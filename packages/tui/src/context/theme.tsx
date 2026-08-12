@@ -37,8 +37,10 @@ export type ThemeSource = Readonly<{
 const themeSource: ThemeSource = {
   async discover() {
     const directories = [Global.Path.config]
+    // Dual-load: .opencode first, .moks second so later scan wins on name conflict.
     for (let current = process.cwd(); ; current = path.dirname(current)) {
       directories.push(path.join(current, ".opencode"))
+      directories.push(path.join(current, ".moks"))
       if (path.dirname(current) === current) break
     }
     return discoverThemes(directories)

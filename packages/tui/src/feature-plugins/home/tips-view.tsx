@@ -68,7 +68,8 @@ function parse(tip: string): TipPart[] {
   return parts
 }
 
-const NO_MODELS_TIP = "Run {highlight}/connect{/highlight} to add an AI provider and start coding"
+const NO_MODELS_TIP =
+  "Run {highlight}/connect{/highlight} to add an AI provider and start hiring — open a req with {highlight}/init{/highlight}"
 const NO_MODELS_PARTS = parse(NO_MODELS_TIP)
 
 function shortcutText(value: string) {
@@ -162,16 +163,24 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
 }
 
 const TIPS: Tip[] = [
-  "Type {highlight}@{/highlight} followed by a filename to fuzzy search and attach files",
-  "Start a message with {highlight}!{/highlight} to run shell commands (e.g., {highlight}!ls -la{/highlight})",
+  // Hero hiring loop
+  "Run {highlight}/init{/highlight} to scaffold a new req under {highlight}.moks/{/highlight} (JD, scorecard, notes)",
+  "Use {highlight}/review{/highlight} for packet review before {highlight}moks commit{/highlight} / {highlight}push{/highlight}",
+  "Ask for the {highlight}req-context{/highlight} skill to load JD, scorecard, and notes for the open req",
+  "Score a resume with the {highlight}score-candidate{/highlight} skill against the req scorecard",
+  "Record decisions with {highlight}moks commit{/highlight}, inspect with {highlight}moks status{/highlight}, apply with {highlight}moks push{/highlight}",
+  "Switch to {highlight}Plan{/highlight} agent to draft a hiring strategy before recruit executes",
   (shortcuts) => press(shortcuts.agentCycle(), "to cycle between Recruit and Plan agents"),
+  "Watch the Diff panel for local candidate and req changes under {highlight}.moks/{/highlight}",
+  "Type {highlight}@{/highlight} followed by a filename to attach a JD, resume, or notes",
+  "Drag and drop resumes, JDs, or PDFs into the terminal as context",
+  // Generic harness
+  "Start a message with {highlight}!{/highlight} to run shell commands (e.g., {highlight}!ls -la{/highlight})",
   "Use {highlight}/undo{/highlight} to revert the last message and file changes",
   "Use {highlight}/redo{/highlight} to restore previously undone messages and file changes",
   "Run {highlight}/share{/highlight} to create a public share link",
-  "Drag and drop images or PDFs into the terminal as context",
   (shortcuts) => press(shortcuts.inputPaste(), "to paste images from your clipboard into the prompt"),
   (shortcuts) => `Use ${commandText("/editor", shortcuts.editorOpen())} to compose messages in your external editor`,
-  "Run {highlight}/init{/highlight} to auto-generate project rules based on your codebase",
   (shortcuts) => `Use ${commandText("/models", shortcuts.modelList())} to switch between available AI models`,
   (shortcuts) => `Use ${commandText("/themes", shortcuts.themeList())} to switch between ${themeCount} built-in themes`,
   (shortcuts) => `Use ${commandText("/new", shortcuts.sessionNew())} to start a fresh conversation session`,
@@ -198,7 +207,6 @@ const TIPS: Tip[] = [
   (shortcuts) => press(shortcuts.inputNewline(), "to add newlines in your prompt"),
   (shortcuts) => press(shortcuts.inputClear(), "when typing to clear the input field"),
   (shortcuts) => press(shortcuts.sessionInterrupt(), "to stop the AI mid-response"),
-  "Switch to {highlight}Plan{/highlight} agent to draft a hiring strategy before recruit executes",
   "Use {highlight}@agent-name{/highlight} in prompts to invoke specialized subagents",
   (shortcuts) => {
     const items = [
@@ -210,41 +218,40 @@ const TIPS: Tip[] = [
     if (!items.length) return undefined
     return `Use ${items.map(shortcutText).join(" / ")} for parent/child sessions`
   },
-  "Create {highlight}opencode.json{/highlight} for server settings, and {highlight}tui.json{/highlight} for TUI",
-  "Place TUI settings in {highlight}~/.config/opencode/tui.json{/highlight} for global config",
+  // Config / workspace (prefer moks paths; dual-load still works)
+  "Create {highlight}moks.json{/highlight} (or {highlight}opencode.json{/highlight}) for server settings, and {highlight}tui.json{/highlight} for TUI",
+  "Place TUI settings in {highlight}tui.json{/highlight} next to your project config for local overrides",
   "Add {highlight}$schema{/highlight} to your config for autocomplete in your editor",
   "Configure {highlight}model{/highlight} in config to set your default model",
   "Override any keybind in {highlight}tui.json{/highlight} via the {highlight}keybinds{/highlight} section",
   "Set any keybind to {highlight}none{/highlight} to disable it completely",
   "Configure local or remote MCP servers in the {highlight}mcp{/highlight} config section",
-  "Add {highlight}.md{/highlight} files to {highlight}.opencode/commands/{/highlight} for reusable prompts",
+  "Add {highlight}.md{/highlight} files to {highlight}.moks/commands/{/highlight} for reusable prompts",
   "Use {highlight}$ARGUMENTS{/highlight}, {highlight}$1{/highlight}, {highlight}$2{/highlight} in custom commands for dynamic input",
-  "Use backticks to inject shell output (e.g., {highlight}`git status`{/highlight})",
-  "Add {highlight}.md{/highlight} files to {highlight}.opencode/agents/{/highlight} for specialized AI personas",
+  "Use backticks to inject shell output (e.g., {highlight}`moks status`{/highlight})",
+  "Add {highlight}.md{/highlight} files to {highlight}.moks/agents/{/highlight} for specialized AI personas",
   "Configure per-agent permissions for {highlight}edit{/highlight}, {highlight}bash{/highlight}, and {highlight}webfetch{/highlight} tools",
-  'Use patterns like {highlight}"git *": "allow"{/highlight} for granular bash permissions',
+  'Use patterns like {highlight}".moks/*": "allow"{/highlight} for path-scoped edit permissions',
   'Set {highlight}"rm -rf *": "deny"{/highlight} to block destructive commands',
-  'Configure {highlight}"git push": "ask"{/highlight} to require approval before pushing',
-  'Set {highlight}"formatter": true{/highlight} to enable built-in formatters',
-  'Set {highlight}"formatter": false{/highlight} to disable inherited formatters',
-  "Define custom formatter commands with file extensions in config",
-  'Set {highlight}"lsp": true{/highlight} to enable built-in LSP code analysis',
-  "Create {highlight}.ts{/highlight} files in {highlight}.opencode/tools/{/highlight} to define new LLM tools",
+  'Configure {highlight}"moks push": "ask"{/highlight} to require approval before applying decisions',
+  "Create {highlight}.ts{/highlight} files in {highlight}.moks/tools/{/highlight} to define new LLM tools",
   "Tool definitions can invoke scripts written in Python, Go, etc",
-  "Add {highlight}.ts{/highlight} files to {highlight}.opencode/plugins/{/highlight} for event hooks",
+  "Add {highlight}.ts{/highlight} files to {highlight}.moks/plugins/{/highlight} for event hooks",
   "Use plugins to send OS notifications when sessions complete",
   "Create a plugin to prevent moks from reading sensitive files",
+  // CLI / scripting
   "Use {highlight}moks run{/highlight} for non-interactive scripting",
   "Use {highlight}moks --continue{/highlight} to resume the last session",
-  "Use {highlight}moks run -f file.ts{/highlight} to attach files via CLI",
+  "Use {highlight}moks run -f resume.pdf{/highlight} to attach files via CLI",
   "Use {highlight}--format json{/highlight} for machine-readable output in scripts",
   "Run {highlight}moks serve{/highlight} for headless API access to moks",
   "Use {highlight}moks run --attach{/highlight} to connect to a running server",
   "Run {highlight}moks upgrade{/highlight} to update to the latest version",
   "Run {highlight}moks auth list{/highlight} to see all configured providers",
   "Run {highlight}moks agent create{/highlight} for guided agent creation",
+  // Themes / config advanced
   'Use {highlight}"theme": "system"{/highlight} to match your terminal\'s colors',
-  "Create JSON theme files in {highlight}.opencode/themes/{/highlight} directory",
+  "Create JSON theme files in {highlight}.moks/themes/{/highlight} directory",
   "Themes support dark/light variants for both modes",
   "Use numeric xterm color codes 0-255 in custom theme JSON",
   "Use {highlight}{env:VAR_NAME}{/highlight} for environment variables in config",
@@ -259,7 +266,7 @@ const TIPS: Tip[] = [
   'Set {highlight}"share": "disabled"{/highlight} to prevent any session sharing',
   "Run {highlight}/unshare{/highlight} to remove a session from public access",
   "Permission {highlight}doom_loop{/highlight} prevents infinite tool call loops",
-  "Permission {highlight}external_directory{/highlight} protects files outside project",
+  "Permission {highlight}external_directory{/highlight} protects files outside the workspace",
   "Run {highlight}moks debug config{/highlight} to troubleshoot configuration",
   "Use {highlight}--print-logs{/highlight} flag to see detailed logs in stderr",
   (shortcuts) => `Use ${commandText("/timeline", shortcuts.sessionTimeline())} to jump to specific messages`,
@@ -270,8 +277,8 @@ const TIPS: Tip[] = [
     shortcuts.commandList()
       ? `Toggle username display in chat via the command palette (${shortcutText(shortcuts.commandList())})`
       : "Toggle username display in chat via the command palette",
-  "Commit your project's {highlight}AGENTS.md{/highlight} file to Git for team sharing",
-  "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",
+  // Optional hiring norms (not hero setup)
+  "Optional: add {highlight}AGENTS.md{/highlight} to inject team hiring conventions into every session",
   (shortcuts) => `Use ${commandText("/help", shortcuts.helpShow())} to show the help dialog`,
   "Use {highlight}/rename{/highlight} to rename the current session",
 ]

@@ -658,7 +658,7 @@
       </div>
       <div class="stat next">
         <div class="n">Next</div>
-        <div class="l">First-run tips + moks identity paths (P2)</div>
+        <div class="l">Req instruction attach + provider identity copy; global app dir parked</div>
       </div>
     </div>
   </section>
@@ -721,7 +721,7 @@
     <div class="decision-head">
       <div>
         <h3>Language servers are not a hiring feature</h3>
-        <p class="plain">No TypeScript/Go language tools by default. No empty LSP chrome. Developers can turn them on for Build dogfood.</p>
+        <p class="plain">No TypeScript/Go language tools by default. No empty LSP chrome. Optional Build escape hatch can re-enable them; we develop moks with installed OpenCode, not inside product moks.</p>
       </div>
       <div class="badges">
         <span class="badge done">Shipped</span>
@@ -803,35 +803,57 @@
 
   <!-- OPEN -->
   <div class="band" id="open">
-    <h2>Still open — P2 first impression + identity</h2>
-    <p>Helpers and front doors shipped. Remaining work is onboarding polish and path/config identity.</p>
+    <h2>Still open — residual identity polish</h2>
+    <p>Tips and dual-load shipped. Global app-dir rename remains parked. Optional: attach .moks/req into system context; provider catalog copy.</p>
   </div>
 
-  <article class="decision">
+  <article class="decision locked done">
     <div class="decision-head">
       <div>
-        <h3>First-run tips still teach coding habits</h3>
-        <p class="plain">Empty-state tips mention AGENTS.md, PR review, and language tools. Heroes should be: open a req, score a candidate, commit, push.</p>
+        <h3>First-run tips teach hiring habits</h3>
+        <p class="plain">Heroes: open a req, score, commit, push. AGENTS.md stays as optional team hiring-norms inject — not the main setup story.</p>
       </div>
       <div class="badges">
-        <span class="badge open">Open</span>
-        <span class="badge port">Next up · P2</span>
+        <span class="badge done">Shipped</span>
       </div>
     </div>
-    <div class="decision-foot"><b>Deferred:</b> saved for the identity / first-impression wave (not blocking helpers).</div>
   </article>
 
-  <article class="decision">
+  <article class="decision locked done">
     <div class="decision-head">
       <div>
-        <h3>Folders and config still say “opencode”</h3>
-        <p class="plain">Longer-term identity: moks config and data dirs so installing both products on one laptop doesn’t collide. Dual-read old names during transition.</p>
+        <h3>Project config/paths dual-load (moks + opencode names)</h3>
+        <p class="plain">Prefer <code>moks.json</code> / <code>.moks/</code>; still load <code>opencode.json</code> / <code>.opencode/</code>. Env: <code>MOKS_*</code> primary, <code>OPENCODE_*</code> fallback. Global XDG dir still named opencode (parked).</p>
       </div>
       <div class="badges">
-        <span class="badge open">Later</span>
+        <span class="badge done">Shipped</span>
       </div>
     </div>
-    <div class="decision-foot"><b>Open timing call:</b> when to migrate the global app data directory (now vs after more users).</div>
+  </article>
+
+  <article class="decision locked">
+    <div class="decision-head">
+      <div>
+        <h3>Global app data dir rename</h3>
+        <p class="plain"><code>~/.config/opencode</code> still shared naming with installed OpenCode. Needs a careful migrate/coexistence design — not this wave.</p>
+      </div>
+      <div class="badges">
+        <span class="badge open">Parked</span>
+      </div>
+    </div>
+    <div class="decision-foot"><b>Locked:</b> leave BL-020 alone until we design coexistence with the global OpenCode we use to build moks.</div>
+  </article>
+
+  <article class="decision locked done">
+    <div class="decision-head">
+      <div>
+        <h3>We do not code moks inside product moks</h3>
+        <p class="plain">Day-to-day engineering uses <strong>installed OpenCode</strong>. Product moks is the TA harness. Tips and identity do not optimize for “build dogfood” inside moks.</p>
+      </div>
+      <div class="badges">
+        <span class="badge done">Locked</span>
+      </div>
+    </div>
   </article>
 
   <!-- BUILD ORDER -->
@@ -856,13 +878,17 @@
         <div class="top"><span class="name">Front doors remainder</span><span class="st">Done</span></div>
         <p>customize-moks · hide GitHub/console/generate · neutral provider CTAs</p>
       </div>
-      <div class="wave next">
-        <div class="top"><span class="name">First impression</span><span class="st">Next · P2</span></div>
-        <p>Empty-state tips feel like a hiring workplace (open a req, score, commit, push)</p>
+      <div class="wave done">
+        <div class="top"><span class="name">First impression + dual-load</span><span class="st">Done</span></div>
+        <p>Tips · moks.json / .moks dual-load · MOKS_* env (not global app dir)</p>
       </div>
       <div class="wave">
-        <div class="top"><span class="name">Identity</span><span class="st">Later</span></div>
-        <p>moks paths &amp; config names without breaking developer setups</p>
+        <div class="top"><span class="name">Global app dir</span><span class="st">Parked</span></div>
+        <p>Rename ~/.config/opencode → moks after coexistence design</p>
+      </div>
+      <div class="wave">
+        <div class="top"><span class="name">Req context + provider identity</span><span class="st">Open</span></div>
+        <p>Auto-discover .moks/req materials; neutral models catalog copy</p>
       </div>
     </div>
   </section>
@@ -929,18 +955,18 @@
           <div class="d">Explore, general, compaction/summary/title shipped hiring-native or neutral.</div>
         </div>
       </li>
-      <li class="soon">
-        <span class="mark">·</span>
+      <li class="yes">
+        <span class="mark">✓</span>
         <div>
-          <div class="t">First-run tips still teach coding (BL-003)</div>
-          <div class="d">Deferred to P2 with identity work.</div>
+          <div class="t">First-run tips + dual-load identity</div>
+          <div class="d">Hiring heroes; moks.json / .moks / MOKS_* with opencode fallbacks.</div>
         </div>
       </li>
       <li class="soon">
         <span class="mark">·</span>
         <div>
-          <div class="t">When to fully separate moks data folders from OpenCode</div>
-          <div class="d">Timing still open; design with dual-read.</div>
+          <div class="t">When to fully separate moks global data folders from OpenCode</div>
+          <div class="d">BL-020 parked; design coexist with installed OpenCode.</div>
         </div>
       </li>
     </ul>

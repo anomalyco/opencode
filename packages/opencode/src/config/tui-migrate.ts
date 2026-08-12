@@ -22,39 +22,77 @@ interface MigrateInput {
 }
 
 /**
- * Migrates tui-specific keys (theme, keybinds, tui) from opencode.json files
- * into dedicated tui.json files. Migration is performed per-directory and
+ * Migrates tui-specific keys (theme, keybinds, tui) from opencode.json / moks.json
+ * files into dedicated tui.json files. Migration is performed per-directory and
  * skips only locations where a tui.json already exists.
+ *
+ * When multiple config files in the same directory carry legacy keys, they are
+ * merged in CONFIG_FILE_NAMES order (opencode then moks) so moks wins, then
+ * every contributor is stripped after a successful write.
  */
 export async function migrateTuiConfig(input: MigrateInput) {
-  const opencode = await opencodeFiles(input)
-  for (const file of opencode) {
-    const source = await Filesystem.readText(file).catch(() => undefined)
-    if (!source) continue
-    const errors: JsoncParseError[] = []
-    const data = parseJsonc(source, errors, { allowTrailingComma: true })
-    if (errors.length || !data || typeof data !== "object" || Array.isArray(data)) continue
-
-    const theme = decodeTheme("theme" in data ? data.theme : undefined)
-    const keybinds = decodeRecord("keybinds" in data ? data.keybinds : undefined)
-    const legacyTui = decodeRecord("tui" in data ? data.tui : undefined)
-    const extracted = {
-      theme: Option.getOrUndefined(theme),
-      keybinds: Option.getOrUndefined(keybinds),
-      tui: Option.getOrUndefined(legacyTui),
+  const sources = await projectConfigFiles(input)
+  const byDir = new Map<string, string[]>()
+  for (const file of sources) {
+    const dir = path.dirname(file)
+    const list = byDir.get(dir)
+    if (!list) {
+      byDir.set(dir, [file])
+      continue
     }
-    const tui = extracted.tui ? normalizeTui(extracted.tui) : undefined
-    if (extracted.theme === undefined && extracted.keybinds === undefined && !tui) continue
+    list.push(file)
+  }
 
-    const target = path.join(path.dirname(file), "tui.json")
-    const targetExists = await Filesystem.exists(target)
-    if (targetExists) continue
+  for (const [dir, files] of byDir) {
+    const target = path.join(dir, "tui.json")
+    if (await Filesystem.exists(target)) continue
+
+    const ordered = files.toSorted((a, b) => configFileRank(a) - configFileRank(b))
+    let theme: string | undefined
+    let keybinds: Record<string, unknown> | undefined
+    let tui:
+      | {
+          scroll_speed: number | undefined
+          scroll_acceleration: { enabled: boolean } | undefined
+          diff_style: "auto" | "stacked" | undefined
+        }
+      | undefined
+    const contributors: { file: string; source: string }[] = []
+
+    for (const file of ordered) {
+      const source = await Filesystem.readText(file).catch(() => undefined)
+      if (!source) continue
+      const errors: JsoncParseError[] = []
+      const data = parseJsonc(source, errors, { allowTrailingComma: true })
+      if (errors.length || !data || typeof data !== "object" || Array.isArray(data)) continue
+
+      const nextTheme = Option.getOrUndefined(decodeTheme("theme" in data ? data.theme : undefined))
+      const nextKeybinds = Option.getOrUndefined(decodeRecord("keybinds" in data ? data.keybinds : undefined))
+      const legacyTui = Option.getOrUndefined(decodeRecord("tui" in data ? data.tui : undefined))
+      const nextTui = legacyTui ? normalizeTui(legacyTui) : undefined
+      if (nextTheme === undefined && nextKeybinds === undefined && !nextTui) continue
+
+      // Later files (moks after opencode) overwrite earlier keys.
+      if (nextTheme !== undefined) theme = nextTheme
+      if (nextKeybinds !== undefined) keybinds = nextKeybinds
+      if (nextTui) {
+        tui = {
+          scroll_speed: nextTui.scroll_speed ?? tui?.scroll_speed,
+          scroll_acceleration: nextTui.scroll_acceleration ?? tui?.scroll_acceleration,
+          diff_style: nextTui.diff_style ?? tui?.diff_style,
+        }
+      }
+      contributors.push({ file, source })
+    }
+
+    if (!contributors.length) continue
+    if (theme === undefined && keybinds === undefined && !tui) continue
 
     const payload: Record<string, unknown> = {
       $schema: TUI_SCHEMA_URL,
     }
-    if (extracted.theme !== undefined) payload.theme = extracted.theme
-    if (extracted.keybinds !== undefined) payload.keybinds = extracted.keybinds
+    if (theme !== undefined) payload.theme = theme
+    if (keybinds !== undefined) payload.keybinds = keybinds
     if (tui) Object.assign(payload, tui)
 
     const wrote = await Filesystem.write(target, JSON.stringify(payload, null, 2))
@@ -62,9 +100,16 @@ export async function migrateTuiConfig(input: MigrateInput) {
       .catch(() => false)
     if (!wrote) continue
 
-    const stripped = await backupAndStripLegacy(file, source)
-    if (!stripped) continue
+    for (const item of contributors) {
+      await backupAndStripLegacy(item.file, item.source)
+    }
   }
+}
+
+function configFileRank(file: string) {
+  const name = path.basename(file)
+  const index = (ConfigPaths.CONFIG_FILE_NAMES as readonly string[]).indexOf(name)
+  return index === -1 ? ConfigPaths.CONFIG_FILE_NAMES.length : index
 }
 
 function normalizeTui(data: Record<string, unknown>):
@@ -112,13 +157,13 @@ async function backupAndStripLegacy(file: string, source: string) {
     .catch(() => false)
 }
 
-async function opencodeFiles(input: { directories: string[]; cwd: string }) {
+async function projectConfigFiles(input: { directories: string[]; cwd: string }) {
   const files = [
-    ...ConfigPaths.fileInDirectory(Global.Path.config, "opencode"),
-    ...(await Filesystem.findUp(["opencode.json", "opencode.jsonc"], input.cwd, undefined, { rootFirst: true })),
+    ...ConfigPaths.configFilesInDirectory(Global.Path.config),
+    ...(await Filesystem.findUp([...ConfigPaths.CONFIG_FILE_NAMES], input.cwd, undefined, { rootFirst: true })),
   ]
   for (const dir of unique(input.directories)) {
-    files.push(...ConfigPaths.fileInDirectory(dir, "opencode"))
+    files.push(...ConfigPaths.configFilesInDirectory(dir))
   }
   if (Flag.OPENCODE_CONFIG) files.push(Flag.OPENCODE_CONFIG)
 

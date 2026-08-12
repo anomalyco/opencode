@@ -44,7 +44,7 @@ A **correct port** preserves the *machinery* and rewrites the *job* to eng-TA: l
 | Diff *only* = remote ATS fields | **No** — diff shows **local** working-tree + pending commit deltas (like uncommitted + staged). Remote ATS truth updates on **push** (when write sink exists). |
 | Branch = pipeline stage | **Don’t force** git-branch UX onto ATS stages |
 | “Candidates are code” | **No** — *workflow shape* is portable; people aren’t files. Working set = materials + records + drafts |
-| Delete LSP/diff subsystems | **No** — hide/demote on `recruit`; full chrome on `build` dogfood |
+| Delete LSP/diff subsystems | **No** — hide/demote on `recruit`; keep code for rare `build` escape hatch (not our moks-dev loop) |
 
 ---
 
@@ -103,7 +103,7 @@ system = [ agent.prompt ?? SystemPrompt.provider(model), ...env/skills, ... ]
 | **explore** | Yes — `agent/prompt/explore.txt` | Req materials / fixtures / notes (done BL-005) |
 | **compaction / title / summary** | Yes | Session-history / hiring brief / mixed titles (done BL-006) |
 
-**Port implication:** doer + plan exit/copy + subagents + hidden summarizers are hiring-native or domain-neutral. Residual coding pedagogy is onboarding tips (BL-003) and identity paths (P2).
+**Port implication:** doer + plan + subagents + tips + dual-load project identity are hiring-native. Residual: global app dir (BL-020 parked), req instruction attach (BL-023), provider catalog copy (BL-024).
 
 ### Plan mode machinery (shipped G3 — keep; do not rebuild)
 
@@ -140,17 +140,20 @@ system = [ agent.prompt ?? SystemPrompt.provider(model), ...env/skills, ... ]
 | Fixtures | none | JD/resume/scorecard + Ashby mock MCP | `product/fixtures/` |
 | User-facing bin | `opencode` | **`moks`** | `cli` / `index.ts` `scriptName` |
 
-**Still coding by design (keep):** monorepo `.opencode/` with `default_agent: build` (+ unhide) configures the *installed* agent that builds moks — not the product.
+**How we develop moks (locked):** we do **not** use the moks product binary to code this repo. Day-to-day engineering is **global installed OpenCode** (and monorepo `.opencode/` with `default_agent: build` is for *that* agent). moks product path is eng-TA only. Do not design tips, identity, or LSP/build chrome around “dogfooding moks by coding inside moks.”
 
 **Locked product decisions (2026-08-11):**
 
-- **Cast:** OpenCode Build doer → **`recruit`**; Plan stays; **`build` hidden** escape hatch (not deleted).
+- **Cast:** OpenCode Build doer → **`recruit`**; Plan stays; **`build` hidden** optional escape hatch for end users who need coding tools (not our internal moks-dev workflow).
 - **G3 plan wave:** BL-001, BL-002, BL-022 **done** — exit/copy/path are hiring-native.
 - **Domain ontology:** req = repo; ATS = GitHub/remote; `.moks/` = local working tree; diff = local candidate/req changes; **`moks commit` / `moks push`** (git metaphor); `/init` = new req; `/review` = packet review skill (not git/PR).
-- **LSP:** not a TA product surface (defaults off; chrome hidden when off; code kept for `build`).
+- **AGENTS.md:** keep as workspace instruction injection (hiring norms, same as coding constitution). Not the hero bootstrap; not removed.
+- **LSP:** not a TA product surface (defaults off; chrome hidden when off; code kept only for optional `build` escape hatch).
 - **Diff:** keep and lean into — real-time visibility of local hiring deltas (like code changes).
+- **BL-020 global app dir:** **parked** — leave alone until we design migrate/coexistence with installed OpenCode more carefully.
 - **Shipped 2026-08-11 (dictionary wave):** BL-004, BL-007, BL-008, BL-013, BL-015 + verb rename propose→**commit**, apply→**push**.
-- **Shipped 2026-08-11 (helpers + front doors):** BL-005, BL-006, BL-009, BL-010, BL-011, BL-012, BL-014, BL-016. **Deferred to P2:** BL-003 home tips (first impression).
+- **Shipped 2026-08-11 (helpers + front doors):** BL-005, BL-006, BL-009, BL-010, BL-011, BL-012, BL-014, BL-016.
+- **Shipped 2026-08-11 (tips + dual-load):** BL-003, BL-018, BL-019, BL-021. **Parked:** BL-020. **Still open:** BL-023/024, bash residual.
 
 ---
 
@@ -160,7 +163,7 @@ system = [ agent.prompt ?? SystemPrompt.provider(model), ...env/skills, ... ]
 |-----|---------|
 | **PORT** | Rewrite coding *semantics* into TA equivalent; keep machinery |
 | **DONE** | Shipped on product path; “Current” below is historical unless noted |
-| **HIDE** | Soft-remove from default `recruit` UX; keep code for `build` / dogfood |
+| **HIDE** | Soft-remove from default `recruit` UX; keep code for optional `build` escape hatch |
 | **DROP** | Quarantine from TA GTM / help / slash defaults |
 | **KEEP** | Already correct or pure kernel |
 | **IDENTITY** | Paths/names/schemas still say OpenCode |
@@ -241,55 +244,24 @@ Default plan mode reads as **req strategy**, not implementation design.
 
 | | |
 |--|--|
-| **Action** | PORT |
-| **Priority** | **P2** (first impression — deferred after helpers/front doors) |
-| **Decision** | ☐ GO (deferred 2026-08-11; ship after P0/P1 helpers wave) |
-| **Rec** | **GO** when scheduled |
+| **Action** | PORT → **DONE** |
+| **Priority** | P2 |
+| **Decision** | ☑ GO (shipped) |
+| **Rec** | **GO** — shipped |
 
-### Current (implementation)
+### Shipped (implementation)
 
-`packages/tui/src/feature-plugins/home/tips-view.tsx` — large `TIPS` array. Examples still coding/OpenCode-shaped:
+`packages/tui/src/feature-plugins/home/tips-view.tsx`:
 
-- `/init` to generate project rules from **codebase**
-- Commit **AGENTS.md**
-- `/review` for uncommitted / branches / **PRs**
-- `opencode.json`, `~/.config/opencode/tui.json`, `.opencode/commands|agents|tools|plugins`
-- `formatter` / `lsp` enable tips
-- `NO_MODELS_TIP` still says “start coding”
+- **Heroes:** `/init` → new req under `.moks/`; `/review` packet review; req-context / score-candidate; `moks commit|status|push`; Plan → recruit; Diff of local req work; attach JD/resume
+- **`NO_MODELS_TIP`:** start hiring + `/init` (not “start coding”)
+- **AGENTS.md:** kept as **optional** tip for team hiring conventions (not codebase commit hero)
+- **Demoted:** LSP/formatter tips, PR review wording, codebase init
+- **Config paths:** prefer `moks.json` / `.moks/` with dual-load honesty (`or opencode.json`)
 
-**Partial:** agent cycle tip says Recruit/Plan; plan tip mentions hiring strategy; some tips say `moks run`.
+### Acceptance (met)
 
-### Coding intent
-
-Onboard users into the coding-agent power-user surface (config dirs, LSP, AGENTS.md, PR review).
-
-### Correct port
-
-Split tips into **generic harness** (sessions, models, keybinds, MCP) vs **product loop**:
-
-| Remove / demote as hero | TA tips to prefer |
-|-------------------------|-------------------|
-| `/init` → AGENTS.md from codebase | `/init` → **new req** under `.moks/`; run **req-context** |
-| `/review` PR | `/review` → **packet review** (skill-backed) |
-| Build/Plan cycle only | **recruit** default; plan for strategy; build = escape hatch |
-| LSP/formatter config | Decision verbs: `moks commit` / `status` / **`push`** |
-| `.opencode/*` pedagogy | `.moks/` workspace + hiring skills |
-| AGENTS.md commit | Optional notes; not the hero instruction file |
-
-**Prefer:** agent-aware tips (`recruit` vs `build`) or a product tip pack selected by default agent.
-
-### Wrong-port risks
-
-- Global search-replace `opencode`→`moks` in tips while keeping AGENTS.md/LSP pedagogy → still trains coding workflow.
-- Deleting all tips → worse empty state.
-
-### Touches
-
-`packages/tui/src/feature-plugins/home/tips-view.tsx`, status dialog empty-state copy if any
-
-### Acceptance
-
-Fresh `recruit` session tips never lead with AGENTS.md, git PR review, or LSP as the primary lesson.
+Fresh `recruit` session tips never lead with AGENTS.md, git PR review, or LSP as the primary lesson. AGENTS.md remains valid workspace inject for hiring norms.
 
 ---
 
@@ -665,39 +637,22 @@ Theme picker doesn’t read only as “pick your coding agent skin.”
 
 | | |
 |--|--|
-| **Action** | IDENTITY |
+| **Action** | IDENTITY → **DONE** (dual-load) |
 | **Priority** | P2 |
-| **Decision** | ☐ Dual-load |
-| **Rec** | **Dual-load; prefer moks** |
+| **Decision** | ☑ Dual-load; prefer moks (shipped) |
+| **Rec** | **Dual-load; prefer moks** — shipped |
 
-### Current (implementation)
+### Shipped (implementation)
 
-- Loads `opencode.json` / `opencode.jsonc` (project + global) — `config/config.ts`
-- Writes `$schema: https://opencode.ai/config.json` on create/update
-- Candidates include `config.json` under global dir; **no `moks.json`**
-- Error copy still references opencode.json (TUI)
+- Dual-load `moks.json(c)` + `opencode.json(c)` project + global + nested dirs (`config/config.ts`, `ConfigPaths.projectConfigFiles`)
+- Prefer moks when both present (merge after opencode)
+- New global seed prefers **`moks.jsonc`** (still under `~/.config/opencode/` until BL-020)
+- Schema URL still `https://opencode.ai/config.json` (catalog identity later)
+- Tests in `test/config/config.test.ts`
 
-### Correct port
+### Acceptance (met)
 
-| From | To |
-|------|-----|
-| Only `opencode.json(c)` | Dual-load **`moks.json(c)` + `opencode.json(c)`** |
-| Prefer | **moks when both present** |
-| Schema URL | moks-hosted or local package schema; tips say moks |
-| Compat | Old file still works |
-
-### Wrong-port risks
-
-- Hard cutover without dual-load → breaks existing configs and monorepo.
-- Writing only new schema without dual-load readers → silent ignore.
-
-### Touches
-
-`config/config.ts`, TUI errors, provider dialogs
-
-### Acceptance
-
-Documented TA setup uses `moks.json` or `.moks/`; `opencode.json` still works.
+Documented TA setup uses `moks.json`; `opencode.json` still works.
 
 ---
 
@@ -705,35 +660,19 @@ Documented TA setup uses `moks.json` or `.moks/`; `opencode.json` still works.
 
 | | |
 |--|--|
-| **Action** | IDENTITY |
+| **Action** | IDENTITY → **DONE** (dual-discover) |
 | **Priority** | P2 |
-| **Decision** | ☐ Dual-discover |
-| **Rec** | **Dual-discover `.moks/` + `.opencode/`** |
+| **Decision** | ☑ Dual-discover `.moks/` + `.opencode/` (shipped) |
+| **Rec** | **Dual-discover** — shipped |
 
-### Current (implementation)
+### Shipped (implementation)
 
-- `config/paths.ts`: `targets: [".opencode"]` only
-- Skills under `.opencode/skill(s)`, agents, commands, tools, plugins discovered from those dirs
-- Global: `~/.config/opencode/...`
+- `ConfigPaths.directories`: targets `.opencode` then `.moks` (moks wins name conflicts)
+- `isProjectConfigDir` basename-safe for both
+- TUI config + theme discovery dual-scan `.moks` + `.opencode`
+- Monorepo `.opencode/` for **installed OpenCode** unchanged and still loads
 
-### Correct port
-
-| From | To |
-|------|-----|
-| Discover `.opencode/` | Discover **`.moks/` and `.opencode/`** |
-| Docs | Teach **`.moks/`** for product workspaces |
-| Monorepo | **Keep `.opencode/`** for *installed* agent building moks (unchanged) |
-
-### Wrong-port risks
-
-- Replacing `.opencode` globally → breaks this repo’s dev agent config (`.opencode/` in monorepo).
-- Not documenting the dual → users put skills in `.moks/` and nothing loads.
-
-### Touches
-
-`config/paths.ts`, skill/agent loaders, FORK/AGENTS clarity
-
-### Acceptance
+### Acceptance (met)
 
 User can put hiring skills under `.moks/skill` and they load.
 
@@ -744,22 +683,23 @@ User can put hiring skills under `.moks/skill` and they load.
 | | |
 |--|--|
 | **Action** | IDENTITY |
-| **Priority** | P2 (timing open) |
-| **Decision** | ☐ Now &nbsp; ☐ After WAU &nbsp; ☐ Design now / ship mid |
-| **Rec** | **Design with 018/019; ship before external install base scales** |
+| **Priority** | P2 — **PARKED** |
+| **Decision** | ☑ **Leave alone for now** (2026-08-11). Needs more design before flip. |
+| **Rec** | **Do not ship** with 018/019/021; revisit after dual-load + clear migrate/coexistence story |
 
-### Current (implementation)
+### Why parked
 
-`packages/core/src/global.ts`:
+moks and **installed OpenCode** both run on the same laptop. Global dirs today:
 
 ```ts
+// packages/core/src/global.ts
 const app = "opencode"
 // → ~/.config/opencode, ~/.local/share/opencode, cache, state, tmp
 ```
 
-**Collides with installed OpenCode** on the same machine (you use both).
+That **collides** with the coding agent we use to build moks. Flipping `app` without a deliberate migrate/read-fallback plan risks auth/session/config corruption. Dual-load of project config (018/019) and env (021) does **not** require changing the global app dir first.
 
-### Correct port
+### When we reopen
 
 | From | To |
 |------|-----|
@@ -771,13 +711,13 @@ const app = "opencode"
 
 - Pointing moks at same dir forever → config/auth/session corruption across products.
 - Auto-move without backup → data loss.
-- Doing this before dual-load story is clear → half-migrated mess.
+- Shipping app rename in the same wave as dual-load before coexistence is designed.
 
-### Touches
+### Touches (later)
 
 `packages/core/src/global.ts`, path helpers, install docs
 
-### Acceptance
+### Acceptance (when unparked)
 
 Running moks and OpenCode on the same machine uses different config/data dirs.
 
@@ -787,26 +727,24 @@ Running moks and OpenCode on the same machine uses different config/data dirs.
 
 | | |
 |--|--|
-| **Action** | IDENTITY |
+| **Action** | IDENTITY → **DONE** (dual-accept) |
 | **Priority** | P2 |
-| **Decision** | ☐ Dual-accept |
-| **Rec** | **GO** (`MOKS_*` primary, `OPENCODE_*` fallback) |
+| **Decision** | ☑ Dual-accept (shipped) |
+| **Rec** | **GO** — shipped |
 
-### Current
+### Shipped (implementation)
 
-Feature flags and paths via `OPENCODE_*` (e.g. `OPENCODE_CONFIG`, `OPENCODE_PURE`, log flags in `index.ts` middleware).
+- `packages/core/src/flag/flag.ts`: `env` / `truthyDual` — `MOKS_*` primary, `OPENCODE_*` fallback; Flag property names stay `OPENCODE_*`
+- Logging + `MOKS_TEST_HOME` dual-read
+- `MOKS_*` false does not fall through to OPENCODE true
 
-### Correct port
+### Residual
 
-Accept **`MOKS_*` primary**; fall back `OPENCODE_*` for fork compat. Docs show `MOKS_`.
+Some non-Flag `process.env.OPENCODE_*` reads elsewhere; CLI may still *set* OPENCODE_ vars (works via fallback).
 
-### Touches
+### Acceptance (met)
 
-Env reads across packages
-
-### Acceptance
-
-Docs show `MOKS_`; old env still works.
+`MOKS_CONFIG` / `MOKS_PURE` work; old env still works.
 
 ---
 
@@ -873,7 +811,7 @@ Repo-level agent constitution for SE work.
 
 ### Wrong-port risks
 
-- Replacing AGENTS.md entirely → monorepo dogfood and coding escape hatch break.
+- Replacing AGENTS.md entirely → users lose workspace-level hiring (or SE) constitution injection.
 - Auto-injecting huge resume PDFs into every turn → context blowups; prefer “discover + attach when relevant” with clear rules.
 
 ### Touches
@@ -941,8 +879,8 @@ No implied identity between moks and OpenCode model hosting.
 | **Decision** | ☑ Keep forever as escape hatch; **hidden by default** |
 | **Rec** | **YES — keep forever** |
 | **From** | Native `build` always registered and visible |
-| **To** | `hidden: true`; unhide via `default_agent: build` or config; monorepo `.opencode` unhides for dogfood |
-| **Note** | Not deleted; product cast is recruit + plan |
+| **To** | `hidden: true`; unhide via `default_agent: build` or config only if a user wants coding tools |
+| **Note** | Not deleted; product cast is recruit + plan. **We** build moks with installed OpenCode, not with product `build`. |
 
 ---
 
@@ -995,7 +933,8 @@ When V2 is the runtime, product default is still hiring-native.
 | Session runner, permission engine, MCP host, skill loader, multi-provider | Kernel — KEEP |
 | Decision verbs + receipts (`commit` / **`push`**) | Already TA authority layer |
 | Diff / session.diff plumbing | KEEP — local candidate/req change visibility |
-| Monorepo `.opencode/` (`default_agent: build`, …) | Configures *installed* agent building moks |
+| Monorepo `.opencode/` (`default_agent: build`, …) | Configures *installed OpenCode* building moks — not product moks |
+| Using moks to code moks | **Non-goal** — global OpenCode is the dev tool |
 | `packages/opencode` folder name | Inherited; rename is hard-fork (BL-025) |
 | Desktop / console / web / SST investment | ROADMAP defer |
 
@@ -1039,9 +978,10 @@ Use this when reviewing any change:
 | **G5 Front doors** | BL-007–012 | **Done** (init/review + customize-moks + hide GH/console/generate + neutral CTAs) |
 | **G6 Guardrails** | BL-015 path-scoped edit | **Done** (bash residual only) |
 | **G4 Subagents** | BL-005 explore, BL-016 general | **Done** |
-| **G1 Session helpers** | BL-006 title/summary/compaction | **Done** (BL-003 tips deferred → P2) |
-| **G7 Identity + first impression** | BL-003 tips, BL-018–021, BL-023–024 | **Next** |
-| **G8 Later** | BL-017, BL-025–030 | Defer |
+| **G1 Session helpers** | BL-003 tips, BL-006 title/summary/compaction | **Done** |
+| **G7 Identity + first impression** | BL-003, BL-018/019/021 | **Done** (BL-020 parked) |
+| **G7 residual** | BL-023, BL-024 | Open |
+| **G8 Later** | BL-017, BL-020, BL-025–030 | Defer / parked |
 
 ---
 
@@ -1056,7 +996,9 @@ Use this when reviewing any change:
 | **G1 helpers** | BL-006 | Titles/summaries/compaction not PR bots | **Done** |
 | **G5 remainder** | BL-009–012 | customize-moks; hide GH/console/generate; neutral CTAs | **Done** |
 | **G6 residual** | BL-014 | recruit: no lsp; no apply_patch prefer | **Done** |
-| **G7 — Identity + tips** | BL-003, BL-018–021, BL-023; BL-024 copy | First impression + moks paths | **Next** |
+| **G7 — Identity + tips** | BL-003, BL-018/019/021 | Tips + dual-load paths/env | **Done** |
+| **Parked** | BL-020 global app dir | Coexist with installed OpenCode — design later | **Parked** |
+| **G7 residual** | BL-023, BL-024 | Req instruction attach; provider catalog copy | Open |
 | **G8 — Later** | BL-017, BL-025–030; bash patterns | Cosmetic, V2, hard-fork, tighter shell | Defer / residual |
 
 ---
@@ -1114,13 +1056,19 @@ Mark when decided:
 - [x] **BL-010/011 shipped** — hide github/pr/generate from root help (console already hidden)
 - [x] **BL-012 shipped** — neutral provider-limit UX; no OpenCode Go as moks
 - [x] **BL-014 shipped** — recruit: lsp deny; no apply_patch prefer
+- [x] **BL-003 shipped** — hiring-first tips; AGENTS.md optional hiring norms
+- [x] **BL-018 shipped** — dual-load moks.json + opencode.json (prefer moks)
+- [x] **BL-019 shipped** — dual-discover `.moks/` + `.opencode/`
+- [x] **BL-021 shipped** — `MOKS_*` primary, `OPENCODE_*` fallback
 
 ### Open
-- [ ] **BL-003** — home tips / first impression (deferred to **P2** with identity)
-- [ ] **G7 Identity** — BL-018–021, BL-023–024 (paths, env, instruction discovery, provider catalog copy)
+- [ ] **BL-023 / BL-024** — req instruction discovery; provider identity copy
 - [ ] **Bash residual** — tighter destructive patterns on recruit (not a numbered BL; residual of BL-015)
-- [ ] **BL-020** — Global dir migrate timing: now / after WAU / design-now-ship-mid (rec mid)
 - [ ] **BL-002 residual** — optional delete/port unused `plan-reminder-anthropic.txt`
+
+### Parked
+- [x] **BL-020** — Global app dir rename **left alone** until migrate/coexistence design (2026-08-11)
+- [x] **Dev tool split** — build moks with **installed OpenCode**, not product moks (2026-08-11)
 
 ---
 
@@ -1128,6 +1076,8 @@ Mark when decided:
 
 | Date | Note |
 |------|------|
+| 2026-08-11 | **Tips + dual-load:** BL-003/018/019/021 shipped; customize-moks honesty; BL-020 still parked |
+| 2026-08-11 | **Locks:** BL-020 parked; do not dogfood moks-for-coding-moks (use global OpenCode); keep AGENTS.md as workspace inject |
 | 2026-08-11 | **Helpers + front doors:** BL-005/006/009/010/011/012/014/016 shipped; BL-003 tips deferred to P2; HTML companion synced |
 | 2026-08-11 | **Ontology ship:** BL-004/007/008/013/015 implemented; verbs `commit`/`push` (was propose/apply); skill `commit-disposition`; `/init-code` escape hatch; LSP chrome hidden when off |
 | 2026-08-11 | **Ontology lock:** thesis moks:TA::OpenCode:SWE; apply=push metaphor; `/init`=new req; `/review`=packet skill; keep Diff; LSP not TA; BL-007/008/004/013/015 decided; HTML companion |

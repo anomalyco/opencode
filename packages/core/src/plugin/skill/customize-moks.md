@@ -46,17 +46,18 @@ Always gitignore `.moks/` in user repos (receipts and local req drafts stay loca
 
 ### What actually loads today (honest dual-load)
 
-Identity dual-load is incomplete. **Today the runtime still discovers config and
-plugin/agent/skill/command files under OpenCode-compatible names:**
+**Project config and dirs dual-load.** Prefer moks names; OpenCode names still work.
+When both exist at the same level, **moks wins** (merged after legacy).
 
 | Scope | Paths that work **now** |
 | ----- | ----------------------- |
-| Project config | `./opencode.json`, `./opencode.jsonc`, `.opencode/opencode.json(c)` (walks up to worktree) |
-| Project dirs | `.opencode/` for `agent(s)/`, `command(s)/`, `skill(s)/`, `plugin(s)/` |
-| Global config | `~/.config/opencode/opencode.json(c)` and `config.json` |
-| Env overrides | `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_CONTENT`, `OPENCODE_DISABLE_PROJECT_CONFIG` |
+| Project config | `moks.json(c)` and `opencode.json(c)` (walks up to worktree; moks preferred) |
+| Nested config | `.moks/` and `.opencode/` may contain `moks.json(c)` / `opencode.json(c)` |
+| Project dirs | `.moks/` **and** `.opencode/` for `agent(s)/`, `command(s)/`, `skill(s)/`, `plugin(s)/`, themes |
+| Global config files | Under **`~/.config/opencode/`** (global app dir not renamed yet): `moks.json(c)`, `opencode.json(c)`, `config.json` |
+| Env overrides | **`MOKS_*` primary**, `OPENCODE_*` fallback (e.g. `MOKS_CONFIG`, `MOKS_CONFIG_DIR`, `MOKS_PURE`) |
 
-**Also real today (product paths that already work):**
+**Also real today:**
 
 | Surface | Path / behavior |
 | ------- | --------------- |
@@ -65,11 +66,12 @@ plugin/agent/skill/command files under OpenCode-compatible names:**
 | Decision receipts | `.moks/receipts/` when `.moks/` exists; else user data dir `…/receipts/` |
 | Built-in hiring skills | registered in-process (see below); disk skills can override by name |
 
-When editing config for a running install: **write what the loader scans today**
-(`opencode.json` / `.opencode/…`) unless the user is deliberately preparing for
-product paths. Prefer documenting both: intended `moks.json` / `.moks/` **and**
-the dual-load names that currently apply. Do not claim `moks.json` or
-`.moks/agent` are fully loaded if they are not yet on the discovery path.
+**Not dual-loaded yet:** global XDG app directory name is still `opencode`
+(`~/.config/opencode`, share/cache). That is intentional until a migrate design
+ships — product files can still be named `moks.json` *inside* that tree.
+
+Prefer scaffolding **`moks.json` / `.moks/`** for new TA workspaces. Keep reading
+and writing `opencode.json` / `.opencode/` when that is what the user already has.
 
 Configs deep-merge; project overrides global. Unknown top-level keys are
 rejected with `ConfigInvalidError`.
@@ -82,8 +84,8 @@ restart moks**. The running session keeps the already-loaded config until then.
 
 ## moks config shape (shared schema summary)
 
-Every field is optional. Use the product names in comments/docs; on disk today
-the file is usually still named `opencode.json`.
+Every field is optional. Prefer file name **`moks.json` / `moks.jsonc`**;
+`opencode.json(c)` still loads.
 
 ```json
 {
@@ -434,20 +436,18 @@ disables an inherited server.
 
 ## Escape hatches
 
-When config is broken and moks won't start:
+When config is broken and moks won't start (prefer **`MOKS_*`**; `OPENCODE_*` still works):
 
-- `OPENCODE_DISABLE_PROJECT_CONFIG=1` — skip project local config (name still uses OPENCODE_ prefix today)
-- `OPENCODE_CONFIG=/path/to/file.json` — extra explicit config
-- `OPENCODE_CONFIG_CONTENT='{...}'` — inline JSON final local merge
-- `OPENCODE_DISABLE_DEFAULT_PLUGINS=1` / `OPENCODE_PURE=1` — plugin skips
-- `OPENCODE_DISABLE_EXTERNAL_SKILLS=1`, `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1` — skip `~/.claude/` / `~/.agents/` skill scans
-
-Env flag names remain OPENCODE-prefixed until identity dual-load fully ships.
+- `MOKS_DISABLE_PROJECT_CONFIG=1` — skip project local config
+- `MOKS_CONFIG=/path/to/file.json` — extra explicit config
+- `MOKS_CONFIG_CONTENT='{...}'` — inline JSON final local merge
+- `MOKS_PURE=1` — skip external plugins
 
 ## When proposing edits
 
 - Prefer **moks product semantics**: `recruit`, `.moks/` workspace, hiring skills, commit/status/push, Ashby read-only edge.
-- Be honest about dual-load: write paths the loader actually scans today when the user needs a working change now; mention intended `moks.json` / `.moks/` paths when scaffolding for the product future.
+- Prefer writing **`moks.json` / `.moks/`**; keep `opencode.json` / `.opencode/` when that is the user's existing layout.
+- Note global data dir is still under `~/.config/opencode` until a future app-dir rename.
 - Do not send users to opencode.ai as the primary config authority for moks.
 - Preserve fields the user did not ask to change.
 - Prefer new agent/command/skill/plugin **files** over inlining everything in JSON.

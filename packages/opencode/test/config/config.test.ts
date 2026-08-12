@@ -308,13 +308,14 @@ it.instance("falls back to generic username when system user info is unavailable
   }),
 )
 
-it.effect("creates global jsonc config with schema when no global configs exist", () =>
+it.effect("creates global moks.jsonc config with schema when no global configs exist", () =>
   withGlobalConfig({}, ({ dir }) =>
     Effect.gen(function* () {
       yield* Config.use.get().pipe(provideInstanceEffect(dir))
 
-      const content = yield* FSUtil.use.readFileString(path.join(dir, "opencode.jsonc"))
+      const content = yield* FSUtil.use.readFileString(path.join(dir, "moks.jsonc"))
       expect(content).toContain('"$schema": "https://opencode.ai/config.json"')
+      expect(yield* FSUtil.use.existsSafe(path.join(dir, "opencode.jsonc"))).toBe(false)
     }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
   ),
 )
@@ -329,6 +330,7 @@ it.effect("does not create global config when OPENCODE_CONFIG_DIR is set", () =>
         Effect.gen(function* () {
           yield* Config.use.get().pipe(provideInstanceEffect(dir))
 
+          expect(yield* FSUtil.use.existsSafe(path.join(dir, "moks.jsonc"))).toBe(false)
           expect(yield* FSUtil.use.existsSafe(path.join(dir, "opencode.jsonc"))).toBe(false)
         }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
       ),
@@ -764,6 +766,142 @@ Test agent prompt`,
       }),
     )
   }),
+)
+
+it.instance("loads moks.json project config", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(
+      test.directory,
+      {
+        $schema: "https://opencode.ai/config.json",
+        model: "moks/model",
+        username: "moks-user",
+      },
+      "moks.json",
+    )
+    const config = yield* Config.use.get()
+    expect(config.model).toBe("moks/model")
+    expect(config.username).toBe("moks-user")
+  }),
+)
+
+it.instance("prefers moks.json over opencode.json in the same directory", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      model: "opencode/model",
+      username: "opencode-user",
+    })
+    yield* writeConfigEffect(
+      test.directory,
+      {
+        $schema: "https://opencode.ai/config.json",
+        model: "moks/model",
+      },
+      "moks.json",
+    )
+    const config = yield* Config.use.get()
+    expect(config.model).toBe("moks/model")
+    expect(config.username).toBe("opencode-user")
+  }),
+)
+
+it.instance("loads agents from .moks directory", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".moks", "agent", "hire.md"),
+      `---
+model: test/model
+---
+Hire agent prompt`,
+    )
+
+    const config = yield* Config.use.get()
+    expect(config.agent?.["hire"]).toEqual(
+      expect.objectContaining({
+        name: "hire",
+        model: "test/model",
+        prompt: "Hire agent prompt",
+      }),
+    )
+  }),
+)
+
+it.instance("loads from both .moks and .opencode and prefers .moks on name conflict", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "agent", "shared.md"),
+      `---
+model: opencode/model
+---
+From opencode`,
+    )
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".moks", "agent", "shared.md"),
+      `---
+model: moks/model
+---
+From moks`,
+    )
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "agent", "legacy-only.md"),
+      `---
+model: legacy/model
+---
+Legacy only`,
+    )
+
+    const config = yield* Config.use.get()
+    expect(config.agent?.["shared"]).toEqual(
+      expect.objectContaining({
+        name: "shared",
+        model: "moks/model",
+        prompt: "From moks",
+      }),
+    )
+    expect(config.agent?.["legacy-only"]).toEqual(
+      expect.objectContaining({
+        name: "legacy-only",
+        model: "legacy/model",
+      }),
+    )
+  }),
+)
+
+it.instance("loads nested moks.json from .moks directory", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(path.join(test.directory, ".moks"), {
+      $schema: "https://opencode.ai/config.json",
+      model: "nested/moks",
+      username: "nested-user",
+    }, "moks.json")
+    const config = yield* Config.use.get()
+    expect(config.model).toBe("nested/moks")
+    expect(config.username).toBe("nested-user")
+  }),
+)
+
+it.effect("prefers global moks.json over opencode.json", () =>
+  withGlobalConfig({ config: { model: "global/opencode", username: "from-opencode" }, name: "opencode.json" }, ({ dir }) =>
+    Effect.gen(function* () {
+      yield* writeConfigEffect(
+        dir,
+        {
+          $schema: "https://opencode.ai/config.json",
+          model: "global/moks",
+        },
+        "moks.json",
+      )
+      const config = yield* Config.use.get().pipe(provideInstanceEffect(dir))
+      expect(config.model).toBe("global/moks")
+      expect(config.username).toBe("from-opencode")
+    }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+  ),
 )
 
 it.instance("agent markdown permission config preserves user key order", () =>
