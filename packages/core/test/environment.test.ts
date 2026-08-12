@@ -4,13 +4,13 @@ import { Effect } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { EnvironmentUnavailable } from "../src/environment/unavailable"
 import {
   execDefaults,
   Failed,
   makeFiles,
   makeLocalDriver,
   makeMemoryDriver,
-  noExecutionPlaneSpawner,
   NotFound,
   typeFollowing,
 } from "../src/environment/index"
@@ -39,7 +39,7 @@ describe("typeFollowing", () => {
 describe("no execution plane", () => {
   it.effect("fails spawn with a typed location error", () =>
     Effect.gen(function* () {
-      const error = yield* noExecutionPlaneSpawner
+      const error = yield* EnvironmentUnavailable.spawner
         .spawn(ChildProcess.make("echo", ["hello"]))
         .pipe(Effect.flip)
 

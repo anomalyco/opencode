@@ -29,7 +29,7 @@ import type { ServerOptions } from "./options"
  *   FileSystemSearch, and Pty fail with a clear defect until a remote sandbox
  *   backs them; Snapshot and Vcs degrade to no-op results.
  * - Config is injected as a string (no filesystem); plugin discovery is
- *   precompiled-only and MCP is restricted to remote transports.
+ *   precompiled-only, and stdio MCP reports the same no-plane failure as Shell.
  *
  * Bundle with the `workerd` condition, e.g.
  * `bun build src/workerd.ts --conditions=workerd --target=node`
@@ -69,9 +69,6 @@ export function serverOptions(options: Options): ServerOptions {
     events: { persist: true },
     config: { content: options.config?.content },
     models: options.models,
-    // No child processes on workerd: local (stdio) MCP servers report failed
-    // instead of connecting; remote transports work unchanged.
-    mcp: { stdio: false },
   }
 }
 
