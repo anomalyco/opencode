@@ -111,18 +111,18 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
   const [dragging, setDragging] = createSignal<string>()
   const [preview, setPreview] = createSignal<{ sessionID: string; index: number }>()
   const newTab = () => tabs.newTab?.() ?? false
-  const activeID = createMemo(() => (newTab() ? NEW_SESSION_TAB.sessionID : tabs.current()))
+  const activeID = createMemo(() => (newTab() ? undefined : tabs.current()))
   const ordered = createMemo(() => {
     const pending = preview()
     if (!pending) return tabs.tabs()
     return moveSessionTab(tabs.tabs(), pending.sessionID, pending.index)
   })
-  const items = createMemo(() => (newTab() ? [...ordered(), NEW_SESSION_TAB] : ordered()))
+  const items = ordered
   const statuses = createMemo(
     () =>
       new Map(
         items().map((tab) => {
-          const status = tab === NEW_SESSION_TAB ? EMPTY_SESSION_TAB_STATUS : tabs.status(tab.sessionID)
+          const status = tabs.status(tab.sessionID)
           return [
             tab.sessionID,
             {
@@ -149,6 +149,8 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
 
   createEffect(() => {
     if (!scroll) return
+    // The promoted new-session slot sits below the list, so bring the rail's bottom into view.
+    if (newTab()) return scroll.scrollTo(Math.max(0, items().length * 3 + 1 - scroll.viewport.height))
     const index = items().findIndex((tab) => tab.sessionID === activeID())
     if (index === -1) return
     const top = index * 3
@@ -175,7 +177,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const selected = () => activeID() === tab.sessionID
               const status = createMemo(() => itemStatus(tab))
               const [sweepLevel, setSweepLevel] = createSignal(0)
-              const session = createMemo(() => (tab === NEW_SESSION_TAB ? undefined : data.session.get(tab.sessionID)))
+              const session = createMemo(() => data.session.get(tab.sessionID))
               const project = createMemo(() => {
                 const value = session()
                 return value ? data.project.get(value.projectID) : undefined
@@ -192,7 +194,6 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
               const titleFades = createMemo(() => stringWidth(title()) >= titleWidth() && titleWidth() > FADE_WIDTH)
               const detail = createMemo(() => {
-                if (tab === NEW_SESSION_TAB) return Locale.takeWidth("Start a new session", titleWidth())
                 const value = session()
                 return Locale.takeWidth(projectName(project(), value?.location.directory) ?? "", titleWidth())
               })
@@ -264,7 +265,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                 setDragging(undefined)
                 const pending = preview()
                 if (pending?.sessionID === tab.sessionID) tabs.move(pending.sessionID, pending.index)
-                if (tab !== NEW_SESSION_TAB) tabs.select(tab.sessionID)
+                tabs.select(tab.sessionID)
               }
               return (
                 <box
@@ -281,7 +282,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   }}
                   onMouseUp={release}
                   onMouseDrag={(event) => {
-                    if (!rail || tab === NEW_SESSION_TAB) return
+                    if (!rail) return
                     const target = Math.max(
                       0,
                       Math.min(
@@ -390,7 +391,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                         onMouseUp={(event) => {
                           if (hovered() !== tab.sessionID) return
                           event.stopPropagation()
-                          tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
+                          tabs.close(tab.sessionID)
                         }}
                       >
                         {hovered() === tab.sessionID ? "×" : ""}
@@ -421,27 +422,61 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               )
             }}
           </For>
-          <Show when={tabs.add}>
+          {/* One slot with two states: a subdued affordance that promotes in place into the
+              active new-session tab, instead of spawning a separate pseudo tab above itself. */}
+          <Show when={tabs.add || newTab()}>
             <box
               height={1}
               width="100%"
+              position="relative"
               flexDirection="row"
               paddingLeft={1}
-              backgroundColor={addHovered() ? theme.background.action.primary.hovered : theme.background.default}
+              backgroundColor={
+                newTab()
+                  ? theme.background.action.primary.selected
+                  : addHovered()
+                    ? theme.background.action.primary.hovered
+                    : theme.background.default
+              }
               onMouseOver={() => setAddHovered(true)}
               onMouseOut={() => setAddHovered(false)}
-              onMouseUp={() => tabs.add?.()}
+              onMouseUp={() => {
+                if (!newTab()) tabs.add?.()
+              }}
             >
-              <text width={2} fg={addHovered() ? theme.text.default : idleNumber()} selectable={false}>
+              <text
+                width={2}
+                fg={newTab() ? activeNumber() : addHovered() ? theme.text.default : idleNumber()}
+                selectable={false}
+                attributes={newTab() ? TextAttributes.BOLD : undefined}
+              >
                 +
               </text>
               <text
-                fg={addHovered() ? theme.text.default : theme.text.subdued}
+                fg={newTab() || addHovered() ? theme.text.default : theme.text.subdued}
                 wrapMode="none"
                 selectable={false}
+                attributes={newTab() ? TextAttributes.BOLD : undefined}
               >
                 {NEW_SESSION_TAB_TITLE}
               </text>
+              <Show when={newTab()}>
+                <text
+                  position="absolute"
+                  right={1}
+                  zIndex={2}
+                  width={1}
+                  fg={theme.text.subdued}
+                  selectable={false}
+                  onMouseUp={(event) => {
+                    if (!addHovered()) return
+                    event.stopPropagation()
+                    tabs.close()
+                  }}
+                >
+                  {addHovered() ? "×" : ""}
+                </text>
+              </Show>
             </box>
           </Show>
         </box>
@@ -477,7 +512,10 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
     if (!pending) return tabs.tabs()
     return moveSessionTab(tabs.tabs(), pending.sessionID, pending.index)
   })
+  // The promoted new-session slot joins the strip as the active tab; the idle plus affordance
+  // and the promoted slot are mutually exclusive states of one control.
   const items = createMemo(() => (newTab() ? [...ordered(), NEW_SESSION_TAB] : ordered()))
+  const showPlus = () => Boolean(tabs.add) && !newTab()
   createEffect(() => {
     const pending = preview()
     if (!pending || dragging()) return
@@ -485,7 +523,12 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
     if (index === -1 || index === Math.min(pending.index, tabs.tabs().length - 1)) setPreview(undefined)
   })
   const layout = createMemo((previous: ReturnType<typeof adaptiveSessionTabLayout> | undefined) =>
-    adaptiveSessionTabLayout(items(), activeID(), dimensions().width - (tabs.add ? ADD_TAB_WIDTH : 0), previous?.start),
+    adaptiveSessionTabLayout(
+      items(),
+      activeID(),
+      dimensions().width - (showPlus() ? ADD_TAB_WIDTH : 0),
+      previous?.start,
+    ),
   )
   const statuses = createMemo(
     () =>
@@ -732,7 +775,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   {" "}
                 </text>
                 <text width={numberWidth()} fg={numberColor()} selectable={false} attributes={bold()}>
-                  {sessionTabShortcutLabel(tabNumber() - 1)}
+                  {tab === NEW_SESSION_TAB ? "+" : sessionTabShortcutLabel(tabNumber() - 1)}
                 </text>
                 <text
                   width={availableTitleWidth()}
@@ -774,7 +817,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           {" " + layout().after}›
         </text>
       </Show>
-      <Show when={tabs.add}>
+      <Show when={showPlus()}>
         <text
           width={ADD_TAB_WIDTH}
           fg={addHovered() ? theme.text.default : theme.text.subdued}
