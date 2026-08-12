@@ -361,6 +361,26 @@ function composeFooter(input: {
   return footer
 }
 
+function sameSubagentSnapshot(left: FooterSubagentState, right: FooterSubagentState) {
+  const sameItems = <T>(a: T[], b: T[]) => a.length === b.length && a.every((item, index) => item === b[index])
+  if (
+    !sameItems(left.tabs, right.tabs) ||
+    !sameItems(left.permissions, right.permissions) ||
+    !sameItems(left.questions, right.questions)
+  ) {
+    return false
+  }
+
+  const before = Object.values(left.details)
+  const after = Object.values(right.details)
+  return (
+    before.length === after.length &&
+    before.every((detail, index) =>
+      detail.sessionID === after[index]?.sessionID ? sameItems(detail.commits, after[index].commits) : false,
+    )
+  )
+}
+
 function traceTabs(trace: Trace | undefined, prev: FooterSubagentTab[], next: FooterSubagentTab[]) {
   const before = new Map(prev.map((item) => [item.sessionID, item]))
   const after = new Map(next.map((item) => [item.sessionID, item]))
@@ -932,6 +952,7 @@ function createLayer(input: StreamInput) {
             )
           }
 
+          const beforeSubagent = currentSubagentState()
           const changed = reduceSubagentData({
             data: state.subagent,
             event,
@@ -944,7 +965,12 @@ function createLayer(input: StreamInput) {
           }
           releaseBlocker(event)
 
-          syncFooter(next.commits, next.footer?.patch, changed ? currentSubagentState() : undefined)
+          const afterSubagent = changed ? currentSubagentState() : undefined
+          syncFooter(
+            next.commits,
+            next.footer?.patch,
+            afterSubagent && !sameSubagentSnapshot(beforeSubagent, afterSubagent) ? afterSubagent : undefined,
+          )
 
           touch(event)
           yield* mark(event)

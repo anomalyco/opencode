@@ -277,6 +277,36 @@ function completedTool(input: {
   }
 }
 
+function failedTool(input: {
+  sessionID: string
+  messageID: string
+  id: string
+  callID: string
+  tool: string
+  body: Record<string, unknown>
+  error: string
+  metadata?: Record<string, unknown>
+}): SessionToolPart {
+  return {
+    id: input.id,
+    sessionID: input.sessionID,
+    messageID: input.messageID,
+    type: "tool",
+    callID: input.callID,
+    tool: input.tool,
+    state: {
+      status: "error",
+      input: input.body,
+      error: input.error,
+      metadata: input.metadata,
+      time: {
+        start: 1,
+        end: 2,
+      },
+    },
+  }
+}
+
 function textPart(id: string, messageID: string, text: string, sessionID = "session-1"): TextPart {
   return {
     id,
@@ -371,6 +401,83 @@ function globalEvent(payload: GlobalEvent["payload"]): GlobalEvent {
   }
 }
 
+function permissionAsked(sessionID: string, id = "perm-1"): SdkEvent {
+  return {
+    id: `evt-${id}-asked`,
+    type: "permission.asked",
+    properties: {
+      id,
+      sessionID,
+      permission: "bash",
+      patterns: ["git status --short"],
+      metadata: {},
+      always: [],
+    },
+  }
+}
+
+function permissionReplied(sessionID: string, requestID = "perm-1"): SdkEvent {
+  return {
+    id: `evt-${requestID}-replied`,
+    type: "permission.replied",
+    properties: {
+      sessionID,
+      requestID,
+      reply: "once",
+    },
+  }
+}
+
+function questionAsked(sessionID: string, id = "question-1"): SdkEvent {
+  return {
+    id: `evt-${id}-asked`,
+    type: "question.asked",
+    properties: {
+      id,
+      sessionID,
+      questions: [
+        {
+          question: "Continue?",
+          header: "Continue",
+          options: [{ label: "Yes", description: "Continue the task" }],
+          multiple: false,
+        },
+      ],
+    },
+  }
+}
+
+function questionReplied(sessionID: string, requestID = "question-1"): SdkEvent {
+  return {
+    id: `evt-${requestID}-replied`,
+    type: "question.replied",
+    properties: {
+      sessionID,
+      requestID,
+      answers: [["Yes"]],
+    },
+  }
+}
+
+function abortedAssistant(sessionID: string): SdkEvent {
+  const info = assistantMessage({ sessionID, id: `msg-${sessionID}-aborted`, parts: [] }).info
+  if (info.role !== "assistant") throw new Error("expected assistant message")
+  return {
+    id: `evt-${sessionID}-aborted`,
+    type: "message.updated",
+    properties: {
+      sessionID,
+      info: {
+        ...info,
+        error: {
+          name: "MessageAbortedError",
+          data: { message: "aborted" },
+        },
+      },
+    },
+  }
+}
+
 function footer(fn?: (commit: StreamCommit) => void) {
   const commits: StreamCommit[] = []
   const events: FooterEvent[] = []
@@ -449,6 +556,42 @@ function sdk(
   spyOn(client.question, "list").mockImplementation(questions)
 
   return client
+}
+
+async function startRunningSubagent(global: ReturnType<typeof globalFeed>, ui: ReturnType<typeof footer>) {
+  const transport = await createSessionTransport({
+    sdk: sdk({ globalStream: global.stream }),
+    sessionID: "session-1",
+    thinking: true,
+    limits: () => ({}),
+    footer: ui.api,
+  })
+  global.push(globalEvent(assistant("msg-1")))
+  global.push(
+    globalEvent(
+      toolUpdated(
+        runningTool({
+          sessionID: "session-1",
+          messageID: "msg-1",
+          id: "task-1",
+          callID: "call-1",
+          tool: "task",
+          body: {
+            description: "Explore run.ts",
+            subagent_type: "explore",
+          },
+          metadata: { sessionId: "child-1" },
+        }),
+      ),
+    ),
+  )
+  await waitFor(() => {
+    const item = ui.events.findLast((event) => event.type === "stream.subagent")
+    return item?.type === "stream.subagent" && item.state.tabs.some((tab) => tab.sessionID === "child-1")
+      ? item
+      : undefined
+  })
+  return transport
 }
 
 describe("run stream transport", () => {
@@ -1652,6 +1795,196 @@ describe("run stream transport", () => {
     } finally {
       global.close()
       await transport?.close()
+    }
+  })
+
+  test("suppresses unselected detail snapshots and reveals all accumulated detail on selection", async () => {
+    const global = globalFeed()
+    const ui = footer()
+    const transport = await startRunningSubagent(global, ui)
+    const subagentEvents = () => ui.events.filter((event) => event.type === "stream.subagent")
+
+    try {
+      const before = subagentEvents().length
+      global.push(
+        globalEvent({
+          id: "evt-child-message",
+          type: "message.updated",
+          properties: {
+            sessionID: "child-1",
+            info: assistantMessage({ sessionID: "child-1", id: "msg-child-1", parts: [] }).info,
+          },
+        }),
+      )
+      global.push(globalEvent(textUpdated(textPart("txt-child-1", "msg-child-1", "", "child-1"))))
+      global.push(
+        globalEvent(
+          toolUpdated(
+            runningTool({
+              sessionID: "child-1",
+              messageID: "msg-child-1",
+              id: "tool-child-1",
+              callID: "call-child-1",
+              tool: "bash",
+              body: { command: "git status --short" },
+            }),
+          ),
+        ),
+      )
+      for (let index = 0; index < 250; index += 1) {
+        global.push(globalEvent(textDelta("msg-child-1", "txt-child-1", "x", "child-1")))
+      }
+      global.push(globalEvent(permissionAsked("child-1")))
+
+      await waitFor(() => {
+        const item = subagentEvents().at(-1)
+        return item?.type === "stream.subagent" && item.state.permissions.some((request) => request.id === "perm-1")
+          ? item
+          : undefined
+      })
+      expect(subagentEvents()).toHaveLength(before + 1)
+
+      transport.selectSubagent("child-1")
+
+      const selected = await waitFor(() => {
+        const item = subagentEvents().at(-1)
+        if (item?.type !== "stream.subagent") return
+        const detail = item.state.details["child-1"]
+        return detail?.commits.some((commit) => commit.kind === "assistant" && commit.text === "x".repeat(250)) &&
+          detail.commits.some((commit) => commit.kind === "tool" && commit.tool === "bash")
+          ? item
+          : undefined
+      })
+      expect(selected.state.details["child-1"]?.commits).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ kind: "assistant", text: "x".repeat(250) }),
+          expect.objectContaining({ kind: "tool", tool: "bash" }),
+        ]),
+      )
+      expect(subagentEvents()).toHaveLength(before + 2)
+    } finally {
+      global.close()
+      await transport.close()
+    }
+  })
+
+  test("emits unselected queue and lifecycle transitions immediately", async () => {
+    const global = globalFeed()
+    const ui = footer()
+    const transport = await startRunningSubagent(global, ui)
+    const subagentEvents = () => ui.events.filter((event) => event.type === "stream.subagent")
+
+    try {
+      const before = subagentEvents().length
+      global.push(globalEvent(permissionAsked("child-1")))
+      await waitFor(() => (subagentEvents().length === before + 1 ? true : undefined))
+      expect(
+        subagentEvents()
+          .at(-1)
+          ?.state.permissions.map((item) => item.id),
+      ).toEqual(["perm-1"])
+
+      global.push(globalEvent(permissionReplied("child-1")))
+      await waitFor(() => (subagentEvents().length === before + 2 ? true : undefined))
+      expect(subagentEvents().at(-1)?.state.permissions).toEqual([])
+
+      global.push(globalEvent(questionAsked("child-1")))
+      await waitFor(() => (subagentEvents().length === before + 3 ? true : undefined))
+      expect(
+        subagentEvents()
+          .at(-1)
+          ?.state.questions.map((item) => item.id),
+      ).toEqual(["question-1"])
+
+      global.push(globalEvent(questionReplied("child-1")))
+      await waitFor(() => (subagentEvents().length === before + 4 ? true : undefined))
+      expect(subagentEvents().at(-1)?.state.questions).toEqual([])
+
+      global.push(globalEvent(abortedAssistant("child-1")))
+      await waitFor(() => (subagentEvents().length === before + 5 ? true : undefined))
+      expect(subagentEvents().at(-1)?.state.tabs[0]?.status).toBe("cancelled")
+
+      global.push(
+        globalEvent(
+          toolUpdated(
+            failedTool({
+              sessionID: "session-1",
+              messageID: "msg-1",
+              id: "task-1",
+              callID: "call-1",
+              tool: "task",
+              body: {
+                description: "Explore run.ts",
+                subagent_type: "explore",
+              },
+              error: "child failed",
+              metadata: { sessionId: "child-1" },
+            }),
+          ),
+        ),
+      )
+      await waitFor(() => (subagentEvents().length === before + 6 ? true : undefined))
+      expect(subagentEvents().at(-1)?.state.tabs[0]?.status).toBe("error")
+
+      global.push(
+        globalEvent(
+          toolUpdated(
+            completedTool({
+              sessionID: "session-1",
+              messageID: "msg-1",
+              id: "task-1",
+              callID: "call-1",
+              tool: "task",
+              body: {
+                description: "Explore run.ts",
+                subagent_type: "explore",
+              },
+              metadata: { sessionId: "child-1" },
+            }),
+          ),
+        ),
+      )
+      await waitFor(() => (subagentEvents().length === before + 7 ? true : undefined))
+      expect(subagentEvents().at(-1)?.state.tabs[0]?.status).toBe("completed")
+    } finally {
+      global.close()
+      await transport.close()
+    }
+  })
+
+  test("keeps selected child detail live", async () => {
+    const global = globalFeed()
+    const ui = footer()
+    const transport = await startRunningSubagent(global, ui)
+    const subagentEvents = () => ui.events.filter((event) => event.type === "stream.subagent")
+
+    try {
+      transport.selectSubagent("child-1")
+      const before = subagentEvents().length
+      global.push(
+        globalEvent({
+          id: "evt-child-message",
+          type: "message.updated",
+          properties: {
+            sessionID: "child-1",
+            info: assistantMessage({ sessionID: "child-1", id: "msg-child-1", parts: [] }).info,
+          },
+        }),
+      )
+      global.push(globalEvent(textUpdated(textPart("txt-child-1", "msg-child-1", "hello", "child-1"))))
+      await waitFor(() => (subagentEvents().length === before + 1 ? true : undefined))
+      expect(subagentEvents().at(-1)?.state.details["child-1"]?.commits).toEqual([
+        expect.objectContaining({ kind: "assistant", text: "hello" }),
+      ])
+
+      global.push(globalEvent(textDelta("msg-child-1", "txt-child-1", " world", "child-1")))
+      await waitFor(() => (subagentEvents().length === before + 2 ? true : undefined))
+      expect(subagentEvents().at(-1)?.state.details["child-1"]?.commits).toEqual([
+        expect.objectContaining({ kind: "assistant", text: "hello world" }),
+      ])
+    } finally {
+      global.close()
+      await transport.close()
     }
   })
 
