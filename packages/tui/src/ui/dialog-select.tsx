@@ -729,6 +729,30 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   )
 }
 
+DialogSelect.show = <T,>(
+  dialog: DialogContext,
+  title: string,
+  options: DialogSelectOption<T>[],
+  extra?: Omit<DialogSelectProps<T>, "title" | "options" | "onSelect">,
+) => {
+  return new Promise<T | null>((resolve) => {
+    dialog.replace(
+      () => (
+        <DialogSelect
+          title={title}
+          options={options}
+          {...extra}
+          onSelect={(option) => {
+            resolve(option.value)
+            dialog.clear()
+          }}
+        />
+      ),
+      () => resolve(null),
+    )
+  })
+}
+
 function Option(props: {
   title: string
   titleView?: JSX.Element

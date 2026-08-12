@@ -50,3 +50,4 @@ Read every file or MCP payload you will cite. Never call Ashby write tools (`ash
 - Quote or paraphrase only what files support; mark gaps under Missing context
 - If JD is absent, ask for path or paste — do not fabricate a full JD
 - Keep the brief short enough to reuse in score-candidate and draft-outreach
+- After the brief, if title, level, team/HM, location, or must-haves are TBD, use the question tool for the next 2–4 gaps. Do not stop at a checklist.

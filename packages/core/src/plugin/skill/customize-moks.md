@@ -34,7 +34,7 @@ Document and prefer these when scaffolding new workspaces:
 | Scope | Intended path |
 | ----- | ------------- |
 | Project config | `./moks.json` or `./moks.jsonc`, or `.moks/moks.json` |
-| Project workspace | `.moks/` (req, plans, notes, receipts) |
+| Project workspace | `.moks/` (reqs, plans, notes, receipts) |
 | Project agents | `.moks/agent/<name>.md` or `.moks/agents/<name>.md` |
 | Project commands | `.moks/command/<name>.md` or `.moks/commands/<name>.md` |
 | Project skills | `.moks/skill(s)/<name>/SKILL.md` |
@@ -88,7 +88,7 @@ Every field is optional. File name is **`moks.json` / `moks.jsonc`**.
   "username": "string",
   "shell": "/bin/zsh",
   "logLevel": "DEBUG" | "INFO" | "WARN" | "ERROR",
-  "instructions": ["HIRING-AGENTS.md", "docs/style.md"],
+   "instructions": ["HIRING-AGENTS.md", "docs/style.md"],
 
   "skills": {
     "paths": [".moks/skills", "/abs/path/to/skills"],
@@ -171,11 +171,13 @@ Scaffold with `/init` (product command) or create by hand:
 
 ```
 .moks/
-  req/
-    jd.md
-    resume.md          # optional / per candidate
-    scorecard.md
-    notes.md
+  reqs/
+    <slug>/
+      jd.md
+      scorecard.md
+      notes.md
+      scores/          # score-candidate writes <candidate>.md here
+      outreach/        # draft-outreach writes <candidate>.md here
   plans/
     {timestamp}-{slug}.md
   receipts/            # decision log when workspace is moks-local
@@ -358,7 +360,7 @@ Plan Mode: `plan` agent edits only plan markdown; no decision recording.
 Discovered as `**/*.md` under command directories:
 
 ```
-.moks/command/deploy.md
+.moks/command/review-packet.md
 ```
 
 ```markdown

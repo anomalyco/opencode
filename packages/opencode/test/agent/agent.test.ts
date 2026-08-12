@@ -88,6 +88,9 @@ it.instance("recruit agent has correct default properties", () =>
     expect(Permission.evaluate("bash", "sudo reboot", recruit!.permission).action).toBe("deny")
     expect(Permission.evaluate("bash", "git push origin main", recruit!.permission).action).toBe("deny")
     expect(evalPerm(recruit, "question")).toBe("allow")
+    expect(evalPerm(recruit, "ashby_list_jobs")).toBe("allow")
+    expect(evalPerm(recruit, "ashby_change_stage")).toBe("deny")
+    expect(evalPerm(recruit, "ashby_create_note")).toBe("deny")
   }),
 )
 
@@ -120,6 +123,8 @@ it.instance("build agent is hidden coding escape hatch", () =>
     expect(build?.prompt).toBeUndefined()
     expect(evalPerm(build, "edit")).toBe("allow")
     expect(evalPerm(build, "bash")).toBe("allow")
+    expect(evalPerm(build, "ashby_change_stage")).toBe("deny")
+    expect(evalPerm(build, "ashby_create_note")).toBe("deny")
   }),
 )
 

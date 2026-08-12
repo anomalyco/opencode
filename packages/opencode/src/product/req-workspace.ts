@@ -70,6 +70,35 @@ export function isReqMaterial(filepath: string) {
   return isReqDir(path.dirname(filepath))
 }
 
+export function reqDirOf(filepath: string) {
+  let current = path.resolve(filepath)
+  while (true) {
+    if (isReqDir(current)) return current
+    const parent = path.dirname(current)
+    if (parent === current) return
+    current = parent
+  }
+}
+
+export function reqDirFromHint(hint: string, worktree: string) {
+  const trimmed = hint.trim()
+  if (!trimmed || worktree === "/") return
+  const abs = path.isAbsolute(trimmed) ? trimmed : path.join(worktree, trimmed)
+  const nested = reqDirOf(abs)
+  if (nested) return nested
+  if (trimmed.includes(path.sep) || trimmed.includes("/") || trimmed.includes(".")) return
+  const slug = slugify(trimmed)
+  if (!slug) return
+  return path.join(worktree, dir(slug))
+}
+
+export function focusFromPaths(paths: Iterable<string>, worktree: string) {
+  for (const hint of paths) {
+    const focused = reqDirFromHint(hint, worktree)
+    if (focused) return focused
+  }
+}
+
 export function slugOf(dirpath: string) {
   if (isBookReq(dirpath)) return path.basename(dirpath)
   if (isLegacyReq(dirpath)) return "req"

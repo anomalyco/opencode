@@ -12,6 +12,8 @@ import {
   ashbyMockMcpConfig,
   ashbyPermissionDefaults,
   ashbyToolPermissionKey,
+  ashbyWriteDeniedMessage,
+  isAshbyWriteTool,
 } from "../../src/product/ashby-edge"
 import { AshbyMockTools, createAshbyMockServer, handleAshbyTool } from "../../src/product/fixtures/mcp/ashby-mock"
 import { McpCatalog } from "../../src/mcp/catalog"
@@ -29,6 +31,13 @@ describe("ashby tool permission keys", () => {
     for (const tool of [...ASHBY_READ_TOOLS, ...ASHBY_WRITE_TOOLS]) {
       expect(ashbyToolPermissionKey(tool)).toBe(McpCatalog.toolName("ashby", tool))
     }
+  })
+
+  test("isAshbyWriteTool matches only write keys", () => {
+    expect(isAshbyWriteTool("ashby_change_stage")).toBe(true)
+    expect(isAshbyWriteTool("ashby_create_note")).toBe(true)
+    expect(isAshbyWriteTool("ashby_list_jobs")).toBe(false)
+    expect(ashbyWriteDeniedMessage()).toContain("moks commit")
   })
 
   test("ashbyPermissionDefaults allows reads and denies writes", () => {

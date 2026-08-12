@@ -4,13 +4,17 @@ import type { DialogContext } from "./dialog"
 import { DialogAlert } from "./dialog-alert"
 import { DialogConfirm } from "./dialog-confirm"
 import { DialogPrompt } from "./dialog-prompt"
+import { DialogSelect } from "./dialog-select"
 import {
   confirmMessage,
   formatDecisionResult,
+  formatReceiptLine,
   needsConfirm,
   receiptId,
   runDecision,
+  statusOpen,
   type DecisionCliResult,
+  type ReceiptRow,
 } from "../util/decision-cli"
 
 type Toast = {
@@ -35,7 +39,7 @@ export async function runCommitFlow(input: { dialog: DialogContext; toast: Toast
   })
   if (reasonRaw === null) return
 
-  const inferred = input.cwd ? await newestScore(input.cwd) : undefined
+  const inferred = input.cwd ? await newestScoreInSingleReq(input.cwd) : undefined
   const args = ["commit", "--json", "--action", trimmedAction]
   const reason = reasonRaw.trim()
   if (reason) args.push("--reason", reason)
@@ -63,13 +67,18 @@ export async function runCommitFlow(input: { dialog: DialogContext; toast: Toast
 }
 
 export async function runPushFlow(input: { dialog: DialogContext; toast: Toast; cwd?: string }) {
-  const commitRaw = await DialogPrompt.show(input.dialog, "Push decision", {
-    placeholder: "dec_… from moks status",
-  })
-  if (commitRaw === null) return
-  const commitID = commitRaw.trim()
+  const listed = await call(["status", "--json"], input)
+  if (listed.code !== 0) {
+    input.toast.show({ message: "Failed to list open decisions", variant: "error" })
+    await showResult(input.dialog, "Push decision", listed)
+    return
+  }
+
+  const open = statusOpen(listed.json)
+  const commitID = await pickOpenCommit(input.dialog, open)
+  if (commitID === null) return
   if (!commitID) {
-    input.toast.show({ message: "Commit id is required", variant: "error" })
+    input.toast.show({ message: "No open commit to push", variant: "info" })
     input.dialog.clear()
     return
   }
@@ -119,15 +128,36 @@ async function showResult(dialog: DialogContext, title: string, result: Decision
   await DialogAlert.show(dialog, title, message.length > 4000 ? `${message.slice(0, 4000)}\n…` : message)
 }
 
-async function newestScore(cwd: string) {
+async function pickOpenCommit(dialog: DialogContext, open: ReceiptRow[]) {
+  if (open.length === 0) return ""
+  if (open.length === 1 && open[0].id) return open[0].id
+  return DialogSelect.show(
+    dialog,
+    "Push decision",
+    open.flatMap((row) => {
+      if (!row.id) return []
+      return [
+        {
+          title: row.id,
+          value: row.id,
+          description: formatReceiptLine(row),
+        },
+      ]
+    }),
+  )
+}
+
+async function newestScoreInSingleReq(cwd: string) {
   const book = path.join(cwd, ".moks", "reqs")
   const slugs = await readdir(book, { withFileTypes: true })
     .then((entries) => entries.flatMap((entry) => (entry.isDirectory() ? [entry.name] : [])))
     .catch(() => [] as string[])
-  const dirs = [
-    ...slugs.map((slug) => ({ abs: path.join(book, slug, "scores"), rel: `.moks/reqs/${slug}/scores` })),
-    { abs: path.join(cwd, ".moks", "req", "scores"), rel: ".moks/req/scores" },
-  ]
+  const dirs =
+    slugs.length === 1
+      ? [{ abs: path.join(book, slugs[0], "scores"), rel: `.moks/reqs/${slugs[0]}/scores` }]
+      : slugs.length === 0
+        ? [{ abs: path.join(cwd, ".moks", "req", "scores"), rel: ".moks/req/scores" }]
+        : []
   const rows = await Promise.all(
     dirs.map(async ({ abs, rel }) => {
       const entries = await readdir(abs, { withFileTypes: true }).catch(() => [])

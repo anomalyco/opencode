@@ -21,6 +21,12 @@ declare global {
 
 type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
 
+function ensureMoksEntry() {
+  if (process.env.MOKS_BIN || process.env.MOKS_ENTRY) return
+  const entry = process.argv[1]
+  if (entry) process.env.MOKS_ENTRY = entry
+}
+
 function createWorkerFetch(client: RpcClient): typeof fetch {
   const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init)
@@ -142,6 +148,7 @@ export const TuiThreadCommand = cmd({
         hidden: true,
       }),
   handler: async (args) => {
+    ensureMoksEntry()
     if (args.replay === true) {
       UI.error("--replay is not supported; replay is enabled by default")
       process.exitCode = 1

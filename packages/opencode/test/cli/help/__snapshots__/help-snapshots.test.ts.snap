@@ -14,7 +14,7 @@ Options:
       --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
                                                                           [boolean] [default: false]
       --mdns-domain  custom domain name for mDNS service (default: moks.local)
-                                                                [string] [default: "opencode.local"]
+                                                                    [string] [default: "moks.local"]
       --cors         additional domains to allow for CORS                      [array] [default: []]
       --cwd          working directory [string] [default: "<HOME>"]"
 `;
@@ -58,7 +58,7 @@ Options:
   -s, --session       session id to continue                                                [string]
       --fork          fork the session when continuing (use with --continue or --session)  [boolean]
   -p, --password      basic auth password (defaults to MOKS_SERVER_PASSWORD)                [string]
-  -u, --username      basic auth username (defaults to MOKS_SERVER_USERNAME or 'opencode')  [string]
+  -u, --username      basic auth username (defaults to MOKS_SERVER_USERNAME or 'moks')      [string]
       --mini          start the minimal interactive interface             [boolean] [default: false]
       --no-replay     disable mini session history replay on resume and after resize       [boolean]
       --replay-limit  cap visible mini replay to the newest N messages                      [number]"
@@ -92,7 +92,7 @@ Options:
       --title        title for the session (uses truncated prompt if no value provided)     [string]
       --attach       attach to a running moks server (e.g., http://localhost:4096)          [string]
   -p, --password     basic auth password (defaults to MOKS_SERVER_PASSWORD)                 [string]
-  -u, --username     basic auth username (defaults to MOKS_SERVER_USERNAME or 'opencode')   [string]
+  -u, --username     basic auth username (defaults to MOKS_SERVER_USERNAME or 'moks')       [string]
       --dir          directory to run in, path on remote server if attaching                [string]
       --port         port for the local server (defaults to random port if no value provided)
                                                                                             [number]
@@ -203,8 +203,6 @@ Options:
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode serve --help 1`] = `
 "moks serve
 
-starts a headless moks server
-
 Options:
   -h, --help         show help                                                             [boolean]
   -v, --version      show version number                                                   [boolean]
@@ -216,7 +214,7 @@ Options:
       --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
                                                                           [boolean] [default: false]
       --mdns-domain  custom domain name for mDNS service (default: moks.local)
-                                                                [string] [default: "opencode.local"]
+                                                                    [string] [default: "moks.local"]
       --cors         additional domains to allow for CORS                      [array] [default: []]"
 `;
 
@@ -234,7 +232,7 @@ Options:
       --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
                                                                           [boolean] [default: false]
       --mdns-domain  custom domain name for mDNS service (default: moks.local)
-                                                                [string] [default: "opencode.local"]
+                                                                    [string] [default: "moks.local"]
       --cors         additional domains to allow for CORS                      [array] [default: []]"
 `;
 

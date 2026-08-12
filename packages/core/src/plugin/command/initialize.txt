@@ -1,8 +1,8 @@
-Scaffold a new requisition under `.moks/reqs/<slug>` at `${path}`.
+Open recruiter intake for a req under `.moks/reqs/<slug>` at `${path}`.
 
-Default `/init` adds a req to the hiring book, not a coding AGENTS.md bible. (Coding AGENTS.md setup is `/init-code` / `build` agent — not this path.)
+This is hiring intake, not a coding AGENTS.md setup. (`/init-code` / `build` is the coding escape hatch.)
 
-User-provided focus or constraints (honor these):
+User notes (honor these; they are not a finished JD):
 $ARGUMENTS
 
 ## Goal
@@ -11,48 +11,20 @@ One hiring workspace holds many reqs. Each req is a directory: `.moks/reqs/<slug
 
 ## Steps
 
-1. Derive `<slug>` from `$ARGUMENTS` (lowercase, hyphens). If missing, ask once for a role title and slugify it.
+1. Derive `<slug>` from `$ARGUMENTS` (lowercase, hyphens). If missing or the slug looks like a placeholder (numeric like `00001`, not a role title), ask for the role title. Keep an existing folder — do not create a new directory when stubs already exist.
 
 2. Create directories if missing:
    - `.moks/reqs/<slug>/`
    - `.moks/reqs/<slug>/scores/`
 
-3. Scaffold stubs under `.moks/reqs/<slug>/` when missing (do not overwrite non-empty files without asking):
-   - `jd.md` — role title, team, level, must-haves / nice-to-haves, location
+3. Scaffold stubs under `.moks/reqs/<slug>/` when missing (do not overwrite non-empty user content):
+   - `jd.md` — only confirmed title / team / level / must-haves; leave the rest TBD
    - `scorecard.md` — dimensions and interview bar (1–5 or pass/fail)
    - `notes.md` — process notes, owners, open questions
-   - Optional: `resume.md` placeholder when the user already has a candidate in mind
+   - Optional: `resume.md` only if the user already named a candidate
 
 4. Gitignore: if a `.gitignore` exists at `${path}`, ensure a `.moks/` entry is present; add it if missing. Do not create a root `.gitignore` solely for this.
 
-5. Fill stubs with role context from `$ARGUMENTS` or brief questions. Use the `question` tool sparingly — at most one short batch for missing **role title** and/or **team**. Prefer writing lightweight stubs over a long interview.
+5. This is recruiter intake. After each answer, update the stubs, then use the question tool for the next 2–4 gaps (title → level → team/HM → location → must-haves). Keep asking until the role is staffable. Do not invent a polished JD from a title. Do not stop after the title.
 
-6. After scaffolding, run or invoke **req-context** to synthesize a structured req brief and list missing context.
-
-## Hiring skills (use via skill tool)
-
-- **req-context** — structured req brief from JD/notes; list gaps
-- **score-candidate** — resume vs JD/scorecard with evidence citations
-- **draft-outreach** — recruiter email/LinkedIn drafts; never send
-- **commit-disposition** — recommend reject/offer/hire/advance; user records via decision verbs
-
-## Decision verbs (authority)
-
-Dispositions are receipts only until push. Prefer bash for these CLIs:
-
-- `moks commit` — record disposition intent (local receipt)
-- `moks status` — inspect pending / open commits
-- `moks push` — push a committed decision (records push receipt; adverse reject/offer/hire need confirm)
-
-Never invent ATS stage moves or claim a remote write happened.
-
-## Samples
-
-If the user wants example materials, point at or copy from ship fixtures (reference only):
-`packages/opencode/src/product/fixtures/hiring/` (`jd.md`, `resume.md`, `scorecard.md`).
-
-## Done criteria
-
-- `.moks/reqs/<slug>/` exists with at least `jd.md`, `scorecard.md`, `notes.md`
-- `.moks/` gitignored when a `.gitignore` is present
-- Short summary of what was created and the next step (e.g. @<slug>, add resume → score-candidate, or fill JD gaps)
+6. After writing what you know, invoke **req-context**. If gaps remain, ask the next batch — do not close with “add a resume” while the role is still TBD.

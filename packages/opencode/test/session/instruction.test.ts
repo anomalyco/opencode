@@ -71,6 +71,41 @@ const tmpWithFiles = (files: Record<string, string>) =>
     return dir
   })
 
+function mentioned(dir: string, slug: string, relative?: string, id = "1"): SessionV1.WithParts {
+  const sessionID = SessionID.make("session-focus-1")
+  const messageID = MessageID.make(`msg_message-focus-${id}`)
+  const rel = relative ?? path.join(".moks", "reqs", slug)
+  return {
+    info: {
+      id: messageID,
+      sessionID,
+      role: "user",
+      time: { created: 0 },
+      agent: "recruit",
+      model: {
+        providerID: ProviderV2.ID.make("anthropic"),
+        modelID: ModelV2.ID.make("claude-sonnet-4-20250514"),
+      },
+    },
+    parts: [
+      {
+        id: PartID.make(`prt_part-focus-${id}`),
+        messageID,
+        sessionID,
+        type: "file",
+        mime: "application/x-directory",
+        filename: slug,
+        url: `file://${path.join(dir, rel)}`,
+        source: {
+          type: "file",
+          path: rel,
+          text: { start: 0, end: 0, value: "" },
+        },
+      },
+    ],
+  }
+}
+
 function loaded(filepath: string): SessionV1.WithParts[] {
   const sessionID = SessionID.make("session-loaded-1")
   const messageID = MessageID.make("msg_message-loaded-1")
@@ -406,6 +441,59 @@ describe("Instruction.system", () => {
           const paths = yield* svc.systemPaths()
           expect(paths.has(path.join(dir, ".moks", "reqs", "senior-backend", "jd.md"))).toBe(false)
           expect(paths.has(path.join(dir, ".moks", "reqs", "staff-ml", "jd.md"))).toBe(false)
+        }),
+    ),
+  )
+
+  it.live("attaches the last @slug mention when several book reqs exist", () =>
+    withFiles(
+      {
+        ".moks/reqs/senior-backend/jd.md": "# Senior Backend",
+        ".moks/reqs/senior-backend/scorecard.md": "# Senior scorecard",
+        ".moks/reqs/staff-ml/jd.md": "# Staff ML",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const paths = yield* svc.systemPaths([mentioned(dir, "senior-backend")])
+          expect(paths.has(path.join(dir, ".moks", "reqs", "senior-backend", "jd.md"))).toBe(true)
+          expect(paths.has(path.join(dir, ".moks", "reqs", "senior-backend", "scorecard.md"))).toBe(true)
+          expect(paths.has(path.join(dir, ".moks", "reqs", "staff-ml", "jd.md"))).toBe(false)
+        }),
+    ),
+  )
+
+  it.live("last @slug mention wins over an earlier one", () =>
+    withFiles(
+      {
+        ".moks/reqs/senior-backend/jd.md": "# Senior Backend",
+        ".moks/reqs/staff-ml/jd.md": "# Staff ML",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const paths = yield* svc.systemPaths([
+            mentioned(dir, "senior-backend", undefined, "1"),
+            mentioned(dir, "staff-ml", undefined, "2"),
+          ])
+          expect(paths.has(path.join(dir, ".moks", "reqs", "staff-ml", "jd.md"))).toBe(true)
+          expect(paths.has(path.join(dir, ".moks", "reqs", "senior-backend", "jd.md"))).toBe(false)
+        }),
+    ),
+  )
+
+  it.live("legacy @req mention focuses .moks/req not a fake book slug", () =>
+    withFiles(
+      {
+        ".moks/req/jd.md": "# Legacy JD",
+        ".moks/reqs/req/jd.md": "# Fake book",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const paths = yield* svc.systemPaths([mentioned(dir, "req", path.join(".moks", "req"), "legacy")])
+          expect(paths.has(path.join(dir, ".moks", "req", "jd.md"))).toBe(true)
+          expect(paths.has(path.join(dir, ".moks", "reqs", "req", "jd.md"))).toBe(false)
         }),
     ),
   )

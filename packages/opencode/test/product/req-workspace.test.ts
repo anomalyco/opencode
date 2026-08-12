@@ -73,3 +73,17 @@ test("resolve falls back to the only req", async () => {
   await ReqWorkspace.scaffold(tmp.path, "staff-ml")
   expect(await ReqWorkspace.resolve(tmp.path, tmp.path)).toBe(path.join(tmp.path, ".moks/reqs/staff-ml"))
 })
+
+test("reqDirFromHint prefers @slug over a multi-req book", async () => {
+  await using tmp = await tmpdir()
+  await ReqWorkspace.scaffold(tmp.path, "staff-ml")
+  await ReqWorkspace.scaffold(tmp.path, "senior-backend")
+  expect(ReqWorkspace.reqDirFromHint("senior-backend", tmp.path)).toBe(
+    path.join(tmp.path, ".moks/reqs/senior-backend"),
+  )
+  expect(ReqWorkspace.reqDirFromHint(".moks/reqs/staff-ml", tmp.path)).toBe(path.join(tmp.path, ".moks/reqs/staff-ml"))
+  expect(ReqWorkspace.focusFromPaths(["resume.md", "senior-backend"], tmp.path)).toBe(
+    path.join(tmp.path, ".moks/reqs/senior-backend"),
+  )
+  expect(ReqWorkspace.reqDirFromHint("senior-backend", "/")).toBeUndefined()
+})

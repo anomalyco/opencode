@@ -763,7 +763,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         : []),
       {
         name: "opencode.status",
-        title: "View status",
+        title: "View system status",
         slashName: "status",
         run: () => {
           dialog.replace(() => <DialogStatus />)

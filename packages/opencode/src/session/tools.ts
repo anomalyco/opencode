@@ -23,6 +23,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { ashbyWriteDeniedMessage, isAshbyWriteTool } from "@/product/ashby-edge"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -405,6 +406,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             { args },
           )
           const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
+            if (isAshbyWriteTool(key)) {
+              return {
+                content: [{ type: "text" as const, text: ashbyWriteDeniedMessage() }],
+                isError: true,
+              }
+            }
             yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
             return yield* Effect.promise(() => execute(args, opts))
           }).pipe(

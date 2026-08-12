@@ -1816,6 +1816,41 @@ unix(
   30_000,
 )
 
+it.instance(
+  "command shows slash invocation and hides expanded template",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        command: {
+          probe: {
+            template: "Hidden intake instructions for $ARGUMENTS",
+          },
+        },
+      }))
+
+      const { prompt, sessions, chat } = yield* boot()
+      yield* llm.text("done")
+
+      yield* prompt.command({
+        sessionID: chat.id,
+        command: "probe",
+        arguments: "00001",
+      })
+
+      const user = (yield* sessions.messages({ sessionID: chat.id })).find((message) => message.info.role === "user")
+      const texts = user?.parts.filter((part): part is SessionV1.TextPart => part.type === "text") ?? []
+      expect(texts).toContainEqual(expect.objectContaining({ text: "/probe 00001" }))
+      expect(texts).toContainEqual(expect.objectContaining({ text: "Hidden intake instructions for 00001", synthetic: true }))
+      expect(texts.find((part) => part.text === "/probe 00001")?.synthetic).toBeUndefined()
+
+      const inputs = yield* llm.inputs
+      expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("/probe 00001")
+      expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("Hidden intake instructions for 00001")
+    }),
+  30_000,
+)
+
 unixNoLLMServer(
   "cancel interrupts shell and resolves cleanly",
   () =>

@@ -47,9 +47,13 @@ it.effect("score-candidate writes a score file path; commit-disposition cites it
     expect(commit?.content).toContain('{"score":".moks/reqs/<req-slug>/scores/<candidate-slug>.md"}')
     expect(PROMPT_RECRUIT).toContain(".moks/reqs/<req-slug>/scores/<candidate-slug>.md")
     expect(PROMPT_RECRUIT).toContain("--meta")
+    expect(PROMPT_RECRUIT).toContain("Keep asking")
+    expect(PROMPT_RECRUIT).toContain("question tool")
     expect(PROMPT_RECRUIT).not.toContain("packages/opencode/src/product/fixtures/hiring/")
     expect(PROMPT_INITIALIZE).toContain(".moks/reqs/<slug>")
     expect(PROMPT_INITIALIZE).toContain("Do not overwrite non-empty user content")
+    expect(PROMPT_INITIALIZE).toContain("Keep going until title, level, team/HM, location, and must-haves are real")
+    expect(PROMPT_INITIALIZE).not.toContain("ask once")
   }),
 )
 

@@ -10,6 +10,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@opencode-ai/core/global"
+import { fileURLToPath } from "url"
 import type { MessageID } from "./schema"
 import { ReqWorkspace } from "@/product/req-workspace"
 
@@ -48,8 +49,8 @@ function formatInstruction(filepath: string, content: string) {
 
 export interface Interface {
   readonly clear: (messageID: MessageID) => Effect.Effect<void>
-  readonly systemPaths: () => Effect.Effect<Set<string>, FSUtil.Error>
-  readonly system: () => Effect.Effect<string[], FSUtil.Error>
+  readonly systemPaths: (messages?: SessionV1.WithParts[]) => Effect.Effect<Set<string>, FSUtil.Error>
+  readonly system: (messages?: SessionV1.WithParts[]) => Effect.Effect<string[], FSUtil.Error>
   readonly find: (dir: string) => Effect.Effect<string | undefined, FSUtil.Error>
   readonly resolve: (
     messages: SessionV1.WithParts[],
@@ -114,7 +115,7 @@ const layer: Layer.Layer<
       s.claims.delete(messageID)
     })
 
-    const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
+    const systemPaths = Effect.fn("Instruction.systemPaths")(function* (messages?: SessionV1.WithParts[]) {
       const config = yield* cfg.get()
       const ctx = yield* InstanceState.context
       const paths = new Set<string>()
@@ -156,9 +157,11 @@ const layer: Layer.Layer<
         }
       }
 
-      // Attach one req: cwd inside a req, else the only req in the book. Never dump every JD.
+      // Attach one req: last @slug / file mention, else cwd inside a req, else the only req. Never dump every JD.
       if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-        const reqDir = yield* Effect.promise(() => ReqWorkspace.resolve(ctx.directory, ctx.worktree))
+        const root = ctx.worktree !== "/" ? ctx.worktree : ctx.directory
+        const focused = messages ? ReqWorkspace.focusFromPaths(filePartHints(messages), root) : undefined
+        const reqDir = focused ?? (yield* Effect.promise(() => ReqWorkspace.resolve(ctx.directory, ctx.worktree)))
         if (reqDir) {
           for (const name of ReqWorkspace.MATERIAL_NAMES) {
             const file = path.resolve(path.join(reqDir, name))
@@ -170,9 +173,9 @@ const layer: Layer.Layer<
       return paths
     })
 
-    const system = Effect.fn("Instruction.system")(function* () {
+    const system = Effect.fn("Instruction.system")(function* (messages?: SessionV1.WithParts[]) {
       const config = yield* cfg.get()
-      const paths = yield* systemPaths()
+      const paths = yield* systemPaths(messages)
       const urls = (config.instructions ?? []).filter(
         (item) => item.startsWith("https://") || item.startsWith("http://"),
       )
@@ -244,6 +247,29 @@ const layer: Layer.Layer<
 
 export function loaded(messages: SessionV1.WithParts[]) {
   return extract(messages)
+}
+
+function filePartHints(messages: SessionV1.WithParts[]) {
+  const hints: string[] = []
+  for (const msg of messages.toReversed()) {
+    for (const part of msg.parts.toReversed()) {
+      if (part.type !== "file") continue
+      if (part.source && "path" in part.source && typeof part.source.path === "string") {
+        hints.push(part.source.path)
+        continue
+      }
+      if (part.url.startsWith("file://")) {
+        try {
+          hints.push(fileURLToPath(part.url))
+          continue
+        } catch {
+          // ignore malformed file URLs
+        }
+      }
+      if (part.filename) hints.push(part.filename)
+    }
+  }
+  return hints
 }
 
 export const node = LayerNode.make({

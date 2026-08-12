@@ -17,6 +17,12 @@ Draft outreach only. Do not send email, LinkedIn, or ATS messages.
 
 Default to a short email + optional LinkedIn DM variant unless the user specifies one.
 
+## Write the draft (required)
+
+After the chat preview, write the full markdown to `.moks/reqs/<req-slug>/outreach/<candidate-slug>.md` (slugs: lowercase, hyphens). Create the `outreach/` directory if needed. Use the @-mentioned or active req; do not write into another req.
+
+Chat may show the same draft; the file is the source of truth. You are not done until the file is written (unless the workspace is read-only or the user forbade writes).
+
 ## Output format
 
 ```markdown

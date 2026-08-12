@@ -14,6 +14,14 @@ export function ashbyToolPermissionKey(tool: string) {
   return McpCatalog.toolName(ASHBY_SERVER, tool)
 }
 
+export function isAshbyWriteTool(name: string) {
+  return ASHBY_WRITE_TOOLS.some((tool) => ashbyToolPermissionKey(tool) === name)
+}
+
+export function ashbyWriteDeniedMessage() {
+  return "Ashby writes are disabled. Record intent with moks commit / moks push."
+}
+
 export function ashbyPermissionDefaults() {
   const permission: Record<string, "allow" | "deny"> = {}
   for (const tool of ASHBY_READ_TOOLS) {

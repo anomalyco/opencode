@@ -227,6 +227,7 @@ const layer = Layer.effect(
               Permission.fromConfig({
                 question: "allow",
                 plan_enter: "allow",
+                ...ashbyPermissionDefaults(),
               }),
               user,
             ),

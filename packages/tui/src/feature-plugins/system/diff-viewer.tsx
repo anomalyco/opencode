@@ -1054,9 +1054,9 @@ const tui: TuiPlugin = async (api) => {
     commands: [
       {
         name: "diff.open",
-        title: "Open diff viewer",
+        title: "Open local hiring diff",
         slashName: "diff",
-        category: "Files",
+        category: "Workspace",
         namespace: "palette",
         run() {
           api.route.navigate(ROUTE, {

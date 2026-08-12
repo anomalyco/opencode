@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>moks — Code-is-everything review</title>
+  <style>
+    :root {
+      --bg: #0b0f0c;
+      --bg2: #121914;
+      --panel: #182018;
+      --panel2: #1e2820;
+      --line: #2c3a30;
+      --text: #eef4ef;
+      --muted: #8f9f93;
+      --dim: #5e6e62;
+      --green: #3dd68c;
+      --green-dim: #1f6b47;
+      --green-bg: rgba(61, 214, 140, 0.1);
+      --amber: #e6b84d;
+      --amber-bg: rgba(230, 184, 77, 0.1);
+      --blue: #6db3f2;
+      --blue-bg: rgba(109, 179, 242, 0.1);
+      --red: #f07178;
+      --red-bg: rgba(240, 113, 120, 0.08);
+      --purple: #c4a1ff;
+      --radius: 14px;
+      --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+      --mono: "IBM Plex Mono", "SF Mono", ui-monospace, monospace;
+      --shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      line-height: 1.55;
+      background:
+        radial-gradient(1000px 500px at 0% -10%, #163525 0%, transparent 55%),
+        radial-gradient(800px 400px at 100% 0%, #152536 0%, transparent 45%),
+        var(--bg);
+      min-height: 100vh;
+      padding: 28px 18px 96px;
+    }
+    .page { max-width: 920px; margin: 0 auto; }
+
+    header {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, var(--panel), var(--bg2));
+      border-radius: 18px;
+      padding: 32px 28px 26px;
+      margin-bottom: 18px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    header::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--green), var(--blue), var(--amber));
+    }
+    .kicker {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .pill {
+      border: 1px solid var(--green-dim);
+      background: var(--green-bg);
+      color: var(--green);
+      padding: 4px 11px;
+      border-radius: 999px;
+      font-size: 11px;
+    }
+    h1 {
+      font-size: clamp(1.55rem, 3.4vw, 2.05rem);
+      font-weight: 650;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      margin-bottom: 14px;
+    }
+    h1 em { font-style: normal; color: var(--green); }
+    .lede {
+      font-size: 1.08rem;
+      color: var(--muted);
+      max-width: 62ch;
+    }
+    .lede strong { color: var(--text); font-weight: 600; }
+
+    .nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 22px;
+    }
+    .nav a {
+      font-size: 13px;
+      color: var(--muted);
+      text-decoration: none;
+      border: 1px solid var(--line);
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: var(--bg);
+    }
+    .nav a:hover { color: var(--green); border-color: var(--green-dim); }
+
+    section {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: var(--radius);
+      padding: 22px 22px 20px;
+      margin-bottom: 16px;
+    }
+    h2 {
+      font-size: 1.15rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+    }
+    .section-sub {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 18px;
+      max-width: 64ch;
+    }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--green);
+      margin-bottom: 8px;
+    }
+    p, li { font-size: 15px; }
+    .muted { color: var(--muted); }
+    strong.ok { color: var(--green); }
+    strong.warn { color: var(--amber); }
+    strong.bad { color: var(--red); }
+
+    .verdict {
+      font-size: 1.05rem;
+      max-width: 68ch;
+    }
+    .verdict + .verdict { margin-top: 10px; }
+
+    .status-grid {
+      display: grid;
+      gap: 10px;
+    }
+    @media (min-width: 700px) {
+      .status-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    .stat {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 14px 12px;
+    }
+    .stat .n {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .stat.done .n { color: var(--green); }
+    .stat.open .n { color: var(--amber); }
+    .stat.glue .n { color: var(--blue); }
+    .stat.later .n { color: var(--purple); }
+    .stat .l { font-size: 13px; color: var(--muted); }
+
+    .analogy {
+      display: grid;
+      gap: 12px;
+      margin-top: 4px;
+    }
+    @media (min-width: 720px) {
+      .analogy { grid-template-columns: 1fr auto 1fr; align-items: stretch; }
+    }
+    .analogy-card {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px 16px;
+    }
+    .analogy-card.ta {
+      border-color: var(--green-dim);
+      background: linear-gradient(180deg, rgba(61,214,140,0.06), var(--bg));
+    }
+    .analogy-card h3 {
+      font-size: 12px;
+      font-family: var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .analogy-card.ta h3 { color: var(--green); }
+    .analogy-card .big {
+      font-size: 1.25rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+    .analogy-card p { color: var(--muted); font-size: 14px; }
+    .analogy-vs {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--dim);
+    }
+
+    table.map {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    table.map th, table.map td {
+      text-align: left;
+      padding: 11px 10px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      font-size: 14px;
+    }
+    table.map th {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    table.map tr:last-child td { border-bottom: none; }
+    table.map td.sw { color: var(--muted); width: 28%; }
+    table.map td.state { width: 14%; white-space: nowrap; }
+
+    .callout {
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-top: 16px;
+      font-size: 14.5px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+    }
+    .callout.do { border-left: 4px solid var(--green); }
+    .callout.dont { border-left: 4px solid var(--amber); }
+    .callout.alert { border-left: 4px solid var(--red); }
+    .callout b { color: var(--text); }
+    .callout p + p { margin-top: 8px; color: var(--muted); }
+
+    .glossary {
+      display: grid;
+      gap: 10px;
+    }
+    @media (min-width: 700px) {
+      .glossary { grid-template-columns: 1fr 1fr; }
+    }
+    .term {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .term dt {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--green);
+      margin-bottom: 4px;
+    }
+    .term dd { font-size: 14px; color: var(--muted); }
+
+    .card {
+      border: 1px solid var(--line);
+      background: var(--bg);
+      border-radius: 12px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .card.go { border-color: #6b5420; }
+    .card.high { border-color: #6b3034; }
+    .card-head {
+      padding: 14px 16px 12px;
+      display: grid;
+      gap: 8px;
+    }
+    @media (min-width: 700px) {
+      .card-head {
+        grid-template-columns: 1fr auto;
+        align-items: start;
+      }
+    }
+    .card h3 {
+      font-size: 1.02rem;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      margin-bottom: 4px;
+    }
+    .card .plain { color: var(--muted); font-size: 14.5px; max-width: 62ch; }
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    @media (min-width: 700px) {
+      .badges { justify-content: flex-end; }
+    }
+    .badge {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 4px 9px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .badge.go { color: var(--amber); border-color: #6b5420; background: var(--amber-bg); }
+    .badge.high { color: var(--red); border-color: #6b3034; background: var(--red-bg); }
+    .badge.defer { color: var(--blue); border-color: #2a4060; background: var(--blue-bg); }
+    .badge.drop { color: var(--dim); }
+    .badge.keep { color: var(--green); border-color: var(--green-dim); background: var(--green-bg); }
+    .card-foot {
+      border-top: 1px solid var(--line);
+      padding: 11px 16px;
+      font-size: 13.5px;
+      color: var(--muted);
+      background: var(--bg2);
+    }
+    .card-foot b { color: var(--text); }
+    .card-foot code, .plain code, td code, li code, p code {
+      font-family: var(--mono);
+      font-size: 0.86em;
+      background: var(--panel2);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    .done-list {
+      list-style: none;
+      display: grid;
+      gap: 8px;
+    }
+    .done-list li {
+      padding: 10px 12px 10px 32px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      position: relative;
+      font-size: 14.5px;
+    }
+    .done-list li::before {
+      content: "✓";
+      position: absolute;
+      left: 12px;
+      color: var(--green);
+      font-size: 13px;
+      top: 10px;
+    }
+    .done-list .why { color: var(--muted); }
+
+    ol.next {
+      padding-left: 22px;
+      display: grid;
+      gap: 10px;
+    }
+    ol.next li { padding-left: 4px; }
+    ol.next .why { display: block; color: var(--muted); font-size: 14px; margin-top: 2px; }
+
+    footer.note {
+      color: var(--dim);
+      font-size: 13px;
+      text-align: center;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div class="kicker">
+        <span class="pill">Code review · 2026-08-12</span>
+        <span>Six agents · settings · commands · agents · TUI · CLI · hiring loop</span>
+      </div>
+      <h1>Is the fork still a <em>coding agent</em> wearing a hiring badge?</h1>
+      <p class="lede">
+        Thesis: <strong>moks is to talent acquisition what OpenCode is to software engineering.</strong>
+        “Code is everything” means the <strong>shape</strong> of the work ports — workspace, plan, tools, review, push —
+        not that recruiters write software.
+      </p>
+      <nav class="nav">
+        <a href="#verdict">Verdict</a>
+        <a href="#thesis">Thesis</a>
+        <a href="#done">Already ported</a>
+        <a href="#gaps">Felt gaps</a>
+        <a href="#leaks">Identity leaks</a>
+        <a href="#later">Defer / drop</a>
+        <a href="#next">What to do next</a>
+      </nav>
+    </header>
+
+    <section id="verdict">
+      <div class="eyebrow">The one-screen answer</div>
+      <h2>Verdict</h2>
+      <p class="verdict">
+        <strong class="ok">The job object is rewritten on the default path.</strong>
+        A recruiter who opens moks gets <code>recruit</code>, not <code>build</code>.
+        <code>/init</code> makes a requisition, <code>/review</code> reviews a packet, and
+        <code>moks commit</code> / <code>push</code> record hiring decisions — they do not move ATS stages.
+      </p>
+      <p class="verdict">
+        <strong class="warn">The product still <em>feels</em> like a coding IDE with hiring tips taped on.</strong>
+        The persistent TUI is files, tokens, MCP, and “Modified Files.”
+        There is no open-req chip, no hiring-book navigator, and decision dialogs dump JSON.
+        <code>@slug</code> is advertised as focus but does not attach the JD.
+      </p>
+      <p class="verdict">
+        Branding and identity isolation mostly landed (<code>moks.json</code>, <code>.moks/</code>, <code>~/.config/moks</code>, <code>MOKS_*</code>).
+        Remaining work is <strong>glue</strong>, not another rename sweep.
+      </p>
+
+      <div class="status-grid" style="margin-top: 20px;">
+        <div class="stat done">
+          <div class="n">Cast</div>
+          <div class="l">recruit default · build hidden · plan exits to recruit</div>
+        </div>
+        <div class="stat done">
+          <div class="n">Verbs</div>
+          <div class="l">commit → receipt → push · dry-run · confirm-adverse</div>
+        </div>
+        <div class="stat glue">
+          <div class="n">Glue</div>
+          <div class="l">focus, drafts, TUI receipts, tips still IDE-shaped</div>
+        </div>
+        <div class="stat open">
+          <div class="n">Leaks</div>
+          <div class="l">OpenCode env / theme / help leftovers</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="thesis">
+      <div class="eyebrow">How to read this review</div>
+      <h2>What “code is everything” actually means</h2>
+      <p class="section-sub">
+        We do not rebuild the harness. Session runner, permissions, MCP, skills, and plan-mode stay.
+        We rewrite the <em>job</em> from “ship software” to “fill reqs with evidence.”
+      </p>
+
+      <div class="analogy">
+        <div class="analogy-card">
+          <h3>OpenCode · software</h3>
+          <div class="big">Ship the PR</div>
+          <p>Open a repo. Plan the change. Edit files. Review the diff. Commit. Push to GitHub.</p>
+        </div>
+        <div class="analogy-vs">maps to</div>
+        <div class="analogy-card ta">
+          <h3>moks · hiring</h3>
+          <div class="big">Fill the req</div>
+          <p>Open a requisition. Plan the loop. Score and draft. Review the packet. Commit. Push to the ATS.</p>
+        </div>
+      </div>
+
+      <table class="map" style="margin-top: 18px;">
+        <thead>
+          <tr>
+            <th>Coding concept</th>
+            <th>TA equivalent</th>
+            <th>In code today</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="sw">Repo / project</td>
+            <td>Hiring book · one req = <code>.moks/reqs/&lt;slug&gt;/</code></td>
+            <td class="state"><strong class="ok">Yes</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">GitHub</td>
+            <td>ATS (Ashby) — read now, write later</td>
+            <td class="state"><strong class="ok">Read / deny write</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">Working tree</td>
+            <td><code>.moks/</code> drafts, scores, notes</td>
+            <td class="state"><strong class="ok">Yes</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">Diff</td>
+            <td>Local candidate &amp; req changes</td>
+            <td class="state"><strong class="warn">Kept, still “files”</strong></td>
+          </tr>
+          <tr>
+            <td class="sw"><code>git commit</code></td>
+            <td><code>moks commit</code> receipt</td>
+            <td class="state"><strong class="ok">Yes</strong></td>
+          </tr>
+          <tr>
+            <td class="sw"><code>git push</code></td>
+            <td><code>moks push</code> (ATS sink later)</td>
+            <td class="state"><strong class="ok">Receipt only</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">PR review</td>
+            <td><code>/review</code> packet review</td>
+            <td class="state"><strong class="ok">Yes</strong></td>
+          </tr>
+          <tr>
+            <td class="sw"><code>/init</code> → AGENTS.md</td>
+            <td><code>/init</code> → new req</td>
+            <td class="state"><strong class="ok">Yes</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">Build agent</td>
+            <td>Recruit agent · build hidden</td>
+            <td class="state"><strong class="ok">Yes</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">Plan → implement</td>
+            <td>Plan → execute hiring steps</td>
+            <td class="state"><strong class="ok">Yes</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">Explore codebase</td>
+            <td>Explore JD / notes / fixtures</td>
+            <td class="state"><strong class="ok">Yes</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">LSP / formatters</td>
+            <td>Not a TA surface</td>
+            <td class="state"><strong class="ok">Off by default</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">@file focus</td>
+            <td><code>@slug</code> focuses a req</td>
+            <td class="state"><strong class="bad">Mention only</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <dl class="glossary" style="margin-top: 18px;">
+        <div class="term">
+          <dt>Wrong-port</dt>
+          <dd>Labels say hiring, but the workflow is still “edit a repo / review a PR / implement a plan.”</dd>
+        </div>
+        <div class="term">
+          <dt>Kernel</dt>
+          <dd>The reusable engine: sessions, permissions, MCP, skills, providers. Do not rebuild.</dd>
+        </div>
+        <div class="term">
+          <dt>Receipt</dt>
+          <dd>An append-only local record of a hiring decision. Not an ATS write. Think “git commit” before “git push.”</dd>
+        </div>
+        <div class="term">
+          <dt>Escape hatch</dt>
+          <dd><code>build</code> and <code>/init-code</code> still exist for rare coding, but must stay hidden from a recruiter.</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section id="done">
+      <div class="eyebrow">Do not re-open</div>
+      <h2>Already correctly ported</h2>
+      <p class="section-sub">The v0 backlog claimed these shipped. The agents checked the code. They did.</p>
+      <ul class="done-list">
+        <li><strong>Default doer is <code>recruit</code>.</strong> <span class="why">Hidden <code>build</code> only via <code>--agent build</code> or <code>default_agent: build</code>. Plan exit switches to recruit with hiring language.</span></li>
+        <li><strong>Config identity is isolated.</strong> <span class="why">Loads only <code>moks.json(c)</code> and <code>.moks/</code>. Global dir is <code>~/.config/moks</code>. Personal OpenCode files are ignored.</span></li>
+        <li><strong><code>/init</code> scaffolds <code>.moks/reqs/&lt;slug&gt;/</code>.</strong> <span class="why">JD, scorecard, notes, scores folder. <code>/init-code</code> is hidden from the slash menu.</span></li>
+        <li><strong><code>/review</code> is packet review.</strong> <span class="why">Explicitly not <code>gh pr</code>. Orchestrates score / outreach / disposition.</span></li>
+        <li><strong>Four hiring skills exist.</strong> <span class="why"><code>req-context</code>, <code>score-candidate</code>, <code>draft-outreach</code>, <code>commit-disposition</code>. Plus <code>customize-moks</code>.</span></li>
+        <li><strong>Decision verbs match the thesis.</strong> <span class="why">Dry-run default. Reject / offer / hire need <code>--confirm</code> on push. No ATS write. <code>activity --days 7</code> exists.</span></li>
+        <li><strong>Ashby writes denied on recruit.</strong> <span class="why">Read tools allowed; stage-change / note-create denied. Mock errors point at commit/push.</span></li>
+        <li><strong>LSP and formatters off unless configured.</strong> <span class="why">Sidebar and footer hide empty IDE chrome. Diff is kept on purpose.</span></li>
+        <li><strong>Subagents are remolded.</strong> <span class="why">Explore searches req materials. General is domain-neutral. Titles/summaries are mostly hiring-native.</span></li>
+        <li><strong>GitHub / PR / generate / console hidden from help.</strong> <span class="why">Still in the binary if you type them. Not on first-run help.</span></li>
+      </ul>
+    </section>
+
+    <section id="gaps">
+      <div class="eyebrow">Where a recruiter still feels a coding agent</div>
+      <h2>Felt gaps — GO</h2>
+      <p class="section-sub">These are the items that break the metaphor in use, not in a string search.</p>
+
+      <div class="card high">
+        <div class="card-head">
+          <div>
+            <h3><code>@slug</code> does not actually focus a req</h3>
+            <p class="plain">The thesis says mentioning a req loads that JD and scorecard. Today it only attaches a folder listing. Auto-attach of materials happens only if you are <em>inside</em> the req folder, or the book has exactly one req. Two reqs at the workspace root → empty hiring context.</p>
+          </div>
+          <div class="badges">
+            <span class="badge high">High</span>
+            <span class="badge go">GO</span>
+          </div>
+        </div>
+        <div class="card-foot"><b>Fix:</b> last <code>@slug</code> (or an explicit focus) should inject that req’s JD / scorecard / notes. Stop claiming “@slug focuses” until it does.</div>
+      </div>
+
+      <div class="card high">
+        <div class="card-head">
+          <div>
+            <h3>TUI decisions look like a debugger</h3>
+            <p class="plain"><code>/commit</code>, <code>/push</code>, and <code>/decisions</code> exist — good. They show raw JSON. Push asks you to type a <code>dec_…</code> id. Commit silently picks the newest score file across <em>every</em> req. Under <code>bun dev</code>, the TUI may fail to find the <code>moks</code> binary at all.</p>
+          </div>
+          <div class="badges">
+            <span class="badge high">High</span>
+            <span class="badge go">GO</span>
+          </div>
+        </div>
+        <div class="card-foot"><b>Fix:</b> human list of open decisions, pick-to-push, bind score to the focused req, call verbs in-process instead of spawning a binary.</div>
+      </div>
+
+      <div class="card go">
+        <div class="card-head">
+          <div>
+            <h3>Session chrome is still an IDE</h3>
+            <p class="plain">Home tips and placeholders teach hiring. The session itself is a blank prompt plus Context / MCP / Modified Files. No open-req chip. No book navigator. No packet pane. A recruiter is looking at a code editor that happens to mention “req” on the welcome screen.</p>
+          </div>
+          <div class="badges">
+            <span class="badge go">GO · thin</span>
+          </div>
+        </div>
+        <div class="card-foot"><b>Fix:</b> one sidebar or home slot — open reqs from <code>.moks/reqs</code>, current focus, last score, pending decision. Keep Diff; rename “Modified Files” to local hiring deltas. Do not build a full ATS UI.</div>
+      </div>
+
+      <div class="card go">
+        <div class="card-head">
+          <div>
+            <h3>Outreach drafts die with the chat</h3>
+            <p class="plain"><code>draft-outreach</code> prints email in the conversation and never writes a file. <code>/review</code> then looks for “outreach drafts” that do not exist. Score is the only skill that leaves a durable artifact.</p>
+          </div>
+          <div class="badges">
+            <span class="badge go">GO</span>
+          </div>
+        </div>
+        <div class="card-foot"><b>Fix:</b> write <code>.moks/reqs/&lt;slug&gt;/outreach/&lt;candidate&gt;.md</code>. Review can then see it the way a PR sees a diff.</div>
+      </div>
+
+      <div class="card go">
+        <div class="card-head">
+          <div>
+            <h3>Tips still mostly teach a coding harness</h3>
+            <p class="plain">The first six tips are hiring-correct. Then ~70 generic tips rotate at random — shell <code>!ls</code>, writing <code>.ts</code> plugins, <code>AGENTS.md</code>, share links. A new TA is more likely to see a coding-agent tip than <code>/init</code>.</p>
+          </div>
+          <div class="badges">
+            <span class="badge go">GO</span>
+          </div>
+        </div>
+        <div class="card-foot"><b>Fix:</b> hiring-first rotation. Keep a handful of harness tips (connect, models, sidebar). Hide <code>/share</code> — share-to-OpenCode is already disabled.</div>
+      </div>
+
+      <div class="card go">
+        <div class="card-head">
+          <div>
+            <h3><code>/diff</code> opens git mode · <code>/status</code> means two things</h3>
+            <p class="plain">Diff should show last-turn / <code>.moks/</code> working-tree changes, not “vs main branch.” TUI <code>/status</code> is system status (MCP, LSP). CLI <code>moks status</code> is decision receipts. Users will type the wrong one.</p>
+          </div>
+          <div class="badges">
+            <span class="badge go">GO</span>
+          </div>
+        </div>
+        <div class="card-foot"><b>Fix:</b> default Diff to session / <code>.moks</code>. Rename TUI status to “system status.” Teach <code>/decisions</code> as the inspect verb.</div>
+      </div>
+
+      <div class="card go">
+        <div class="card-head">
+          <div>
+            <h3>Help still presents a coding product with extra verbs</h3>
+            <p class="plain"><code>moks --help</code> leads with TUI + <code>run</code> (good) then <code>serve</code>, <code>stats</code>, export/import. Headless is supposed to be a <em>mode</em>, not a pillar. Hidden but fully wired: <code>github</code>, <code>pr</code>, <code>generate</code>, <code>console</code>.</p>
+          </div>
+          <div class="badges">
+            <span class="badge go">GO</span>
+          </div>
+        </div>
+        <div class="card-foot"><b>Fix:</b> hide <code>serve</code> (and maybe <code>stats</code>) from help. Do not polish GitHub/PR. First help should read: TUI, run, commit, status, push, activity, mcp, providers.</div>
+      </div>
+
+      <div class="card go">
+        <div class="card-head">
+          <div>
+            <h3>Agents can still be taught the old singleton tree</h3>
+            <p class="plain">Runtime scaffolds <code>.moks/reqs/&lt;slug&gt;/</code>. The <code>customize-moks</code> skill still draws <code>.moks/req/</code> as the canonical layout. Ask it to set up a workspace and it will build the leftover path.</p>
+          </div>
+          <div class="badges">
+            <span class="badge go">GO</span>
+          </div>
+        </div>
+        <div class="card-foot"><b>Fix:</b> one diagram, one path. Keep reading legacy <code>.moks/req</code> as fallback; stop teaching it.</div>
+      </div>
+
+      <div class="callout dont">
+        <p><b>Wrong-port risk if we “just add more UI.”</b></p>
+        <p>A full packet-review product or ATS clone would abandon the thesis. The coding analog of a file tree is a <em>req book + diff of local artifacts</em>, not Greenhouse-in-the-terminal. Thin focus chrome. Keep Diff. Do not invent a TA-LSP.</p>
+      </div>
+    </section>
+
+    <section id="leaks">
+      <div class="eyebrow">OpenCode still leaking into the product</div>
+      <h2>Identity leaks — GO if cheap</h2>
+      <p class="section-sub">Isolation is real for config files. A few env vars and chrome names still say OpenCode.</p>
+
+      <div class="card go">
+        <div class="card-head">
+          <div>
+            <h3>Personal OpenCode env can still change moks</h3>
+            <p class="plain">The Flag module only reads <code>MOKS_*</code>. Some code bypasses it: <code>OPENCODE_DISABLE_SHARE</code> is dual-read, websearch flags are OpenCode-only, console token is written into the process as <code>OPENCODE_CONSOLE_TOKEN</code>.</p>
+          </div>
+          <div class="badges">
+            <span class="badge go">GO</span>
+          </div>
+        </div>
+        <div class="card-foot"><b>Fix:</b> route leftover gates through <code>MOKS_*</code>. Do not honor personal OpenCode env.</div>
+      </div>
+
+      <div class="card go">
+        <div class="card-head">
+          <div>
+            <h3>Visible leftovers: username, mDNS, theme, OAuth</h3>
+            <p class="plain">Basic-auth default user is <code>opencode</code>. Help says <code>moks.local</code> but default is <code>opencode.local</code>. Default TUI theme id is <code>opencode</code>. MCP OAuth consent shows <code>opencode.ai</code>. <code>PATCH /config</code> writes unread <code>config.json</code>. Launcher cache dir is still <code>.opencode</code>.</p>
+          </div>
+          <div class="badges">
+            <span class="badge go">GO</span>
+          </div>
+        </div>
+        <div class="card-foot"><b>Fix:</b> <code>moks</code> username, <code>moks.local</code>, display-name the default theme, write <code>moks.json</code>, cache under <code>.moks</code>.</div>
+      </div>
+
+      <div class="card go">
+        <div class="card-head">
+          <div>
+            <h3>Shared tools still talk like a software engineer</h3>
+            <p class="plain">Recruit never loads the “you are a coding agent” provider prompts — those only fire on <code>build</code>. But title examples still include “debug 500 / refactor user service.” Agent-create teaches code-reviewer and test-generator. The task tool offers “tests if this is engineering work.” <code>AGENTS.md</code> is still auto-injected into every session, including recruit — dangerous in a software repo.</p>
+          </div>
+          <div class="badges">
+            <span class="badge go">GO</span>
+          </div>
+        </div>
+        <div class="card-foot"><b>Fix:</b> hiring title examples; neutralize <code>generate.txt</code> / task copy; stop auto-injecting <code>AGENTS.md</code> on the recruit path (keep for <code>build</code> / <code>/init-code</code>).</div>
+      </div>
+
+      <div class="card go">
+        <div class="card-head">
+          <div>
+            <h3>Ashby write-deny is recruit policy, not a host rule</h3>
+            <p class="plain">On <code>recruit</code>, write tools are hidden and denied. User config can re-allow them. Hidden <code>build</code> has no Ashby denies. Mock is not on by default. No session test that recruit cannot call <code>ashby_change_stage</code>.</p>
+          </div>
+          <div class="badges">
+            <span class="badge go">GO · safety</span>
+          </div>
+        </div>
+        <div class="card-foot"><b>Fix:</b> deny writes at the MCP adapter regardless of agent. One permission test. Document that <code>moks.json</code> must not flip this.</div>
+      </div>
+    </section>
+
+    <section id="later">
+      <div class="eyebrow">Do not start these</div>
+      <h2>Defer / drop</h2>
+      <p class="section-sub">Correct ports we should not confuse with leftover bugs.</p>
+
+      <table class="map">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Why it looks undone</th>
+            <th>Call</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Provider prompts still say “coding agent”</td>
+            <td>Only used when an agent has no custom prompt — i.e. the <code>build</code> hatch.</td>
+            <td class="state"><strong class="ok">DROP</strong></td>
+          </tr>
+          <tr>
+            <td>V2 default is still <code>build</code></td>
+            <td>Stale. V2 already defaults to recruit. Permissions/prompt are thinner — wait until V2 is the product runtime.</td>
+            <td class="state"><strong class="ok">DEFER</strong></td>
+          </tr>
+          <tr>
+            <td>Delete LSP / Diff / <code>build</code></td>
+            <td>Harness, not product. Diff is the TA “see what changed” muscle.</td>
+            <td class="state"><strong class="ok">DROP</strong></td>
+          </tr>
+          <tr>
+            <td>Own models catalog / console / desktop</td>
+            <td>Roadmap: post-WAU. Keep third-party <code>models.opencode.ai</code>.</td>
+            <td class="state"><strong class="ok">DEFER</strong></td>
+          </tr>
+          <tr>
+            <td><code>moks ashby auth</code></td>
+            <td>Would make Ashby the product. Use <code>moks mcp auth</code> when live sandbox exists.</td>
+            <td class="state"><strong class="ok">DROP</strong></td>
+          </tr>
+          <tr>
+            <td><code>/focus-req</code> slash</td>
+            <td>Ontology already has <code>@slug</code>. Make that work; don’t add a second verb.</td>
+            <td class="state"><strong class="ok">DROP</strong></td>
+          </tr>
+          <tr>
+            <td>CLI <code>moks init</code></td>
+            <td>TUI <code>/init</code> is enough. Headless is not a GTM pillar.</td>
+            <td class="state"><strong class="ok">DEFER</strong></td>
+          </tr>
+          <tr>
+            <td>Compare candidates / slate / HM notes</td>
+            <td>v0 is one-candidate loops. <code>notes.md</code> is enough.</td>
+            <td class="state"><strong class="ok">DEFER</strong></td>
+          </tr>
+          <tr>
+            <td>ATS write on push</td>
+            <td>Locked: receipts only until kernel. <code>--execute</code> only unsets dry-run.</td>
+            <td class="state"><strong class="ok">DEFER</strong></td>
+          </tr>
+          <tr>
+            <td>Rename <code>packages/opencode</code> / <code>@opencode-ai/*</code></td>
+            <td>Hard-fork. Painful merges. Locked: keep inherited names.</td>
+            <td class="state"><strong class="ok">DROP now</strong></td>
+          </tr>
+          <tr>
+            <td>Theme ids <code>v2-agent-build</code></td>
+            <td>Not in the TUI picker. Cosmetic (BL-017).</td>
+            <td class="state"><strong class="ok">DEFER</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="next">
+      <div class="eyebrow">If we do one more wave</div>
+      <h2>Recommended next cut</h2>
+      <p class="section-sub">Make the loop <em>felt</em>. Then stop and measure WAU. Do not start Cloud, V2 parity, or a rename.</p>
+
+      <ol class="next">
+        <li>
+          <strong>Focus is real.</strong> <code>@slug</code> injects that req’s materials.
+          <span class="why">Without this, a hiring book with two reqs is a coding workspace that happens to contain markdown.</span>
+        </li>
+        <li>
+          <strong>Decisions are operable.</strong> Human receipt list, pick-to-push, in-process verbs, score bound to the focused req.
+          <span class="why">Commit / push are the authority layer. If they feel like JSON debug, the metaphor fails.</span>
+        </li>
+        <li>
+          <strong>Outreach is a file.</strong> Drafts land under the req so <code>/review</code> can see them.
+          <span class="why">Score already does this. Outreach should match.</span>
+        </li>
+        <li>
+          <strong>Thin req chrome.</strong> Open reqs + current focus + pending decision. Reframe Diff. Reweight tips.
+          <span class="why">Enough to stop feeling like VS Code. Not a new product surface.</span>
+        </li>
+        <li>
+          <strong>Close cheap leaks.</strong> Theme display name, auth username, mDNS, <code>customize-moks</code> tree, hide <code>serve</code>, Ashby host-level write deny, one test.
+          <span class="why">Identity hygiene. Half a day, not a pillar.</span>
+        </li>
+      </ol>
+
+      <div class="callout do">
+        <p><b>Success test for this wave:</b> an eng-TA opens a book with two reqs, types <code>@senior-backend</code>, scores a resume, drafts outreach, <code>/review</code>s the packet, <code>/commit</code>s reject, and <code>/push</code>es with confirm — without ever seeing “Modified Files,” JSON, or a coding tip.</p>
+      </div>
+
+      <div class="callout alert" style="margin-top: 12px;">
+        <p><b>Do not confuse three OpenCodes.</b></p>
+        <p>This review is about <b>moks</b> (this repo). OpenCode upstream is lineage. The installed OpenCode on your machine is the tool that built this review — not the product.</p>
+      </div>
+    </section>
+
+    <p class="note">
+      Companion: <code>docs/BACKLOG-coding-to-ta.md</code> (historical cards) · <code>docs/ROADMAP.md</code> · <code>docs/gtm.html</code><br />
+      Agents reviewed current code in <code>packages/opencode</code>, <code>packages/core</code>, and <code>packages/tui</code> on 2026-08-12.
+    </p>
+  </div>
+</body>
+</html>
