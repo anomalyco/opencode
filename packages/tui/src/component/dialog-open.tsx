@@ -151,6 +151,7 @@ export function DialogOpen() {
       options={options()}
       current={currentSessionID() ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget) : undefined}
       focusCurrent={false}
+      sectionNavigation={true}
       preserveSelection={selectionMoved()}
       onMove={() => setSelectionMoved(true)}
       onFilter={setFilter}

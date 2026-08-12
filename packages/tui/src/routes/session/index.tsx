@@ -1983,6 +1983,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
         border={["left"]}
         borderColor={delivery() ? theme.border.default : color()}
         customBorderChars={SplitBorder.customBorderChars}
+        backgroundColor={theme.background.default}
       >
         <SessionImages images={images()} paddingLeft={2} />
         <box

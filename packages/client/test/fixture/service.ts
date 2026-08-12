@@ -27,7 +27,10 @@ if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" ||
 }
 
 let requests = 0
-const version = mode === "old" || mode === "reject-stop" ? "old" : "test"
+let version = "test"
+if (mode === "old" || mode === "reject-stop") version = "old"
+if (mode === "incompatible") version = "1.9.0"
+if (mode === "compatible" || mode === "delayed-compatible") version = "2.1.0-next.1"
 const id = crypto.randomUUID()
 const server = Bun.serve({
   port: 0,

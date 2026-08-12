@@ -9,6 +9,7 @@ import {
   spawnServiceContender,
 } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
+import { matchesVersion } from "../service-version.js"
 import type { ServiceHealth, ServiceStopResponse } from "./generated/types.js"
 
 export * from "../service.js"
@@ -27,7 +28,7 @@ export async function discover(options: DiscoverOptions = {}) {
 async function discoverLocal(options: DiscoverOptions) {
   const found = (await registered(options.file)).service
   if (found?.state !== "ready") return undefined
-  if (options.version !== undefined && found.version !== options.version) return undefined
+  if (!matchesVersion(found.version, options)) return undefined
   return found
 }
 
@@ -76,7 +77,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (registration.service !== undefined) {
         spawnDelay = timing.spawnDelay
         const service = registration.service
-        const compatible = !service.legacy && (options.version === undefined || service.version === options.version)
+        const compatible = !service.legacy && matchesVersion(service.version, options)
         if (compatible && service.state === "ready") return service.endpoint
         if (compatible && service.state === "failed") throw new Error("Background service failed to start")
         if (!compatible) {
