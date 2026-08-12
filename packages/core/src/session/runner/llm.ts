@@ -16,6 +16,8 @@ import { EventV2 } from "../../event"
 import { Location } from "../../location"
 import { ModelV2 } from "../../model"
 import { NotebookEvidence } from "../../notebook/evidence"
+import { FSUtil } from "../../fs-util"
+import { NotebookAttach } from "../../notebook/attach"
 import { PermissionV2 } from "../../permission"
 import { ProviderV2 } from "../../provider"
 import { QuestionV2 } from "../../question"
@@ -114,6 +116,7 @@ const layer = Layer.effect(
     const referenceGuidance = yield* ReferenceGuidance.Service
     const config = yield* Config.Service
     const snapshots = yield* Snapshot.Service
+    const attach = yield* NotebookAttach.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
@@ -270,14 +273,20 @@ const layer = Layer.effect(
                 }),
               ).pipe(
                 Effect.flatMap((settlement) =>
-                  publish(
-                    LLMEvent.toolResult({
-                      id: event.id,
-                      name: event.name,
-                      result: settlement.result,
-                      output: settlement.output,
-                    }),
-                    settlement.outputPaths ?? [],
+                  // Surface the relevant per-file notebook memory with the tool
+                  // result so leaf notes reach the model as it starts a file.
+                  attach.noteFor(session.id, event.name, event.input).pipe(
+                    Effect.flatMap((note) =>
+                      publish(
+                        LLMEvent.toolResult({
+                          id: event.id,
+                          name: event.name,
+                          result: settlement.result,
+                          output: settlement.output ? NotebookAttach.prependNote(settlement.output, note) : settlement.output,
+                        }),
+                        settlement.outputPaths ?? [],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -441,5 +450,7 @@ export const node = makeLocationNode({
     Config.node,
     Snapshot.node,
     Database.node,
+    FSUtil.node,
+    NotebookAttach.node,
   ],
 })
