@@ -243,7 +243,6 @@ describe("OpenAI Responses route", () => {
           RequestExecutor.Service,
           RequestExecutor.Service.of({
             execute: () => Effect.die("unexpected HTTP request"),
-            stream: () => Stream.die("unexpected HTTP request"),
           }),
         ),
         Layer.succeed(

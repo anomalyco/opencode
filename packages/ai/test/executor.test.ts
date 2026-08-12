@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Ref, Stream } from "effect"
-import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Headers, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LLM, AIError } from "../src/index.js"
 import { LLMClient, RequestExecutor } from "../src/route.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
@@ -70,7 +70,7 @@ describe("RequestExecutor", () => {
   it.effect("parses response body failures at the executor seam", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
-      const error = yield* executor.stream(secretRequest).pipe(Stream.runDrain, Effect.flip)
+      const error = yield* RequestExecutor.stream(executor, secretRequest).pipe(Stream.runDrain, Effect.flip)
 
       expectAIError(error)
       expect(error.reason).toMatchObject({
@@ -96,6 +96,35 @@ describe("RequestExecutor", () => {
     ),
   )
 
+  it.effect("unwraps native transport failure causes", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* RequestExecutor.stream(executor, secretRequest).pipe(Stream.runDrain, Effect.flip)
+
+      expectAIError(error)
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        message: "ECONNRESET: socket closed",
+        operation: "read",
+        code: "ECONNRESET",
+      })
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response(
+            new ReadableStream({
+              pull(controller) {
+                controller.error(
+                  new TypeError("fetch failed", { cause: systemError("ECONNRESET", "socket closed") }),
+                )
+              },
+            }),
+          ),
+        ]),
+      ),
+    ),
+  )
+
   it.effect("preserves middleware error messages", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
@@ -106,6 +135,48 @@ describe("RequestExecutor", () => {
       expectAIError(error)
       expect(error.reason.message).toBe("plugin rejected request")
     }).pipe(Effect.provide(responsesLayer([]))),
+  )
+
+  it.effect("reports the request sent by middleware", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor
+        .execute(request, (original, handler) =>
+          handler(
+            original.pipe(
+              HttpClientRequest.setUrl("https://proxy.test/v1/chat?api_key=proxy-secret"),
+              HttpClientRequest.setHeader("authorization", "Bearer proxy-secret"),
+            ),
+          ),
+        )
+        .pipe(Effect.flip)
+
+      expectAIError(error)
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        message: "ECONNRESET: proxy disconnected <redacted>",
+        url: "https://proxy.test/v1/chat?api_key=%3Credacted%3E",
+        http: {
+          request: {
+            url: "https://proxy.test/v1/chat?api_key=%3Credacted%3E",
+            headers: { authorization: "<redacted>" },
+          },
+        },
+      })
+    }).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.fail(
+            new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({
+                request: input.request,
+                cause: systemError("ECONNRESET", "proxy disconnected proxy-secret"),
+              }),
+            }),
+          ),
+        ),
+      ),
+    ),
   )
 
   it.effect("classifies context overflow responses", () =>

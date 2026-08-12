@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Ref, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import {
   HttpOptions,
@@ -1225,8 +1225,15 @@ describe("OpenAI Chat route", () => {
         [`data: ${JSON.stringify(deltaChunk({ role: "assistant", content: "Hello" }))}\n\n`],
         systemError("ECONNRESET", "socket closed unexpectedly"),
       )
-      const error = yield* LLMClient.generate(request).pipe(Effect.provide(layer), Effect.flip)
+      const events = yield* Ref.make<ReadonlyArray<LLMEvent>>([])
+      const error = yield* LLMClient.stream(request).pipe(
+        Stream.tap((event) => Ref.update(events, (current) => [...current, event])),
+        Stream.runDrain,
+        Effect.provide(layer),
+        Effect.flip,
+      )
 
+      expect((yield* Ref.get(events)).some((event) => event.type === "text-delta")).toBeTrue()
       expect(error.reason).toMatchObject({
         _tag: "Transport",
         message: "ECONNRESET: socket closed unexpectedly",
@@ -1234,6 +1241,23 @@ describe("OpenAI Chat route", () => {
         operation: "read",
         code: "ECONNRESET",
         url: "https://api.openai.test/v1/chat/completions",
+      })
+    }),
+  )
+
+  it.effect("surfaces transport errors before the first stream frame", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(truncatedStream([], systemError("ECONNRESET", "socket closed before output"))),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        message: "ECONNRESET: socket closed before output",
+        transport: "http",
+        operation: "read",
+        code: "ECONNRESET",
       })
     }),
   )

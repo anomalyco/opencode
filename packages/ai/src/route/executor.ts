@@ -16,17 +16,12 @@ import {
   TransportReason,
 } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
-import { isRecord } from "../utils/record.js"
 
 export interface Interface {
   readonly execute: (
     request: HttpClientRequest.HttpClientRequest,
     middleware?: HttpMiddleware,
   ) => Effect.Effect<HttpClientResponse.HttpClientResponse, AIError>
-  readonly stream: (
-    request: HttpClientRequest.HttpClientRequest,
-    middleware?: HttpMiddleware,
-  ) => Stream.Stream<Uint8Array, AIError>
 }
 
 export type HttpHandler = (
@@ -304,12 +299,29 @@ export const classifyHttpFailure = (input: {
 
 type HttpOperation = "request" | "read"
 
+const NativeTransportFailure = Schema.Struct({
+  message: Schema.String,
+  code: Schema.optionalKey(Schema.String),
+  cause: Schema.optionalKey(Schema.Unknown),
+})
+const decodeNativeTransportFailure = Schema.decodeUnknownOption(NativeTransportFailure)
+
+const nativeTransportFailure = (error: unknown) => {
+  const failure = Option.getOrUndefined(decodeNativeTransportFailure(error))
+  if (!failure) return undefined
+  if (failure.code !== undefined) return failure
+  const cause = Option.getOrUndefined(decodeNativeTransportFailure(failure.cause))
+  if (cause?.code !== undefined) return cause
+  return failure
+}
+
 const httpError = (input: {
   readonly error: unknown
   readonly request: HttpClientRequest.HttpClientRequest
   readonly operation: HttpOperation
   readonly redactedNames: ReadonlyArray<string | RegExp>
 }) => {
+  const request = HttpClientError.isHttpClientError(input.error) ? input.error.request : input.request
   const transportError = (failure: { readonly message: string; readonly code?: string | undefined }) =>
     new AIError({
       module: "RequestExecutor",
@@ -319,8 +331,8 @@ const httpError = (input: {
         transport: "http",
         operation: input.operation,
         code: failure.code,
-        url: redactUrl(input.request.url),
-        http: new HttpContext({ request: requestDetails(input.request, input.redactedNames) }),
+        url: redactUrl(request.url),
+        http: new HttpContext({ request: requestDetails(request, input.redactedNames) }),
       }),
     })
 
@@ -328,9 +340,9 @@ const httpError = (input: {
     HttpClientError.isHttpClientError(input.error) && "cause" in input.error.reason
       ? input.error.reason.cause
       : input.error
-  const code = isRecord(source) && typeof source.code === "string" ? source.code : undefined
-  const request = HttpClientError.isHttpClientError(input.error) ? input.error.request : input.request
-  const raw = source instanceof Error ? source.message : input.error instanceof Error ? input.error.message : undefined
+  const native = nativeTransportFailure(source)
+  const code = native?.code
+  const raw = native?.message ?? (input.error instanceof Error ? input.error.message : undefined)
   const detail = raw ? redactBody(raw, secretValues(request)) : undefined
   const message = code && detail && !detail.includes(code) ? `${code}: ${detail}` : detail
 
@@ -350,16 +362,30 @@ const httpError = (input: {
   })
 }
 
+export const stream = (
+  executor: Interface,
+  request: HttpClientRequest.HttpClientRequest,
+  middleware?: HttpMiddleware,
+): Stream.Stream<Uint8Array, AIError> =>
+  Stream.unwrap(
+    Effect.gen(function* () {
+      const redactedNames = yield* Headers.CurrentRedactedNames
+      const response = yield* executor.execute(request, middleware)
+      return response.stream.pipe(
+        Stream.mapError((error) =>
+          httpError({ error, request: response.request, operation: "read", redactedNames }),
+        ),
+      )
+    }),
+  )
+
 export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
-    const execute = (
-      request: HttpClientRequest.HttpClientRequest,
-      middleware: HttpMiddleware | undefined,
-      redactedNames: ReadonlyArray<string | RegExp>,
-    ) =>
+    const executeOnce = (request: HttpClientRequest.HttpClientRequest, middleware?: HttpMiddleware) =>
       Effect.gen(function* () {
+        const redactedNames = yield* Headers.CurrentRedactedNames
         if (!middleware)
           return yield* http.execute(request).pipe(
             Effect.mapError((error) => httpError({ error, request, operation: "request", redactedNames })),
@@ -373,22 +399,8 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
         ).pipe(Effect.mapError((error) => httpError({ error, request, operation: "request", redactedNames })))
         return yield* statusError(response.request, redactedNames)(response)
       })
-    const executeOnce = (request: HttpClientRequest.HttpClientRequest, middleware?: HttpMiddleware) =>
-      Effect.flatMap(Headers.CurrentRedactedNames, (redactedNames) => execute(request, middleware, redactedNames))
     return Service.of({
       execute: executeOnce,
-      stream: (request, middleware) =>
-        Stream.unwrap(
-          Effect.gen(function* () {
-            const redactedNames = yield* Headers.CurrentRedactedNames
-            const response = yield* execute(request, middleware, redactedNames)
-            return response.stream.pipe(
-              Stream.mapError((error) =>
-                httpError({ error, request: response.request, operation: "read", redactedNames }),
-              ),
-            )
-          }),
-        ),
     })
   }),
 )

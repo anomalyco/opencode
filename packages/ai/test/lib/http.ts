@@ -1,5 +1,5 @@
 import { Effect, Layer, Ref } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route.js"
 import type { Service as LLMClientService } from "../../src/route/client.js"
 import type { Service as RequestExecutorService } from "../../src/route/executor.js"
@@ -14,7 +14,9 @@ export type HandlerInput = {
   ) => HttpClientResponse.HttpClientResponse
 }
 
-export type Handler = (input: HandlerInput) => Effect.Effect<HttpClientResponse.HttpClientResponse>
+export type Handler = (
+  input: HandlerInput,
+) => Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
 
 const handlerLayer = (handler: Handler): Layer.Layer<HttpClient.HttpClient> =>
   Layer.succeed(
@@ -73,9 +75,15 @@ export const truncatedStream = (chunks: ReadonlyArray<string>, error: Error = ne
   dynamicResponse((input) =>
     Effect.sync(() => {
       const encoder = new TextEncoder()
+      let index = 0
       const stream = new ReadableStream({
-        start(controller) {
-          for (const chunk of chunks) controller.enqueue(encoder.encode(chunk))
+        pull(controller) {
+          const chunk = chunks[index]
+          if (chunk !== undefined) {
+            index++
+            controller.enqueue(encoder.encode(chunk))
+            return
+          }
           controller.error(error)
         },
       })

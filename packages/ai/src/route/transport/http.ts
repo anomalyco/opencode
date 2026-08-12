@@ -6,6 +6,7 @@ import { Framing } from "../framing.js"
 import type { HttpMiddleware, Transport, TransportPrepareInput } from "./index.js"
 import * as ProviderShared from "../../protocols/shared.js"
 import { mergeJsonRecords, type LLMRequest } from "../../schema/index.js"
+import { RequestExecutor } from "../executor.js"
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
 
@@ -87,7 +88,7 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
       }
     }),
   frames: (prepared, _request, runtime) =>
-    prepared.framing.frame(runtime.http.stream(prepared.request, prepared.middleware)),
+    prepared.framing.frame(RequestExecutor.stream(runtime.http, prepared.request, prepared.middleware)),
 })
 
 export const sseJson = {

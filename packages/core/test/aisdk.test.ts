@@ -9,7 +9,7 @@ import { LLM, AIError, LLMEvent, Message, isContextOverflowFailure } from "@open
 import { LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
 import { compileRequest } from "@opencode-ai/ai/route/client"
 import { expect } from "bun:test"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer } from "effect"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AISDK.locationLayer)
@@ -51,7 +51,6 @@ const client = LLMClient.layer.pipe(
       RequestExecutor.Service,
       RequestExecutor.Service.of({
         execute: () => Effect.die("Unexpected HTTP request"),
-        stream: () => Stream.die("Unexpected HTTP request"),
       }),
     ),
   ),
