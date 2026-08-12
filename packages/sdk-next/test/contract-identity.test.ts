@@ -4,6 +4,7 @@ import { SessionInbox as CoreSessionInbox } from "@opencode-ai/core/session/inbo
 import { SessionMessage as CoreSessionMessage } from "@opencode-ai/core/session/message"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Config } from "@opencode-ai/schema/config"
+import { Event } from "@opencode-ai/schema/event"
 import { Location } from "@opencode-ai/schema/location"
 import { Model } from "@opencode-ai/schema/model"
 import { Project } from "@opencode-ai/schema/project"
@@ -26,6 +27,7 @@ const CoreSession = await import("@opencode-ai/core/session")
 test("re-exports canonical contracts directly from Schema", () => {
   expect(SDK.Agent).toBe(Agent)
   expect(SDK.Config).toBe(Config)
+  expect(SDK.Event).toBe(Event)
   expect(SDK.Model).toBe(Model)
   expect(SDK.WebSearch).toBe(WebSearch)
   expect(SDK.Session).toBe(Session)
@@ -37,6 +39,7 @@ test("re-exports canonical contracts directly from Schema", () => {
     "Command",
     "Config",
     "Credential",
+    "Event",
     "FileSystem",
     "Integration",
     "Location",
