@@ -139,7 +139,7 @@ export async function handler(
     if (
       authInfo &&
       opts.modelList === "lite" &&
-      modelInfo.id === "deepseek-v4-flash" &&
+      ["deepseek-v4-flash", "deepseek-v4-pro"].includes(modelInfo.id) &&
       !allowedRegions?.includes("cn")
     )
       throw new RegionError(
