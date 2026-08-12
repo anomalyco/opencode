@@ -1,17 +1,17 @@
-export * as ConfigMigrateV1 from "./migrate"
+export * as ConfigMigrateV1 from "./migrate.js"
 
 import { Info } from "@opencode-ai/schema/config"
 import { ConfigAgent } from "@opencode-ai/schema/config/agent"
 import { Schema } from "effect"
-import { ConfigV1 } from "./config"
-import { ConfigAgentV1 } from "./agent"
-import { ConfigCommandV1 } from "./command"
-import { ConfigMCPV1 } from "./mcp"
-import { ConfigPermissionV1 } from "./permission"
-import { ConfigProviderV1 } from "./provider"
-import { ConfigProviderOptionsV1 } from "./provider-options"
-import { Provider } from "../../provider"
-import { Model } from "../../model"
+import { ConfigV1 } from "./config.js"
+import { ConfigAgentV1 } from "./agent.js"
+import { ConfigCommandV1 } from "./command.js"
+import { ConfigMCPV1 } from "./mcp.js"
+import { ConfigPermissionV1 } from "./permission.js"
+import { ConfigProviderV1 } from "./provider.js"
+import { ConfigProviderOptionsV1 } from "./provider-options.js"
+import { Provider } from "../../provider.js"
+import { Model } from "../../model.js"
 
 const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
 const decodeInfo = Schema.decodeUnknownSync(Schema.fromJsonString(Info), decodeOptions)

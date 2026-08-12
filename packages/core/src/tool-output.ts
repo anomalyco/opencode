@@ -1,4 +1,4 @@
-export * as ToolOutput from "./tool-output"
+export * as ToolOutput from "./tool-output.js"
 
 import path from "path"
 import type { Tool } from "@opencode-ai/schema/tool"
@@ -6,8 +6,8 @@ import { Context, Duration, Effect, Layer, Schedule } from "effect"
 import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
-import { Config } from "./config"
-import { Identifier } from "./id/id"
+import { Config } from "./config.js"
+import { Identifier } from "./id/id.js"
 
 export const MAX_LINES = 2_000
 export const MAX_BYTES = 50 * 1024 // 50 KiB

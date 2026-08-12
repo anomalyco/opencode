@@ -86,7 +86,7 @@ import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
-import { PluginSlot } from "../../plugin/render"
+import { Slot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
 import {
   cacheReuseDrop,
@@ -1088,7 +1088,7 @@ export function Session() {
               <Show when={!composer.open && !disabled() && queuedPrompts().length > 0}>
                 <QueuedPromptDock prompts={queuedPrompts()} onOpen={openQueuedPrompts} />
               </Show>
-              <PluginSlot name="session.composer.top" input={{ sessionID: route.sessionID }} mode="all" />
+              <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
               <Composer
                 sessionID={route.sessionID}
                 open={composer.open || (!!session()?.parentID && forms().length === 0)}

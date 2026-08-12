@@ -1,10 +1,10 @@
 import { Effect, Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
-import { Route } from "../route/client"
-import { Auth } from "../route/auth"
-import { Endpoint } from "../route/endpoint"
-import { Framing } from "../route/framing"
-import { Protocol } from "../route/protocol"
+import { Route } from "../route/client.js"
+import { Auth } from "../route/auth.js"
+import { Endpoint } from "../route/endpoint.js"
+import { Framing } from "../route/framing.js"
+import { Protocol } from "../route/protocol.js"
 import {
   LLMEvent,
   Usage,
@@ -17,11 +17,11 @@ import {
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
-} from "../schema"
-import { JsonObject, optionalArray, ProviderShared } from "./shared"
-import { GeminiToolSchema } from "./utils/gemini-tool-schema"
-import { Lifecycle } from "./utils/lifecycle"
-import { ToolSchemaProjection } from "./utils/tool-schema"
+} from "../schema/index.js"
+import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
+import { GeminiToolSchema } from "./utils/gemini-tool-schema.js"
+import { Lifecycle } from "./utils/lifecycle.js"
+import { ToolSchemaProjection } from "./utils/tool-schema.js"
 
 const ADAPTER = "gemini"
 const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
@@ -643,4 +643,4 @@ export const route = Route.make({
   framing: Framing.sse,
 })
 
-export * as Gemini from "./gemini"
+export * as Gemini from "./gemini.js"

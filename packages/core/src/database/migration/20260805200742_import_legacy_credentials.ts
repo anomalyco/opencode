@@ -6,7 +6,7 @@ import { Credential } from "@opencode-ai/schema/credential"
 import { Integration } from "@opencode-ai/schema/integration"
 import { NonNegativeInt } from "@opencode-ai/schema/schema"
 import { Global } from "@opencode-ai/util/global"
-import type { DatabaseMigration } from "../migration"
+import type { DatabaseMigration } from "../migration.js"
 
 const LegacyOAuth = Schema.Struct({
   type: Schema.Literal("oauth"),

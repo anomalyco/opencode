@@ -10,6 +10,7 @@
     "migration": "bun run script/migration.ts",
     "fix-node-pty": "bun run script/fix-node-pty.ts",
     "benchmark:location": "bun run script/benchmark-location.ts",
+    "update-models-snapshot": "bun run script/update-models-snapshot.ts",
     "test": "bun test --only-failures",
     "typecheck": "tsgo -b tsconfig.json tsconfig.tests.json"
   },
@@ -25,9 +26,10 @@
   },
   "imports": {
     "#sqlite": {
+      "workerd": "./src/database/sqlite.workerd.ts",
       "bun": "./src/database/sqlite.bun.ts",
       "node": "./src/database/sqlite.node.ts",
-      "default": "./src/database/sqlite.bun.ts"
+      "default": "./src/database/sqlite.node.ts"
     },
     "#pty": {
       "bun": "./src/pty/pty.bun.ts",
@@ -98,7 +100,6 @@
     "@ff-labs/fff-bun": "0.10.1",
     "@ff-labs/fff-node": "0.10.1",
     "@opencode-ai/codemode": "workspace:*",
-    "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
     "@opencode-ai/ai": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",

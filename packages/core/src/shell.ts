@@ -1,4 +1,4 @@
-export * as Shell from "./shell"
+export * as Shell from "./shell.js"
 
 import path from "path"
 import { Context, Deferred, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
@@ -6,14 +6,14 @@ import { ChildProcess } from "effect/unstable/process"
 import { produce } from "immer"
 import { Shell } from "@opencode-ai/schema/shell"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Config } from "./config"
-import { Bus } from "./bus"
-import { Environment } from "./environment"
-import { Location } from "./location"
+import { Config } from "./config.js"
+import { Bus } from "./bus.js"
+import { Environment } from "./environment/index.js"
+import { Location } from "./location.js"
 import { Global } from "@opencode-ai/util/global"
-import { ShellSelect } from "./shell/select"
+import { ShellSelect } from "./shell/select.js"
 import type { ShellCreateBefore } from "@opencode-ai/plugin/effect/shell"
-import { PluginHooks } from "./plugin/hooks"
+import { PluginHooks } from "./plugin/hooks.js"
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Shell.NotFoundError", {
   id: Shell.ID,

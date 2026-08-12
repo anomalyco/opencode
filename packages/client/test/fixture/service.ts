@@ -3,6 +3,10 @@ import { appendFile, rename, writeFile } from "node:fs/promises"
 const [registration, mode, delay] = process.argv.slice(2)
 if (registration === undefined || mode === undefined) throw new Error("Missing service fixture arguments")
 if (mode === "failed") process.exit(1)
+if (mode === "stderr-failed") {
+  process.stderr.write("x".repeat(16_384) + "\nactionable startup failure\n")
+  process.exit(1)
+}
 if (mode === "record-start") {
   await writeFile(registration + ".started", "")
   process.exit(1)
@@ -17,7 +21,7 @@ if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" ||
   if (!owner) process.exit(mode === "coordinated-failed-loser" ? 1 : 0)
   if (mode === "coordinated" || mode === "coordinated-failed-loser") {
     while ((await Bun.file(registration + ".starts").text()).trim().split("\n").length < 2) await Bun.sleep(10)
-    if (mode === "coordinated-failed-loser") await Bun.sleep(1_500)
+    if (mode === "coordinated-failed-loser") await Bun.sleep(Number(delay ?? 1_500))
   } else await Bun.sleep(Number(delay))
   if (mode === "delayed-failed") process.exit(1)
 }
@@ -30,7 +34,7 @@ const server = Bun.serve({
   async fetch(request) {
     const pathname = new URL(request.url).pathname
     if (pathname === "/api/service/stop" && mode === "reject-stop") {
-      await writeFile(registration + ".stop-attempt", "")
+      await appendFile(registration + ".stop-attempts", process.pid + "\n")
       return Response.json({ accepted: false })
     }
     if (pathname === "/api/service/stop" && mode === "graceful") {
@@ -42,6 +46,7 @@ const server = Bun.serve({
     }
     if (pathname !== "/api/health") return new Response(null, { status: 404 })
     requests += 1
+    if (mode === "starting") await writeFile(registration + ".health-request", "")
     if (mode === "hanging") {
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})

@@ -1,15 +1,15 @@
-export * as ReadToolFileSystem from "./read-filesystem"
+export * as ReadToolFileSystem from "./read-filesystem.js"
 
 import path from "path"
 import { pathToFileURL } from "url"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { lookup } from "mime-types"
-import { Environment } from "../environment"
-import type { Files } from "../environment"
-import { FileSystem } from "../filesystem"
-import { Mime } from "../mime"
-import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath } from "../schema"
+import { Environment } from "../environment/index.js"
+import type { Files } from "../environment/index.js"
+import { FileSystem } from "../filesystem.js"
+import { Mime } from "../mime.js"
+import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath } from "../schema.js"
 
 export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024

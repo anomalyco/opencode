@@ -1,15 +1,15 @@
-export * as SessionStore from "./store"
+export * as SessionStore from "./store.js"
 
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm"
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Database } from "../database/database"
+import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { SessionHistory } from "./history"
-import { MessageDecodeError } from "./error"
-import { SessionMessage } from "./message"
+import { SessionHistory } from "./history.js"
+import { MessageDecodeError } from "./error.js"
+import { SessionMessage } from "./message.js"
 import { Session } from "@opencode-ai/schema/session"
-import { SessionMessageTable, SessionTable } from "./sql"
-import { fromRow } from "./info"
+import { SessionMessageTable, SessionTable } from "./sql.js"
+import { fromRow } from "./info.js"
 
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>
@@ -17,10 +17,32 @@ export interface Interface {
   readonly message: (
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
+  /**
+   * Top-level Sessions holding an execution claim. Child (subagent) Sessions
+   * are excluded: a resumed parent re-runs its tool call and spawns fresh
+   * children, so resuming orphaned children would duplicate their work.
+   */
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
-  /** Clears suspension, reporting whether this caller consumed it. At most one concurrent caller receives true. */
-  readonly consumeSuspended: (sessionID: Session.ID) => Effect.Effect<boolean>
-  readonly suspend: (sessionIDs: Iterable<Session.ID>) => Effect.Effect<void>
+  /**
+   * Records the execution claim: the durable write-ahead intent that a turn is
+   * (or was) in flight. Set when execution starts; a claim that survives to the
+   * next boot marks a turn that never completed — its process crashed or shut
+   * down mid-turn.
+   */
+  readonly claim: (sessionID: Session.ID) => Effect.Effect<void>
+  /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
+  readonly release: (sessionID: Session.ID) => Effect.Effect<void>
+  /**
+   * Clears orphaned child (subagent) claims. Children are never resumed
+   * independently, so a dead child's claim is noise no terminal will ever
+   * release.
+   */
+  readonly releaseChildClaims: Effect.Effect<void>
+  /**
+   * Durably counts one more resume of an orphaned claim, returning the new
+   * total — or undefined when the Session no longer exists.
+   */
+  readonly countResume: (sessionID: Session.ID) => Effect.Effect<number | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStore") {}
@@ -57,34 +79,51 @@ const layer = Layer.effect(
         return yield* db
           .select({ sessionID: SessionTable.id })
           .from(SessionTable)
-          .where(isNotNull(SessionTable.time_suspended))
+          .where(and(isNotNull(SessionTable.time_suspended), isNull(SessionTable.parent_id)))
           .all()
           .pipe(
             Effect.orDie,
             Effect.map((rows) => rows.map((row) => row.sessionID)),
           )
       }),
-      consumeSuspended: Effect.fn("SessionStore.consumeSuspended")(function* (sessionID) {
-        return (
-          (yield* db
-            .update(SessionTable)
-            .set({ time_suspended: null })
-            .where(and(eq(SessionTable.id, sessionID), isNotNull(SessionTable.time_suspended)))
-            .returning({ sessionID: SessionTable.id })
-            .get()
-            .pipe(Effect.orDie)) !== undefined
-        )
-      }),
-      suspend: Effect.fn("SessionStore.suspend")(function* (sessionIDs) {
-        const ids = Array.from(sessionIDs)
-        if (ids.length === 0) return
-        // The null guard preserves the original suspension time if a Session is somehow suspended twice.
+      claim: Effect.fn("SessionStore.claim")(function* (sessionID) {
+        // The null guard makes re-claiming a still-claimed Session a zero-row
+        // no-op (a resumed turn re-claims through the same started hook).
+        // Claim bookkeeping never counts as user activity: time_updated is
+        // pinned so session ordering only moves on real changes.
         yield* db
           .update(SessionTable)
-          .set({ time_suspended: Date.now() })
-          .where(and(inArray(SessionTable.id, ids), isNull(SessionTable.time_suspended)))
+          .set({ time_suspended: Date.now(), time_updated: sql`${SessionTable.time_updated}` })
+          .where(and(eq(SessionTable.id, sessionID), isNull(SessionTable.time_suspended)))
           .run()
           .pipe(Effect.orDie)
+      }),
+      release: Effect.fn("SessionStore.release")(function* (sessionID) {
+        yield* db
+          .update(SessionTable)
+          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+          .where(eq(SessionTable.id, sessionID))
+          .run()
+          .pipe(Effect.orDie)
+      }),
+      releaseChildClaims: db
+        .update(SessionTable)
+        .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+        .where(and(isNotNull(SessionTable.time_suspended), isNotNull(SessionTable.parent_id)))
+        .run()
+        .pipe(Effect.orDie, Effect.asVoid, Effect.withSpan("SessionStore.releaseChildClaims")),
+      countResume: Effect.fn("SessionStore.countResume")(function* (sessionID) {
+        const row = yield* db
+          .update(SessionTable)
+          .set({
+            resume_attempts: sql`${SessionTable.resume_attempts} + 1`,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
+          .where(eq(SessionTable.id, sessionID))
+          .returning({ attempts: SessionTable.resume_attempts })
+          .get()
+          .pipe(Effect.orDie)
+        return row?.attempts
       }),
     })
   }),

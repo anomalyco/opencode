@@ -165,7 +165,6 @@ describe("Agent", () => {
         "compaction",
         "explore",
         "general",
-        "plan",
         "summary",
         "title",
       ])

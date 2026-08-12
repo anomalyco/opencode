@@ -27,8 +27,32 @@ test("defensively syncs advertised Copilot models", async () => {
                 max_context_window_tokens: 200000,
                 max_output_tokens: 16384,
                 max_prompt_tokens: 180000,
+                vision: {
+                  max_prompt_image_size: 10000000,
+                  max_prompt_images: 10,
+                  supported_media_types: ["image/png", "application/pdf"],
+                },
               },
-              supports: { tool_calls: true, reasoning_effort: ["low", "high"] },
+              supports: { tool_calls: true, vision: true, reasoning_effort: ["low", "high"] },
+            },
+          },
+          {
+            model_picker_enabled: true,
+            id: "vision-only",
+            name: "Vision only",
+            version: "vision-only-2026-06-01",
+            capabilities: {
+              family: "vision",
+              limits: {
+                max_output_tokens: 16384,
+                max_prompt_tokens: 180000,
+                vision: {
+                  max_prompt_image_size: 10000000,
+                  max_prompt_images: 10,
+                  supported_media_types: ["image/png"],
+                },
+              },
+              supports: { tool_calls: true, vision: true },
             },
           },
           {
@@ -67,6 +91,8 @@ test("defensively syncs advertised Copilot models", async () => {
       Model.VariantID.make("low"),
       Model.VariantID.make("high"),
     ])
+    expect(model?.capabilities.input).toEqual(["text", "image", "pdf"])
+    expect(models.get(Model.ID.make("vision-only"))?.capabilities.input).toEqual(["text", "image"])
     expect(models.get(Model.ID.make("utility"))?.enabled).toBe(false)
     expect(models.has(Model.ID.make("stale"))).toBe(false)
     expect(models.has(Model.ID.make("incomplete"))).toBe(false)

@@ -39,6 +39,9 @@ if (Script.channel !== "beta") {
   console.log("\n=== schema ===\n")
   await $`bun ./packages/schema/script/publish.ts`
 
+  console.log("\n=== codemode ===\n")
+  await $`bun ./packages/codemode/script/publish.ts`
+
   console.log("\n=== theme ===\n")
   await $`bun ./packages/theme/script/publish.ts`
 

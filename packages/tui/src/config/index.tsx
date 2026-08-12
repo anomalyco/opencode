@@ -189,6 +189,13 @@ export const Info = Schema.Struct({
       }),
     }),
   ).annotate({ description: "Debugging settings" }),
+  experimental: Schema.optional(
+    Schema.Struct({
+      tab_drafts: Schema.optional(Schema.Boolean).annotate({
+        description: "Keep unsent prompt drafts on the tab where they were written",
+      }),
+    }),
+  ).annotate({ description: "Experimental features that may change or be removed at any time" }),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable terminal mouse capture" }),
   cursor: Schema.optional(Cursor),

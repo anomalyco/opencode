@@ -1,13 +1,13 @@
-export * as VcsGit from "./git"
+export * as VcsGit from "./git.js"
 
 import { Effect } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { AppProcess } from "@opencode-ai/util/process"
-import type { DiffOptions, Interface } from "../vcs"
-import { chunksByFile, emptyPatch, MAX_PATCH_BYTES, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./patch"
-import type { Patch } from "./patch"
+import type { DiffOptions, Interface } from "../vcs.js"
+import { chunksByFile, emptyPatch, MAX_PATCH_BYTES, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./patch.js"
+import type { Patch } from "./patch.js"
 
 /**
  * Git adapter for the Vcs service. Ported from the V1 pipeline: patches are

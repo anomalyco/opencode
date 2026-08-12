@@ -1,4 +1,4 @@
-export * as Vcs from "./vcs"
+export * as Vcs from "./vcs.js"
 
 import path from "path"
 import { Context, Effect, Layer, Stream } from "effect"
@@ -8,11 +8,11 @@ import { FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Location } from "./location"
+import { Location } from "./location.js"
 import { AppProcess } from "@opencode-ai/util/process"
-import { Bus } from "./bus"
-import { VcsGit } from "./vcs/git"
-import { VcsHg } from "./vcs/hg"
+import { Bus } from "./bus.js"
+import { VcsGit } from "./vcs/git.js"
+import { VcsHg } from "./vcs/hg.js"
 
 export { FileStatus, Info, Mode }
 

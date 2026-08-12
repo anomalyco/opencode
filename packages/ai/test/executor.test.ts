@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Ref } from "effect"
 import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { LLM, AIError } from "../src"
-import { LLMClient, RequestExecutor } from "../src/route"
-import * as OpenAIChat from "../src/protocols/openai-chat"
-import { dynamicResponse } from "./lib/http"
-import { deltaChunk } from "./lib/openai-chunks"
-import { sseRaw } from "./lib/sse"
-import { it } from "./lib/effect"
+import { LLM, AIError } from "../src/index.js"
+import { LLMClient, RequestExecutor } from "../src/route.js"
+import * as OpenAIChat from "../src/protocols/openai-chat.js"
+import { dynamicResponse } from "./lib/http.js"
+import { deltaChunk } from "./lib/openai-chunks.js"
+import { sseRaw } from "./lib/sse.js"
+import { it } from "./lib/effect.js"
 
 const request = HttpClientRequest.post("https://provider.test/v1/chat?api_key=secret&key=secret&debug=1").pipe(
   HttpClientRequest.setHeaders(Headers.fromInput({ authorization: "Bearer secret", "x-safe": "visible" })),

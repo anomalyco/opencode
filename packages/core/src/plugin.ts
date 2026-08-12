@@ -1,25 +1,25 @@
-export * as Plugin from "./plugin"
+export * as Plugin from "./plugin.js"
 export { Event, ID, Info } from "@opencode-ai/schema/plugin"
 
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { App } from "./app"
-import { Context, Effect, Exit, Layer, Scope, Semaphore } from "effect"
-import { Agent } from "./agent"
-import { AISDK } from "./aisdk"
-import { Catalog } from "./catalog"
-import { Command } from "./command"
-import { Bus } from "./bus"
-import { Integration } from "./integration"
-import { Location } from "./location"
-import { PluginHost } from "./plugin/host"
-import { PluginRuntime } from "./plugin/runtime"
-import { WebSearch } from "./websearch"
-import { Reference } from "./reference"
-import { Skill } from "./skill"
-import { State } from "./state"
-import { Tool } from "./tool"
-import { PluginHooks } from "./plugin/hooks"
+import { App } from "./app.js"
+import { Context, Effect, Exit, Layer, Logger, References, Scope, Semaphore } from "effect"
+import { Agent } from "./agent.js"
+import { AISDK } from "./aisdk.js"
+import { Catalog } from "./catalog.js"
+import { Command } from "./command.js"
+import { Bus } from "./bus.js"
+import { Integration } from "./integration.js"
+import { Location } from "./location.js"
+import { PluginHost } from "./plugin/host.js"
+import { PluginRuntime } from "./plugin/runtime.js"
+import { WebSearch } from "./websearch.js"
+import { Reference } from "./reference.js"
+import { Skill } from "./skill.js"
+import { State } from "./state.js"
+import { Tool } from "./tool.js"
+import { PluginHooks } from "./plugin/hooks.js"
 
 export interface Interface {
   readonly activate: (plugins: readonly Versioned[]) => Effect.Effect<void>
@@ -44,7 +44,12 @@ const layer = Layer.effect(
       const inherit = yield* State.inherit()
       const loaded = yield* Effect.suspend(() => plugin.effect(host)).pipe(
         inherit,
-        Effect.updateContext((_context: Context.Context<never>) => Context.make(Scope.Scope, child)),
+        Effect.updateContext((context: Context.Context<never>) =>
+          Context.make(Scope.Scope, child).pipe(
+            Context.add(Logger.CurrentLoggers, Context.get(context, Logger.CurrentLoggers)),
+            Context.add(References.MinimumLogLevel, Context.get(context, References.MinimumLogLevel)),
+          ),
+        ),
         Effect.withSpan("Plugin.load", { attributes: { "plugin.id": plugin.id } }),
         Effect.andThen(bus.publish(Plugin.Event.Added, { id: Plugin.ID.make(plugin.id) })),
         Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void)),

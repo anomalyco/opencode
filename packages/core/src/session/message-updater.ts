@@ -1,7 +1,7 @@
 import { castDraft, produce, type WritableDraft } from "immer"
 import { DateTime, Effect, Match, pipe } from "effect"
-import { SessionEvent } from "./event"
-import { SessionMessage } from "./message"
+import { SessionEvent } from "./event.js"
+import { SessionMessage } from "./message.js"
 
 export interface Adapter {
   readonly getAgent: () => Effect.Effect<SessionMessage.AgentSelected["agent"] | undefined, never, never>
@@ -427,4 +427,4 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
   return project(event)
 }
 
-export * as SessionMessageUpdater from "./message-updater"
+export * as SessionMessageUpdater from "./message-updater.js"

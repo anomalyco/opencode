@@ -1,14 +1,14 @@
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
-import type { Route, RouteDefaultsInput } from "../route/client"
-import type { ProviderPackage } from "../provider-package"
-import { HttpOptions, ProviderID, ToolDefinition, mergeHttpOptions, type ModelID } from "../schema"
-import * as OpenAIChat from "../protocols/openai-chat"
-import * as OpenAIResponses from "../protocols/openai-responses"
-import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
-import { OpenAIImages, type OpenAIImageString } from "../protocols/openai-images"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { Route, RouteDefaultsInput } from "../route/client.js"
+import type { ProviderPackage } from "../provider-package.js"
+import { HttpOptions, ProviderID, ToolDefinition, mergeHttpOptions, type ModelID } from "../schema/index.js"
+import * as OpenAIChat from "../protocols/openai-chat.js"
+import * as OpenAIResponses from "../protocols/openai-responses.js"
+import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
+import { OpenAIImages, type OpenAIImageString } from "../protocols/openai-images.js"
 
-export type { OpenAIOptionsInput, OpenAIResponseIncludable } from "./openai-options"
-export type { OpenAIImageOptions } from "../protocols/openai-images"
+export type { OpenAIOptionsInput, OpenAIResponseIncludable } from "./openai-options.js"
+export type { OpenAIImageOptions } from "../protocols/openai-images.js"
 
 export const id = ProviderID.make("openai")
 

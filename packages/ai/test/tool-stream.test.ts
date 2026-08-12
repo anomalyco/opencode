@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { AIError } from "../src/schema"
-import { ToolStream } from "../src/protocols/utils/tool-stream"
-import { it } from "./lib/effect"
+import { AIError } from "../src/schema/index.js"
+import { ToolStream } from "../src/protocols/utils/tool-stream.js"
+import { it } from "./lib/effect.js"
 
 const ADAPTER = "test-route"
 

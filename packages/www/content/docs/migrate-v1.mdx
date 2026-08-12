@@ -504,8 +504,8 @@ require a V2 rewrite. See [Skills](/skills).
 
 ### Instruction files
 
-Existing `AGENTS.md` files stay in place. V2 discovers the global `~/.config/opencode/AGENTS.md` and project `AGENTS.md`
-files from the current directory up to the project root.
+Existing `AGENTS.md` files stay in place. V2 discovers the global `~/.config/opencode/AGENTS.md` and ambient `AGENTS.md`
+files from the current directory up to home. For projects outside home, discovery stops at the project root.
 
 If a V1 setup relied on a `CLAUDE.md` fallback, move that guidance into the applicable `AGENTS.md`. V2 currently only
 discovers `AGENTS.md`; because non-API V1 behavior is intended to remain compatible, also run `/report` with the affected

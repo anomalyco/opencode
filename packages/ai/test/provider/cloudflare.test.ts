@@ -1,12 +1,12 @@
 import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMEvent } from "../../src"
-import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare"
-import { compileRequest } from "../../src/route/client"
-import { it } from "../lib/effect"
-import { dynamicResponse } from "../lib/http"
-import { sseEvents } from "../lib/sse"
+import { LLM, LLMEvent } from "../../src/index.js"
+import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare.js"
+import { compileRequest } from "../../src/route/client.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse } from "../lib/http.js"
+import { sseEvents } from "../lib/sse.js"
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)

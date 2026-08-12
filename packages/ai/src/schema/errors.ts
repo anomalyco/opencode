@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
-import { ModelID, ProviderID, ProviderMetadata, RouteID } from "./ids"
+import { ModelID, ProviderID, ProviderMetadata, RouteID } from "./ids.js"
 
 export const ProviderFailureClassification = Schema.Literals(["context-overflow", "payload-too-large"])
 export type ProviderFailureClassification = typeof ProviderFailureClassification.Type

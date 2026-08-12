@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../src"
-import { OpenAIChat } from "../src/protocols"
-import { ToolSchemaProjection } from "../src/protocols/utils/tool-schema"
-import { Auth } from "../src/route"
-import { compileRequest } from "../src/route/client"
-import { it } from "./lib/effect"
+import { LLM } from "../src/index.js"
+import { OpenAIChat } from "../src/protocols.js"
+import { ToolSchemaProjection } from "../src/protocols/utils/tool-schema.js"
+import { Auth } from "../src/route.js"
+import { compileRequest } from "../src/route/client.js"
+import { it } from "./lib/effect.js"
 
 describe("tool schema projections", () => {
   test("moonshot strips $ref siblings and converts tuple arrays to a schema object", () => {

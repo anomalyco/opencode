@@ -1,4 +1,4 @@
-export * as VcsHg from "./hg"
+export * as VcsHg from "./hg.js"
 
 import path from "path"
 import { Effect } from "effect"
@@ -7,7 +7,7 @@ import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { FileStatus, Info, Mode } from "@opencode-ai/schema/vcs"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { AppProcess } from "@opencode-ai/util/process"
-import type { DiffOptions, Interface } from "../vcs"
+import type { DiffOptions, Interface } from "../vcs.js"
 import {
   addPatch,
   chunksByFile,
@@ -17,7 +17,7 @@ import {
   MAX_PATCH_BYTES,
   MAX_TOTAL_PATCH_BYTES,
   PATCH_CONTEXT_LINES,
-} from "./patch"
+} from "./patch.js"
 
 /**
  * Mercurial adapter for the Vcs service. `hg diff --git` emits git-format

@@ -1,16 +1,16 @@
 import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
 import * as Option from "effect/Option"
-import { Auth } from "./auth"
-import { Endpoint, type EndpointPatch } from "./endpoint"
-import { RequestExecutor } from "./executor"
-import { Framing } from "./framing"
-import { HttpTransport } from "./transport"
-import type { HttpMiddleware, Transport, TransportRuntime } from "./transport"
-import { WebSocketExecutor } from "./transport"
-import type { Protocol } from "./protocol"
-import { applyCachePolicy } from "../cache-policy"
-import * as ProviderShared from "../protocols/shared"
-import type { ProtocolID, ProviderOptions } from "../schema"
+import { Auth } from "./auth.js"
+import { Endpoint, type EndpointPatch } from "./endpoint.js"
+import { RequestExecutor } from "./executor.js"
+import { Framing } from "./framing.js"
+import { HttpTransport } from "./transport/index.js"
+import type { HttpMiddleware, Transport, TransportRuntime } from "./transport/index.js"
+import { WebSocketExecutor } from "./transport/index.js"
+import type { Protocol } from "./protocol.js"
+import { applyCachePolicy } from "../cache-policy.js"
+import * as ProviderShared from "../protocols/shared.js"
+import type { ProtocolID, ProviderOptions } from "../schema/index.js"
 import {
   AIError,
   GenerationOptions,
@@ -25,7 +25,7 @@ import {
   mergeGenerationOptions,
   mergeHttpOptions,
   mergeProviderOptions,
-} from "../schema"
+} from "../schema/index.js"
 
 export interface RouteBody<Body> {
   /** Schema for the validated provider-native body sent as the JSON request. */

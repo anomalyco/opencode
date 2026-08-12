@@ -1,6 +1,6 @@
-import { Route, type RouteRoutedLanguageModelInput } from "../route/client"
-import { Endpoint } from "../route/endpoint"
-import { OpenResponses } from "./open-responses"
+import { Route, type RouteRoutedLanguageModelInput } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
+import { OpenResponses } from "./open-responses.js"
 
 const ADAPTER = "openai-compatible-responses"
 
@@ -19,4 +19,4 @@ export const route = Route.make({
   transport: OpenResponses.httpTransport,
 })
 
-export * as OpenAICompatibleResponses from "./openai-compatible-responses"
+export * as OpenAICompatibleResponses from "./openai-compatible-responses.js"

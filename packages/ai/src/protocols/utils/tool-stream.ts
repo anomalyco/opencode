@@ -1,6 +1,6 @@
 import { Effect } from "effect"
-import { AIError, LLMEvent, type ProviderMetadata, type ToolCall, type ToolInputError } from "../../schema"
-import { eventError, parseToolInput, type ToolAccumulator } from "../shared"
+import { AIError, LLMEvent, type ProviderMetadata, type ToolCall, type ToolInputError } from "../../schema/index.js"
+import { eventError, parseToolInput, type ToolAccumulator } from "../shared.js"
 
 type StreamKey = string | number
 
@@ -223,4 +223,4 @@ export const finishAll = <K extends StreamKey>(route: string, tools: State<K>) =
     }
   })
 
-export * as ToolStream from "./tool-stream"
+export * as ToolStream from "./tool-stream.js"

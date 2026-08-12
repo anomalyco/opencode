@@ -1,11 +1,11 @@
 import { Effect, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { Auth } from "../auth"
-import { render as renderEndpoint } from "../endpoint"
-import { Framing } from "../framing"
-import type { HttpMiddleware, Transport, TransportPrepareInput } from "./index"
-import * as ProviderShared from "../../protocols/shared"
-import { mergeJsonRecords, type LLMRequest } from "../../schema"
+import { Auth } from "../auth.js"
+import { render as renderEndpoint } from "../endpoint.js"
+import { Framing } from "../framing.js"
+import type { HttpMiddleware, Transport, TransportPrepareInput } from "./index.js"
+import * as ProviderShared from "../../protocols/shared.js"
+import { mergeJsonRecords, type LLMRequest } from "../../schema/index.js"
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
 

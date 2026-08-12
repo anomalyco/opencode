@@ -1,10 +1,10 @@
-export * as WebSearchFirecrawl from "./firecrawl"
+export * as WebSearchFirecrawl from "./firecrawl.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Option, Schema, Scope } from "effect"
 import { HttpClient } from "effect/unstable/http"
-import { App } from "../../app"
-import { WebSearchMcp } from "./mcp"
+import { App } from "../../app.js"
+import { WebSearchMcp } from "./mcp.js"
 
 export const endpoint = "https://mcp.firecrawl.dev/v2/mcp"
 
@@ -41,7 +41,7 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       draft.update("firecrawl", (integration) => (integration.name = "Firecrawl"))
       draft.method.update({
         integrationID: "firecrawl",
-        method: { type: "key", label: "API key (optional)" },
+        method: { type: "key" },
       })
       draft.method.update({
         integrationID: "firecrawl",

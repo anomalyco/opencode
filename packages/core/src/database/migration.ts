@@ -1,10 +1,11 @@
-export * as DatabaseMigration from "./migration"
+export * as DatabaseMigration from "./migration.js"
 
 import { sql } from "drizzle-orm"
 import { Effect, Semaphore } from "effect"
-import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
-import { migrations } from "./migration.gen"
-import schema from "./schema.gen"
+import { supportsForeignKeyToggle } from "#sqlite"
+import type { EffectDrizzleSqlite } from "./drizzle.js"
+import { migrations } from "./migration.gen.js"
+import schema from "./schema.gen.js"
 import { Global } from "@opencode-ai/util/global"
 
 type Database = EffectDrizzleSqlite.EffectSQLiteDatabase
@@ -20,8 +21,10 @@ export type Migration = {
 export function apply(db: Database) {
   return lock.withPermit(
     Effect.gen(function* () {
+      // OpenCode owns the unprefixed table namespace. Embedders sharing this
+      // database may own underscore-prefixed tables, which bootstrap ignores.
       const tables = yield* db.all<{ name: string }>(
-        sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
+        sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND substr(name, 1, 1) <> '_'`,
       )
       if (tables.some((table) => table.name === "session" || table.name === "session_v2"))
         return yield* applyOnly(db, migrations)
@@ -103,9 +106,15 @@ export function applyOnly(db: Database, input: Migration[]) {
         })
         continue
       }
-      yield* db.run(sql`PRAGMA foreign_keys = OFF`)
+      // Durable Object SQLite rejects the foreign_keys toggle; the closest
+      // allowlisted relaxation is deferring enforcement to transaction commit.
+      const relaxForeignKeys = supportsForeignKeyToggle
+        ? db.run(sql`PRAGMA foreign_keys = OFF`)
+        : db.run(sql`PRAGMA defer_foreign_keys = ON`)
+      const restoreForeignKeys = supportsForeignKeyToggle ? db.run(sql`PRAGMA foreign_keys = ON`) : Effect.void
+      yield* relaxForeignKeys
       yield* apply.pipe(
-        Effect.ensuring(db.run(sql`PRAGMA foreign_keys = ON`).pipe(Effect.orDie)),
+        Effect.ensuring(restoreForeignKeys.pipe(Effect.orDie)),
         Effect.tapError((error) =>
           Effect.logError("database migration failed", {
             migration: migration.id,

@@ -1,10 +1,10 @@
 import type { Config, Redacted } from "effect"
-import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat"
-import { Auth } from "../route/auth"
-import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options"
-import type { RouteDefaultsInput } from "../route/client"
-import { ProviderID, type ModelID } from "../schema"
-import type { OpenAIProviderOptionsInput } from "./openai-options"
+import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat.js"
+import { Auth } from "../route/auth.js"
+import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
+import type { RouteDefaultsInput } from "../route/client.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
+import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const aiGatewayID = ProviderID.make("cloudflare-ai-gateway")
 export const workersAIID = ProviderID.make("cloudflare-workers-ai")

@@ -19,8 +19,9 @@ V2 loads:
 
 1. The global file at `$XDG_CONFIG_HOME/opencode/AGENTS.md`, normally
    `~/.config/opencode/AGENTS.md`.
-2. Every `AGENTS.md` from the current Location up to and including the project
-   root.
+2. Every `AGENTS.md` from the current Location up to and including the home
+   directory when the Location is inside it. For Locations outside home, the
+   scan stops at the project root.
 
 For example, when the Location is `packages/web`, OpenCode can load all three
 project files below:
@@ -35,9 +36,9 @@ my-project/
 ```
 
 The files are combined rather than selecting a single winner. They are rendered
-in this order: global, then project files from the Location toward the project
+in this order: global, then files from the Location toward home or the project
 root. OpenCode does not resolve conflicts between their contents, so keep broad
-guidance global and put scoped guidance in the relevant project directory.
+guidance global and put scoped guidance in the relevant directory.
 
 If the Location is outside the project root, only the global file is loaded.
 Setting `OPENCODE_DISABLE_PROJECT_CONFIG=1` also skips project `AGENTS.md`

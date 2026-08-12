@@ -1,3 +1,4 @@
 packages/core/migration/**/snapshot.json linguist-generated
 packages/core/src/database/migration.gen.ts linguist-generated
+packages/core/src/models-dev/snapshot.txt linguist-generated
 packages/core/src/**/*.txt text eol=lf

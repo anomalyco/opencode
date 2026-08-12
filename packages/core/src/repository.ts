@@ -201,4 +201,4 @@ function buildFile(input: { url: URL; remote: string }) {
   } satisfies FileReference
 }
 
-export * as Repository from "./repository"
+export * as Repository from "./repository.js"

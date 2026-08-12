@@ -11,8 +11,7 @@
   },
   "scripts": {
     "typecheck": "tsgo -b",
-    "predev": "bun ./scripts/predev.ts",
-    "dev": "electron-vite dev",
+    "dev": "bun ./scripts/dev.ts",
     "prebuild": "bun ./scripts/prebuild.ts",
     "build": "electron-vite build",
     "preview": "electron-vite preview",

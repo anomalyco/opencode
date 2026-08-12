@@ -1,5 +1,5 @@
-import { LLM } from "../../src"
-import { GoogleVertexResponses } from "../../src/providers"
+import { LLM } from "../../src/index.js"
+import { GoogleVertexResponses } from "../../src/providers.js"
 
 const model = GoogleVertexResponses.configure({ accessToken: "test", project: "project" }).model("gemini")
 

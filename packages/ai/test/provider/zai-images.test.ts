@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { Image, ImageClient } from "../../src"
-import { ZAI } from "../../src/providers"
-import { it } from "../lib/effect"
-import { dynamicResponse, fixedResponse } from "../lib/http"
+import { Image, ImageClient } from "../../src/index.js"
+import { ZAI } from "../../src/providers.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse, fixedResponse } from "../lib/http.js"
 
 describe("Z.ai Images", () => {
   it.effect("generates through the Z.ai Images API", () =>

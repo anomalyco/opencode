@@ -19,17 +19,17 @@ import {
   postJsonToApi,
 } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
-import type { OpenAIConfig } from "./openai-config"
-import { openaiFailedResponseHandler } from "./openai-error"
-import { codeInterpreterInputSchema, codeInterpreterOutputSchema } from "./tool/code-interpreter"
-import { fileSearchOutputSchema } from "./tool/file-search"
-import { imageGenerationOutputSchema } from "./tool/image-generation"
-import { convertToOpenAIResponsesInput } from "./convert-to-openai-responses-input"
-import { mapOpenAIResponseFinishReason } from "./map-openai-responses-finish-reason"
-import type { OpenAIResponsesIncludeOptions, OpenAIResponsesIncludeValue } from "./openai-responses-api-types"
-import { prepareResponsesTools } from "./openai-responses-prepare-tools"
-import type { OpenAIResponsesModelId } from "./openai-responses-settings"
-import { localShellInputSchema } from "./tool/local-shell"
+import type { OpenAIConfig } from "./openai-config.js"
+import { openaiFailedResponseHandler } from "./openai-error.js"
+import { codeInterpreterInputSchema, codeInterpreterOutputSchema } from "./tool/code-interpreter.js"
+import { fileSearchOutputSchema } from "./tool/file-search.js"
+import { imageGenerationOutputSchema } from "./tool/image-generation.js"
+import { convertToOpenAIResponsesInput } from "./convert-to-openai-responses-input.js"
+import { mapOpenAIResponseFinishReason } from "./map-openai-responses-finish-reason.js"
+import type { OpenAIResponsesIncludeOptions, OpenAIResponsesIncludeValue } from "./openai-responses-api-types.js"
+import { prepareResponsesTools } from "./openai-responses-prepare-tools.js"
+import type { OpenAIResponsesModelId } from "./openai-responses-settings.js"
+import { localShellInputSchema } from "./tool/local-shell.js"
 
 const webSearchCallItem = z.object({
   type: z.literal("web_search_call"),

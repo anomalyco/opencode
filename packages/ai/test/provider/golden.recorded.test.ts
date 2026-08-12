@@ -1,12 +1,12 @@
-import * as Anthropic from "../../src/providers/anthropic"
-import * as AnthropicCompatible from "../../src/providers/anthropic-compatible"
-import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare"
-import * as Google from "../../src/providers/google"
-import * as OpenAI from "../../src/providers/openai"
-import * as OpenAICompatible from "../../src/providers/openai-compatible"
-import * as OpenRouter from "../../src/providers/openrouter"
-import * as XAI from "../../src/providers/xai"
-import { describeRecordedGoldenScenarios } from "../recorded-golden"
+import * as Anthropic from "../../src/providers/anthropic.js"
+import * as AnthropicCompatible from "../../src/providers/anthropic-compatible.js"
+import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare.js"
+import * as Google from "../../src/providers/google.js"
+import * as OpenAI from "../../src/providers/openai.js"
+import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
+import * as OpenRouter from "../../src/providers/openrouter.js"
+import * as XAI from "../../src/providers/xai.js"
+import { describeRecordedGoldenScenarios } from "../recorded-golden.js"
 
 const openAI = OpenAI.configure({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",

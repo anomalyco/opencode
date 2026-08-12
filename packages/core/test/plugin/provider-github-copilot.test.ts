@@ -141,6 +141,32 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("classifies title generation as a background interaction", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* (yield* PluginHooks.Service).trigger("session", "http.request", {
+        sessionID: Session.ID.make("ses_title"),
+        agent: Agent.ID.make("title"),
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4-nano") }),
+        request: new Request("https://api.githubcopilot.com/chat/completions"),
+      })
+      expect(event.request.headers.get("x-interaction-type")).toBe("conversation-background")
+    }),
+  )
+
+  it.effect("classifies compaction requests", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* (yield* PluginHooks.Service).trigger("session", "http.request", {
+        sessionID: Session.ID.make("ses_compaction"),
+        agent: Agent.ID.make("compaction"),
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4") }),
+        request: new Request("https://api.githubcopilot.com/responses"),
+      })
+      expect(event.request.headers.get("x-interaction-type")).toBe("conversation-compaction")
+    }),
+  )
+
   it.effect("creates the bundled Copilot SDK for the GitHub Copilot package", () =>
     Effect.gen(function* () {
       const plugin = yield* Plugin.Service
