@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
-import { batch, createSignal, For, onCleanup } from "solid-js"
+import { batch, createSignal, For, onCleanup, Show } from "solid-js"
+import { useConfig } from "../../../config"
 import { createStore, reconcile } from "solid-js/store"
 import { EMPTY_SESSION_TAB_STATUS, SessionTabs, type SessionTabsController } from "../../../component/session-tabs"
 import { moveSessionTab } from "../../../context/session-tabs-model"
@@ -38,6 +39,9 @@ const TRANSCRIPT_FILES = [
 
 function SessionTabsStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
+  const config = useConfig().data
+  // The story follows the configured layout so both orientations are exercised.
+  const orientation = () => (config.tabs.layout === "vertical" ? ("vertical" as const) : undefined)
   const theme = props.context.theme
   const elevatedTheme = theme.contextual.elevated
   // A keyed store mirrors production: retitles mutate rows in place instead of remounting them.
@@ -320,39 +324,43 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     <box
       width={dimensions().width}
       height={dimensions().height}
-      flexDirection="column"
+      flexDirection={orientation() === "vertical" ? "row" : "column"}
       backgroundColor={theme.background.default}
     >
-      <SessionTabs controller={controller} />
-      <box height={1} />
-      <box flexGrow={1} paddingLeft={2} paddingRight={2} flexDirection="column">
-        <For each={transcript()}>
-          {(line) => (
-            <text fg={line.color} wrapMode="none" selectable={false}>
-              {line.text || " "}
-            </text>
-          )}
-        </For>
-      </box>
-      <box paddingLeft={2} flexDirection="column">
-        <text fg={theme.text.subdued}>
-          selected: {number(active() ?? "")} | state: {selectedState()}
-        </text>
-        <text fg={theme.text.subdued}>background: {lastEvent()}</text>
-      </box>
-      <box
-        height={1}
-        flexShrink={0}
-        backgroundColor={elevatedTheme.background.default}
-        paddingLeft={1}
-        paddingRight={1}
-        flexDirection="row"
-      >
-        <text fg={elevatedTheme.text.subdued}>storybook / tabs</text>
-        <box flexGrow={1} />
-        <text fg={elevatedTheme.text.subdued}>
-          space/s run | t add | d close | r reset | ←/→ 1-0 move | drag reorders | esc back
-        </text>
+      <SessionTabs controller={controller} orientation={orientation()} />
+      <box flexGrow={1} flexDirection="column">
+        <Show when={orientation() === undefined}>
+          <box height={1} />
+        </Show>
+        <box flexGrow={1} paddingLeft={2} paddingRight={2} flexDirection="column">
+          <For each={transcript()}>
+            {(line) => (
+              <text fg={line.color} wrapMode="none" selectable={false}>
+                {line.text || " "}
+              </text>
+            )}
+          </For>
+        </box>
+        <box paddingLeft={2} flexDirection="column">
+          <text fg={theme.text.subdued}>
+            selected: {number(active() ?? "")} | state: {selectedState()}
+          </text>
+          <text fg={theme.text.subdued}>background: {lastEvent()}</text>
+        </box>
+        <box
+          height={1}
+          flexShrink={0}
+          backgroundColor={elevatedTheme.background.default}
+          paddingLeft={1}
+          paddingRight={1}
+          flexDirection="row"
+        >
+          <text fg={elevatedTheme.text.subdued}>storybook / tabs</text>
+          <box flexGrow={1} />
+          <text fg={elevatedTheme.text.subdued}>
+            space/s run | t add | d close | r reset | ←/→ 1-0 move | drag reorders | esc back
+          </text>
+        </box>
       </box>
     </box>
   )

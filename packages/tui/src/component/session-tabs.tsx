@@ -16,6 +16,7 @@ import {
   type SessionTab,
   type SessionTabUnread,
 } from "../context/session-tabs-model"
+import { isFallbackTitle } from "@opencode-ai/util/session-title-fallback"
 import { createAnimatable, spring, tween } from "../ui/animation"
 import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
@@ -58,6 +59,11 @@ function fadeTitleColor(color: RGBA, background: RGBA, index: number, length: nu
   const end = index - (length - FADE_WIDTH) + 1
   const opacity = Math.max(fade(start) * leading, fade(end))
   return opacity === 0 ? color : tint(color, background, opacity)
+}
+
+// A tab title is provisional until the session earns a generated or user-provided one.
+function isPlaceholderSessionTitle(value: string | undefined) {
+  return value === NEW_SESSION_TAB_TITLE || value === "Untitled session" || isFallbackTitle(value)
 }
 
 function createMarquee(hovered: () => string | undefined, animations: () => boolean) {
@@ -185,6 +191,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const numberWidth = () => 2
               const titleWidth = () => Math.max(1, width() - numberWidth() - 2 - (hovered() === tab.sessionID ? 1 : 0))
               const title = () => tab.title ?? "Untitled session"
+              const placeholder = () => isPlaceholderSessionTitle(tab.title)
               const scrolling = () => hovered() === tab.sessionID && marquee.offset() > 0
               const visibleTitle = createMemo(() =>
                 scrolling()
@@ -215,8 +222,10 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                 return sweepLevel() === 0 ? color : tint(color, theme.text.default, 0.15 * sweepLevel())
               }
               const foreground = () => {
-                if (hovered() === tab.sessionID) return theme.text.default
-                return selected() ? theme.text.default : theme.text.subdued
+                const base =
+                  hovered() === tab.sessionID || selected() ? theme.text.default : theme.text.subdued
+                // A provisional title reads dimmer than its neighbors until the real one arrives.
+                return placeholder() ? tint(base, pulseBackground(), 0.35) : base
               }
               const complete = () => status().complete
               const glowHue = () => {
@@ -373,7 +382,10 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                         fg={foreground()}
                         wrapMode="none"
                         selectable={false}
-                        attributes={selected() ? TextAttributes.BOLD : undefined}
+                        attributes={
+                          (selected() ? TextAttributes.BOLD : 0) | (placeholder() ? TextAttributes.ITALIC : 0) ||
+                          undefined
+                        }
                       >
                         <Show when={glows() || titleFades()} fallback={visibleTitle()}>
                           <For each={visibleTitleParts()}>
@@ -676,6 +688,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           const glowColor = () => feedbackColor() ?? accent()
           const glows = () => !selected() && (status().attention || (!status().busy && status().unread !== undefined))
           const title = () => tab.title ?? "Untitled session"
+          const placeholder = () => tab !== NEW_SESSION_TAB && isPlaceholderSessionTitle(tab.title)
           const tabNumber = createMemo(() => items().findIndex((item) => item.sessionID === tab.sessionID) + 1)
           // Shortcut labels stay one cell wide: 1-9, 0 for ten, then a neutral dot.
           const numberWidth = () => 2
@@ -693,8 +706,10 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
             () => stringWidth(title()) >= availableTitleWidth() && availableTitleWidth() > FADE_WIDTH,
           )
           const foreground = () => {
-            if (hovered() === tab.sessionID) return theme.text.default
-            return tint(theme.text.subdued, theme.text.default, selection())
+            const base =
+              hovered() === tab.sessionID ? theme.text.default : tint(theme.text.subdued, theme.text.default, selection())
+            // A provisional title reads dimmer than its neighbors until the real one arrives.
+            return placeholder() ? tint(base, background(), 0.35) : base
           }
           // Title characters sitting over the glow tinge toward its color, following the same
           // spatial falloff as the glow itself; characters beyond the tail stay neutral.
@@ -782,7 +797,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   fg={foreground()}
                   wrapMode="none"
                   selectable={false}
-                  attributes={bold()}
+                  attributes={(bold() ?? 0) | (placeholder() ? TextAttributes.ITALIC : 0) || undefined}
                 >
                   <Show when={glows() || titleFades()} fallback={visibleTitle()}>
                     <For each={visibleTitleParts()}>
