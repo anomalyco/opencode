@@ -59,13 +59,6 @@ const layer = Layer.effect(
           if (rules) output.system.push(`EXTRACTED LESSONS:\n${rules}`)
         },
 
-        "experimental.text.complete": async (input, output) => {
-          if (output.text && !output.text.includes("Harness Quality & Evolution Feedback")) {
-            const auditBanner = `\n\n---\n### 📊 Harness Quality & Evolution Feedback\n**Are you satisfied with this subtask result? (Yes/No)**\n*Reply ` + "`Yes`" + ` to confirm or ` + "`No: <your explanation of how you expected it>`" + ` so the Harness can learn and extract rules for future runs.*`
-            output.text += auditBanner
-          }
-        },
-
         "tool.definition": async (input, output) => {
           if (!activeVersion) return
           const toolOverrides = parseRecord(activeVersion.toolOverrides)

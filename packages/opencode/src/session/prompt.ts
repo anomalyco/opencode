@@ -79,18 +79,50 @@ IMPORTANT:
 - Complete all necessary research and tool calls BEFORE calling this tool
 - This tool provides your final answer - no further actions are taken after calling it`
 
+
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
 function mcpResourceBase64Size(value: string) {
-  const trimmed = value.replace(/\s/g, "")
-  const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0
-  return Math.max(0, Math.floor((trimmed.length * 3) / 4) - padding)
-}
 
-function formatMcpResourceBytes(value: number) {
-  if (value < 1024) return `${value} B`
-  if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KB`
-  return `${Math.ceil(value / (1024 * 1024))} MB`
+    // Remove spaces from the Base64 string
+    const trimmed = value.replace(/\s/g, "");
+
+    // Check how many padding characters (=) are present
+    let padding = 0;
+
+    if (trimmed.endsWith("==")) {
+        padding = 2;
+    } else if (trimmed.endsWith("=")) {
+        padding = 1;
+    }
+
+    // Calculate the original file size
+    let originalSize = Math.floor((trimmed.length * 3) / 4);
+
+    // Remove padding bytes
+    originalSize = originalSize - padding;
+
+    // Size should never be negative
+    if (originalSize < 0) {
+        return 0;
+    }
+
+    return originalSize;
+}
+function formatMcpResourceBytes(value : number) {
+
+    // If size is less than 1 KB
+    if (value < 1024) {
+        return value + " B";
+    }
+
+    // If size is less than 1 MB
+    if (value < 1024 * 1024) {
+        return Math.ceil(value / 1024) + " KB";
+    }
+
+    // Otherwise show in MB
+    return Math.ceil(value / (1024 * 1024)) + " MB";
 }
 
 function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
