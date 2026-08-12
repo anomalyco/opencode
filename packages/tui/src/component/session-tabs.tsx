@@ -34,6 +34,7 @@ const FADE_WIDTH = 4
 const ADD_TAB_WIDTH = 3
 const MARQUEE_DELAY = 600
 const MARQUEE_INTERVAL = 100
+const MARQUEE_FADE_DURATION = 250
 const CONTEXT_MENU_WIDTH = 16
 const RIGHT_MOUSE_BUTTON = 2
 
@@ -95,6 +96,7 @@ export function createMarquee(animations: () => boolean) {
     clear()
     if (active() === sessionID) {
       returning = false
+      leading.animate({ opacity: 1 })
       return scroll()
     }
     if (!marqueeOverflows(title, width)) {
@@ -116,7 +118,12 @@ export function createMarquee(animations: () => boolean) {
     if (active() !== sessionID) return
     clear()
     if (offset() === 0) {
-      setActive(undefined)
+      returning = true
+      leading.animate({ opacity: 0 })
+      delay = setTimeout(() => {
+        returning = false
+        setActive(undefined)
+      }, MARQUEE_FADE_DURATION)
       return
     }
     returning = true
@@ -125,9 +132,11 @@ export function createMarquee(animations: () => boolean) {
         const next = (value + 1) % cycleWidth
         if (next !== 0) return next
         clear()
-        returning = false
-        setActive(undefined)
         leading.animate({ opacity: 0 })
+        delay = setTimeout(() => {
+          returning = false
+          setActive(undefined)
+        }, MARQUEE_FADE_DURATION)
         return 0
       })
     }, MARQUEE_INTERVAL)
@@ -370,7 +379,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const titleWidth = () =>
                 hovered() === tab.sessionID ? hoveredTitleWidth() : restingTitleWidth()
               const title = () => tab.title ?? "Untitled session"
-              const scrolling = () => marquee.active() === tab.sessionID && marquee.offset() > 0
+              const scrolling = () => marquee.active() === tab.sessionID
               const visibleTitle = createMemo(() =>
                 scrolling()
                   ? marqueeText(title(), titleWidth(), marquee.offset())
@@ -905,7 +914,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           const hoveredTitleWidth = () => Math.max(1, restingTitleWidth() - 2)
           const availableTitleWidth = () =>
             hovered() === tab.sessionID ? hoveredTitleWidth() : restingTitleWidth()
-          const scrolling = () => marquee.active() === tab.sessionID && marquee.offset() > 0
+          const scrolling = () => marquee.active() === tab.sessionID
           const visibleTitle = createMemo(() =>
             scrolling()
               ? marqueeText(title(), availableTitleWidth(), marquee.offset())

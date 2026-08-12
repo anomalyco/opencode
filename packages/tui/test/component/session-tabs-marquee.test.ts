@@ -25,6 +25,19 @@ describe("session tab marquee", () => {
     scope.dispose()
   })
 
+  test("keeps the leading fade through a natural loop boundary", () => {
+    jest.useFakeTimers()
+    const scope = createRoot((dispose) => ({ marquee: createMarquee(() => false), dispose }))
+
+    scope.marquee.enter("first", "opencode", 6)
+    jest.advanceTimersByTime(1_600)
+
+    expect(scope.marquee.active()).toBe("first")
+    expect(scope.marquee.offset()).toBe(0)
+    expect(scope.marquee.leading()).toBe(1)
+    scope.dispose()
+  })
+
   test("finishes the current cycle after leaving", () => {
     jest.useFakeTimers()
     const scope = createRoot((dispose) => ({ marquee: createMarquee(() => false), dispose }))
@@ -32,8 +45,12 @@ describe("session tab marquee", () => {
     scope.marquee.enter("first", "opencode", 6)
     jest.advanceTimersByTime(700)
     scope.marquee.leave("first")
-    jest.advanceTimersByTime(1_000)
+    jest.advanceTimersByTime(900)
 
+    expect(scope.marquee.active()).toBe("first")
+    expect(scope.marquee.offset()).toBe(0)
+
+    jest.advanceTimersByTime(250)
     expect(scope.marquee.active()).toBeUndefined()
     expect(scope.marquee.offset()).toBe(0)
     scope.dispose()
