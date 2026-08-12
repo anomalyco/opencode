@@ -222,10 +222,15 @@ kbd {
 }
 
 .catalog-tabs button:focus-visible,
-.viewer-button:focus-visible,
 .command-trigger:focus-visible {
   outline: 1px solid var(--kit-fg-faint);
   outline-offset: -1px;
+}
+
+.viewer-button:focus-visible {
+  outline: 0;
+  background: var(--kit-bg-hover);
+  color: var(--kit-fg-strong);
 }
 
 .catalog-tools {
@@ -1180,7 +1185,7 @@ kbd {
 
 .viewer-header > .viewer-button:first-child {
   justify-self: start;
-  border-right: 1px solid var(--kit-line);
+  padding-inline: 1.1rem;
 }
 
 .viewer-position {
@@ -1195,17 +1200,24 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 0.35rem;
+  padding-right: 0.75rem;
 }
 
 .viewer-actions .capture-actions {
   align-self: center;
-  margin-inline: 0.4rem;
 }
 
 .viewer-button {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.viewer-actions .variant-switcher {
+  border-left: 0;
+  min-height: 1.9rem;
+  padding: 0 0.8rem;
 }
 
 .viewer-button kbd {
@@ -1230,7 +1242,8 @@ kbd {
 }
 
 .viewer-actions .viewer-button {
-  border-left: 1px solid var(--kit-line);
+  align-self: center;
+  min-height: 1.9rem;
 }
 
 .viewer-body {
