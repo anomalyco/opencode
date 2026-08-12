@@ -89,12 +89,12 @@ test("migrates tui and kv config into cli.json", async () => {
       terminal: { title: false },
       prompt: { editor: false, paste: "full" },
       session: { sidebar: "hide", scrollbar: true, thinking: "show", grouping: "none" },
-      hints: { onboarding: false },
       animations: false,
       mouse: false,
     })
     expect(config).not.toHaveProperty("skipped_version")
     expect(config).not.toHaveProperty("which_key")
+    expect(config).not.toHaveProperty("hints")
     expect((await Bun.file(path.join(directory, "cli.json")).json()).keybinds).toEqual({
       leader: "ctrl+o",
       "app.exit": "ctrl+q",

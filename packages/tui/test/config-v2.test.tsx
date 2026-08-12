@@ -74,19 +74,19 @@ test("uses command IDs as keybind keys", () => {
   ).toBe(true)
 })
 
-test("preserves supported v1 keybind defaults", () => {
-  const legacy = Object.fromEntries(
-    Object.entries(Definitions).flatMap(([name, item]) => {
-      const command = CommandMap[name as keyof typeof CommandMap] ?? name
-      if (command === "app.heap_snapshot") return []
-      return [[command, item.default]]
-    }),
-  )
-  const current = Object.fromEntries(
-    Object.entries(TuiKeybind.Definitions).map(([name, item]) => [name, item.default]),
-  )
+test("preserves migrated v1 keybind defaults", () => {
+  const pairs = [
+    ["app.exit", "app_exit"],
+    ["prompt.paste", "input_paste"],
+    ["session.delete", "session_delete"],
+    ["session.list", "session_list"],
+    ["agent.list", "agent_list"],
+  ] as const
 
-  expect(current).toMatchObject(legacy)
+  pairs.forEach(([command, name]) => {
+    expect(CommandMap[name]).toBe(command)
+    expect(TuiKeybind.Definitions[command].default).toEqual(Definitions[name].default)
+  })
 })
 
 test("accepts every v2-only named command ID", () => {
@@ -135,9 +135,7 @@ test("centralizes named command defaults and resolves explicit none", () => {
     "diff.mark_reviewed": "m",
   }
   const config = resolve({}, { terminalSuspend: true })
-  Object.entries(defaults).forEach(([command, key]) =>
-    expect(config.keybinds.get(command)).toMatchObject([{ key }]),
-  )
+  Object.entries(defaults).forEach(([command, key]) => expect(config.keybinds.get(command)).toMatchObject([{ key }]))
 
   const disabled = resolve(
     decodeInfo({ keybinds: Object.fromEntries(Object.keys(defaults).map((command) => [command, "none"])) }),

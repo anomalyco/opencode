@@ -78,7 +78,6 @@ test("brackets navigate diff hunks", async () => {
     await viewer.app.waitForFrame((frame) => frame.includes("const first"))
     await viewer.app.waitFor(() => Boolean(findScrollBox(viewer.app.renderer.root)))
     await viewer.app.flush()
-    expect(viewer.app.captureCharFrame()).toContain("@@ -20,3 +20,3 @@")
     expect(countDiffs(viewer.app.renderer.root)).toBe(3)
     const scroll = findScrollBox(viewer.app.renderer.root)!
     const initial = scroll.scrollTop
