@@ -148,7 +148,7 @@ system = [ agent.prompt ?? SystemPrompt.provider(model), ...env/skills, ... ]
 - **Cast:** OpenCode Build doer → **`recruit`**; Plan stays; **`build` hidden** optional escape hatch for end users who need coding tools (not our internal moks-dev workflow).
 - **G3 plan wave:** BL-001, BL-002, BL-022 **done** — exit/copy/path are hiring-native.
 - **Domain ontology:** hiring **book** = repo; **req = directory** `.moks/reqs/<slug>/` (`@slug` to focus); ATS = GitHub/remote; `.moks/` = local working tree; diff = local candidate/req changes; **`moks commit` / `moks push`** (git metaphor); `/init` = add a req to the book; `/review` = packet review skill (not git/PR). Not req=repo (20–30 remotes) and not branch=req.
-- **AGENTS.md:** keep as workspace instruction injection (hiring norms, same as coding constitution). Not the hero bootstrap; not removed.
+- **HIRING-AGENTS.md:** TA constitution (same job as coding `AGENTS.md`). Load global + upward project `HIRING-AGENTS.md`. Do **not** auto-load coding `AGENTS.md`. Not the hero bootstrap.
 - **LSP:** not a TA product surface (defaults off; chrome hidden when off; code kept only for optional `build` escape hatch).
 - **Diff:** keep and lean into — real-time visibility of local hiring deltas (like code changes).
 - **BL-020 global app dir:** **shipped isolate** (2026-08-12) — `app = "moks"`; no migrate/fallback; OpenCode dirs untouched.

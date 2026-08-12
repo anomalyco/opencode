@@ -29,7 +29,7 @@ const instructionLayer = (input: {
   ])
 
 describe("InstructionContext", () => {
-  it.live("loads global and upward project AGENTS.md files as one aggregate context", () =>
+  it.live("loads global and upward project HIRING-AGENTS.md files as one aggregate context", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -39,10 +39,10 @@ describe("InstructionContext", () => {
           const global = path.join(tmp.path, "global")
           const project = path.join(tmp.path, "project")
           const directory = path.join(project, "packages", "core")
-          const outside = path.join(tmp.path, "AGENTS.md")
-          const globalFile = path.join(global, "AGENTS.md")
-          const projectFile = path.join(project, "AGENTS.md")
-          const packageFile = path.join(directory, "AGENTS.md")
+          const outside = path.join(tmp.path, "HIRING-AGENTS.md")
+          const globalFile = path.join(global, "HIRING-AGENTS.md")
+          const projectFile = path.join(project, "HIRING-AGENTS.md")
+          const packageFile = path.join(directory, "HIRING-AGENTS.md")
           yield* Effect.promise(async () => {
             await fs.mkdir(global, { recursive: true })
             await fs.mkdir(directory, { recursive: true })
@@ -109,14 +109,14 @@ describe("InstructionContext", () => {
     ),
   )
 
-  it.live("keeps an empty AGENTS.md as available context", () =>
+  it.live("keeps an empty HIRING-AGENTS.md as available context", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
-          const file = path.join(tmp.path, "AGENTS.md")
+          const file = path.join(tmp.path, "HIRING-AGENTS.md")
           yield* Effect.promise(() => fs.writeFile(file, ""))
           const context = yield* SystemContextRegistry.Service.pipe(
             Effect.flatMap((service) => service.load()),
@@ -137,6 +137,34 @@ describe("InstructionContext", () => {
     ),
   )
 
+  it.live("does not load coding AGENTS.md", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const file = path.join(tmp.path, "AGENTS.md")
+          yield* Effect.promise(() => fs.writeFile(file, "coding"))
+          const context = yield* SystemContextRegistry.Service.pipe(
+            Effect.flatMap((service) => service.load()),
+            Effect.provide(
+              instructionLayer({
+                config: path.join(tmp.path, "global"),
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+                ),
+              }),
+            ),
+          )
+
+          expect((yield* SystemContext.initialize(context)).baseline).toBe("")
+        }),
+      ),
+    ),
+  )
+
   it.live("attaches nearest .moks/req materials as ambient context", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -146,7 +174,7 @@ describe("InstructionContext", () => {
         Effect.gen(function* () {
           const project = path.join(tmp.path, "project")
           const directory = path.join(project, "packages", "core")
-          const agents = path.join(project, "AGENTS.md")
+          const agents = path.join(project, "HIRING-AGENTS.md")
           const jd = path.join(project, ".moks", "req", "jd.md")
           const scorecard = path.join(project, ".moks", "req", "scorecard.md")
           const notes = path.join(project, ".moks", "req", "notes.md")
@@ -264,7 +292,7 @@ describe("InstructionContext", () => {
       expect(
         yield* SystemContext.reconcile(context, {
           "core/instructions": {
-            value: [{ path: "/repo/AGENTS.md", content: "old" }],
+            value: [{ path: "/repo/HIRING-AGENTS.md", content: "old" }],
             removed: "Previously loaded instructions no longer apply.",
           },
         }),
@@ -274,7 +302,7 @@ describe("InstructionContext", () => {
 
   it.effect("preserves admitted instructions when a discovered file disappears before read", () =>
     Effect.gen(function* () {
-      const file = AbsolutePath.make("/repo/AGENTS.md")
+      const file = AbsolutePath.make("/repo/HIRING-AGENTS.md")
       const racingFS = Layer.effect(
         FSUtil.Service,
         FSUtil.Service.pipe(
@@ -348,7 +376,7 @@ describe("InstructionContext", () => {
       )
 
       expect(observed).toEqual({
-        targets: ["AGENTS.md", path.join(".moks", "req")],
+        targets: ["HIRING-AGENTS.md", path.join(".moks", "req")],
         start: FSUtil.resolve("/repo"),
         stop: FSUtil.resolve("/repo"),
       })

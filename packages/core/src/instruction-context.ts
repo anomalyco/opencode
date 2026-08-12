@@ -49,14 +49,14 @@ const layer = Layer.effectDiscard(
       const scanProject = !Flag.OPENCODE_DISABLE_PROJECT_CONFIG && insideProject
       const found = scanProject
         ? yield* fs.up({
-            targets: ["AGENTS.md", join(".moks", "req")],
+            targets: ["HIRING-AGENTS.md", join(".moks", "req")],
             start,
             stop,
           })
         : []
       const discovered = new Set(
         yield* Effect.forEach(
-          found.filter((item) => basename(item) === "AGENTS.md"),
+          found.filter((item) => basename(item) === "HIRING-AGENTS.md"),
           fs.resolve,
         ),
       )
@@ -73,14 +73,14 @@ const layer = Layer.effectDiscard(
         }
       }
 
-      const paths = Array.dedupe([yield* fs.resolve(join(global.config, "AGENTS.md")), ...discovered, ...reqPaths])
+      const paths = Array.dedupe([yield* fs.resolve(join(global.config, "HIRING-AGENTS.md")), ...discovered, ...reqPaths])
       const files = yield* Effect.forEach(
         paths,
         (path) =>
           fs.readFileStringSafe(path).pipe(
             Effect.map((content) => {
               if (content === undefined) return undefined
-              // Skip empty req materials; empty AGENTS.md remains available context.
+              // Skip empty req materials; empty HIRING-AGENTS.md remains available context.
               if (content === "" && isReqMaterial(path)) return undefined
               return new File({
                 path: AbsolutePath.make(path),

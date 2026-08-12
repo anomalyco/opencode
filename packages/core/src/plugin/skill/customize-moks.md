@@ -88,7 +88,7 @@ Every field is optional. File name is **`moks.json` / `moks.jsonc`**.
   "username": "string",
   "shell": "/bin/zsh",
   "logLevel": "DEBUG" | "INFO" | "WARN" | "ERROR",
-  "instructions": ["AGENTS.md", "docs/style.md"],
+  "instructions": ["HIRING-AGENTS.md", "docs/style.md"],
 
   "skills": {
     "paths": [".moks/skills", "/abs/path/to/skills"],

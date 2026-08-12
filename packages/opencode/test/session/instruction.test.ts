@@ -111,12 +111,12 @@ function loaded(filepath: string): SessionV1.WithParts[] {
 }
 
 describe("Instruction.resolve", () => {
-  it.live("returns empty when AGENTS.md is at project root (already in systemPaths)", () =>
-    withFiles({ "AGENTS.md": "# Root Instructions", "src/file.ts": "const x = 1" }, (dir) =>
+  it.live("returns empty when HIRING-AGENTS.md is at project root (already in systemPaths)", () =>
+    withFiles({ "HIRING-AGENTS.md": "# Root Instructions", "src/file.ts": "const x = 1" }, (dir) =>
       Effect.gen(function* () {
         const svc = yield* Instruction.Service
         const system = yield* svc.systemPaths()
-        expect(system.has(path.join(dir, "AGENTS.md"))).toBe(true)
+        expect(system.has(path.join(dir, "HIRING-AGENTS.md"))).toBe(true)
 
         const results = yield* svc.resolve([], path.join(dir, "src", "file.ts"), MessageID.make("msg_message-test-1"))
         expect(results).toEqual([])
@@ -124,12 +124,12 @@ describe("Instruction.resolve", () => {
     ),
   )
 
-  it.live("returns AGENTS.md from subdirectory (not in systemPaths)", () =>
-    withFiles({ "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
+  it.live("returns HIRING-AGENTS.md from subdirectory (not in systemPaths)", () =>
+    withFiles({ "subdir/HIRING-AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
       Effect.gen(function* () {
         const svc = yield* Instruction.Service
         const system = yield* svc.systemPaths()
-        expect(system.has(path.join(dir, "subdir", "AGENTS.md"))).toBe(false)
+        expect(system.has(path.join(dir, "subdir", "HIRING-AGENTS.md"))).toBe(false)
 
         const results = yield* svc.resolve(
           [],
@@ -137,16 +137,16 @@ describe("Instruction.resolve", () => {
           MessageID.make("msg_message-test-2"),
         )
         expect(results.length).toBe(1)
-        expect(results[0].filepath).toBe(path.join(dir, "subdir", "AGENTS.md"))
+        expect(results[0].filepath).toBe(path.join(dir, "subdir", "HIRING-AGENTS.md"))
       }),
     ),
   )
 
-  it.live("doesn't reload AGENTS.md when reading it directly", () =>
-    withFiles({ "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
+  it.live("doesn't reload HIRING-AGENTS.md when reading it directly", () =>
+    withFiles({ "subdir/HIRING-AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
       Effect.gen(function* () {
         const svc = yield* Instruction.Service
-        const filepath = path.join(dir, "subdir", "AGENTS.md")
+        const filepath = path.join(dir, "subdir", "HIRING-AGENTS.md")
         const system = yield* svc.systemPaths()
         expect(system.has(filepath)).toBe(false)
 
@@ -157,7 +157,7 @@ describe("Instruction.resolve", () => {
   )
 
   it.live("does not reattach the same nearby instructions twice for one message", () =>
-    withFiles({ "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
+    withFiles({ "subdir/HIRING-AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
       Effect.gen(function* () {
         const svc = yield* Instruction.Service
         const filepath = path.join(dir, "subdir", "nested", "file.ts")
@@ -167,14 +167,14 @@ describe("Instruction.resolve", () => {
         const second = yield* svc.resolve([], filepath, id)
 
         expect(first).toHaveLength(1)
-        expect(first[0].filepath).toBe(path.join(dir, "subdir", "AGENTS.md"))
+        expect(first[0].filepath).toBe(path.join(dir, "subdir", "HIRING-AGENTS.md"))
         expect(second).toEqual([])
       }),
     ),
   )
 
   it.live("clear allows nearby instructions to be attached again for the same message", () =>
-    withFiles({ "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
+    withFiles({ "subdir/HIRING-AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
       Effect.gen(function* () {
         const svc = yield* Instruction.Service
         const filepath = path.join(dir, "subdir", "nested", "file.ts")
@@ -186,16 +186,16 @@ describe("Instruction.resolve", () => {
 
         expect(first).toHaveLength(1)
         expect(second).toHaveLength(1)
-        expect(second[0].filepath).toBe(path.join(dir, "subdir", "AGENTS.md"))
+        expect(second[0].filepath).toBe(path.join(dir, "subdir", "HIRING-AGENTS.md"))
       }),
     ),
   )
 
   it.live("skips instructions already reported by prior read metadata", () =>
-    withFiles({ "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
+    withFiles({ "subdir/HIRING-AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
       Effect.gen(function* () {
         const svc = yield* Instruction.Service
-        const agents = path.join(dir, "subdir", "AGENTS.md")
+        const agents = path.join(dir, "subdir", "HIRING-AGENTS.md")
         const filepath = path.join(dir, "subdir", "nested", "file.ts")
         const id = MessageID.make("msg_message-claim-3")
 
@@ -209,21 +209,21 @@ describe("Instruction.resolve", () => {
 })
 
 describe("Instruction.system", () => {
-  it.live("loads both project and global AGENTS.md when both exist", () =>
+  it.live("loads both project and global HIRING-AGENTS.md when both exist", () =>
     Effect.gen(function* () {
-      const globalTmp = yield* tmpWithFiles({ "AGENTS.md": "# Global Instructions" })
-      const projectTmp = yield* tmpWithFiles({ "AGENTS.md": "# Project Instructions" })
+      const globalTmp = yield* tmpWithFiles({ "HIRING-AGENTS.md": "# Global Instructions" })
+      const projectTmp = yield* tmpWithFiles({ "HIRING-AGENTS.md": "# Project Instructions" })
 
       yield* Effect.gen(function* () {
         const svc = yield* Instruction.Service
         const paths = yield* svc.systemPaths()
-        expect(paths.has(path.join(projectTmp, "AGENTS.md"))).toBe(true)
-        expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(true)
+        expect(paths.has(path.join(projectTmp, "HIRING-AGENTS.md"))).toBe(true)
+        expect(paths.has(path.join(globalTmp, "HIRING-AGENTS.md"))).toBe(true)
 
         const rules = yield* svc.system()
         expect(rules).toHaveLength(2)
-        expect(rules[0]).toBe(`Instructions from: ${path.join(globalTmp, "AGENTS.md")}\n# Global Instructions`)
-        expect(rules[1]).toBe(`Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Project Instructions`)
+        expect(rules[0]).toBe(`Instructions from: ${path.join(globalTmp, "HIRING-AGENTS.md")}\n# Global Instructions`)
+        expect(rules[1]).toBe(`Instructions from: ${path.join(projectTmp, "HIRING-AGENTS.md")}\n# Project Instructions`)
       }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
     }),
   )
@@ -261,7 +261,7 @@ describe("Instruction.system", () => {
     }),
   )
 
-  it.live("attaches .moks/req materials without AGENTS.md", () =>
+  it.live("attaches .moks/req materials without HIRING-AGENTS.md", () =>
     withFiles(
       {
         ".moks/req/jd.md": "# Job Description",
@@ -282,7 +282,7 @@ describe("Instruction.system", () => {
           expect(paths.has(scorecard)).toBe(true)
           expect(paths.has(notes)).toBe(true)
           expect(paths.has(resume)).toBe(false)
-          expect(paths.has(path.join(dir, "AGENTS.md"))).toBe(false)
+          expect(paths.has(path.join(dir, "HIRING-AGENTS.md"))).toBe(false)
 
           const rules = yield* svc.system()
           expect(rules).toContain(`Req materials from: ${jd}\n# Job Description`)
@@ -293,16 +293,27 @@ describe("Instruction.system", () => {
     ),
   )
 
-  it.live("keeps AGENTS.md alongside req materials", () =>
+  it.live("does not load coding AGENTS.md", () =>
+    withFiles({ "AGENTS.md": "# Coding constitution" }, (dir) =>
+      Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+        expect(paths.has(path.join(dir, "AGENTS.md"))).toBe(false)
+        expect(yield* svc.system()).toEqual([])
+      }),
+    ),
+  )
+
+  it.live("keeps HIRING-AGENTS.md alongside req materials", () =>
     withFiles(
       {
-        "AGENTS.md": "# Hiring norms",
+        "HIRING-AGENTS.md": "# Hiring norms",
         ".moks/req/jd.md": "# JD",
       },
       (dir) =>
         Effect.gen(function* () {
           const svc = yield* Instruction.Service
-          const agents = path.join(dir, "AGENTS.md")
+          const agents = path.join(dir, "HIRING-AGENTS.md")
           const jd = path.join(dir, ".moks", "req", "jd.md")
 
           const paths = yield* svc.systemPaths()
@@ -420,15 +431,15 @@ describe("Instruction.system", () => {
 })
 
 describe("Instruction.systemPaths global config", () => {
-  it.live("uses Global.Service config AGENTS.md", () =>
+  it.live("uses Global.Service config HIRING-AGENTS.md", () =>
     Effect.gen(function* () {
-      const globalTmp = yield* tmpWithFiles({ "AGENTS.md": "# Global Instructions" })
+      const globalTmp = yield* tmpWithFiles({ "HIRING-AGENTS.md": "# Global Instructions" })
       const projectTmp = yield* tmpdirScoped()
 
       yield* Effect.gen(function* () {
         const svc = yield* Instruction.Service
         const paths = yield* svc.systemPaths()
-        expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(true)
+        expect(paths.has(path.join(globalTmp, "HIRING-AGENTS.md"))).toBe(true)
       }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
     }),
   )

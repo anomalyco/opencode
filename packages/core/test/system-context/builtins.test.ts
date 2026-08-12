@@ -15,7 +15,7 @@ import { testEffect } from "../lib/effect"
 
 const directory = AbsolutePath.make(FSUtil.resolve("/repo/packages/core"))
 const projectDirectory = AbsolutePath.make(FSUtil.resolve("/repo"))
-const instructionFile = FSUtil.resolve("/repo/AGENTS.md")
+const instructionFile = FSUtil.resolve("/repo/HIRING-AGENTS.md")
 const timestamp = Date.parse("2026-06-03T12:00:00.000Z")
 const localDate = (time: number) => new Date(time).toDateString()
 const locationLayer = Layer.succeed(

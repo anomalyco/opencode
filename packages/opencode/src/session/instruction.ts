@@ -71,11 +71,8 @@ const layer: Layer.Layer<
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
-    const globalFiles = [path.join(global.config, "AGENTS.md")]
-    const instructionFiles = [
-      "AGENTS.md",
-      "CONTEXT.md", // deprecated
-    ]
+    const globalFiles = [path.join(global.config, "HIRING-AGENTS.md")]
+    const instructionFiles = ["HIRING-AGENTS.md"]
 
     const state = yield* InstanceState.make(
       Effect.fn("Instruction.state")(() =>
@@ -129,7 +126,7 @@ const layer: Layer.Layer<
         }
       }
 
-      // The first project-level match wins so we don't stack AGENTS.md from every ancestor.
+      // The first project-level match wins so we don't stack HIRING-AGENTS.md from every ancestor.
       if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
         for (const file of instructionFiles) {
           const matches = yield* fs
