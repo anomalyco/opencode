@@ -381,10 +381,15 @@ const layer = Layer.effect(
         { sessionID: input.sessionID },
         { context: [], prompt: undefined },
       )
-      const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const conversation = msgs.map(serialize).filter(Boolean).join("\n\n")
+      const nextPrompt =
+        compacting.prompt ??
+        buildPrompt({
+          previousSummary,
+          context: [...compacting.context, conversation],
+        })
       const ctx = yield* InstanceState.context
       const msg: SessionV1.Assistant = {
         id: MessageID.ascending(),
@@ -430,7 +435,10 @@ const layer = Layer.effect(
             content: [
               {
                 type: "text",
-                text: [nextPrompt, "The following is the conversation history:", conversation]
+                text: [
+                  nextPrompt,
+                  ...(compacting.prompt ? ["The following is the conversation history:", conversation] : []),
+                ]
                   .filter(Boolean)
                   .join("\n\n"),
               },

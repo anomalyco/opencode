@@ -158,14 +158,21 @@ const select = (
   }
 }
 
-export const buildPrompt = (input: { readonly previousSummary?: string; readonly context: readonly string[] }) =>
-  [
-    input.previousSummary
-      ? `Update the anchored summary below using the conversation history above.\nPreserve still-true details, remove stale details, and merge in the new facts.\n<previous-summary>\n${input.previousSummary}\n</previous-summary>`
-      : "Create a new anchored summary from the conversation history.",
+export const buildPrompt = (input: { readonly previousSummary?: string; readonly context: readonly string[] }) => {
+  const conversation = `Here is the conversation so far:\n\n<conversation>\n${input.context.join("\n\n")}\n</conversation>`
+  if (!input.previousSummary)
+    return [
+      conversation,
+      "Create a new anchored summary from the conversation history in the <conversation> tags above.",
+      SUMMARY_TEMPLATE,
+    ].join("\n\n")
+  return [
+    conversation,
+    `Here is the previous summary:\n\n<prior-summary>\n${input.previousSummary}\n</prior-summary>`,
+    "The <conversation> tags above contain new conversation history to incorporate into the existing summary in the <prior-summary> tags.\n\nUpdate the anchored summary with the new information. Preserve still-true details, remove stale details, and merge in the new facts.",
     SUMMARY_TEMPLATE,
-    ...input.context,
   ].join("\n\n")
+}
 
 export const make = (dependencies: Dependencies) => {
   const config = settings(dependencies.config)

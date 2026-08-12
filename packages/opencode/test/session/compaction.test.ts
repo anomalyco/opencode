@@ -1389,6 +1389,11 @@ describe("session.compaction.process", () => {
         const captured = JSON.stringify(messages)
         expect(messages).toHaveLength(1)
         expect(messages[0]?.role).toBe("user")
+        expect(captured).toContain("Here is the conversation so far:")
+        expect(captured).toContain("<conversation>")
+        expect(captured.indexOf("[User]: older context")).toBeLessThan(
+          captured.indexOf("Create a new anchored summary"),
+        )
         expect(captured).toContain("[User]: older context")
         expect(captured).not.toContain("keep this turn")
         expect(captured).not.toContain("and this one too")
@@ -1430,9 +1435,11 @@ describe("session.compaction.process", () => {
         expect(parent).toBeTruthy()
         yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
 
-        expect(captured).toContain("<previous-summary>")
+        expect(captured).toContain("<prior-summary>")
         expect(captured).toContain("summary one")
         expect(captured.match(/summary one/g)?.length).toBe(1)
+        expect(captured.indexOf("latest turn")).toBeLessThan(captured.indexOf("Here is the previous summary:"))
+        expect(captured).toContain("existing summary in the <prior-summary> tags")
         expect(captured).toContain("## Important Details")
         expect(captured).toContain("## Work State")
       }).pipe(withCompaction({ llm: stub.llmLayer }))
