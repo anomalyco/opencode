@@ -3,11 +3,11 @@
   "upstreamRemote": "anomalyco/opencode",
   "note": "Machine-readable inventory of everything this fork adds on top of upstream. Drives `bun run fork:verify` (run after every sync to prove nothing was silently dropped) and `bun run sync:check` (detect when upstream has moved past our baseline). Update `baseline` after each successful sync. Keep the human-readable rationale in FORK_WORKFLOW.md in step with this file.",
   "baseline": {
-    "upstreamRef": "8716c4309a209d50f0b17211e407e317a28cdce3",
+    "upstreamRef": "91df88323196b13b099911ad7f0660ed3310f527",
     "upstreamBranch": "upstream/dev",
-    "syncedAt": "2026-06-18",
-    "forkTag": "fork/2026-06-18.1",
-    "comment": "Last upstream commit fully merged into dev. sync:check compares upstream/dev against this ref. Bump it (and forkTag) after every sync. As of 2026-08-12, sync:check reports upstream 22 commits ahead — a sync is due but deliberately deferred until in-flight gallery/skein-migration planning lands."
+    "syncedAt": "2026-08-13",
+    "forkTag": "fork/2026-08-13.1",
+    "comment": "Last upstream commit fully merged into dev. sync:check compares upstream/dev against this ref. Bump it (and forkTag) after every sync."
   },
   "owned": [
     "packages/opencode/src/fork/commands.ts",
