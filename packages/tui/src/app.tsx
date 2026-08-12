@@ -890,6 +890,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         // secret /baldbeard incantation.
         name: "opencode.experiments",
         title: "Experiments",
+        description: "Arr. Here be experiments.",
         palette: undefined,
         slash: { name: "baldbeard" },
         run: () => {
