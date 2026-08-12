@@ -249,6 +249,12 @@ const mcp = Layer.mock(MCP.Service, {
         },
       }),
       new MCP.Tool({
+        server: MCP.ServerName.make("demo"),
+        name: "status",
+        description: "Status",
+        inputSchema: { type: "object", properties: {} },
+      }),
+      new MCP.Tool({
         server: MCP.ServerName.make("direct"),
         name: "lookup",
         codemode: false,
@@ -289,6 +295,13 @@ const mcp = Layer.mock(MCP.Service, {
             { type: "text", text: "rendered chart" },
             { type: "media", data: "aGVsbG8=", mimeType: "image/png" },
           ],
+        })
+      if (input.name === "status")
+        return new MCP.ToolResult({
+          server: MCP.ServerName.make(input.server),
+          tool: input.name,
+          isError: false,
+          content: [{ type: "text", text: "hello" }],
         })
       return new MCP.ToolResult({
         server: MCP.ServerName.make(input.server),
@@ -981,6 +994,31 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
     ])
     expect(toolSet.codeModeCatalog?.find((tool) => tool.path === "demo.search")?.signature).toContain("ok: boolean")
     expect(execute?.description).not.toContain("tools.demo.search")
+  }),
+)
+
+it.effect("returns content-only MCP results through Code Mode", () =>
+  Effect.gen(function* () {
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    decision = Effect.void
+    const registry = yield* Tool.Service
+    const toolSet = yield* waitForCodeModeTool(registry, "demo.status")
+
+    const execution = yield* toolSet.execute({
+      sessionID: Session.ID.make("ses_mcp_content_only"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_content_only",
+        name: "execute",
+        input: { code: "return await tools.demo.status({})" },
+      },
+    })
+
+    expect(execution).toMatchObject({
+      output: { output: "hello", toolCalls: [{ tool: "demo.status", status: "completed" }] },
+      content: [{ type: "text", text: "hello" }],
+    })
   }),
 )
 

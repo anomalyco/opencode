@@ -75,7 +75,9 @@ export const create = (
               const outputFileParts = outputFiles(content)
               if (outputFileParts.length > 0)
                 yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-              return executed.output
+              if (executed.output !== undefined) return executed.output
+              const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+              return text === "" ? null : text
             }),
           {
             onToolCallStart: ({ index, name, input }) => {
@@ -155,7 +157,7 @@ function runtime(
     tools[path] = Tool.make({
       description: child.description,
       input: child.inputSchema,
-      output: child.outputSchema,
+      output: child.outputSchema ?? Schema.NullOr(Schema.String),
       execute: (input) => executeTool(name, registration, input),
     })
   }

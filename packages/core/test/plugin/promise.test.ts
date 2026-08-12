@@ -393,4 +393,45 @@ describe("fromPromise", () => {
       expect(progress).toEqual([{ phase: "greeting" }])
     }),
   )
+
+  it.effect("returns content-only plugin results through Code Mode", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const registry = yield* Tool.Service
+      const host = yield* PluginHost.make(plugins)
+      const promisePlugin = define({
+        id: "content-only-tool",
+        setup: async (ctx) => {
+          await ctx.tool.transform((tools) => {
+            tools.add({
+              name: "demo_status",
+              description: "Returns a status string",
+              input: Schema.Struct({}),
+              execute: async () => ({ content: [{ type: "text", text: "hello" }] }),
+              options: { codemode: true },
+            })
+          })
+        },
+      })
+
+      yield* PluginPromise.fromPromise(promisePlugin).effect(host)
+
+      const toolSet = yield* registry.snapshot()
+      const throughCodeMode = yield* toolSet.execute({
+        sessionID: Session.ID.make("ses_content_only_tool"),
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_content_only_tool"),
+        call: {
+          type: "tool-call",
+          id: "call_content_only_tool",
+          name: "execute",
+          input: { code: "return await tools.demo_status({})" },
+        },
+      })
+      expect(throughCodeMode).toMatchObject({
+        output: { output: "hello", toolCalls: [{ tool: "demo_status", status: "completed" }] },
+        content: [{ type: "text", text: "hello" }],
+      })
+    }),
+  )
 })
