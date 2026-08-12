@@ -2,6 +2,7 @@ import { createMemo, createResource, createSignal, onMount, Show } from "solid-j
 import path from "path"
 import type { SessionInfo } from "@opencode-ai/client"
 import { TextAttributes } from "@opentui/core"
+import type { RGBA } from "@opentui/core"
 import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
@@ -161,7 +162,7 @@ export function DialogSessionList() {
         gutter:
           data.session.status(session.id) === "running" ||
           data.session.family(session.id).some((id) => data.session.status(id) === "running")
-            ? () => <Spinner />
+            ? (color: RGBA) => <Spinner color={color} />
             : slot === undefined
               ? undefined
               : () => <text fg={theme.hue.accent[mode() === "light" ? 800 : 200]}>{slot}</text>,

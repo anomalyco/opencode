@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { InputRenderable } from "@opentui/core"
+import { InputRenderable, type RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
@@ -194,6 +194,32 @@ test("renders actions with a current selection", async () => {
     await app.waitForFrame((frame) => frame.includes("delete"))
   } finally {
     app.renderer.destroy()
+  }
+})
+
+test("passes the row foreground color to gutters", async () => {
+  await using tmp = await tmpdir()
+  const colors = new Map<string, RGBA>()
+  const gutter = (item: string) => (color: RGBA) => {
+    colors.set(item, color)
+    return <text fg={color}>*</text>
+  }
+  const select = await mountSelect(tmp.path, [
+    { title: "Alpha", value: "alpha", gutter: gutter("alpha") },
+    { title: "Beta", value: "beta", gutter: gutter("beta") },
+  ])
+
+  try {
+    await select.app.waitFor(() => colors.size === 2)
+    const selected = colors.get("alpha")!.toInts()
+    const idle = colors.get("beta")!.toInts()
+    expect(selected).not.toEqual(idle)
+
+    select.app.mockInput.pressArrow("down")
+    await select.app.waitFor(() => colors.get("alpha")!.toInts().every((value, index) => value === idle[index]))
+    expect(colors.get("beta")!.toInts()).toEqual(selected)
+  } finally {
+    select.app.renderer.destroy()
   }
 })
 

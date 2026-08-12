@@ -1,6 +1,7 @@
 import { createMemo, createResource, createSignal } from "solid-js"
 import type { SessionInfo } from "@opencode-ai/client"
 import { useTerminalDimensions } from "@opentui/solid"
+import type { RGBA } from "@opentui/core"
 import { dialogWidth, useDialog } from "../ui/dialog"
 import { DialogSelect, dialogSelectContentWidth } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
@@ -105,7 +106,7 @@ export function DialogOpen(props: { sessions: SessionInfo[] }) {
         footer: `${name ? `${Locale.truncate(name, 20)} · ` : ""}${timeAgo(session.time.updated)}`,
         onSelect: () => location.set(session.location),
         gutter: running
-          ? () => <Spinner />
+          ? (color: RGBA) => <Spinner color={color} />
           : tabs.has(session.id)
             ? () => <text fg={theme.hue.accent[mode() === "light" ? 800 : 200]}>▪</text>
             : undefined,
