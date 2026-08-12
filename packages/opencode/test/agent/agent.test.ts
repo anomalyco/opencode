@@ -76,7 +76,17 @@ it.instance("recruit agent has correct default properties", () =>
     expect(Permission.evaluate("edit", "jd.md", recruit!.permission).action).toBe("ask")
     // /init may add `.moks/` to root gitignore outside the req tree
     expect(Permission.evaluate("edit", ".gitignore", recruit!.permission).action).toBe("allow")
-    expect(evalPerm(recruit, "bash")).toBe("allow")
+    // Bash residual closed: default ask; verbs + light reads allow; destructive deny
+    expect(evalPerm(recruit, "bash")).toBe("ask")
+    expect(Permission.evaluate("bash", "moks commit --action advance", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("bash", "moks status --json", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("bash", "moks push --commit-id abc", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("bash", "ls -la .moks", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("bash", "pwd", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("bash", "npm install", recruit!.permission).action).toBe("ask")
+    expect(Permission.evaluate("bash", "rm -rf /tmp/foo", recruit!.permission).action).toBe("deny")
+    expect(Permission.evaluate("bash", "sudo reboot", recruit!.permission).action).toBe("deny")
+    expect(Permission.evaluate("bash", "git push origin main", recruit!.permission).action).toBe("deny")
     expect(evalPerm(recruit, "question")).toBe("allow")
   }),
 )

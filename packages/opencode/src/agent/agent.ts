@@ -89,6 +89,38 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ag
 
 export const use = serviceUse(Service)
 
+/** Recruit shell policy: verbs + light reads allow; default ask; destructive deny. Later rules win on match. */
+const recruitBashPermission = {
+  "*": "ask",
+  // Decision verbs (product authority path — shell is the CLI host today)
+  "moks *": "allow",
+  // Light read-only / identity
+  "pwd *": "allow",
+  "ls *": "allow",
+  "which *": "allow",
+  "true *": "allow",
+  "false *": "allow",
+  "head *": "allow",
+  "wc *": "allow",
+  // Destructive / high-blast — deny even if user might have wanted ask
+  "rm *": "deny",
+  "sudo *": "deny",
+  "dd *": "deny",
+  "mkfs *": "deny",
+  "shutdown *": "deny",
+  "reboot *": "deny",
+  "halt *": "deny",
+  "poweroff *": "deny",
+  "chmod *": "deny",
+  "chown *": "deny",
+  "chgrp *": "deny",
+  "git push *": "deny",
+  "git reset *": "deny",
+  "git clean *": "deny",
+  "git filter-branch *": "deny",
+  "git rebase *": "deny",
+} as const
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -158,7 +190,8 @@ const layer = Layer.effect(
                 ...ashbyPermissionDefaults(),
                 // Path-scoped edits: free under .moks/ + ship hiring fixtures; ask elsewhere.
                 // `edit` also gates write and apply_patch. Wildcard `*` matches nested path segments.
-                // Bash stays broadly allow this wave (decision verbs via shell); residual for BL-015.
+                // Bash: decision verbs + light reads allow; default ask; destructive deny (BL-015 residual).
+                bash: recruitBashPermission,
                 external_directory: {
                   [path.join(HiringFixturesDir, "*")]: "allow",
                 },

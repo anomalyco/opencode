@@ -123,7 +123,7 @@ system = [ agent.prompt ?? SystemPrompt.provider(model), ...env/skills, ... ]
 - `"*": "allow"` (broad baseline)
 - `question` / `plan_enter` / `plan_exit` denied by default, then **allowed on recruit/build/plan** as appropriate
 - `recruit` **adds**: `question`, `plan_enter`, Ashby read allow / write deny, **`edit: * → ask`**, **`.moks/*` + fixtures + `.gitignore` → allow**
-- **Residual:** bash still broadly allow (decision verbs via shell); destructive bash patterns still open
+- Bash residual **closed:** default ask; `moks *` + light reads allow; destructive deny
 
 ### Already correct (baseline — do not re-open)
 
@@ -557,10 +557,10 @@ Bash still broadly allow on recruit (decision verbs via shell) — not this card
 
 | | |
 |--|--|
-| **Action** | PORT → **DONE** (edit path-scoped; bash residual) |
+| **Action** | PORT → **DONE** (edit path-scoped + bash policy) |
 | **Priority** | P1 |
-| **Decision** | ☑ **Path-scoped allow under `.moks/**` + fixtures** |
-| **Rec** | **Path-scoped** — edit shipped |
+| **Decision** | ☑ **Path-scoped edit + restricted bash** |
+| **Rec** | **Path-scoped** — edit + bash shipped |
 
 ### Shipped (implementation)
 
@@ -571,19 +571,17 @@ defaults (*: allow, …)
 + question / plan_enter / ashby reads allow, ashby writes deny
 + edit: * → ask
 + edit: .moks/* , fixtures, .gitignore → allow
++ bash: * → ask
++ bash: moks * , pwd/ls/which/true/false/head/wc * → allow
++ bash: rm/sudo/dd/mkfs/shutdown/…/git push|reset|clean|… → deny
 + user config merge
 ```
 
-`edit` also gates **write** and **apply_patch**. Prompt (`recruit.txt`) matches enforcement.
+`edit` also gates **write** and **apply_patch**. Prompt (`recruit.txt`) documents shell policy.
 
-### Residual
+### Acceptance (met)
 
-- **Bash** still broadly allow (needed for `moks commit|status|push` via shell). Destructive bash patterns not yet ask/deny.
-- BL-014 tool prominence **done** (lsp deny + no apply_patch prefer for recruit).
-
-### Acceptance (edit path — met)
-
-Note drafts under `.moks/` stay easy; edits outside ask first. Remote ATS still only via **push** authority (receipts today).
+Note drafts under `.moks/` stay easy; edits outside ask first. Decision verbs via shell free; other shell asks; destructive denied. Remote ATS still only via **push** authority (receipts today).
 
 ---
 
@@ -957,7 +955,7 @@ Use this when reviewing any change:
 | **Verbs** | `propose`/`apply` → **`commit`/`push`** | **Done** |
 | **G2 Chrome & defaults** | BL-004, BL-013, BL-014 | **Done** |
 | **G5 Front doors** | BL-007–012 | **Done** (init/review + customize-moks + hide GH/console/generate + neutral CTAs) |
-| **G6 Guardrails** | BL-015 path-scoped edit | **Done** (bash residual only) |
+| **G6 Guardrails** | BL-015 path-scoped edit + bash policy | **Done** |
 | **G4 Subagents** | BL-005 explore, BL-016 general | **Done** |
 | **G1 Session helpers** | BL-003 tips, BL-006 title/summary/compaction | **Done** |
 | **G7 Identity + first impression** | BL-003, BL-018/019/021 | **Done** (BL-020 parked) |
@@ -980,7 +978,7 @@ Use this when reviewing any change:
 | **G7 — Identity + tips** | BL-003, BL-018/019/021 | Tips + dual-load paths/env | **Done** |
 | **Parked** | BL-020 global app dir | Coexist with installed OpenCode — design later | **Parked** |
 | **G7 residual** | BL-023, BL-024 | Req materials attach; moks provider identity headers | **Done** |
-| **G8 — Later** | BL-017, BL-020, BL-025–030; bash patterns; own models catalog | Cosmetic, V2, hard-fork, catalog | Defer / residual |
+| **G8 — Later** | BL-017, BL-020, BL-025–030; own models catalog | Cosmetic, V2, hard-fork, catalog | Defer / residual |
 
 ---
 
@@ -1045,7 +1043,6 @@ Mark when decided:
 - [x] **BL-024 shipped** — moks UA/Referer/X-Title; catalog URL still third-party models.opencode.ai
 
 ### Open
-- [ ] **Bash residual** — tighter destructive patterns on recruit (not a numbered BL; residual of BL-015)
 - [ ] **BL-002 residual** — optional delete/port unused `plan-reminder-anthropic.txt`
 - [ ] **Own models catalog** — post-WAU residual of BL-024 if productized hosting is needed
 
@@ -1053,12 +1050,16 @@ Mark when decided:
 - [x] **BL-020** — Global app dir rename **left alone** until migrate/coexistence design (2026-08-11)
 - [x] **Dev tool split** — build moks with **installed OpenCode**, not product moks (2026-08-11)
 
+### Done (guardrails residual)
+- [x] **Bash residual (BL-015)** — recruit: default ask; `moks *` + light reads allow; destructive deny (2026-08-12)
+
 ---
 
 ## Change log
 
 | Date | Note |
 |------|------|
+| 2026-08-12 | **Bash residual:** recruit shell policy — verbs/light reads allow; default ask; destructive deny |
 | 2026-08-12 | **Req context + provider identity:** BL-023/024 shipped; AGENTS kept; resume not auto-injected; moks HTTP identity |
 | 2026-08-11 | **Tips + dual-load:** BL-003/018/019/021 shipped; customize-moks honesty; BL-020 still parked |
 | 2026-08-11 | **Locks:** BL-020 parked; do not dogfood moks-for-coding-moks (use global OpenCode); keep AGENTS.md as workspace inject |

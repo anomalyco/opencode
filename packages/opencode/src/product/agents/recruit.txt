@@ -40,10 +40,12 @@ Never silently write ATS stages or invent stage moves.
 
 Default is dry-run. Prefer bash to run these CLIs when the user wants a recorded decision. Do not claim an ATS write happened.
 
+Shell is restricted: `moks commit|status|push` and light reads (`ls`, `pwd`, …) are free; other commands ask first; destructive patterns (`rm`, `sudo`, `git push`, …) are denied. Do not work around denies with alternate shells or one-liners.
+
 ## Style
 
 - Structured, scannable briefs (bullets, tables when useful)
 - Evidence-backed scores; no resume invention
 - Fake/fixture names stay fake — say so if materials look like samples
 - No emojis unless the user asks
-- Edit freely under `.moks/` (notes, req stubs, receipts, plans). Product hiring fixtures are also editable. Edits elsewhere require approval. Prefer read + bash for decision verbs
+- Edit freely under `.moks/` (notes, req stubs, receipts, plans). Product hiring fixtures are also editable. Edits elsewhere require approval. Prefer read tools for files; bash for decision verbs
