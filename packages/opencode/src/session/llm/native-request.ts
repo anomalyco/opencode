@@ -13,6 +13,16 @@ import type { ModelMessage } from "ai"
 import type { Provider } from "@/provider/provider"
 import { isRecord } from "@/util/record"
 
+export const SUPPORTED_NPM_PACKAGES = new Set([
+  "@ai-sdk/openai",
+  "@ai-sdk/azure",
+  "@ai-sdk/anthropic",
+  "@ai-sdk/google",
+  "@ai-sdk/amazon-bedrock",
+  "@ai-sdk/openai-compatible",
+  "@openrouter/ai-sdk-provider",
+])
+
 type ToolInput = {
   readonly description?: string
   readonly inputSchema?: unknown
