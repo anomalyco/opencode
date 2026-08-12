@@ -372,8 +372,6 @@ export interface KeymapCommand {
     readonly aliases?: string[]
     /** Keeps the slash command in the prompt and passes its raw input to run. */
     readonly arguments?: true
-    /** Hides the command from slash completion until its exact name is typed. */
-    readonly secret?: true
   }
   /** Promotes the command in discovery UI. */
   readonly suggested?: boolean | (() => boolean)

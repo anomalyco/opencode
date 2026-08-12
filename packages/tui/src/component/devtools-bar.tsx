@@ -13,6 +13,8 @@ import { useRoute } from "../context/route"
 import { Keymap } from "../context/keymap"
 import { useTheme, useThemes } from "../context/theme"
 import { DevTools } from "../devtools"
+import { useDialog } from "../ui/dialog"
+import { DialogExperiments } from "./dialog-experiments"
 import { usePlugin } from "../plugin/context"
 import { errorMessage } from "../util/error"
 
@@ -27,6 +29,7 @@ export type RuntimeStatus = "normal" | "medium" | "high"
 export function DevToolsBar() {
   const client = useClient()
   const config = useConfig()
+  const dialog = useDialog()
   const data = useData()
   const location = useLocation()
   const route = useRoute()
@@ -404,6 +407,15 @@ export function DevToolsBar() {
             </For>
           </PanelBox>
         </Show>
+      </BarItem>
+      <BarItem
+        active={false}
+        onClick={() => {
+          close()
+          dialog.replace(() => <DialogExperiments />)
+        }}
+      >
+        <text fg={theme.text.subdued}>Experiments</text>
       </BarItem>
       <box flexGrow={1} minWidth={0}>
         <TimeToFirstDraw visible={timing()} width="100%" fg={theme.text.subdued} label="Time to first draw" />

@@ -512,9 +512,6 @@ export function Autocomplete(props: {
     const results: AutocompleteOption[] = keymapCommands().flatMap((command) => {
       const slash = command.slash
       if (!slash) return []
-      // Secret commands are incantations: absent from the "/" listing and from
-      // fuzzy matching until the exact name is typed.
-      if (slash.secret && search().toLowerCase() !== slash.name) return []
       return {
         display: `/${slash.name}`,
         description: command.description ?? command.title,

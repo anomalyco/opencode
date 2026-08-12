@@ -16,13 +16,14 @@ export const experiments: Experiment[] = [
   {
     id: "tab_drafts",
     title: "Per-tab prompt drafts",
-    description: "Keep unsent prompt drafts on the tab where they were written. New session moves the current draft.",
+    description: "Keep unsent prompt drafts on the tab where they were written. New sessions start blank.",
   },
 ]
 
 export function DialogExperiments() {
   const config = useConfig()
   const toast = useToast()
+  const [selected, setSelected] = createSignal(0)
   const [saving, setSaving] = createSignal(false)
 
   const enabled = (experiment: Experiment) => config.data.experimental?.[experiment.id] === true
@@ -30,14 +31,15 @@ export function DialogExperiments() {
   const options = createMemo(() =>
     experiments.map((experiment, index) => ({
       title: experiment.title,
-      description: experiment.description,
       category: "Experiments",
+      searchText: experiment.description,
       footer: enabled(experiment) ? "on" : "off",
       value: index,
     })),
   )
 
-  async function toggle(index: number) {
+  // All experiments are booleans, so either direction toggles.
+  async function change(index = selected()) {
     if (saving()) return
     const experiment = experiments[index]
     if (!experiment) return
@@ -56,8 +58,23 @@ export function DialogExperiments() {
     <DialogSelect
       title="Experiments"
       options={options()}
-      onSelect={(option) => void toggle(option.value)}
-      footerHints={[{ title: "enter", label: "toggle" }]}
+      onMove={(option) => setSelected(option.value)}
+      onSelect={(option) => void change(option.value)}
+      footerHints={[{ title: "←/→", label: "change" }]}
+      bindings={[
+        {
+          bind: "left",
+          title: "Previous value",
+          group: "Experiments",
+          run: () => void change(),
+        },
+        {
+          bind: "right",
+          title: "Next value",
+          group: "Experiments",
+          run: () => void change(),
+        },
+      ]}
     />
   )
 }
