@@ -27,10 +27,7 @@ export interface EmbedOptions {
   readonly resumeSuspendedSessions?: boolean
 }
 
-export const create = Effect.fn("OpenCode.create")(function* (
-  options: CreateOptions = {},
-  embed: EmbedOptions = {},
-) {
+export const create = Effect.fn("OpenCode.create")(function* (options: CreateOptions = {}, embed: EmbedOptions = {}) {
   const { log, ...server } = options
   const runtime = yield* Effect.acquireRelease(
     Effect.sync(() =>

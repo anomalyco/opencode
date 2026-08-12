@@ -43,8 +43,8 @@ export interface Options {
   readonly password?: string
   /** Inline opencode config content (JSON), same as `ServerOptions.config.content`. */
   readonly config?: { readonly content?: string }
-  /** models.dev catalog source; the bundled snapshot is the boot-time floor either way. */
-  readonly models?: { readonly url?: string }
+  /** models.dev catalog options; the bundled snapshot is the boot-time floor either way. */
+  readonly models?: ServerOptions["models"]
   /** Overrides for the injected Global paths; defaults root everything under tmp on workerd. */
   readonly paths?: Partial<Global.Interface>
 }
@@ -66,8 +66,12 @@ export function serverOptions(options: Options): ServerOptions {
     app: options.app,
     password: options.password,
     fs: { filewatcher: false, fff: false },
+    // Durable event history is how a turn orphaned by eviction is recovered:
+    // the boot-time resume replays it. A runtime that dies without teardown
+    // cannot opt out of it, so this is not exposed as an option.
+    events: { persist: true },
     config: { content: options.config?.content },
-    models: { url: options.models?.url },
+    models: options.models,
   }
 }
 

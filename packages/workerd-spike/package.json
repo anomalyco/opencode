@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/workerd-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/server": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.12.6",
+    "@cloudflare/workers-types": "^4.20250808.0",
+    "vitest": "3.2.7",
+    "wrangler": "4.28.0",
+    "xdg-basedir": "5.1.0",
+    "unenv": "2.0.0-rc.24",
+    "@effect/platform-node": "catalog:"
+  }
+}
