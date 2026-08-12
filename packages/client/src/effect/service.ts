@@ -4,7 +4,7 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, EnsureOptions, StopOptions } from "../service.js"
-import { ensureTiming, type EnsureTiming } from "../service-timing.js"
+import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 
 export * from "../service.js"
 /** Contents of the local service registration file. */
@@ -82,7 +82,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     })
   })
   const found = yield* Effect.gen(function* () {
-    const registration = yield* registered(options.file, true, timing.probeTimeout)
+    const registration = yield* registered(options.file, true, timing.requestTimeout)
     const info = registration.info
     const service = registration.service
     if (registration.timedOut && info !== undefined) {
@@ -152,7 +152,7 @@ function contenderFinished(contender: Contender) {
 /** Stop the registered local service. */
 export const stop = Effect.fn("service.stop")(function* (options: StopOptions = {}) {
   const existing = yield* find(options)
-  if (existing !== undefined) yield* kill(existing, options)
+  if (existing !== undefined) yield* kill(existing, options, defaultEnsureTiming)
 })
 
 function fallback() {
@@ -200,7 +200,11 @@ const probe = Effect.fnUntraced(function* (info: Info, allowLegacy = false) {
   return (yield* probeResult(info, allowLegacy)).service
 })
 
-const probeResult = Effect.fnUntraced(function* (info: Info, allowLegacy = false, timeout = 2_000) {
+const probeResult = Effect.fnUntraced(function* (
+  info: Info,
+  allowLegacy = false,
+  timeout = defaultEnsureTiming.requestTimeout,
+) {
   const endpoint = {
     url: info.url,
     auth:
@@ -283,11 +287,7 @@ function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
-const evict = Effect.fnUntraced(function* (
-  info: Info,
-  options: { readonly file?: string },
-  timing = ensureTiming(options),
-) {
+const evict = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = yield* read(options.file)
   if (current === undefined || !same(current, info)) return
   yield* signal(info.pid, "SIGTERM")
@@ -303,9 +303,9 @@ const evict = Effect.fnUntraced(function* (
 const kill = Effect.fnUntraced(function* (
   service: LocalService,
   options: { readonly file?: string },
-  timing = ensureTiming(options),
+  timing: EnsureTiming,
 ) {
-  const requested = yield* requestStop(service, timing.probeTimeout)
+  const requested = yield* requestStop(service, timing.requestTimeout)
   if (requested === "rejected") return
   if (requested === "unsupported") {
     // A stale registration may point at a reused PID. Authenticate again
@@ -325,7 +325,7 @@ const kill = Effect.fnUntraced(function* (
 
 const decodeStopResponse = Schema.decodeUnknownOption(ServiceStatus.StopResponse)
 
-const requestStop = Effect.fnUntraced(function* (service: LocalService, timeout = 2_000) {
+const requestStop = Effect.fnUntraced(function* (service: LocalService, timeout = defaultEnsureTiming.requestTimeout) {
   if (service.info.id === undefined || service.legacy) return "unsupported" as const
   const response = yield* Effect.tryPromise(() =>
     fetch(new URL("/api/service/stop", service.info.url), {

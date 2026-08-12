@@ -2,10 +2,11 @@ import { afterEach, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Service, type EnsureOptions, type EnsureReason } from "../src/promise/service"
-import { accelerate } from "./fixture/service-timing"
+import { Service, type EnsureReason } from "../src/promise/service"
+import { accelerate, waitForExit } from "./fixture/service-timing"
 
 const fixture = join(import.meta.dir, "fixture/service.ts")
+const ensure = accelerate(Service.ensure)
 const processes: Bun.Subprocess[] = []
 const directories: string[] = []
 
@@ -43,7 +44,7 @@ test("ensures a missing service with native promises", async () => {
     process.kill(info.pid, "SIGTERM")
     await waitForExit(info.pid)
   }
-}, 15_000)
+})
 
 test("waits for a live contender when another native contender fails", async () => {
   const directory = await temp()
@@ -61,7 +62,7 @@ test("waits for a live contender when another native contender fails", async () 
     process.kill(info.pid, "SIGTERM")
     await waitForExit(info.pid)
   }
-}, 15_000)
+})
 
 test("reports a failed registered service", async () => {
   const registration = await setup("failed-owner")
@@ -95,7 +96,7 @@ test("evicts an unresponsive registered service before starting its replacement"
   expect(endpoint.url).toBe(replacement.url)
   process.kill(replacement.pid, "SIGTERM")
   await waitForExit(replacement.pid)
-}, 20_000)
+})
 
 test("requests graceful stop of the exact service instance", async () => {
   const registration = await setup("graceful")
@@ -114,10 +115,6 @@ async function setup(mode: string) {
   return registration
 }
 
-function ensure(options: EnsureOptions) {
-  return Service.ensure(accelerate(options))
-}
-
 async function temp() {
   const directory = await mkdtemp(join(tmpdir(), "opencode-promise-service-"))
   directories.push(directory)
@@ -130,16 +127,4 @@ async function waitForFile(file: string) {
     await Bun.sleep(5)
   }
   throw new Error(`Timed out waiting for ${file}`)
-}
-
-async function waitForExit(pid: number) {
-  for (let attempt = 0; attempt < 600; attempt++) {
-    try {
-      process.kill(pid, 0)
-    } catch {
-      return
-    }
-    await Bun.sleep(5)
-  }
-  throw new Error(`Timed out waiting for process ${pid}`)
 }

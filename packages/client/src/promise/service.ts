@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
-import { ensureTiming, type EnsureTiming } from "../service-timing.js"
+import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import type { ServiceHealth, ServiceStopResponse } from "./generated/types.js"
 
 export * from "../service.js"
@@ -64,7 +64,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 
   while (true) {
     if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
-    const registration = await registered(options.file, true, timing.probeTimeout)
+    const registration = await registered(options.file, true, timing.requestTimeout)
     if (registration.timedOut && registration.info !== undefined) {
       timeouts = {
         info: registration.info,
@@ -126,7 +126,7 @@ function contenderFinished(contender: Contender) {
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
   const existing = await find(options)
-  if (existing !== undefined) await kill(existing, options)
+  if (existing !== undefined) await kill(existing, options, defaultEnsureTiming)
 }
 
 function fallback() {
@@ -163,7 +163,7 @@ async function probe(info: Info, allowLegacy = false): Promise<LocalService | un
   return (await probeResult(info, allowLegacy)).service
 }
 
-async function probeResult(info: Info, allowLegacy = false, timeout = 2_000) {
+async function probeResult(info: Info, allowLegacy = false, timeout = defaultEnsureTiming.requestTimeout) {
   const endpoint = {
     url: info.url,
     auth:
@@ -245,7 +245,7 @@ function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
-async function evict(info: Info, options: { readonly file?: string }, timing = ensureTiming(options)) {
+async function evict(info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = await read(options.file)
   if (current === undefined || !same(current, info)) return
   signal(info.pid, "SIGTERM")
@@ -257,8 +257,8 @@ async function evict(info: Info, options: { readonly file?: string }, timing = e
   if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
 }
 
-async function kill(service: LocalService, options: { readonly file?: string }, timing = ensureTiming(options)) {
-  const requested = await requestStop(service, timing.probeTimeout)
+async function kill(service: LocalService, options: { readonly file?: string }, timing: EnsureTiming) {
+  const requested = await requestStop(service, timing.requestTimeout)
   if (requested === "rejected") return
   if (requested === "unsupported") {
     const current = await find(options)
@@ -274,7 +274,7 @@ async function kill(service: LocalService, options: { readonly file?: string }, 
     throw new Error(`Server process ${service.info.pid} is still running`)
 }
 
-async function requestStop(service: LocalService, timeout = 2_000) {
+async function requestStop(service: LocalService, timeout = defaultEnsureTiming.requestTimeout) {
   if (service.info.id === undefined || service.legacy) return "unsupported" as const
   const response = await fetch(new URL("/api/service/stop", service.info.url), {
     method: "POST",

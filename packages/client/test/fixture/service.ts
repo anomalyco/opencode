@@ -30,7 +30,7 @@ const server = Bun.serve({
   async fetch(request) {
     const pathname = new URL(request.url).pathname
     if (pathname === "/api/service/stop" && mode === "reject-stop") {
-      await writeFile(registration + ".stop-attempt", "")
+      await appendFile(registration + ".stop-attempts", process.pid + "\n")
       return Response.json({ accepted: false })
     }
     if (pathname === "/api/service/stop" && mode === "graceful") {
@@ -42,6 +42,7 @@ const server = Bun.serve({
     }
     if (pathname !== "/api/health") return new Response(null, { status: 404 })
     requests += 1
+    if (mode === "starting") await writeFile(registration + ".health-request", "")
     if (mode === "hanging") {
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})

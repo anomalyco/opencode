@@ -1,7 +1,7 @@
 export type EnsureTiming = {
   readonly pollInterval: number
   readonly attempts: number
-  readonly probeTimeout: number
+  readonly requestTimeout: number
   readonly spawnDelay: number
   readonly maxSpawnDelay: number
   readonly promiseTimeout: number
@@ -11,10 +11,10 @@ export type EnsureTiming = {
 
 const timings = new WeakMap<object, EnsureTiming>()
 
-const defaults: EnsureTiming = {
+export const defaultEnsureTiming: EnsureTiming = {
   pollInterval: 1_000,
   attempts: 120,
-  probeTimeout: 2_000,
+  requestTimeout: 2_000,
   spawnDelay: 5_000,
   maxSpawnDelay: 30_000,
   promiseTimeout: 120_000,
@@ -23,11 +23,11 @@ const defaults: EnsureTiming = {
 }
 
 export function ensureTiming(options: object) {
-  return timings.get(options) ?? defaults
+  return timings.get(options) ?? defaultEnsureTiming
 }
 
 // Keep test timing out of the public lifecycle option types.
-export function withEnsureTiming<A extends object>(options: A, value: EnsureTiming): A {
-  timings.set(options, value)
+export function withEnsureTiming<A extends object>(options: A, overrides: Partial<EnsureTiming>): A {
+  timings.set(options, { ...defaultEnsureTiming, ...overrides })
   return options
 }

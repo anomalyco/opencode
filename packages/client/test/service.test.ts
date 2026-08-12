@@ -4,10 +4,11 @@ import { Effect } from "effect"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Service, type EnsureOptions, type EnsureReason } from "../src/effect/service"
-import { accelerate } from "./fixture/service-timing"
+import { Service, type EnsureReason } from "../src/effect/service"
+import { accelerate, waitForExit } from "./fixture/service-timing"
 
 const fixture = join(import.meta.dir, "fixture/service.ts")
+const ensure = accelerate(Service.ensure)
 const processes: Bun.Subprocess[] = []
 const directories: string[] = []
 
@@ -53,7 +54,7 @@ test("waits for a registered service to finish starting", async () => {
   await waitForFile(registration)
   const result = run(ensure({ file: registration, version: "test", command: [] }))
 
-  await Bun.sleep(100)
+  await waitForFile(registration + ".health-request")
   expect(process.exitCode).toBe(null)
   await writeFile(registration + ".release", "")
   expect((await result).url).toBe((await Bun.file(registration).json()).url)
@@ -93,7 +94,8 @@ test("evicts an unresponsive registered service before starting its replacement"
   expect(endpoint.url).toBe(replacement.url)
   expect(await health(endpoint.url)).toEqual({ healthy: true, version: "test", pid: replacement.pid })
   process.kill(replacement.pid, "SIGTERM")
-}, 20_000)
+  await waitForExit(replacement.pid)
+})
 
 test("requests graceful stop of the exact service instance", async () => {
   const directory = await temp()
@@ -123,8 +125,7 @@ test("does not spawn contenders while an incompatible service rejects replacemen
     { signal: controller.signal },
   )
 
-  await waitForFile(registration + ".stop-attempt")
-  await Bun.sleep(300)
+  await waitForLines(registration + ".stop-attempts", 2)
   controller.abort()
   await starting.catch(() => undefined)
 
@@ -144,7 +145,7 @@ test("a legacy health response is still replaced", async () => {
   await expect(result).rejects.toThrow("Missing service command")
   expect(starts).toEqual(["version-mismatch"])
   await existing.exited
-}, 10_000)
+})
 
 test("waits for a slow winner while bounding lock probes", async () => {
   const directory = await temp()
@@ -163,8 +164,9 @@ test("waits for a slow winner while bounding lock probes", async () => {
     expect((await Bun.file(registration + ".starts").text()).trim().split("\n")).toHaveLength(2)
   } finally {
     process.kill(info.pid, "SIGTERM")
+    await waitForExit(info.pid)
   }
-}, 15_000)
+})
 
 test("waits for a live contender when another contender fails", async () => {
   const directory = await temp()
@@ -181,8 +183,9 @@ test("waits for a live contender when another contender fails", async () => {
     expect(endpoint.url).toBe(info.url)
   } finally {
     process.kill(info.pid, "SIGTERM")
+    await waitForExit(info.pid)
   }
-}, 15_000)
+})
 
 test("reports a contender that fails to start", async () => {
   const directory = await temp()
@@ -196,7 +199,7 @@ test("reports a contender that fails to start", async () => {
       }),
     ),
   ).rejects.toThrow("Server process exited with code 1")
-}, 10_000)
+})
 
 test("reports a contender terminated by a signal", async () => {
   const directory = await temp()
@@ -210,7 +213,7 @@ test("reports a contender terminated by a signal", async () => {
       }),
     ),
   ).rejects.toThrow(/Server process (terminated by|exited with code)/)
-}, 10_000)
+})
 
 test("reports a slow contender that eventually fails", async () => {
   const directory = await temp()
@@ -224,7 +227,7 @@ test("reports a slow contender that eventually fails", async () => {
       }),
     ),
   ).rejects.toThrow("Server process exited with code 1")
-}, 15_000)
+})
 
 test("replaces an incompatible owner that appears during startup", async () => {
   const directory = await temp()
@@ -236,7 +239,7 @@ test("replaces an incompatible owner that appears during startup", async () => {
       command: [process.execPath, fixture, registration, "delayed", "500"],
     }),
   )
-  await Bun.sleep(100)
+  await waitForFile(registration + ".starts")
   const old = spawn(registration, "old")
   await waitForFile(registration)
   const endpoint = await starting
@@ -247,15 +250,12 @@ test("replaces an incompatible owner that appears during startup", async () => {
     await old.exited
   } finally {
     process.kill(info.pid, "SIGTERM")
+    await waitForExit(info.pid)
   }
-}, 20_000)
+})
 
 function run<A, E>(effect: Effect.Effect<A, E>) {
   return Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)))
-}
-
-function ensure(options: EnsureOptions) {
-  return Service.ensure(accelerate(options))
 }
 
 function spawn(registration: string, mode: string, ...args: string[]) {
@@ -279,6 +279,17 @@ async function waitForFile(file: string) {
     await Bun.sleep(5)
   }
   throw new Error(`Timed out waiting for ${file}`)
+}
+
+async function waitForLines(file: string, count: number) {
+  for (let attempt = 0; attempt < 600; attempt++) {
+    const text = await Bun.file(file)
+      .text()
+      .catch(() => "")
+    if (text.trim().split("\n").length >= count) return
+    await Bun.sleep(5)
+  }
+  throw new Error(`Timed out waiting for ${count} lines in ${file}`)
 }
 
 async function health(url: string) {
