@@ -408,7 +408,16 @@ export type ProviderRequest = {
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
-export type SessionMessageLocationInfo = { location: LocationRef; projectID?: string; subpath?: string }
+export type SessionMessageLocationSwitched = {
+  id: string
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  type: "location-switched"
+  location: LocationRef
+  projectID?: string
+  subpath?: string
+  previous?: { location: LocationRef; projectID?: string; subpath?: string }
+}
 
 export type SessionCreated = {
   id: string
@@ -1516,17 +1525,6 @@ export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
 export type VcsInfo = { branch: VcsBranch }
 
 export type PermissionRuleset = Array<PermissionRule>
-
-export type SessionMessageLocationSwitched = {
-  id: string
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  type: "location-switched"
-  location: LocationRef
-  projectID?: string
-  subpath?: string
-  previous?: SessionMessageLocationInfo
-}
 
 export type SessionInfo = {
   id: string

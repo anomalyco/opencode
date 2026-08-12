@@ -55,13 +55,6 @@ export const ModelSelected = Schema.Struct({
   previous: Model.Ref.pipe(optional),
 }).annotate({ identifier: "Session.Message.ModelSelected" })
 
-export interface LocationInfo extends Schema.Schema.Type<typeof LocationInfo> {}
-export const LocationInfo = Schema.Struct({
-  location: Location.Ref,
-  projectID: Project.ID.pipe(optional),
-  subpath: RelativePath.pipe(optional),
-}).annotate({ identifier: "Session.Message.LocationInfo" })
-
 export interface LocationSwitched extends Schema.Schema.Type<typeof LocationSwitched> {}
 export const LocationSwitched = Schema.Struct({
   ...Base,
@@ -69,7 +62,11 @@ export const LocationSwitched = Schema.Struct({
   location: Location.Ref,
   projectID: Project.ID.pipe(optional),
   subpath: RelativePath.pipe(optional),
-  previous: LocationInfo.pipe(optional),
+  previous: Schema.Struct({
+    location: Location.Ref,
+    projectID: Project.ID.pipe(optional),
+    subpath: RelativePath.pipe(optional),
+  }).pipe(optional),
 }).annotate({ identifier: "Session.Message.LocationSwitched" })
 
 export interface User extends Schema.Schema.Type<typeof User> {}
