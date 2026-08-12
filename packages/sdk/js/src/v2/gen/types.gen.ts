@@ -2684,6 +2684,9 @@ export type UnauthorizedError = {
 
 export type SessionsResponse = {
   data: Array<SessionV2Info>
+  snippets?: {
+    [key: string]: unknown | string
+  }
   cursor: {
     previous?: string
     next?: string

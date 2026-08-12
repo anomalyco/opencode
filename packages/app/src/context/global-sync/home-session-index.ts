@@ -4,6 +4,7 @@ import { trimSessions } from "./session-trim"
 import { pathKey } from "@/utils/path-key"
 
 export const HOME_V2_SESSION_PAGE_LIMIT = 5_000
+export const HOME_SESSION_SEARCH_LIMIT = 100
 
 export type HomeSessionEvent = {
   type: "session.created" | "session.updated" | "session.deleted"
@@ -47,6 +48,60 @@ export async function loadHomeSessionIndex(
     data.push(...page.data)
     if (page.data.length < HOME_V2_SESSION_PAGE_LIMIT || !page.cursor.next)
       return { sessions: parseHomeSessionIndex(data), eventSequence }
+    cursor = page.cursor.next
+  }
+}
+
+export async function loadHomeSessionSearch(
+  list: (
+    input: { search: string; limit: number; order: "desc"; project?: string; cursor?: string },
+    options: { signal?: AbortSignal },
+  ) => Promise<HomeSessionPage>,
+  search: string,
+  options: { project?: string; directories?: string[] } = {},
+  signal?: AbortSignal,
+) {
+  const directories = options.directories ? new Set(options.directories.map(pathKey)) : undefined
+  const sessions: Session[] = []
+  const snippets: Record<string, string> = {}
+  let cursor: string | undefined
+
+  for (;;) {
+    const response = await list(
+      {
+        search,
+        limit: HOME_SESSION_SEARCH_LIMIT,
+        order: "desc",
+        ...(options.project ? { project: options.project } : {}),
+        ...(cursor ? { cursor } : {}),
+      },
+      { signal },
+    )
+    const page = response.data!
+    const visible = parseHomeSessionIndex(page.data)
+      .filter((session) => !directories || directories.has(pathKey(session.directory)))
+      .slice(0, HOME_SESSION_SEARCH_LIMIT - sessions.length)
+    const pageSnippets = Object.fromEntries(
+      Object.entries(page.snippets ?? {}).filter((entry): entry is [string, string] => {
+        return typeof entry[1] === "string"
+      }),
+    )
+    sessions.push(...visible)
+    Object.assign(
+      snippets,
+      Object.fromEntries(
+        visible.flatMap((session) => {
+          const snippet = pageSnippets[session.id]
+          return snippet === undefined ? [] : [[session.id, snippet]]
+        }),
+      ),
+    )
+    if (
+      sessions.length === HOME_SESSION_SEARCH_LIMIT ||
+      page.data.length < HOME_SESSION_SEARCH_LIMIT ||
+      !page.cursor.next
+    )
+      return { sessions, snippets }
     cursor = page.cursor.next
   }
 }

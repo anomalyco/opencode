@@ -18,6 +18,8 @@ export type ScrollViewThumbVisibility = "hover" | "scroll"
 
 export interface ScrollViewProps extends ComponentProps<"div"> {
   viewportRef?: (el: HTMLDivElement) => void
+  /** Tab index for the inner scroll viewport. Defaults to 0. */
+  viewportTabIndex?: number
   orientation?: "vertical" | "horizontal" // currently only vertical is fully implemented for thumb
   /**
    * `hover`: show while hovered or scrolling. `scroll`: show only while scrolling.
@@ -105,6 +107,7 @@ export function ScrollView(props: ScrollViewProps) {
       "class",
       "children",
       "viewportRef",
+      "viewportTabIndex",
       "orientation",
       "thumbVisibility",
       "thumbContainer",
@@ -366,7 +369,7 @@ export function ScrollView(props: ScrollViewProps) {
         onTouchCancel={events.onTouchCancel as any}
         onPointerDown={events.onPointerDown as any}
         onClick={events.onClick as any}
-        tabIndex={0}
+        tabIndex={local.viewportTabIndex ?? 0}
         role="region"
         aria-label={i18n.t("ui.scrollView.ariaLabel")}
         onKeyDown={(e) => {

@@ -42,6 +42,30 @@ export function loadDialogSessionList<T>(input: {
   )
 }
 
+export function filterDialogSessionList<T extends { id: string; title: string }>(input: {
+  sessions: T[]
+  resultIDs: Set<string>
+  search: string
+}) {
+  const query = input.search.trim().toLowerCase()
+  return input.sessions.filter(
+    (session) => !query || input.resultIDs.has(session.id) || session.title.toLowerCase().includes(query),
+  )
+}
+
+export function currentDialogSessionSearch<T>(
+  result: { query: string; filter: SessionListFilter; sessions: T[] } | undefined,
+  input: { query: string; filter: SessionListFilter },
+) {
+  if (
+    result?.query !== input.query ||
+    result.filter.scope !== input.filter.scope ||
+    result.filter.path !== input.filter.path
+  )
+    return undefined
+  return result.sessions
+}
+
 export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
@@ -71,13 +95,17 @@ export function DialogSessionList() {
         search: input.query,
         filter: input.filter,
         list: (query) => sdk.client.session.list(query),
-      })
+      }).then((sessions) => (sessions ? { query: input.query, filter: input.filter, sessions } : undefined))
     },
   )
 
+  const currentSearchResults = createMemo(() =>
+    currentDialogSessionSearch(searchResults(), { query: search(), filter: sync.session.query() }),
+  )
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
   const sessions = createMemo(() => {
-    const result = searchResults() ?? browseResults() ?? sync.data.session
+    const matches = currentSearchResults()
+    const result = matches ?? browseResults() ?? sync.data.session
     const synced = new Map(sync.data.session.map((session) => [session.id, session]))
     const ids = new Set(result.map((session) => session.id))
     const extra = [currentSessionID(), ...local.session.pinned()].flatMap((id) => {
@@ -86,10 +114,13 @@ export function DialogSessionList() {
       if (session) ids.add(id)
       return session ? [session] : []
     })
-    const query = search().trim().toLowerCase()
-    return [...result.map((session) => synced.get(session.id) ?? session), ...extra]
-      .filter((session) => !deleted().has(session.id))
-      .filter((session) => !query || session.title.toLowerCase().includes(query))
+    return filterDialogSessionList({
+      sessions: [...result.map((session) => synced.get(session.id) ?? session), ...extra].filter(
+        (session) => !deleted().has(session.id),
+      ),
+      resultIDs: new Set(matches?.map((session) => session.id)),
+      search: search(),
+    })
   })
 
   onCleanup(
@@ -213,7 +244,7 @@ export function DialogSessionList() {
         .map((x) => [x.id, x]),
     )
 
-    const searchResult = searchResults()
+    const searchResult = currentSearchResults()
     const order = searchResult ? orderByRecency(sessions()) : browseOrder()
     const current = currentSessionID()
     const displayOrder = current && sessionMap.has(current) && !order.includes(current) ? [...order, current] : order

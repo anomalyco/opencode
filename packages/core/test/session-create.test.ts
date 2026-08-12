@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Layer, Stream } from "effect"
+import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
@@ -15,13 +15,14 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
@@ -70,6 +71,120 @@ describe("SessionV2.create", () => {
 
       expect(retried).toEqual(first)
       expect(yield* session.list()).toEqual([first])
+    }),
+  )
+
+  it.effect("returns a bounded context snippet for a content search match", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const db = (yield* Database.Service).db
+      const created = yield* session.create({ location })
+      const text = `${"Earlier context ".repeat(8)}inspect the spectral cache invalidation path${" later context".repeat(10)}`
+      const messageID = SessionMessage.ID.make("msg_search")
+      const encoded = Schema.encodeSync(SessionMessage.User)(
+        SessionMessage.User.make({
+          id: messageID,
+          type: "user",
+          text,
+          files: [],
+          agents: [],
+          time: { created: DateTime.makeUnsafe(1) },
+        }),
+      )
+      const { id: _, type, ...data } = encoded
+      yield* db
+        .insert(SessionMessageTable)
+        .values({
+          id: messageID,
+          session_id: created.id,
+          type,
+          seq: 1,
+          time_created: 1,
+          data,
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const snippets = yield* session.searchSnippets({ sessionIDs: [created.id], search: "spectral cache" })
+
+      expect(snippets).toHaveLength(1)
+      expect(snippets[0]).toMatchObject({ sessionID: created.id })
+      expect(snippets[0].snippet).toContain("spectral cache")
+      expect(snippets[0].snippet.startsWith("…")).toBe(true)
+      expect(snippets[0].snippet.endsWith("…")).toBe(true)
+      expect(snippets[0].snippet.length).toBeLessThanOrEqual(182)
+    }),
+  )
+
+  it.effect("excludes hidden and generated current messages from content search", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const db = (yield* Database.Service).db
+      const created = yield* session.create({ location })
+      const messages = [
+        SessionMessage.System.make({
+          id: SessionMessage.ID.make("msg_search_system"),
+          type: "system",
+          text: "private-system-context",
+          time: { created: DateTime.makeUnsafe(1) },
+        }),
+        SessionMessage.Synthetic.make({
+          id: SessionMessage.ID.make("msg_search_synthetic"),
+          sessionID: created.id,
+          type: "synthetic",
+          text: "synthetic-internal-context",
+          time: { created: DateTime.makeUnsafe(2) },
+        }),
+        SessionMessage.Shell.make({
+          id: SessionMessage.ID.make("msg_search_shell"),
+          type: "shell",
+          callID: "shell-search",
+          command: "visible-shell-command",
+          output: "private-shell-output",
+          time: { created: DateTime.makeUnsafe(3), completed: DateTime.makeUnsafe(4) },
+        }),
+        SessionMessage.Assistant.make({
+          id: SessionMessage.ID.make("msg_search_assistant"),
+          type: "assistant",
+          agent: "build",
+          model: { id: ModelV2.ID.make("test"), providerID: ProviderV2.ID.make("test") },
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              id: "reasoning-search",
+              text: "private-generated-reasoning",
+            }),
+          ],
+          time: { created: DateTime.makeUnsafe(4), completed: DateTime.makeUnsafe(5) },
+        }),
+      ]
+      yield* db
+        .insert(SessionMessageTable)
+        .values(
+          messages.map((message, index) => {
+            const { id: _, type: __, ...data } = Schema.encodeSync(SessionMessage.Message)(message)
+            return {
+              id: message.id,
+              session_id: created.id,
+              type: message.type,
+              seq: index + 1,
+              time_created: index + 1,
+              data,
+            }
+          }),
+        )
+        .run()
+        .pipe(Effect.orDie)
+
+      expect(yield* session.list({ search: "private-system-context" })).toEqual([])
+      expect(yield* session.list({ search: "synthetic-internal-context" })).toEqual([])
+      expect(yield* session.list({ search: "private-shell-output" })).toEqual([])
+      expect(yield* session.list({ search: "private-generated-reasoning" })).toEqual([])
+      expect((yield* session.list({ search: "visible-shell-command" })).map((item) => item.id)).toEqual([created.id])
+      expect(yield* session.searchSnippets({ sessionIDs: [created.id], search: "private-system-context" })).toEqual([])
+      expect(
+        (yield* session.searchSnippets({ sessionIDs: [created.id], search: "visible-shell-command" }))[0]?.snippet,
+      ).toContain("visible-shell-command")
     }),
   )
 

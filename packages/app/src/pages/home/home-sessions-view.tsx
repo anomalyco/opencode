@@ -11,6 +11,7 @@ import { ServerConnection } from "@/context/server"
 import { SessionTabAvatarView } from "@/pages/layout/session-tab-avatar"
 import { sessionTitle } from "@/utils/session-title"
 import { shouldOpenSessionInBackground } from "../home-session-open"
+import { splitHomeSessionSearchSnippet } from "../home-session-search"
 import {
   HomeSessionStatusController,
   homeSessionSearchKey,
@@ -43,6 +44,7 @@ export type HomeSessionsViewProps = {
   server: Accessor<ServerConnection.Key>
   canCreateSession: Accessor<boolean>
   searchValue: Accessor<string>
+  searchQuery: Accessor<string>
   searchPlaceholder: Accessor<string>
   searchOpen: Accessor<boolean>
   searchLoading: Accessor<boolean>
@@ -246,14 +248,14 @@ function HomeSessionSearch(props: HomeSessionsViewProps) {
                       >
                         {props.language.t("home.sessions.search.sessions")}
                       </p>
-                      <ScrollView class="max-h-80" viewportRef={props.onSetSearchList}>
+                      <ScrollView class="max-h-80" viewportRef={props.onSetSearchList} viewportTabIndex={-1}>
                         <div class="flex flex-col gap-px pb-2">
                           <For each={props.searchResults()}>
                             {(record) => (
                               <HomeSessionSearchResultRow
                                 {...props}
                                 record={record}
-                                selected={props.searchActive() === homeSessionSearchKey(record)}
+                                selected={!record.stale && props.searchActive() === homeSessionSearchKey(record)}
                               />
                             )}
                           </For>
@@ -356,8 +358,10 @@ function HomeSessionSearchResultRow(
       data-component="home-session-search-row"
       role="option"
       aria-selected={props.selected}
+      aria-disabled={props.record.stale}
+      disabled={props.record.stale}
       class={`
-        flex h-10 w-full shrink-0 cursor-default items-center gap-2 border-0 py-3 pl-[18px] pr-6 text-left
+        flex min-h-10 w-full shrink-0 cursor-default items-center gap-2 border-0 py-2 pl-[18px] pr-6 text-left
         transition-[background-color] duration-[120ms] ease-in-out
         hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
       `}
@@ -369,9 +373,11 @@ function HomeSessionSearchResultRow(
       onMouseDown={(event) => {
         if (event.button === 1) event.preventDefault()
       }}
-      onClick={(event) => props.onSearchSelect(props.record, { background: isBackgroundOpen(event) })}
+      onClick={(event) => {
+        if (!props.record.stale) props.onSearchSelect(props.record, { background: isBackgroundOpen(event) })
+      }}
       onAuxClick={(event) => {
-        if (!isBackgroundOpen(event)) return
+        if (props.record.stale || !isBackgroundOpen(event)) return
         event.preventDefault()
         props.onSearchSelect(props.record, { background: true })
       }}
@@ -382,10 +388,37 @@ function HomeSessionSearchResultRow(
         record={props.record}
         revealProjectOnHover={!!showProjectName()}
       />
-      <div class="flex min-w-0 flex-1 items-center gap-1.5">
-        <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} search />
-        <Show when={showProjectName()}>
-          <HomeSessionProjectName name={props.record.projectName} search />
+      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div class="flex min-w-0 items-center gap-1.5">
+          <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} search />
+          <Show when={showProjectName()}>
+            <HomeSessionProjectName name={props.record.projectName} search />
+          </Show>
+        </div>
+        <Show when={props.record.snippet}>
+          {(snippet) => (
+            <p
+              class={`
+                min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] leading-4
+                tracking-[-0.01px] text-v2-text-text-faint [font-weight:440]
+              `}
+            >
+              <For each={splitHomeSessionSearchSnippet(snippet(), props.searchQuery())}>
+                {(segment) => (
+                  <Show when={segment.match} fallback={segment.text}>
+                    <mark
+                      class={`
+                        rounded-[3px] bg-v2-icon-icon-accent/15 px-0.5
+                        text-v2-text-text-accent [font-weight:530]
+                      `}
+                    >
+                      {segment.text}
+                    </mark>
+                  </Show>
+                )}
+              </For>
+            </p>
+          )}
         </Show>
       </div>
     </button>

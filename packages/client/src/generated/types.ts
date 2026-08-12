@@ -263,6 +263,7 @@ export type SessionsListOutput = {
       }>
     }
   }>
+  readonly snippets?: { readonly [x: string]: string } | null
   readonly cursor: { readonly previous?: string | null; readonly next?: string | null }
 }
 

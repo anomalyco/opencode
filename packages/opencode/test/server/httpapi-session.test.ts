@@ -428,6 +428,44 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "preserves content search snippets across cursor pages",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const first = yield* createSession({ title: "first unrelated title" })
+        const second = yield* createSession({ title: "second unrelated title" })
+        yield* createTextMessage(first.id, "inspect the spectral cache in the first session")
+        yield* createTextMessage(second.id, "inspect the spectral cache in the second session")
+
+        const page = yield* requestJson<{
+          data: Session.Info[]
+          snippets?: Record<string, string>
+          cursor: { next?: string }
+        }>(
+          `/api/session?${new URLSearchParams({
+            limit: "1",
+            order: "asc",
+            directory: test.directory,
+            search: "spectral cache",
+          })}`,
+          { headers },
+        )
+        expect(page.data).toHaveLength(1)
+        expect(page.snippets?.[page.data[0]!.id]).toContain("spectral cache")
+        expect(page.cursor.next).toBeTruthy()
+
+        const next = yield* requestJson<{
+          data: Session.Info[]
+          snippets?: Record<string, string>
+        }>(`/api/session?cursor=${page.cursor.next}`, { headers })
+        expect(next.data).toHaveLength(1)
+        expect(next.snippets?.[next.data[0]!.id]).toContain("spectral cache")
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "returns v2 public request errors for cursor and workspace query failures",
     () =>
       Effect.gen(function* () {

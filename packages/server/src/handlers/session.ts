@@ -35,10 +35,19 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             workspaceID: query.workspace,
             limit: ctx.query.limit ?? DefaultSessionsLimit,
           })
+          const snippets = query.search
+            ? Object.fromEntries(
+                (yield* session.searchSnippets({
+                  sessionIDs: sessions.map((item) => item.id),
+                  search: query.search,
+                })).map((item) => [item.sessionID, item.snippet]),
+              )
+            : undefined
           const first = sessions[0]
           const last = sessions.at(-1)
           return {
             data: sessions,
+            snippets,
             cursor: {
               previous: first
                 ? SessionsCursor.make({

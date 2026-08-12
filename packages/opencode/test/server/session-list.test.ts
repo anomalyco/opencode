@@ -12,6 +12,10 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { eq } from "drizzle-orm"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { MessageID, PartID } from "@/session/schema"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 const layer = (experimentalWorkspaces: boolean) =>
   AppNodeBuilder.build(LayerNode.group([Database.node, SessionNs.node, SessionProjector.node]), [
@@ -266,6 +270,65 @@ describe("session.list", () => {
 
         expect(titles).toContain("unique-search-term-abc")
         expect(titles).not.toContain("other-session-xyz")
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "finds search terms in session text",
+    () =>
+      Effect.gen(function* () {
+        const matching = yield* withSession({ title: "unrelated-title" })
+        const unrelated = yield* withSession({ title: "another-title" })
+        const session = yield* SessionNs.Service
+        const messageID = MessageID.ascending()
+        yield* session.updateMessage({
+          id: messageID,
+          sessionID: matching.id,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "test",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
+        } satisfies SessionV1.User)
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID: matching.id,
+          messageID,
+          type: "text",
+          text: "We discussed a phosphorescent database migration.",
+        } satisfies SessionV1.TextPart)
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID: matching.id,
+          messageID,
+          type: "text",
+          text: "synthetic-internal-context",
+          synthetic: true,
+        } satisfies SessionV1.TextPart)
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID: matching.id,
+          messageID,
+          type: "reasoning",
+          text: "generated-private-reasoning",
+          time: { start: Date.now() },
+        } satisfies SessionV1.ReasoningPart)
+
+        const sessions = yield* SessionNs.use.list({ search: "phosphorescent" })
+        const ids = sessions.map((item) => item.id)
+        const serializedField = yield* SessionNs.use.list({ search: "text" })
+        const syntheticText = yield* SessionNs.use.list({ search: "synthetic-internal-context" })
+        const reasoningText = yield* SessionNs.use.list({ search: "generated-private-reasoning" })
+        const underscoreWildcard = yield* SessionNs.use.list({ search: "phosphorescent_" })
+        const percentWildcard = yield* SessionNs.use.list({ search: "%" })
+
+        expect(ids).toContain(matching.id)
+        expect(ids).not.toContain(unrelated.id)
+        expect(serializedField.map((item) => item.id)).not.toContain(matching.id)
+        expect(syntheticText.map((item) => item.id)).not.toContain(matching.id)
+        expect(reasoningText.map((item) => item.id)).not.toContain(matching.id)
+        expect(underscoreWildcard.map((item) => item.id)).not.toContain(matching.id)
+        expect(percentWildcard.map((item) => item.id)).not.toContain(matching.id)
       }),
     { git: true },
   )

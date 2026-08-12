@@ -16,6 +16,7 @@ export function HomeSessions(props: {
       server={props.sessions.session.server}
       canCreateSession={props.sessions.session.canCreate}
       searchValue={props.search.query.value}
+      searchQuery={props.search.query.search}
       searchPlaceholder={props.search.query.placeholder}
       searchOpen={props.search.query.open}
       searchLoading={props.search.result.loading}

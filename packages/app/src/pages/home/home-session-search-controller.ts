@@ -1,10 +1,19 @@
 import { useCommand } from "@/context/command"
+import { loadHomeSessionSearch } from "@/context/global-sync/home-session-index"
 import { useLanguage } from "@/context/language"
 import { serverName } from "@/context/server"
 import { displayName } from "@/pages/layout/helpers"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { createMemo, onCleanup } from "solid-js"
+import { debounce } from "@solid-primitives/scheduled"
+import { useQuery } from "@tanstack/solid-query"
+import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+import {
+  findHomeSessionSearchResult,
+  isHomeSessionSearchResultCurrent,
+  mergeHomeSessionSearchResults,
+  settledHomeSessionSearchResult,
+} from "../home-session-search"
 import type { HomeController } from "./home-controller"
 import { homeSessionSearchKey, type HomeSessionRecord, type HomeSessionsController } from "./home-sessions-controller"
 
@@ -18,15 +27,88 @@ export function createHomeSessionSearchController(home: HomeController, sessions
   let input: HTMLInputElement | undefined
   let list: HTMLDivElement | undefined
   const query = createMemo(() => state.value.trim())
+  const [serverSearch, setServerSearch] = createSignal("")
+  const scheduleServerSearch = debounce(setServerSearch, 150)
+  createEffect(
+    on(query, (value) => {
+      if (value) {
+        scheduleServerSearch(value)
+        return
+      }
+      scheduleServerSearch.clear()
+      setServerSearch("")
+    }),
+  )
+  const sessionSearchLoad = useQuery(() => ({
+    queryKey: [
+      "home",
+      "session-search",
+      home.selection.value().server,
+      home.selection.value().directory,
+      home.project.selected()?.id,
+      serverSearch(),
+    ],
+    enabled: !!home.server.focusedContext() && serverSearch().length > 0,
+    queryFn: async ({ signal }) => {
+      const value = serverSearch()
+      const server = home.selection.value().server
+      const scope = home.selection.value().directory ?? ""
+      const ctx = home.server.focusedContext()
+      if (!ctx) return { sessions: [], snippets: {}, query: value, server, scope }
+      const project = home.project.selected()
+      const result = await loadHomeSessionSearch(
+        (input, options) => ctx.sdk.client.v2.session.list(input, options),
+        value,
+        {
+          project: project?.id,
+          directories: project ? [project.worktree, ...(project.sandboxes ?? [])] : undefined,
+        },
+        signal,
+      )
+      return { ...result, query: value, server, scope }
+    },
+    placeholderData: (previous) => previous,
+    retry: false,
+  }))
   const results = createMemo(() => {
-    const value = query().toLowerCase()
-    if (!value) return []
-    return sessions.data
+    const current = {
+      query: query(),
+      server: home.selection.value().server,
+      scope: home.selection.value().directory ?? "",
+    }
+    if (!current.query) return []
+    const local = sessions.data
       .searchRecords()
-      .filter((record) => `${record.session.title} ${record.projectName}`.toLowerCase().includes(value))
+      .filter((record) =>
+        `${record.session.title} ${record.projectName}`.toLowerCase().includes(current.query.toLowerCase()),
+      )
+    const result = settledHomeSessionSearchResult(sessionSearchLoad)
+    const resultCurrent = result ? isHomeSessionSearchResultCurrent(result, current) : false
+    const remote =
+      result?.server === current.server
+        ? sessions.data.searchResultRecords({
+            sessions: result.sessions,
+            snippets: result.snippets,
+            stale: !resultCurrent,
+          })
+        : undefined
+    const merged =
+      remote && !resultCurrent
+        ? mergeHomeSessionSearchResults({ local: remote, remote: local, key: homeSessionSearchKey })
+        : mergeHomeSessionSearchResults({ local, remote, key: homeSessionSearchKey })
+    return merged.sort(
+      (a, b) => (b.session.time.updated ?? b.session.time.created) - (a.session.time.updated ?? a.session.time.created),
+    )
   })
+  const loading = createMemo(
+    () =>
+      sessions.data.loading() ||
+      (query().length > 0 &&
+        results().length === 0 &&
+        (serverSearch() !== query() || sessionSearchLoad.isFetching)),
+  )
   const active = createMemo(() => {
-    const records = results()
+    const records = results().filter((record) => !record.stale)
     if (records.some((record) => homeSessionSearchKey(record) === state.highlighted)) return state.highlighted
     return records[0] ? homeSessionSearchKey(records[0]) : ""
   })
@@ -77,6 +159,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
   return {
     query: {
       value: () => state.value,
+      search: query,
       placeholder,
       open,
       focus,
@@ -84,22 +167,24 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       close,
     },
     result: {
-      loading: sessions.data.loading,
+      loading,
       list: results,
       active,
       noResultsLabel: () => language.t("home.sessions.search.noResults", { query: query() }),
-      highlight: (record: HomeSessionRecord) => setState("highlighted", homeSessionSearchKey(record)),
+      highlight: (record: HomeSessionRecord) => {
+        if (!record.stale) setState("highlighted", homeSessionSearchKey(record))
+      },
       move: (delta: number) => {
-        const records = results()
+        const records = results().filter((record) => !record.stale)
         if (records.length === 0) return
         const index = records.findIndex((record) => homeSessionSearchKey(record) === active())
         const next = ((index === -1 ? 0 : index) + delta + records.length) % records.length
         setState("highlighted", homeSessionSearchKey(records[next]))
-        list?.querySelector<HTMLElement>(`[data-key="${state.highlighted}"]`)?.scrollIntoView({ block: "nearest" })
+        findHomeSessionSearchResult(list, state.highlighted)?.scrollIntoView({ block: "nearest" })
       },
       select,
       selectActive: () => {
-        const record = results().find((item) => homeSessionSearchKey(item) === active())
+        const record = results().find((item) => !item.stale && homeSessionSearchKey(item) === active())
         if (record) select(record)
       },
     },

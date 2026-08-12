@@ -3,8 +3,10 @@ import type { SessionV2Info } from "@opencode-ai/sdk/v2/client"
 import {
   applyHomeSessionEvent,
   appendHomeSessionEvent,
+  HOME_SESSION_SEARCH_LIMIT,
   HOME_V2_SESSION_PAGE_LIMIT,
   loadHomeSessionIndex,
+  loadHomeSessionSearch,
   homeSessionIndexSessions,
   homeSessionIndexRefresh,
   parseHomeSessionIndex,
@@ -67,6 +69,69 @@ describe("Home V2 session index", () => {
       { input: { limit: HOME_V2_SESSION_PAGE_LIMIT, order: "desc" }, signal: controller.signal },
       {
         input: { limit: HOME_V2_SESSION_PAGE_LIMIT, order: "desc", cursor: "next-page" },
+        signal: controller.signal,
+      },
+    ])
+  })
+
+  test("searches scoped session content until a visible page is found", async () => {
+    const calls: unknown[] = []
+    const controller = new AbortController()
+    const result = await loadHomeSessionSearch(
+      async (input, options) => {
+        calls.push({ input, signal: options.signal })
+        if (!("cursor" in input)) {
+          return {
+            data: {
+              data: Array.from({ length: HOME_SESSION_SEARCH_LIMIT }, (_, index) =>
+                index % 2 === 0
+                  ? session({ id: `child-${index}`, parentID: "root" })
+                  : session({ id: `archived-${index}`, archived: 2 }),
+              ),
+              cursor: { next: "next-page" },
+            },
+          }
+        }
+        return {
+          data: {
+            data: [
+              session({ id: "content-match" }),
+              session({ id: "other-project", directory: "/other" }),
+              session({ id: "child", parentID: "content-match" }),
+            ],
+            snippets: {
+              "content-match": "inspect the spectral cache invalidation path",
+              "other-project": "spectral cache in another project",
+            },
+            cursor: {},
+          },
+        }
+      },
+      "spectral cache",
+      { project: "project", directories: ["/project"] },
+      controller.signal,
+    )
+
+    expect(result.sessions.map((item) => item.id)).toEqual(["content-match"])
+    expect(result.snippets).toEqual({ "content-match": "inspect the spectral cache invalidation path" })
+    expect(calls).toEqual([
+      {
+        input: {
+          search: "spectral cache",
+          limit: HOME_SESSION_SEARCH_LIMIT,
+          order: "desc",
+          project: "project",
+        },
+        signal: controller.signal,
+      },
+      {
+        input: {
+          search: "spectral cache",
+          limit: HOME_SESSION_SEARCH_LIMIT,
+          order: "desc",
+          project: "project",
+          cursor: "next-page",
+        },
         signal: controller.signal,
       },
     ])
