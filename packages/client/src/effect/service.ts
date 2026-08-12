@@ -121,6 +121,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       until: Option.isSome,
       schedule: Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(120)]),
     }),
+    Effect.ensuring(Effect.sync(() => contenders.forEach((contender) => contender.release()))),
   )
   if (Option.isNone(found))
     return yield* Effect.fail(new Error("Timed out waiting for the background service to start"))

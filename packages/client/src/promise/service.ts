@@ -54,50 +54,54 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
     }
   }
 
-  while (true) {
-    if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
-    const registration = await registered(options.file, true)
-    if (registration.timedOut && registration.info !== undefined) {
-      timeouts = {
-        info: registration.info,
-        count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
-      }
-      if (timeouts.count >= 3) {
-        announce("missing")
-        await evict(registration.info, options)
-        timeouts = undefined
-        lastSpawn = Date.now() - spawnDelay
-      }
-    } else timeouts = undefined
+  try {
+    while (true) {
+      if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
+      const registration = await registered(options.file, true)
+      if (registration.timedOut && registration.info !== undefined) {
+        timeouts = {
+          info: registration.info,
+          count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
+        }
+        if (timeouts.count >= 3) {
+          announce("missing")
+          await evict(registration.info, options)
+          timeouts = undefined
+          lastSpawn = Date.now() - spawnDelay
+        }
+      } else timeouts = undefined
 
-    if (registration.service !== undefined) {
-      spawnDelay = 5_000
-      const service = registration.service
-      const compatible = !service.legacy && (options.version === undefined || service.version === options.version)
-      if (compatible && service.state === "ready") return service.endpoint
-      if (compatible && service.state === "failed") throw new Error("Background service failed to start")
-      if (!compatible) {
-        announce("version-mismatch", service.version)
-        await kill(service, options).catch(() => undefined)
-        lastSpawn = 0
+      if (registration.service !== undefined) {
+        spawnDelay = 5_000
+        const service = registration.service
+        const compatible = !service.legacy && (options.version === undefined || service.version === options.version)
+        if (compatible && service.state === "ready") return service.endpoint
+        if (compatible && service.state === "failed") throw new Error("Background service failed to start")
+        if (!compatible) {
+          announce("version-mismatch", service.version)
+          await kill(service, options).catch(() => undefined)
+          lastSpawn = 0
+        }
+      } else {
+        if (lastSpawn === 0 && registration.info !== undefined) lastSpawn = Date.now()
+        const finished = [...contenders].filter(contenderFinished)
+        const failure = finished.map(contenderFailure).find((error) => error !== undefined)
+        if (finished.some((item) => item.child.exitCode === 0)) {
+          spawnDelay = Math.min(spawnDelay * 2, 30_000)
+        }
+        finished.forEach((item) => contenders.delete(item))
+        if (failure !== undefined && contenders.size === 0) throw failure
+        // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
+        if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
+          announce("missing")
+          contenders.add(spawnContender())
+          lastSpawn = Date.now()
+        }
       }
-    } else {
-      if (lastSpawn === 0 && registration.info !== undefined) lastSpawn = Date.now()
-      const finished = [...contenders].filter(contenderFinished)
-      const failure = finished.map(contenderFailure).find((error) => error !== undefined)
-      if (finished.some((item) => item.child.exitCode === 0)) {
-        spawnDelay = Math.min(spawnDelay * 2, 30_000)
-      }
-      finished.forEach((item) => contenders.delete(item))
-      if (failure !== undefined && contenders.size === 0) throw failure
-      // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
-      if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
-        announce("missing")
-        contenders.add(spawnContender())
-        lastSpawn = Date.now()
-      }
+      await delay(1_000)
     }
-    await delay(1_000)
+  } finally {
+    contenders.forEach((contender) => contender.release())
   }
 }
 

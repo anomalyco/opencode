@@ -5,6 +5,7 @@ export type ServiceContender = {
   readonly error: () => Error | undefined
   readonly closed: () => boolean
   readonly stderr: () => string
+  readonly release: () => void
 }
 
 const stderrLimit = 8 * 1024
@@ -14,11 +15,15 @@ export function spawnServiceContender(command: string, args: ReadonlyArray<strin
   let error: Error | undefined
   let closed = false
   let stderr = Buffer.alloc(0)
-  child.stderr?.on("data", (chunk: Buffer) => {
-    stderr = Buffer.concat([stderr, chunk]).subarray(-stderrLimit)
-  })
-  if (child.stderr !== null && "unref" in child.stderr && typeof child.stderr.unref === "function")
-    child.stderr.unref()
+  const onStderr = (chunk: Buffer) => {
+    const tail = chunk.subarray(-stderrLimit)
+    stderr =
+      tail.length === stderrLimit
+        ? Buffer.from(tail)
+        : Buffer.concat([stderr.subarray(-(stderrLimit - tail.length)), tail])
+  }
+  child.stderr?.on("data", onStderr)
+  if (child.stderr !== null && "unref" in child.stderr && typeof child.stderr.unref === "function") child.stderr.unref()
   child.once("error", (cause) => {
     error = new Error("Failed to start server", { cause })
   })
@@ -26,7 +31,17 @@ export function spawnServiceContender(command: string, args: ReadonlyArray<strin
     closed = true
   })
   child.unref()
-  return { child, error: () => error, closed: () => closed, stderr: () => stderr.toString("utf8").trim() }
+  return {
+    child,
+    error: () => error,
+    closed: () => closed,
+    stderr: () => stderr.toString("utf8").trim(),
+    release: () => {
+      child.stderr?.off("data", onStderr)
+      child.stderr?.resume()
+      stderr = Buffer.alloc(0)
+    },
+  }
 }
 
 export function contenderFailure(contender: ServiceContender) {
