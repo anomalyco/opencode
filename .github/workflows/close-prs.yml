@@ -1,19 +1,7 @@
 name: close-prs
 
 on:
-  schedule:
-    - cron: "0 22 * * *" # Daily at 10:00 PM UTC
   workflow_dispatch:
-    inputs:
-      dry-run:
-        description: "Log matching PRs without closing them"
-        type: boolean
-        default: true
-      max-close:
-        description: "Maximum matching PRs to close"
-        type: string
-        required: false
-        default: "50"
 
 jobs:
   close:

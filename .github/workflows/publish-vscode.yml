@@ -2,9 +2,6 @@ name: publish-vscode
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "vscode-v*.*.*"
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 

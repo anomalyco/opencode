@@ -35,7 +35,7 @@ moks is a product fork of [OpenCode](https://github.com/anomalyco/opencode).
 
 8. **Fork badge** — GitHub shows “Forked from anomalyco/opencode” while this stays a fork. Detach later only if the badge hurts product positioning; `upstream` as a remote still works either way.
 
-9. **Hard choice** — either track upstream and merge often, or accept a hard fork and stop merging. Don’t half-do both after deep product divergence.
+9. **Tracking fork, not a prune.** Stay a tracking fork: unused packages (desktop, console, web, enterprise, stats, slack, SST) stay on disk and are not invested in. Do not hard-fork or delete them until we decide we will only cherry-pick. Slim **hooks and CI** so they are not run — that is the cost, not the trees.
 
 ## Sync
 

@@ -2,10 +2,6 @@ name: publish-github-action
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "github-v*.*.*"
-      - "!github-v1"
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 

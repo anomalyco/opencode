@@ -1,8 +1,7 @@
 name: pr-management
 
 on:
-  pull_request_target:
-    types: [opened]
+  workflow_dispatch:
 
 jobs:
   check-duplicates:

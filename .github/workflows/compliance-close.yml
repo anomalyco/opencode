@@ -1,9 +1,6 @@
 name: compliance-close
 
 on:
-  schedule:
-    # Run every 30 minutes to check for expired compliance windows
-    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 permissions:

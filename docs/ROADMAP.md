@@ -11,7 +11,7 @@ We mold the OpenCode fork — we do not rebuild the harness from zero.
 |--------|----------|
 | ATS | **Ashby preferred** (official MCP). Sandbox when available; **fixtures/files until then**. Greenhouse later. |
 | Rebrand | **User-facing now** (`moks` bin, README, TUI copy). **Keep** inherited package names (`packages/opencode`, `@opencode-ai/*`) until deliberate divergence. |
-| Unused packages | **Leave them.** Don’t invest in desktop/console/web/SST unless asked. |
+| Unused packages | **Leave them.** Don’t invest in desktop/console/web/SST unless asked. Hooks/CI run the harness only. |
 | Receipts | **Hybrid:** default user data dir; if cwd is a moks workspace (`.moks/`), use `.moks/receipts/`. Always gitignore `.moks/`. |
 | Skills vs MCP | **MCP = edge tools** (vendor read). **Skills = prompt packs** (hiring loop). **Verbs + receipts = authority** (`commit` / `push` / confirm-adverse). |
 | CLI | Headless is a **mode of Open**, not a co-equal pillar. |
