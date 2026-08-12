@@ -1,4 +1,3 @@
-import { createServer } from "node:http"
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
@@ -58,6 +57,8 @@ const browser = (app: App.Info) =>
         const state = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
         const code = yield* Deferred.make<string, Error>()
         const redirect = `http://localhost:${callbackPort}/auth/callback`
+        // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
+        const { createServer } = yield* Effect.promise(() => import("node:http"))
         const server = createServer((request, response) => {
           const url = new URL(request.url ?? "/", `http://localhost:${callbackPort}`)
           if (url.pathname !== "/auth/callback") {
