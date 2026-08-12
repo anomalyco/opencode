@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Notebook } from "@opencode-ai/core/notebook/notebook"
+import { NotebookAttach } from "@opencode-ai/core/notebook/attach"
+import type { ToolOutput } from "@opencode-ai/llm"
 
 const {
   emptyNotebook,
@@ -94,6 +96,33 @@ describe("Notebook ops", () => {
     expect(updated.nb.entries["a.ts"].summary).toBe("Does a better.")
     expect(updated.nb.entries["a.ts"].based_on).toEqual(["a.ts@1-2", "a.ts@3-4"])
     expect(updated.nb.relations).toHaveLength(0)
+  })
+})
+
+describe("NotebookAttach.prependNote", () => {
+  test("merges the note into a single-text output, preserving the text result type", () => {
+    const output: ToolOutput = { structured: {}, content: [{ type: "text", text: "file body" }] }
+    const decorated = NotebookAttach.prependNote(output, "## Local notebook · a.ts [✓]")
+    expect(decorated.content).toEqual([{ type: "text", text: "## Local notebook · a.ts [✓]" + "\n\n" + "file body" }])
+  })
+
+  test("prepends a text part when the output has multiple parts or media", () => {
+    const output: ToolOutput = {
+      structured: {},
+      content: [
+        { type: "text", text: "body" },
+        { type: "text", text: "stats" },
+      ],
+    }
+    const decorated = NotebookAttach.prependNote(output, "note")
+    expect(decorated.content).toHaveLength(3)
+    expect(decorated.content[0]).toEqual({ type: "text", text: "note" })
+    expect(decorated.content[1]).toEqual({ type: "text", text: "body" })
+  })
+
+  test("returns the output unchanged when there is no note", () => {
+    const output: ToolOutput = { structured: {}, content: [{ type: "text", text: "file body" }] }
+    expect(NotebookAttach.prependNote(output, "")).toBe(output)
   })
 })
 

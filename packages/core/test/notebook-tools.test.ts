@@ -155,7 +155,7 @@ describe("NotebookTools", () => {
                 {
                   path: "src/lib.ts",
                   summary:
-                    "The util module exposes a single exported constant that other modules import for the shared helper value.",
+                    "The util module exposes a single exported constant `util` that other modules import for the shared helper value.",
                   based_on: ["src/lib.ts"],
                 },
               ],
@@ -173,6 +173,33 @@ describe("NotebookTools", () => {
 
         const again = yield* withTools(tmp.path, (registry) => settleTool(registry, getCall({ path: "src/lib.ts" })))
         expect(textValue(again.result)).toContain("single exported constant")
+      }),
+    ),
+  )
+
+  it.live("notes_commit rejects a vague summary that names no concrete symbols", () =>
+    inTemp((tmp) =>
+      Effect.gen(function* () {
+        const src = path.join(tmp.path, "src")
+        yield* Effect.promise(() => fs.mkdir(src, { recursive: true }))
+        yield* Effect.promise(() => fs.writeFile(path.join(src, "lib.ts"), "export const util = 1\n"))
+        NotebookEvidence.markExplore(sessionID)
+
+        const settled = yield* withTools(tmp.path, (registry) =>
+          settleTool(
+            registry,
+            commitCall({
+              task: "vague",
+              entries: [
+                { path: "src/lib.ts", summary: "Handles files and manages things in a nice and friendly way that is helpful.", based_on: ["src/lib.ts"] },
+
+              ],
+            }),
+          ),
+        )
+        const value = textValue(settled.result)
+        expect(value).toContain("NOT applied")
+        expect(value).toContain("vague")
       }),
     ),
   )

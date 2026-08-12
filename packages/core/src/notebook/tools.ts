@@ -106,7 +106,7 @@ const layer = Layer.effectDiscard(
 
     const notesGet = Tool.make({
       description:
-        "Recall the project notebook memory (`.note.yaml` per folder): folder roles, per-file summaries, and cross-file relations accumulated across tasks. Call at the START of a task, before exploring. Pass `path` to read the ancestor chain for a file/dir, or `task` to keyword-search all notebooks. Entries carry a freshness badge: ✓ fresh · ⚠ suspect (its source changed) · ✗ stale (its source is gone). This is a map to trust and navigate by, not to re-verify wholesale — re-read a file only to resolve a ⚠/✗ entry.",
+        "Recall the project notebook memory (`.note.yaml` per folder): folder roles, per-file summaries, and cross-file relations accumulated across tasks. Call at the START of a task, before exploring — AND again mid-task before working on any file/dir you have not consulted this session (the note for a file you touch is auto-attached to read/edit results on its first touch). Pass `path` to read the ancestor chain for a file/dir, or `task` to keyword-search all notebooks. It is cheap and local — it returns only the relevant subtree, so use it freely mid-task rather than re-reading code. Entries carry a freshness badge: ✓ fresh · ⚠ suspect (its source changed) · ✗ stale (its source is gone). This is a map to trust and navigate by, not to re-verify wholesale — re-read a file only to resolve a ⚠/✗ entry.",
       input: GetInput,
       output: Output,
       toModelOutput,
@@ -117,21 +117,24 @@ const layer = Layer.effectDiscard(
           const lines: string[] = []
           const limit = input.limit ?? 20
 
-          if (input.path) {
-            const target = normalizeRel(root, input.path)
-            if (!target) {
-              return { text: `Invalid path: ${input.path}` } satisfies Output
-            }
-            const parts = target.split("/").slice(0, -1)
-            const chain: string[] = []
-            for (let i = 0; i <= parts.length; i++) chain.push(parts.slice(0, i).join("/"))
-            const leaf = chain[chain.length - 1]
+            if (input.path) {
+              const target = normalizeRel(root, input.path)
+              if (!target) {
+                return { text: `Invalid path: ${input.path}` } satisfies Output
+              }
+              const parentParts = target.split("/").slice(0, -1)
+              const chain: string[] = []
+              for (let i = 0; i <= parentParts.length; i++) chain.push(parentParts.slice(0, i).join("/"))
+              // When the target is a directory that carries its own notebook, descend into it
+              // as a leaf so its summary/entries/relations are shown (not just the parent chain).
+              if (byRel.has(target)) chain.push(target)
+              const leaf = chain[chain.length - 1]
             lines.push(`## Notebook memory · ${target}`)
             let shown = 0
             for (let i = 0; i < chain.length; i++) {
               const dir = chain[i] ?? ""
               const nb = byRel.get(dir)
-              if (!nb || (!nb.summary && Object.keys(nb.entries).length === 0)) continue
+              if (!nb || (!nb.summary && Object.keys(nb.entries).length === 0 && nb.relations.length === 0)) continue
               const isLeaf = dir === leaf
               lines.push(`### ${dir || "."}`)
               if (nb.summary) {
@@ -343,6 +346,20 @@ function hasNonLatinScript(text: string): boolean {
   return /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0900-\u097F]./u.test(text)
 }
 
+/** A summary is usable mid-task only if it names concrete symbols, not just describes them in vague prose. */
+function hasConcreteAnchor(text: string): boolean {
+  return (
+    // CamelCase symbol (class/service name), e.g. ProgressiveMemoryService
+    /[A-Z][a-z]+[A-Z][A-Za-z]*/.test(text) ||
+    // snake_case identifier, e.g. create_candidate
+    /[a-z][a-z0-9]*_[a-z0-9]+/.test(text) ||
+    // file/module reference with an extension, e.g. retrieval.py
+    /\.[a-z]{2,4}\b/.test(text) ||
+    // backtick code span or a bare function call
+    /`[^`\n]+`|\b[A-Za-z_][A-Za-z0-9_]*\(\)/.test(text)
+  )
+}
+
 function summarizeGateProblems(input: typeof CommitInput.Type): Map<string, string[]> {
   const problems = new Map<string, string[]>()
   const note = (where: string, issue: string) => {
@@ -363,6 +380,7 @@ function summarizeGateProblems(input: typeof CommitInput.Type): Map<string, stri
     if (!item.summary?.trim()) note(where, "empty summary")
     else if (hasNonLatinScript(item.summary)) note(where, "not written in English (a non-Latin script was detected)")
     else if (item.summary.trim().length < MIN_SUMMARY_CHARS) note(where, `summary is too thin (< ${MIN_SUMMARY_CHARS} chars); fold in the prior entry summary and concrete detail`)
+    else if (!hasConcreteAnchor(item.summary)) note(where, "summary is vague — name the concrete symbols (classes/functions/modules) so the note is usable mid-task")
   }
 
   for (const item of input.relations ?? []) {
@@ -370,6 +388,7 @@ function summarizeGateProblems(input: typeof CommitInput.Type): Map<string, stri
     if (!item.description?.trim()) note(where, "empty description")
     else if (hasNonLatinScript(item.description)) note(where, "not written in English (a non-Latin script was detected)")
     else if (item.description.trim().length < MIN_SUMMARY_CHARS) note(where, `description is too thin (< ${MIN_SUMMARY_CHARS} chars); describe the concrete connection`)
+    else if (!hasConcreteAnchor(item.description)) note(where, "description is vague — name which functions/classes connect")
   }
 
   return problems
