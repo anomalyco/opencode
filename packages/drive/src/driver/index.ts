@@ -191,7 +191,7 @@ export {
   UiTimeoutError,
   UiWaitOptionsError,
 } from "./ui.js"
-export { SimulationRequestError } from "../simulation/rpc.js"
+export { SimulationRequestError } from "@opencode-ai/protocol/simulation"
 export {
   SimulationCompatibilityError,
   SimulationConnectionError,

@@ -63,6 +63,7 @@
     "@effect/platform-node": "catalog:",
     "@napi-rs/canvas": "1.0.2",
     "@opencode-ai/client": "workspace:*",
+    "@opencode-ai/protocol": "workspace:*",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",
     "@wterm/core": "0.3.0",

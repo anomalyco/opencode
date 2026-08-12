@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { RpcTest } from "effect/unstable/rpc"
-import { BackendRpcs, SimulationRequestError, UiRpcs } from "../../src/simulation/rpc.js"
+import { BackendRpcs, SimulationRequestError, UiRpcs } from "@opencode-ai/protocol/simulation"
 
 const state = {
   focused: { renderable: 1, editor: true },

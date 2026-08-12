@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { RpcClient, RpcClientError, RpcMessage } from "effect/unstable/rpc"
 import * as OpenCodeRpcProtocol from "../../src/simulation/opencode-protocol.js"
-import { SimulationRequestError, UiRpcs } from "../../src/simulation/rpc.js"
+import { SimulationRequestError, UiRpcs } from "@opencode-ai/protocol/simulation"
 import { sendError, sendResult, startTransportPeer } from "./transport-peer.js"
 
 const state = {

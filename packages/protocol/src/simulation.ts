@@ -1,6 +1,5 @@
-import * as Effect from "effect/Effect"
-import * as Schema from "effect/Schema"
-import * as Llm from "../llm/index.js"
+import { Effect, Schema } from "effect"
+import { Rpc, RpcGroup } from "effect/unstable/rpc"
 
 const JsonRpcID = Schema.Union([Schema.String, Schema.Number, Schema.Null])
 const decodeJson = Schema.decodeUnknownSync(Schema.Json)
@@ -33,10 +32,7 @@ export namespace JsonRpc {
 
   export const decodeRequest = Schema.decodeUnknownSync(Request)
 
-  export function success(
-    id: Request["id"],
-    result: unknown,
-  ): Response | undefined {
+  export function success(id: Request["id"], result: unknown): Response | undefined {
     if (id === undefined) return undefined
     return { jsonrpc: "2.0", id, result: decodeJson(result) }
   }
@@ -72,9 +68,10 @@ export namespace Handshake {
   export const Params = Schema.Struct({
     client: Identity,
     expectedRole: EndpointRole,
-    offeredVersions: Schema.Array(
-      Schema.Int.check(Schema.isGreaterThan(0)),
-    ).check(Schema.isMinLength(1), Schema.isUnique()),
+    offeredVersions: Schema.Array(Schema.Int.check(Schema.isGreaterThan(0))).check(
+      Schema.isMinLength(1),
+      Schema.isUnique(),
+    ),
     requiredCapabilities: Schema.Array(Capability).check(Schema.isUnique()),
     optionalCapabilities: Schema.Array(Capability).check(Schema.isUnique()),
   })
@@ -94,6 +91,77 @@ export namespace Handshake {
     params: Params,
   })
   export interface Request extends Schema.Schema.Type<typeof Request> {}
+
+  export interface DispatchAction {
+    readonly role: EndpointRole
+    readonly server: Identity
+    readonly capabilities: ReadonlyArray<Capability>
+  }
+
+  export class RoleMismatchError extends Schema.TaggedErrorClass<RoleMismatchError>()(
+    "SimulationHandshake.RoleMismatchError",
+    {
+      expected: EndpointRole,
+      actual: EndpointRole,
+      message: Schema.String,
+    },
+  ) {}
+
+  export class UnsupportedProtocolError extends Schema.TaggedErrorClass<UnsupportedProtocolError>()(
+    "SimulationHandshake.UnsupportedProtocolError",
+    {
+      offered: Schema.Array(Schema.Number),
+      supported: Schema.Array(ProtocolVersion),
+      message: Schema.String,
+    },
+  ) {}
+
+  export class MissingCapabilityError extends Schema.TaggedErrorClass<MissingCapabilityError>()(
+    "SimulationHandshake.MissingCapabilityError",
+    {
+      missing: Schema.Array(Capability),
+      message: Schema.String,
+    },
+  ) {}
+
+  export function dispatch(action: DispatchAction, params: Params) {
+    return Effect.gen(function* () {
+      if (params.expectedRole !== action.role) {
+        return yield* Effect.fail(
+          new RoleMismatchError({
+            expected: params.expectedRole,
+            actual: action.role,
+            message: `Expected simulation endpoint role ${params.expectedRole}, received ${action.role}`,
+          }),
+        )
+      }
+      if (!params.offeredVersions.includes(1)) {
+        return yield* Effect.fail(
+          new UnsupportedProtocolError({
+            offered: params.offeredVersions,
+            supported: [1],
+            message: "No mutually supported simulation protocol version",
+          }),
+        )
+      }
+      const installed = new Set(action.capabilities)
+      const missing = params.requiredCapabilities.filter((capability) => !installed.has(capability))
+      if (missing.length > 0) {
+        return yield* Effect.fail(
+          new MissingCapabilityError({
+            missing,
+            message: `Simulation endpoint is missing required capabilities: ${missing.join(", ")}`,
+          }),
+        )
+      }
+      return {
+        protocolVersion: 1,
+        role: action.role,
+        server: action.server,
+        capabilities: Array.from(installed),
+      } satisfies Response
+    })
+  }
 }
 
 export namespace Frontend {
@@ -122,29 +190,20 @@ export namespace Frontend {
     super: Schema.optional(Schema.Boolean),
     hyper: Schema.optional(Schema.Boolean),
   })
-  export interface KeyModifiers
-    extends Schema.Schema.Type<typeof KeyModifiers> {}
+  export interface KeyModifiers extends Schema.Schema.Type<typeof KeyModifiers> {}
 
   export const SemanticClickTarget = Schema.Struct({
     id: Schema.NonEmptyString,
     instance: Schema.optionalKey(Schema.NonEmptyString),
     element: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
   })
-  export interface SemanticClickTarget
-    extends Schema.Schema.Type<typeof SemanticClickTarget> {}
+  export interface SemanticClickTarget extends Schema.Schema.Type<typeof SemanticClickTarget> {}
 
   export const Action = Schema.Union([
     Schema.Struct({ type: Schema.Literal("ui.type"), text: Schema.String }),
-    Schema.Struct({
-      type: Schema.Literal("ui.press"),
-      key: Schema.String,
-      modifiers: Schema.optional(KeyModifiers),
-    }),
+    Schema.Struct({ type: Schema.Literal("ui.press"), key: Schema.String, modifiers: Schema.optional(KeyModifiers) }),
     Schema.Struct({ type: Schema.Literal("ui.enter") }),
-    Schema.Struct({
-      type: Schema.Literal("ui.arrow"),
-      direction: Schema.Literals(["up", "down", "left", "right"]),
-    }),
+    Schema.Struct({ type: Schema.Literal("ui.arrow"), direction: Schema.Literals(["up", "down", "left", "right"]) }),
     Schema.Struct({ type: Schema.Literal("ui.focus"), target: Schema.Number }),
     Schema.Struct({
       type: Schema.Literal("ui.click"),
@@ -153,11 +212,7 @@ export namespace Frontend {
       y: Schema.Number,
       semantic: Schema.optionalKey(SemanticClickTarget),
     }),
-    Schema.Struct({
-      type: Schema.Literal("ui.resize"),
-      cols: Schema.Number,
-      rows: Schema.Number,
-    }),
+    Schema.Struct({ type: Schema.Literal("ui.resize"), cols: Schema.Number, rows: Schema.Number }),
   ])
   export type Action = Schema.Schema.Type<typeof Action>
 
@@ -227,12 +282,7 @@ export namespace Frontend {
   export const Screenshot = Schema.String
   export type Screenshot = Schema.Schema.Type<typeof Screenshot>
 
-  export const Color = Schema.Tuple([
-    Schema.Number,
-    Schema.Number,
-    Schema.Number,
-    Schema.Number,
-  ])
+  export const Color = Schema.Tuple([Schema.Number, Schema.Number, Schema.Number, Schema.Number])
   export type Color = Schema.Schema.Type<typeof Color>
 
   export const CapturedFrame = Schema.Struct({
@@ -253,8 +303,7 @@ export namespace Frontend {
       }),
     ),
   })
-  export interface CapturedFrame
-    extends Schema.Schema.Type<typeof CapturedFrame> {}
+  export interface CapturedFrame extends Schema.Schema.Type<typeof CapturedFrame> {}
 
   export const RecordingFinish = Schema.String
   export type RecordingFinish = Schema.Schema.Type<typeof RecordingFinish>
@@ -262,36 +311,24 @@ export namespace Frontend {
   export const Matches = Schema.Boolean
   export type Matches = Schema.Schema.Type<typeof Matches>
 
-  export const ScreenshotParams = Schema.Struct({
-    name: Schema.optional(Schema.String),
-  })
-  export interface ScreenshotParams
-    extends Schema.Schema.Type<typeof ScreenshotParams> {}
+  export const ScreenshotParams = Schema.Struct({ name: Schema.optional(Schema.String) })
+  export interface ScreenshotParams extends Schema.Schema.Type<typeof ScreenshotParams> {}
 
   export const TypeParams = Schema.Struct({ text: Schema.String })
   export interface TypeParams extends Schema.Schema.Type<typeof TypeParams> {}
 
   export const MatchesParams = Schema.Struct({ text: Schema.String })
-  export interface MatchesParams
-    extends Schema.Schema.Type<typeof MatchesParams> {}
+  export interface MatchesParams extends Schema.Schema.Type<typeof MatchesParams> {}
 
-  export const PressParams = Schema.Struct({
-    key: Schema.String,
-    modifiers: Schema.optional(KeyModifiers),
-  })
+  export const PressParams = Schema.Struct({ key: Schema.String, modifiers: Schema.optional(KeyModifiers) })
   export interface PressParams extends Schema.Schema.Type<typeof PressParams> {}
 
-  export const pressParams = (
-    key: string,
-    modifiers?: KeyModifiers,
-  ): PressParams => ({
+  export const pressParams = (key: string, modifiers?: KeyModifiers): PressParams => ({
     key,
     ...(modifiers === undefined ? {} : { modifiers }),
   })
 
-  export const ArrowParams = Schema.Struct({
-    direction: Schema.Literals(["up", "down", "left", "right"]),
-  })
+  export const ArrowParams = Schema.Struct({ direction: Schema.Literals(["up", "down", "left", "right"]) })
   export interface ArrowParams extends Schema.Schema.Type<typeof ArrowParams> {}
 
   export const FocusParams = Schema.Struct({ target: Schema.Number })
@@ -305,50 +342,18 @@ export namespace Frontend {
   })
   export interface ClickParams extends Schema.Schema.Type<typeof ClickParams> {}
 
-  export const ResizeParams = Schema.Struct({
-    cols: Schema.Number,
-    rows: Schema.Number,
-  })
-  export interface ResizeParams
-    extends Schema.Schema.Type<typeof ResizeParams> {}
+  export const ResizeParams = Schema.Struct({ cols: Schema.Number, rows: Schema.Number })
+  export interface ResizeParams extends Schema.Schema.Type<typeof ResizeParams> {}
 
   export const Request = Schema.Union([
     Handshake.Request,
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("ui.type"),
-      params: TypeParams,
-    }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("ui.press"),
-      params: PressParams,
-    }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("ui.arrow"),
-      params: ArrowParams,
-    }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("ui.focus"),
-      params: FocusParams,
-    }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("ui.click"),
-      params: ClickParams,
-    }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("ui.resize"),
-      params: ResizeParams,
-    }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("ui.matches"),
-      params: MatchesParams,
-    }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.type"), params: TypeParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.press"), params: PressParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.arrow"), params: ArrowParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.focus"), params: FocusParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.click"), params: ClickParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.resize"), params: ResizeParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.matches"), params: MatchesParams }),
     Schema.Struct({
       ...JsonRpc.RequestFields,
       method: Schema.Literal("ui.screenshot"),
@@ -356,20 +361,13 @@ export namespace Frontend {
     }),
     Schema.Struct({
       ...JsonRpc.RequestFields,
-      method: Schema.Literals([
-        "ui.enter",
-        "ui.state",
-        "ui.snapshot",
-        "ui.recording.finish",
-      ]),
+      method: Schema.Literals(["ui.enter", "ui.state", "ui.snapshot", "ui.recording.finish"]),
     }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("ui.capture"),
-    }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.capture") }),
   ])
   export type Request = Schema.Schema.Type<typeof Request>
   export const decodeRequest = Schema.decodeUnknownSync(Request)
+  export const decodeRequestEffect = Schema.decodeUnknownEffect(Schema.fromJsonString(Request))
 }
 
 export namespace Backend {
@@ -391,10 +389,7 @@ export namespace Backend {
 
   export const Item = Schema.Union([
     Schema.Struct({ type: Schema.Literal("textDelta"), text: Schema.String }),
-    Schema.Struct({
-      type: Schema.Literal("reasoningDelta"),
-      text: Schema.String,
-    }),
+    Schema.Struct({ type: Schema.Literal("reasoningDelta"), text: Schema.String }),
     Schema.Struct({
       type: Schema.Literal("toolInputStart"),
       index: Schema.Number,
@@ -413,11 +408,11 @@ export namespace Backend {
       name: Schema.String,
       input: Schema.Json,
     }),
-    Llm.Raw,
+    Schema.Struct({ type: Schema.Literal("raw"), chunk: Schema.Json }),
   ])
   export type Item = Schema.Schema.Type<typeof Item>
 
-  export const FinishReason = Llm.FinishReason
+  export const FinishReason = Schema.Literals(["stop", "tool-calls", "length", "content-filter"])
   export type FinishReason = Schema.Schema.Type<typeof FinishReason>
 
   export const ToolContent = Schema.Union([
@@ -433,9 +428,7 @@ export namespace Backend {
 
   const ToolName = Schema.NonEmptyString.check(
     Schema.makeFilter((name) =>
-      /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name)
-        ? undefined
-        : "simulated tool names must be provider-safe",
+      /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name) ? undefined : "simulated tool names must be provider-safe",
     ),
   )
   const ToolNamespace = Schema.NonEmptyString.check(
@@ -467,14 +460,11 @@ export namespace Backend {
         const names = tools.map(exposedToolName)
         if (names.some((name) => !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name)))
           return "simulated tool names including namespaces must be provider-safe"
-        if (new Set(names).size !== names.length)
-          return "simulated tool registrations must have unique exposed names"
+        if (new Set(names).size !== names.length) return "simulated tool registrations must have unique exposed names"
         if (
           tools.some(
             (tool) =>
-              tool.name === "execute" &&
-              tool.options?.namespace === undefined &&
-              tool.options?.codemode === false,
+              tool.name === "execute" && tool.options?.namespace === undefined && tool.options?.codemode === false,
           )
         )
           return 'direct simulated tool name "execute" is reserved'
@@ -490,10 +480,7 @@ export namespace Backend {
       : `${registration.options.namespace.replaceAll(".", "_")}_${registration.name}`
   }
 
-  export const ToolProgress = Schema.Struct({
-    structured: Schema.Record(Schema.String, Schema.Json),
-    content: Schema.optionalKey(Schema.Array(ToolContent)),
-  })
+  export const ToolProgress = Schema.Record(Schema.String, Schema.Json)
   export interface ToolProgress extends Schema.Schema.Type<typeof ToolProgress> {}
 
   export const ToolOutput = Schema.Struct({
@@ -509,16 +496,10 @@ export namespace Backend {
   })
   export interface ToolUpdateParams extends Schema.Schema.Type<typeof ToolUpdateParams> {}
 
-  export const ToolFinishParams = Schema.Struct({
-    id: Schema.String,
-    output: ToolOutput,
-  })
+  export const ToolFinishParams = Schema.Struct({ id: Schema.String, output: ToolOutput })
   export interface ToolFinishParams extends Schema.Schema.Type<typeof ToolFinishParams> {}
 
-  export const ToolFailParams = Schema.Struct({
-    id: Schema.String,
-    message: Schema.String,
-  })
+  export const ToolFailParams = Schema.Struct({ id: Schema.String, message: Schema.String })
   export interface ToolFailParams extends Schema.Schema.Type<typeof ToolFailParams> {}
 
   export const ToolInvocation = Schema.Struct({
@@ -529,7 +510,7 @@ export namespace Backend {
       sessionID: Schema.String,
       agent: Schema.String,
       messageID: Schema.String,
-      callID: Schema.String,
+      id: Schema.String,
     }),
   })
   export interface ToolInvocation extends Schema.Schema.Type<typeof ToolInvocation> {}
@@ -546,71 +527,33 @@ export namespace Backend {
   export const Ok = Schema.Struct({ ok: Schema.Literal(true) })
   export interface Ok extends Schema.Schema.Type<typeof Ok> {}
 
-  export const ChunkParams = Schema.Struct({
-    id: Schema.String,
-    items: Schema.Array(Item),
-  })
+  export const ChunkParams = Schema.Struct({ id: Schema.String, items: Schema.Array(Item) })
   export interface ChunkParams extends Schema.Schema.Type<typeof ChunkParams> {}
+
+  export const FinishParams = Schema.Struct({
+    id: Schema.String,
+    reason: FinishReason.pipe(Schema.withDecodingDefault(Effect.succeed("stop" as const))),
+  })
+  export interface FinishParams extends Schema.Schema.Type<typeof FinishParams> {}
 
   export const FinishPayload = Schema.Struct({
     id: Schema.String,
     reason: Schema.optionalKey(FinishReason),
   })
-  export interface FinishPayload
-    extends Schema.Schema.Type<typeof FinishPayload> {}
-
-  export const FinishParams = Schema.Struct({
-    id: Schema.String,
-    reason: FinishReason.pipe(
-      Schema.withDecodingDefault(Effect.succeed("stop" as const)),
-    ),
-  })
-  export interface FinishParams extends Schema.Schema.Type<
-    typeof FinishParams
-  > {}
+  export interface FinishPayload extends Schema.Schema.Type<typeof FinishPayload> {}
 
   export const DisconnectParams = Schema.Struct({ id: Schema.String })
-  export interface DisconnectParams extends Schema.Schema.Type<
-    typeof DisconnectParams
-  > {}
+  export interface DisconnectParams extends Schema.Schema.Type<typeof DisconnectParams> {}
 
   export const Request = Schema.Union([
     Handshake.Request,
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("llm.chunk"),
-      params: ChunkParams,
-    }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("llm.finish"),
-      params: FinishParams,
-    }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("llm.disconnect"),
-      params: DisconnectParams,
-    }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("tool.attach"),
-      params: ToolAttachParams,
-    }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("tool.update"),
-      params: ToolUpdateParams,
-    }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("tool.finish"),
-      params: ToolFinishParams,
-    }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("tool.fail"),
-      params: ToolFailParams,
-    }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.chunk"), params: ChunkParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.finish"), params: FinishParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.disconnect"), params: DisconnectParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("tool.attach"), params: ToolAttachParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("tool.update"), params: ToolUpdateParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("tool.finish"), params: ToolFinishParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("tool.fail"), params: ToolFailParams }),
     Schema.Struct({
       ...JsonRpc.RequestFields,
       method: Schema.Literals(["llm.attach", "llm.pending"]),
@@ -618,18 +561,12 @@ export namespace Backend {
   ])
   export type Request = Schema.Schema.Type<typeof Request>
   export const decodeRequest = Schema.decodeUnknownSync(Request)
+  export const decodeRequestEffect = Schema.decodeUnknownEffect(Schema.fromJsonString(Request))
 
-  export const OpenedExchange = Schema.Struct({
-    id: Schema.String,
-    url: Schema.String,
-    body: Schema.Json,
-  })
-  export interface OpenedExchange
-    extends Schema.Schema.Type<typeof OpenedExchange> {}
+  export const ProviderInvocation = Schema.Struct({ id: Schema.String, url: Schema.String, body: Schema.Json })
+  export interface ProviderInvocation extends Schema.Schema.Type<typeof ProviderInvocation> {}
 
-  export const Pending = Schema.Struct({
-    invocations: Schema.Array(OpenedExchange),
-  })
+  export const Pending = Schema.Struct({ invocations: Schema.Array(ProviderInvocation) })
   export interface Pending extends Schema.Schema.Type<typeof Pending> {}
 
   export const NetworkLogEntry = Schema.Struct({
@@ -638,7 +575,60 @@ export namespace Backend {
     url: Schema.String,
     matched: Schema.Boolean,
   })
-  export interface NetworkLogEntry extends Schema.Schema.Type<
-    typeof NetworkLogEntry
-  > {}
+  export interface NetworkLogEntry extends Schema.Schema.Type<typeof NetworkLogEntry> {}
 }
+
+export class SimulationRequestError extends Schema.TaggedErrorClass<SimulationRequestError>()(
+  "SimulationRequestError",
+  {
+    method: Schema.String,
+    code: Schema.Number,
+    message: Schema.String,
+    data: Schema.optionalKey(Schema.Json),
+  },
+) {}
+
+const request = <
+  const Tag extends string,
+  Payload extends Schema.Top | Schema.Struct.Fields = typeof Schema.Void,
+  Success extends Schema.Top = typeof Schema.Void,
+>(
+  tag: Tag,
+  options?: {
+    readonly payload?: Payload
+    readonly success?: Success
+  },
+) => Rpc.make(tag, { ...options, error: SimulationRequestError })
+
+export const UiRpcs = RpcGroup.make(
+  request("simulation.handshake", { payload: Handshake.Params, success: Handshake.Response }),
+  request("ui.state", { success: Frontend.State }),
+  request("ui.snapshot", { success: Frontend.SemanticSnapshot }),
+  request("ui.capture", { success: Frontend.CapturedFrame }),
+  request("ui.matches", { payload: Frontend.MatchesParams, success: Frontend.Matches }),
+  request("ui.screenshot", {
+    payload: Schema.UndefinedOr(Frontend.ScreenshotParams),
+    success: Frontend.Screenshot,
+  }),
+  request("ui.recording.finish", { success: Frontend.RecordingFinish }),
+  request("ui.type", { payload: Frontend.TypeParams, success: Frontend.State }),
+  request("ui.press", { payload: Frontend.PressParams, success: Frontend.State }),
+  request("ui.enter", { success: Frontend.State }),
+  request("ui.arrow", { payload: Frontend.ArrowParams, success: Frontend.State }),
+  request("ui.focus", { payload: Frontend.FocusParams, success: Frontend.State }),
+  request("ui.click", { payload: Frontend.ClickParams, success: Frontend.State }),
+  request("ui.resize", { payload: Frontend.ResizeParams, success: Frontend.State }),
+)
+
+export const BackendRpcs = RpcGroup.make(
+  request("simulation.handshake", { payload: Handshake.Params, success: Handshake.Response }),
+  request("llm.attach", { success: Backend.Attached }),
+  request("llm.pending", { success: Backend.Pending }),
+  request("llm.chunk", { payload: Backend.ChunkParams, success: Backend.Ok }),
+  request("llm.finish", { payload: Backend.FinishPayload, success: Backend.Ok }),
+  request("llm.disconnect", { payload: Backend.DisconnectParams, success: Backend.Ok }),
+  request("tool.attach", { payload: Backend.ToolAttachParams, success: Backend.Attached }),
+  request("tool.update", { payload: Backend.ToolUpdateParams, success: Backend.Ok }),
+  request("tool.finish", { payload: Backend.ToolFinishParams, success: Backend.Ok }),
+  request("tool.fail", { payload: Backend.ToolFailParams, success: Backend.Ok }),
+)

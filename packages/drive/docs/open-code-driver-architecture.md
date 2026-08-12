@@ -153,7 +153,7 @@ exposed as `driver.opencode` and `ScriptContext.opencode`.
 
 ## Canonical Protocol
 
-`simulation/protocol.ts` contains the single schema definition for OpenCode's
+`@opencode-ai/protocol/simulation` contains the single schema definition for OpenCode's
 handshake, frontend, and backend simulation messages. `client/protocol.ts`
 publishes those namespaces without redefining their data types.
 

@@ -7,7 +7,7 @@ import {
   type UiConnection,
 } from "../simulation/connector.js"
 import { Frontend } from "../client/protocol.js"
-import type { SimulationRequestError } from "../simulation/rpc.js"
+import type { SimulationRequestError } from "@opencode-ai/protocol/simulation"
 
 export interface WaitOptions {
   /** Maximum wait in milliseconds. Defaults to 5,000. */

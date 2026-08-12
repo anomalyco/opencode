@@ -7,8 +7,7 @@ import {
   RpcClientError,
   type RpcMessage,
 } from "effect/unstable/rpc"
-import { JsonRpc } from "./protocol.js"
-import { SimulationRequestError } from "./rpc.js"
+import { JsonRpc, SimulationRequestError } from "@opencode-ai/protocol/simulation"
 
 interface PendingRequest {
   readonly clientId: number

@@ -5,7 +5,7 @@
 The imported baseline is `1.4.3` and the workspace package remains `private` until release setup is complete.
 Do not remove that guard or publish from this repository until both release gates are complete:
 
-1. The version of `@opencode-ai/client` written into the packed Drive manifest is available on npm.
+1. The versions of `@opencode-ai/client` and `@opencode-ai/protocol` written into the packed Drive manifest are available on npm, including the `@opencode-ai/protocol/simulation` export.
 2. npm package administration and trusted publishing move from `anomalyco/opencode-drive` to `anomalyco/opencode`.
 
 The npm package is currently maintained by `jlongster`, and its trusted publisher is the old repository's

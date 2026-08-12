@@ -24,12 +24,12 @@ import type { Response } from "./llm-responder.js"
 export type Completion = Deferred.Deferred<void, LlmControllerError>
 
 export type ServeHandler = (
-  request: Backend.OpenedExchange,
+  request: Backend.ProviderInvocation,
   index: number,
 ) => Response
 
 export type TitleHandler = (
-  request: Backend.OpenedExchange,
+  request: Backend.ProviderInvocation,
   index: number,
 ) => Effect.Effect<string, LlmControllerError>
 
@@ -39,7 +39,7 @@ export interface QueuedResponse {
 }
 
 export interface AttachedRequest {
-  readonly request: Backend.OpenedExchange
+  readonly request: Backend.ProviderInvocation
   readonly backend: BackendConnection
 }
 

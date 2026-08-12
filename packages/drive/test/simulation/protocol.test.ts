@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest"
-import { Backend } from "../../src/simulation/protocol.js"
+import { Backend } from "@opencode-ai/protocol/simulation"
 
 it("decodes the canonical dynamic tool lifecycle", () => {
   expect(

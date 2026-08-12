@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
-import type { Backend } from "../simulation/protocol.js"
+import { Backend } from "@opencode-ai/protocol/simulation"
 
 const PositiveInt = Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))
 
@@ -168,7 +168,11 @@ export interface StaticControls {
 export type Content = Backend.ToolContent
 export type DynamicRegistration = Backend.ToolRegistration
 export type AttachParams = Backend.ToolAttachParams
-export type Progress = Backend.ToolProgress
+export const Progress = Schema.Struct({
+  structured: Schema.Record(Schema.String, Schema.Json),
+  content: Schema.optionalKey(Schema.Array(Backend.ToolContent)),
+})
+export interface Progress extends Schema.Schema.Type<typeof Progress> {}
 export type Output = Backend.ToolOutput
 export type Cancellation = Backend.ToolCancellation
 
@@ -195,7 +199,7 @@ export interface Invocation {
   /** Effective provider-visible name, including any flattened namespace. */
   readonly name: string
   readonly input: Backend.ToolInvocation["input"]
-  readonly context: Backend.ToolInvocation["context"]
+  readonly context: Omit<Backend.ToolInvocation["context"], "id"> & { readonly callID: string }
   readonly progress: (update: Progress) => Effect.Effect<void, LifecycleError>
   readonly finish: (output: Output) => Effect.Effect<void, LifecycleError>
   readonly fail: (message: string) => Effect.Effect<void, LifecycleError>

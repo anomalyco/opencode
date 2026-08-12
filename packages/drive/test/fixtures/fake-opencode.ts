@@ -188,7 +188,7 @@ const backend = role === "client" ? undefined : Bun.serve({
                   sessionID: "ses_dynamic",
                   agent: "build",
                   messageID: "msg_dynamic",
-                  callID: "call_lookup",
+                  id: "call_lookup",
                 },
               },
             }),

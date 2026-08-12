@@ -8,4 +8,4 @@ export const defaultBackendPort = 40950
 export { Backend, Frontend, Handshake, JsonRpc, SimulationProtocol } from "./protocol.js"
 export type BackendFinishReason = Backend.FinishReason
 export type BackendItem = Backend.Item
-export type OpenedExchange = Backend.OpenedExchange
+export type OpenedExchange = Backend.ProviderInvocation

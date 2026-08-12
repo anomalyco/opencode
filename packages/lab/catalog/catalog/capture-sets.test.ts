@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { resolve } from "node:path"
 import {
   captureMatrixManifest,
   captureSetId,
@@ -15,7 +16,7 @@ describe("capture revision sets", () => {
       "--theme", "opencode",
       "--theme", "rosepine",
     ], "/default")).toEqual({
-      opencode: `${process.cwd()}/opencode`,
+      opencode: resolve("opencode"),
       revisions: ["v2~1", "v2"],
       themes: ["opencode", "rosepine"],
       flow: undefined,

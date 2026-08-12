@@ -16,4 +16,4 @@ export {
   UiWaitOptionsError,
 } from "../driver/ui.js"
 export { SimulationCompatibilityError } from "../simulation/connector.js"
-export { SimulationRequestError } from "../simulation/rpc.js"
+export { SimulationRequestError } from "@opencode-ai/protocol/simulation"

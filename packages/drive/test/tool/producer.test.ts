@@ -30,7 +30,7 @@ const invocation = {
     sessionID: "ses_tools",
     agent: "build",
     messageID: "msg_tools",
-    callID: "call_lookup",
+    id: "call_lookup",
   },
 } as const
 
@@ -56,7 +56,17 @@ it.live("attaches, sequences progress, and settles one dynamic invocation", () =
       notify(socket, "tool.invocation", invocation)
       const call = yield* controller.controls.take("call_lookup")
 
-      expect(call).toMatchObject(invocation)
+      expect(call).toMatchObject({
+        id: invocation.id,
+        name: invocation.name,
+        input: invocation.input,
+        context: {
+          sessionID: invocation.context.sessionID,
+          agent: invocation.context.agent,
+          messageID: invocation.context.messageID,
+          callID: invocation.context.id,
+        },
+      })
       yield* call.progress({
         structured: { phase: "searching" },
         content: [{ type: "text", text: "Searching" }],
@@ -211,7 +221,7 @@ it.live("bounds retained unclaimed cancellations", () =>
         notify(socket, "tool.invocation", {
           ...invocation,
           id: `tool_${index}`,
-          context: { ...invocation.context, callID: `call_${index}` },
+          context: { ...invocation.context, id: `call_${index}` },
         })
         notify(socket, "tool.cancel", {
           id: `tool_${index}`,
@@ -251,7 +261,7 @@ it.live("settles concurrent invocations in controlled reverse order", () =>
         ...invocation,
         id: "tool_2",
         input: { query: "second" },
-        context: { ...invocation.context, callID: "call_second" },
+        context: { ...invocation.context, id: "call_second" },
       })
 
       const second = yield* controller.controls.take("call_second")
@@ -401,7 +411,7 @@ it.live("preserves a replacement intent when its acknowledgement is lost", () =>
         ...invocation,
         id: "tool_2",
         name: "search",
-        context: { ...invocation.context, callID: "call_search" },
+        context: { ...invocation.context, id: "call_search" },
       }
       const firstReplacement = yield* Deferred.make<void>()
       const peer = startTransportPeer(({ request, socket }) => {
@@ -1109,7 +1119,7 @@ it.live("drains a reconnect that finishes during settlement commit", () =>
       const staleInvocation = {
         ...invocation,
         id: "tool_stale",
-        context: { ...invocation.context, callID: "call_stale" },
+        context: { ...invocation.context, id: "call_stale" },
       }
       const peer = startTransportPeer(({ request, socket }) => {
         if (request.method === "tool.attach") {

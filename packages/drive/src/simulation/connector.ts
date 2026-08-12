@@ -8,14 +8,16 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { RpcClient, RpcClientError } from "effect/unstable/rpc"
-import packageJson from "../../package.json" with { type: "json" }
-import * as OpenCodeRpcProtocol from "./opencode-protocol.js"
 import {
   Backend as BackendProtocol,
+  BackendRpcs,
   Frontend as FrontendProtocol,
   Handshake,
-} from "./protocol.js"
-import { BackendRpcs, SimulationRequestError, UiRpcs } from "./rpc.js"
+  SimulationRequestError,
+  UiRpcs,
+} from "@opencode-ai/protocol/simulation"
+import packageJson from "../../package.json" with { type: "json" }
+import * as OpenCodeRpcProtocol from "./opencode-protocol.js"
 
 export class SimulationConnectionError extends Schema.TaggedErrorClass<SimulationConnectionError>()(
   "SimulationConnectionError",
@@ -102,7 +104,7 @@ export interface BackendConnection {
   readonly rpc: BackendClient
   readonly compatibility: EndpointCompatibility
   readonly requests: Stream.Stream<
-    BackendProtocol.OpenedExchange,
+    BackendProtocol.ProviderInvocation,
     Schema.SchemaError
   >
   readonly toolEvents: Stream.Stream<ToolEvent, Schema.SchemaError>
@@ -195,7 +197,7 @@ export const backend = Effect.fn("SimulationConnector.backend")(function* (
   options?: Options,
 ) {
   const requests = yield* Queue.unbounded<
-    BackendProtocol.OpenedExchange,
+    BackendProtocol.ProviderInvocation,
     Schema.SchemaError
   >()
   const toolEvents = yield* Queue.unbounded<ToolEvent, Schema.SchemaError>()
@@ -214,7 +216,7 @@ export const backend = Effect.fn("SimulationConnector.backend")(function* (
       switch (method) {
         case "llm.request":
           return Effect.matchEffect(
-            Schema.decodeUnknownEffect(BackendProtocol.OpenedExchange)(params),
+            Schema.decodeUnknownEffect(BackendProtocol.ProviderInvocation)(params),
             {
               onFailure: (error) => Queue.fail(requests, error).pipe(Effect.asVoid),
               onSuccess: (request) => Queue.offer(requests, request).pipe(Effect.asVoid),

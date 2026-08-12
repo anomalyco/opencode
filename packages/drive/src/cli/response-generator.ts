@@ -58,7 +58,7 @@ export function createResponseSettings() {
 
 export function generateResponse(
   configuration: ResponseConfiguration,
-  request: Backend.OpenedExchange,
+  request: Backend.ProviderInvocation,
 ): {
   readonly items: ReadonlyArray<Backend.Item>
   readonly finish: Backend.FinishReason

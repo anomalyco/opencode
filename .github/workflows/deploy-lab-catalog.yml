@@ -8,6 +8,8 @@ on:
       - "bun.lock"
       - "package.json"
       - "packages/drive/**"
+      - "packages/protocol/src/simulation.ts"
+      - "packages/simulation/**"
       - "packages/lab/catalog/**"
   workflow_dispatch:
 
@@ -29,11 +31,11 @@ jobs:
 
       - name: Validate
         run: |
+          bun --cwd packages/protocol typecheck
+          bun --cwd packages/simulation typecheck
           bun --cwd packages/drive run check
           bun --cwd packages/drive run test
-          bun --cwd packages/lab/catalog run lint
-          bun --cwd packages/lab/catalog typecheck
-          bun --cwd packages/lab/catalog run test
+          bun --cwd packages/lab/catalog run check
 
       - name: Deploy
         working-directory: packages/lab/catalog

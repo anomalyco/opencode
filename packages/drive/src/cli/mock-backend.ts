@@ -50,7 +50,7 @@ export async function connectMockBackend(
 
 const respond = Effect.fn("DriveCli.mockRespond")(function* (
   backend: SimulationConnector.BackendConnection,
-  request: Backend.OpenedExchange,
+  request: Backend.ProviderInvocation,
   responses: ReturnType<typeof createResponseSettings>,
 ) {
   const response = generateResponse(responses.current(), request)

@@ -203,7 +203,7 @@ describe("OpenCode backend simulation transport", () => {
           sessionID: "ses_tools",
           agent: "build",
           messageID: "msg_tools",
-          callID: "call_lookup",
+          id: "call_lookup",
         },
       }
       const peer = startTransportPeer(({ request, socket }) => {

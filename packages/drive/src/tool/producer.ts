@@ -15,8 +15,7 @@ import {
   SimulationConnectionError,
   type BackendConnection,
 } from "../simulation/connector.js"
-import { Backend } from "../simulation/protocol.js"
-import { SimulationRequestError } from "../simulation/rpc.js"
+import { Backend, SimulationRequestError } from "@opencode-ai/protocol/simulation"
 import {
   LifecycleError,
   type AttachParams,
@@ -24,7 +23,7 @@ import {
   type DynamicControls,
   type Invocation,
   type Output,
-  type Progress,
+  Progress,
 } from "./types.js"
 
 export interface BackendAttachment {
@@ -71,7 +70,7 @@ type AttachmentIntent = {
 }
 
 const decodeAttach = Schema.decodeUnknownEffect(Backend.ToolAttachParams)
-const decodeProgress = Schema.decodeUnknownEffect(Backend.ToolProgress)
+const decodeProgress = Schema.decodeUnknownEffect(Progress)
 const decodeOutput = Schema.decodeUnknownEffect(Backend.ToolOutput)
 const decodeFailure = Schema.decodeUnknownEffect(Schema.String)
 const decodeCallID = Schema.decodeUnknownEffect(Schema.String)
@@ -346,7 +345,12 @@ export const make = Effect.fn("ToolProducer.make")(function* (
       id: invocation.id,
       name: invocation.name,
       input: invocation.input,
-      context: invocation.context,
+      context: {
+        sessionID: invocation.context.sessionID,
+        agent: invocation.context.agent,
+        messageID: invocation.context.messageID,
+        callID: invocation.context.id,
+      },
       progress: (update: Progress) =>
         operate(
           record,
@@ -357,11 +361,11 @@ export const make = Effect.fn("ToolProducer.make")(function* (
                 "progress",
                 "rejected",
                 error.message,
-                invocation.context.callID,
+                invocation.context.id,
               ),
             ),
             Effect.flatMap((decoded) =>
-              request("progress", invocation.context.callID, (backend) =>
+              request("progress", invocation.context.id, (backend) =>
                 backend.updateTool({
                   id: invocation.id,
                   sequence: record.sequence,
@@ -386,11 +390,11 @@ export const make = Effect.fn("ToolProducer.make")(function* (
                 "finish",
                 "rejected",
                 error.message,
-                invocation.context.callID,
+                invocation.context.id,
               ),
             ),
             Effect.flatMap((decoded) =>
-              request("finish", invocation.context.callID, (backend) =>
+              request("finish", invocation.context.id, (backend) =>
                 backend.finishTool({ id: invocation.id, output: decoded }),
               ),
             ),
@@ -406,11 +410,11 @@ export const make = Effect.fn("ToolProducer.make")(function* (
                 "fail",
                 "rejected",
                 error.message,
-                invocation.context.callID,
+                invocation.context.id,
               ),
             ),
             Effect.flatMap((decoded) =>
-              request("fail", invocation.context.callID, (backend) =>
+              request("fail", invocation.context.id, (backend) =>
                 backend.failTool({ id: invocation.id, message: decoded }),
               ),
             ),
@@ -442,7 +446,7 @@ export const make = Effect.fn("ToolProducer.make")(function* (
                 "take",
                 "rejected",
                 `dynamic tool invocation ${invocation.id} was replayed with different input`,
-                invocation.context.callID,
+                invocation.context.id,
               ),
             )
           return
@@ -455,7 +459,7 @@ export const make = Effect.fn("ToolProducer.make")(function* (
                 "take",
                 "rejected",
                 `dynamic tool invocation ${invocation.id} was reused with different input`,
-                invocation.context.callID,
+                invocation.context.id,
               ),
             )
           return
