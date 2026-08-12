@@ -120,7 +120,10 @@ const layer: Layer.Layer<
       }
 
       // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
-      if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      // OPENCODE_DISABLE_PROJECT_INSTRUCTIONS skips discovery of repository-controlled
+      // project instruction files (AGENTS.md/CLAUDE.md/CONTEXT.md); trusted global
+      // user instructions above remain eligible.
+      if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG && !Flag.OPENCODE_DISABLE_PROJECT_INSTRUCTIONS) {
         for (const file of instructionFiles) {
           const matches = yield* fs
             .findUp(file, ctx.directory, ctx.worktree)
@@ -181,6 +184,10 @@ const layer: Layer.Layer<
       filepath: string,
       messageID: MessageID,
     ) {
+      // OPENCODE_DISABLE_PROJECT_INSTRUCTIONS suppresses the nearby-instructions-on-read
+      // walk: repository-controlled AGENTS.md/CLAUDE.md/CONTEXT.md files discovered by
+      // walking upward from the file being read must not enter the model/system context.
+      if (Flag.OPENCODE_DISABLE_PROJECT_INSTRUCTIONS) return []
       const sys = yield* systemPaths()
       const already = extract(messages)
       const results: { filepath: string; content: string }[] = []

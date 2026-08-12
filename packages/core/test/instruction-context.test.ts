@@ -290,6 +290,144 @@ describe("InstructionContext", () => {
     }),
   )
 
+  it.effect("honors OPENCODE_DISABLE_PROJECT_INSTRUCTIONS and skips upward project AGENTS.md scan", () =>
+    Effect.gen(function* () {
+      const previous = process.env.OPENCODE_DISABLE_PROJECT_INSTRUCTIONS
+      let scanned = false
+      process.env.OPENCODE_DISABLE_PROJECT_INSTRUCTIONS = "1"
+
+      yield* SystemContextRegistry.Service.pipe(
+        Effect.flatMap((service) => service.load()),
+        Effect.provide(
+          instructionLayer({
+            config: "/global",
+            filesystemLayer: Layer.effect(
+              FSUtil.Service,
+              FSUtil.Service.pipe(
+                Effect.map((fs) => FSUtil.Service.of({ ...fs, up: () => Effect.sync(() => ((scanned = true), [])) })),
+              ),
+            ).pipe(Layer.provide(LayerNode.compile(FSUtil.node))),
+            locationServiceLayer: Layer.succeed(
+              Location.Service,
+              Location.Service.of(location({ directory: AbsolutePath.make("/repo") })),
+            ),
+          }),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (previous === undefined) delete process.env.OPENCODE_DISABLE_PROJECT_INSTRUCTIONS
+            else process.env.OPENCODE_DISABLE_PROJECT_INSTRUCTIONS = previous
+          }),
+        ),
+      )
+
+      expect(scanned).toBe(false)
+    }),
+  )
+
+  it.live("keeps a sentinel project AGENTS.md out of the baseline when OPENCODE_DISABLE_PROJECT_INSTRUCTIONS is set", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const previous = process.env.OPENCODE_DISABLE_PROJECT_INSTRUCTIONS
+          process.env.OPENCODE_DISABLE_PROJECT_INSTRUCTIONS = "1"
+
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const directory = path.join(project, "packages", "core")
+          const globalFile = path.join(global, "AGENTS.md")
+          const projectFile = path.join(project, "AGENTS.md")
+          const sentinel = "SENTINEL_PROJECT_INSTRUCTIONS_MUST_NOT_LOAD"
+          const globalContent = "global-trusted"
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(directory, { recursive: true })
+            await fs.writeFile(globalFile, globalContent)
+            await fs.writeFile(projectFile, sentinel)
+          })
+
+          const load = SystemContextRegistry.Service.pipe(
+            Effect.flatMap((service) => service.load()),
+            Effect.provide(
+              instructionLayer({
+                config: global,
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(
+                    location(
+                      { directory: AbsolutePath.make(directory) },
+                      { projectDirectory: AbsolutePath.make(project) },
+                    ),
+                  ),
+                ),
+              }),
+            ),
+          )
+
+          const initialized = yield* SystemContext.initialize(yield* load).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (previous === undefined) delete process.env.OPENCODE_DISABLE_PROJECT_INSTRUCTIONS
+                else process.env.OPENCODE_DISABLE_PROJECT_INSTRUCTIONS = previous
+              }),
+            ),
+          )
+
+          expect(initialized.baseline).toBe(`Instructions from: ${globalFile}\n${globalContent}`)
+          expect(initialized.baseline).not.toContain(sentinel)
+        }),
+      ),
+    ),
+  )
+
+  it.live("loads a nested working-directory project AGENTS.md by default (regression for OPENCODE_DISABLE_PROJECT_INSTRUCTIONS)", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          const directory = path.join(project, "packages", "core")
+          const projectFile = path.join(project, "AGENTS.md")
+          const nestedFile = path.join(directory, "AGENTS.md")
+          const sentinel = "NESTED_SENTINEL_PROJECT_INSTRUCTIONS"
+          yield* Effect.promise(async () => {
+            await fs.mkdir(directory, { recursive: true })
+            await fs.writeFile(projectFile, "root-project")
+            await fs.writeFile(nestedFile, sentinel)
+          })
+
+          const load = SystemContextRegistry.Service.pipe(
+            Effect.flatMap((service) => service.load()),
+            Effect.provide(
+              instructionLayer({
+                config: path.join(tmp.path, "global"),
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(
+                    location(
+                      { directory: AbsolutePath.make(directory) },
+                      { projectDirectory: AbsolutePath.make(project) },
+                    ),
+                  ),
+                ),
+              }),
+            ),
+          )
+
+          const initialized = yield* SystemContext.initialize(yield* load)
+
+          expect(initialized.baseline).toContain(`Instructions from: ${nestedFile}\n${sentinel}`)
+          expect(initialized.baseline).toContain(`Instructions from: ${projectFile}\nroot-project`)
+        }),
+      ),
+    ),
+  )
+
   it.effect("does not discover project instructions outside the canonical project root", () =>
     Effect.gen(function* () {
       let scanned = false

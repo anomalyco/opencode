@@ -54,6 +54,17 @@ export const Flag = {
   get OPENCODE_DISABLE_PROJECT_CONFIG() {
     return truthy("OPENCODE_DISABLE_PROJECT_CONFIG")
   },
+  // When set, opencode does not discover or inject project/local AGENTS.md or
+  // CLAUDE.md files while traversing from the working directory to the
+  // repository root. Trusted global user instructions (~/.config/opencode/AGENTS.md,
+  // ~/.claude/CLAUDE.md) remain eligible. Intended for automation such as
+  // independent code reviewers that must not honor repository-controlled
+  // instruction files. Set by the global `--no-project-instructions` CLI switch
+  // (which takes precedence over a pre-existing env value) and by the
+  // OPENCODE_DISABLE_PROJECT_INSTRUCTIONS env var directly.
+  get OPENCODE_DISABLE_PROJECT_INSTRUCTIONS() {
+    return truthy("OPENCODE_DISABLE_PROJECT_INSTRUCTIONS")
+  },
   get OPENCODE_EXPERIMENTAL_REFERENCES() {
     return enabledByExperimental("OPENCODE_EXPERIMENTAL_REFERENCES")
   },

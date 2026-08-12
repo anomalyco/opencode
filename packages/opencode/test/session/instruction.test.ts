@@ -262,3 +262,168 @@ describe("Instruction.systemPaths global config", () => {
     }),
   )
 })
+
+// Saves and restores an env var around an effect. The Instruction service reads
+// OPENCODE_DISABLE_PROJECT_INSTRUCTIONS via the synchronous `Flag` getter at
+// access time, so toggling the env var before the effect is observed directly.
+// `Effect.ensuring` is applied as a pipe operator (Effect v4) so the restore
+// runs on success, failure, or defect.
+const withEnvVar = <A, E, R>(key: string, value: string | undefined, self: Effect.Effect<A, E, R>) => {
+  const previous = process.env[key]
+  if (value === undefined) delete process.env[key]
+  else process.env[key] = value
+  return self.pipe(
+    Effect.ensuring(
+      Effect.sync(() => {
+        if (previous === undefined) delete process.env[key]
+        else process.env[key] = previous
+      }),
+    ),
+  )
+}
+
+const PROJECT_AGENTS_SENTINEL = "SENTINEL_PROJECT_AGENTS_MUST_NOT_LOAD"
+const PROJECT_CLAUDE_SENTINEL = "SENTINEL_PROJECT_CLAUDE_MUST_NOT_LOAD"
+
+describe("Instruction OPENCODE_DISABLE_PROJECT_INSTRUCTIONS", () => {
+  it.live("keeps sentinel project AGENTS.md and CLAUDE.md out of systemPaths when the flag is set", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpWithFiles({ "AGENTS.md": "# Global Trusted" })
+      const projectTmp = yield* tmpWithFiles({
+        "AGENTS.md": PROJECT_AGENTS_SENTINEL,
+        "CLAUDE.md": PROJECT_CLAUDE_SENTINEL,
+        "src/file.ts": "const x = 1",
+      })
+
+      yield* withEnvVar("OPENCODE_DISABLE_PROJECT_INSTRUCTIONS", "1",
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const paths = yield* svc.systemPaths()
+
+          // Trusted global user instructions remain eligible.
+          expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(true)
+          // Repository-controlled project instructions are suppressed.
+          expect(paths.has(path.join(projectTmp, "AGENTS.md"))).toBe(false)
+          expect(paths.has(path.join(projectTmp, "CLAUDE.md"))).toBe(false)
+
+          const rules = yield* svc.system()
+          expect(rules).toEqual([`Instructions from: ${path.join(globalTmp, "AGENTS.md")}\n# Global Trusted`])
+          expect(rules.join("\n")).not.toContain(PROJECT_AGENTS_SENTINEL)
+          expect(rules.join("\n")).not.toContain(PROJECT_CLAUDE_SENTINEL)
+        }),
+      ).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
+  it.live("keeps sentinel project CLAUDE.md out of systemPaths when the flag is set and AGENTS.md is absent", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpWithFiles({ "AGENTS.md": "# Global Trusted" })
+      const projectTmp = yield* tmpWithFiles({
+        "CLAUDE.md": PROJECT_CLAUDE_SENTINEL,
+        "src/file.ts": "const x = 1",
+      })
+
+      yield* withEnvVar("OPENCODE_DISABLE_PROJECT_INSTRUCTIONS", "1",
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const paths = yield* svc.systemPaths()
+
+          expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(true)
+          expect(paths.has(path.join(projectTmp, "CLAUDE.md"))).toBe(false)
+
+          const rules = yield* svc.system()
+          expect(rules.join("\n")).not.toContain(PROJECT_CLAUDE_SENTINEL)
+        }),
+      ).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
+  it.live("loads sentinel project AGENTS.md by default (regression)", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpdirScoped()
+      const projectTmp = yield* tmpWithFiles({
+        "AGENTS.md": PROJECT_AGENTS_SENTINEL,
+        "CLAUDE.md": PROJECT_CLAUDE_SENTINEL,
+        "src/file.ts": "const x = 1",
+      })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+
+        // systemPaths picks the first project-level match (AGENTS.md wins over CLAUDE.md)
+        expect(paths.has(path.join(projectTmp, "AGENTS.md"))).toBe(true)
+        expect(paths.has(path.join(projectTmp, "CLAUDE.md"))).toBe(false)
+
+        const rules = yield* svc.system()
+        expect(rules.some((r) => r.includes(PROJECT_AGENTS_SENTINEL))).toBe(true)
+        expect(rules.join("\n")).not.toContain(PROJECT_CLAUDE_SENTINEL)
+      }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
+  it.live("loads sentinel project CLAUDE.md by default when AGENTS.md is absent", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpdirScoped()
+      const projectTmp = yield* tmpWithFiles({
+        "CLAUDE.md": PROJECT_CLAUDE_SENTINEL,
+        "src/file.ts": "const x = 1",
+      })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+
+        // With no AGENTS.md, CLAUDE.md is the first project-level match.
+        expect(paths.has(path.join(projectTmp, "CLAUDE.md"))).toBe(true)
+
+        const rules = yield* svc.system()
+        expect(rules.some((r) => r.includes(PROJECT_CLAUDE_SENTINEL))).toBe(true)
+      }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
+  it.live("does not attach nearby instructions on read when the flag is set (nested working directory)", () =>
+    withFiles(
+      {
+        "AGENTS.md": PROJECT_AGENTS_SENTINEL,
+        "CLAUDE.md": PROJECT_CLAUDE_SENTINEL,
+        "subdir/nested/file.ts": "const x = 1",
+      },
+      (dir) =>
+        withEnvVar(
+          "OPENCODE_DISABLE_PROJECT_INSTRUCTIONS",
+          "1",
+          Effect.gen(function* () {
+            const svc = yield* Instruction.Service
+            const filepath = path.join(dir, "subdir", "nested", "file.ts")
+            const id = MessageID.make("msg_message-disable-nested")
+
+            const results = yield* svc.resolve([], filepath, id)
+            expect(results).toEqual([])
+            expect(results.join("\n")).not.toContain(PROJECT_AGENTS_SENTINEL)
+            expect(results.join("\n")).not.toContain(PROJECT_CLAUDE_SENTINEL)
+          }),
+        ),
+    ),
+  )
+
+  it.live("attaches nearby AGENTS.md on read by default from a nested working directory (regression)", () =>
+    withFiles(
+      {
+        "subdir/AGENTS.md": "# Nested Instructions",
+        "subdir/nested/file.ts": "const x = 1",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const filepath = path.join(dir, "subdir", "nested", "file.ts")
+          const id = MessageID.make("msg_message-default-nested")
+
+          const results = yield* svc.resolve([], filepath, id)
+          expect(results.length).toBe(1)
+          expect(results[0].filepath).toBe(path.join(dir, "subdir", "AGENTS.md"))
+        }),
+    ),
+  )
+})

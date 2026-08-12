@@ -429,6 +429,17 @@ When a user's config is broken and opencode won't start, these env vars help:
 - `OPENCODE_DISABLE_PROJECT_CONFIG=1`: skip the project's local `opencode.json`
   and start from globals only. Run from the project directory, opencode loads,
   the user edits the broken file, then they restart without the flag.
+- `OPENCODE_DISABLE_PROJECT_INSTRUCTIONS=1`: do not discover or inject
+  repository-controlled project/local `AGENTS.md` or `CLAUDE.md` files while
+  traversing from the working directory to the repository root. Trusted global
+  user instructions (`~/.config/opencode/AGENTS.md`, `~/.claude/CLAUDE.md`)
+  remain eligible. The same behavior is available as the global CLI switch
+  `--no-project-instructions` (which takes precedence over a pre-existing env
+  value). Intended for automation such as independent code reviewers that
+  must not honor repository-controlled instruction files. The CLI switch is
+  recognized by the binary, so older versions that do not know it reject it
+  as an unknown option — use that as a fail-safe capability check rather than
+  relying on the env var alone (older versions silently ignore env vars).
 - `OPENCODE_CONFIG=/path/to/file.json`: load an additional explicit config.
 - `OPENCODE_CONFIG_CONTENT='{"$schema":"https://opencode.ai/config.json"}'`:
   inject inline JSON as a final local-scope merge.

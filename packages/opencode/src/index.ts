@@ -63,11 +63,31 @@ const cli = yargs(args)
     describe: "run without external plugins",
     type: "boolean",
   })
+  // `--no-project-instructions` opts out of repository-controlled project
+  // AGENTS.md/CLAUDE.md discovery. Defining the positive `project-instructions`
+  // too keeps yargs' auto-negation (`--no-foo` ↔ `foo`) symmetric and avoids
+  // `Unknown arguments: project-instructions` under `.strict()`. yargs lowers
+  // `--no-project-instructions` to `projectInstructions === false`, so the
+  // middleware keys off that exact value (undefined = default, true = no-op).
+  .option("project-instructions", {
+    type: "boolean",
+    hidden: true,
+  })
+  .option("no-project-instructions", {
+    describe: "do not load repository-controlled project AGENTS.md or CLAUDE.md files (automation/reviewer safe)",
+    type: "boolean",
+  })
   .middleware(async (opts) => {
     if (opts.printLogs) process.env.OPENCODE_PRINT_LOGS = "1"
     if (opts.logLevel) process.env.OPENCODE_LOG_LEVEL = opts.logLevel
     if (opts.pure) {
       process.env.OPENCODE_PURE = "1"
+    }
+    // The CLI switch takes precedence over a pre-existing env value so callers
+    // get a deterministic, fail-safe capability check: older binaries that do
+    // not know the flag reject it as an unknown option under `.strict()`.
+    if (opts.projectInstructions === false) {
+      process.env.OPENCODE_DISABLE_PROJECT_INSTRUCTIONS = "1"
     }
 
     Heap.start()
