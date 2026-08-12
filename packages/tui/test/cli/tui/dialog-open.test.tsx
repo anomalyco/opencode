@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
-import { DialogOpen } from "../../../src/component/dialog-open"
+import { DialogOpen, DialogOpenKey, loadDialogOpen } from "../../../src/component/dialog-open"
 import { ConfigProvider } from "../../../src/config"
 import { ClientProvider, useClient } from "../../../src/context/client"
 import { DataProvider, useData } from "../../../src/context/data"
@@ -131,7 +131,7 @@ test("shows the current project and opens its root", async () => {
   }
 })
 
-test("preserves a moved project when sessions arrive", async () => {
+test("waits for sessions before showing the populated picker", async () => {
   let resolveSessions!: (response: Response) => void
   const sessions = new Promise<Response>((resolve) => (resolveSessions = resolve))
   const fixture = await renderOpen((url) => {
@@ -301,15 +301,8 @@ async function renderOpen(
     storage = useStorage()
     onMount(
       () =>
-        void Promise.all([
-          beforeOpen?.({ data, location }),
-          data.project.sync().catch(() => {}),
-          client.api.session
-            .list({ limit: 50, order: "desc", parentID: null })
-            .then((response) => response.data)
-            .catch(() => []),
-        ]).then(([, , sessions]) =>
-          dialog.replace(() => <DialogOpen sessions={sessions} />, undefined, { key: "open", size: "large" }),
+        void Promise.all([beforeOpen?.({ data, location }), loadDialogOpen(data, client)]).then(([, sessions]) =>
+          dialog.replace(() => <DialogOpen sessions={sessions} />, undefined, { key: DialogOpenKey, size: "large" }),
         ),
     )
     return null

@@ -75,7 +75,7 @@ function init() {
     stack: [] as {
       element: JSX.Element
       onClose?: () => void
-      key?: string
+      key?: unknown
     }[],
     size: "medium" as DialogSize,
     centered: false,
@@ -156,7 +156,7 @@ function init() {
       })
       refocus()
     },
-    replace(input: any, onClose?: () => void, options?: { key?: string; size?: DialogSize }) {
+    replace(input: any, onClose?: () => void, options?: { key?: unknown; size?: DialogSize }) {
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
         focus?.blur()

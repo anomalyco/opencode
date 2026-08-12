@@ -20,8 +20,20 @@ import { Spinner } from "./spinner"
 import { projectName } from "../util/project"
 
 const RECENT_LIMIT = 8
+export const DialogOpenKey = Symbol("DialogOpen")
 
 type OpenTarget = { type: "session"; sessionID: string } | { type: "project"; directory: string }
+
+export async function loadDialogOpen(data: ReturnType<typeof useData>, client: ReturnType<typeof useClient>) {
+  const [, sessions] = await Promise.all([
+    data.project.sync().catch(() => {}),
+    client.api.session
+      .list({ limit: 50, order: "desc", parentID: null })
+      .then((response) => response.data)
+      .catch(() => [] as SessionInfo[]),
+  ])
+  return sessions
+}
 
 export function DialogOpen(props: { sessions: SessionInfo[] }) {
   const dialog = useDialog()

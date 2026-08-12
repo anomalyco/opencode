@@ -69,7 +69,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
-import { DialogOpen } from "./component/dialog-open"
+import { DialogOpen, DialogOpenKey, loadDialogOpen } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
 import { sessionTabsFitVertically } from "./ui/layout"
 import { ThemeErrorToast } from "./component/theme-error-toast"
@@ -682,19 +682,13 @@ function App(props: { pair?: DialogPairCredentials }) {
         category: "Session",
         slash: { name: "open", aliases: ["projects", "project"] },
         run: async () => {
-          if (dialog.key === "open" || openingOpen) return
+          if (dialog.key === DialogOpenKey || openingOpen) return
           const previous = dialog.stack.at(-1)
-          openingOpen = Promise.all([
-            data.project.sync().catch(() => {}),
-            client.api.session
-              .list({ limit: 50, order: "desc", parentID: null })
-              .then((response) => response.data)
-              .catch(() => [] as SessionInfo[]),
-          ]).then(([, sessions]) => sessions)
+          openingOpen = loadDialogOpen(data, client)
           const sessions = await openingOpen
           openingOpen = undefined
           if (dialog.stack.at(-1) !== previous) return
-          dialog.replace(() => <DialogOpen sessions={sessions} />, undefined, { key: "open", size: "large" })
+          dialog.replace(() => <DialogOpen sessions={sessions} />, undefined, { key: DialogOpenKey, size: "large" })
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
