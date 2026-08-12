@@ -33,7 +33,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
 import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
-import { extractResponseText, formatPromptTooLargeError } from "./github.shared"
+import { extractResponseText, formatPromptTooLargeError, isAllowedBot, isBotActor } from "./github.shared"
 
 type GitHubAuthor = {
   login: string
@@ -1165,6 +1165,16 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     async function assertPermissions() {
       // Only called for non-schedule events, so actor is defined
       console.log(`Asserting permissions for user ${actor}...`)
+
+      if (isBotActor(payload.sender)) {
+        if (!isAllowedBot(payload.sender, process.env["ALLOWED_BOTS"] || "")) {
+          throw new Error(
+            `Bot ${payload.sender.login} is not allowed to trigger this action. Add it to allowed_bots or use '*' to allow all bots.`,
+          )
+        }
+        console.log(`  allowed bot: ${payload.sender.login}`)
+        return
+      }
 
       let permission
       try {

@@ -109,6 +109,19 @@ Or you can set it up manually.
 
   `id-token: write` is not required in this mode because OIDC exchange is skipped. To use a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or another GitHub App token, store it as a secret and pass that secret as `GITHUB_TOKEN` instead.
 
+- `allowed_bots`: Optional comma-separated list of bot usernames allowed to trigger the action, or `*` to allow all bots. Bots are denied by default. Names are case-insensitive and may include or omit the `[bot]` suffix.
+
+  To allow an OpenCode GitHub App to trigger the action for issues or comments it creates, configure its bot username:
+
+  ```yaml
+  - uses: anomalyco/opencode/github@latest
+    with:
+      model: anthropic/claude-sonnet-4-20250514
+      allowed_bots: opencode-agent
+  ```
+
+  Only allow bots you trust. An allowed bot's issue or comment content is treated as an authorized prompt and bypasses the repository collaborator permission check. Avoid `allowed_bots: "*"` unless any bot with the ability to create a matching issue or comment should be allowed to invoke OpenCode.
+
 ---
 
 ## Supported Events
