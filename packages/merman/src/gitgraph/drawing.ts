@@ -8,9 +8,11 @@ interface BranchSpan {
   last: number
 }
 
-interface Transition {
-  fromLane: number
-  toLane: number
+interface Connections {
+  up?: boolean
+  down?: boolean
+  left?: boolean
+  right?: boolean
   style: GitGraphCellStyle
 }
 
@@ -25,35 +27,56 @@ export function drawGitGraphDiagramGrid(
   const laneByBranch = new Map(diagram.branches.map((branch, index) => [branch.name, index]))
   const commitById = new Map(diagram.commits.map((commit) => [commit.id, commit]))
   const spans = branchSpans(diagram, commitById)
-  const heads = new Map<string, string[]>()
-  for (const branch of diagram.branches) {
-    if (branch.head === undefined) continue
-    const names = heads.get(branch.head) ?? []
-    names.push(branch.name)
-    heads.set(branch.head, names)
-  }
+  const heads = branchHeads(diagram)
   const graphWidth = (diagram.branches.length - 1) * LANE_WIDTH + 1
   let labelWidth = 0
   for (const commit of diagram.commits) labelWidth = Math.max(labelWidth, diagramTextWidth(commitLabel(commit, heads)))
-  const transitions = diagram.commits.map((commit) => commitTransitions(commit, laneByBranch, commitById))
-  const transitionHeights = transitions.map((items, index) =>
-    index === 0 ? 0 : Math.max(1, ...items.map((item) => Math.abs(item.fromLane - item.toLane))),
-  )
-  const height = diagram.commits.length + transitionHeights.reduce((sum, value) => sum + value, 0)
+  const forks = diagram.commits.map((commit) => isFork(commit, laneByBranch, commitById))
+  const height = diagram.commits.length + forks.filter(Boolean).length
   const grid: GitGraphGrid = new DiagramCanvas(graphWidth + LABEL_GAP + labelWidth, height)
 
   let row = 0
   diagram.commits.forEach((commit, index) => {
-    const transitionHeight = transitionHeights[index]!
-    if (transitionHeight > 0) {
-      drawTransitionRows(grid, spans, laneByBranch, commit, index, row, transitionHeight, transitions[index]!)
-      row += transitionHeight
+    if (forks[index]) {
+      drawTransitionRow(grid, spans, laneByBranch, commitById, commit, index, row)
+      row += 1
     }
-    drawCommitRow(grid, diagram, spans, laneByBranch, commit, index, row)
+    drawCommitRow(grid, diagram, spans, laneByBranch, commitById, commit, index, row)
     grid.setText(graphWidth + LABEL_GAP, row, commitLabel(commit, heads), "label")
     row += 1
   })
   return grid
+}
+
+function drawTransitionRow(
+  grid: GitGraphGrid,
+  spans: Map<string, BranchSpan>,
+  laneByBranch: Map<string, number>,
+  commitById: Map<string, GitGraphCommit>,
+  commit: GitGraphCommit,
+  index: number,
+  y: number,
+): void {
+  const cells = new Map<number, Connections>()
+  for (const [branch, span] of spans) {
+    if (span.first >= index || span.last < index) continue
+    const lane = laneByBranch.get(branch)!
+    connect(cells, lane * LANE_WIDTH, { up: true, down: true }, branchStyle(lane))
+  }
+
+  const lane = laneByBranch.get(commit.branch)!
+  const firstParent = commit.parents[0] === undefined ? undefined : commitById.get(commit.parents[0])
+  if (firstParent && firstParent.branch !== commit.branch) {
+    const parentLane = laneByBranch.get(firstParent.branch)!
+    connectHorizontal(
+      cells,
+      parentLane,
+      lane,
+      { sourceUp: true, sourceDown: true, targetDown: true },
+      branchStyle(lane),
+    )
+  }
+  paintConnections(grid, cells, y)
 }
 
 function drawCommitRow(
@@ -61,71 +84,95 @@ function drawCommitRow(
   diagram: GitGraphDiagram,
   spans: Map<string, BranchSpan>,
   laneByBranch: Map<string, number>,
+  commitById: Map<string, GitGraphCommit>,
   commit: GitGraphCommit,
   index: number,
   y: number,
 ): void {
+  const cells = new Map<number, Connections>()
   for (const branch of diagram.branches) {
-    const lane = laneByBranch.get(branch.name)!
     const span = spans.get(branch.name)
-    if (span && span.first <= index && (span.last > index || branch.name === commit.branch)) {
-      grid.setCell(lane * LANE_WIDTH, y, "│", branchStyle(lane))
-    }
+    if (!span || span.first > index || (span.last <= index && branch.name !== commit.branch)) continue
+    const lane = laneByBranch.get(branch.name)!
+    connect(cells, lane * LANE_WIDTH, { up: index > 0, down: span.last > index }, branchStyle(lane))
   }
+
   const lane = laneByBranch.get(commit.branch)!
+  const secondParent = commit.parents[1] === undefined ? undefined : commitById.get(commit.parents[1])
+  if (secondParent) {
+    const parentLane = laneByBranch.get(secondParent.branch)!
+    connectHorizontal(cells, lane, parentLane, { sourceUp: true, targetUp: true }, branchStyle(parentLane))
+  }
+  paintConnections(grid, cells, y)
   grid.setCell(lane * LANE_WIDTH, y, commitGlyph(commit), commitStyle(commit))
 }
 
-function drawTransitionRows(
-  grid: GitGraphGrid,
-  spans: Map<string, BranchSpan>,
-  laneByBranch: Map<string, number>,
-  commit: GitGraphCommit,
-  index: number,
-  startY: number,
-  height: number,
-  transitions: readonly Transition[],
+function connectHorizontal(
+  cells: Map<number, Connections>,
+  sourceLane: number,
+  targetLane: number,
+  vertical: { sourceUp?: boolean; sourceDown?: boolean; targetUp?: boolean; targetDown?: boolean },
+  style: GitGraphCellStyle,
 ): void {
-  for (let row = 0; row < height; row += 1) {
-    const y = startY + row
-    for (const [branch, span] of spans) {
-      const lane = laneByBranch.get(branch)!
-      if (span.first < index && (span.last > index || branch === commit.branch)) {
-        grid.setCell(lane * LANE_WIDTH, y, "│", branchStyle(lane))
-      }
-    }
-    for (const transition of transitions) drawTransitionStep(grid, transition, row, height, y)
+  if (sourceLane === targetLane) return
+  const source = sourceLane * LANE_WIDTH
+  const target = targetLane * LANE_WIDTH
+  const direction = Math.sign(target - source)
+  connect(
+    cells,
+    source,
+    { ...verticalAt(vertical.sourceUp, vertical.sourceDown), ...(direction > 0 ? { right: true } : { left: true }) },
+    style,
+  )
+  for (let x = source + direction; x !== target; x += direction) {
+    connect(cells, x, { left: true, right: true }, style)
   }
+  connect(
+    cells,
+    target,
+    { ...verticalAt(vertical.targetUp, vertical.targetDown), ...(direction > 0 ? { left: true } : { right: true }) },
+    style,
+  )
 }
 
-function commitTransitions(
-  commit: GitGraphCommit,
-  laneByBranch: Map<string, number>,
-  commitById: Map<string, GitGraphCommit>,
-): Transition[] {
-  const result: Transition[] = []
-  const lane = laneByBranch.get(commit.branch)!
-  const firstParent = commit.parents[0] === undefined ? undefined : commitById.get(commit.parents[0])
-  if (firstParent && firstParent.branch !== commit.branch) {
-    result.push({ fromLane: laneByBranch.get(firstParent.branch)!, toLane: lane, style: branchStyle(lane) })
-  }
-  const secondParent = commit.parents[1] === undefined ? undefined : commitById.get(commit.parents[1])
-  if (secondParent) {
-    const fromLane = laneByBranch.get(secondParent.branch)!
-    result.push({ fromLane, toLane: lane, style: branchStyle(fromLane) })
-  }
-  return result
+function verticalAt(up: boolean | undefined, down: boolean | undefined): Pick<Connections, "up" | "down"> {
+  return { ...(up ? { up: true } : {}), ...(down ? { down: true } : {}) }
 }
 
-function drawTransitionStep(grid: GitGraphGrid, transition: Transition, row: number, height: number, y: number): void {
-  const distance = Math.abs(transition.fromLane - transition.toLane)
-  if (distance === 0) return
-  const firstStep = height - distance
-  if (row < firstStep) return
-  const direction = Math.sign(transition.toLane - transition.fromLane)
-  const step = row - firstStep
-  const lane = transition.fromLane + (direction > 0 ? step : -step - 1)
-  grid.setCell(lane * LANE_WIDTH + 1, y, direction > 0 ? "╲" : "╱", transition.style)
+function connect(
+  cells: Map<number, Connections>,
+  x: number,
+  additions: Omit<Connections, "style">,
+  style: GitGraphCellStyle,
+): void {
+  const current = cells.get(x)
+  cells.set(x, { ...current, ...additions, style: current?.style ?? style })
+}
+
+function paintConnections(grid: GitGraphGrid, cells: Map<number, Connections>, y: number): void {
+  for (const [x, connections] of cells) grid.setCell(x, y, connectionGlyph(connections), connections.style)
+}
+
+function connectionGlyph({ up, down, left, right }: Connections): string {
+  const mask = `${up ? 1 : 0}${down ? 1 : 0}${left ? 1 : 0}${right ? 1 : 0}`
+  const glyphs: Record<string, string> = {
+    "1100": "│",
+    "0011": "─",
+    "0101": "╭",
+    "0110": "╮",
+    "1001": "╰",
+    "1010": "╯",
+    "1101": "├",
+    "1110": "┤",
+    "0111": "┬",
+    "1011": "┴",
+    "1111": "┼",
+    "1000": "│",
+    "0100": "│",
+    "0010": "─",
+    "0001": "─",
+  }
+  return glyphs[mask] ?? " "
 }
 
 function branchSpans(diagram: GitGraphDiagram, commitById: Map<string, GitGraphCommit>): Map<string, BranchSpan> {
@@ -144,10 +191,30 @@ function branchSpans(diagram: GitGraphDiagram, commitById: Map<string, GitGraphC
   return spans
 }
 
+function branchHeads(diagram: GitGraphDiagram): Map<string, string[]> {
+  const heads = new Map<string, string[]>()
+  for (const branch of diagram.branches) {
+    if (branch.head === undefined) continue
+    const names = heads.get(branch.head) ?? []
+    names.push(branch.name)
+    heads.set(branch.head, names)
+  }
+  return heads
+}
+
+function isFork(
+  commit: GitGraphCommit,
+  laneByBranch: Map<string, number>,
+  commitById: Map<string, GitGraphCommit>,
+): boolean {
+  const parent = commit.parents[0] === undefined ? undefined : commitById.get(commit.parents[0])
+  return parent !== undefined && laneByBranch.get(parent.branch) !== laneByBranch.get(commit.branch)
+}
+
 function commitGlyph(commit: GitGraphCommit): string {
   if (commit.type === "REVERSE") return "⊗"
   if (commit.type === "HIGHLIGHT") return "◆"
-  return commit.parents.length > 1 ? "◎" : "○"
+  return commit.parents.length > 1 ? "◎" : "●"
 }
 
 function commitStyle(commit: GitGraphCommit): GitGraphCellStyle {
@@ -157,9 +224,9 @@ function commitStyle(commit: GitGraphCommit): GitGraphCellStyle {
 }
 
 function commitLabel(commit: GitGraphCommit, heads: Map<string, string[]>): string {
-  const subject = commit.message && commit.message !== commit.id ? `${commit.id} ${commit.message}` : commit.id
-  const decorations = [...(heads.get(commit.id) ?? []), ...commit.tags.map((tag) => `tag: ${tag}`)]
-  return decorations.length === 0 ? subject : `${subject}  (${decorations.join(", ")})`
+  const subject = commit.message ?? commit.id
+  const decorations = [...(heads.get(commit.id) ?? []), ...commit.tags].map((value) => `[${value}]`)
+  return decorations.length === 0 ? subject : `${subject}  ${decorations.join(" ")}`
 }
 
 function branchStyle(lane: number): GitGraphCellStyle {

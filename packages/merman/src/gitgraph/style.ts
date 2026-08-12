@@ -18,15 +18,16 @@ export type GitGraphStyleColors = Required<Record<GitGraphCellStyle, RGBA>>
 export function resolveGitGraphStyleColors(
   colors: Partial<Record<"primary" | "secondary" | "muted" | "warning" | "text", RGBA | undefined>> = {},
 ): GitGraphStyleColors {
+  const rail = colors.muted ?? rgba([111, 138, 126])
   return {
-    branch0: colors.primary ?? rgba(BRANCH_RGB[0]),
-    branch1: colors.warning ?? rgba(BRANCH_RGB[1]),
-    branch2: colors.secondary ?? rgba(BRANCH_RGB[2]),
-    branch3: rgba(BRANCH_RGB[3]),
-    branch4: rgba(BRANCH_RGB[4]),
-    branch5: rgba(BRANCH_RGB[5]),
-    branch6: rgba(BRANCH_RGB[6]),
-    branch7: rgba(BRANCH_RGB[7]),
+    branch0: rail,
+    branch1: rail,
+    branch2: rail,
+    branch3: rail,
+    branch4: rail,
+    branch5: rail,
+    branch6: rail,
+    branch7: rail,
     commit: colors.primary ?? rgba(BRANCH_RGB[0]),
     merge: colors.secondary ?? rgba(BRANCH_RGB[2]),
     highlight: colors.warning ?? rgba(BRANCH_RGB[1]),

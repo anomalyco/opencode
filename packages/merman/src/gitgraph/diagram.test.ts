@@ -47,15 +47,12 @@ describe("GitGraphDiagram", () => {
       commit id: "unrelated-fix"
       merge refactor id: "land-refactor" tag: "v2"`
 
-    expect(renderGitGraphDiagram(source)).toBe(`○    baseline
-│╲
-│ ○  extract-seam Extract seam
-│ │
-│ ○  add-tests  (refactor, tag: ready)
-│ │
-○ │  unrelated-fix
-│╱
-◎    land-refactor  (main, tag: v2)`)
+    expect(renderGitGraphDiagram(source)).toBe(`●    baseline
+├─╮
+│ ●  Extract seam
+│ ●  add-tests  [refactor] [ready]
+● │  unrelated-fix
+◎─╯  land-refactor  [main] [v2]`)
   })
 
   test("uses deterministic generated ids", () => {
@@ -83,7 +80,7 @@ describe("GitGraphDiagram", () => {
       branch feature
       checkout main
       commit id: next`),
-    ).toContain("base  (feature)")
+    ).toContain("base  [feature]")
   })
 
   test("places unordered branches before explicitly ordered branches", () => {
@@ -104,17 +101,16 @@ describe("GitGraphDiagram", () => {
     )
   })
 
-  test("uses diagonal routing rows for wide lane transitions", () => {
+  test("uses rounded routing for wide lane transitions", () => {
     expect(
       renderGitGraphDiagram(`gitGraph
         commit id: base
         branch one
         branch two
         commit id: work`),
-    ).toBe(`○      base  (main, one)
- ╲
-   ╲
-    ○  work  (two)`)
+    ).toBe(`●      base  [main] [one]
+├───╮
+    ●  work  [two]`)
   })
 
   test("preserves direction semantics while rendering vertically", () => {
