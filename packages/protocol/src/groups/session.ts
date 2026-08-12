@@ -647,6 +647,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
     .add(
       HttpApiEndpoint.post("session.interrupt", "/api/session/:sessionID/interrupt", {
         params: { sessionID: Session.ID },
+        query: { continue: BooleanFromString.pipe(Schema.optional) },
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,
       })
@@ -655,7 +656,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           OpenApi.annotations({
             identifier: "v2.session.interrupt",
             summary: "Interrupt session execution",
-            description: "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op.",
+            description:
+              "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes if durable pending work remains after interruption.",
           }),
         ),
     )

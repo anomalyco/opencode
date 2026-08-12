@@ -915,7 +915,7 @@ export type Endpoint5_31Output =
   | EventLog.Synced
 export type SessionLogOperation<E = never> = (input: Endpoint5_31Input) => Stream.Stream<Endpoint5_31Output, E>
 
-export type Endpoint5_32Input = { readonly sessionID: Session.ID }
+export type Endpoint5_32Input = { readonly sessionID: Session.ID; readonly continue?: boolean | undefined }
 export type Endpoint5_32Output = void
 export type SessionInterruptOperation<E = never> = (input: Endpoint5_32Input) => Effect.Effect<Endpoint5_32Output, E>
 
