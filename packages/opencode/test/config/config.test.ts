@@ -948,6 +948,84 @@ it.effect("creates a missing OPENCODE_CONFIG_DIR", () =>
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
+it.effect("reports a config error when OPENCODE_CONFIG_DIR cannot be created", () =>
+  Effect.gen(function* () {
+    if (process.platform === "win32") return
+
+    const readonly = path.join(yield* tmpdirScoped(), "readonly")
+    yield* FSUtil.use.ensureDir(readonly)
+    yield* FSUtil.use.chmod(readonly, 0o555)
+    yield* Effect.addFinalizer(() => FSUtil.use.chmod(readonly, 0o755).pipe(Effect.ignore))
+    const configDir = path.join(readonly, "opencode")
+
+    yield* withGlobalConfig({}, ({ dir }) =>
+      withProcessEnv(
+        "OPENCODE_CONFIG_DIR",
+        configDir,
+        Effect.gen(function* () {
+          const exit = yield* Config.use.get().pipe(provideInstanceEffect(dir), Effect.exit)
+
+          expect(Exit.isFailure(exit)).toBe(true)
+          const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+          expect(NamedError.hasName(error, "ConfigInvalidError")).toBe(true)
+          const data = (error as { data?: { path?: string; message?: string } }).data
+          expect(data?.path).toBe(configDir)
+          expect(data?.message).toContain("OPENCODE_CONFIG_DIR")
+        }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+      ),
+    )
+  }),
+)
+
+it.effect("reports a config error when OPENCODE_CONFIG points at a directory", () =>
+  Effect.gen(function* () {
+    const custom = yield* tmpdirScoped()
+    yield* withGlobalConfig({}, ({ dir }) =>
+      withProcessEnv(
+        "OPENCODE_CONFIG",
+        custom,
+        Effect.gen(function* () {
+          const exit = yield* Config.use.get().pipe(provideInstanceEffect(dir), Effect.exit)
+
+          expect(Exit.isFailure(exit)).toBe(true)
+          const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+          expect(NamedError.hasName(error, "ConfigInvalidError")).toBe(true)
+          const data = (error as { data?: { path?: string; message?: string } }).data
+          expect(data?.path).toBe(custom)
+          expect(data?.message).toContain("found a directory")
+          expect(data?.message).toContain("OPENCODE_CONFIG")
+        }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+      ),
+    )
+  }),
+)
+
+it.effect("reports a config error when OPENCODE_CONFIG_DIR points at a file", () =>
+  Effect.gen(function* () {
+    const custom = yield* tmpdirScoped()
+    const file = path.join(custom, "opencode-config")
+    yield* FSUtil.use.writeFileString(file, "{}")
+
+    yield* withGlobalConfig({}, ({ dir }) =>
+      withProcessEnv(
+        "OPENCODE_CONFIG_DIR",
+        file,
+        Effect.gen(function* () {
+          const exit = yield* Config.use.get().pipe(provideInstanceEffect(dir), Effect.exit)
+
+          expect(Exit.isFailure(exit)).toBe(true)
+          const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+          expect(NamedError.hasName(error, "ConfigInvalidError")).toBe(true)
+          const data = (error as { data?: { path?: string; message?: string } }).data
+          expect(data?.path).toBe(file)
+          expect(data?.message).toContain("found a file")
+          expect(data?.message).toContain("OPENCODE_CONFIG_DIR")
+        }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+      ),
+    )
+  }),
+)
+
 it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped()

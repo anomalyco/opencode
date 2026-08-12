@@ -23,7 +23,7 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { RemoteAuthError } from "@opencode-ai/core/v1/config/error"
+import { InvalidError, RemoteAuthError } from "@opencode-ai/core/v1/config/error"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { ConfigAgent } from "./agent"
@@ -182,7 +182,29 @@ const layer = Layer.effect(
     const npmSvc = yield* Npm.Service
     const http = yield* HttpClient.HttpClient
 
-    const readConfigFile = (filepath: string) => fs.readFileStringSafe(filepath).pipe(Effect.orDie)
+    const readConfigFile = (filepath: string) =>
+      fs.readFileStringSafe(filepath).pipe(
+        Effect.catch(
+          Effect.fnUntraced(function* (error) {
+            const dir = path.dirname(filepath)
+            if (yield* fs.isDir(filepath))
+              return yield* Effect.die(
+                new InvalidError({
+                  path: filepath,
+                  message: `expected a file, found a directory${filepath === Flag.OPENCODE_CONFIG ? " (OPENCODE_CONFIG)" : ""}`,
+                }),
+              )
+            if (yield* fs.isFile(dir))
+              return yield* Effect.die(
+                new InvalidError({
+                  path: dir,
+                  message: `expected a directory, found a file${dir === Flag.OPENCODE_CONFIG_DIR ? " (OPENCODE_CONFIG_DIR)" : ""}`,
+                }),
+              )
+            return yield* Effect.die(error)
+          }),
+        ),
+      )
 
     const fetchRemoteJson = Effect.fnUntraced(function* <S extends Schema.Top>(
       url: string,
@@ -433,7 +455,16 @@ const layer = Layer.effect(
             }
           }
 
-          yield* ensureGitignore(dir).pipe(Effect.orDie)
+          yield* ensureGitignore(dir).pipe(
+            Effect.catch(() =>
+              Effect.die(
+                new InvalidError({
+                  path: dir,
+                  message: `cannot create directory${dir === Flag.OPENCODE_CONFIG_DIR ? " (OPENCODE_CONFIG_DIR)" : ""}`,
+                }),
+              ),
+            ),
+          )
 
           const dep = yield* npmSvc
             .install(dir, {
