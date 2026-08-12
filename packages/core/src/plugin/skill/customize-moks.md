@@ -310,6 +310,8 @@ Built-in `recruit` permissions (defaults):
 
 - **Allow reads:** `ashby_list_jobs`, `ashby_get_job`, `ashby_list_candidates`, `ashby_get_candidate`
 - **Deny writes:** `ashby_change_stage`, `ashby_create_note`
+- **Edit:** ask outside `.moks/` (and fixtures / `.gitignore`); allow under `.moks/*`
+- **Bash:** default **ask**; **allow** `moks *` (commit/status/push) and light reads (`ls`, `pwd`, …); **deny** destructive patterns (`rm *`, `sudo *`, `git push *`, …)
 
 Sample mock config (shape):
 
@@ -342,7 +344,7 @@ building a controlled sink — and even then, prefer commit/push as the product 
 ```json
 "permission": {
   "edit": { "*": "ask", ".moks/*": "allow" },
-  "bash": { "moks *": "allow", "git *": "allow", "rm *": "deny", "*": "ask" },
+  "bash": { "*": "ask", "moks *": "allow", "ls *": "allow", "rm *": "deny", "git push *": "deny" },
   "external_directory": { "~/secrets/**": "deny", "*": "allow" }
 }
 ```
