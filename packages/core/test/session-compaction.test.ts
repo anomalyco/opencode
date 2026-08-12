@@ -15,6 +15,22 @@ test("compaction prompt preserves detailed work state and relevant files", () =>
   expect(prompt).toContain("## Relevant Files")
 })
 
+test("compaction prompt gives explicit update instructions for a prior summary", () => {
+  const prompt = SessionCompaction.buildPrompt({
+    context: ["new conversation"],
+    previousSummary: "existing summary",
+  })
+
+  expect(prompt.indexOf("<conversation>")).toBeLessThan(prompt.indexOf("<prior-summary>"))
+  expect(prompt.indexOf("<prior-summary>")).toBeLessThan(prompt.indexOf("When updating:"))
+  expect(prompt).toContain(
+    "Preserve all information from the <prior-summary> unless the new conversation shows that it is inaccurate, superseded, or no longer applicable.",
+  )
+  expect(prompt).toContain(
+    "If a blocker has been resolved, update the summary to reflect that while keeping any details still needed to continue the work.",
+  )
+})
+
 test("compaction describes tool media without embedding base64", () => {
   const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
   const serialized = SessionCompaction.serializeToolContent([

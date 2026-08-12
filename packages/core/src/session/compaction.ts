@@ -44,6 +44,14 @@ Rules:
 - Use terse bullets, not prose paragraphs.
 - Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
 - Do not mention the summary process or that context was compacted.`
+const SUMMARY_UPDATE_INSTRUCTIONS = `Update the existing anchored summary with the new information.
+
+When updating:
+- Preserve all information from the <prior-summary> unless the new conversation shows that it is inaccurate, superseded, or no longer applicable.
+- Add new progress, decisions, constraints, and context from the conversation.
+- Move completed work from "Active" to "Completed".
+- If a blocker has been resolved, update the summary to reflect that while keeping any details still needed to continue the work.
+- Update "Objective" and "Next Move" to reflect the current work state.`
 
 type Entry = {
   readonly seq: number
@@ -169,7 +177,8 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
   return [
     conversation,
     `Here is the previous summary:\n\n<prior-summary>\n${input.previousSummary}\n</prior-summary>`,
-    "The <conversation> tags above contain new conversation history to incorporate into the existing summary in the <prior-summary> tags.\n\nUpdate the anchored summary with the new information. Preserve still-true details, remove stale details, and merge in the new facts.",
+    "The <conversation> tags above contain new conversation history to incorporate into the existing summary in the <prior-summary> tags.",
+    SUMMARY_UPDATE_INSTRUCTIONS,
     SUMMARY_TEMPLATE,
   ].join("\n\n")
 }
