@@ -35,7 +35,7 @@ import {
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
-  visible: false | "@" | "/" | "directory"
+  visible: false | "reference" | "command" | "directory"
 }
 
 export type AutocompleteOption = {
@@ -289,7 +289,7 @@ export function Autocomplete(props: {
   const references = createMemo(() => data.location.reference.list() ?? [])
 
   const referenceMatch = createMemo(() => {
-    if (store.visible !== "@") return
+    if (store.visible !== "reference") return
     const base = parseFileLineRange(search()).base
     const slash = base.indexOf("/")
     const alias = slash === -1 ? base : base.slice(0, slash)
@@ -315,7 +315,7 @@ export function Autocomplete(props: {
       endLine: input.lineEnd > input.lineStart ? input.lineEnd : undefined,
     }
     const { filename, part } = createFilePart({ path: item, type: "file" }, input.filePath, lineRange)
-    const index = store.visible === "@" ? store.index : props.input().cursorOffset
+    const index = store.visible === "reference" ? store.index : props.input().cursorOffset
 
     setStore("visible", false)
     setStore("index", index)
@@ -336,7 +336,7 @@ export function Autocomplete(props: {
   const [files] = createResource(
     () => ({ query: search(), location: location.current, visible: store.visible }),
     async (input, info): Promise<AutocompleteResults> => {
-      if (!input.visible || input.visible === "/")
+      if (!input.visible || input.visible === "command")
         return { options: [], failed: false, mode: input.visible, query: input.query, resolved: true }
       if (referenceMatch())
         return { options: [], failed: false, mode: input.visible, query: input.query, resolved: true }
@@ -431,7 +431,7 @@ export function Autocomplete(props: {
   })
 
   const mcpResources = createMemo(() => {
-    if (store.visible !== "@") return []
+    if (store.visible !== "reference") return []
 
     const options: AutocompleteOption[] = []
     const width = props.anchor().width - 4
@@ -583,15 +583,15 @@ export function Autocomplete(props: {
       return [...supplemental, ...fileSearch.options.filter((item) => !paths.has(item.absolute))]
     }
 
-    if (store.visible === "@" && referenceMatchValue) {
+    if (store.visible === "reference" && referenceMatchValue) {
       return referenceAliasesValue.filter((item) => item.display === `@${referenceMatchValue.name}`)
     }
 
     // Files come from fff already fuzzy ranked and filtered
     // it shouldn't be additionally sorted by fuzzysort as it will loose the results
-    const fileOptions: AutocompleteOption[] = store.visible === "@" ? fileSearch.options : []
+    const fileOptions: AutocompleteOption[] = store.visible === "reference" ? fileSearch.options : []
     const nonFileOptions: AutocompleteOption[] =
-      store.visible === "@"
+      store.visible === "reference"
         ? [...referenceAliasesValue, ...agentsValue, ...mcpResources()]
         : store.index === 0
           ? [...commandsValue]
@@ -606,15 +606,16 @@ export function Autocomplete(props: {
         keys: [
           (obj) => stripFileLineRange((obj.value ?? obj.display).trimEnd()),
           // Match description for slash commands only; for "@" it surfaced unrelated items.
-          ...(store.visible === "/" ? ["description" as const] : []),
+          ...(store.visible === "command" ? ["description" as const] : []),
           (obj) => obj.aliases?.join(" ") ?? "",
         ],
-        threshold: store.visible === "@" ? 0.5 : 0,
+        threshold: store.visible === "reference" ? 0.5 : 0,
         limit: 10,
         scoreFn: (objResults) => {
           const displayResult = objResults[0]
           let score = objResults.score
-          if (displayResult && displayResult.target.startsWith(store.visible + searchValue)) {
+          const prefix = store.visible === "reference" ? "@" : store.visible === "command" ? "/" : ""
+          if (displayResult && displayResult.target.startsWith(prefix + searchValue)) {
             score *= 2
           }
           const frecencyScore = objResults.obj.path ? frecency.getFrecency(objResults.obj.path) : 0
@@ -774,7 +775,7 @@ export function Autocomplete(props: {
   }
 
   function hide(removeToken = false) {
-    if (removeToken && store.visible === "/") {
+    if (removeToken && store.visible === "command") {
       const input = props.input()
       const cursorOffset = input.cursorOffset
       input.cursorOffset = store.index
@@ -831,7 +832,7 @@ export function Autocomplete(props: {
 
         const slash = slashTriggerIndex(value, offset)
         if (slash !== undefined) {
-          show("/")
+          show("command")
           setStore("index", slash)
           return
         }
@@ -839,7 +840,7 @@ export function Autocomplete(props: {
         // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
         const idx = mentionTriggerIndex(value, offset)
         if (idx !== undefined) {
-          show("@")
+          show("reference")
           setStore("index", idx)
         }
       },
@@ -857,7 +858,7 @@ export function Autocomplete(props: {
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const emptyMessage = createMemo(() => {
     const fileSearch = visibleFiles()
-    if (store.visible === "/") return "No matching commands"
+    if (store.visible === "command") return "No matching commands"
     if (store.visible === "directory") {
       if (files.loading) return "Searching…"
       if (fileSearch.failed) return "Could not search directories. Keep typing to try again."
@@ -867,7 +868,7 @@ export function Autocomplete(props: {
     if (fileSearch.failed) return "Could not search files. Keep typing to try again."
     return "No matching files, agents, or references"
   })
-  const emptyError = createMemo(() => store.visible === "@" && !files.loading && visibleFiles().failed)
+  const emptyError = createMemo(() => store.visible === "reference" && !files.loading && visibleFiles().failed)
 
   return (
     <box
