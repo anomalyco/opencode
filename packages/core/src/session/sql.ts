@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm"
 import { directoryColumn, pathColumn } from "../database/path.js"
 import { ProjectTable } from "../project/sql.js"
 import type { SessionMessage } from "./message.js"
-import type { SessionPending } from "./pending.js"
+import type { SessionInbox } from "./inbox.js"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
 import { PermissionV1 } from "../v1/permission.js"
 import { Project } from "../project.js"
@@ -12,7 +12,7 @@ import { Workspace } from "../workspace.js"
 import { Timestamps } from "../database/schema.sql.js"
 import type { Instruction } from "@opencode-ai/schema/instruction"
 import type { Session } from "@opencode-ai/schema/session"
-import type { SyntheticData, UserData } from "@opencode-ai/schema/session-pending"
+import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } from "@opencode-ai/schema/session-inbox"
 import type { RevertV1 } from "@opencode-ai/schema/session-revert"
 import type { Schema } from "effect"
 
@@ -101,9 +101,9 @@ export const SessionPendingTable = sqliteTable(
       .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    type: text().$type<SessionPending.Info["type"]>().notNull(),
-    data: text({ mode: "json" }).$type<UserData | SyntheticData | Record<string, never>>().notNull(),
-    delivery: text().$type<SessionPending.Delivery>(),
+    type: text().$type<SessionInbox.Info["type"]>().notNull(),
+    data: text({ mode: "json" }).$type<UserPayload | SyntheticPayload | Record<string, never>>().notNull(),
+    delivery: text().$type<SessionInbox.Delivery>(),
     admitted_seq: integer().notNull(),
     time_created: integer()
       .notNull()
@@ -115,6 +115,28 @@ export const SessionPendingTable = sqliteTable(
       .on(table.session_id)
       .where(sql`${table.type} = 'compaction'`),
     uniqueIndex("session_pending_session_admitted_seq_idx").on(table.session_id, table.admitted_seq),
+  ],
+)
+
+export const SessionInboxTable = sqliteTable(
+  "session_inbox",
+  {
+    id: text().$type<SessionMessage.ID>().primaryKey(),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    type: text().$type<SessionInbox.Info["type"]>().notNull(),
+    payload: text({ mode: "json" }).$type<UserPayload | SyntheticPayload | CompactionPayload | MovePayload>().notNull(),
+    delivery: text().$type<SessionInbox.Delivery>().notNull(),
+    enqueued_seq: integer().notNull(),
+    time_created: integer()
+      .notNull()
+      .$default(() => Date.now()),
+  },
+  (table) => [
+    index("session_inbox_session_delivery_seq_idx").on(table.session_id, table.delivery, table.enqueued_seq),
+    uniqueIndex("session_inbox_session_enqueued_seq_idx").on(table.session_id, table.enqueued_seq),
   ],
 )
 

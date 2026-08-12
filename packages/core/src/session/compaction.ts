@@ -89,6 +89,7 @@ export type ManualInput = {
   readonly session: SessionSchema.Info
   readonly messages: readonly SessionMessage.Info[]
   readonly inputID: SessionMessage.ID
+  readonly started?: boolean
 }
 
 type RequiredInput = Omit<AutoInput, "ref">
@@ -102,6 +103,7 @@ type Plan = {
   readonly prompt: string
   readonly recent: string
   readonly inputID?: SessionMessage.ID
+  readonly started?: boolean
 }
 
 export type Outcome =
@@ -248,12 +250,13 @@ const make = (dependencies: Dependencies) => {
     return { status: "failed" as const, error: input.error }
   })
   const execute = Effect.fn("SessionCompaction.execute")(function* (plan: Plan) {
-    yield* dependencies.bus.publish(SessionEvent.Compaction.Started, {
-      sessionID: plan.session.id,
-      reason: plan.reason,
-      recent: plan.recent,
-      inputID: plan.inputID,
-    })
+    if (!plan.started)
+      yield* dependencies.bus.publish(SessionEvent.Compaction.Started, {
+        sessionID: plan.session.id,
+        reason: plan.reason,
+        recent: plan.recent,
+        inputID: plan.inputID,
+      })
 
     const chunks: string[] = []
     let failure: SessionError.Error | undefined
@@ -408,6 +411,7 @@ const make = (dependencies: Dependencies) => {
       cost: resolved.cost,
       reason: "manual",
       inputID: input.inputID,
+      started: input.started,
       ...content,
     })
   })

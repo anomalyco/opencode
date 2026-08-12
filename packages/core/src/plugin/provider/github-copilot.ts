@@ -204,10 +204,11 @@ export const GithubCopilotPlugin = define({
         for (const [id, model] of loaded.models) {
           evt.model.update(item.provider.id, id, (draft) => Object.assign(draft, structuredClone(model)))
         }
-      } else if (loaded.baseURL) {
+      } else {
         for (const id of item.models.keys()) {
           evt.model.update(item.provider.id, id, (model) => {
-            model.settings = Provider.mergeOverlay(model.settings, { baseURL: loaded.baseURL })
+            model.package = "@ai-sdk/github-copilot"
+            if (loaded.baseURL) model.settings = Provider.mergeOverlay(model.settings, { baseURL: loaded.baseURL })
           })
         }
       }

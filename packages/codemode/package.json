@@ -19,6 +19,12 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "imports": {
+    "#transpile": {
+      "workerd": "./src/interpreter/transpile.workerd.ts",
+      "default": "./src/interpreter/transpile.node.ts"
+    }
+  },
   "scripts": {
     "build": "bun run script/build.ts",
     "typecheck": "tsgo --noEmit",

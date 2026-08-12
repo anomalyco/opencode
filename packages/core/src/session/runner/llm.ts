@@ -17,7 +17,7 @@ import { InstructionState } from "../instruction-state.js"
 import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
-import { SessionPending } from "../pending.js"
+import { SessionInbox } from "../inbox.js"
 import { SessionModelRequest } from "../model-request.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
@@ -125,13 +125,19 @@ const layer = Layer.effect(
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
     }) {
-      if (!input.force && !(yield* SessionPending.has(db, input.sessionID, "any"))) return
+      let force = input.force
+      if (!force && !(yield* SessionInbox.has(db, input.sessionID, "any"))) return
       yield* settleStaleToolCalls(input.sessionID)
-      yield* runPendingCompaction(input.sessionID)
-      if (!input.force && !(yield* SessionPending.has(db, input.sessionID, "input"))) return
-      do {
-        yield* runSteps(input.sessionID)
-      } while (yield* SessionPending.has(db, input.sessionID, "input"))
+      while (true) {
+        if (yield* runPendingCompaction(input.sessionID)) {
+          force = false
+          continue
+        }
+        if (yield* runPendingMove(input.sessionID)) return
+        if (!force && !(yield* SessionInbox.has(db, input.sessionID, "input"))) return
+        if (yield* runSteps(input.sessionID)) return
+        force = false
+      }
     })
 
     /**
@@ -140,12 +146,13 @@ const layer = Layer.effect(
      */
     const runSteps = Effect.fn("SessionRunner.runSteps")(function* (sessionID: SessionSchema.ID) {
       // Fresh work may promote queued input; later steps absorb steers only.
-      let promotable: SessionPending.Promotable = "input"
+      let promotable: SessionInbox.Promotable = "input"
       let step = 1
       while (true) {
+        if (yield* runPendingCompaction(sessionID)) continue
+        if (yield* runPendingMove(sessionID)) return true
         const result = yield* runStep(sessionID, promotable, step)
-        yield* runPendingCompaction(sessionID)
-        if (!result.needsContinuation && !(yield* SessionPending.has(db, sessionID, "steer"))) return
+        if (!result.needsContinuation && !(yield* SessionInbox.has(db, sessionID, "steer"))) return false
         promotable = "steer"
         step = result.step + 1
       }
@@ -154,7 +161,7 @@ const layer = Layer.effect(
     /** Completes one logical model step, transparently retrying or rebuilding after compaction. */
     const runStep = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
-      promotable: SessionPending.Promotable,
+      promotable: SessionInbox.Promotable,
       step: number,
     ) {
       // Minting message identity before any attempt lets retries resume the same durable
@@ -182,7 +189,7 @@ const layer = Layer.effect(
               .pipe(Effect.andThen(Effect.fail(failure.cause))),
           ),
         )
-      let currentPromotable: SessionPending.Promotable | undefined = promotable
+      let currentPromotable: SessionInbox.Promotable | undefined = promotable
       let currentStep = step
       // Overflow recovery is one-shot: a call after recovery must not recover another overflow.
       let recoverOverflow = true
@@ -225,7 +232,7 @@ const layer = Layer.effect(
      */
     const callModel = Effect.fn("SessionRunner.callModel")(function* (
       sessionID: SessionSchema.ID,
-      promotable: SessionPending.Promotable | undefined,
+      promotable: SessionInbox.Promotable | undefined,
       step: number,
       recoverOverflow: boolean,
       assistantMessageID: SessionMessage.ID,
@@ -234,7 +241,7 @@ const layer = Layer.effect(
       // Establish what the model knows before admitting what the user said, so
       // a blocked first step leaves pending inputs untouched.
       yield* InstructionState.prepare(db, bus, selected.instructions, selected.session.id)
-      const promoted = promotable ? yield* SessionPending.promote(db, bus, selected.session.id, promotable) : 0
+      const promoted = promotable ? yield* SessionInbox.promote(db, bus, selected.session.id, promotable) : 0
       if (promoted > 0) yield* startTitle(sessionID)
       // Promoted input opens a fresh step allowance.
       const currentStep = promoted > 0 ? 1 : step
@@ -245,7 +252,7 @@ const layer = Layer.effect(
       // Make room: history must fit the context window before the call. A pending manual
       // compaction owns this instead; the runner executes it between steps.
       const compactionInput = { session, messages: loaded.messages, model, ref: resolved.ref, cost: resolved.cost }
-      if (compaction.required(compactionInput) && !(yield* SessionPending.compaction(db, session.id))) {
+      if (compaction.required(compactionInput)) {
         const compacted = yield* compaction.compact(compactionInput)
         if (compacted.status === "completed")
           return CallOutcome.Restart({ step: currentStep, recoveredOverflow: false })
@@ -482,32 +489,67 @@ const layer = Layer.effect(
     const runPendingCompaction = Effect.fn("SessionRunner.runPendingCompaction")(function* (
       sessionID: SessionSchema.ID,
     ) {
-      const pending = yield* SessionPending.compaction(db, sessionID)
-      if (!pending) return
-      const session = yield* getSession(sessionID)
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
+          const pending = yield* SessionInbox.serialized(
+            sessionID,
+            Effect.gen(function* () {
+              const selected =
+                (yield* SessionInbox.nextSteer(db, sessionID)) ?? (yield* SessionInbox.nextQueued(db, sessionID))
+              if (selected?.type !== "compaction") return
+              yield* bus.publishAll([
+                [SessionEvent.InboxDelivered, { sessionID, inboxID: selected.id }],
+                [SessionEvent.Compaction.Started, { sessionID, reason: "manual", recent: "", inputID: selected.id }],
+              ])
+              return selected
+            }),
+          )
+          if (pending?.type !== "compaction") return false
+          const session = yield* getSession(sessionID)
           const compacted = yield* restore(
             Effect.gen(function* () {
               return yield* compaction.compactManual({
                 session,
                 messages: yield* store.context(sessionID),
                 inputID: pending.id,
+                started: true,
               })
             }),
           ).pipe(Effect.exit)
-          if (Exit.isSuccess(compacted)) return
-          const unsettled = yield* SessionPending.compaction(db, sessionID)
-          if (unsettled)
-            yield* bus.publish(SessionEvent.Compaction.Failed, {
-              sessionID,
-              reason: "manual",
-              error: Cause.hasInterruptsOnly(compacted.cause)
-                ? { type: "aborted", message: "Compaction cancelled" }
-                : { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
-              inputID: unsettled.id,
-            })
+          if (Exit.isSuccess(compacted)) return true
+          yield* bus.publish(SessionEvent.Compaction.Failed, {
+            sessionID,
+            reason: "manual",
+            error: Cause.hasInterruptsOnly(compacted.cause)
+              ? { type: "aborted", message: "Compaction cancelled" }
+              : { type: "compaction.failed", message: Cause.pretty(compacted.cause) },
+            inputID: pending.id,
+          })
           return yield* Effect.failCause(compacted.cause)
+        }),
+      )
+    })
+
+    const runPendingMove = Effect.fn("SessionRunner.runPendingMove")(function* (sessionID: SessionSchema.ID) {
+      return yield* SessionInbox.serialized(
+        sessionID,
+        Effect.gen(function* () {
+          const pending =
+            (yield* SessionInbox.nextSteer(db, sessionID)) ?? (yield* SessionInbox.nextQueued(db, sessionID))
+          if (pending?.type !== "move") return false
+          yield* bus.publishAll([
+            [SessionEvent.InboxDelivered, { sessionID, inboxID: pending.id }],
+            [
+              SessionEvent.Moved,
+              {
+                sessionID,
+                location: pending.payload.location,
+                projectID: pending.payload.projectID,
+                subpath: pending.payload.subpath,
+              },
+            ],
+          ])
+          return true
         }),
       )
     })

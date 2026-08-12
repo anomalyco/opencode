@@ -89,7 +89,7 @@ type PromptInput = {
   mono: Accessor<boolean>
   history?: Accessor<RunPrompt[]>
   queuedPrompts: Accessor<FooterQueuedPrompt[]>
-  onQueuedPromptSteer: (inputID: string) => Promise<boolean>
+  onQueuedPromptSteer: (inboxID: string) => Promise<boolean>
   onSubmit: (input: RunPrompt) => boolean | Promise<boolean>
   onCycle: () => void
   onInterrupt: () => boolean

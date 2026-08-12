@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "00924d88-1842-4d71-ac74-5682ddc47e1c",
-  "prevIds": ["15060ec5-05f7-4b86-b2a5-9108609432b3"],
+  "id": "5c1aa56b-c3ee-4283-9a84-c0bf626dc604",
+  "prevIds": ["00924d88-1842-4d71-ac74-5682ddc47e1c"],
   "ddl": [
     {
       "name": "account_state",
@@ -54,6 +54,10 @@
     },
     {
       "name": "instruction_state",
+      "entityType": "tables"
+    },
+    {
+      "name": "session_inbox",
       "entityType": "tables"
     },
     {
@@ -850,6 +854,76 @@
       "generated": null,
       "name": "id",
       "entityType": "columns",
+      "table": "session_inbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "session_inbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "type",
+      "entityType": "columns",
+      "table": "session_inbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "payload",
+      "entityType": "columns",
+      "table": "session_inbox"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "delivery",
+      "entityType": "columns",
+      "table": "session_inbox"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "enqueued_seq",
+      "entityType": "columns",
+      "table": "session_inbox"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "session_inbox"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
       "table": "session_message"
     },
     {
@@ -1435,6 +1509,17 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
+      "name": "fk_session_inbox_session_id_session_v2_id_fk",
+      "entityType": "fks",
+      "table": "session_inbox"
+    },
+    {
+      "columns": ["session_id"],
+      "tableTo": "session_v2",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
       "name": "fk_session_message_session_id_session_v2_id_fk",
       "entityType": "fks",
       "table": "session_message"
@@ -1555,6 +1640,13 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
+      "name": "session_inbox_pk",
+      "table": "session_inbox",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
       "name": "session_message_pk",
       "table": "session_message",
       "entityType": "pks"
@@ -1641,6 +1733,46 @@
       "name": "permission_project_action_resource_idx",
       "entityType": "indexes",
       "table": "permission"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "delivery",
+          "isExpression": false
+        },
+        {
+          "value": "enqueued_seq",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_inbox_session_delivery_seq_idx",
+      "entityType": "indexes",
+      "table": "session_inbox"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        },
+        {
+          "value": "enqueued_seq",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "session_inbox_session_enqueued_seq_idx",
+      "entityType": "indexes",
+      "table": "session_inbox"
     },
     {
       "columns": [

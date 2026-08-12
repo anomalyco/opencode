@@ -23,6 +23,7 @@ import { ID, type Payload } from "@opencode-ai/schema/event"
 import { Form } from "@opencode-ai/core/form"
 import { Integration } from "@opencode-ai/core/integration"
 import { Environment } from "@opencode-ai/core/environment/index"
+import { EnvironmentUnavailable } from "@opencode-ai/core/environment/unavailable"
 import { Location } from "@opencode-ai/core/location"
 import { MCP } from "@opencode-ai/core/mcp/index"
 import { MCPClient } from "@opencode-ai/core/mcp/client"
@@ -476,6 +477,27 @@ test("spawns local MCP servers through the location environment", async () => {
   expect(command.options.cwd).toBe(cwd)
   expect(command.options.extendEnv).toBe(true)
   expect(command.options.env).toEqual({ MCP_LOCATION_TEST: "configured" })
+})
+
+test("reports a local MCP server as failed when the location has no execution plane", async () => {
+  const config = new ConfigMCP.Local({ type: "local", command: ["example-mcp"] })
+  const driver = Environment.makeMemoryDriver()
+  const environment = Layer.succeed(
+    Environment.Service,
+    Environment.Service.of({ files: Environment.makeFiles(driver), spawner: EnvironmentUnavailable.spawner }),
+  )
+
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const service = yield* MCP.Service
+      yield* service.tools()
+      const status = (yield* service.servers()).find((server) => server.name === "resources")?.status
+      expect(status).toEqual({
+        status: "failed",
+        error: expect.stringContaining("location has no execution plane"),
+      })
+    }).pipe(Effect.provide(resourceMcpLayer(config, undefined, undefined, { environment }))),
+  )
 })
 
 test("rejects sends before the stdio transport is started", async () => {

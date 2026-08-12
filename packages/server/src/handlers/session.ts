@@ -26,7 +26,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
   Effect.gen(function* () {
     const session = yield* Session.Service
     const transfer = yield* SessionTransfer.Service
-    const pendingMutation = (effect: ReturnType<typeof session.cancelPending>, conflict: string) =>
+    const pendingMutation = (effect: ReturnType<typeof session.cancelInbox>, conflict: string) =>
       effect.pipe(
         Effect.catchTag(
           "Session.NotFoundError",
@@ -37,8 +37,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             }),
         ),
         Effect.catchTag(
-          "Session.PendingInputConflictError",
-          (error) => new ConflictError({ resource: error.inputID, message: `${conflict}: ${error.inputID}` }),
+          "Session.InboxConflictError",
+          (error) => new ConflictError({ resource: error.inboxID, message: `${conflict}: ${error.inboxID}` }),
         ),
         Effect.as(HttpApiSchema.NoContent.make()),
       )
@@ -282,6 +282,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               sessionID: ctx.params.sessionID,
               directory: ctx.payload.directory,
               workspaceID: ctx.payload.workspaceID,
+              delivery: ctx.payload.delivery,
             })
             .pipe(
               Effect.catchTag("Session.NotFoundError", (error) =>
@@ -488,24 +489,26 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.compact",
         Effect.fn(function* (ctx) {
           return {
-            data: yield* session.compact({ sessionID: ctx.params.sessionID, id: ctx.payload.id }).pipe(
-              Effect.catchTag("Session.NotFoundError", (error) =>
-                Effect.fail(
-                  new SessionNotFoundError({
-                    sessionID: error.sessionID,
-                    message: `Session not found: ${error.sessionID}`,
-                  }),
+            data: yield* session
+              .compact({ sessionID: ctx.params.sessionID, id: ctx.payload.id, delivery: ctx.payload.delivery })
+              .pipe(
+                Effect.catchTag("Session.NotFoundError", (error) =>
+                  Effect.fail(
+                    new SessionNotFoundError({
+                      sessionID: error.sessionID,
+                      message: `Session not found: ${error.sessionID}`,
+                    }),
+                  ),
+                ),
+                Effect.catchTag("Session.CompactionConflictError", (error) =>
+                  Effect.fail(
+                    new ConflictError({
+                      message: `Compaction input ID conflicts with an existing durable record: ${error.inputID}`,
+                      resource: error.inputID,
+                    }),
+                  ),
                 ),
               ),
-              Effect.catchTag("Session.CompactionConflictError", (error) =>
-                Effect.fail(
-                  new ConflictError({
-                    message: `Compaction input ID conflicts with an existing durable record: ${error.inputID}`,
-                    resource: error.inputID,
-                  }),
-                ),
-              ),
-            ),
           }
         }),
       )
@@ -669,10 +672,10 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
-        "session.pending.list",
+        "session.inbox.list",
         Effect.fn(function* (ctx) {
           return {
-            data: yield* session.pending(ctx.params.sessionID).pipe(
+            data: yield* session.inbox(ctx.params.sessionID).pipe(
               Effect.catchTag("Session.NotFoundError", (error) =>
                 Effect.fail(
                   new SessionNotFoundError({
@@ -686,28 +689,28 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
-        "session.pending.cancel",
+        "session.inbox.cancel",
         Effect.fn(function* (ctx) {
           return yield* pendingMutation(
-            session.cancelPending({ sessionID: ctx.params.sessionID, inputID: ctx.params.inputID }),
+            session.cancelInbox({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID }),
             "Pending input can no longer be cancelled",
           )
         }),
       )
       .handle(
-        "session.pending.steer",
+        "session.inbox.steer",
         Effect.fn(function* (ctx) {
           return yield* pendingMutation(
-            session.steerPending({ sessionID: ctx.params.sessionID, inputID: ctx.params.inputID }),
+            session.steerInbox({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID }),
             "Pending input is no longer queued",
           )
         }),
       )
       .handle(
-        "session.pending.queue",
+        "session.inbox.queue",
         Effect.fn(function* (ctx) {
           return yield* pendingMutation(
-            session.queuePending({ sessionID: ctx.params.sessionID, inputID: ctx.params.inputID }),
+            session.queueInbox({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID }),
             "Pending input is no longer a steer",
           )
         }),

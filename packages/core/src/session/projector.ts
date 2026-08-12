@@ -11,10 +11,10 @@ import { Model } from "../model.js"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
-import { SessionPending } from "./pending.js"
+import { SessionInbox } from "./inbox.js"
 import { Workspace } from "../workspace.js"
 import { InstructionState } from "./instruction-state.js"
-import { SessionPendingTable, SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { Slug } from "../util/slug.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Money } from "@opencode-ai/schema/money"
@@ -515,14 +515,15 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.UsageRecorded, (event) => applyUsage(db, event.data.sessionID, event.data))
     yield* bus.project(SessionEvent.Forked, (event) => projectFork(db, event))
-    yield* bus.project(SessionEvent.InputPromoted, (event) =>
+    yield* bus.project(SessionEvent.InboxDelivered, (event) =>
       Effect.gen(function* () {
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        const input = yield* SessionPending.projectPromoted(db, {
-          id: event.data.inputID,
+        const input = yield* SessionInbox.projectDelivered(db, {
+          id: event.data.inboxID,
           sessionID: event.data.sessionID,
         })
+        if (input.type === "compaction" || input.type === "move") return
         yield* insertMessage(
           db,
           event,
@@ -530,33 +531,33 @@ const layer = Layer.effectDiscard(
             ? {
                 id: input.id,
                 type: "user",
-                metadata: input.data.metadata,
-                text: input.data.text,
-                files: input.data.files,
-                agents: input.data.agents,
-                skills: input.data.skills,
+                metadata: input.payload.metadata,
+                text: input.payload.text,
+                files: input.payload.files,
+                agents: input.payload.agents,
+                skills: input.payload.skills,
                 time: { created: event.created },
               }
             : {
                 id: input.id,
                 type: "synthetic",
-                text: input.data.text,
-                description: input.data.description,
-                metadata: input.data.metadata,
+                text: input.payload.text,
+                description: input.payload.description,
+                metadata: input.payload.metadata,
                 time: { created: event.created },
               },
         )
       }),
     )
-    yield* bus.project(SessionEvent.InputAdmitted, (event) =>
+    yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
       Effect.gen(function* () {
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        yield* SessionPending.projectAdmitted(db, {
-          admittedSeq: event.durable.seq,
-          id: event.data.inputID,
+        yield* SessionInbox.projectAdmitted(db, {
+          enqueuedSeq: event.durable.seq,
+          id: event.data.inboxID,
           sessionID: event.data.sessionID,
-          input: event.data.input,
+          item: event.data.item,
           timeCreated: event.created,
         })
         yield* db
@@ -567,34 +568,17 @@ const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
       }),
     )
-    yield* bus.project(SessionEvent.InputCancelled, (event) =>
-      SessionPending.projectCancelled(db, {
-        id: event.data.inputID,
+    yield* bus.project(SessionEvent.InboxCancelled, (event) =>
+      SessionInbox.projectCancelled(db, {
+        id: event.data.inboxID,
         sessionID: event.data.sessionID,
       }),
     )
-    yield* bus.project(SessionEvent.InputSteered, (event) =>
-      SessionPending.projectSteered(db, {
-        id: event.data.inputID,
+    yield* bus.project(SessionEvent.InboxDeliveryChanged, (event) =>
+      SessionInbox.projectDeliveryChanged(db, {
+        id: event.data.inboxID,
         sessionID: event.data.sessionID,
-      }),
-    )
-    yield* bus.project(SessionEvent.InputQueued, (event) =>
-      SessionPending.projectQueued(db, {
-        id: event.data.inputID,
-        sessionID: event.data.sessionID,
-      }),
-    )
-    yield* bus.project(SessionEvent.Compaction.Admitted, (event) =>
-      Effect.gen(function* () {
-        if (event.durable === undefined)
-          return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        yield* SessionPending.projectCompactionAdmitted(db, {
-          admittedSeq: event.durable.seq,
-          id: event.data.inputID,
-          sessionID: event.data.sessionID,
-          timeCreated: event.created,
-        })
+        delivery: event.data.delivery,
       }),
     )
     yield* bus.project(SessionEvent.Execution.Succeeded, (event) => run(db, event))
@@ -641,8 +625,6 @@ const layer = Layer.effectDiscard(
         yield* InstructionState.advanceEpoch(db, event.data.sessionID, event.durable.seq)
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        if (event.data.reason === "manual")
-          yield* SessionPending.settleCompaction(db, { sessionID: event.data.sessionID })
       }),
     )
     yield* bus.project(SessionEvent.Compaction.Failed, (event) =>
@@ -650,8 +632,6 @@ const layer = Layer.effectDiscard(
         yield* run(db, event)
         if (event.durable === undefined)
           return yield* Effect.die(new Error("Durable Session event is missing aggregate sequence"))
-        if (event.data.reason === "manual")
-          yield* SessionPending.settleCompaction(db, { sessionID: event.data.sessionID })
       }),
     )
     yield* bus.project(SessionEvent.RevertEvent.Staged, (event) =>
@@ -695,11 +675,11 @@ const layer = Layer.effectDiscard(
           .run()
           .pipe(Effect.orDie)
         yield* db
-          .delete(SessionPendingTable)
+          .delete(SessionInboxTable)
           .where(
             and(
-              eq(SessionPendingTable.session_id, event.data.sessionID),
-              gte(SessionPendingTable.admitted_seq, boundary.seq),
+              eq(SessionInboxTable.session_id, event.data.sessionID),
+              gte(SessionInboxTable.enqueued_seq, boundary.seq),
             ),
           )
           .run()

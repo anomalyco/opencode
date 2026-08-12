@@ -5,12 +5,13 @@ import { ConfigPluginSource } from "@opencode-ai/core/config/plugin/source"
 import { Database } from "@opencode-ai/core/database/database"
 import { sqliteLayer } from "@opencode-ai/core/database/sqlite.workerd"
 import type { DurableObjectStorage } from "@opencode-ai/core/database/sqlite.workerd"
+import { EnvironmentUnavailable } from "@opencode-ai/core/environment/unavailable"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
 import { Pty } from "@opencode-ai/core/pty"
-import { Shell } from "@opencode-ai/core/shell"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Vcs } from "@opencode-ai/core/vcs"
+import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import type { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { ServerFetch } from "./fetch"
 import type { ServerOptions } from "./options"
@@ -24,10 +25,11 @@ import type { ServerOptions } from "./options"
  * - Watcher and fff are disabled through their existing option flags; pty, fff,
  *   shell-parser, photon, and process-lock native modules resolve to inert
  *   stubs under the `workerd` bundle condition.
- * - Shell, FileSystem, FileSystemSearch, and Pty fail with a clear defect until
- *   a remote sandbox backs them; Snapshot and Vcs degrade to no-op results.
+ * - Bare locations use a typed no-execution-plane process spawner; FileSystem,
+ *   FileSystemSearch, and Pty fail with a clear defect until a remote sandbox
+ *   backs them; Snapshot and Vcs degrade to no-op results.
  * - Config is injected as a string (no filesystem); plugin discovery is
- *   precompiled-only and MCP is restricted to remote transports.
+ *   precompiled-only, and stdio MCP reports the same no-plane failure as Shell.
  *
  * Bundle with the `workerd` condition, e.g.
  * `bun build src/workerd.ts --conditions=workerd --target=node`
@@ -67,9 +69,6 @@ export function serverOptions(options: Options): ServerOptions {
     events: { persist: true },
     config: { content: options.config?.content },
     models: options.models,
-    // No child processes on workerd: local (stdio) MCP servers report failed
-    // instead of connecting; remote transports work unchanged.
-    mcp: { stdio: false },
   }
 }
 
@@ -77,9 +76,9 @@ export function serverOptions(options: Options): ServerOptions {
 export function replacements(options: Options): LayerNode.Replacements {
   return [
     [Database.node, Database.configuredClient(sqliteLayer({ storage: options.storage }))],
+    [CrossSpawnSpawner.node, EnvironmentUnavailable.layer],
     [Snapshot.node, Snapshot.noopLayer],
     [Vcs.node, vcsLayer],
-    [Shell.node, shellLayer],
     [FileSystem.node, fileSystemLayer],
     [FileSystemSearch.node, fileSystemSearchLayer],
     [Pty.node, ptyLayer],
@@ -99,22 +98,6 @@ const vcsLayer = Layer.succeed(
     info: () => Effect.succeed({ branch: {} }),
     status: () => Effect.succeed([]),
     diff: () => Effect.succeed([]),
-  }),
-)
-
-// Shell commands need a real process; queries for unknown IDs stay typed while
-// creation is a defect until a remote sandbox backs them.
-const shellLayer = Layer.succeed(
-  Shell.Service,
-  Shell.Service.of({
-    name: () => Effect.succeed("unsupported"),
-    create: () => unavailable("Shell.create"),
-    list: () => Effect.succeed([]),
-    get: (id) => Effect.fail(new Shell.NotFoundError({ id })),
-    wait: (id) => Effect.fail(new Shell.NotFoundError({ id })),
-    timeout: (id) => Effect.fail(new Shell.NotFoundError({ id })),
-    output: (id) => Effect.fail(new Shell.NotFoundError({ id })),
-    remove: (id) => Effect.fail(new Shell.NotFoundError({ id })),
   }),
 )
 

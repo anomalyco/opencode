@@ -1,6 +1,6 @@
 export * as SessionExecution from "./execution.js"
 
-import { Cause, Context, Effect, Exit, Layer } from "effect"
+import { Cause, Context, Effect, Exit, Layer, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
@@ -116,6 +116,10 @@ export const layer = Layer.effect(
           }),
         ),
     })
+    yield* bus.subscribe(SessionEvent.Moved).pipe(
+      Stream.runForEach((event) => coordinator.wake(event.data.sessionID)),
+      Effect.forkScoped,
+    )
 
     return Service.of({
       active: coordinator.active,

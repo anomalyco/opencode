@@ -1670,7 +1670,32 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Location.Ref"
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string"
+                  },
+                  "workspaceID": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "pattern": "^wrk"
+                      }
+                    ]
+                  },
+                  "delivery": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["directory"],
+                "additionalProperties": false
               }
             }
           },
@@ -1707,7 +1732,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/SessionPending.User"
+                      "$ref": "#/components/schemas/Session.Inbox.User"
                     }
                   },
                   "required": ["data"],
@@ -1821,8 +1846,7 @@
                   "delivery": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "enum": ["steer", "queue"]
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
                       },
                       {
                         "type": "null"
@@ -1878,7 +1902,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/SessionPending.User"
+                      "$ref": "#/components/schemas/Session.Inbox.User"
                     }
                   },
                   "required": ["data"],
@@ -2032,8 +2056,7 @@
                   "delivery": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "enum": ["steer", "queue"]
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
                       },
                       {
                         "type": "null"
@@ -2200,7 +2223,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/SessionPending.Synthetic"
+                      "$ref": "#/components/schemas/Session.Inbox.Synthetic"
                     }
                   },
                   "required": ["data"],
@@ -2299,8 +2322,7 @@
                   "delivery": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "enum": ["steer", "queue"]
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
                       },
                       {
                         "type": "null"
@@ -2454,7 +2476,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/SessionPending.Compaction"
+                      "$ref": "#/components/schemas/Session.Inbox.Compaction"
                     }
                   },
                   "required": ["data"],
@@ -2528,6 +2550,16 @@
                             "pattern": "^msg_"
                           }
                         ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "delivery": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
                       },
                       {
                         "type": "null"
@@ -3000,10 +3032,10 @@
         "summary": "Get session context"
       }
     },
-    "/api/session/{sessionID}/pending": {
+    "/api/session/{sessionID}/inbox": {
       "get": {
         "tags": ["session"],
-        "operationId": "v2.session.pending.list",
+        "operationId": "v2.session.inbox.list",
         "parameters": [
           {
             "name": "sessionID",
@@ -3031,7 +3063,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/SessionPending.Info"
+                        "$ref": "#/components/schemas/Session.Inbox.Info"
                       }
                     }
                   },
@@ -3072,14 +3104,14 @@
             }
           }
         },
-        "description": "List durable admitted session work not yet visible in projected history, ordered by admission. Includes unpromoted user and synthetic inputs and unhandled compaction barriers. The runner owns consumption; items disappear once promoted or handled.",
-        "summary": "List pending session work"
+        "description": "List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items.",
+        "summary": "List session inbox"
       }
     },
-    "/api/session/{sessionID}/pending/{inputID}": {
+    "/api/session/{sessionID}/inbox/{inboxID}": {
       "delete": {
         "tags": ["session"],
-        "operationId": "v2.session.pending.cancel",
+        "operationId": "v2.session.inbox.cancel",
         "parameters": [
           {
             "name": "sessionID",
@@ -3095,7 +3127,7 @@
             "required": true
           },
           {
-            "name": "inputID",
+            "name": "inboxID",
             "in": "path",
             "schema": {
               "type": "string",
@@ -3154,14 +3186,14 @@
             }
           }
         },
-        "description": "Cancel an input that has not yet been promoted into session history.",
-        "summary": "Cancel pending input"
+        "description": "Cancel an inbox item that has not yet been delivered.",
+        "summary": "Cancel inbox input"
       }
     },
-    "/api/session/{sessionID}/pending/{inputID}/steer": {
+    "/api/session/{sessionID}/inbox/{inboxID}/steer": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.pending.steer",
+        "operationId": "v2.session.inbox.steer",
         "parameters": [
           {
             "name": "sessionID",
@@ -3177,7 +3209,7 @@
             "required": true
           },
           {
-            "name": "inputID",
+            "name": "inboxID",
             "in": "path",
             "schema": {
               "type": "string",
@@ -3236,14 +3268,14 @@
             }
           }
         },
-        "description": "Change a queued input to steer delivery and wake session execution.",
-        "summary": "Steer queued input"
+        "description": "Change a queued inbox item to steer delivery and wake session execution.",
+        "summary": "Steer queued item"
       }
     },
-    "/api/session/{sessionID}/pending/{inputID}/queue": {
+    "/api/session/{sessionID}/inbox/{inboxID}/queue": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.pending.queue",
+        "operationId": "v2.session.inbox.queue",
         "parameters": [
           {
             "name": "sessionID",
@@ -3259,7 +3291,7 @@
             "required": true
           },
           {
-            "name": "inputID",
+            "name": "inboxID",
             "in": "path",
             "schema": {
               "type": "string",
@@ -3318,8 +3350,8 @@
             }
           }
         },
-        "description": "Change a pending steer to queued delivery.",
-        "summary": "Queue pending steer"
+        "description": "Change a steered inbox item to queued delivery.",
+        "summary": "Queue steered item"
       }
     },
     "/api/session/{sessionID}/instructions/entries": {
@@ -3932,7 +3964,7 @@
             }
           }
         },
-        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes if durable pending work remains after interruption.",
+        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes if durable inbox work remains after interruption.",
         "summary": "Interrupt session execution"
       }
     },
@@ -13951,6 +13983,10 @@
         "required": ["_tag", "sessionID", "messageID", "message"],
         "additionalProperties": false
       },
+      "Session.Inbox.Delivery": {
+        "type": "string",
+        "enum": ["steer", "queue"]
+      },
       "PromptInput.FileAttachment": {
         "type": "object",
         "properties": {
@@ -13983,7 +14019,7 @@
         "required": ["id"],
         "additionalProperties": false
       },
-      "SessionPending.UserData": {
+      "Session.Inbox.UserPayload": {
         "type": "object",
         "properties": {
           "text": {
@@ -14014,7 +14050,7 @@
         "required": ["text"],
         "additionalProperties": false
       },
-      "SessionPending.User": {
+      "Session.Inbox.User": {
         "type": "object",
         "properties": {
           "id": {
@@ -14040,15 +14076,14 @@
             "type": "string",
             "enum": ["user"]
           },
-          "data": {
-            "$ref": "#/components/schemas/SessionPending.UserData"
+          "payload": {
+            "$ref": "#/components/schemas/Session.Inbox.UserPayload"
           },
           "delivery": {
-            "type": "string",
-            "enum": ["steer", "queue"]
+            "$ref": "#/components/schemas/Session.Inbox.Delivery"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type", "data", "delivery"],
+        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
         "additionalProperties": false
       },
       "CommandNotFoundError": {
@@ -14102,7 +14137,7 @@
         "required": ["_tag", "skill", "message"],
         "additionalProperties": false
       },
-      "SessionPending.SyntheticData": {
+      "Session.Inbox.SyntheticPayload": {
         "type": "object",
         "properties": {
           "text": {
@@ -14118,7 +14153,7 @@
         "required": ["text"],
         "additionalProperties": false
       },
-      "SessionPending.Synthetic": {
+      "Session.Inbox.Synthetic": {
         "type": "object",
         "properties": {
           "id": {
@@ -14144,18 +14179,27 @@
             "type": "string",
             "enum": ["synthetic"]
           },
-          "data": {
-            "$ref": "#/components/schemas/SessionPending.SyntheticData"
+          "payload": {
+            "$ref": "#/components/schemas/Session.Inbox.SyntheticPayload"
           },
           "delivery": {
-            "type": "string",
-            "enum": ["steer", "queue"]
+            "$ref": "#/components/schemas/Session.Inbox.Delivery"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type", "data", "delivery"],
+        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
         "additionalProperties": false
       },
-      "SessionPending.Compaction": {
+      "Session.Inbox.CompactionPayload": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "array"
+          }
+        ]
+      },
+      "Session.Inbox.Compaction": {
         "type": "object",
         "properties": {
           "id": {
@@ -14180,9 +14224,15 @@
           "type": {
             "type": "string",
             "enum": ["compaction"]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Session.Inbox.CompactionPayload"
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/Session.Inbox.Delivery"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type"],
+        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
         "additionalProperties": false
       },
       "ServiceUnavailableError": {
@@ -14226,16 +14276,71 @@
         "required": ["_tag", "sessionID", "message"],
         "additionalProperties": false
       },
-      "SessionPending.Info": {
+      "Session.Inbox.MovePayload": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "subpath": {
+            "type": "string"
+          }
+        },
+        "required": ["location", "projectID"],
+        "additionalProperties": false
+      },
+      "Session.Inbox.Move": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^msg_"
+              }
+            ]
+          },
+          "sessionID": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^ses"
+              }
+            ]
+          },
+          "timeCreated": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["move"]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Session.Inbox.MovePayload"
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/Session.Inbox.Delivery"
+          }
+        },
+        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
+        "additionalProperties": false
+      },
+      "Session.Inbox.Info": {
         "anyOf": [
           {
-            "$ref": "#/components/schemas/SessionPending.User"
+            "$ref": "#/components/schemas/Session.Inbox.User"
           },
           {
-            "$ref": "#/components/schemas/SessionPending.Synthetic"
+            "$ref": "#/components/schemas/Session.Inbox.Synthetic"
           },
           {
-            "$ref": "#/components/schemas/SessionPending.Compaction"
+            "$ref": "#/components/schemas/Session.Inbox.Compaction"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Inbox.Move"
           }
         ]
       },
@@ -14602,7 +14707,7 @@
                 "type": "string"
               }
             },
-            "required": ["sessionID", "location"],
+            "required": ["sessionID", "location", "projectID"],
             "additionalProperties": false
           }
         },
@@ -14831,7 +14936,7 @@
         "required": ["id", "created", "type", "durable", "data"],
         "additionalProperties": false
       },
-      "session.input.promoted": {
+      "session.inbox.delivered": {
         "type": "object",
         "properties": {
           "id": {
@@ -14850,7 +14955,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["session.input.promoted"]
+            "enum": ["session.inbox.delivered"]
           },
           "durable": {
             "type": "object",
@@ -14888,7 +14993,7 @@
                   }
                 ]
               },
-              "inputID": {
+              "inboxID": {
                 "type": "string",
                 "allOf": [
                   {
@@ -14897,14 +15002,14 @@
                 ]
               }
             },
-            "required": ["sessionID", "inputID"],
+            "required": ["sessionID", "inboxID"],
             "additionalProperties": false
           }
         },
         "required": ["id", "created", "type", "durable", "data"],
         "additionalProperties": false
       },
-      "SessionPending.UserData1": {
+      "Session.Inbox.UserPayload1": {
         "type": "object",
         "properties": {
           "text": {
@@ -14935,25 +15040,7 @@
         "required": ["text"],
         "additionalProperties": false
       },
-      "SessionPending.UserMessage": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["user"]
-          },
-          "data": {
-            "$ref": "#/components/schemas/SessionPending.UserData1"
-          },
-          "delivery": {
-            "type": "string",
-            "enum": ["steer", "queue"]
-          }
-        },
-        "required": ["type", "data", "delivery"],
-        "additionalProperties": false
-      },
-      "SessionPending.SyntheticData1": {
+      "Session.Inbox.SyntheticPayload1": {
         "type": "object",
         "properties": {
           "text": {
@@ -14969,35 +15056,79 @@
         "required": ["text"],
         "additionalProperties": false
       },
-      "SessionPending.SyntheticMessage": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["synthetic"]
-          },
-          "data": {
-            "$ref": "#/components/schemas/SessionPending.SyntheticData1"
-          },
-          "delivery": {
-            "type": "string",
-            "enum": ["steer", "queue"]
-          }
-        },
-        "required": ["type", "data", "delivery"],
-        "additionalProperties": false
-      },
-      "SessionPending.Message": {
+      "Session.Inbox.Item": {
         "anyOf": [
           {
-            "$ref": "#/components/schemas/SessionPending.UserMessage"
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["user"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/Session.Inbox.UserPayload1"
+              },
+              "delivery": {
+                "$ref": "#/components/schemas/Session.Inbox.Delivery"
+              }
+            },
+            "required": ["type", "payload", "delivery"],
+            "additionalProperties": false
           },
           {
-            "$ref": "#/components/schemas/SessionPending.SyntheticMessage"
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["synthetic"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/Session.Inbox.SyntheticPayload1"
+              },
+              "delivery": {
+                "$ref": "#/components/schemas/Session.Inbox.Delivery"
+              }
+            },
+            "required": ["type", "payload", "delivery"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["compaction"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/Session.Inbox.CompactionPayload"
+              },
+              "delivery": {
+                "$ref": "#/components/schemas/Session.Inbox.Delivery"
+              }
+            },
+            "required": ["type", "payload", "delivery"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["move"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/Session.Inbox.MovePayload"
+              },
+              "delivery": {
+                "$ref": "#/components/schemas/Session.Inbox.Delivery"
+              }
+            },
+            "required": ["type", "payload", "delivery"],
+            "additionalProperties": false
           }
         ]
       },
-      "session.input.admitted": {
+      "session.inbox.enqueued": {
         "type": "object",
         "properties": {
           "id": {
@@ -15016,7 +15147,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["session.input.admitted"]
+            "enum": ["session.inbox.enqueued"]
           },
           "durable": {
             "type": "object",
@@ -15054,7 +15185,7 @@
                   }
                 ]
               },
-              "inputID": {
+              "inboxID": {
                 "type": "string",
                 "allOf": [
                   {
@@ -15062,18 +15193,18 @@
                   }
                 ]
               },
-              "input": {
-                "$ref": "#/components/schemas/SessionPending.Message"
+              "item": {
+                "$ref": "#/components/schemas/Session.Inbox.Item"
               }
             },
-            "required": ["sessionID", "inputID", "input"],
+            "required": ["sessionID", "inboxID", "item"],
             "additionalProperties": false
           }
         },
         "required": ["id", "created", "type", "durable", "data"],
         "additionalProperties": false
       },
-      "session.input.cancelled": {
+      "session.inbox.cancelled": {
         "type": "object",
         "properties": {
           "id": {
@@ -15092,7 +15223,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["session.input.cancelled"]
+            "enum": ["session.inbox.cancelled"]
           },
           "durable": {
             "type": "object",
@@ -15130,7 +15261,7 @@
                   }
                 ]
               },
-              "inputID": {
+              "inboxID": {
                 "type": "string",
                 "allOf": [
                   {
@@ -15139,14 +15270,14 @@
                 ]
               }
             },
-            "required": ["sessionID", "inputID"],
+            "required": ["sessionID", "inboxID"],
             "additionalProperties": false
           }
         },
         "required": ["id", "created", "type", "durable", "data"],
         "additionalProperties": false
       },
-      "session.input.steered": {
+      "session.inbox.delivery.changed": {
         "type": "object",
         "properties": {
           "id": {
@@ -15165,7 +15296,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["session.input.steered"]
+            "enum": ["session.inbox.delivery.changed"]
           },
           "durable": {
             "type": "object",
@@ -15203,89 +15334,19 @@
                   }
                 ]
               },
-              "inputID": {
+              "inboxID": {
                 "type": "string",
                 "allOf": [
                   {
                     "pattern": "^msg_"
                   }
                 ]
+              },
+              "delivery": {
+                "$ref": "#/components/schemas/Session.Inbox.Delivery"
               }
             },
-            "required": ["sessionID", "inputID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "created", "type", "durable", "data"],
-        "additionalProperties": false
-      },
-      "session.input.queued": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^evt_"
-              }
-            ]
-          },
-          "created": {
-            "type": "number"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.input.queued"]
-          },
-          "durable": {
-            "type": "object",
-            "properties": {
-              "aggregateID": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 0
-                  }
-                ]
-              },
-              "version": {
-                "type": "number",
-                "enum": [1]
-              }
-            },
-            "required": ["aggregateID", "seq", "version"],
-            "additionalProperties": false
-          },
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^ses"
-                  }
-                ]
-              },
-              "inputID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^msg_"
-                  }
-                ]
-              }
-            },
-            "required": ["sessionID", "inputID"],
+            "required": ["sessionID", "inboxID", "delivery"],
             "additionalProperties": false
           }
         },
@@ -17208,79 +17269,6 @@
         "required": ["id", "created", "type", "durable", "data"],
         "additionalProperties": false
       },
-      "session.compaction.admitted": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^evt_"
-              }
-            ]
-          },
-          "created": {
-            "type": "number"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.compaction.admitted"]
-          },
-          "durable": {
-            "type": "object",
-            "properties": {
-              "aggregateID": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 0
-                  }
-                ]
-              },
-              "version": {
-                "type": "number",
-                "enum": [1]
-              }
-            },
-            "required": ["aggregateID", "seq", "version"],
-            "additionalProperties": false
-          },
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^ses"
-                  }
-                ]
-              },
-              "inputID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^msg_"
-                  }
-                ]
-              }
-            },
-            "required": ["sessionID", "inputID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "created", "type", "durable", "data"],
-        "additionalProperties": false
-      },
       "session.compaction.started": {
         "type": "object",
         "properties": {
@@ -17821,19 +17809,16 @@
             "$ref": "#/components/schemas/session.forked"
           },
           {
-            "$ref": "#/components/schemas/session.input.promoted"
+            "$ref": "#/components/schemas/session.inbox.delivered"
           },
           {
-            "$ref": "#/components/schemas/session.input.admitted"
+            "$ref": "#/components/schemas/session.inbox.enqueued"
           },
           {
-            "$ref": "#/components/schemas/session.input.cancelled"
+            "$ref": "#/components/schemas/session.inbox.cancelled"
           },
           {
-            "$ref": "#/components/schemas/session.input.steered"
-          },
-          {
-            "$ref": "#/components/schemas/session.input.queued"
+            "$ref": "#/components/schemas/session.inbox.delivery.changed"
           },
           {
             "$ref": "#/components/schemas/session.execution.started"
@@ -17900,9 +17885,6 @@
           },
           {
             "$ref": "#/components/schemas/session.retry.scheduled"
-          },
-          {
-            "$ref": "#/components/schemas/session.compaction.admitted"
           },
           {
             "$ref": "#/components/schemas/session.compaction.started"
@@ -23381,19 +23363,16 @@
             "$ref": "#/components/schemas/session.forked"
           },
           {
-            "$ref": "#/components/schemas/session.input.promoted"
+            "$ref": "#/components/schemas/session.inbox.delivered"
           },
           {
-            "$ref": "#/components/schemas/session.input.admitted"
+            "$ref": "#/components/schemas/session.inbox.enqueued"
           },
           {
-            "$ref": "#/components/schemas/session.input.cancelled"
+            "$ref": "#/components/schemas/session.inbox.cancelled"
           },
           {
-            "$ref": "#/components/schemas/session.input.steered"
-          },
-          {
-            "$ref": "#/components/schemas/session.input.queued"
+            "$ref": "#/components/schemas/session.inbox.delivery.changed"
           },
           {
             "$ref": "#/components/schemas/session.execution.started"
@@ -23472,9 +23451,6 @@
           },
           {
             "$ref": "#/components/schemas/session.retry.scheduled"
-          },
-          {
-            "$ref": "#/components/schemas/session.compaction.admitted"
           },
           {
             "$ref": "#/components/schemas/session.compaction.started"

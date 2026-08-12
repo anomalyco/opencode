@@ -165,8 +165,6 @@ export const Options = Schema.Struct({
       version: Schema.String,
     }),
   ),
-  /** Set false on runtimes that cannot spawn child processes; local (stdio) servers report failed instead of connecting. */
-  stdio: Schema.optional(Schema.Boolean),
 })
 export type Options = typeof Options.Type
 
@@ -500,11 +498,6 @@ export const layer = (options?: Options) =>
 
       const startServer = (name: ServerName, entry: ServerEntry) =>
         Effect.gen(function* () {
-          if (options?.stdio === false && entry.config.type === "local") {
-            entry.status = { status: "failed", error: "stdio MCP servers are unavailable in this runtime" }
-            yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
-            return
-          }
           // Announce the handshake so connect() and credential reconnects don't show a stale
           // disabled/failed status for the duration of the connection attempt.
           entry.status = { status: "pending" }

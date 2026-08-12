@@ -902,12 +902,12 @@ test("completes exploration when a queued prompt is promoted", async () => {
     emitEvent(events, {
       id: "evt_prompt_admitted",
       created: 3,
-      type: "session.input.admitted",
+      type: "session.inbox.enqueued",
       durable: durable(sessionID, 2),
       data: {
         sessionID,
-        inputID: "message-user",
-        input: { type: "user", data: { text: "Continue" }, delivery: "steer" },
+        inboxID: "message-user",
+        item: { type: "user", payload: { text: "Continue" }, delivery: "steer" },
       },
     })
     await wait(() => rows.at(-1)?.type === "message")
@@ -916,9 +916,12 @@ test("completes exploration when a queued prompt is promoted", async () => {
     emitEvent(events, {
       id: "evt_prompt_promoted",
       created: 4,
-      type: "session.input.promoted",
+      type: "session.inbox.delivered",
       durable: durable(sessionID, 3),
-      data: { sessionID, inputID: "message-user" },
+      data: {
+        sessionID,
+        inboxID: "message-user",
+      },
     })
     await wait(() => rows.find((row) => row.type === "group")?.completed === true)
     expect(rows.at(-1)).toEqual({ type: "message", messageID: "message-user" })
@@ -961,12 +964,12 @@ test("updates and removes queued inputs from durable lifecycle events", async ()
     emitEvent(events, {
       id: "evt_queue_admitted",
       created: 1,
-      type: "session.input.admitted",
+      type: "session.inbox.enqueued",
       durable: durable(sessionID),
       data: {
         sessionID,
-        inputID: "message-queued",
-        input: { type: "user", data: { text: "Steer me" }, delivery: "queue" },
+        inboxID: "message-queued",
+        item: { type: "user", payload: { text: "Steer me" }, delivery: "queue" },
       },
     })
     await wait(() => data.session.pending.list(sessionID).length === 1)
@@ -975,9 +978,9 @@ test("updates and removes queued inputs from durable lifecycle events", async ()
     emitEvent(events, {
       id: "evt_queue_steered",
       created: 2,
-      type: "session.input.steered",
+      type: "session.inbox.delivery.changed",
       durable: durable(sessionID, 1),
-      data: { sessionID, inputID: "message-queued" },
+      data: { sessionID, inboxID: "message-queued", delivery: "steer" },
     })
     await wait(() =>
       data.session.pending
@@ -989,9 +992,9 @@ test("updates and removes queued inputs from durable lifecycle events", async ()
     emitEvent(events, {
       id: "evt_queue_restored",
       created: 3,
-      type: "session.input.queued",
+      type: "session.inbox.delivery.changed",
       durable: durable(sessionID, 2),
-      data: { sessionID, inputID: "message-queued" },
+      data: { sessionID, inboxID: "message-queued", delivery: "queue" },
     })
     await wait(() =>
       data.session.pending
@@ -1003,21 +1006,21 @@ test("updates and removes queued inputs from durable lifecycle events", async ()
     emitEvent(events, {
       id: "evt_cancel_admitted",
       created: 4,
-      type: "session.input.admitted",
+      type: "session.inbox.enqueued",
       durable: durable(sessionID, 3),
       data: {
         sessionID,
-        inputID: "message-cancelled",
-        input: { type: "user", data: { text: "Delete me" }, delivery: "queue" },
+        inboxID: "message-cancelled",
+        item: { type: "user", payload: { text: "Delete me" }, delivery: "queue" },
       },
     })
     await wait(() => data.session.pending.list(sessionID).length === 2)
     emitEvent(events, {
       id: "evt_queue_cancelled",
       created: 5,
-      type: "session.input.cancelled",
+      type: "session.inbox.cancelled",
       durable: durable(sessionID, 4),
-      data: { sessionID, inputID: "message-cancelled" },
+      data: { sessionID, inboxID: "message-cancelled" },
     })
     await wait(() => !data.session.input.has(sessionID, "message-cancelled"))
     expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["message-queued"])
@@ -1102,13 +1105,13 @@ test("removes committed revert messages from local state", async () => {
   ))
 
   try {
-    for (const [seq, inputID] of ["msg_001", "msg_002", "msg_003"].entries()) {
+    for (const [seq, inboxID] of ["msg_001", "msg_002", "msg_003"].entries()) {
       emitEvent(events, {
         id: Event.ID.create(),
         created: seq,
-        type: "session.input.admitted",
+        type: "session.inbox.enqueued",
         durable: durable(sessionID, seq),
-        data: { sessionID, inputID, input: { type: "user", data: { text: inputID }, delivery: "steer" } },
+        data: { sessionID, inboxID, item: { type: "user", payload: { text: inboxID }, delivery: "steer" } },
       })
     }
     await wait(() => data.session.message.list(sessionID).length === 3)
@@ -1473,9 +1476,13 @@ test("tracks session status from active sessions and execution events", async ()
     emitEvent(events, {
       id: "evt_manual_compaction_admitted",
       created: 0,
-      type: "session.compaction.admitted",
+      type: "session.inbox.enqueued",
       durable: durable("session-manual", 1),
-      data: { sessionID: "session-manual", inputID: "message-compaction" },
+      data: {
+        sessionID: "session-manual",
+        inboxID: "message-compaction",
+        item: { type: "compaction", payload: {}, delivery: "queue" },
+      },
     })
     await wait(() => data.session.pending.list("session-manual").some((item) => item.id === "message-compaction"))
     emitEvent(events, {
@@ -1574,16 +1581,20 @@ test("restores queued compaction from durable pending input", async () => {
       sessionID,
       timeCreated: 1,
       type: "compaction" as const,
+      payload: {},
+      delivery: "queue" as const,
     },
     {
       id: "message-compaction-later",
       sessionID,
       timeCreated: 2,
       type: "compaction" as const,
+      payload: {},
+      delivery: "queue" as const,
     },
   ]
   const calls = createFetch((url) => {
-    if (url.pathname !== `/api/session/${sessionID}/pending`) return
+    if (url.pathname !== `/api/session/${sessionID}/inbox`) return
     return json({ data: pending })
   }, events)
   let data!: ReturnType<typeof useData>
@@ -1618,8 +1629,8 @@ test("restores queued compaction from durable pending input", async () => {
     ])
     await wait(() => rows.filter((row) => row.type === "compaction-queued").length === 2)
     expect(rows.filter((row) => row.type === "compaction-queued")).toEqual([
-      { type: "compaction-queued", inputID: "message-compaction-queued" },
-      { type: "compaction-queued", inputID: "message-compaction-later" },
+      { type: "compaction-queued", inboxID: "message-compaction-queued" },
+      { type: "compaction-queued", inboxID: "message-compaction-later" },
     ])
 
     emitEvent(events, {
@@ -2793,12 +2804,12 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     emitEvent(events, {
       id: "evt_admitted_1",
       created: 0,
-      type: "session.input.admitted",
+      type: "session.inbox.enqueued",
       durable: durable(sessionID),
       data: {
         sessionID,
-        inputID: messageID,
-        input: { type: "user", data: { text: "hello" }, delivery: "steer" },
+        inboxID: messageID,
+        item: { type: "user", payload: { text: "hello" }, delivery: "steer" },
       },
     })
     await wait(() => sync.session.message.list(sessionID)?.length === 1)
@@ -2811,7 +2822,7 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
         sessionID,
         timeCreated: 0,
         type: "user",
-        data: { text: "hello" },
+        payload: { text: "hello" },
         delivery: "steer",
       },
     ])
@@ -2823,16 +2834,16 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     emitEvent(events, {
       id: "evt_prompted_1",
       created: 0,
-      type: "session.input.promoted",
+      type: "session.inbox.delivered",
       durable: durable(sessionID, 1),
       data: {
         sessionID,
-        inputID: messageID,
+        inboxID: messageID,
       },
     })
 
-    await wait(() => received.at(-1) === "session.input.promoted")
-    expect(received.slice(-2)).toEqual(["session.input.admitted", "session.input.promoted"])
+    await wait(() => received.at(-1) === "session.inbox.delivered")
+    expect(received.slice(-2)).toEqual(["session.inbox.enqueued", "session.inbox.delivered"])
     unsubscribe()
     const message = sync.session.message.list(sessionID)?.[0]
     expect(message?.type).toBe("user")

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Location as CoreLocation } from "@opencode-ai/core/location"
-import { SessionPending as CoreSessionPending } from "@opencode-ai/core/session/pending"
+import { SessionInbox as CoreSessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage as CoreSessionMessage } from "@opencode-ai/core/session/message"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Config } from "@opencode-ai/schema/config"
@@ -10,7 +10,7 @@ import { Project } from "@opencode-ai/schema/project"
 import { Provider } from "@opencode-ai/schema/provider"
 import { WebSearch } from "@opencode-ai/schema/websearch"
 import { Session } from "@opencode-ai/schema/session"
-import { SessionPending } from "@opencode-ai/schema/session-pending"
+import { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Api } from "@opencode-ai/server/api"
@@ -53,8 +53,8 @@ test("re-exports canonical contracts directly from Schema", () => {
     "Reference",
     "RelativePath",
     "Session",
+    "SessionInbox",
     "SessionMessage",
-    "SessionPending",
     "Skill",
     "Tool",
     "WebSearch",
@@ -69,9 +69,9 @@ test("Core and Server reuse the authoritative Schema and Protocol values", () =>
   expect(CoreProject.Current).toBe(Project.Current)
   expect(CoreProject.Directory).toBe(Project.Directory)
   expect(CoreProject.Directories).toBe(Project.Directories)
-  expect(CoreSessionPending.Message).toBe(SessionPending.Message)
-  expect(CoreSessionPending.User).toBe(SessionPending.User)
-  expect(CoreSessionPending.Synthetic).toBe(SessionPending.Synthetic)
+  expect(CoreSessionInbox.Item).toBe(SessionInbox.Item)
+  expect(CoreSessionInbox.User).toBe(SessionInbox.User)
+  expect(CoreSessionInbox.Synthetic).toBe(SessionInbox.Synthetic)
   expect(CoreSessionMessage.Info).toBe(SessionMessage.Info)
   expect(CoreSessionMessage.AssistantText).toBe(SessionMessage.AssistantText)
   expect(Api.groups["server.session"].identifier).toBe("server.session")

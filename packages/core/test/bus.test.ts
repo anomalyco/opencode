@@ -455,6 +455,120 @@ describe("Bus", () => {
     }),
   )
 
+  it.effect("publishes a durable batch atomically in provided order", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const aggregateID = Event.ID.create()
+      const observed = new Array<string>()
+      yield* bus.project(SyncMessage, (event) =>
+        Effect.sync(() => {
+          observed.push(`project:${event.data.text}`)
+        }),
+      )
+      yield* bus.listen((event) =>
+        event.type === SyncMessage.type
+          ? Effect.gen(function* () {
+              const text = (event.data as { readonly text: string }).text
+              const row = yield* db
+                .select({ seq: EventSequenceTable.seq })
+                .from(EventSequenceTable)
+                .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+                .get()
+                .pipe(Effect.orDie)
+              observed.push(`notify:${text}:${row?.seq}`)
+            })
+          : Effect.void,
+      )
+
+      const events = yield* bus.publishAll([
+        [SyncMessage, { id: aggregateID, text: "first" }],
+        [SyncMessage, { id: aggregateID, text: "second" }],
+      ])
+
+      expect(events.map((event) => event.durable.seq)).toEqual([Event.Seq.make(0), Event.Seq.make(1)])
+      expect(observed).toEqual(["project:first", "project:second", "notify:first:1", "notify:second:1"])
+      expect(
+        (yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).map(
+          (row) => row.seq,
+        ),
+      ).toEqual([0, 1])
+    }),
+  )
+
+  it.effect("rolls back every batch event when a projector fails", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const aggregateID = Event.ID.create()
+      const notifications = new Array<string>()
+      yield* db.run("CREATE TABLE IF NOT EXISTS event_batch_probe (value text NOT NULL)")
+      yield* db.run("DELETE FROM event_batch_probe")
+      yield* bus.project(SyncMessage, (event) =>
+        db
+          .run(`INSERT INTO event_batch_probe (value) VALUES ('${event.data.text}')`)
+          .pipe(
+            Effect.orDie,
+            Effect.andThen(event.data.text === "second" ? Effect.die("projector failed") : Effect.void),
+          ),
+      )
+      yield* bus.listen((event) =>
+        Effect.sync(() => {
+          notifications.push(event.type)
+        }),
+      )
+
+      const exit = yield* bus
+        .publishAll([
+          [SyncMessage, { id: aggregateID, text: "first" }],
+          [SyncMessage, { id: aggregateID, text: "second" }],
+        ])
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain("projector failed")
+      expect(yield* db.all("SELECT value FROM event_batch_probe")).toEqual([])
+      expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).toEqual([])
+      expect(
+        yield* db.select().from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).all(),
+      ).toEqual([])
+      expect(notifications).toEqual([])
+    }),
+  )
+
+  it.effect("does not interleave a concurrent publish with batch notifications", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const aggregateID = Event.ID.create()
+      const firstObserved = yield* Deferred.make<void>()
+      const continueNotifications = yield* Deferred.make<void>()
+      const observed = new Array<string>()
+      yield* bus.listen((event) => {
+        if (event.type !== SyncMessage.type) return Effect.void
+        const text = (event.data as { readonly text: string }).text
+        return Effect.sync(() => observed.push(text)).pipe(
+          Effect.andThen(text === "first" ? Deferred.succeed(firstObserved, undefined) : Effect.void),
+          Effect.andThen(text === "first" ? Deferred.await(continueNotifications) : Effect.void),
+        )
+      })
+
+      const batch = yield* bus
+        .publishAll([
+          [SyncMessage, { id: aggregateID, text: "first" }],
+          [SyncMessage, { id: aggregateID, text: "second" }],
+        ])
+        .pipe(Effect.forkScoped)
+      yield* Deferred.await(firstObserved)
+      const single = yield* bus.publish(SyncMessage, { id: aggregateID, text: "third" }).pipe(Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      expect(observed).toEqual(["first"])
+      yield* Deferred.succeed(continueNotifications, undefined)
+      yield* Fiber.join(batch)
+      yield* Fiber.join(single)
+      expect(observed).toEqual(["first", "second", "third"])
+    }),
+  )
+
   it.effect("replays durable aggregate events after a sequence and tails new events", () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service

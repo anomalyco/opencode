@@ -195,8 +195,8 @@ export async function runNonInteractivePrompt(input: Input) {
       if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
       const time = toMillis("created" in event ? event.created : undefined)
 
-      if (event.type === "session.input.promoted") {
-        if (event.data.inputID === messageID) {
+      if (event.type === "session.inbox.delivered") {
+        if (event.data.inboxID === messageID) {
           promoted = true
           prePromotionError = undefined
           continue

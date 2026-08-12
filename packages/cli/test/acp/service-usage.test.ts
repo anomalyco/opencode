@@ -15,8 +15,8 @@ describe("acp service prompt routing and usage", () => {
           const id = requestID(request)
           completeTurn(context, "ses_routes", {
             id: `evt_${id}`,
-            type: "session.input.promoted",
-            data: { sessionID: "ses_routes", inputID: id },
+            type: "session.inbox.delivered",
+            data: { sessionID: "ses_routes", inboxID: id },
           })
           return Response.json({ data: {} })
         }
@@ -33,8 +33,8 @@ describe("acp service prompt routing and usage", () => {
           const id = requestID(request)
           completeTurn(context, "ses_routes", {
             id: `evt_${id}`,
-            type: "session.compaction.admitted",
-            data: { sessionID: "ses_routes", inputID: id },
+            type: "session.inbox.delivered",
+            data: { sessionID: "ses_routes", inboxID: id },
           })
           return Response.json({ data: {} })
         }
@@ -95,8 +95,8 @@ describe("acp service prompt routing and usage", () => {
           const id = requestID(request)
           context.send({
             id: `evt_${id}`,
-            type: "session.input.promoted",
-            data: { sessionID: "ses_usage", inputID: id },
+            type: "session.inbox.delivered",
+            data: { sessionID: "ses_usage", inboxID: id },
           })
           context.send({
             id: "evt_step",
@@ -189,8 +189,8 @@ describe("acp service prompt routing and usage", () => {
           const id = requestID(request)
           context.send({
             id: `evt_${id}`,
-            type: "session.input.promoted",
-            data: { sessionID: "ses_usage_failure", inputID: id },
+            type: "session.inbox.delivered",
+            data: { sessionID: "ses_usage_failure", inboxID: id },
           })
           context.send({
             id: "evt_step_failure",

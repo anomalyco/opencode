@@ -241,7 +241,7 @@ it.live(
           resume: false,
         })
         const context = yield* opencode.sessions.context({ sessionID: id })
-        const pendingAfterAdmit = yield* opencode.sessions.pending.list({ sessionID: id })
+        const pendingAfterAdmit = yield* opencode.sessions.inbox.list({ sessionID: id })
         yield* opencode.sessions.instructions.entry.put({ sessionID: id, key: "deploy-target", value: "production" })
         yield* opencode.sessions.instructions.entry.put({ sessionID: id, key: "flags", value: { beta: true } })
         const contextEntries = yield* opencode.sessions.instructions.entry.list({ sessionID: id })
@@ -252,13 +252,13 @@ it.live(
           text: "Promote this input",
         })
         const prompted = yield* opencode.sessions.log({ sessionID: id, follow: true }).pipe(
-          Stream.filter((event) => event.type === "session.input.promoted" && event.data.inputID === wake.id),
+          Stream.filter((event) => event.type === "session.inbox.delivered" && event.data.inboxID === wake.id),
           Stream.runHead,
           Effect.timeout("10 seconds"),
           Effect.map(Option.getOrThrow),
         )
         const wakeContext = yield* opencode.sessions.context({ sessionID: id })
-        const pendingAfterPromote = yield* opencode.sessions.pending.list({ sessionID: id })
+        const pendingAfterPromote = yield* opencode.sessions.inbox.list({ sessionID: id })
         const event = yield* opencode.sessions.log({ sessionID: id }).pipe(
           Stream.filter((item) => item.type === "session.model.selected"),
           Stream.take(1),
@@ -278,7 +278,7 @@ it.live(
             opencode.sessions.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
             opencode.sessions.message({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
             opencode.sessions.instructions.entry.list({ sessionID: missingSessionID }).pipe(Effect.flip),
-            opencode.sessions.pending.list({ sessionID: missingSessionID }).pipe(Effect.flip),
+            opencode.sessions.inbox.list({ sessionID: missingSessionID }).pipe(Effect.flip),
           ],
           { concurrency: "unbounded" },
         )
@@ -298,7 +298,7 @@ it.live(
         expect(pendingAfterAdmit).toContainEqual(
           expect.objectContaining({ id: admitted.id, type: "user", delivery: "steer" }),
         )
-        expect(prompted.type).toBe("session.input.promoted")
+        expect(prompted.type).toBe("session.inbox.delivered")
         expect(pendingAfterPromote.map((item) => item.id)).not.toContainAnyValues([admitted.id, wake.id])
         expect(wakeContext).toContainEqual(expect.objectContaining({ id: wake.id, type: "user" }))
         expect(contextEntries).toEqual([
@@ -362,13 +362,13 @@ it.live(
         const opencode = yield* fixture.sdk.OpenCode.create()
         const id = sessionID(fixture)
         const connected = yield* Latch.make(false)
-        const prompted = yield* Deferred.make<Extract<OpenCodeEvent, { type: "session.input.promoted" }>>()
+        const prompted = yield* Deferred.make<Extract<OpenCodeEvent, { type: "session.inbox.delivered" }>>()
 
         yield* opencode.events.subscribe().pipe(
           Stream.runForEach((event) =>
             event.type === "server.connected"
               ? connected.open
-              : event.type === "session.input.promoted" && event.data.sessionID === id
+              : event.type === "session.inbox.delivered" && event.data.sessionID === id
                 ? Deferred.succeed(prompted, event).pipe(Effect.asVoid)
                 : Effect.void,
           ),

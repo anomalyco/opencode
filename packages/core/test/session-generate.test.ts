@@ -38,7 +38,7 @@ import {
   InstructionBlobTable,
   InstructionStateTable,
   SessionMessageTable,
-  SessionPendingTable,
+  SessionInboxTable,
   SessionTable,
 } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -170,9 +170,9 @@ const durableState = (db: Database.Interface["db"], sessionID: SessionSchema.ID)
       .pipe(Effect.orDie),
     pending: db
       .select()
-      .from(SessionPendingTable)
-      .where(eq(SessionPendingTable.session_id, sessionID))
-      .orderBy(asc(SessionPendingTable.admitted_seq))
+      .from(SessionInboxTable)
+      .where(eq(SessionInboxTable.session_id, sessionID))
+      .orderBy(asc(SessionInboxTable.enqueued_seq))
       .all()
       .pipe(Effect.orDie),
     instructions: db
@@ -225,12 +225,15 @@ it.effect("generates from fresh settled Session context without durable mutation
     const { db, bus, instructions } = yield* setup
     yield* InstructionState.prepare(db, bus, instructions, sessionID)
     const existing = SessionMessage.ID.create()
-    yield* bus.publish(SessionEvent.InputAdmitted, {
+    yield* bus.publish(SessionEvent.InboxEnqueued, {
       sessionID,
-      inputID: existing,
-      input: { type: "user", data: { text: "Existing durable context" }, delivery: "steer" },
+      inboxID: existing,
+      item: { type: "user", payload: { text: "Existing durable context" }, delivery: "steer" },
     })
-    yield* bus.publish(SessionEvent.InputPromoted, { sessionID, inputID: existing })
+    yield* bus.publish(SessionEvent.InboxDelivered, {
+      sessionID,
+      inboxID: existing,
+    })
     const settledAssistant = SessionMessage.ID.create()
     yield* bus.publish(SessionEvent.Step.Started, {
       sessionID,
@@ -275,10 +278,10 @@ it.effect("generates from fresh settled Session context without durable mutation
       input: {},
       executed: false,
     })
-    yield* bus.publish(SessionEvent.InputAdmitted, {
+    yield* bus.publish(SessionEvent.InboxEnqueued, {
       sessionID,
-      inputID: SessionMessage.ID.create(),
-      input: { type: "user", data: { text: "Queued input must remain invisible" }, delivery: "queue" },
+      inboxID: SessionMessage.ID.create(),
+      item: { type: "user", payload: { text: "Queued input must remain invisible" }, delivery: "queue" },
     })
     instruction = "Changed context"
     const before = yield* durableState(db, sessionID)

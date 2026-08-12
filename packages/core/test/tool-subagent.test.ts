@@ -19,7 +19,7 @@ import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionPending } from "@opencode-ai/core/session/pending"
+import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -304,7 +304,7 @@ describe("SubagentTool", () => {
             agent: "reviewer",
             model: childModel,
           })
-          expect((yield* sessions.pending(child.id)).find((message) => message.type === "user")?.data.text).toBe(
+          expect((yield* sessions.inbox(child.id)).find((message) => message.type === "user")?.payload.text).toBe(
             "You are a subagent spawned by another session.\nreview this",
           )
 
@@ -376,8 +376,8 @@ describe("SubagentTool", () => {
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           const bus = yield* Bus.Service
-          const admitted = yield* bus.subscribe(SessionEvent.InputAdmitted).pipe(
-            Stream.filter((event) => event.data.sessionID === parent.id && event.data.input.type === "synthetic"),
+          const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === parent.id && event.data.item.type === "synthetic"),
             Stream.take(1),
             Stream.runCollect,
             Effect.forkScoped({ startImmediately: true }),
@@ -401,8 +401,10 @@ describe("SubagentTool", () => {
           expect(settled.content).toEqual([{ type: "text", text: expect.stringContaining(`id: ${childID}`) }])
 
           const admission = Array.from(yield* Fiber.join(admitted))[0]
-          expect(admission?.data.input.data.text).toContain(`<subagent id="${childID}" state="completed"`)
-          expect(admission?.data.input.data).toMatchObject({
+          expect(admission?.data.item.type).toBe("synthetic")
+          if (admission?.data.item.type !== "synthetic") return yield* Effect.die("Expected synthetic inbox item")
+          expect(admission?.data.item.payload.text).toContain(`<subagent id="${childID}" state="completed"`)
+          expect(admission?.data.item.payload).toMatchObject({
             description: "background review",
             metadata: {
               source: "subagent",
@@ -412,7 +414,7 @@ describe("SubagentTool", () => {
             },
           })
           const database = yield* Database.Service
-          yield* SessionPending.promote(database.db, bus, parent.id, "steer")
+          yield* SessionInbox.promote(database.db, bus, parent.id, "steer")
           const synthetic = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
           expect(synthetic).toHaveLength(1)
           expect(synthetic[0]?.text).toContain(`<subagent id="${childID}" state="completed"`)

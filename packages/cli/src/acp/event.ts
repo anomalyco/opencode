@@ -538,9 +538,8 @@ async function replayMessage(
 }
 
 function matchesStart(event: EventSubscribeOutput, start: TurnStart) {
-  if (start.type === "input") return event.type === "session.input.promoted" && event.data.inputID === start.id
-  if (start.type === "compaction")
-    return event.type === "session.compaction.admitted" && event.data.inputID === start.id
+  if (start.type === "input") return event.type === "session.inbox.delivered" && event.data.inboxID === start.id
+  if (start.type === "compaction") return event.type === "session.inbox.delivered" && event.data.inboxID === start.id
   return event.type === "session.skill.activated" && event.id === start.id.replace(/^msg_/, "evt_")
 }
 

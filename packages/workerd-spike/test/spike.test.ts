@@ -178,10 +178,29 @@ it("runs a full prompt turn against a fake provider and reads the durable log", 
   const items = await timed("session log read", () => readLog(sessionID))
   console.log(`[info] durable log events: ${JSON.stringify(items.map((item) => item.type))}`)
   const eventTypes = items.map((item) => item.type)
-  expect(eventTypes).toContain("session.input.admitted")
+  expect(eventTypes).toContain("session.inbox.enqueued")
   expect(eventTypes).toContain("session.text.ended")
   expect(eventTypes).toContain("session.execution.succeeded")
   expect(eventTypes).toContain("log.synced")
+})
+
+it("fails a shell command through the no-execution-plane spawner and leaves the session usable", async () => {
+  const sessionID = await createSession()
+  const shell = await request(`/api/session/${sessionID}/shell`, {
+    method: "POST",
+    body: JSON.stringify({ command: "pwd" }),
+  })
+  expect(shell.status).toBe(500)
+
+  mockLLM()
+  const prompt = await request(`/api/session/${sessionID}/prompt`, {
+    method: "POST",
+    body: JSON.stringify({ text: "Say hello after the shell failure" }),
+  })
+  expect(prompt.status).toBe(200)
+  const wait = await request(`/api/session/${sessionID}/wait`, { method: "POST" })
+  expect(wait.status).toBe(204)
+  expect((await readLog(sessionID)).map((item) => item.type)).toContain("session.execution.succeeded")
 })
 
 // A5 question 1 (ack-then-continue): the Slack flow returns the prompt request

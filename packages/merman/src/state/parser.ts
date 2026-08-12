@@ -176,6 +176,9 @@ export function parseMermaidStateDiagram(content: string): StateDiagram {
     if (transitionMatch) {
       const rawFrom = transitionMatch[1]!
       const rawTo = transitionMatch[2]!
+      if (rawFrom.includes("-->") || rawTo.includes("-->")) {
+        throw new MermaidSyntaxError("state", source.lineNumber, line)
+      }
       const from = normalizeStateDiagramEndpoint(rawFrom, "from", parentId)
       const to = normalizeStateDiagramEndpoint(rawTo, "to", parentId)
       ensureState(states, from, rawFrom === "[*]" ? "●" : from, rawFrom === "[*]" ? "start" : "state", parentId)

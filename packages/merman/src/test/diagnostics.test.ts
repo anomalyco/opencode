@@ -41,6 +41,11 @@ describe("parser diagnostics", () => {
     expect(diagram.edges).toHaveLength(1)
   })
 
+  test("rejects pathological flowchart statements before parsing edge operators", () => {
+    const statement = "-.a".repeat(4_000)
+    expect(() => parseMermaidFlowchartDiagram(`flowchart LR\n${statement}`)).toThrow("Flowchart statement is too long")
+  })
+
   test("exposes structured syntax errors through top-level rendering", () => {
     try {
       renderSequenceDiagram(`sequenceDiagram
@@ -60,6 +65,11 @@ describe("parser diagnostics", () => {
     for (const message of ["A<<->>B: hello", "A<<-->>B: hello"]) {
       expect(() => parseMermaidSequenceDiagram(`sequenceDiagram\n  ${message}`)).toThrow(MermaidSyntaxError)
     }
+  })
+
+  test("rejects chained sequence and state transitions instead of creating phantom endpoints", () => {
+    expect(() => parseMermaidSequenceDiagram("sequenceDiagram\n  A->>B->>C: hello")).toThrow(MermaidSyntaxError)
+    expect(() => parseMermaidStateDiagram("stateDiagram-v2\n  A-->B-->C")).toThrow(MermaidSyntaxError)
   })
 
   test("reports unclosed state constructs at their opening line", () => {

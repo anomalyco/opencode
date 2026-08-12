@@ -669,8 +669,8 @@ describe("ShellTool", () => {
         return withSession(tmp.path, (registry) =>
           Effect.gen(function* () {
             const bus = yield* Bus.Service
-            const admitted = yield* bus.subscribe(SessionEvent.InputAdmitted).pipe(
-              Stream.filter((event) => event.data.sessionID === sessionID && event.data.input.type === "synthetic"),
+            const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+              Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
               Stream.runHead,
               Effect.forkScoped({ startImmediately: true }),
             )
@@ -684,7 +684,7 @@ describe("ShellTool", () => {
             const id = ShellSchema.ID.make(shellID)
             expect((yield* shell.list()).map((info) => info.id)).toContain(id)
             expect((yield* shell.wait(id)).status).toBe("timeout")
-            expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.input.data).toMatchObject({
+            expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
               description: idleCommand,
               metadata: {
                 source: "shell",

@@ -30,6 +30,7 @@ const BOX_NODE_RE = new RegExp(`^(${ID_RE})\\[(.+)\\]$`)
 const ID_ONLY_RE = new RegExp(`^${ID_RE}$`)
 const EXPLICIT_NODE_SHAPE_RE = new RegExp(`^${ID_RE}(?:\\[|\\(|\\{)`)
 const CIRCLE_NODE_RE = new RegExp(`^${ID_RE}\\(\\(.+\\)\\)$`)
+const MAX_FLOWCHART_LINE_LENGTH = 10_000
 const EDGE_OPERATOR_RE =
   /(-\.(?!->)(.+?)\.(?:->|-))|(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->|\.-)|(<-->|-->|==>|-\.->|---|~~~)\s*(?:\|([^|]*)\|\s*)?/dg
 
@@ -252,6 +253,9 @@ export function parseMermaidFlowchartDiagram(content: string): FlowchartDiagram 
 
   for (const source of meaningfulNumberedMermaidLines(content)) {
     const line = source.text
+    if (line.length > MAX_FLOWCHART_LINE_LENGTH) {
+      throw new MermaidSyntaxError("flowchart", source.lineNumber, line, "Flowchart statement is too long")
+    }
     if (hasInternalStatementSeparator(line)) throw new MermaidSyntaxError("flowchart", source.lineNumber, line)
     const header = line.match(FLOWCHART_HEADER_RE)
     if (header) {

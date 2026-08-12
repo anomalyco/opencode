@@ -83,7 +83,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
       })
     if (url.pathname === "/api/session/dummy") return json({ data: session })
     if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
-    if (url.pathname === "/api/session/dummy/pending") return json({ data: [] })
+    if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
     if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
     if (url.pathname === "/api/session/dummy/prompt") {
       promptRequests++
@@ -167,7 +167,7 @@ test("session title generated while an untitled session is loading remains visib
       return json({ data: session })
     }
     if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
-    if (url.pathname === "/api/session/dummy/pending") return json({ data: [] })
+    if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
     if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
   }, events)
   const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
@@ -243,7 +243,7 @@ test("session startup prompt is submitted exactly once", async () => {
     if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
     if (url.pathname === "/api/session/dummy") return json({ data: session })
     if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
-    if (url.pathname === "/api/session/dummy/pending") return json({ data: [] })
+    if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
     if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
     if (url.pathname === "/api/agent")
       return json({

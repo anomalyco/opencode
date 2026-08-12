@@ -22,7 +22,7 @@ import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionPending } from "@opencode-ai/core/session/pending"
+import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -338,9 +338,9 @@ describe("Session.create", () => {
         text: "First",
         resume: false,
       })
-      yield* SessionPending.promote(db, bus, parent.id, "steer")
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
       yield* session.synthetic({ sessionID: parent.id, text: "parent note", resume: false })
-      yield* SessionPending.promote(db, bus, parent.id, "steer")
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
 
       const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
       const parentContext = yield* session.context(parent.id)
@@ -360,24 +360,24 @@ describe("Session.create", () => {
         durable: { seq: 0 },
         data: { sessionID: forked.id, parentID: parent.id },
       })
-      expect(yield* SessionPending.find(db, forkContext[0].id)).toBeUndefined()
-      expect(yield* SessionPending.find(db, forkContext[1].id)).toBeUndefined()
+      expect(yield* SessionInbox.find(db, forkContext[0].id)).toBeUndefined()
+      expect(yield* SessionInbox.find(db, forkContext[1].id)).toBeUndefined()
       expect(
         yield* session.prompt({ id: forkContext[0].id, sessionID: forked.id, text: "First", resume: false }),
-      ).toMatchObject({ id: forkContext[0].id, type: "user", data: { text: "First" } })
+      ).toMatchObject({ id: forkContext[0].id, type: "user", payload: { text: "First" } })
 
       yield* session.prompt({
         sessionID: parent.id,
         text: "Parent changed",
         resume: false,
       })
-      yield* SessionPending.promote(db, bus, parent.id, "steer")
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
       yield* session.prompt({
         sessionID: forked.id,
         text: "Child continues",
         resume: false,
       })
-      yield* SessionPending.promote(db, bus, forked.id, "steer")
+      yield* SessionInbox.promote(db, bus, forked.id, "steer")
 
       expect((yield* session.context(parent.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
       expect((yield* session.context(forked.id)).map((message) => message.type)).toEqual(["user", "synthetic", "user"])
@@ -387,7 +387,7 @@ describe("Session.create", () => {
           (event): number | undefined => event.durable?.seq,
         ),
       ).toEqual([0, 5, 6])
-      expect(yield* SessionPending.find(db, admitted.id)).toBeUndefined()
+      expect(yield* SessionInbox.find(db, admitted.id)).toBeUndefined()
     }),
   )
 
@@ -398,7 +398,7 @@ describe("Session.create", () => {
       const { db } = yield* Database.Service
       const parent = yield* session.create({ location })
       yield* session.prompt({ sessionID: parent.id, text: "First", resume: false })
-      yield* SessionPending.promote(db, bus, parent.id, "steer")
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
 
       const forked = yield* session.fork({ sessionID: parent.id, boundary: { type: "through" } })
       const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, forked.id)).get().pipe(Effect.orDie)
@@ -430,13 +430,13 @@ describe("Session.create", () => {
         text: "First",
         resume: false,
       })
-      yield* SessionPending.promote(db, bus, parent.id, "steer")
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
       const second = yield* session.prompt({
         sessionID: parent.id,
         text: "Second",
         resume: false,
       })
-      yield* SessionPending.promote(db, bus, parent.id, "steer")
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
       const assistantMessageID = SessionMessage.ID.create()
       const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
       yield* bus.publish(SessionEvent.Step.Started, {
@@ -567,7 +567,7 @@ describe("Session.create", () => {
         text: "Hello",
         resume: false,
       })
-      yield* SessionPending.promote(db, bus, created.id, "steer")
+      yield* SessionInbox.promote(db, bus, created.id, "steer")
 
       expect(
         Array.from(yield* logEvents(session, created.id, true).pipe(Stream.take(3), Stream.runCollect)),
@@ -575,10 +575,13 @@ describe("Session.create", () => {
         { durable: { seq: 0 }, type: "session.created" },
         {
           durable: { seq: 1 },
-          type: "session.input.admitted",
-          data: { input: { type: "user", data: { text: "Hello" }, delivery: "steer" } },
+          type: "session.inbox.enqueued",
+          data: {
+            inboxID: expect.any(String),
+            item: { type: "user", payload: { text: "Hello" }, delivery: "steer" },
+          },
         },
-        { durable: { seq: 2 }, type: "session.input.promoted" },
+        { durable: { seq: 2 }, type: "session.inbox.delivered" },
       ])
     }),
   )
@@ -594,7 +597,7 @@ describe("Session.create", () => {
         text: "Replay lifecycle",
         resume: false,
       })
-      yield* SessionPending.promote(sourceDb, sourceEvents, created.id, "steer")
+      yield* SessionInbox.promote(sourceDb, sourceEvents, created.id, "steer")
       const serialized = (yield* sourceDb
         .select()
         .from(EventTable)
@@ -634,17 +637,17 @@ describe("Session.create", () => {
 
         expect(yield* store.get(created.id)).toBeUndefined()
         expect(yield* bus.replayAll(serialized.slice(0, 2))).toBe(created.id)
-        expect(yield* SessionPending.find(db, admitted.id)).toMatchObject({
+        expect(yield* SessionInbox.find(db, admitted.id)).toMatchObject({
           id: admitted.id,
           sessionID: created.id,
           type: "user",
-          data: { text: "Replay lifecycle" },
+          payload: { text: "Replay lifecycle" },
           delivery: "steer",
         })
         expect(yield* store.context(created.id)).toEqual([])
 
         expect(yield* bus.replayAll(serialized.slice(2))).toBe(created.id)
-        expect(yield* SessionPending.find(db, admitted.id)).toBeUndefined()
+        expect(yield* SessionInbox.find(db, admitted.id)).toBeUndefined()
         expect(yield* store.context(created.id)).toMatchObject([
           { id: admitted.id, type: "user", text: "Replay lifecycle" },
         ])
@@ -658,8 +661,8 @@ describe("Session.create", () => {
             .pipe(Effect.orDie)).map((event) => [event.seq, event.type]),
         ).toEqual([
           [0, Bus.versionedType(SessionEvent.Created.type, 1)],
-          [1, Bus.versionedType(SessionEvent.InputAdmitted.type, 1)],
-          [2, Bus.versionedType(SessionEvent.InputPromoted.type, 1)],
+          [1, Bus.versionedType(SessionEvent.InboxEnqueued.type, 1)],
+          [2, Bus.versionedType(SessionEvent.InboxDelivered.type, 1)],
         ])
       }).pipe(Effect.provide(Layer.fresh(targetLayer)))
     }),
@@ -879,7 +882,7 @@ describe("SessionTransfer", () => {
       ])
 
       yield* session.prompt({ sessionID, text: "Continue", resume: false })
-      yield* SessionPending.promote(db, bus, sessionID, "steer")
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
 
       expect((yield* session.messages({ sessionID, order: "asc" })).map((message) => message.type)).toEqual([
         "user",

@@ -2,7 +2,7 @@ export * as Tool from "./tool.js"
 export { CallID, Content, Error, FileContent, TextContent } from "@opencode-ai/schema/tool"
 export type { Context, Metadata, Options, Result } from "@opencode-ai/schema/tool"
 
-import type { ToolCall, ToolDefinition } from "@opencode-ai/ai"
+import { ToolDefinition, type ToolCall } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Context, Effect, Layer, Schema, Scope, Semaphore } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -165,6 +165,19 @@ const layer = Layer.effect(
           }),
         )
       if (entries.length === 0) return
+      yield* Effect.forEach(
+        entries,
+        (entry) =>
+          Effect.try({
+            try: () => ToolDefinition.make(definition(entry.tool)),
+            catch: (error) =>
+              new RegistrationError({
+                name: entry.key,
+                message: `Invalid tool definition ${entry.key}: ${error instanceof Error ? error.message : String(error)}`,
+              }),
+          }),
+        { discard: true },
+      )
       yield* Effect.uninterruptible(
         lock.withPermit(
           Effect.gen(function* () {

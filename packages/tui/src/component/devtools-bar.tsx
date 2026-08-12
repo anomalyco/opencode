@@ -182,7 +182,7 @@ export function DevToolsBar() {
                 location: sessionLocation,
                 status: data.session.status(sessionID),
                 pending: data.session.pending.list(sessionID),
-                inputIDs: data.session.input.list(sessionID),
+                inboxIDs: data.session.input.list(sessionID),
                 permissions: data.session.permission.list(sessionID) ?? [],
                 forms: data.session.form.list(sessionID) ?? [],
               }

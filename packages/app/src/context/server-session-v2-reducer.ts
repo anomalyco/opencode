@@ -1,4 +1,4 @@
-import type { OpenCodeEvent, SessionMessageInfo, SessionPendingMessage } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent, SessionInboxItem, SessionMessageInfo } from "@opencode-ai/client/promise"
 
 type Assistant = Extract<SessionMessageInfo, { type: "assistant" }>
 type Compaction = Extract<SessionMessageInfo, { type: "compaction" }>
@@ -12,7 +12,7 @@ export type V2SessionReduction = {
 }
 
 export function createV2SessionReducer() {
-  const pending = new Map<string, SessionPendingMessage>()
+  const pending = new Map<string, SessionInboxItem>()
 
   const reduce = (source: readonly SessionMessageInfo[], event: OpenCodeEvent): V2SessionReduction | undefined => {
     if (!("data" in event) || !("sessionID" in event.data) || typeof event.data.sessionID !== "string") return
@@ -26,32 +26,33 @@ export function createV2SessionReducer() {
       result(source.some((item) => item.id === message.id) ? [...source] : [...source, message], [message.id])
 
     switch (event.type) {
-      case "session.input.admitted":
-        pending.set(key(sessionID, event.data.inputID), event.data.input)
+      case "session.inbox.enqueued":
+        pending.set(key(sessionID, event.data.inboxID), event.data.item)
         return result([...source])
-      case "session.input.cancelled":
-        pending.delete(key(sessionID, event.data.inputID))
+      case "session.inbox.cancelled":
+        pending.delete(key(sessionID, event.data.inboxID))
         return
-      case "session.input.promoted": {
-        const input = pending.get(key(sessionID, event.data.inputID))
-        pending.delete(key(sessionID, event.data.inputID))
-        if (!input) return { ...result([...source]), missing: event.data.inputID }
+      case "session.inbox.delivered": {
+        const input = pending.get(key(sessionID, event.data.inboxID))
+        pending.delete(key(sessionID, event.data.inboxID))
+        if (!input) return { ...result([...source]), missing: event.data.inboxID }
         if (input.type === "user")
           return append({
-            id: event.data.inputID,
+            id: event.data.inboxID,
             type: "user",
-            metadata: input.data.metadata,
-            text: input.data.text,
-            files: input.data.files,
-            agents: input.data.agents,
+            metadata: input.payload.metadata,
+            text: input.payload.text,
+            files: input.payload.files,
+            agents: input.payload.agents,
             time: { created: event.created },
           })
+        if (input.type !== "synthetic") return result([...source])
         return append({
-          id: event.data.inputID,
+          id: event.data.inboxID,
           type: "synthetic",
-          metadata: input.data.metadata,
-          text: input.data.text,
-          description: input.data.description,
+          metadata: input.payload.metadata,
+          text: input.payload.text,
+          description: input.payload.description,
           time: { created: event.created },
         })
       }
@@ -351,7 +352,7 @@ export function createV2SessionReducer() {
           metadata: event.metadata,
           reason: event.data.reason,
           summary: "",
-          recent: event.data.recent,
+          recent: event.data.recent ?? "",
           time: { created: event.created },
         })
       case "session.compaction.delta":
