@@ -386,10 +386,15 @@ const layer = Layer.effect(
       const conversation = msgs.map(serialize).filter(Boolean).join("\n\n")
       const nextPrompt =
         compacting.prompt ??
-        buildPrompt({
-          previousSummary,
-          context: [...compacting.context, conversation],
-        })
+        [
+          buildPrompt({
+            previousSummary,
+            context: [conversation],
+          }),
+          ...compacting.context,
+        ]
+          .filter(Boolean)
+          .join("\n\n")
       const ctx = yield* InstanceState.context
       const msg: SessionV1.Assistant = {
         id: MessageID.ascending(),
