@@ -24,8 +24,8 @@ export function DialogLocalDiscovery() {
   const [pending, setPending] = createSignal(new Set<string>())
 
   function goBack() {
-    void import("./dialog-select-provider").then((m) => {
-      dialog.show(() => <m.DialogSelectProvider />)
+    void import("./dialog-connect-provider").then((m) => {
+      dialog.show(() => <m.DialogConnectProvider />)
     })
   }
 
@@ -55,8 +55,8 @@ export function DialogLocalDiscovery() {
     setScanState("scanning")
     setInstances([])
     setErrorMsg(undefined)
-    sdk.client.local
-      .scan({ directory: sdk.directory })
+    sdk().client.local
+      .scan({ directory: sdk().directory })
       .then((res) => {
         setInstances(res.data ?? [])
         setScanState("done")
@@ -70,9 +70,9 @@ export function DialogLocalDiscovery() {
 
   function addProvider(instance: LocalInstance) {
     setInstancePending(instance.id, true)
-    sdk.client.local
+    sdk().client.local
       .connect({
-        directory: sdk.directory,
+        directory: sdk().directory,
         localConnectPayload: { id: instance.id, name: instance.name, baseURL: instance.baseURL },
       })
       .then((res) => {
@@ -95,8 +95,8 @@ export function DialogLocalDiscovery() {
     const providerID = effectiveProviderID(instance)
     if (!providerID) return
     setInstancePending(instance.id, true)
-    sdk.client.local
-      .disconnect({ providerID, directory: sdk.directory })
+    sdk().client.local
+      .disconnect({ providerID, directory: sdk().directory })
       .then(() => {
         setLocalConfig((prev) => new Map(prev).set(instance.id, null))
         showToast({
