@@ -1,16 +1,16 @@
-export * as SessionExecution from "./execution"
+export * as SessionExecution from "./execution.js"
 
 import { Cause, Context, Effect, Exit, Layer } from "effect"
-import { Bus } from "../bus"
-import { LocationServiceMap } from "../location-service-map"
+import { Bus } from "../bus.js"
+import { LocationServiceMap } from "../location-service-map.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { SessionEvent } from "./event"
-import { SessionRunCoordinator } from "./run-coordinator"
-import { SessionRunner } from "./runner/index"
-import { SessionSchema } from "./schema"
-import { SessionStore } from "./store"
-import { toSessionError } from "./to-session-error"
-import { UserInterruptedError } from "./error"
+import { SessionEvent } from "./event.js"
+import { SessionRunCoordinator } from "./run-coordinator.js"
+import { SessionRunner } from "./runner/index.js"
+import { SessionSchema } from "./schema.js"
+import { SessionStore } from "./store.js"
+import { toSessionError } from "./to-session-error.js"
+import { UserInterruptedError } from "./error.js"
 
 export interface Interface {
   /** Snapshots active execution owned by this process. */

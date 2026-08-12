@@ -1,4 +1,4 @@
-export * as ModelResolver from "./model-resolver"
+export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { LanguageModel } from "@opencode-ai/ai"
@@ -11,14 +11,14 @@ import * as OpenAIResponses from "@opencode-ai/ai/protocols/openai-responses"
 import { Auth, type AnyRoute } from "@opencode-ai/ai/route"
 import { Context, Effect, Layer, Schema } from "effect"
 import { produce } from "immer"
-import { AISDK } from "./aisdk"
-import { AISDKNative } from "./aisdk-native"
-import { Catalog } from "./catalog"
-import { Credential } from "./credential"
-import { Integration } from "./integration"
-import { Capabilities, ID, Info, Ref, VariantID } from "./model"
+import { AISDK } from "./aisdk.js"
+import { AISDKNative } from "./aisdk-native.js"
+import { Catalog } from "./catalog.js"
+import { Credential } from "./credential.js"
+import { Integration } from "./integration.js"
+import { Capabilities, ID, Info, Ref, VariantID } from "./model.js"
 import { Npm } from "@opencode-ai/util/npm"
-import { Provider } from "./provider"
+import { Provider } from "./provider.js"
 
 export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",

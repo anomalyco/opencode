@@ -1,13 +1,13 @@
-export * as InstructionState from "./instruction-state"
+export * as InstructionState from "./instruction-state.js"
 
 import { eq, inArray, sql } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
-import type { Database } from "../database/database"
-import type { Bus } from "../bus"
-import { Instructions } from "../instructions/index"
-import { SessionEvent } from "./event"
-import { SessionSchema } from "./schema"
-import { InstructionBlobTable, InstructionStateTable } from "./sql"
+import type { Database } from "../database/database.js"
+import type { Bus } from "../bus.js"
+import { Instructions } from "../instructions/index.js"
+import { SessionEvent } from "./event.js"
+import { SessionSchema } from "./schema.js"
+import { InstructionBlobTable, InstructionStateTable } from "./sql.js"
 
 type DatabaseService = Database.Interface["db"]
 

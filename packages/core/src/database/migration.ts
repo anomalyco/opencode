@@ -1,11 +1,11 @@
-export * as DatabaseMigration from "./migration"
+export * as DatabaseMigration from "./migration.js"
 
 import { sql } from "drizzle-orm"
 import { Effect, Semaphore } from "effect"
 import { supportsForeignKeyToggle } from "#sqlite"
 import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
-import { migrations } from "./migration.gen"
-import schema from "./schema.gen"
+import { migrations } from "./migration.gen.js"
+import schema from "./schema.gen.js"
 import { Global } from "@opencode-ai/util/global"
 
 type Database = EffectDrizzleSqlite.EffectSQLiteDatabase

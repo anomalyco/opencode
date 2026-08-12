@@ -1,7 +1,7 @@
-export * as AISDKNative from "./aisdk-native"
+export * as AISDKNative from "./aisdk-native.js"
 
 import { isRecord } from "@opencode-ai/ai/utils/record"
-import { Provider } from "./provider"
+import { Provider } from "./provider.js"
 
 export interface Mapping {
   readonly package: string

@@ -1,6 +1,6 @@
 import { Effect } from "effect"
-import { Model } from "../../model"
-import { Provider } from "../../provider"
+import { Model } from "../../model.js"
+import { Provider } from "../../provider.js"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 
 export const OpenRouterPlugin = define({

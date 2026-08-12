@@ -1,10 +1,10 @@
-export * as Provider from "./provider"
+export * as Provider from "./provider.js"
 
 import { Effect, Schema } from "effect"
 import { Provider } from "@opencode-ai/schema/provider"
 import type { ProviderPackageDefinition } from "@opencode-ai/ai"
 import { Npm } from "@opencode-ai/util/npm"
-import type { DeepMutable } from "./schema"
+import type { DeepMutable } from "./schema.js"
 import { importModule, resolveModule } from "@opencode-ai/util/runtime-import"
 
 export const ID = Provider.ID

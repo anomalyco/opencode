@@ -46,4 +46,4 @@ export function timestamp(id: string): number {
   return Number(encoded / BigInt(0x1000))
 }
 
-export * as Identifier from "./id"
+export * as Identifier from "./id.js"

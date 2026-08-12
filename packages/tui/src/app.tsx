@@ -30,7 +30,7 @@ import {
   batch,
   Show,
 } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, unwrap } from "solid-js/store"
 import {
   TuiLifecycleProvider,
   TuiAppProvider,
@@ -62,6 +62,7 @@ import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
 import { DialogConfig } from "./component/dialog-config"
+import { DialogExperiments } from "./component/dialog-experiments"
 import { DialogDebug } from "./component/dialog-debug"
 import { DialogPair, type DialogPairCredentials } from "./component/dialog-pair"
 import { DialogThemeList } from "./component/dialog-theme-list"
@@ -657,8 +658,22 @@ function App(props: { pair?: DialogPairCredentials }) {
         category: "Session",
         slash: { name: "new", aliases: ["clear"] },
         run: () => {
+          // With per-tab drafts, a new session is an explicit "this belongs
+          // elsewhere" gesture: move the in-progress draft instead of leaving
+          // a copy behind on the tab it came from.
+          const carried = (() => {
+            if (config.data.experimental?.tab_drafts !== true) return undefined
+            const current = promptRef.current
+            if (!current?.current.text) return undefined
+            // Copy before reset: reset() merges an empty prompt into the same
+            // underlying store object that unwrap exposes.
+            const prompt = { ...unwrap(current.current) }
+            current.reset()
+            return prompt
+          })()
           route.navigate({
             type: "home",
+            prompt: carried,
             location:
               route.data.type === "session"
                 ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
@@ -867,6 +882,19 @@ function App(props: { pair?: DialogPairCredentials }) {
         slash: { name: "settings" },
         run: () => {
           dialog.replace(() => <DialogConfig />)
+        },
+        category: "System",
+      },
+      {
+        // Deliberately absent from the command palette; reachable only by the
+        // secret /baldbeard incantation.
+        name: "opencode.experiments",
+        title: "Experiments",
+        description: "look is my devrel meme face",
+        palette: undefined,
+        slash: { name: "baldbeard", secret: true as const },
+        run: () => {
+          dialog.replace(() => <DialogExperiments />)
         },
         category: "System",
       },

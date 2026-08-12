@@ -1,4 +1,4 @@
-export * as SessionModelHttp from "./model-http"
+export * as SessionModelHttp from "./model-http.js"
 
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import type { Agent } from "@opencode-ai/schema/agent"
@@ -6,7 +6,7 @@ import type { Model } from "@opencode-ai/schema/model"
 import type { Session } from "@opencode-ai/schema/session"
 import { Effect, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { PluginHooks } from "../plugin/hooks"
+import { PluginHooks } from "../plugin/hooks.js"
 
 export const middleware =
   (

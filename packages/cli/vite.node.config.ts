@@ -10,8 +10,13 @@ const dir = import.meta.dirname
 function rawTextPlugin(): Plugin {
   return {
     name: "opencode:raw-text",
+    // "pre" is load-bearing for .txt: Vite's built-in asset plugin claims
+    // known asset types (.txt among them) ahead of normal-priority plugins,
+    // replacing the import with an asset URL string instead of the content.
+    // .md only ever worked without it because .md is not a known asset type.
+    enforce: "pre",
     async load(id) {
-      if (!id.endsWith(".md")) return
+      if (!id.endsWith(".md") && !id.endsWith(".txt")) return
       return `export default ${JSON.stringify(await readFile(id, "utf8"))}`
     },
   }
@@ -222,7 +227,6 @@ if (process.platform === "linux") process.env.OPENTUI_LIBC = "glibc"`
 export type NodeBuildInput = {
   readonly version: string
   readonly channel: string
-  readonly models: string
   readonly assetHash: string
   readonly target: NodeTarget
   readonly appArchive: string
@@ -248,7 +252,6 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
     define: {
       OPENCODE_VERSION: JSON.stringify(input.version),
       OPENCODE_CLI_NAME: JSON.stringify("opencode2-node"),
-      OPENCODE_MODELS_DEV: input.models,
       OPENCODE_CHANNEL: JSON.stringify(input.channel),
       OPENCODE_LIBC: input.target.platform === "linux" ? JSON.stringify("glibc") : "undefined",
       FFF_LIBC: input.target.platform === "linux" ? JSON.stringify("gnu") : "undefined",
@@ -271,7 +274,6 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
 export default mainConfig({
   version: process.env.OPENCODE_VERSION ?? "local",
   channel: process.env.OPENCODE_CHANNEL ?? "local",
-  models: "undefined",
   assetHash: "local",
   target: nodeTarget(process.platform, process.arch),
   appArchive: "",

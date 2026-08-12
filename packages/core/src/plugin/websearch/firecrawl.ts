@@ -1,10 +1,10 @@
-export * as WebSearchFirecrawl from "./firecrawl"
+export * as WebSearchFirecrawl from "./firecrawl.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Option, Schema, Scope } from "effect"
 import { HttpClient } from "effect/unstable/http"
-import { App } from "../../app"
-import { WebSearchMcp } from "./mcp"
+import { App } from "../../app.js"
+import { WebSearchMcp } from "./mcp.js"
 
 export const endpoint = "https://mcp.firecrawl.dev/v2/mcp"
 

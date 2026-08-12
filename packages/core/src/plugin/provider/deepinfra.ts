@@ -1,4 +1,4 @@
-import { createProviderPlugin } from "./factory"
+import { createProviderPlugin } from "./factory.js"
 
 export const DeepInfraPlugin = createProviderPlugin({
   id: "opencode.provider.deepinfra",

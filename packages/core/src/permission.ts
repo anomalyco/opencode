@@ -1,16 +1,16 @@
-export * as Permission from "./permission"
+export * as Permission from "./permission.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Deferred, Effect, Layer, Schema } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
-import { Bus } from "./bus"
-import { Location } from "./location"
-import { Agent } from "./agent"
-import { SessionErrors } from "./session/error"
-import { SessionSchema } from "./session/schema"
-import { SessionStore } from "./session/store"
-import { Wildcard } from "./util/wildcard"
-import { PermissionSaved } from "./permission/saved"
+import { Bus } from "./bus.js"
+import { Location } from "./location.js"
+import { Agent } from "./agent.js"
+import { SessionErrors } from "./session/error.js"
+import { SessionSchema } from "./session/schema.js"
+import { SessionStore } from "./session/store.js"
+import { Wildcard } from "./util/wildcard.js"
+import { PermissionSaved } from "./permission/saved.js"
 
 const PermissionEffect = Permission.Effect
 export { PermissionEffect as Effect }

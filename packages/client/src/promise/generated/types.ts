@@ -3892,7 +3892,10 @@ export type SessionLogInput = {
 
 export type SessionLogOutput = SessionLogItem
 
-export type SessionInterruptInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionInterruptInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly continue?: { readonly continue?: boolean | undefined }["continue"]
+}
 
 export type SessionInterruptOutput = void
 

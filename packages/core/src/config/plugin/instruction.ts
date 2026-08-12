@@ -1,15 +1,15 @@
-export * as ConfigInstructionPlugin from "./instruction"
+export * as ConfigInstructionPlugin from "./instruction.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { dirname, join } from "path"
 import { Effect, PubSub, Semaphore, Stream } from "effect"
-import { Watcher } from "../../filesystem/watcher"
-import { InstructionDiscovery } from "../../instruction-discovery"
-import { Instructions } from "../../instructions/index"
-import { Location } from "../../location"
-import { AbsolutePath } from "../../schema"
+import { Watcher } from "../../filesystem/watcher.js"
+import { InstructionDiscovery } from "../../instruction-discovery.js"
+import { Instructions } from "../../instructions/index.js"
+import { Location } from "../../location.js"
+import { AbsolutePath } from "../../schema.js"
 
 type Loaded =
   | { readonly type: "available"; readonly files: InstructionDiscovery.File[] }

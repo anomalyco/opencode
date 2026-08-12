@@ -1,9 +1,9 @@
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Integration } from "@opencode-ai/schema/integration"
 import { Effect, Stream } from "effect"
-import { Bus } from "../bus"
-import { ModelsDev } from "../models-dev"
-import { Provider } from "../provider"
+import { Bus } from "../bus.js"
+import { ModelsDev } from "../models-dev.js"
+import { Provider } from "../provider.js"
 
 export const ModelsDevPlugin = define({
   id: "opencode.models-dev",

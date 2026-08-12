@@ -1,12 +1,12 @@
-export * as McpInstructions from "./instructions"
+export * as McpInstructions from "./instructions.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Agent } from "../agent"
-import { Permission } from "../permission"
-import { McpTool } from "../tool/mcp"
-import { MCP } from "./index"
-import { Instructions } from "../instructions/index"
+import { Agent } from "../agent.js"
+import { Permission } from "../permission.js"
+import { McpTool } from "../tool/mcp.js"
+import { MCP } from "./index.js"
+import { Instructions } from "../instructions/index.js"
 
 const Summary = Schema.Struct({
   server: Schema.String,

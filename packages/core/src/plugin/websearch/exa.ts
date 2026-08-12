@@ -1,9 +1,9 @@
-export * as WebSearchExa from "./exa"
+export * as WebSearchExa from "./exa.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Schema, Scope } from "effect"
 import { HttpClient } from "effect/unstable/http"
-import { WebSearchMcp } from "./mcp"
+import { WebSearchMcp } from "./mcp.js"
 
 export const endpoint = "https://mcp.exa.ai/mcp"
 

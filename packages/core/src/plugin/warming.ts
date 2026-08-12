@@ -1,9 +1,9 @@
-export * as WarmingPlugin from "./warming"
+export * as WarmingPlugin from "./warming.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Clock, Duration, Effect, Scope } from "effect"
-import { Config } from "../config"
-import { SessionSchema } from "../session/schema"
+import { Config } from "../config.js"
+import { SessionSchema } from "../session/schema.js"
 
 const defaults = {
   prompt: "This is a keep-alive request. Do not perform any work or use tools. Reply with exactly: OK",

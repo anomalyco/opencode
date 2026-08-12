@@ -1,4 +1,4 @@
-export * as State from "./state"
+export * as State from "./state.js"
 
 import { Clock, Context, Deferred, Effect, Scope, Semaphore } from "effect"
 

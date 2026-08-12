@@ -1,4 +1,4 @@
-export * as Sqlite from "./sqlite"
+export * as Sqlite from "./sqlite.js"
 
 import { Context, Effect, Fiber, Scope, Semaphore, Stream } from "effect"
 import { identity } from "effect/Function"

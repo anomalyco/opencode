@@ -4,7 +4,7 @@ import { Context, Effect, Layer } from "effect"
 import { Reactivity } from "effect/unstable/reactivity"
 import { SqlClient } from "effect/unstable/sql"
 import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError"
-import { Sqlite } from "./sqlite"
+import { Sqlite } from "./sqlite.js"
 
 const TypeId = "~@opencode-ai/core/database/SqliteNode" as const
 

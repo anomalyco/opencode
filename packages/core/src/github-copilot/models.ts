@@ -1,9 +1,9 @@
-export * as CopilotModels from "./models"
+export * as CopilotModels from "./models.js"
 
 import { Money } from "@opencode-ai/schema/money"
 import { Option, Schema } from "effect"
-import { Model } from "../model"
-import { Provider } from "../provider"
+import { Model } from "../model.js"
+import { Provider } from "../provider.js"
 
 const RemoteModel = Schema.Struct({
   model_picker_enabled: Schema.Boolean,

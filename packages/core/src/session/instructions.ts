@@ -1,16 +1,16 @@
-export * as SessionInstructions from "./instructions"
+export * as SessionInstructions from "./instructions.js"
 
 import { relative } from "path"
 import { Context, DateTime, Effect, Layer, Option, Ref, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Bus } from "../bus"
+import { Bus } from "../bus.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Location } from "../location"
-import { SessionEvent } from "./event"
-import { MessageDecodeError } from "./error"
-import { SessionMessage } from "./message"
-import { SessionSchema } from "./schema"
-import { SessionStore } from "./store"
+import { Location } from "../location.js"
+import { SessionEvent } from "./event.js"
+import { MessageDecodeError } from "./error.js"
+import { SessionMessage } from "./message.js"
+import { SessionSchema } from "./schema.js"
+import { SessionStore } from "./store.js"
 
 const InjectedMetadata = Schema.Struct({
   instruction: Schema.Struct({ paths: Schema.Array(Schema.String) }),

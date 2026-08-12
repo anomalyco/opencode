@@ -28,12 +28,13 @@ import { parseSlashHead } from "../../prompt/parse"
 import { stringWidth } from "../../util/string-width"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
+import { saveDraft, takeDraft } from "./draft-stash"
 import { Skill } from "@opencode-ai/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
-import { type AutocompleteRef, Autocomplete } from "./autocomplete"
+import { type AutocompleteOption, type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
@@ -66,6 +67,8 @@ import {
   promptAttachmentLabel,
 } from "../../prompt/attachment"
 import { DialogImagePreview } from "../dialog-image-preview"
+import { useDirectoryRecents } from "../../prompt/directory-recents"
+import { directoryRecentValue } from "../../prompt/directory-completion"
 
 export type PromptProps = {
   sessionID?: string
@@ -130,8 +133,6 @@ function formatEditorContext(selection: EditorSelection) {
   return `<system-reminder>${ranges.join("\n")} This may or may not be relevant to the current task.</system-reminder>\n`
 }
 
-let stashed: { prompt: PromptInfo; cursor: number } | undefined
-
 function argumentSlash(input: string, commands: readonly KeymapCommand[]) {
   const head = parseSlashHead(input, /\s/)
   if (!head) return
@@ -159,6 +160,7 @@ export function Prompt(props: PromptProps) {
   const editor = useEditorContext()
   const route = useRoute()
   const data = useData()
+  const directoryRecents = useDirectoryRecents()
   const keymapCommands = Keymap.useCommands()
   const currentLocation = useLocation()
   const config = useConfig().data
@@ -227,27 +229,34 @@ export function Prompt(props: PromptProps) {
             return
           }
           const sessionID = props.sessionID
+          const session = sessionID ? data.session.get(sessionID) : undefined
+          const sourceProjectID = session?.projectID ?? data.location.info()?.project.id
+          const value = input.trim()
+          const expanded =
+            value === "~" ? paths.home : value.startsWith("~/") ? path.join(paths.home, value.slice(2)) : value
+          const directory = path.resolve(
+            session?.location.directory ?? currentLocation.current?.directory ?? data.location.default().directory,
+            expanded,
+          )
           if (!sessionID) {
-            const value = input.trim()
-            const expanded =
-              value === "~" ? paths.home : value.startsWith("~/") ? path.join(paths.home, value.slice(2)) : value
-            const directory = path.resolve(
-              currentLocation.current?.directory ?? data.location.default().directory,
-              expanded,
-            )
             const location = await client.api.location.get({ location: { directory } }).catch((error) => {
               toast.show({ title: "Failed to change directory", message: errorMessage(error), variant: "error" })
               return undefined
             })
             if (!location) return
+            if (sourceProjectID) directoryRecents.touch(sourceProjectID, location.directory)
             currentLocation.set(location)
             return
           }
-          await client.api.session
-            .move({ sessionID, directory: input })
-            .catch((error) =>
-              toast.show({ title: "Failed to change directory", message: errorMessage(error), variant: "error" }),
-            )
+          const error = await client.api.session.move({ sessionID, directory: input }).then(
+            () => undefined,
+            (error) => error,
+          )
+          if (error) {
+            toast.show({ title: "Failed to change directory", message: errorMessage(error), variant: "error" })
+            return
+          }
+          if (sourceProjectID) directoryRecents.touch(sourceProjectID, directory)
         },
       },
     ],
@@ -647,9 +656,14 @@ export function Prompt(props: PromptProps) {
     },
   }
 
+  // Captured once: the session route is keyed by sessionID, so this Prompt
+  // instance belongs to exactly one tab. Reading props.sessionID lazily would
+  // observe the *next* route during onCleanup and stash under the wrong tab.
+  const stashSessionID = props.sessionID
+  const stashKey = () => (config.experimental?.tab_drafts === true ? (stashSessionID ?? "home") : undefined)
+
   onMount(() => {
-    const saved = stashed
-    stashed = undefined
+    const saved = takeDraft(stashKey())
     if (store.prompt.text) return
     if (saved && saved.prompt.text) {
       input.setText(saved.prompt.text)
@@ -662,7 +676,7 @@ export function Prompt(props: PromptProps) {
   onCleanup(() => {
     disposed = true
     if (store.prompt.text) {
-      stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
+      saveDraft(stashKey(), { prompt: unwrap(store.prompt), cursor: input.cursorOffset })
     }
     setInputTarget(undefined)
     props.ref?.(undefined)
@@ -1855,6 +1869,30 @@ export function Prompt(props: PromptProps) {
       </box>
       <Autocomplete
         sessionID={props.sessionID}
+        argumentAutocomplete={(command) => (command.id === "session.cd" ? "directory" : undefined)}
+        directoryOptions={(query): AutocompleteOption[] => {
+          if (query !== "") return []
+          const projectID =
+            (props.sessionID ? data.session.get(props.sessionID)?.projectID : undefined) ??
+            data.location.info()?.project.id
+          if (!projectID) return []
+          return directoryRecents.list(projectID).map((item) => {
+            const value = directoryRecentValue(item.directory, paths.home)
+            return {
+              display: value,
+              value,
+              description: "recent",
+              isDirectory: true,
+              path: value,
+              absolute: item.directory,
+              destructive: {
+                id: item.directory,
+                confirm: "Press ctrl+d to confirm",
+                run: () => directoryRecents.remove(projectID, item.directory),
+              },
+            }
+          })
+        }}
         ref={(r) => {
           setAuto(() => r)
         }}

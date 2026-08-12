@@ -1,10 +1,10 @@
-export * as PlanPlugin from "./plan"
+export * as PlanPlugin from "./plan.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
-import { Agent } from "../agent"
-import { SessionEvent } from "../session/event"
+import { Agent } from "../agent.js"
+import { SessionEvent } from "../session/event.js"
 
 const plan = Agent.ID.make("plan")
 

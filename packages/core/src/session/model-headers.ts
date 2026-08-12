@@ -1,7 +1,7 @@
-export * as SessionModelHeaders from "./model-headers"
+export * as SessionModelHeaders from "./model-headers.js"
 
-import { App } from "../app"
-import { SessionSchema } from "./schema"
+import { App } from "../app.js"
+import { SessionSchema } from "./schema.js"
 
 export const make = (session: Pick<SessionSchema.Info, "id" | "parentID" | "projectID">, app: App.Info) => ({
   "x-session-affinity": session.id,
