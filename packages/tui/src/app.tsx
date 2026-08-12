@@ -137,6 +137,7 @@ const appBindingCommands = [
   "app.toggle.diffwrap",
   "app.toggle.paste_summary",
   "app.toggle.session_directory_filter",
+  "permission.mode",
 ] as const
 
 export type TuiInput = {
