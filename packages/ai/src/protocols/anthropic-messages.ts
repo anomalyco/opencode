@@ -573,7 +573,10 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
         cache_control: cacheControl(breakpoints, part.cache),
       })
     }
-    messages.push({ role: "user", content })
+    const previous = messages.at(-1)
+    if (previous?.role === "user" && previous.content.every((block) => block.type === "tool_result"))
+      messages[messages.length - 1] = { role: "user", content: [...previous.content, ...content] }
+    else messages.push({ role: "user", content })
   }
 
   return messages

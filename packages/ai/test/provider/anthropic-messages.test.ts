@@ -271,6 +271,47 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("batches parallel tool results into one Anthropic user message", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Check both cities."),
+            Message.assistant([
+              { type: "text", text: "I'll check both." },
+              ToolCallPart.make({ id: "call_paris", name: "weather", input: { city: "Paris" } }),
+              ToolCallPart.make({ id: "call_london", name: "weather", input: { city: "London" } }),
+            ]),
+            Message.tool({ id: "call_paris", name: "weather", result: { temperature: 22 } }),
+            Message.tool({ id: "call_london", name: "weather", result: { temperature: 18 } }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toMatchObject([
+        { role: "user", content: [{ type: "text", text: "Check both cities." }] },
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: "I'll check both." },
+            { type: "tool_use", id: "call_paris", name: "weather", input: { city: "Paris" } },
+            { type: "tool_use", id: "call_london", name: "weather", input: { city: "London" } },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "call_paris", content: '{"temperature":22}' },
+            { type: "tool_result", tool_use_id: "call_london", content: '{"temperature":18}' },
+          ],
+        },
+      ])
+      expect(prepared.body.messages).toHaveLength(3)
+    }),
+  )
+
   it.effect("keeps tools and sends tool_choice none", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -912,6 +953,54 @@ describe("Anthropic Messages route", () => {
           usage,
         },
       ])
+    }),
+  )
+
+  it.effect("assembles and persists multiple tool calls from one Anthropic response", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              {
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "tool_use", id: "call_paris", name: "weather", input: {} },
+              },
+              {
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "input_json_delta", partial_json: '{"city":"Paris"}' },
+              },
+              { type: "content_block_stop", index: 0 },
+              {
+                type: "content_block_start",
+                index: 1,
+                content_block: { type: "tool_use", id: "call_london", name: "weather", input: {} },
+              },
+              {
+                type: "content_block_delta",
+                index: 1,
+                delta: { type: "input_json_delta", partial_json: '{"city":"London"}' },
+              },
+              { type: "content_block_stop", index: 1 },
+              { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 2 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toMatchObject([
+        { id: "call_paris", name: "weather", input: { city: "Paris" } },
+        { id: "call_london", name: "weather", input: { city: "London" } },
+      ])
+      expect(response.message.content).toMatchObject([
+        { type: "tool-call", id: "call_paris", name: "weather", input: { city: "Paris" } },
+        { type: "tool-call", id: "call_london", name: "weather", input: { city: "London" } },
+      ])
+      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_use" })
     }),
   )
 
