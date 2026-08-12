@@ -26,6 +26,7 @@ import { Environment } from "@opencode-ai/core/environment/index"
 import { Location } from "@opencode-ai/core/location"
 import { MCP } from "@opencode-ai/core/mcp/index"
 import { MCPClient } from "@opencode-ai/core/mcp/client"
+import { MCPStdio } from "@opencode-ai/core/mcp/stdio"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
@@ -476,6 +477,29 @@ test("spawns local MCP servers through the location environment", async () => {
   expect(command.options.extendEnv).toBe(true)
   expect(command.options.env).toEqual({ MCP_LOCATION_TEST: "configured" })
   expect(command.options.env).not.toHaveProperty("HOME")
+})
+
+test("rejects sends before the stdio transport is started", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const transport = yield* MCPStdio.make({
+          server: "not-started",
+          command: process.execPath,
+          args: [path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+          cwd: import.meta.dir,
+          environment: {},
+        })
+        yield* Effect.tryPromise({
+          try: () => transport.send({ jsonrpc: "2.0", method: "notifications/initialized" }),
+          catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+        }).pipe(
+          Effect.flip,
+          Effect.tap((error) => Effect.sync(() => expect(error.message).toBe("Not connected"))),
+        )
+      }).pipe(Effect.provide(hostEnvironmentLayer)),
+    ),
+  )
 })
 
 test("applies the configured MCP catalog timeout", async () => {

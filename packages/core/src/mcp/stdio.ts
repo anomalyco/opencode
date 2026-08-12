@@ -3,7 +3,7 @@ export * as MCPStdio from "./stdio.js"
 import { ReadBuffer, serializeMessage } from "@modelcontextprotocol/sdk/shared/stdio.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js"
-import { Cause, Deferred, Duration, Effect, Exit, Queue, Scope, Stream } from "effect"
+import { Cause, Duration, Effect, Queue, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner"
 import { Environment } from "../environment/index.js"
@@ -13,6 +13,7 @@ const CLOSE_GRACE = Duration.seconds(2)
 
 /** Mirrors StdioClientTransport: escalate SIGTERM to SIGKILL after this long. */
 const FORCE_KILL_AFTER = Duration.seconds(2)
+const OUTGOING_CAPACITY = 64
 
 export interface Options {
   /** Server name; only used to attribute logs. */
@@ -44,16 +45,22 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   const context = yield* Effect.context<Scope.Scope>()
   // Outgoing frames are queued rather than written to `handle.stdin` directly: the sink closes the
   // stream it is run with, and stdin must stay open across the whole session.
-  const outgoing = yield* Queue.unbounded<Uint8Array, Cause.Done>()
-  const encoder = new TextEncoder()
+  const outgoing = yield* Queue.bounded<string, Cause.Done>(OUTGOING_CAPACITY)
   const buffer = new ReadBuffer()
-  const closed = Deferred.makeUnsafe<void>()
-  const state: { started: boolean; handle?: ChildProcessHandle } = { started: false }
+  const state: { phase: "ready" | "starting" | "open" | "closed"; handle?: ChildProcessHandle } = { phase: "ready" }
+
+  const stop = (handle: ChildProcessHandle) =>
+    Effect.gen(function* () {
+      Queue.endUnsafe(outgoing)
+      const exit = yield* Effect.timeoutOption(handle.exitCode, CLOSE_GRACE)
+      if (exit._tag === "Some") return
+      yield* handle.kill({ killSignal: "SIGTERM", forceKillAfter: FORCE_KILL_AFTER })
+    }).pipe(Effect.ignore)
 
   const transport: Transport = {
     start: () => {
-      if (state.started) return Promise.reject(new Error("Stdio transport already started"))
-      state.started = true
+      if (state.phase !== "ready") return Promise.reject(new Error("Stdio transport already started"))
+      state.phase = "starting"
       return Effect.runPromiseWith(context)(
         Effect.gen(function* () {
           const handle = yield* environment.spawner.spawn(
@@ -61,34 +68,40 @@ export const make = Effect.fnUntraced(function* (options: Options) {
               cwd: options.cwd,
               env: options.environment,
               extendEnv: true,
-              stdin: { stream: Stream.fromQueue(outgoing), endOnDone: true },
+              stdin: { stream: Stream.encodeText(Stream.fromQueue(outgoing)), endOnDone: true },
               stdout: "pipe",
               stderr: "pipe",
               forceKillAfter: FORCE_KILL_AFTER,
             }),
           )
           state.handle = handle
+          if (state.phase === "closed") {
+            state.handle = undefined
+            return yield* stop(handle)
+          }
+          state.phase = "open"
           yield* startOutput(handle)
         }),
       )
     },
     send: (message: JSONRPCMessage) =>
-      Queue.offerUnsafe(outgoing, encoder.encode(serializeMessage(message)))
-        ? Promise.resolve()
-        : Promise.reject(new Error("Not connected")),
+      state.phase !== "open"
+        ? Promise.reject(new Error("Not connected"))
+        : Effect.runPromise(
+            Queue.offer(outgoing, serializeMessage(message)).pipe(
+              Effect.flatMap((offered) => (offered ? Effect.void : Effect.fail(new Error("Not connected")))),
+            ),
+          ),
     close: () =>
       Effect.runPromise(
         Effect.gen(function* () {
+          state.phase = "closed"
           Queue.endUnsafe(outgoing)
           const handle = state.handle
           if (!handle) return
-          // Give the server the same chance to exit on its own that the SDK transport gives it; the
-          // handle then signals the process through whichever execution driver spawned it.
-          const exit = yield* Effect.timeoutOption(handle.exitCode, CLOSE_GRACE)
-          if (exit._tag === "Some") return
-          const terminated = yield* Effect.timeoutOption(handle.kill({ killSignal: "SIGTERM" }), FORCE_KILL_AFTER)
-          if (terminated._tag === "None") yield* handle.kill({ killSignal: "SIGKILL" })
-        }).pipe(Effect.ensuring(Effect.sync(() => buffer.clear())), Effect.ignore),
+          state.handle = undefined
+          yield* stop(handle)
+        }).pipe(Effect.ensuring(Effect.sync(() => buffer.clear()))),
       ),
   }
 
@@ -128,22 +141,25 @@ export const make = Effect.fnUntraced(function* (options: Options) {
           Effect.ignore,
           // stdout ending means the server is gone; the SDK transport reports that the same way.
           Effect.ensuring(
-            Effect.sync(() => {
-              if (Deferred.doneUnsafe(closed, Exit.void)) transport.onclose?.()
+            Effect.gen(function* () {
+              const unexpected = state.phase !== "closed"
+              state.phase = "closed"
+              if (unexpected) yield* stop(handle)
+              transport.onclose?.()
             }),
           ),
         ),
       )
 
-      // StdioClientTransport pipes stderr into a stream nobody reads, which both hides server
-      // diagnostics and lets a chatty server stall on backpressure. Draining it into the debug log
-      // keeps the pipe moving and makes the output reachable.
+      // StdioClientTransport pipes stderr into a stream nobody reads. Drain chunks into the debug
+      // log so chatty servers cannot stall and newline-free output is not buffered without bound.
       yield* Effect.forkScoped(
         handle.stderr.pipe(
           Stream.decodeText(),
-          Stream.splitLines,
-          Stream.runForEach((line) =>
-            line.trim() === "" ? Effect.void : Effect.logDebug("mcp server stderr", { server: options.server, line }),
+          Stream.runForEach((output) =>
+            output.trim() === ""
+              ? Effect.void
+              : Effect.logDebug("mcp server stderr", { server: options.server, output }),
           ),
           Effect.ignore,
         ),

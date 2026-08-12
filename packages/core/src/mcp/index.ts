@@ -179,9 +179,8 @@ export const layer = (options?: Options) =>
       const forms = yield* Form.Service
       const integration = yield* Integration.Service
       const credentials = yield* Credential.Service
-      const root = yield* Scope.make()
+      const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
-      yield* Effect.addFinalizer((exit) => Scope.close(root, exit))
 
       const loadConfig = (entries: readonly Entry[]) => {
         const documents = entries.filter((entry): entry is Document => entry.type === "document")
@@ -461,10 +460,13 @@ export const layer = (options?: Options) =>
         connection.onClose(() =>
           live(
             Effect.gen(function* () {
+              const scope = entry.scope
+              entry.scope = undefined
               entry.client = undefined
               entry.tools = undefined
               entry.prompts = undefined
               entry.status = { status: "failed", error: "Connection closed" }
+              if (scope) yield* Scope.close(scope, Exit.void)
               yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
               yield* bus.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
               yield* bus.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
