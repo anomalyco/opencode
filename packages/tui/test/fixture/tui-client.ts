@@ -107,7 +107,13 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
       })
     if (url.pathname === "/api/project/current") return json({ id: "proj_test", directory: worktree })
     if (url.pathname === "/api/project") return json([])
-    if (url.pathname === "/api/project/proj_test/directories") return json([{ directory: worktree }])
+    if (url.pathname === "/api/experimental/project/proj_test/worktree") {
+      if (request.method === "GET") return json([{ directory: worktree }])
+      if (request.method === "POST") return json({ directory: `${worktree}/created` })
+      return new Response(null, { status: 204 })
+    }
+    if (url.pathname === "/api/experimental/project/proj_test/worktree/refresh")
+      return new Response(null, { status: 204 })
     if (url.pathname === "/api/shell")
       return json({
         location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
