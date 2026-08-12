@@ -19,7 +19,7 @@ const attachmentLocation = (file: FileAttachment) => {
   if (file.source.type !== "uri") return undefined
   const url = URL.parse(file.source.uri)
   if (url?.protocol !== "file:") return undefined
-  return fileURLToPath(url, { windows: url.hostname !== "" || /^\/[a-zA-Z]:\//.test(url.pathname) })
+  return fileURLToPath(url)
 }
 
 const textAttachment = (file: FileAttachment): ContentPart => ({

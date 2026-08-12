@@ -9,6 +9,8 @@ import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { Agent } from "@opencode-ai/core/agent"
 import { Shell } from "@opencode-ai/schema/shell"
 import { DateTime } from "effect"
+import path from "path"
+import { pathToFileURL } from "url"
 
 const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
@@ -250,13 +252,14 @@ Recent work
   })
 
   test("exposes admitted reference directory source paths in model context", () => {
+    const location = path.resolve("/references/harness-engineering")
     const directory = FileAttachment.make({
       data: Base64.make(Buffer.from("lib/\nindex.ts").toString("base64")),
       mime: "application/x-directory",
-      source: { type: "uri", uri: "file:///references/harness-engineering" },
+      source: { type: "uri", uri: pathToFileURL(location).href },
       name: "harness-engineering",
     })
-    expect(directory.source).toEqual({ type: "uri", uri: "file:///references/harness-engineering" })
+    expect(directory.source).toEqual({ type: "uri", uri: pathToFileURL(location).href })
     const messages = toLLMMessages(
       [
         SessionMessage.User.make({
@@ -278,7 +281,7 @@ Recent work
         { type: "text", text: "Review this directory" },
         {
           type: "text",
-          text: "\n\nAttached directory: /references/harness-engineering\n\nlib/\nindex.ts",
+          text: `\n\nAttached directory: ${location}\n\nlib/\nindex.ts`,
           metadata: { attachment: { source: directory.source, name: "harness-engineering" } },
         },
       ],
@@ -286,6 +289,7 @@ Recent work
   })
 
   test("preserves attachment order after the prompt", () => {
+    const directory = path.resolve("/project/src")
     const messages = toLLMMessages(
       [
         SessionMessage.User.make({
@@ -296,7 +300,7 @@ Recent work
             FileAttachment.make({
               data: Base64.make(Buffer.from("index.ts").toString("base64")),
               mime: "application/x-directory",
-              source: { type: "uri", uri: "file:///project/src" },
+              source: { type: "uri", uri: pathToFileURL(directory).href },
               name: "src/",
             }),
             FileAttachment.make({
@@ -315,12 +319,13 @@ Recent work
     expect(messages).toHaveLength(1)
     expect(messages[0]?.content.map((part) => (part.type === "text" ? part.text : part.type))).toEqual([
       "Review these attachments",
-      "\n\nAttached directory: /project/src\n\nindex.ts",
+      `\n\nAttached directory: ${directory}\n\nindex.ts`,
       "\n\nAttached file: main.ts\n\nexport const value = 1",
     ])
   })
 
   test("omits empty prompt text before an attachment", () => {
+    const directory = path.resolve("/project/src")
     const messages = toLLMMessages(
       [
         SessionMessage.User.make({
@@ -331,7 +336,7 @@ Recent work
             FileAttachment.make({
               data: Base64.make(Buffer.from("index.ts").toString("base64")),
               mime: "application/x-directory",
-              source: { type: "uri", uri: "file:///project/src" },
+              source: { type: "uri", uri: pathToFileURL(directory).href },
               name: "src/",
             }),
           ],
@@ -343,7 +348,7 @@ Recent work
 
     expect(messages).toHaveLength(1)
     expect(messages[0]?.content).toMatchObject([
-      { type: "text", text: "\n\nAttached directory: /project/src\n\nindex.ts" },
+      { type: "text", text: `\n\nAttached directory: ${directory}\n\nindex.ts` },
     ])
   })
 
@@ -378,13 +383,14 @@ Recent work
 
   test("exposes admitted local image source paths before provider media", () => {
     const data = Base64.make("AAECAw==")
+    const location = path.resolve("/project/IMG_3480.JPG")
     const image = FileAttachment.make({
       data,
       mime: "image/png",
-      source: { type: "uri", uri: "file:///project/IMG_3480.JPG" },
+      source: { type: "uri", uri: pathToFileURL(location).href },
       name: "IMG_3480.JPG",
     })
-    expect(image.source).toEqual({ type: "uri", uri: "file:///project/IMG_3480.JPG" })
+    expect(image.source).toEqual({ type: "uri", uri: pathToFileURL(location).href })
 
     const messages = toLLMMessages(
       [
@@ -401,7 +407,7 @@ Recent work
 
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Inspect this image" },
-      { type: "text", text: "Attached file: /project/IMG_3480.JPG" },
+      { type: "text", text: `Attached file: ${location}` },
       { type: "media", mediaType: "image/png", data, filename: "IMG_3480.JPG" },
     ])
   })
@@ -511,7 +517,7 @@ Recent work
             FileAttachment.make({
               data,
               mime: "image/png",
-              source: { type: "uri", uri: "file:///project/image.png" },
+              source: { type: "uri", uri: pathToFileURL(path.resolve("/project/image.png")).href },
               name: "image.png",
               mention: { start: 0, end: 9, text: "[Image 1]" },
             }),
