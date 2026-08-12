@@ -51,11 +51,13 @@ export function DialogErrorDetails(props: { title: string; error: string; onBack
 
   Keymap.createLayer(() => ({
     mode: "modal",
-    commands: [{ bind: "escape", title: "Back", group: "Dialog", run: props.onBack }],
+    commands: [
+      { bind: "escape", title: "Back", group: "Dialog", run: props.onBack },
+      { bind: "c", title: "Copy details", group: "Dialog", run: copy },
+    ],
   }))
 
   useKeyboard((event) => {
-    if (event.name === "c") return copy()
     if (!scrollable()) return
     if (event.name === "up") return scroll?.scrollBy(-1)
     if (event.name === "down") return scroll?.scrollBy(1)
@@ -72,7 +74,7 @@ export function DialogErrorDetails(props: { title: string; error: string; onBack
           {props.title}
         </text>
         <text fg={theme.text.subdued} onMouseUp={props.onBack}>
-          esc back
+          esc
         </text>
       </box>
       <text fg={theme.text.feedback.error.default}>✗ Failed</text>
@@ -95,12 +97,17 @@ export function DialogErrorDetails(props: { title: string; error: string; onBack
         </scrollbox>
       </box>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text.subdued}>{scrollable() ? "↑↓ scroll" : ""}</text>
+        <text>
+          <span style={{ fg: theme.text.default }}>
+            <b>{scrollable() ? "↑/↓" : ""}</b>
+          </span>
+          <span style={{ fg: theme.text.subdued }}>{scrollable() ? " scroll" : ""}</span>
+        </text>
         <text onMouseUp={copy}>
           <span style={{ fg: copied() ? theme.text.feedback.success.default : theme.text.default }}>
-            <b>{copied() ? "✓ copied" : "copy details"}</b>
+            <b>{copied() ? "✓ copied" : "c"}</b>
           </span>
-          <span style={{ fg: theme.text.subdued }}>{copied() ? "" : "  c"}</span>
+          <span style={{ fg: theme.text.subdued }}>{copied() ? "" : " copy details"}</span>
         </text>
       </box>
     </box>
