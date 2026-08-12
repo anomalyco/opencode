@@ -93,6 +93,10 @@ export const TuiThreadCommand = cmd({
         type: "string",
         describe: "session id to continue",
       })
+      .option("resume", {
+        type: "boolean",
+        describe: "pick a session to resume from the sessions in this directory",
+      })
       .option("fork", {
         type: "boolean",
         describe: "fork the session when continuing (use with --continue or --session)",
@@ -148,6 +152,17 @@ export const TuiThreadCommand = cmd({
       return
     }
     const noReplay = args.replay === false || args.noReplay === true
+
+    if (args.resume && (args.continue || args.session)) {
+      UI.error("--resume cannot be used with --continue or --session")
+      process.exitCode = 1
+      return
+    }
+    if (args.resume && args.mini) {
+      UI.error("--resume is not supported with --mini; use --continue or --session")
+      process.exitCode = 1
+      return
+    }
 
     if (args.mini) {
       const network = ["--port", "--hostname", "--mdns", "--no-mdns", "--mdns-domain", "--cors"].find((option) =>
@@ -287,6 +302,7 @@ export const TuiThreadCommand = cmd({
             args: {
               continue: args.continue,
               sessionID: args.session,
+              resume: args.resume,
               agent: args.agent,
               model: args.model,
               prompt,

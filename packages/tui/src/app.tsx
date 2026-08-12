@@ -47,7 +47,7 @@ import { DialogDebug } from "./component/dialog-debug"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
-import { DialogSessionList } from "./component/dialog-session-list"
+import { DialogSessionList, loadDialogSessionList } from "./component/dialog-session-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
@@ -519,6 +519,28 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         route.navigate({ type: "session", sessionID: match })
       }
     }
+  })
+
+  // Handle --resume: open the session picker so any session for this
+  // directory can be resumed, once the session list has loaded
+  let resumed = false
+  createEffect(() => {
+    if (resumed || sync.status === "loading" || !args.resume) return
+    // Provider setup replaces dialogs at "complete"; wait it out rather than lose the picker
+    if (sync.data.provider.length === 0) return
+    resumed = true
+    const filter = sync.session.query()
+    void loadDialogSessionList({ filter, list: (query) => sdk.client.session.list(query) }).then((sessions) => {
+      if (sessions === undefined || sessions.length > 0) {
+        dialog.replace(() => <DialogSessionList />)
+        return
+      }
+      toast.show({
+        variant: "info",
+        message: filter.scope === "project" ? "No sessions to resume" : "No sessions to resume in this directory",
+        duration: 3000,
+      })
+    })
   })
 
   // Handle --session with --fork: wait for sync to be fully complete before forking
