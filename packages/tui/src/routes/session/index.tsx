@@ -54,6 +54,7 @@ import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
+import { AnalyticsSidebar } from "./analytics-sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
@@ -123,6 +124,7 @@ const sessionBindingCommands = [
   "session.undo",
   "session.redo",
   "session.sidebar.toggle",
+  "session.analytics.toggle",
   "session.toggle.conceal",
   "session.toggle.timestamps",
   "session.toggle.thinking",
@@ -246,9 +248,10 @@ export function Session() {
   })
 
   const dimensions = useTerminalDimensions()
-  const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
-  const [sidebarOpen, setSidebarOpen] = createSignal(false)
-  const [conceal, setConceal] = createSignal(true)
+const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
+const [sidebarOpen, setSidebarOpen] = createSignal(false)
+const [analyticsOpen, setAnalyticsOpen] = createSignal(true)
+const [conceal, setConceal] = createSignal(true)
   const thinking = useThinkingMode()
   const thinkingMode = thinking.mode
   const showThinking = createMemo(() => true)
@@ -268,7 +271,7 @@ export function Session() {
     return false
   })
   const showTimestamps = createMemo(() => timestamps() === "show")
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 24 - 4)
   const providers = createMemo(() => Model.index(sync.data.provider))
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
@@ -673,6 +676,15 @@ export function Session() {
           setSidebar(() => (isVisible ? "hide" : "auto"))
           setSidebarOpen(!isVisible)
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: analyticsOpen() ? "Hide analytics" : "Show analytics",
+      value: "session.analytics.toggle",
+      category: "Session",
+      run: () => {
+        setAnalyticsOpen((prev) => !prev)
         dialog.clear()
       },
     },
@@ -1341,6 +1353,7 @@ export function Session() {
               </Match>
             </Switch>
           </Show>
+          <AnalyticsSidebar sessionID={route.sessionID} />
         </box>
       </context.Provider>
     </LocationProvider>
