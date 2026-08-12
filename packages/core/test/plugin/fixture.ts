@@ -3,12 +3,14 @@ import { AISDK } from "@opencode-ai/core/aisdk"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { CommandV2 } from "@opencode-ai/core/command"
 import { Credential } from "@opencode-ai/core/credential"
+import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Integration } from "@opencode-ai/core/integration"
 import { Location } from "@opencode-ai/core/location"
 import { Npm } from "@opencode-ai/core/npm"
@@ -27,6 +29,11 @@ const npmLayer = Layer.succeed(
   }),
 )
 
+const watcherLayer = Layer.succeed(
+  Watcher.Service,
+  Watcher.Service.of({ watch: () => Effect.succeed(Effect.void) }),
+)
+
 export const PluginTestLayer = AppNodeBuilder.build(
   LayerNode.group([
     FileSystem.node,
@@ -34,6 +41,7 @@ export const PluginTestLayer = AppNodeBuilder.build(
     Location.node,
     Npm.node,
     Credential.node,
+    Database.node,
     EventV2.node,
     LayerNodePlatform.httpClient,
     PluginV2.node,
@@ -48,5 +56,6 @@ export const PluginTestLayer = AppNodeBuilder.build(
   [
     [Location.node, tempLocationLayer],
     [Npm.node, npmLayer],
+    [Watcher.node, watcherLayer],
   ],
 )

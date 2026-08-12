@@ -54,6 +54,18 @@ export const Flag = {
   get OPENCODE_DISABLE_PROJECT_CONFIG() {
     return truthy("OPENCODE_DISABLE_PROJECT_CONFIG")
   },
+  // Mirrors packages/opencode/src/effect/runtime-flags.ts's
+  // disableExternalSkills/disableClaudeCodeSkills (same env vars, V1 skill
+  // discovery). Core cannot depend on opencode's Effect Config-based
+  // RuntimeFlags, so this reads process.env directly like the rest of this
+  // file; keep both definitions' semantics in sync if either changes.
+  get OPENCODE_DISABLE_EXTERNAL_SKILLS() {
+    return truthy("OPENCODE_DISABLE_EXTERNAL_SKILLS")
+  },
+  get OPENCODE_DISABLE_CLAUDE_CODE_SKILLS() {
+    const disabled = truthy("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS")
+    return disabled || truthy("OPENCODE_DISABLE_CLAUDE_CODE")
+  },
   get OPENCODE_EXPERIMENTAL_REFERENCES() {
     return enabledByExperimental("OPENCODE_EXPERIMENTAL_REFERENCES")
   },

@@ -119,6 +119,8 @@ Commands:
   opencode debug file          file system debugging utilities
   opencode debug scrap         list all known projects
   opencode debug skill         list all available skills
+  opencode debug skill-v2      list V2 skills (SkillV2) for the current directory; --watch reprints
+                               live
   opencode debug snapshot      snapshot debugging utilities
   opencode debug startup       print startup timing
   opencode debug agent <name>  show agent configuration details

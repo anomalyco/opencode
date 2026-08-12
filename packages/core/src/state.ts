@@ -65,8 +65,12 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
 
   const commit = Effect.fn("State.commit")(function* (next: State) {
     const api = options.draft(next)
-    if (options.finalize) yield* options.finalize(api)
+    // Assign before finalize (which publishes *.updated for catalog/reference/
+    // integration): a listener reacting to that event and immediately calling
+    // get() must observe the rebuilt state, not the state it is about to
+    // replace.
     state = next
+    if (options.finalize) yield* options.finalize(api)
   })
 
   const apply = (transform: TransformCallback<DraftApi>, draft: DraftApi) =>
