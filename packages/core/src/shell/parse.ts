@@ -1,6 +1,6 @@
 export * as ShellParse from "./parse.js"
 
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { fileURLToPath } from "url"
 import os from "os"
 import path from "path"
@@ -153,8 +153,15 @@ const ARITY: Record<string, number> = {
 }
 
 export const scan = Effect.fn("ShellParse.scan")(function* (command: string, shell: string, cwd: string) {
-  const parsers = yield* Effect.promise(load)
   const powershell = ShellSelect.ps(shell)
+  const loaded = yield* Effect.promise(load).pipe(Effect.exit)
+  // Workerd has no filesystem-backed tree-sitter assets. Preserve execution
+  // with one conservative permission resource instead of disabling shell.
+  if (Exit.isFailure(loaded)) {
+    const tokens = command.trim().split(/\s+/)
+    return { commands: [{ resource: command, save: `${prefix(tokens).join(" ")} *` }], directories: [] }
+  }
+  const parsers = loaded.value
   const tree = (powershell ? parsers.ps : parsers.bash).parse(command)
   if (!tree) return yield* Effect.fail(new Error("Failed to parse shell command"))
 
