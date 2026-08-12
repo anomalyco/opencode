@@ -2372,6 +2372,7 @@ function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?
     <Show when={visible().length > 0}>
       <box
         flexDirection="row"
+        height={height() + 2}
         flexShrink={0}
         paddingTop={1}
         paddingLeft={props.paddingLeft ?? 3}
