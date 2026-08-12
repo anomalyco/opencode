@@ -178,7 +178,7 @@ it("runs a full prompt turn against a fake provider and reads the durable log", 
   const items = await timed("session log read", () => readLog(sessionID))
   console.log(`[info] durable log events: ${JSON.stringify(items.map((item) => item.type))}`)
   const eventTypes = items.map((item) => item.type)
-  expect(eventTypes).toContain("session.input.admitted")
+  expect(eventTypes).toContain("session.inbox.enqueued")
   expect(eventTypes).toContain("session.text.ended")
   expect(eventTypes).toContain("session.execution.succeeded")
   expect(eventTypes).toContain("log.synced")
