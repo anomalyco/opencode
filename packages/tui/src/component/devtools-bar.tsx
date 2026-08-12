@@ -429,6 +429,7 @@ export function DevToolsBar() {
 function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
   const theme = useTheme()
   const renderer = useRenderer()
+  const [hovered, setHovered] = createSignal(false)
   return (
     <box
       position="relative"
@@ -437,7 +438,15 @@ function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
       flexDirection="row"
       paddingLeft={1}
       paddingRight={1}
-      backgroundColor={props.active ? theme.background.action.primary.focused : undefined}
+      backgroundColor={
+        props.active
+          ? theme.background.action.primary.focused
+          : hovered()
+            ? theme.background.action.primary.hovered
+            : undefined
+      }
+      onMouseOver={() => setHovered(true)}
+      onMouseOut={() => setHovered(false)}
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
         props.onClick()
