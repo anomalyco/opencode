@@ -107,7 +107,7 @@ function createMarquee(hovered: () => string | undefined, animations: () => bool
 
 function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsController; onClose: () => void }) {
   const dimensions = useTerminalDimensions()
-  const theme = useTheme("overlay")
+  const theme = useTheme("elevated")
   const dialog = useDialog()
   const keymap = Keymap.use()
   const renderer = useRenderer()
@@ -166,11 +166,11 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
     >
       <For each={actions}>
         {(action, index) => (
-          <text
+          <box
             width="100%"
-            fg={selected() === index() ? theme.text.action.primary.default : theme.text.default}
-            bg={selected() === index() ? theme.background.action.primary.focused : theme.background.default}
-            selectable={false}
+            paddingLeft={1}
+            paddingRight={1}
+            backgroundColor={selected() === index() ? theme.background.action.primary.hovered : undefined}
             onMouseOver={() => setSelected(index())}
             onMouseUp={(event) => {
               event.preventDefault()
@@ -178,8 +178,10 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
               run(index())
             }}
           >
-            {` ${action.title} `}
-          </text>
+            <text fg={theme.text.default} selectable={false}>
+              {action.title}
+            </text>
+          </box>
         )}
       </For>
     </box>
