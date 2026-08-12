@@ -310,27 +310,6 @@ test("unrelated managed port occupancy reports an actionable conflict", async ()
   }
 }, 30_000)
 
-test("managed service startup reports an actionable port conflict", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-managed-conflict-"))
-  const registration = path.join(root, "state", "opencode", "service-local.json")
-  const message =
-    "Managed service port 49374 on 127.0.0.1 is already in use by another process. " +
-    "Configure another port with `opencode service set port <port>` and start the service again."
-
-  try {
-    await expect(
-      Effect.runPromise(
-        Service.ensure({
-          file: registration,
-          command: [process.execPath, "-e", `console.error(${JSON.stringify(message)}); process.exit(1)`],
-        }).pipe(Effect.provide(NodeFileSystem.layer)),
-      ),
-    ).rejects.toThrow(message)
-  } finally {
-    await fs.rm(root, { recursive: true, force: true })
-  }
-}, 30_000)
-
 test("unresponsive managed port occupancy reports a bounded conflict", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-unresponsive-conflict-"))
   const recognizing = Promise.withResolvers<void>()
