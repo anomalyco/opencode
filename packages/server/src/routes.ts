@@ -28,6 +28,7 @@ import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { WellKnown } from "@opencode-ai/core/wellknown"
 import { Workspace } from "@opencode-ai/core/workspace"
+import { Worktree } from "@opencode-ai/core/worktree"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -52,6 +53,7 @@ const applicationServiceNodes = [
   httpClient,
   Job.node,
   Project.node,
+  Worktree.node,
   Session.node,
   SessionTransfer.node,
   PluginRuntime.providerNode,

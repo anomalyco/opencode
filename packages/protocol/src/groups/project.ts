@@ -31,24 +31,9 @@ export const ProjectGroup = HttpApiGroup.make("server.project")
         }),
       ),
   )
-  .add(
-    HttpApiEndpoint.get("project.directories", `${root}/:projectID/directories`, {
-      params: { projectID: Project.ID },
-      query: LocationQuery,
-      success: Project.Directories,
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "v2.project.directories",
-          summary: "List project directories",
-          description: "List known local absolute directories for a project.",
-        }),
-      ),
-  )
   .annotateMerge(
     OpenApi.annotations({
       title: "project",
-      description: "Location-scoped project routes.",
+      description: "Project routes.",
     }),
   )
