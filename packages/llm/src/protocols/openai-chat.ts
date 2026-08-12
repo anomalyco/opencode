@@ -95,6 +95,7 @@ export const bodyFields = {
   tool_choice: Schema.optional(OpenAIChatToolChoice),
   stream: Schema.Literal(true),
   stream_options: Schema.optional(Schema.Struct({ include_usage: Schema.Boolean })),
+  prompt_cache_key: Schema.optional(Schema.String),
   store: Schema.optional(Schema.Boolean),
   reasoning_effort: Schema.optional(OpenAIOptions.OpenAIReasoningEffort),
   max_tokens: Schema.optional(Schema.Number),
@@ -332,11 +333,13 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
 
 const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LLMRequest) {
   const store = OpenAIOptions.store(request)
+  const promptCacheKey = request.model.provider === "openai" ? OpenAIOptions.promptCacheKey(request) : undefined
   const reasoningEffort = OpenAIOptions.reasoningEffort(request)
   if (reasoningEffort && !OpenAIOptions.isReasoningEffort(reasoningEffort))
     return yield* invalid(`OpenAI Chat does not support reasoning effort ${reasoningEffort}`)
   return {
     ...(store !== undefined ? { store } : {}),
+    ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
     ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
   }
 })
