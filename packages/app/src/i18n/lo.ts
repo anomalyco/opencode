@@ -171,6 +171,8 @@ export const dict = {
   "command.session.redo": "ເຮັດຄືນ",
   "command.session.redo.description": "ເຮັດຄືນຂໍ້ຄວາມທີ່ຍົກເລີກຫຼ້າສຸດ",
   "command.session.compact": "ຊ່ວງເວລາກະທັດຮັດ",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "ສະຫຼຸບກອງປະຊຸມເພື່ອຫຼຸດຂະໜາດບໍລິບົດ",
   "command.session.fork": "ສ້ອມຈາກຂໍ້ຄວາມ",
   "command.session.fork.description": "ສ້າງເຊດຊັນໃໝ່ຈາກຂໍ້ຄວາມກ່ອນໜ້າ",

@@ -186,6 +186,7 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Atskirti į naują seansą",
   "ui.message.revertMessage": "Grąžinti pranešimą",
   "ui.message.copyResponse": "Nukopijuokite atsakymą",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Nukopijuota",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",

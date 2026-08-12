@@ -33,6 +33,11 @@ export function markCommitted(sessionID: string) {
   evidence(sessionID).dirty = false
 }
 
+/** Whether the session has explored (or committed) something since it started tracking. */
+export function isDirty(sessionID: string): boolean {
+  return sessions.get(sessionID)?.dirty ?? false
+}
+
 /** Returns a save-reminder for the agent, honoring a cooldown between nudges. */
 export function nudgeFor(sessionID: string): string | undefined {
   const entry = sessions.get(sessionID)

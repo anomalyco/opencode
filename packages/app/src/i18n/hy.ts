@@ -173,6 +173,8 @@ export const dict = {
   "command.session.redo": "Կրկնել",
   "command.session.redo.description": "Կրկնել վերջին չեղարկված հաղորդագրությունը",
   "command.session.compact": "Կոմպակտ նիստ",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Ամփոփեք նիստը՝ համատեքստի չափը նվազեցնելու համար",
   "command.session.fork": "Ստեղծել ճյուղ հաղորդագրությունից",
   "command.session.fork.description": "Ստեղծել նոր նիստ նախորդ հաղորդագրությունից",

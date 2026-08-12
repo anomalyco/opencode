@@ -178,6 +178,7 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "ახალ სესიად განშტოება",
   "ui.message.revertMessage": "წერილის დაბრუნება",
   "ui.message.copyResponse": "პასუხის კოპირება",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "კოპირებულია",
   "ui.message.duration.seconds": "{{count}} წმ",
   "ui.message.duration.minutesSeconds": "{{minutes}} წთ {{seconds}}წმ",
