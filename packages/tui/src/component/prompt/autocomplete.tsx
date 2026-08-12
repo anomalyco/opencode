@@ -18,7 +18,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
 import type { PromptInfo, PromptPartRef } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
-import { Keymap } from "../../context/keymap"
+import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { displayCharAt, mentionTriggerIndex, slashTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/client"
 import { Skill } from "@opencode-ai/schema/skill"
@@ -63,6 +63,7 @@ type AutocompleteResults = {
 export function Autocomplete(props: {
   value: string
   sessionID?: string
+  argumentAutocomplete?: (command: KeymapCommand) => "directory" | undefined
   directoryOptions?: (query: string) => AutocompleteOption[]
   setPrompt: (input: (prompt: PromptInfo) => void) => void
   setExtmark: (part: PromptPartRef, extmarkId: number) => void
@@ -807,7 +808,7 @@ export function Autocomplete(props: {
         if (dismissedValue() === value) return
         setDismissedValue(undefined)
         const offset = props.input().cursorOffset
-        const argument = slashArgumentAutocomplete(value, offset, keymapCommands())
+        const argument = slashArgumentAutocomplete(value, offset, keymapCommands(), props.argumentAutocomplete)
         if (argument?.type === "directory") {
           show("directory", argument.index)
           return

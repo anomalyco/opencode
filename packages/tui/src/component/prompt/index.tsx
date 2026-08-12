@@ -223,7 +223,7 @@ export function Prompt(props: PromptProps) {
       {
         id: "session.cd",
         title: "Change working directory",
-        slash: { name: "cd", arguments: true, autocomplete: "directory" },
+        slash: { name: "cd", arguments: true },
         run: async (input) => {
           if (!input?.trim()) {
             toast.show({ message: "Directory is required", variant: "error" })
@@ -1865,6 +1865,7 @@ export function Prompt(props: PromptProps) {
       </box>
       <Autocomplete
         sessionID={props.sessionID}
+        argumentAutocomplete={(command) => (command.id === "session.cd" ? "directory" : undefined)}
         directoryOptions={(query): AutocompleteOption[] => {
           if (query !== "") return []
           const projectID =

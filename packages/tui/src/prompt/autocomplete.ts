@@ -3,20 +3,27 @@ import path from "path"
 import { displaySlice, promptOffsetWidth } from "./display"
 import { parseSlashHead } from "./parse"
 
-export function slashArgumentAutocomplete(value: string, offset: number, commands: readonly KeymapCommand[]) {
+export function slashArgumentAutocomplete(
+  value: string,
+  offset: number,
+  commands: readonly KeymapCommand[],
+  autocomplete: ((command: KeymapCommand) => "directory" | undefined) | undefined,
+) {
   const beforeCursor = displaySlice(value, 0, offset)
   const head = parseSlashHead(beforeCursor, /\s/)
   if (!head || head.end === beforeCursor.length) return
 
-  const autocomplete = commands.find(
+  const command = commands.find(
     (command) =>
-      command.slash?.autocomplete &&
+      command.slash?.arguments &&
       (command.slash.name === head.name || command.slash.aliases?.includes(head.name) === true),
-  )?.slash?.autocomplete
-  if (!autocomplete) return
+  )
+  if (!command) return
+  const type = autocomplete?.(command)
+  if (!type) return
 
   return {
-    type: autocomplete,
+    type,
     index: promptOffsetWidth(beforeCursor.slice(0, head.end + 1)),
   }
 }

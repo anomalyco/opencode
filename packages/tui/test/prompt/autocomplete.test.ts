@@ -11,24 +11,37 @@ import {
 
 const commands = [
   {
-    slash: { name: "cd", aliases: ["chdir"], arguments: true, autocomplete: "directory" },
+    id: "session.cd",
+    slash: { name: "cd", aliases: ["chdir"], arguments: true },
     run: () => undefined,
   },
 ] satisfies KeymapCommand[]
 
+const argumentAutocomplete = (command: KeymapCommand) =>
+  command.id === "session.cd" ? ("directory" as const) : undefined
+
 describe("slashArgumentAutocomplete", () => {
   test("starts after the command separator", () => {
-    expect(slashArgumentAutocomplete("/cd ", 4, commands)).toEqual({ type: "directory", index: 4 })
-    expect(slashArgumentAutocomplete("/cd src", 7, commands)).toEqual({ type: "directory", index: 4 })
+    expect(slashArgumentAutocomplete("/cd ", 4, commands, argumentAutocomplete)).toEqual({
+      type: "directory",
+      index: 4,
+    })
+    expect(slashArgumentAutocomplete("/cd src", 7, commands, argumentAutocomplete)).toEqual({
+      type: "directory",
+      index: 4,
+    })
   })
 
   test("supports aliases", () => {
-    expect(slashArgumentAutocomplete("/chdir src", 10, commands)).toEqual({ type: "directory", index: 7 })
+    expect(slashArgumentAutocomplete("/chdir src", 10, commands, argumentAutocomplete)).toEqual({
+      type: "directory",
+      index: 7,
+    })
   })
 
   test("does not complete the command token", () => {
-    expect(slashArgumentAutocomplete("/cd", 3, commands)).toBeUndefined()
-    expect(slashArgumentAutocomplete("/other ", 7, commands)).toBeUndefined()
+    expect(slashArgumentAutocomplete("/cd", 3, commands, argumentAutocomplete)).toBeUndefined()
+    expect(slashArgumentAutocomplete("/other ", 7, commands, argumentAutocomplete)).toBeUndefined()
   })
 })
 
