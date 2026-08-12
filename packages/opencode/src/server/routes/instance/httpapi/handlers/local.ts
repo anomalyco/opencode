@@ -290,13 +290,13 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       // VRAM-achievable hard n_ctx. When it is unknown (0 — non-llama-skein
       // backend, VRAM unreadable) there is nothing to judge against, so let the
       // patch through rather than block a valid change.
-      const fit = yield* Effect.tryPromise(() => client.getModelFit({ model: modelID })).pipe(
+      const fit = yield* Effect.tryPromise(() => client.getModelFit({ path: { model: modelID } })).pipe(
         Effect.orElseSucceed(() => null),
       )
       const maxFit = fit?.data?.max_fit_ctx ?? 0
       if (maxFit > 0 && ctx_size > maxFit) return false
       const res = yield* Effect.tryPromise(() =>
-        client.patchModelConfig({ id: modelID, configModelPatchRequest: { ctx_size } }),
+        client.patchModelConfig({ path: { id: modelID }, body: { ctx_size } }),
       ).pipe(Effect.orElseSucceed(() => null))
       const ok = res !== null && !res.error
       // fork: llama-skein reloads the model on a ctx change; sync our cached
@@ -317,7 +317,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
         ?.baseURL
       if (!baseURL) return false
       const res = yield* Effect.tryPromise(() =>
-        llamaClient(baseURL).patchModelConfig({ id: modelID, configModelPatchRequest: ctx.payload }),
+        llamaClient(baseURL).patchModelConfig({ path: { id: modelID }, body: ctx.payload }),
       ).pipe(Effect.orElseSucceed(() => null))
       return res !== null && !res.error
     })
@@ -330,7 +330,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       const unavailable = { applicable: false, backend: "llamacpp", reason: "recommendation unavailable" }
       if (!baseURL) return { applicable: false, backend: "llamacpp", reason: "provider not configured" }
       const res = yield* Effect.tryPromise(() =>
-        llamaClient(baseURL).getOffloadRecommendation({ model: modelID }),
+        llamaClient(baseURL).getOffloadRecommendation({ path: { model: modelID } }),
       ).pipe(Effect.orElseSucceed(() => null))
       if (res === null || res.error || !res.data) return unavailable
       return res.data
