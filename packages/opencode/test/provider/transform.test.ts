@@ -523,6 +523,7 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.reasoningEffort).toBe("medium")
     expect(result.reasoningSummary).toBeUndefined()
     expect(result.include).toBeUndefined()
+    expect(result.textVerbosity).toBeUndefined()
   })
 
   test("azure chat completions omit Responses-only reasoning options after variants merge", async () => {
