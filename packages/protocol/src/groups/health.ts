@@ -5,7 +5,8 @@ export namespace ServiceStatus {
   export const Health = Schema.Struct({
     healthy: Schema.Literal(true),
     version: Schema.String,
-    pid: Schema.Int.check(Schema.isGreaterThan(0)),
+    // 0 means the runtime has no OS process identity (e.g. workerd).
+    pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   }).annotate({ identifier: "ServiceHealth" })
   export type Health = typeof Health.Type
 

@@ -120,6 +120,11 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
   }
 
   private withTransaction<A, E, R>(effect: Effect.Effect<A, E, R>, config: SQLiteTransactionConfig | undefined) {
+    // Some runtimes (Cloudflare Durable Object SQLite) reject SQL transaction
+    // statements outright and replace the client's withTransaction with a
+    // native implementation; delegate to it instead of issuing BEGIN/SAVEPOINT.
+    const client = this.client as SqlClient & { readonly transactionStatements?: boolean }
+    if (client.transactionStatements === false) return client.withTransaction(effect)
     return Effect.uninterruptibleMask((restore) =>
       Effect.withFiber<A, E | SqlError, R>((fiber) => {
         const services = fiber.context
