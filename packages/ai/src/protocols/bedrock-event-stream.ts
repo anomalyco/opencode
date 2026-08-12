@@ -1,8 +1,8 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { Effect, Stream } from "effect"
-import { Framing } from "../route/framing"
-import { ProviderShared } from "./shared"
+import { Framing } from "../route/framing.js"
+import { ProviderShared } from "./shared.js"
 
 // Bedrock streams responses using the AWS event stream binary protocol — each
 // frame is `[length:4][headers-length:4][prelude-crc:4][headers][payload][crc:4]`.
@@ -98,4 +98,4 @@ export const framing = (route: string): Framing.Definition<object> => ({
   frame: (bytes) => bytes.pipe(Stream.mapAccumEffect(() => initialFrameBuffer, consumeFrames(route))),
 })
 
-export * as BedrockEventStream from "./bedrock-event-stream"
+export * as BedrockEventStream from "./bedrock-event-stream.js"

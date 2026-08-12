@@ -1,4 +1,4 @@
-import type { LanguageModel, ProviderOptions } from "./schema"
+import type { LanguageModel, ProviderOptions } from "./schema/index.js"
 
 export interface Settings extends Readonly<Record<string, unknown>> {
   readonly baseURL?: string
@@ -18,4 +18,4 @@ export interface Definition<
   readonly model: (modelID: string, settings: ProviderSettings) => LanguageModel<Options>
 }
 
-export * as ProviderPackage from "./provider-package"
+export * as ProviderPackage from "./provider-package.js"

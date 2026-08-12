@@ -22,8 +22,8 @@ import { type DrizzleTypeError, haveSameKeys } from "drizzle-orm/utils"
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core/columns/common"
 import { QueryBuilder } from "drizzle-orm/sqlite-core/query-builders/query-builder"
 import type { SQLiteUpdateSetSource } from "drizzle-orm/sqlite-core/query-builders/update"
-import { getTableColumnsRuntime, mapUpdateSet, orderSelectedFields } from "../../internal/drizzle-utils"
-import type { SQLiteEffectPreparedQuery, SQLiteEffectSession } from "./session"
+import { getTableColumnsRuntime, mapUpdateSet, orderSelectedFields } from "../../internal/drizzle-utils.js"
+import type { SQLiteEffectPreparedQuery, SQLiteEffectSession } from "./session.js"
 
 export type SQLiteEffectInsertWithout<
   T extends AnySQLiteEffectInsert,

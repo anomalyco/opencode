@@ -1,11 +1,11 @@
-import { Auth } from "../route/auth"
-import type { Route as RouteDef, RouteDefaultsInput } from "../route/client"
-import type { ProviderPackage } from "../provider-package"
-import { OpenAIChat } from "../protocols/openai-chat"
-import { OpenAIResponses } from "../protocols/openai-responses"
-import { BedrockAuth, type Credentials } from "../protocols/utils/bedrock-auth"
-import { ProviderID, type ModelID } from "../schema"
-import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
+import { Auth } from "../route/auth.js"
+import type { Route as RouteDef, RouteDefaultsInput } from "../route/client.js"
+import type { ProviderPackage } from "../provider-package.js"
+import { OpenAIChat } from "../protocols/openai-chat.js"
+import { OpenAIResponses } from "../protocols/openai-responses.js"
+import { BedrockAuth, type Credentials } from "../protocols/utils/bedrock-auth.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
+import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("amazon-bedrock")
 

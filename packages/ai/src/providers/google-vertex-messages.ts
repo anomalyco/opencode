@@ -1,13 +1,13 @@
 import { Effect, Schema, Struct } from "effect"
-import type { ProviderPackage } from "../provider-package"
-import { AnthropicMessages } from "../protocols/anthropic-messages"
-import { Auth } from "../route/auth"
-import { Route, type RouteDefaultsInput } from "../route/client"
-import { Endpoint } from "../route/endpoint"
-import { Framing } from "../route/framing"
-import { Protocol } from "../route/protocol"
-import { ProviderID, type ModelID } from "../schema"
-import { GoogleVertexShared } from "./google-vertex-shared"
+import type { ProviderPackage } from "../provider-package.js"
+import { AnthropicMessages } from "../protocols/anthropic-messages.js"
+import { Auth } from "../route/auth.js"
+import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
+import { Framing } from "../route/framing.js"
+import { Protocol } from "../route/protocol.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
+import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
 export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInput

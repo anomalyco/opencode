@@ -1,7 +1,7 @@
 import { Effect, Encoding, Schema } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { GeneratedImage, ImageModel, ImageResponse, type ImageRequestFor, type ImageRoute } from "../image"
-import { Auth, type Definition as AuthDefinition } from "../route/auth"
+import { GeneratedImage, ImageModel, ImageResponse, type ImageRequestFor, type ImageRoute } from "../image.js"
+import { Auth, type Definition as AuthDefinition } from "../route/auth.js"
 import {
   InvalidProviderOutputReason,
   AIError,
@@ -9,9 +9,9 @@ import {
   mergeHttpOptions,
   mergeJsonRecords,
   type HttpOptions,
-} from "../schema"
-import { ProviderShared, optionalNull } from "./shared"
-import { ImageInputs } from "./utils/image-input"
+} from "../schema/index.js"
+import { ProviderShared, optionalNull } from "./shared.js"
+import { ImageInputs } from "./utils/image-input.js"
 
 const ADAPTER = "xai-images"
 export const DEFAULT_BASE_URL = "https://api.x.ai/v1"

@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM } from "../../src"
-import { LLMClient } from "../../src/route"
-import { AmazonBedrock } from "../../src/providers"
-import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios"
-import { recordedTests } from "../recorded-test"
+import { CacheHint, LLM } from "../../src/index.js"
+import { LLMClient } from "../../src/route.js"
+import { AmazonBedrock } from "../../src/providers.js"
+import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
+import { recordedTests } from "../recorded-test.js"
 
 const RECORDING_REGION = process.env.BEDROCK_RECORDING_REGION ?? "us-east-1"
 

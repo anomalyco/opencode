@@ -1,5 +1,5 @@
-import { LLM } from "../../src"
-import { CloudflareWorkersAI } from "../../src/providers"
+import { LLM } from "../../src/index.js"
+import { CloudflareWorkersAI } from "../../src/providers.js"
 
 const model = CloudflareWorkersAI.configure({ accountId: "account", apiKey: "test" }).model("model")
 

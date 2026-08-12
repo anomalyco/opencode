@@ -14,8 +14,8 @@ import {
   HttpResponseDetails,
   AIError,
   TransportReason,
-} from "../schema"
-import { classifyProviderFailure } from "../provider-error"
+} from "../schema/index.js"
+import { classifyProviderFailure } from "../provider-error.js"
 
 export interface Interface {
   readonly execute: (
@@ -362,4 +362,4 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
 
 export const fetchLayer = layer.pipe(Layer.provide(FetchHttpClient.layer))
 
-export * as RequestExecutor from "./executor"
+export * as RequestExecutor from "./executor.js"

@@ -1,5 +1,5 @@
 import { Effect, JsonSchema, Schema } from "effect"
-import { LLMClient, Service } from "./route/client"
+import { LLMClient, Service } from "./route/client.js"
 import {
   GenerationOptions,
   HttpOptions,
@@ -15,8 +15,8 @@ import {
   ToolDefinition,
   type ContentPart,
   type LanguageModelProviderOptions,
-} from "./schema"
-import { make as makeTool, toDefinitions, type ToolSchema } from "./tool"
+} from "./schema/index.js"
+import { make as makeTool, toDefinitions, type ToolSchema } from "./tool.js"
 
 /** Input accepted by `LLM.request`, normalized into the canonical `LLMRequest` class. */
 export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<

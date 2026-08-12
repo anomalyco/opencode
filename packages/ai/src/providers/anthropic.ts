@@ -1,10 +1,10 @@
-import type { RouteDefaultsInput } from "../route/client"
-import { Auth } from "../route/auth"
-import type { ProviderAuthOption } from "../route/auth-options"
-import type { ProviderPackage } from "../provider-package"
-import { ProviderID, type ModelID } from "../schema"
-import { AnthropicMessages } from "../protocols/anthropic-messages"
-import { AnthropicCompatible } from "./anthropic-compatible"
+import type { RouteDefaultsInput } from "../route/client.js"
+import { Auth } from "../route/auth.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderPackage } from "../provider-package.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
+import { AnthropicMessages } from "../protocols/anthropic-messages.js"
+import { AnthropicCompatible } from "./anthropic-compatible.js"
 
 export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
 export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInput

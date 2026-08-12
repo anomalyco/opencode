@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src"
-import { Auth, LLMClient } from "../../src/route"
-import { compileRequest } from "../../src/route/client"
-import * as Gemini from "../../src/protocols/gemini"
-import { ProviderShared } from "../../src/protocols/shared"
-import { it } from "../lib/effect"
-import { fixedResponse } from "../lib/http"
-import { sseEvents, sseRaw } from "../lib/sse"
+import { LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src/index.js"
+import { Auth, LLMClient } from "../../src/route.js"
+import { compileRequest } from "../../src/route/client.js"
+import * as Gemini from "../../src/protocols/gemini.js"
+import { ProviderShared } from "../../src/protocols/shared.js"
+import { it } from "../lib/effect.js"
+import { fixedResponse } from "../lib/http.js"
+import { sseEvents, sseRaw } from "../lib/sse.js"
 
 const model = Gemini.route
   .with({

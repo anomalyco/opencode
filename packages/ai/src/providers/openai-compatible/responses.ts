@@ -1,1 +1,1 @@
-export * from "../openai-compatible-responses"
+export * from "../openai-compatible-responses.js"

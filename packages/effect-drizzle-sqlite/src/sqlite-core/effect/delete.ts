@@ -15,8 +15,8 @@ import { extractUsedTable } from "drizzle-orm/sqlite-core/utils"
 import type { Subquery } from "drizzle-orm/subquery"
 import { type DrizzleTypeError, type ValueOrArray } from "drizzle-orm/utils"
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core/columns/common"
-import { getTableColumnsRuntime, orderSelectedFields } from "../../internal/drizzle-utils"
-import type { SQLiteEffectPreparedQuery, SQLiteEffectSession } from "./session"
+import { getTableColumnsRuntime, orderSelectedFields } from "../../internal/drizzle-utils.js"
+import type { SQLiteEffectPreparedQuery, SQLiteEffectSession } from "./session.js"
 
 export type SQLiteEffectDeleteWithout<
   T extends AnySQLiteEffectDelete,

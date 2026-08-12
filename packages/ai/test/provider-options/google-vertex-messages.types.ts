@@ -1,5 +1,5 @@
-import { LLM } from "../../src"
-import { GoogleVertexMessages } from "../../src/providers"
+import { LLM } from "../../src/index.js"
+import { GoogleVertexMessages } from "../../src/providers.js"
 
 const model = GoogleVertexMessages.configure({ accessToken: "test", project: "project" }).model("claude")
 
