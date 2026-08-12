@@ -868,7 +868,7 @@ export default function LegacyLayout(props: ParentProps) {
     }
   }
 
-  async function archiveSession(session: Session) {
+  async function executeArchiveSession(session: Session) {
     if ((await serverSDK().protocol) !== "v1") return
     const [store, setStore] = serverSync().child(session.directory)
     const sessions = store.session ?? []
@@ -893,6 +893,10 @@ export default function LegacyLayout(props: ParentProps) {
         navigate(`/${params.dir}/session`)
       }
     }
+  }
+
+  async function archiveSession(session: Session) {
+    await executeArchiveSession(session)
   }
 
   command.register("layout", () => {
@@ -980,7 +984,7 @@ export default function LegacyLayout(props: ParentProps) {
         disabled: !params.dir || !params.id,
         onSelect: () => {
           const session = currentSessions().find((s) => s.id === params.id)
-          if (session) void archiveSession(session)
+          if (session) dialog.show(() => <DialogArchiveSession session={session} />)
         },
       },
       {
@@ -1659,7 +1663,37 @@ export default function LegacyLayout(props: ParentProps) {
     )
   }
 
-  const activeRoute = {
+  function DialogArchiveSession(props: { session: Session }) {
+    const name = createMemo(
+      () => props.session.title ?? language.t("command.session.new"),
+    )
+    const handleArchive = async () => {
+      await executeArchiveSession(props.session)
+      dialog.close()
+    }
+
+    return (
+      <Dialog title={language.t("session.archive.title")} fit>
+        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
+          <div class="flex flex-col gap-1">
+            <span class="text-14-regular text-text-strong">
+              {language.t("session.archive.confirm", { name: name() })}
+            </span>
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              {language.t("common.cancel")}
+            </Button>
+            <Button variant="primary" size="large" onClick={handleArchive}>
+              {language.t("session.archive.button")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
+  }
+
+    const activeRoute = {
     session: "",
     sessionProject: "",
     directory: "",
