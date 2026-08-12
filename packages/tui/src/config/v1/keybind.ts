@@ -218,7 +218,7 @@ export const Definitions = {
   "dialog.select.page_down": keybind("pagedown", "Move down one page in dialog"),
   "dialog.select.home": keybind("home", "Move to first dialog item"),
   "dialog.select.end": keybind("end", "Move to last dialog item"),
-  "dialog.select.submit": keybind("return", "Submit selected dialog item"),
+  "dialog.select.submit": keybind("return,shift+return,linefeed", "Submit selected dialog item"),
   "dialog.prompt.submit": keybind("return", "Submit dialog prompt"),
   "dialog.project_copy.generate": keybind("tab", "Generate project copy name"),
   "dialog.move_session.new": keybind("ctrl+m", "New project copy"),

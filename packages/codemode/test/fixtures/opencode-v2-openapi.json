@@ -6866,7 +6866,7 @@
     "/api/fs/find": {
       "get": {
         "tags": ["filesystem"],
-        "operationId": "v2.fs.find",
+        "operationId": "v2.fs.get",
         "parameters": [
           {
             "name": "location",

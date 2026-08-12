@@ -47,14 +47,14 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
       ),
   )
   .add(
-    HttpApiEndpoint.get("fs.find", "/api/fs/find", {
+    HttpApiEndpoint.get("fs.get", "/api/fs/find", {
       query: FindQuery,
       success: Location.response(Schema.Array(FileSystem.Entry)),
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.fs.find",
+          identifier: "v2.fs.get",
           summary: "Find files",
           description: "Find recursively ranked filesystem entries relative to the requested location.",
         }),

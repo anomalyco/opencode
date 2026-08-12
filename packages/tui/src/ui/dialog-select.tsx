@@ -1,4 +1,11 @@
-import { CliRenderEvents, InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
+import {
+  CliRenderEvents,
+  InputRenderable,
+  RGBA,
+  ScrollBoxRenderable,
+  TextAttributes,
+  type KeyEvent,
+} from "@opentui/core"
 import { Keymap, type KeymapCommand } from "../context/keymap"
 import { useTheme, useThemes } from "../context/theme"
 import { entries, filter, flatMap, groupBy, pipe } from "remeda"
@@ -26,7 +33,7 @@ export interface DialogSelectProps<T> {
   ref?: (ref: DialogSelectRef<T>) => void
   onMove?: (option: DialogSelectOption<T>) => void
   onFilter?: (query: string) => void
-  onSelect?: (option: DialogSelectOption<T>) => void
+  onSelect?: (option: DialogSelectOption<T>, activation: { shift: boolean }) => void
   skipFilter?: boolean
   renderFilter?: boolean
   locked?: boolean
@@ -382,7 +389,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     }
   }
 
-  function submit() {
+  function submit(_input?: string, event?: KeyEvent) {
     if (props.locked) return
     setStore("input", "keyboard")
     const index = focusedAction()
@@ -393,7 +400,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const option = selected()
     if (!option) return
     option.onSelect?.(dialog)
-    props.onSelect?.(option)
+    props.onSelect?.(option, { shift: event?.shift === true || event?.name === "linefeed" })
   }
 
   function moveAction(direction: 1 | -1) {
@@ -712,10 +719,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                             setStore("input", "mouse")
                             setFocusedAction(undefined)
                           }}
-                          onMouseUp={() => {
+                          onMouseUp={(event) => {
                             if (props.locked) return
                             option.onSelect?.(dialog)
-                            props.onSelect?.(option)
+                            props.onSelect?.(option, { shift: event.modifiers.shift })
                           }}
                           onMouseOver={() => {
                             if (props.locked) return

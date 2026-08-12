@@ -28,7 +28,7 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
           }),
         ),
       )
-      .handle("fs.find", (ctx) =>
+      .handle("fs.get", (ctx) =>
         response(
           Effect.gen(function* () {
             const fs = yield* FileSystem.Service

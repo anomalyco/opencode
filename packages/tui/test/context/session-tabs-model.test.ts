@@ -9,6 +9,7 @@ import {
   recordClosedSessionTab,
   recordSessionTabHistory,
   reopenSessionTab,
+  replaceSessionTab,
   seedSessionTabMotion,
   sessionTabComplete,
   sessionTabOverflowWidth,
@@ -87,6 +88,18 @@ describe("session tabs", () => {
     expect(tabs).toEqual([{ sessionID: "a", title: "New" }])
     expect(openSessionTab(tabs, { sessionID: "b" })).toEqual([{ sessionID: "a", title: "New" }, { sessionID: "b" }])
     expect(openSessionTab(tabs, { sessionID: "a", title: "New" })).toBe(tabs)
+  })
+
+  test("replaces the active tab without duplicating an already-open target", () => {
+    const tabs = ["a", "b", "c"].map((sessionID) => ({ sessionID }))
+    expect(replaceSessionTab(tabs, "b", { sessionID: "d" }).map((tab) => tab.sessionID)).toEqual(["a", "d", "c"])
+    expect(replaceSessionTab(tabs, "b", { sessionID: "c" })).toBe(tabs)
+    expect(replaceSessionTab(tabs, undefined, { sessionID: "d" }).map((tab) => tab.sessionID)).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+    ])
   })
 
   test("selects the right tab then the left tab after closing", () => {

@@ -19,6 +19,7 @@ import {
   openSessionTab,
   recordClosedSessionTab,
   recordSessionTabHistory,
+  replaceSessionTab,
   reopenSessionTab,
   type ClosedSessionTab,
   type SessionTab,
@@ -64,6 +65,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const fallback = empty()
     const [promptPulses, setPromptPulses] = createSignal<Record<string, number>>({})
     let history: SessionTabHistory = { entries: [], index: -1 }
+    let replacement: string | undefined
     // User-closed tabs eligible for reopening; in-memory like history, deleted sessions pruned.
     let closedTabs: ClosedSessionTab[] = []
 
@@ -132,18 +134,22 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       if (!enabled()) return
       if (route.data.type !== "session" || route.data.sessionID === "dummy") return
       const sessionID = root(route.data.sessionID)
+      const replaced = replacement
+      replacement = undefined
       history = recordSessionTabHistory(history, sessionID)
-      const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
-      const tabs = openSessionTab(state().tabs, {
+      const fallback = !replaced && newTab() ? NEW_SESSION_TAB_TITLE : undefined
+      const tab = {
         sessionID,
         title: title(sessionID, state().tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
-      })
+      }
+      const tabs = replaced ? replaceSessionTab(state().tabs, replaced, tab) : openSessionTab(state().tabs, tab)
       if (tabs === state().tabs && !state().unread[sessionID]) return
       update((draft) => {
-        draft.tabs = openSessionTab(draft.tabs, {
+        const tab = {
           sessionID,
           title: title(sessionID, draft.tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
-        })
+        }
+        draft.tabs = replaced ? replaceSessionTab(draft.tabs, replaced, tab) : openSessionTab(draft.tabs, tab)
         delete draft.unread[sessionID]
       })
     })
@@ -250,6 +256,16 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       select(sessionID: string) {
         if (!enabled()) return
         route.navigate({ type: "session", sessionID: root(sessionID) })
+      },
+      replace(sessionID: string) {
+        const target = root(sessionID)
+        if (!enabled()) {
+          route.navigate({ type: "session", sessionID: target })
+          return
+        }
+        if (target === current()) return
+        replacement = current()
+        route.navigate({ type: "session", sessionID: target })
       },
       add() {
         if (!enabled()) return

@@ -1034,12 +1034,12 @@ const Endpoint16_0 = (raw: RawClient["server.fs"]) => (input?: Endpoint16_0Input
 
 const Endpoint16_1 = (raw: RawClient["server.fs"]) => (input: Endpoint16_1Input) =>
   preserveEffect<Endpoint16_1Output>()(
-    raw["fs.find"]({
+    raw["fs.get"]({
       query: { location: input["location"], query: input["query"], type: input["type"], limit: input["limit"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroup16 = (raw: RawClient["server.fs"]) => ({ list: Endpoint16_0(raw), find: Endpoint16_1(raw) })
+const adaptGroup16 = (raw: RawClient["server.fs"]) => ({ list: Endpoint16_0(raw), get: Endpoint16_1(raw) })
 
 const Endpoint17_0 = (raw: RawClient["server.command"]) => (input?: Endpoint17_0Input) =>
   preserveEffect<Endpoint17_0Output>()(

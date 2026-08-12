@@ -235,7 +235,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     getDirectory: () => state.location.directory,
     findFiles: (query) =>
       state.sdk.file
-        .find({
+        .get({
           query,
           type: "file",
           location: { directory: state.location.directory, workspace: state.location.workspaceID },

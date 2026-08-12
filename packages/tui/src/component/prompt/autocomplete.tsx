@@ -353,7 +353,7 @@ export function Autocomplete(props: {
       const result = await (
         input.visible === "directory"
           ? client.api.file.list({ location: requestLocation })
-          : client.api.file.find({ query: base, limit: 20, location: requestLocation })
+          : client.api.file.get({ query: base, limit: 20, location: requestLocation })
       ).then(
         (result) => result,
         () => undefined,

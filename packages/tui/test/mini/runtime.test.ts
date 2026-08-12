@@ -504,7 +504,7 @@ describe("run interactive runtime", () => {
     const catalogs = stubCatalogLists(sdk, {
       location: { directory: "/session", workspaceID: "work-1" },
     })
-    const fileFind = spyOn(sdk.file, "find").mockResolvedValue({
+    const fileGet = spyOn(sdk.file, "get").mockResolvedValue({
       location: {
         directory: "/session",
         workspaceID: "work-1",
@@ -591,6 +591,6 @@ describe("run interactive runtime", () => {
     expect(catalogs.reference).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(catalogs.command).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(catalogs.skill).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
-    expect(fileFind).toHaveBeenCalledWith({ query: "index", type: "file", ...query })
+    expect(fileGet).toHaveBeenCalledWith({ query: "index", type: "file", ...query })
   })
 })

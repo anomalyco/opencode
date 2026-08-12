@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { InputRenderable } from "@opentui/core"
+import { MouseButtons } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
@@ -109,6 +110,7 @@ async function mountSelect(
   ])
 
   const selected: string[] = []
+  const shifted: boolean[] = []
   const moved: string[] = []
   let replaceOptions!: (options: DialogSelectOption<string>[]) => void
 
@@ -127,7 +129,10 @@ async function mountSelect(
             focusCurrent={focusCurrent}
             flat={select?.flat}
             onMove={(option) => moved.push(option.value)}
-            onSelect={(option) => selected.push(option.value)}
+            onSelect={(option, activation) => {
+              selected.push(option.value)
+              shifted.push(activation.shift)
+            }}
           />
         )),
       )
@@ -155,8 +160,48 @@ async function mountSelect(
   app.renderer.start()
   await app.waitForFrame((frame) => frame.includes("Mutable options"))
   await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
-  return { app, moved, replaceOptions, selected }
+  return { app, moved, replaceOptions, selected, shifted }
 }
+
+test("reports Shift for keyboard selection", async () => {
+  await using tmp = await tmpdir()
+  const select = await mountSelect(tmp.path, [{ title: "Alpha", value: "alpha" }])
+
+  try {
+    select.app.mockInput.pressEnter({ shift: true })
+    expect(select.selected).toEqual(["alpha"])
+    expect(select.shifted).toEqual([true])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("treats a raw linefeed as Shift selection", async () => {
+  await using tmp = await tmpdir()
+  const select = await mountSelect(tmp.path, [{ title: "Alpha", value: "alpha" }])
+
+  try {
+    select.app.renderer.stdin.emit("data", Buffer.from("\n"))
+    await select.app.waitFor(() => select.selected.length === 1)
+    expect(select.selected).toEqual(["alpha"])
+    expect(select.shifted).toEqual([true])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("reports Shift for mouse selection", async () => {
+  await using tmp = await tmpdir()
+  const select = await mountSelect(tmp.path, [{ title: "Alpha", value: "alpha" }])
+
+  try {
+    await select.app.mockMouse.click(15, 11, MouseButtons.LEFT, { modifiers: { shift: true } })
+    expect(select.selected).toEqual(["alpha"])
+    expect(select.shifted).toEqual([true])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
 
 test("budgets option content for constrained and full-width large dialogs", () => {
   expect(dialogSelectContentWidth(Math.min(dialogWidth("large"), 62 - 2)) - 7).toBe(41)

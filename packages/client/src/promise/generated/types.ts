@@ -5335,7 +5335,7 @@ export type FileListOutput = {
   data: Array<FileSystemEntry>
 }
 
-export type FileFindInput = {
+export type FileGetInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
     readonly query: string
@@ -5362,7 +5362,7 @@ export type FileFindInput = {
   }["limit"]
 }
 
-export type FileFindOutput = {
+export type FileGetOutput = {
   location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
   data: Array<FileSystemEntry>
 }

@@ -103,7 +103,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     const base = pickerRoot(cleaned) || root() || start()
     if (!base) return { query: value, items: directories.slice(0, 5) }
     const files = await sdk.api.file
-      .find({
+      .get({
         location: { directory: base },
         query: pickerFileSearchQuery(base, value, home()),
         type: "file",

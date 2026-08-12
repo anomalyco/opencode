@@ -1362,11 +1362,11 @@ export type Endpoint16_1Input = {
   readonly limit?: number | undefined
 }
 export type Endpoint16_1Output = { readonly location: Location.Info; readonly data: ReadonlyArray<FileSystem.Entry> }
-export type FileFindOperation<E = never> = (input: Endpoint16_1Input) => Effect.Effect<Endpoint16_1Output, E>
+export type FileGetOperation<E = never> = (input: Endpoint16_1Input) => Effect.Effect<Endpoint16_1Output, E>
 
 export interface FileApi<E = never> {
   readonly list: FileListOperation<E>
-  readonly find: FileFindOperation<E>
+  readonly get: FileGetOperation<E>
 }
 
 export type Endpoint17_0Input = {

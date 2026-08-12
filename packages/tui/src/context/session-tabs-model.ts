@@ -35,6 +35,13 @@ export function openSessionTab(tabs: SessionTab[], tab: SessionTab): SessionTab[
   return tabs.map((item, position) => (position === index ? { ...item, title: tab.title } : item))
 }
 
+export function replaceSessionTab(tabs: SessionTab[], current: string | undefined, tab: SessionTab): SessionTab[] {
+  if (tabs.some((item) => item.sessionID === tab.sessionID)) return tabs
+  const index = current ? tabs.findIndex((item) => item.sessionID === current) : -1
+  if (index === -1) return [...tabs, tab]
+  return tabs.map((item, position) => (position === index ? tab : item))
+}
+
 export function closeSessionTab(tabs: SessionTab[], sessionID: string) {
   const index = tabs.findIndex((tab) => tab.sessionID === sessionID)
   // Like openSessionTab and moveSessionTab, a no-op returns the same reference so callers can

@@ -227,8 +227,9 @@ export function DialogSessionList() {
         </box>
       }
       onMove={() => setToDelete(undefined)}
-      onSelect={(option) => {
-        route.navigate({ type: "session", sessionID: option.value })
+      onSelect={(option, activation) => {
+        if (activation.shift) route.navigate({ type: "session", sessionID: option.value })
+        else sessionTabs.replace(option.value)
         dialog.clear()
       }}
       actions={[

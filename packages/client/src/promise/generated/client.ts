@@ -167,8 +167,8 @@ import type {
   FileReadOutput,
   FileListInput,
   FileListOutput,
-  FileFindInput,
-  FileFindOutput,
+  FileGetInput,
+  FileGetOutput,
   CommandListInput,
   CommandListOutput,
   SkillListInput,
@@ -1473,8 +1473,8 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      find: (input: FileFindInput, requestOptions?: RequestOptions) =>
-        request<FileFindOutput>(
+      get: (input: FileGetInput, requestOptions?: RequestOptions) =>
+        request<FileGetOutput>(
           {
             method: "GET",
             path: `/api/fs/find`,

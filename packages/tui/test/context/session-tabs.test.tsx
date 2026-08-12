@@ -289,3 +289,25 @@ test("add opens the new session tab carrying the current session's location", as
     await setup.destroy()
   }
 })
+
+test("replace swaps the current tab while selecting an existing tab preserves the tab list", async () => {
+  const setup = await renderSessionTabs("first")
+
+  try {
+    await wait(() => setup.tabs.current() === "first")
+    setup.route.navigate({ type: "session", sessionID: "second" })
+    await wait(() => setup.tabs.current() === "second" && setup.tabs.tabs().length === 2)
+
+    setup.tabs.replace("third")
+    await wait(
+      () => setup.tabs.current() === "third" && setup.tabs.tabs().map((tab) => tab.sessionID).join() === "first,third",
+    )
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first", "third"])
+
+    setup.tabs.replace("first")
+    await wait(() => setup.tabs.current() === "first")
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first", "third"])
+  } finally {
+    await setup.destroy()
+  }
+})
