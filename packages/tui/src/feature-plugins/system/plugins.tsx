@@ -107,6 +107,7 @@ function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePl
           <DialogSelect
             title="Plugins"
             options={options()}
+            current={focused()}
             locked={locked()}
             preserveSelection={true}
             onMove={(option) => setFocused(option.value)}

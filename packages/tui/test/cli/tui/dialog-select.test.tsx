@@ -87,7 +87,7 @@ async function mountSelect(
   initial: DialogSelectOption<string>[],
   current?: string,
   focusCurrent?: boolean,
-  select?: { flat?: boolean },
+  select?: { flat?: boolean; followSelection?: boolean },
 ) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
@@ -114,6 +114,7 @@ async function mountSelect(
 
   function Harness() {
     const [options, setOptions] = createSignal(initial)
+    const [controlled, setControlled] = createSignal(current)
     replaceOptions = setOptions
 
     function Fixture() {
@@ -123,10 +124,13 @@ async function mountSelect(
           <DialogSelect
             title="Mutable options"
             options={options()}
-            current={current}
+            current={controlled()}
             focusCurrent={focusCurrent}
             flat={select?.flat}
-            onMove={(option) => moved.push(option.value)}
+            onMove={(option) => {
+              moved.push(option.value)
+              if (select?.followSelection) setControlled(option.value)
+            }}
             onSelect={(option) => selected.push(option.value)}
           />
         )),
@@ -364,6 +368,34 @@ test("keeps the current option selected when options reorder", async () => {
     await select.app.waitFor(() => select.selected.length === 1)
 
     expect(select.selected).toEqual(["current"])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("navigates filtered options when current follows selection", async () => {
+  await using tmp = await tmpdir()
+  const select = await mountSelect(
+    tmp.path,
+    [
+      { title: "internal:first", value: "first" },
+      { title: "internal:second", value: "second" },
+      { title: "external", value: "external" },
+    ],
+    "first",
+    undefined,
+    { followSelection: true },
+  )
+
+  try {
+    await select.app.mockInput.typeText("internal")
+    await select.app.waitForFrame((frame) => !frame.includes("external"))
+    select.app.mockInput.pressArrow("down")
+    await select.app.waitFor(() => select.moved.at(-1) === "second")
+    select.app.mockInput.pressEnter()
+    await select.app.waitFor(() => select.selected.length === 1)
+
+    expect(select.selected).toEqual(["second"])
   } finally {
     select.app.renderer.destroy()
   }
