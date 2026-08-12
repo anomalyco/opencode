@@ -1,0 +1,512 @@
+---
+title: MCP сервери
+description: Додавайте локальні та віддалені MCP інструменти.
+---
+
+Ви можете додавати зовнішні інструменти до OpenCode за допомогою _Model Context Protocol_, або MCP. OpenCode підтримує як локальні, так і віддалені сервери.
+
+Після додавання MCP інструменти автоматично доступні LLM разом із вбудованими інструментами.
+
+---
+
+#### Застереження
+
+Коли ви використовуєте MCP сервер, це додає до контексту. Це може швидко накопичуватися, якщо у вас багато інструментів. Тому ми рекомендуємо бути обережними з вибором MCP серверів.
+
+:::tip
+MCP сервери додають до вашого контексту, тому варто бути обережними з тими, які ви вмикаєте.
+:::
+
+Деякі MCP сервери, як-от GitHub MCP сервер, мають тенденцію додавати багато токенів і можуть легко перевищити ліміт контексту.
+
+---
+
+## Увімкнення
+
+Ви можете визначити MCP сервери у вашому [конфігу OpenCode](https://opencode.ai/docs/config/) в розділі `mcp`. Додайте кожен MCP з унікальною назвою. Ви можете посилатися на цей MCP за назвою при запиті до LLM.
+
+```jsonc title="opencode.jsonc" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "name-of-mcp-server": {
+      // ...
+      "enabled": true,
+    },
+    "name-of-other-mcp-server": {
+      // ...
+    },
+  },
+}
+```
+
+Ви також можете вимкнути сервер, встановивши `enabled` у `false`. Це корисно, якщо ви хочете тимчасово вимкнути сервер без видалення його з конфігу.
+
+---
+
+### Перевизначення віддалених значень за замовчуванням
+
+Організації можуть надавати MCP сервери за замовчуванням через свій ендпоїнт `.well-known/opencode`. Ці сервери можуть бути вимкнені за замовчуванням, дозволяючи користувачам вмикати ті, які їм потрібні.
+
+Щоб увімкнути конкретний сервер з віддаленої конфігурації вашої організації, додайте його до вашого локального конфігу з `enabled: true`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+Ваші локальні значення конфігурації перевизначають віддалені значення за замовчуванням. Див. [пріоритет конфігурації](/docs/config#precedence-order) для деталей.
+
+---
+
+## Локальні
+
+Додавайте локальні MCP сервери, використовуючи `type` зі значенням `"local"` в об'єкті MCP.
+
+```jsonc title="opencode.jsonc" {15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-local-mcp-server": {
+      "type": "local",
+      // Або ["bun", "x", "my-mcp-command"]
+      "command": ["npx", "-y", "my-mcp-command"],
+      "enabled": true,
+      "environment": {
+        "MY_ENV_VAR": "my_env_var_value",
+      },
+    },
+  },
+}
+```
+
+Команда — це спосіб запуску локального MCP сервера. Ви також можете передати список змінних середовища.
+
+Наприклад, ось як додати тестовий MCP сервер [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything).
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mcp_everything": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+    },
+  },
+}
+```
+
+І щоб використати його, я можу додати `use the mcp_everything tool` до моїх промптів.
+
+```txt "mcp_everything"
+use the mcp_everything tool to add the number 3 and 4
+```
+
+---
+
+#### Опції
+
+Ось всі опції для налаштування локального MCP сервера.
+
+| Опція        | Тип    | Обов'язково | Опис                                                                              |
+| ------------- | ------- | -------- | ---------------------------------------------------------------------------------------- |
+| `type`        | String  | Так        | Тип підключення MCP сервера, має бути `"local"`.                                        |
+| `command`     | Array   | Так        | Команда та аргументи для запуску MCP сервера.                                             |
+| `cwd`         | String  |          | Робоча директорія для процесу MCP сервера. Відносні шляхи розпізнаються з робочої області. |
+| `environment` | Object  |          | Змінні середовища для встановлення під час запуску сервера.                                    |
+| `enabled`     | Boolean |          | Увімкнути або вимкнути MCP сервер при запуску.                                             |
+| `timeout`     | Number  |          | Таймаут у мс для отримання інструментів з MCP сервера. За замовчуванням 5000 (5 секунд).      |
+
+---
+
+## Віддалені
+
+Додавайте віддалені MCP сервери, встановлюючи `type` у `"remote"`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-remote-mcp": {
+      "type": "remote",
+      "url": "https://my-mcp-server.com",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer MY_API_KEY"
+      }
+    }
+  }
+}
+```
+
+`url` — це URL віддаленого MCP сервера, а за допомогою опції `headers` ви можете передати список заголовків.
+
+---
+
+#### Опції
+
+| Опція    | Тип    | Обов'язково | Опис                                                                         |
+| --------- | ------- | -------- | ----------------------------------------------------------------------------------- |
+| `type`    | String  | Так        | Тип підключення MCP сервера, має бути `"remote"`.                                  |
+| `url`     | String  | Так        | URL віддаленого MCP сервера.                                                       |
+| `enabled` | Boolean |          | Увімкнути або вимкнути MCP сервер при запуску.                                        |
+| `headers` | Object  |          | Заголовки для надсилання з запитом.                                                   |
+| `oauth`   | Object  |          | Конфігурація OAuth автентифікації. Див. розділ [OAuth](#oauth) нижче.              |
+| `timeout` | Number  |          | Таймаут у мс для отримання інструментів з MCP сервера. За замовчуванням 5000 (5 секунд). |
+
+---
+
+## OAuth
+
+OpenCode автоматично обробляє OAuth автентифікацію для віддалених MCP серверів. Коли сервер вимагає автентифікації, OpenCode:
+
+1. Виявляє відповідь 401 та ініціює OAuth потік
+2. Використовує **Динамічну реєстрацію клієнта (RFC 7591)**, якщо підтримується сервером
+3. Зберігає токени безпечно для майбутніх запитів
+
+---
+
+### Автоматична
+
+Для більшості MCP серверів з підтримкою OAuth не потрібна спеціальна конфігурація. Просто налаштуйте віддалений сервер:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp"
+    }
+  }
+}
+```
+
+Якщо сервер вимагає автентифікації, OpenCode запропонує вам автентифікуватися при першій спробі використання. Якщо ні, ви можете [вручну запустити потік](#автентифікація) за допомогою `opencode mcp auth <server-name>`.
+
+---
+
+### Попередньо зареєстрована
+
+Якщо у вас є облікові дані клієнта від провайдера MCP сервера, ви можете налаштувати їх:
+
+```json title="opencode.json" {7-11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "clientId": "{env:MY_MCP_CLIENT_ID}",
+        "clientSecret": "{env:MY_MCP_CLIENT_SECRET}",
+        "scope": "tools:read tools:execute"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Автентифікація
+
+Ви можете вручну запустити автентифікацію або керувати обліковими даними.
+
+Автентифікуватися з конкретним MCP сервером:
+
+```bash
+opencode mcp auth my-oauth-server
+```
+
+Список всіх MCP серверів та їхній статус автентифікації:
+
+```bash
+opencode mcp list
+```
+
+Видалити збережені облікові дані:
+
+```bash
+opencode mcp logout my-oauth-server
+```
+
+Команда `mcp auth` відкриє ваш браузер для авторизації. Після авторизації OpenCode безпечно збереже токени в `~/.local/share/opencode/mcp-auth.json`.
+
+---
+
+#### Вимкнення OAuth
+
+Якщо ви хочете вимкнути автоматичний OAuth для сервера (наприклад, для серверів, які використовують API ключі замість цього), встановіть `oauth` у `false`:
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-api-key-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MY_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+---
+
+#### OAuth Опції
+
+| Опція         | Тип            | Опис                                                                      |
+| -------------- | --------------- | -------------------------------------------------------------------------------- |
+| `oauth`        | Object \| false | Об'єкт конфігурації OAuth або `false` для вимкнення автоматичного виявлення OAuth.                 |
+| `clientId`     | String          | OAuth ID клієнта. Якщо не надано, буде спробовано динамічну реєстрацію клієнта. |
+| `clientSecret` | String          | Секрет клієнта OAuth, якщо вимагається сервером авторизації.                    |
+| `scope`        | String          | OAuth області для запиту під час авторизації.                                    |
+
+#### Діагностика
+
+Якщо віддалений MCP сервер не може автентифікуватися, ви можете діагностувати проблеми за допомогою:
+
+```bash
+# Переглянути статус автентифікації для всіх OAuth-сумісних серверів
+opencode mcp auth list
+
+# Діагностика підключення та OAuth потоку для конкретного сервера
+opencode mcp debug my-oauth-server
+```
+
+Команда `mcp debug` показує поточний статус автентифікації, тестує HTTP з'єднання та намагається виконати потік виявлення OAuth.
+
+---
+
+## Керування
+
+Ваші MCP доступні як інструменти в OpenCode, разом із вбудованими інструментами. Тому ви можете керувати ними через конфігурацію OpenCode, як і будь-яким іншим інструментом.
+
+---
+
+### Глобально
+
+Це означає, що ви можете вмикати або вимикати їх глобально.
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp-foo": false
+  }
+}
+```
+
+Ми також можемо використовувати glob патерн для вимкнення всіх відповідних MCP.
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  }
+}
+```
+
+Тут ми використовуємо glob патерн `my-mcp*`, щоб вимкнути всі MCP.
+
+---
+
+### За агентом
+
+Якщо у вас велика кількість MCP серверів, ви можете ввімкнути їх лише для конкретного агента та вимкнути глобально. Для цього:
+
+1. Вимкніть його як інструмент глобально.
+2. У [конфігурації агента](/docs/agents#tools) увімкніть MCP сервер як інструмент.
+
+```json title="opencode.json" {11, 14-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command"],
+      "enabled": true
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  },
+  "agent": {
+    "my-agent": {
+      "tools": {
+        "my-mcp*": true
+      }
+    }
+  }
+}
+```
+
+---
+
+#### Glob патерни
+
+Glob патерн використовує прості regex патерни зіставлення:
+
+- `*` відповідає нулю або більше будь-яких символів (наприклад, `"my-mcp*"` збігається з `my-mcp_search`, `my-mcp_list`, тощо)
+- `?` відповідає рівно одному символу
+- Всі інші символи збігаються буквально
+
+:::note
+Інструменти MCP сервера реєструються з назвою сервера як префіксом, тому щоб вимкнути всі інструменти для сервера, просто використовуйте:
+
+```
+"mymcpservername_*": false
+```
+
+:::
+
+---
+
+## Приклади
+
+Нижче наведено приклади деяких поширених MCP серверів. Ви можете надіслати PR, якщо хочете задокументувати інші сервери.
+
+---
+
+### Sentry
+
+Додайте [Sentry MCP сервер](https://mcp.sentry.dev) для взаємодії з вашими Sentry проєктами та issues.
+
+```json title="opencode.json" {4-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "sentry": {
+      "type": "remote",
+      "url": "https://mcp.sentry.dev/mcp",
+      "oauth": {}
+    }
+  }
+}
+```
+
+Після додавання конфігурації автентифікуйтеся з Sentry:
+
+```bash
+opencode mcp auth sentry
+```
+
+Це відкриє вікно браузера для завершення OAuth потоку та підключення OpenCode до вашого облікового запису Sentry.
+
+Після автентифікації ви можете використовувати інструменти Sentry у ваших промптах для запиту issues, проєктів та даних про помилки.
+
+```txt "use sentry"
+Show me the latest unresolved issues in my project. use sentry
+```
+
+---
+
+### Context7
+
+Додайте [Context7 MCP сервер](https://github.com/upstash/context7) для пошуку в документації.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}
+```
+
+Якщо ви зареєстрували безкоштовний обліковий запис, ви можете використовувати свій API ключ та отримати вищі ліміти швидкості.
+
+```json title="opencode.json" {7-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Тут ми припускаємо, що у вас встановлена змінна середовища `CONTEXT7_API_KEY`.
+
+Додайте `use context7` до ваших промптів, щоб використовувати Context7 MCP сервер.
+
+```txt "use context7"
+Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
+```
+
+Альтернативно, ви можете додати щось подібне до вашого [AGENTS.md](/docs/rules/).
+
+```md title="AGENTS.md"
+When you need to search docs, use `context7` tools.
+```
+
+---
+
+### Grep від Vercel
+
+Додайте [Grep від Vercel](https://grep.app) MCP сервер для пошуку фрагментів коду на GitHub.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "gh_grep": {
+      "type": "remote",
+      "url": "https://mcp.grep.app"
+    }
+  }
+}
+```
+
+Оскільки ми назвали наш MCP сервер `gh_grep`, ви можете додати `use the gh_grep tool` до ваших промптів, щоб агент його використовував.
+
+```txt "use the gh_grep tool"
+What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
+```
+
+Альтернативно, ви можете додати щось подібне до вашого [AGENTS.md](/docs/rules/).
+
+```md title="AGENTS.md"
+If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
+```
