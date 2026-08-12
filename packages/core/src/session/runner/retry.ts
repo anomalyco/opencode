@@ -2,7 +2,7 @@ export * as SessionRunnerRetry from "./retry.js"
 
 import { AIError } from "@opencode-ai/ai"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Data, Duration, Effect, Random, Schedule } from "effect"
+import { Data, Duration, Effect, Schedule } from "effect"
 import { Bus } from "../../bus.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
@@ -13,8 +13,6 @@ export class RetryableFailure extends Data.TaggedError("SessionRunner.RetryableF
   readonly error: SessionError.Error
   readonly step: number
 }> {}
-
-const RETRY_JITTER_FACTOR = 0.2
 
 export function isRetryable(error: AIError) {
   switch (error.reason._tag) {
@@ -50,11 +48,7 @@ export const schedule = (
   assistantMessageID: () => SessionMessage.ID,
 ) =>
   Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(4)]).pipe(
-    Schedule.modifyDelay(({ duration }) =>
-      Random.nextBetween(1 - RETRY_JITTER_FACTOR, 1 + RETRY_JITTER_FACTOR).pipe(
-        Effect.map((factor) => Duration.times(duration, factor)),
-      ),
-    ),
+    Schedule.jittered,
     Schedule.setInputType<RetryableFailure>(),
     Schedule.modifyDelay(({ input: failure, duration: delay }) => {
       const minimum = retryAfter(failure)
