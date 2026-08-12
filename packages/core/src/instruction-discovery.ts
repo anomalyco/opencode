@@ -1,11 +1,11 @@
-export * as InstructionDiscovery from "./instruction-discovery"
+export * as InstructionDiscovery from "./instruction-discovery.js"
 
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Bus } from "./bus"
-import { Instructions } from "./instructions/index"
-import { AbsolutePath } from "./schema"
-import { State } from "./state"
+import { Bus } from "./bus.js"
+import { Instructions } from "./instructions/index.js"
+import { AbsolutePath } from "./schema.js"
+import { State } from "./state.js"
 
 export class File extends Schema.Class<File>("InstructionDiscovery.File")({
   path: AbsolutePath,

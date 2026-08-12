@@ -1,14 +1,14 @@
-export * as McpTool from "./mcp"
+export * as McpTool from "./mcp.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Effect, Exit, type JsonSchema, Layer, Scope, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Bus } from "../bus"
+import { Bus } from "../bus.js"
 
-import { MCP } from "../mcp"
-import { Permission } from "../permission"
-import { Tool } from "../tool"
+import { MCP } from "../mcp/index.js"
+import { Permission } from "../permission.js"
+import { Tool } from "../tool.js"
 
 /**
  * Registry namespace and permission action names for MCP tools.

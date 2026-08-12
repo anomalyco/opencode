@@ -1,4 +1,4 @@
-export * as ConfigPermissionV1 from "./permission"
+export * as ConfigPermissionV1 from "./permission.js"
 
 import { Schema, SchemaGetter } from "effect"
 

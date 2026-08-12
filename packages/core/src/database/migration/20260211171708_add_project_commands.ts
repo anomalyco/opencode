@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { DatabaseMigration } from "../migration"
+import type { DatabaseMigration } from "../migration.js"
 
 const migration: DatabaseMigration.Migration = {
   id: "20260211171708_add_project_commands",

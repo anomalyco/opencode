@@ -1,4 +1,4 @@
-import { createProviderPlugin } from "./factory"
+import { createProviderPlugin } from "./factory.js"
 
 export const CoherePlugin = createProviderPlugin({
   id: "opencode.provider.cohere",

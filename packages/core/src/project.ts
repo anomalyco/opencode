@@ -1,19 +1,19 @@
-export * as Project from "./project"
+export * as Project from "./project.js"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { asc, desc } from "drizzle-orm"
 import path from "path"
-import { AbsolutePath } from "./schema"
-import { Database } from "./database/database"
+import { AbsolutePath } from "./schema.js"
+import { Database } from "./database/database.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Git } from "./git"
+import { Git } from "./git.js"
 import { AppProcess } from "@opencode-ai/util/process"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Hash } from "@opencode-ai/util/hash"
-import { ProjectDirectories } from "./project/directories"
-import { ProjectSchema } from "./project/schema"
-import { ProjectTable, upsertProject } from "./project/sql"
+import { ProjectDirectories } from "./project/directories.js"
+import { ProjectSchema } from "./project/schema.js"
+import { ProjectTable, upsertProject } from "./project/sql.js"
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID

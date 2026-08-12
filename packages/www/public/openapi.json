@@ -3871,6 +3871,22 @@
               ]
             },
             "required": true
+          },
+          {
+            "name": "continue",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
           }
         ],
         "security": [],
@@ -3916,7 +3932,7 @@
             }
           }
         },
-        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op.",
+        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes if durable pending work remains after interruption.",
         "summary": "Interrupt session execution"
       }
     },

@@ -1,4 +1,4 @@
-export * as ConfigPluginSource from "./source"
+export * as ConfigPluginSource from "./source.js"
 
 import { Directory, Document, type Entry } from "@opencode-ai/schema/config"
 import { ConfigPlugin } from "@opencode-ai/schema/config/plugin"
@@ -7,9 +7,9 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Option, Predicate, PubSub, Schema, Scope, Stream } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
-import { Config } from "../../config"
-import { Watcher } from "../../filesystem/watcher"
-import { Location } from "../../location"
+import { Config } from "../../config.js"
+import { Watcher } from "../../filesystem/watcher.js"
+import { Location } from "../../location.js"
 
 export type Operation =
   | {

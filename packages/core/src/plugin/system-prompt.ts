@@ -1,4 +1,4 @@
-export * as SystemPromptPlugin from "./system-prompt"
+export * as SystemPromptPlugin from "./system-prompt.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"

@@ -1,12 +1,12 @@
-export * as LocationMutation from "./location-mutation"
+export * as LocationMutation from "./location-mutation.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Location } from "./location"
-import { Project } from "./project"
-import { AbsolutePath } from "./schema"
+import { Location } from "./location.js"
+import { Project } from "./project.js"
+import { AbsolutePath } from "./schema.js"
 
 export const Kind = Schema.Literals(["file", "directory"])
 export type Kind = typeof Kind.Type

@@ -1,12 +1,12 @@
 /// <reference path="../markdown.d.ts" />
 
-export * as SkillPlugin from "./skill"
+export * as SkillPlugin from "./skill.js"
 
 import { define, type Context } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
-import { AbsolutePath } from "../schema"
-import { Skill } from "../skill"
-import { ConfigPluginSource } from "../config/plugin/source"
+import { AbsolutePath } from "../schema.js"
+import { Skill } from "../skill.js"
+import { ConfigPluginSource } from "../config/plugin/source.js"
 import os from "os"
 import opencodeContent from "./skill/opencode.md" with { type: "text" }
 import reportContent from "./skill/report.md" with { type: "text" }

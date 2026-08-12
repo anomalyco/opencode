@@ -1,16 +1,16 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { Effect, Option, Schema, Semaphore, Stream } from "effect"
-import { Catalog } from "../../catalog"
-import { Credential } from "../../credential"
-import { Bus } from "../../bus"
-import { CopilotModels } from "../../github-copilot/models"
-import { App } from "../../app"
-import { Agent } from "../../agent"
-import { Integration } from "../../integration"
-import { Model } from "../../model"
+import { Catalog } from "../../catalog.js"
+import { Credential } from "../../credential.js"
+import { Bus } from "../../bus.js"
+import { CopilotModels } from "../../github-copilot/models.js"
+import { App } from "../../app.js"
+import { Agent } from "../../agent.js"
+import { Integration } from "../../integration.js"
+import { Model } from "../../model.js"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Provider } from "../../provider"
-import type { PluginInternal } from "../internal"
+import { Provider } from "../../provider.js"
+import type { PluginInternal } from "../internal.js"
 
 const clientID = "Ov23li8tweQw6odWQebz"
 const apiVersion = "2026-06-01"
@@ -236,7 +236,7 @@ export const GithubCopilotPlugin = define({
           evt.options.fetch,
           ctx.app,
         )
-        const mod = yield* Effect.promise(() => import("../../github-copilot/copilot-provider"))
+        const mod = yield* Effect.promise(() => import("../../github-copilot/copilot-provider.js"))
         evt.sdk = mod.createOpenaiCompatible(evt.options)
       }),
     )

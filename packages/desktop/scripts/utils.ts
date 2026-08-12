@@ -90,7 +90,7 @@ export async function buildCliToResources(dest = windowsify("resources/opencode-
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
   const target = `cli-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`
   try {
-    await $`bun ${join(import.meta.dirname, "../../cli/script/build.ts")} --single --skip-install --outdir=${directory}`.env(
+    await $`bun ${join(import.meta.dirname, "../../cli/script/build.ts")} --single --skip-install --skip-web-ui --outdir=${directory}`.env(
       {
         ...process.env,
         OPENCODE_VERSION: `0.0.0-local-${Date.now()}`,

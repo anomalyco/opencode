@@ -5,7 +5,7 @@ import { Reactivity } from "effect/unstable/reactivity"
 import { SqlClient, Statement } from "effect/unstable/sql"
 import type { Connection } from "effect/unstable/sql/SqlConnection"
 import { classifySqliteError, SqlError, UnknownError } from "effect/unstable/sql/SqlError"
-import { Sqlite } from "./sqlite"
+import { Sqlite } from "./sqlite.js"
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name"
 

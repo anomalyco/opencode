@@ -1,4 +1,4 @@
-export * as Formatter from "./formatter"
+export * as Formatter from "./formatter.js"
 
 import { Context, Effect, Layer } from "effect"
 import { ChildProcess } from "effect/unstable/process"
@@ -8,9 +8,9 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Npm } from "@opencode-ai/util/npm"
 import { AppProcess } from "@opencode-ai/util/process"
 import { Global } from "@opencode-ai/util/global"
-import { Config } from "./config"
-import { Location } from "./location"
-import { make, type Info } from "./formatter/builtins"
+import { Config } from "./config.js"
+import { Location } from "./location.js"
+import { make, type Info } from "./formatter/builtins.js"
 
 export interface Interface {
   readonly file: (filepath: string) => Effect.Effect<boolean>

@@ -543,7 +543,7 @@ test("session methods use the public HTTP contract", async () => {
   const context = await client.session.context({ sessionID: "ses_test" })
   const log = []
   for await (const item of client.session.log({ sessionID: "ses_test", after: 0 })) log.push(item)
-  await client.session.interrupt({ sessionID: "ses_test" })
+  await client.session.interrupt({ sessionID: "ses_test", continue: true })
   const message = await client.session.message({ sessionID: "ses_test", messageID: "msg_model" })
 
   expect(page.cursor.next).toBe("next")
@@ -568,7 +568,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
     ["GET", "http://localhost:3000/api/experimental/session/ses_test/log?after=0"],
-    ["POST", "http://localhost:3000/api/session/ses_test/interrupt"],
+    ["POST", "http://localhost:3000/api/session/ses_test/interrupt?continue=true"],
     ["GET", "http://localhost:3000/api/session/ses_test/message/msg_model"],
   ])
   const body = requests.find((request) => request.url.endsWith("/api/session/ses_test/prompt"))?.init?.body

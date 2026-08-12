@@ -1,16 +1,16 @@
-export * as Command from "./command"
+export * as Command from "./command.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Command } from "@opencode-ai/schema/command"
-import { State } from "./state"
-import { MCP } from "./mcp/index"
-import { Bus } from "./bus"
+import { State } from "./state.js"
+import { MCP } from "./mcp/index.js"
+import { Bus } from "./bus.js"
 import { AppProcess } from "@opencode-ai/util/process"
 import { ChildProcess } from "effect/unstable/process"
-import { Config } from "./config"
-import { Location } from "./location"
-import { ShellSelect } from "./shell/select"
+import { Config } from "./config.js"
+import { Location } from "./location.js"
+import { ShellSelect } from "./shell/select.js"
 import { Global } from "@opencode-ai/util/global"
 
 export const Info = Command.Info

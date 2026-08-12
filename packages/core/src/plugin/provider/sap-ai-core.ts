@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { pathToFileURL } from "url"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Npm } from "@opencode-ai/util/npm"
-import { Provider } from "../../provider"
+import { Provider } from "../../provider.js"
 import { importModule } from "@opencode-ai/util/runtime-import"
 
 export const SapAICorePlugin = define({

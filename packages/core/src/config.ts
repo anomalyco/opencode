@@ -1,4 +1,4 @@
-export * as Config from "./config"
+export * as Config from "./config.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
@@ -16,16 +16,16 @@ import {
   Event,
 } from "@opencode-ai/schema/config"
 import { Integration } from "@opencode-ai/schema/integration"
-import { Credential } from "./credential"
-import { Bus } from "./bus"
-import { Watcher } from "./filesystem/watcher"
+import { Credential } from "./credential.js"
+import { Bus } from "./bus.js"
+import { Watcher } from "./filesystem/watcher.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
-import { Location } from "./location"
-import { AbsolutePath } from "./schema"
-import { ConfigVariable } from "./config/variable"
-import { ConfigNormalize } from "./config/normalize"
-import { WellKnown } from "./wellknown"
+import { Location } from "./location.js"
+import { AbsolutePath } from "./schema.js"
+import { ConfigVariable } from "./config/variable.js"
+import { ConfigNormalize } from "./config/normalize.js"
+import { WellKnown } from "./wellknown.js"
 
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
   return entries

@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Provider } from "../../provider"
+import { Provider } from "../../provider.js"
 
 function resolveProject(options: Record<string, any>) {
   // models.dev advertises GOOGLE_VERTEX_PROJECT for Vertex, while Google SDKs

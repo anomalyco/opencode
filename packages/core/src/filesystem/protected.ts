@@ -54,4 +54,4 @@ export function paths(): string[] {
   return []
 }
 
-export * as Protected from "./protected"
+export * as Protected from "./protected.js"

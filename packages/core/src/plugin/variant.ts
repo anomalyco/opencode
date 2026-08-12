@@ -1,9 +1,9 @@
-export * as VariantPlugin from "./variant"
+export * as VariantPlugin from "./variant.js"
 
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Model } from "../model"
-import { Provider } from "../provider"
+import { Model } from "../model.js"
+import { Provider } from "../provider.js"
 
 export const Plugin = define({
   id: "opencode.variant",

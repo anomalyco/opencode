@@ -1,12 +1,12 @@
-export * as PluginRuntime from "./runtime"
+export * as PluginRuntime from "./runtime.js"
 
 import { Context, Effect, Layer } from "effect"
-import { Agent } from "../agent"
+import { Agent } from "../agent.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Job } from "../job"
-import { Location } from "../location"
-import { LocationServiceMap } from "../location-service-map"
-import { Session } from "../session"
+import { Job } from "../job.js"
+import { Location } from "../location.js"
+import { LocationServiceMap } from "../location-service-map.js"
+import { Session } from "../session.js"
 
 export interface Interface {
   readonly session: Pick<

@@ -1,10 +1,10 @@
-export * as SkillFile from "./skill-file"
+export * as SkillFile from "./skill-file.js"
 
 import path from "path"
 import { Result, Schema, type SchemaIssue, SchemaParser } from "effect"
-import { ConfigMarkdown } from "../markdown"
-import { AbsolutePath } from "../../schema"
-import { Skill } from "../../skill"
+import { ConfigMarkdown } from "../markdown.js"
+import { AbsolutePath } from "../../schema.js"
+import { Skill } from "../../skill.js"
 
 const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),

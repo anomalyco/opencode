@@ -1,12 +1,12 @@
-export * as SessionRestart from "./restart"
+export * as SessionRestart from "./restart.js"
 
 import { Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Bus } from "../../bus"
-import { SessionEvent } from "../event"
-import { SessionExecution } from "../execution"
-import { SessionSchema } from "../schema"
-import { SessionStore } from "../store"
+import { Bus } from "../../bus.js"
+import { SessionEvent } from "../event.js"
+import { SessionExecution } from "../execution.js"
+import { SessionSchema } from "../schema.js"
+import { SessionStore } from "../store.js"
 
 const CONTINUE_AFTER_SERVER_RESTART =
   "The server restarted while you were working. Continue from where you left off without repeating completed work."

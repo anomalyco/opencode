@@ -4,18 +4,18 @@
  * absolute external paths retain mutation capability through a separate
  * external_directory approval before edit approval.
  */
-export * as WriteTool from "./write"
+export * as WriteTool from "./write.js"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
 import { Bom } from "@opencode-ai/util/bom"
-import { Environment } from "../../environment"
-import { FileMutation } from "../../file-mutation"
-import { Formatter } from "../../formatter"
-import { LocationMutation } from "../../location-mutation"
-import { Permission } from "../../permission"
-import { fileDiff } from "./file-diff"
+import { Environment } from "../../environment/index.js"
+import { FileMutation } from "../../file-mutation.js"
+import { Formatter } from "../../formatter.js"
+import { LocationMutation } from "../../location-mutation.js"
+import { Permission } from "../../permission.js"
+import { fileDiff } from "./file-diff.js"
 
 export const name = "write"
 

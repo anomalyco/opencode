@@ -1,4 +1,4 @@
-export * as SessionSchema from "./schema"
+export * as SessionSchema from "./schema.js"
 
 import { Session } from "@opencode-ai/schema/session"
 

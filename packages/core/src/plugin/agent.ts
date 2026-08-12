@@ -1,9 +1,9 @@
-export * as AgentPlugin from "./agent"
+export * as AgentPlugin from "./agent.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
-import { Agent } from "../agent"
-import { Permission } from "../permission"
+import { Agent } from "../agent.js"
+import { Permission } from "../permission.js"
 
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
 

@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Integration } from "../../integration"
-import { Provider } from "../../provider"
+import { Integration } from "../../integration.js"
+import { Provider } from "../../provider.js"
 
 export const LLMGatewayPlugin = define({
   id: "opencode.provider.llmgateway",

@@ -1,10 +1,10 @@
 import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { isNotNull, isNull, ne, or } from "drizzle-orm"
 import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core"
-import { absoluteArrayColumn, absoluteColumn } from "../database/path"
-import { Timestamps } from "../database/schema.sql"
-import type { AbsolutePath } from "../schema"
-import { ProjectSchema } from "./schema"
+import { absoluteArrayColumn, absoluteColumn } from "../database/path.js"
+import { Timestamps } from "../database/schema.sql.js"
+import type { AbsolutePath } from "../schema.js"
+import { ProjectSchema } from "./schema.js"
 
 type DatabaseClient = EffectDrizzleSqlite.EffectSQLiteDatabase
 type Transaction = Parameters<Parameters<DatabaseClient["transaction"]>[0]>[0]
