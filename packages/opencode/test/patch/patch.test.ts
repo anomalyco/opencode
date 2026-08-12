@@ -356,6 +356,26 @@ PATCH`
       }),
     )
 
+    it.live("should preserve a trailing blank line when updating other lines", () =>
+      Effect.gen(function* () {
+        const filePath = path.join(tempDir, "trailing-blank.txt")
+        yield* Effect.promise(() => fs.writeFile(filePath, "line 1\nline 2\n\n"))
+
+        const patchText = `*** Begin Patch
+*** Update File: ${filePath}
+@@
+-line 1
++LINE 1
+*** End Patch`
+
+        const result = yield* Patch.applyPatch(patchText)
+        expect(result.modified).toHaveLength(1)
+
+        const content = yield* Effect.promise(() => fs.readFile(filePath, "utf-8"))
+        expect(content).toBe("LINE 1\nline 2\n\n")
+      }),
+    )
+
     it.live("should handle multiple update chunks in single file", () =>
       Effect.gen(function* () {
         const filePath = path.join(tempDir, "multi-chunk.txt")

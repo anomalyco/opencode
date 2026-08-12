@@ -202,6 +202,37 @@ describe("ApplyPatchTool", () => {
     ),
   )
 
+  it.live("preserves a trailing blank line when updating other lines", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const update = path.join(tmp.path, "update.txt")
+        return Effect.promise(() => fs.writeFile(update, "alpha\nbeta\n\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const settled = yield* settleTool(
+                  registry,
+                  call("*** Begin Patch\n*** Update File: update.txt\n@@\n-alpha\n+ALPHA\n*** End Patch"),
+                )
+                expect(settled.result).toEqual({
+                  type: "text",
+                  value: "Applied patch sequentially:\nM update.txt",
+                })
+                expect(settled.output?.structured).toMatchObject({
+                  files: [{ file: "update.txt", status: "modified", additions: 1, deletions: 1 }],
+                })
+                expect(yield* Effect.promise(() => fs.readFile(update, "utf8"))).toBe("ALPHA\nbeta\n\n")
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("rejects moves before applying any hunk", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
