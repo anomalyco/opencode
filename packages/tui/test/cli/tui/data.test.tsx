@@ -2889,14 +2889,26 @@ test("skips initial instruction state and projects later updates with their mess
         delta: { "core/date": "1".repeat(64) },
       },
     })
+    emitEvent(events, {
+      id: "evt_instructions_3",
+      created: 2,
+      type: "session.instructions.updated",
+      durable: durable("session-1", 2, 2),
+      data: {
+        sessionID: "session-1",
+        delta: { "core/date": "2".repeat(64) },
+        text: "The current date has changed.",
+      },
+    })
 
-    await wait(() => sync.session.message.list("session-1")?.some((message) => message.time.created === 1))
+    await wait(() => sync.session.message.list("session-1")?.some((message) => message.time.created === 2))
     expect(sync.session.message.list("session-1")).toHaveLength(1)
     expect(sync.session.message.list("session-1")?.[0]).toMatchObject({
-      id: SessionMessage.ID.fromEvent(Event.ID.make("evt_instructions_2")),
+      id: SessionMessage.ID.fromEvent(Event.ID.make("evt_instructions_3")),
       type: "system",
-      text: "Instructions updated: core/date",
-      time: { created: 1 },
+      text: "The current date has changed.",
+      description: "Instructions updated: core/date",
+      time: { created: 2 },
     })
   } finally {
     app.renderer.destroy()

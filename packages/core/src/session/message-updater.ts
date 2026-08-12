@@ -109,6 +109,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             id: SessionMessage.ID.fromEvent(event.id),
             type: "system",
             text: event.data.text,
+            description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
             metadata: event.metadata,
             time: { created: event.created },
           }),

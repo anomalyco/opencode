@@ -505,19 +505,16 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.instructions.updated":
-          const instructions = event.metadata?.instructions
-          if (
-            typeof instructions === "object" &&
-            instructions !== null &&
-            "initial" in instructions &&
-            instructions.initial === true
-          )
-            break
+          // Mirror the projector: the initial baseline and empty-rendering deltas carry no text
+          // and produce no transcript message.
+          const updateText = event.data.text
+          if (updateText === undefined) break
           message.update(event.data.sessionID, (draft, index) => {
             message.append(draft, index, {
               id: messageIDFromEvent(event.id),
               type: "system",
-              text: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
+              text: updateText,
+              description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
               metadata: event.metadata,
               time: { created: event.created },
             })

@@ -75,7 +75,10 @@ export interface System extends Schema.Schema.Type<typeof System> {}
 export const System = Schema.Struct({
   ...Base,
   type: Schema.tag("system"),
+  /** The model-facing update text, frozen at emit time. */
   text: Schema.String,
+  /** A short human-readable summary for transcript display. */
+  description: Schema.String.pipe(optional),
 }).annotate({ identifier: "Session.Message.System" })
 
 export interface Skill extends Schema.Schema.Type<typeof Skill> {}
