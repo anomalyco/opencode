@@ -1528,7 +1528,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     state.wait = active
     const interrupt = () => {
       active.interrupted = true
-      void sdk.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+      void sdk.session.interrupt({ sessionID: input.sessionID, continue: true }).catch(() => {})
     }
     next.signal?.addEventListener("abort", interrupt, { once: true })
     try {
@@ -1786,7 +1786,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
       if (state.wait) state.wait.interrupted = true
-      await sdk.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+      await sdk.session.interrupt({ sessionID: input.sessionID, continue: true }).catch(() => {})
     },
     selectSubagent(sessionID) {
       subagents.select(sdk, sessionID)
