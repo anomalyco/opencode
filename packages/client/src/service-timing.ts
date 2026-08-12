@@ -1,5 +1,6 @@
 export type EnsureTiming = {
   readonly pollInterval: number
+  readonly attempts: number
   readonly probeTimeout: number
   readonly spawnDelay: number
   readonly maxSpawnDelay: number
@@ -12,6 +13,7 @@ const timings = new WeakMap<object, EnsureTiming>()
 
 const defaults: EnsureTiming = {
   pollInterval: 1_000,
+  attempts: 120,
   probeTimeout: 2_000,
   spawnDelay: 5_000,
   maxSpawnDelay: 30_000,

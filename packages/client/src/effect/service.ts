@@ -127,7 +127,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   }).pipe(
     Effect.repeat({
       until: Option.isSome,
-      schedule: Schedule.max([Schedule.spaced(timing.pollInterval), Schedule.recurs(120)]),
+      schedule: Schedule.max([Schedule.spaced(timing.pollInterval), Schedule.recurs(timing.attempts)]),
     }),
   )
   if (Option.isNone(found))
