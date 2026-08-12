@@ -168,10 +168,8 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
         {(action, index) => (
           <text
             width="100%"
-            paddingLeft={2}
-            paddingRight={2}
             fg={selected() === index() ? theme.text.action.primary.default : theme.text.default}
-            bg={selected() === index() ? theme.background.action.primary.default : theme.background.default}
+            bg={selected() === index() ? theme.background.action.primary.focused : theme.background.default}
             selectable={false}
             onMouseOver={() => setSelected(index())}
             onMouseUp={(event) => {
@@ -180,7 +178,7 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
               run(index())
             }}
           >
-            {action.title}
+            {` ${action.title} `}
           </text>
         )}
       </For>
