@@ -28,6 +28,10 @@ test("discovers a registered service", async () => {
 test("discovers a compatible registered service", async () => {
   const registration = await setup("compatible")
 
+  expect(await Service.discover({ file: registration, version: "2.1.0" })).toBeUndefined()
+  expect(await Service.discover({ file: registration, version: "2.1.0-next.1" })).toEqual(
+    expect.objectContaining({ url: expect.stringMatching(/^http:\/\//) }),
+  )
   expect(await Service.discover({ file: registration, version: (version) => version.startsWith("2.") })).toEqual(
     expect.objectContaining({ url: expect.stringMatching(/^http:\/\//) }),
   )
