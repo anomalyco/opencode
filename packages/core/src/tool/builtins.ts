@@ -7,6 +7,7 @@ import { ApplyPatchTool } from "./apply-patch"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
+import { MiniMaxImageGenerationTool } from "./minimax-image-generation"
 import { QuestionTool } from "./question"
 import { ReadTool } from "./read"
 import { SkillTool } from "./skill"
@@ -37,6 +38,7 @@ export const node = makeLocationNode({
     EditTool.node,
     GlobTool.node,
     GrepTool.node,
+    MiniMaxImageGenerationTool.node,
     QuestionTool.node,
     ReadTool.node,
     SkillTool.node,
