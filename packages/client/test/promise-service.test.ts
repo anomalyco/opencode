@@ -25,13 +25,13 @@ test("discovers a registered service", async () => {
   expect(await Service.discover({ file: registration, version: "other" })).toBeUndefined()
 })
 
-test("discovers a registered service within a version range", async () => {
-  const registration = await setup("semver")
+test("discovers a compatible registered service", async () => {
+  const registration = await setup("compatible")
 
-  expect(await Service.discover({ file: registration, version: ">=2.0.0-0 <3.0.0" })).toEqual(
+  expect(await Service.discover({ file: registration, version: (version) => version.startsWith("2.") })).toEqual(
     expect.objectContaining({ url: expect.stringMatching(/^http:\/\//) }),
   )
-  expect(await Service.discover({ file: registration, version: ">=2.2.0" })).toBeUndefined()
+  expect(await Service.discover({ file: registration, version: (version) => version.startsWith("3.") })).toBeUndefined()
 })
 
 test("ensures a missing service with native promises", async () => {

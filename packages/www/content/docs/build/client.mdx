@@ -96,12 +96,12 @@ const health = await client.health.get()
 
 `Service.ensure()` accepts an optional registration file, version, service
 command, and `onStart` callback. `version` accepts either an exact value or a
-range using npm semver syntax. Ranges include prerelease versions:
+compatibility predicate:
 
 ```ts
 const endpoint = await Service.ensure({
   file: "/var/run/opencode/service.json",
-  version: "2.0.0", // or a semver range: ">=2.0.0 <3.0.0"
+  version: (version) => version.startsWith("2."),
   command: ["opencode", "serve", "--service"],
   onStart(reason, previousVersion) {
     console.log(reason, previousVersion)

@@ -47,17 +47,17 @@ test("a concurrent same-version start cannot invalidate a resolved endpoint", as
   expect(await health(resolved.url)).toEqual({ healthy: true, version: "test", pid: original.pid })
 })
 
-test("reuses a registered service within a version range", async () => {
+test("reuses a compatible registered service", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
-  const existing = spawn(registration, "semver")
+  const existing = spawn(registration, "compatible")
   await waitForFile(registration)
 
   const starts: EnsureReason[] = []
   const endpoint = await run(
     ensure({
       file: registration,
-      version: ">=2.0.0-0 <3.0.0",
+      version: (version) => version.startsWith("2."),
       command: [],
       onStart: (reason) => starts.push(reason),
     }),
@@ -68,18 +68,18 @@ test("reuses a registered service within a version range", async () => {
   expect(existing.exitCode).toBe(null)
 })
 
-test("replaces a registered service outside a version range", async () => {
+test("replaces an incompatible registered service", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
-  const existing = spawn(registration, "semver-old")
+  const existing = spawn(registration, "incompatible")
   await waitForFile(registration)
 
   const starts: EnsureReason[] = []
   const endpoint = await run(
     ensure({
       file: registration,
-      version: ">=2.0.0-0 <3.0.0",
-      command: [process.execPath, fixture, registration, "delayed-semver", "10"],
+      version: (version) => version.startsWith("2."),
+      command: [process.execPath, fixture, registration, "delayed-compatible", "10"],
       onStart: (reason) => starts.push(reason),
     }),
   )

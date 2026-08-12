@@ -10,7 +10,7 @@ declare const effectClient: EffectClient
 declare const promiseClient: PromiseClient
 
 const exactVersion: DiscoverOptions = { version: "2.0.0" }
-const versionRange: DiscoverOptions = { version: ">=2.0.0 <3.0.0" }
+const compatibleVersion: DiscoverOptions = { version: (version) => version.startsWith("2.") }
 
 const effectApi: EffectApi<unknown> = effectClient
 
@@ -55,5 +55,5 @@ void [
   promisePut,
   promiseRemove,
   exactVersion,
-  versionRange,
+  compatibleVersion,
 ]

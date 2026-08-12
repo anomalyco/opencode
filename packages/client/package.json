@@ -33,8 +33,7 @@
   },
   "dependencies": {
     "@opencode-ai/schema": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*",
-    "semver": "catalog:"
+    "@opencode-ai/protocol": "workspace:*"
   },
   "peerDependencies": {
     "effect": "4.0.0-beta.101"
@@ -48,7 +47,6 @@
     "@effect/platform-node": "catalog:",
     "@opencode-ai/httpapi-codegen": "workspace:*",
     "@tsconfig/bun": "catalog:",
-    "@types/semver": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",
     "effect": "catalog:"
