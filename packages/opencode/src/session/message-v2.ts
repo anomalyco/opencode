@@ -210,6 +210,23 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         // text/plain and directory files are converted into text parts, ignore them
         if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
+          // Prepend a short annotation that names the local file so the model
+          // can see the on-disk path the attachment came from. The Vercel AI
+          // SDK's file part only carries `filename` (basename) and the data
+          // URL, so without this the model has no way to reference the file
+          // from scripts or correlate it with the working tree.
+          const sourcePath =
+            part.source && (part.source.type === "file" || part.source.type === "symbol")
+              ? part.source.path
+              : undefined
+          const partPath = part.path ?? sourcePath
+          if (partPath) {
+            const label = part.filename ? `${part.filename} (${partPath})` : partPath
+            userMessage.parts.push({
+              type: "text",
+              text: `[Attached file: ${label}]`,
+            })
+          }
           if (options?.stripMedia && isMedia(part.mime)) {
             userMessage.parts.push({
               type: "text",

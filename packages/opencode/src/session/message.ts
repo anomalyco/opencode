@@ -75,6 +75,12 @@ export const FilePart = Schema.Struct({
   mediaType: Schema.String,
   filename: Schema.optional(Schema.String),
   url: Schema.String,
+  /**
+   * Absolute local filesystem path of the original attachment, when known.
+   * Distinct from `filename` (which is just the basename): the model can
+   * use this to reference the file from scripts and tools.
+   */
+  path: Schema.optional(Schema.String),
 }).annotate({ identifier: "FilePart" })
 export type FilePart = Schema.Schema.Type<typeof FilePart>
 

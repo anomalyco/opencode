@@ -125,6 +125,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       mime: attachment.mime ?? "text/plain",
       url: attachment.url ?? `file://${encodeFilePath(path)}${fileQuery(attachment.selection)}`,
       filename: attachment.filename ?? getFilename(attachment.path),
+      path,
       source,
     } satisfies PromptRequestPart
   })
@@ -156,6 +157,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       mime: "text/plain",
       url,
       filename: getFilename(item.path),
+      path,
     } satisfies PromptRequestPart
 
     if (!comment) return [filePart]
@@ -171,6 +173,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
           mime: "text/plain",
           url,
           filename: getFilename(path),
+          path: absolute(input.sessionDirectory, path),
         } satisfies PromptRequestPart,
       ]
     })
@@ -201,6 +204,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       mime: attachment.mime,
       url: attachment.dataUrl,
       filename: attachment.sourcePath ?? attachment.filename,
+      path: attachment.sourcePath,
     } satisfies PromptRequestPart
   })
 

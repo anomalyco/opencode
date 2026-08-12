@@ -319,6 +319,120 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("user file part with `path` gets a text annotation naming the local file", async () => {
+    const messageID = "m-user"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "p1"),
+            type: "text",
+            text: "see attached",
+          },
+          {
+            ...basePart(messageID, "p2"),
+            type: "file",
+            mime: "image/png",
+            filename: "img.png",
+            url: "data:image/png;base64,Zm9v",
+            path: "/home/user/Pictures/img.png",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "see attached" },
+          { type: "text", text: "[Attached file: img.png (/home/user/Pictures/img.png)]" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "img.png",
+            data: "data:image/png;base64,Zm9v",
+          },
+        ],
+      },
+    ])
+  })
+
+  test("user file part with `source.path` (legacy) still gets the path annotation", async () => {
+    const messageID = "m-user"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "p1"),
+            type: "file",
+            mime: "image/png",
+            filename: "img.png",
+            url: "data:image/png;base64,Zm9v",
+            source: {
+              type: "file",
+              path: "/tmp/legacy/img.png",
+              text: { value: "img.png", start: 0, end: 0 },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "[Attached file: img.png (/tmp/legacy/img.png)]" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "img.png",
+            data: "data:image/png;base64,Zm9v",
+          },
+        ],
+      },
+    ])
+  })
+
+  test("user file part without any path stays unchanged (no annotation injected)", async () => {
+    const messageID = "m-user"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "p1"),
+            type: "file",
+            mime: "image/png",
+            filename: "img.png",
+            url: "data:image/png;base64,Zm9v",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "img.png",
+            data: "data:image/png;base64,Zm9v",
+          },
+        ],
+      },
+    ])
+  })
+
   test("converts assistant tool completion into tool-call + tool-result messages with attachments", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"

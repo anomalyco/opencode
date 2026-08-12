@@ -1249,6 +1249,7 @@ export function Prompt(props: PromptProps) {
       mime: file.mime,
       filename: file.filename,
       url: `data:${file.mime};base64,${file.content}`,
+      path: file.filepath,
       source: {
         type: "file",
         path: file.filepath ?? file.filename ?? "",

@@ -174,6 +174,12 @@ export const FilePart = Schema.Struct({
   mime: Schema.String,
   filename: Schema.optional(Schema.String),
   url: Schema.String,
+  /**
+   * Absolute local filesystem path of the original attachment, when known.
+   * Distinct from `filename` (which is just the basename): the model can
+   * use this to reference the file from scripts and tools.
+   */
+  path: Schema.optional(Schema.String),
   source: Schema.optional(FilePartSource),
 }).annotate({ identifier: "FilePart" })
 export type FilePart = Types.DeepMutable<Schema.Schema.Type<typeof FilePart>>
@@ -416,6 +422,12 @@ export const FilePartInput = Schema.Struct({
   mime: Schema.String,
   filename: Schema.optional(Schema.String),
   url: Schema.String,
+  /**
+   * Absolute local filesystem path of the original attachment, when known.
+   * Distinct from `filename` (which is just the basename): the model can
+   * use this to reference the file from scripts and tools.
+   */
+  path: Schema.optional(Schema.String),
   source: Schema.optional(FilePartSource),
 }).annotate({ identifier: "FilePartInput" })
 export type FilePartInput = Types.DeepMutable<Schema.Schema.Type<typeof FilePartInput>>
