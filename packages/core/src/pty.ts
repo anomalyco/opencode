@@ -1,16 +1,16 @@
-export * as Pty from "./pty"
+export * as Pty from "./pty.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import type { Disp, Proc } from "#pty"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Pty } from "@opencode-ai/schema/pty"
-import { Config } from "./config"
-import { Bus } from "./bus"
-import { Location } from "./location"
-import { PtyID } from "./pty/schema"
-import { ShellSelect } from "./shell/select"
+import { Config } from "./config.js"
+import { Bus } from "./bus.js"
+import { Location } from "./location.js"
+import { PtyID } from "./pty/schema.js"
+import { ShellSelect } from "./shell/select.js"
 import { Global } from "@opencode-ai/util/global"
-import { lazy } from "./util/lazy"
+import { lazy } from "./util/lazy.js"
 
 const BUFFER_LIMIT = 1024 * 1024 * 2
 // Exited sessions stay observable (status, exit code, retained output) until removed explicitly.

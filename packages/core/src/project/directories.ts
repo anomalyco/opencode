@@ -1,14 +1,14 @@
-export * as ProjectDirectories from "./directories"
+export * as ProjectDirectories from "./directories.js"
 
 import { and, asc, desc, eq, isNotNull, isNull, ne, or } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Database } from "../database/database"
+import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { AbsolutePath } from "../schema"
-import { ProjectSchema } from "./schema"
-import { ProjectDirectoryTable } from "./sql"
+import { AbsolutePath } from "../schema.js"
+import { ProjectSchema } from "./schema.js"
+import { ProjectDirectoryTable } from "./sql.js"
 import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
-import type { Project } from "../project"
+import type { Project } from "../project.js"
 
 export type Directory = Project.Directory
 

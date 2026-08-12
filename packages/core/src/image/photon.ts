@@ -2,8 +2,8 @@ import photonWasm from "#photon-wasm"
 import { Effect } from "effect"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { FileSystem } from "../filesystem"
-import { DecodeError, ResizerUnavailableError, SizeError } from "../image"
+import { FileSystem } from "../filesystem.js"
+import { DecodeError, ResizerUnavailableError, SizeError } from "../image.js"
 
 const JPEG_QUALITIES = [80, 85, 70, 55, 40]
 

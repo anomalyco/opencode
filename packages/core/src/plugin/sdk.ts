@@ -1,10 +1,10 @@
-export * as SdkPlugins from "./sdk"
+export * as SdkPlugins from "./sdk.js"
 
 import type { Plugin } from "@opencode-ai/plugin/effect/plugin"
 import { Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Bus } from "../bus"
-import type { Versioned } from "../plugin"
+import { Bus } from "../bus.js"
+import type { Versioned } from "../plugin.js"
 
 export const Updated = Bus.ephemeral({ type: "sdk.plugin.updated", schema: {} })
 

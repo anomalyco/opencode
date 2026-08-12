@@ -1,6 +1,6 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { Timestamps } from "../database/schema.sql"
-import type { Credential } from "../credential"
+import { Timestamps } from "../database/schema.sql.js"
+import type { Credential } from "../credential.js"
 
 export const CredentialTable = sqliteTable("credential", {
   id: text().$type<Credential.ID>().primaryKey(),

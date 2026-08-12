@@ -2,8 +2,8 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { Effect } from "effect"
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
-import type { Driver } from "./driver"
-import { Failed, NotFound, WrongKind, type FileInfo, type FilesImpl, type FileType } from "./files"
+import type { Driver } from "./driver.js"
+import { Failed, NotFound, WrongKind, type FileInfo, type FilesImpl, type FileType } from "./files.js"
 
 /**
  * The host filesystem binding. Deliberately raw node:fs rather than effect's
@@ -100,4 +100,4 @@ const isMissing = (cause: unknown) =>
   "code" in cause &&
   (cause.code === "ENOENT" || cause.code === "ENOTDIR")
 
-export * as EnvironmentLocal from "./local"
+export * as EnvironmentLocal from "./local.js"

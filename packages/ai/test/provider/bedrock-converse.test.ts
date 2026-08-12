@@ -255,6 +255,57 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("merges parallel tool results into one user message", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          id: "req_parallel_history",
+          model,
+          messages: [
+            Message.user("Compare the weather."),
+            Message.assistant([
+              ToolCallPart.make({ id: "tool_paris", name: "lookup", input: { city: "Paris" } }),
+              ToolCallPart.make({ id: "tool_london", name: "lookup", input: { city: "London" } }),
+            ]),
+            Message.tool({ id: "tool_paris", name: "lookup", result: { forecast: "sunny" } }),
+            Message.tool({ id: "tool_london", name: "lookup", result: { forecast: "rainy" } }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ text: "Compare the weather." }] },
+        {
+          role: "assistant",
+          content: [
+            { toolUse: { toolUseId: "tool_paris", name: "lookup", input: { city: "Paris" } } },
+            { toolUse: { toolUseId: "tool_london", name: "lookup", input: { city: "London" } } },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              toolResult: {
+                toolUseId: "tool_paris",
+                content: [{ json: { forecast: "sunny" } }],
+                status: "success",
+              },
+            },
+            {
+              toolResult: {
+                toolUseId: "tool_london",
+                content: [{ json: { forecast: "rainy" } }],
+                status: "success",
+              },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("lowers image content in tool-result messages", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -1163,6 +1214,41 @@ describe("Bedrock Converse recorded", () => {
           }),
         ),
       )
+    }),
+  )
+
+  recorded.effect.with("continues after parallel tool results", { tags: ["tool", "tool-loop", "parallel"] }, () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          id: "recorded_bedrock_parallel_tool_results",
+          model: recordedModel(),
+          system: "After receiving both tool results, reply exactly: Paris is sunny; London is rainy.",
+          messages: [
+            Message.user("Compare the weather in Paris and London."),
+            Message.assistant([
+              ToolCallPart.make({ id: "weather_paris", name: weatherToolName, input: { city: "Paris" } }),
+              ToolCallPart.make({ id: "weather_london", name: weatherToolName, input: { city: "London" } }),
+            ]),
+            Message.tool({
+              id: "weather_paris",
+              name: weatherToolName,
+              result: { temperature: 22, condition: "sunny" },
+            }),
+            Message.tool({
+              id: "weather_london",
+              name: weatherToolName,
+              result: { temperature: 14, condition: "rainy" },
+            }),
+          ],
+          tools: [weatherTool],
+          cache: "none",
+          generation: { maxTokens: 40, temperature: 0 },
+        }),
+      )
+
+      expect(response.text.trim()).toBe("Paris is sunny; London is rainy.")
+      expect(response.finishReason?.normalized).toBe("stop")
     }),
   )
 })

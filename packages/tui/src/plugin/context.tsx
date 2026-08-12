@@ -14,15 +14,16 @@ import {
 import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
-import type { Page, Slot, SlotName } from "@opencode-ai/plugin/tui/context"
-import { createStore, produce, reconcile as reconcileStore } from "solid-js/store"
+import type { Page } from "@opencode-ai/plugin/tui/context"
+import { resolveSlots, type Claim } from "./structure"
+import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
 import { isDeepEqual } from "remeda"
 import "#runtime-plugin-support"
 import { useConfig } from "../config"
 import { useTuiLifecycle } from "../context/runtime"
 import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
-import { createPluginContext, usePluginHost, type Dispose } from "./api"
+import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, type SlotRender } from "./api"
 import { createSourceWatcher } from "./watch"
 import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
 
@@ -46,9 +47,11 @@ type Value = {
   readonly list: () => ReadonlyArray<State>
   readonly registered: () => ReadonlyArray<RegisteredPlugin>
   readonly route: (id: string, name: string) => Page["render"] | undefined
-  readonly slot: <Name extends SlotName>(
-    name: Name,
-  ) => ReadonlyArray<{ readonly id: string; readonly render: Slot<Name> }>
+  readonly slots: {
+    // A mounted <Slot> instance registers its path; the disposer unregisters.
+    readonly register: (path: string) => () => void
+    readonly resolved: () => ReturnType<typeof resolveSlots<SlotRender>>
+  }
   readonly markdown: () => MarkdownOptions["renderNode"]
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
@@ -62,7 +65,7 @@ type Registration = {
   options?: Readonly<Record<string, any>>
   active: boolean
   routes: Record<string, Page>
-  slots: Record<string, Slot>
+  slots: Record<string, RegisteredSlot>
   markdown: Record<string, MarkdownCodeBlockRenderer>
   cleanups: Dispose[]
 }
@@ -119,8 +122,11 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       owned,
       registry: {
         has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
-        set: (kind: "routes" | "slots" | "markdown", name: string, value: Page | Slot | MarkdownCodeBlockRenderer) =>
-          setStore("registrations", id, kind, name, () => value),
+        set: (
+          kind: "routes" | "slots" | "markdown",
+          name: string,
+          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer,
+        ) => setStore("registrations", id, kind, name, () => value),
         remove: (kind, name) =>
           setStore(
             "registrations",
@@ -387,7 +393,44 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         host.toast.show({ variant: "error", title: "Plugin", message: `${state.target}: ${state.error}` })
     setStore("states", reconcileStore(states))
   }
-  const slotItems = new WeakMap<Slot, { readonly id: string; readonly render: Slot }>()
+  const slotItems = new WeakMap<SlotRender, Claim<SlotRender>>()
+  // The mounted slot tree: path -> live <Slot> instance count. Reference
+  // counted because the same path can be mounted several times (one composer
+  // footer per session tab); a path exists while any instance is mounted.
+  const [mounted, setMounted] = createStore<Record<string, number>>({})
+  const registerSlot = (slotPath: string) => {
+    setMounted(slotPath, (count) => (count ?? 0) + 1)
+    return () =>
+      setMounted(
+        produce((counts) => {
+          const count = counts[slotPath]
+          if (count && count > 1) counts[slotPath] = count - 1
+          else delete counts[slotPath]
+        }),
+      )
+  }
+  // Claims come back in enable order: registration-store key order across
+  // plugins (generations preserve key positions in place), then registration
+  // order within one plugin. The resolver's last-wins rules depend on it.
+  const claims = createMemo(() =>
+    Object.entries(store.registrations).flatMap(([id, registration]) =>
+      Object.entries(registration.active ? registration.slots : {}).map(([key, slot]) => {
+        // Rows downstream diff by reference; a stable claim per render
+        // function keeps untouched plugins' slot rows (and their state)
+        // alive across other plugins' reloads.
+        const cached = slotItems.get(slot.render)
+        if (cached) return cached
+        // Placements are immutable once registered; unwrap the store proxy
+        // so resolver reads don't subscribe tracked scopes.
+        const item = { key: `${id}/${key}`, plugin: id, placement: unwrap(slot.placement), render: slot.render }
+        slotItems.set(slot.render, item)
+        return item
+      }),
+    ),
+  )
+  // Object.keys tracks the store's keys node only: refcount changes on an
+  // already-mounted path (a second tab's composer) skip re-resolution.
+  const resolved = createMemo(() => resolveSlots({ paths: new Set(Object.keys(mounted)), claims: claims() }))
   createEffect(
     on(
       () => JSON.stringify(config.data.plugins ?? []),
@@ -436,19 +479,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
             active: plugin.active,
           })),
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
-        slot: (name) =>
-          Object.entries(store.registrations).flatMap(([id, registration]) => {
-            const render = registration.active ? registration.slots[name] : undefined
-            if (!render) return []
-            // <For> diffs rows by reference; a stable wrapper per render
-            // function keeps untouched plugins' slot rows (and their state)
-            // alive across other plugins' reloads.
-            const cached = slotItems.get(render)
-            if (cached) return [cached]
-            const item = { id, render }
-            slotItems.set(render, item)
-            return [item]
-          }),
+        slots: { register: registerSlot, resolved },
         markdown,
         // Manual dialog toggles join the same chain as reconciles so a
         // toggle mid-reload cannot mix registrations across generations.

@@ -1,11 +1,11 @@
 import os from "os"
-import { App } from "../../app"
+import { App } from "../../app.js"
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Form } from "@opencode-ai/schema/form"
-import { Provider } from "../../provider"
-import { iife } from "../../util/iife"
-import { configuredSettings } from "./configured"
+import { Provider } from "../../provider.js"
+import { iife } from "../../util/iife.js"
+import { configuredSettings } from "./configured.js"
 
 const providerID = Provider.ID.make("cloudflare-workers-ai")
 

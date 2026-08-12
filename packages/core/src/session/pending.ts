@@ -1,4 +1,4 @@
-export * as SessionPending from "./pending"
+export * as SessionPending from "./pending.js"
 
 import { and, asc, eq, or } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
@@ -12,13 +12,13 @@ import {
   User,
   UserData,
 } from "@opencode-ai/schema/session-pending"
-import type { Database } from "../database/database"
-import { Bus } from "../bus"
-import { KeyedMutex } from "../effect/keyed-mutex"
-import { SessionEvent } from "./event"
-import { SessionMessage } from "./message"
-import { SessionSchema } from "./schema"
-import { SessionMessageTable, SessionPendingTable } from "./sql"
+import type { Database } from "../database/database.js"
+import { Bus } from "../bus.js"
+import { KeyedMutex } from "../effect/keyed-mutex.js"
+import { SessionEvent } from "./event.js"
+import { SessionMessage } from "./message.js"
+import { SessionSchema } from "./schema.js"
+import { SessionMessageTable, SessionPendingTable } from "./sql.js"
 
 type DatabaseService = Database.Interface["db"]
 

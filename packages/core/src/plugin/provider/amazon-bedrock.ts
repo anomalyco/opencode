@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Provider } from "../../provider"
+import { Provider } from "../../provider.js"
 
 type MantleSDK = {
   languageModel: (modelID: string) => LanguageModelV3

@@ -1,7 +1,7 @@
 import { Service } from "@opencode-ai/client/service"
 import { execFile } from "node:child_process"
 import { existsSync } from "node:fs"
-import { chmod, copyFile, mkdir, rename, rm } from "node:fs/promises"
+import { chmod, copyFile, mkdir, readdir, rename, rm } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -16,12 +16,14 @@ type Logger = {
 }
 
 export async function startBackgroundCli(logger: Logger) {
+  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const bundled = app.isPackaged
     ? join(process.resourcesPath, executableName())
-    : join(root, "../../resources", executableName())
+    : join(root, "../../resources", isolated ? developmentExecutableName() : executableName())
   logger.log("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
   const version = parseVersion(await run(bundled, ["--version"], logger))
-  const binary = app.isPackaged ? await installCli(bundled, version, logger) : bundled
+  const binary = app.isPackaged || isolated ? await installCli(bundled, version, logger) : bundled
+  if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const service = await Service.ensure({
     version,
     command: [binary, "serve", "--service"],
@@ -33,11 +35,26 @@ export async function startBackgroundCli(logger: Logger) {
     version,
     ...endpoint(service.url),
   })
+  if (isolated) await cleanCliStages(binary, logger)
   return {
     url: service.url,
     username: service.auth.username,
     password: service.auth.password,
   }
+}
+
+async function cleanCliStages(binary: string, logger: Logger) {
+  const current = dirname(binary)
+  const root = dirname(current)
+  await Promise.all(
+    (await readdir(root, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() && join(root, entry.name) !== current)
+      .map((entry) =>
+        rm(join(root, entry.name), { recursive: true, force: true }).catch((error) =>
+          logger.error("failed to clean staged v2 CLI", { path: join(root, entry.name), error }),
+        ),
+      ),
+  )
 }
 
 async function installCli(source: string, version: string, logger: Logger) {
@@ -97,4 +114,8 @@ function endpoint(url: string | undefined) {
 
 function executableName() {
   return process.platform === "win32" ? "opencode-cli.exe" : "opencode-cli"
+}
+
+function developmentExecutableName() {
+  return process.platform === "win32" ? "opencode-cli-dev.exe" : "opencode-cli-dev"
 }

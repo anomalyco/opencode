@@ -1,12 +1,12 @@
-export * as SessionRunnerRetry from "./retry"
+export * as SessionRunnerRetry from "./retry.js"
 
 import { AIError } from "@opencode-ai/ai"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Data, Duration, Effect, Schedule } from "effect"
-import { Bus } from "../../bus"
-import { SessionEvent } from "../event"
-import { SessionMessage } from "../message"
-import { SessionSchema } from "../schema"
+import { Bus } from "../../bus.js"
+import { SessionEvent } from "../event.js"
+import { SessionMessage } from "../message.js"
+import { SessionSchema } from "../schema.js"
 
 export class RetryableFailure extends Data.TaggedError("SessionRunner.RetryableFailure")<{
   readonly cause: AIError

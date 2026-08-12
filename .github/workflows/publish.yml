@@ -124,11 +124,65 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: opencode-preview-cli
+          name: opencode-preview-cli-unsigned
           path: packages/cli/dist/cli-*
 
     outputs:
       version: ${{ needs.version.outputs.version }}
+
+  sign-cli-macos:
+    needs: build-cli
+    runs-on: macos-26
+    if: github.repository == 'anomalyco/opencode'
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
+        with:
+          keychain: build
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-preview-cli-unsigned
+          path: packages/cli/dist
+
+      - name: Sign macOS CLI binaries
+        run: |
+          identity=$(security find-identity -v -p codesigning build.keychain | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)
+          if [ -z "$identity" ]; then
+            echo "Developer ID Application identity not found"
+            exit 1
+          fi
+
+          found=0
+          for file in packages/cli/dist/cli-darwin-*/bin/opencode2; do
+            if [ ! -f "$file" ]; then
+              continue
+            fi
+            found=1
+            codesign \
+              --force \
+              --timestamp \
+              --options runtime \
+              --entitlements packages/cli/script/entitlements.plist \
+              --sign "$identity" \
+              "$file"
+            codesign --verify --deep --strict --verbose=4 "$file"
+            codesign --display --requirements - "$file"
+          done
+
+          if [ "$found" -eq 0 ]; then
+            echo "No macOS CLI binaries found"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-preview-cli
+          path: packages/cli/dist/cli-*
+          if-no-files-found: error
 
   build-node-cli:
     needs: version
@@ -468,6 +522,7 @@ jobs:
     needs:
       - version
       - build-cli
+      - sign-cli-macos
       - build-node-cli
       - sign-cli-windows
       - build-electron

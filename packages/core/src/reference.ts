@@ -1,14 +1,14 @@
-export * as Reference from "./reference"
+export * as Reference from "./reference.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Scope, Types } from "effect"
 import { Reference } from "@opencode-ai/schema/reference"
 import { Global } from "@opencode-ai/util/global"
-import { Bus } from "./bus"
-import { Repository } from "./repository"
-import { RepositoryCache } from "./repository-cache"
-import { AbsolutePath } from "./schema"
-import { State } from "./state"
+import { Bus } from "./bus.js"
+import { Repository } from "./repository.js"
+import { RepositoryCache } from "./repository-cache.js"
+import { AbsolutePath } from "./schema.js"
+import { State } from "./state.js"
 
 export const LocalSource = Reference.LocalSource
 export type LocalSource = Reference.LocalSource

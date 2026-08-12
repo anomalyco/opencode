@@ -1,4 +1,4 @@
-export * as MCPClient from "./client"
+export * as MCPClient from "./client.js"
 
 import path from "node:path"
 import { execFile } from "node:child_process"

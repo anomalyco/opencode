@@ -1,5 +1,23 @@
+diff --git a/dist/Deferred.js b/dist/Deferred.js
+index dd5334d6e42b0881f411fca56688e639cd49c176..ea200a80d6186f07a29d0d231ff1f038433bfec3 100644
+--- a/dist/Deferred.js
++++ b/dist/Deferred.js
+@@ -81,8 +81,12 @@ const _await = self => internalEffect.callback(resume => {
+   self.resumes ??= [];
+   self.resumes.push(resume);
+   return internalEffect.sync(() => {
++    // Completion resumes every waiter and clears the array, so a cleanup
++    // that runs after completion (an interrupt racing the resume) has
++    // nothing to unregister.
++    if (!self.resumes) return;
+     const index = self.resumes.indexOf(resume);
+-    self.resumes.splice(index, 1);
++    if (index >= 0) self.resumes.splice(index, 1);
+   });
+ });
+ export {
 diff --git a/dist/unstable/httpapi/HttpApiSchema.js b/dist/unstable/httpapi/HttpApiSchema.js
-index c51851b..2100420 100644
+index e0fd59143c398fcb13680c74e571ef53f5b4bdc0..5df252aabaf8f9f16dff5b93dcce022745fa52ca 100644
 --- a/dist/unstable/httpapi/HttpApiSchema.js
 +++ b/dist/unstable/httpapi/HttpApiSchema.js
 @@ -151,7 +151,7 @@ export const StreamSse = options => {
@@ -26,11 +44,30 @@ index c51851b..2100420 100644
  /**
   * Creates a streaming `Uint8Array` success response schema.
   *
+diff --git a/src/Deferred.ts b/src/Deferred.ts
+index f6d37948bfbe690a7998b06c562e434e1b8ae084..da91e4dc0fd32e534fbc72f7beb0514e67e4ce74 100644
+--- a/src/Deferred.ts
++++ b/src/Deferred.ts
+@@ -188,8 +188,12 @@ const _await = <A, E>(self: Deferred<A, E>): Effect<A, E> =>
+     self.resumes ??= []
+     self.resumes.push(resume)
+     return internalEffect.sync(() => {
+-      const index = self.resumes!.indexOf(resume)
+-      self.resumes!.splice(index, 1)
++      // Completion resumes every waiter and clears the array, so a cleanup
++      // that runs after completion (an interrupt racing the resume) has
++      // nothing to unregister.
++      if (!self.resumes) return
++      const index = self.resumes.indexOf(resume)
++      if (index >= 0) self.resumes.splice(index, 1)
+     })
+   })
+ 
 diff --git a/src/unstable/httpapi/HttpApiSchema.ts b/src/unstable/httpapi/HttpApiSchema.ts
-index aae6cd5..f05e3ed 100644
+index 3899f4fabbbc5f72ab5e6c759db332ee6c3c5633..7e742f76abe64c93b37534c0e1070b0012a4f74f 100644
 --- a/src/unstable/httpapi/HttpApiSchema.ts
 +++ b/src/unstable/httpapi/HttpApiSchema.ts
-@@ -407,7 +407,7 @@ export const StreamSse: {
+@@ -430,7 +430,7 @@ export const StreamSse: {
    const events = options.events ?? (options.data === undefined ? undefined : Schema.Struct({
      id: Schema.UndefinedOr(Schema.String),
      event: Schema.String,
@@ -39,7 +76,7 @@ index aae6cd5..f05e3ed 100644
    }))
    if (events === undefined) {
      throw new Error("StreamSse requires either an events schema or a data schema")
-@@ -423,6 +423,15 @@ export const StreamSse: {
+@@ -446,6 +446,15 @@ export const StreamSse: {
    })
  }
  

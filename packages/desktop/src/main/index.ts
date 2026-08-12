@@ -25,6 +25,7 @@ import {
 } from "./onboarding"
 import { getDefaultServerUrl, preferAppEnv, setDefaultServerUrl } from "./server"
 import { setupAutoUpdater, showUpdaterDialog } from "./updater"
+import { registerUpdaterIpc } from "./updater-ipc"
 import { safeWebContentsURL } from "./window-state"
 import {
   getLastFocusedWindow,
@@ -283,7 +284,6 @@ const main = Effect.gen(function* () {
     setDisplayBackend: async () => undefined,
     checkAppExists: (appName) => checkAppExists(appName),
     resolveAppPath: async (appName) => resolveAppPath(appName),
-    updater,
     showUpdater: () => showUpdaterDialog(updater, true),
     setBackgroundColor: (color) => setBackgroundColor(color),
     exportDebugLogs: () => exportDebugLogs(),
@@ -292,6 +292,7 @@ const main = Effect.gen(function* () {
       if (setNativeTranslations(bundle)) createMenu(menuDeps)
     },
   })
+  registerUpdaterIpc(updater)
   registerWslIpcHandlers(wslServers)
   void updater.start()
   const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)

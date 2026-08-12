@@ -1,4 +1,4 @@
-export * as Instructions from "./index"
+export * as Instructions from "./index.js"
 
 import { createHash } from "crypto"
 import { Instruction } from "@opencode-ai/schema/instruction"

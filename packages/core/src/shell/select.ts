@@ -1,11 +1,11 @@
-export * as ShellSelect from "./select"
+export * as ShellSelect from "./select.js"
 
 import path from "path"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
 import { Schema } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { which } from "../util/which"
+import { which } from "../util/which.js"
 
 const META: Record<string, { deny?: boolean; login?: boolean; ps?: boolean }> = {
   bash: { login: true },

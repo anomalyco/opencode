@@ -1,4 +1,4 @@
-export * as ShellParse from "./parse"
+export * as ShellParse from "./parse.js"
 
 import { Effect } from "effect"
 import { fileURLToPath } from "url"
@@ -6,7 +6,7 @@ import os from "os"
 import path from "path"
 import type { Node } from "web-tree-sitter"
 import { shellParserWasm } from "#shell-parser-wasm"
-import { ShellSelect } from "./select"
+import { ShellSelect } from "./select.js"
 
 type Part = { type: string; text: string }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])

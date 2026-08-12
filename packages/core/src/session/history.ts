@@ -1,12 +1,12 @@
 import { and, asc, desc, eq, gte, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
-import { Database } from "../database/database"
-import { MessageDecodeError } from "./error"
-import { SessionMessage } from "./message"
-import { SessionSchema } from "./schema"
-import { Instructions } from "../instructions/index"
-import { InstructionState } from "./instruction-state"
-import { SessionMessageTable } from "./sql"
+import { Database } from "../database/database.js"
+import { MessageDecodeError } from "./error.js"
+import { SessionMessage } from "./message.js"
+import { SessionSchema } from "./schema.js"
+import { Instructions } from "../instructions/index.js"
+import { InstructionState } from "./instruction-state.js"
+import { SessionMessageTable } from "./sql.js"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -132,4 +132,4 @@ export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(fun
   return message?.type === "user" ? message : undefined
 })
 
-export * as SessionHistory from "./history"
+export * as SessionHistory from "./history.js"

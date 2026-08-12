@@ -1,9 +1,9 @@
-export * as WellKnownPlugin from "./plugin"
+export * as WellKnownPlugin from "./plugin.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
-import { Bus } from "../bus"
-import { WellKnown } from "../wellknown"
+import { Bus } from "../bus.js"
+import { WellKnown } from "../wellknown.js"
 
 export const Plugin = define({
   id: "opencode.wellknown",

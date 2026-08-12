@@ -168,6 +168,75 @@ describe("PluginSupervisor config", () => {
     ),
   )
 
+  it.live("loads auto-discovered plugin package entrypoints in order", () =>
+    withLocation(
+      undefined,
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* Plugin.Service
+        const ids = (yield* plugins.list()).map((plugin) => String(plugin.id))
+        expect(ids).toContain("package-exports")
+        expect(ids).toContain("package-module")
+        expect(ids).toContain("package-main")
+        expect(ids).toContain("package-index")
+      }),
+      false,
+      async (directory) => {
+        await Promise.all([
+          writeDiscoveredPackage(directory, "exports", { exports: "./entry.ts" }, { "entry.ts": "package-exports" }),
+          writeDiscoveredPackage(
+            directory,
+            "module",
+            { exports: "./missing.js", module: "./entry.js" },
+            { "entry.js": "package-module" },
+          ),
+          writeDiscoveredPackage(
+            directory,
+            "main",
+            { exports: { import: "./missing.js" }, module: "./missing.js", main: "./entry.js" },
+            { "entry.js": "package-main" },
+          ),
+          writeDiscoveredPackage(directory, "index", undefined, { "index.js": "package-index" }),
+        ])
+      },
+    ),
+  )
+
+  it.live("keeps auto-discovered package entrypoints inside the package directory", () =>
+    withLocation(
+      undefined,
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* Plugin.Service
+        const ids = (yield* plugins.list()).map((plugin) => String(plugin.id))
+        expect(ids).toContain("contained-fallback")
+        expect(ids).toContain("symlink-fallback")
+        expect(ids).not.toContain("escaped-entrypoint")
+      }),
+      false,
+      async (directory) => {
+        await fs.mkdir(path.join(directory, ".opencode"), { recursive: true })
+        await fs.writeFile(path.join(directory, ".opencode", "escape.js"), discoveredPlugin("escaped-entrypoint"))
+        await writeDiscoveredPackage(
+          directory,
+          "contained",
+          { exports: "../../escape.js" },
+          { "index.js": "contained-fallback" },
+        )
+        await writeDiscoveredPackage(
+          directory,
+          "symlink",
+          { exports: "./entry.js" },
+          { "index.js": "symlink-fallback" },
+        )
+        await fs.symlink(
+          path.join(directory, ".opencode", "escape.js"),
+          path.join(directory, ".opencode", "plugins", "symlink", "entry.js"),
+        )
+      },
+    ),
+  )
+
   staticIt.live("uses only internal and SDK plugins when the static source is wired", () =>
     Effect.gen(function* () {
       const sdk = yield* SdkPlugins.Service
@@ -388,4 +457,22 @@ export default Plugin.define({
   },
 })
 `
+}
+
+function discoveredPlugin(id: string) {
+  return `export default { id: ${JSON.stringify(id)}, setup() {} }`
+}
+
+async function writeDiscoveredPackage(
+  directory: string,
+  name: string,
+  manifest: Record<string, unknown> | undefined,
+  files: Record<string, string>,
+) {
+  const plugin = path.join(directory, ".opencode", "plugins", name)
+  await fs.mkdir(plugin, { recursive: true })
+  await Promise.all([
+    ...(manifest ? [fs.writeFile(path.join(plugin, "package.json"), JSON.stringify(manifest))] : []),
+    ...Object.entries(files).map(([file, id]) => fs.writeFile(path.join(plugin, file), discoveredPlugin(id))),
+  ])
 }

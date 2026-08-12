@@ -1,16 +1,16 @@
-export * as LocationWatcher from "./location-watcher"
+export * as LocationWatcher from "./location-watcher.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Stream } from "effect"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Document } from "@opencode-ai/schema/config"
 import path from "path"
-import { Config } from "../config"
-import { Bus } from "../bus"
+import { Config } from "../config.js"
+import { Bus } from "../bus.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Git } from "../git"
-import { Location } from "../location"
-import { Watcher } from "./watcher"
+import { Git } from "../git.js"
+import { Location } from "../location.js"
+import { Watcher } from "./watcher.js"
 
 export interface Interface {}
 

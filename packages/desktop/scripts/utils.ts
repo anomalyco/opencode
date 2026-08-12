@@ -69,10 +69,9 @@ export function getCurrentCli(target = CLI_TARGET ?? nativeTarget()) {
   return binaryConfig
 }
 
-export async function downloadCliToResources(version = CLI_VERSION) {
+export async function downloadCliToResources(version = CLI_VERSION, dest = windowsify("resources/opencode-cli")) {
   const cli = getCurrentCli()
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
-  const dest = windowsify("resources/opencode-cli")
   try {
     await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${version}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
     await copyFile(
@@ -82,13 +81,45 @@ export async function downloadCliToResources(version = CLI_VERSION) {
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
+  await prepareCli(dest)
+
+  console.log(`Copied ${cli.package}@${version} to ${dest}`)
+}
+
+export async function buildCliToResources(dest = windowsify("resources/opencode-cli"), stateHome?: string) {
+  const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
+  const target = `cli-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`
+  try {
+    await $`bun ${join(import.meta.dirname, "../../cli/script/build.ts")} --single --skip-install --skip-web-ui --outdir=${directory}`.env(
+      {
+        ...process.env,
+        OPENCODE_VERSION: `0.0.0-local-${Date.now()}`,
+      },
+    )
+    if (stateHome && (await Bun.file(dest).exists())) {
+      const child = Bun.spawn([dest, "service", "stop"], {
+        env: { ...process.env, XDG_STATE_HOME: stateHome },
+        stdout: "inherit",
+        stderr: "inherit",
+      })
+      const exitCode = await child.exited
+      if (exitCode !== 0) throw new Error(`Failed to stop development service: ${exitCode}`)
+    }
+    await copyFile(join(directory, target, "bin", windowsify("opencode2")), dest)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+  await prepareCli(dest)
+
+  console.log(`Built local CLI at ${dest}`)
+}
+
+async function prepareCli(dest: string) {
   if (process.platform !== "win32") await chmod(dest, 0o755)
   if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true") {
     await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 ${dest}`
   }
   if (process.platform === "darwin") await $`codesign --force --sign - ${dest}`
-
-  console.log(`Copied ${cli.package}@${version} to ${dest}`)
 }
 
 export function windowsify(path: string) {

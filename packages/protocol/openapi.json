@@ -3871,6 +3871,22 @@
               ]
             },
             "required": true
+          },
+          {
+            "name": "continue",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
           }
         ],
         "security": [],
@@ -3916,7 +3932,7 @@
             }
           }
         },
-        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op.",
+        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes if durable pending work remains after interruption.",
         "summary": "Interrupt session execution"
       }
     },
@@ -10930,7 +10946,7 @@
         "summary": "List references"
       }
     },
-    "/experimental/project/{projectID}/copy": {
+    "/api/experimental/project/{projectID}/copy": {
       "post": {
         "tags": ["projectCopy"],
         "operationId": "v2.projectCopy.create",
@@ -11156,7 +11172,7 @@
         }
       }
     },
-    "/experimental/project/{projectID}/copy/refresh": {
+    "/api/experimental/project/{projectID}/copy/refresh": {
       "post": {
         "tags": ["projectCopy"],
         "operationId": "v2.projectCopy.refresh",

@@ -19,6 +19,8 @@ function View(props: { context: Plugin.Context }) {
 export default Plugin.define({
   id: "opencode.sidebar-footer",
   setup(context) {
-    context.ui.slot("sidebar.footer", () => <View context={context} />)
+    // Append keeps the path open to additive plugin claims; an external
+    // replace still takes the boundary over.
+    context.ui.slot({ append: "sidebar.footer", render: () => <View context={context} /> })
   },
 })

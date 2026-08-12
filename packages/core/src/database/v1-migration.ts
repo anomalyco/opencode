@@ -1,13 +1,13 @@
-export * as V1Migration from "./v1-migration"
+export * as V1Migration from "./v1-migration.js"
 
 import { Cause, Effect, Layer, Option, Schema, Semaphore } from "effect"
-import { Database } from "./database"
-import { SessionMessageTable, SessionTable } from "../session/sql"
+import { Database } from "./database.js"
+import { SessionMessageTable, SessionTable } from "../session/sql.js"
 import { SessionV1 } from "@opencode-ai/schema/session-v1"
-import { SessionMessage } from "../session/message"
-import { SessionSchema } from "../session/schema"
-import { KVTable } from "../kv/sql"
-import { EventSequenceTable } from "../event/sql"
+import { SessionMessage } from "../session/message.js"
+import { SessionSchema } from "../session/schema.js"
+import { KVTable } from "../kv/sql.js"
+import { EventSequenceTable } from "../event/sql.js"
 import { eq, sql } from "drizzle-orm"
 import { Global } from "@opencode-ai/util/global"
 import { existsSync } from "node:fs"
@@ -578,10 +578,18 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                 )
                 yield* tx.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, next.id)).run()
                 yield* Effect.forEach(transformed.messages, (message) =>
-                  tx.run(sql`
-                    INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
-                    VALUES (${message.id}, ${message.session_id}, ${message.type}, ${message.seq}, ${message.time_created}, ${message.time_updated}, ${JSON.stringify(message.data)})
-                  `),
+                  tx
+                    .insert(SessionMessageTable)
+                    .values({
+                      id: SessionMessage.ID.make(message.id),
+                      session_id: SessionSchema.ID.make(message.session_id),
+                      type: message.type,
+                      seq: message.seq,
+                      time_created: message.time_created,
+                      time_updated: message.time_updated,
+                      data: sql`${JSON.stringify(message.data)}`,
+                    })
+                    .run(),
                 )
                 yield* tx
                   .update(SessionTable)
@@ -739,13 +747,18 @@ function importNextDatabase(
                 )
               `)
               yield* Effect.forEach(messages, (message) =>
-                tx.run(sql`
-                  INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
-                  VALUES (
-                    ${message.id}, ${message.session_id}, ${message.type}, ${message.seq},
-                    ${message.time_created}, ${message.time_updated}, ${message.data}
-                  )
-                `),
+                tx
+                  .insert(SessionMessageTable)
+                  .values({
+                    id: SessionMessage.ID.make(message.id),
+                    session_id: SessionSchema.ID.make(message.session_id),
+                    type: message.type as SessionMessage.Type,
+                    seq: message.seq,
+                    time_created: message.time_created,
+                    time_updated: message.time_updated,
+                    data: sql`${message.data}`,
+                  })
+                  .run(),
               )
               yield* tx
                 .insert(EventSequenceTable)

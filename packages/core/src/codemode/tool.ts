@@ -1,9 +1,9 @@
-export * as CodeModeTool from "./tool"
+export * as CodeModeTool from "./tool.js"
 
 import { CodeMode, Tool, toolError } from "@opencode-ai/codemode"
 import type { Content, Context, Error, Info, Metadata, Result } from "@opencode-ai/schema/tool"
 import { Effect, Ref, Schema, Semaphore } from "effect"
-import { definition } from "../tool/runtime"
+import { definition } from "../tool/runtime.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,

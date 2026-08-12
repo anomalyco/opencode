@@ -1,6 +1,6 @@
 import { Model } from "@opencode-ai/schema/model"
-import { Provider } from "./provider"
-import type { DeepMutable } from "./schema"
+import { Provider } from "./provider.js"
+import type { DeepMutable } from "./schema.js"
 
 export const ID = Model.ID
 export type ID = typeof ID.Type
@@ -45,4 +45,4 @@ export function parse(input: string): { providerID: Provider.ID; modelID: ID } {
   }
 }
 
-export * as Model from "./model"
+export * as Model from "./model.js"

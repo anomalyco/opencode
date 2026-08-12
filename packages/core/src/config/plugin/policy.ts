@@ -1,10 +1,10 @@
-export * as ConfigPolicyPlugin from "./policy"
+export * as ConfigPolicyPlugin from "./policy.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Document } from "@opencode-ai/schema/config"
 import { Effect, Stream } from "effect"
-import { Config } from "../../config"
-import { Wildcard } from "../../util/wildcard"
+import { Config } from "../../config.js"
+import { Wildcard } from "../../util/wildcard.js"
 
 export const Plugin = define({
   id: "opencode.config.policy",

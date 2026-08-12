@@ -1,4 +1,4 @@
-export * as AISDK from "./aisdk"
+export * as AISDK from "./aisdk.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { APICallError } from "@ai-sdk/provider"
@@ -34,9 +34,9 @@ import {
 import { Auth, Endpoint, RequestExecutor, type AnyRoute } from "@opencode-ai/ai/route"
 import { ProviderShared } from "@opencode-ai/ai/protocols/shared"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
-import type { ID, Info } from "./model"
-import { Provider } from "./provider"
-import { State } from "./state"
+import type { ID, Info } from "./model.js"
+import { Provider } from "./provider.js"
+import { State } from "./state.js"
 
 type SDK = any
 type UserContent = Extract<LanguageModelV3Message, { role: "user" }>["content"]

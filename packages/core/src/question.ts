@@ -1,10 +1,10 @@
-export * as Question from "./question"
+export * as Question from "./question.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Deferred, Effect, Layer, Schema } from "effect"
 import { Question } from "@opencode-ai/schema/question"
-import { Bus } from "./bus"
-import { SessionSchema } from "./session/schema"
+import { Bus } from "./bus.js"
+import { SessionSchema } from "./session/schema.js"
 
 export const ID = Question.ID
 export type ID = typeof ID.Type

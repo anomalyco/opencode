@@ -3,6 +3,7 @@ import type { UpdaterState } from "@/updater"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
+import { formatServerError } from "@/utils/server-errors"
 
 export function updaterAction(state: UpdaterState | undefined) {
   if (!state) return { label: "settings.updates.action.checkNow" as const }
@@ -31,7 +32,14 @@ export function useUpdaterAction() {
     action,
     async run() {
       const run = action().run
-      if (run === "install") return platform.updater?.install()
+      if (run === "install") {
+        return platform.updater?.install().catch((error) => {
+          showToast({
+            title: language.t("common.requestFailed"),
+            description: formatServerError(error, language.t, language.t("common.requestFailed")),
+          })
+        })
+      }
       if (run !== "check") return
 
       const state = await platform.updater?.check()

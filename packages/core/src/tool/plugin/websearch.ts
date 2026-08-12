@@ -1,13 +1,13 @@
-export * as WebSearchTool from "./websearch"
+export * as WebSearchTool from "./websearch.js"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema, Semaphore } from "effect"
 import { HttpClientError } from "effect/unstable/http"
-import { Form } from "../../form"
-import { KV } from "../../kv"
-import { Permission } from "../../permission"
-import { WebSearch } from "../../websearch"
+import { Form } from "../../form.js"
+import { KV } from "../../kv.js"
+import { Permission } from "../../permission.js"
+import { WebSearch } from "../../websearch.js"
 
 export const name = "websearch"
 export const NO_RESULTS = "No search results found. Please try a different query."
