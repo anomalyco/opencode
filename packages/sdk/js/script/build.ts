@@ -5,17 +5,43 @@ const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
 import { $ } from "bun"
+import { rename } from "node:fs/promises"
 import path from "path"
 
 import { createClient } from "@hey-api/openapi-ts"
 
 const opencode = path.resolve(dir, "../../opencode")
+const specPath = path.join(dir, "openapi.json")
 
-await $`bun dev generate > ${dir}/openapi.json`.cwd(opencode)
+/**
+ * Writes via a temp file and renames, so an interrupted write cannot leave a
+ * half-written spec that the next run parses as corrupt.
+ */
+async function writeSpec(contents: string) {
+  const tmp = `${specPath}.tmp`
+  await Bun.write(tmp, contents)
+  await rename(tmp, specPath)
+}
 
-const document = (await Bun.file("./openapi.json").json()) as {
+// Capture the generator's output instead of redirecting into the spec file.
+// `bun dev generate > openapi.json` truncates the moment the shell opens the
+// target, so a generator crash destroyed the previous good spec and left an
+// empty one — after which every later run failed on a JSON parse error
+// instead of the actual fault. $ throws on a non-zero exit, so a failure now
+// aborts before anything is written.
+const generated = await $`bun dev generate`.cwd(opencode).text()
+if (generated.trim() === "") {
+  throw new Error("bun dev generate produced no output; openapi.json left unchanged")
+}
+
+let document: {
   components?: { schemas?: Record<string, unknown> }
   [key: string]: unknown
+}
+try {
+  document = JSON.parse(generated)
+} catch (cause) {
+  throw new Error(`bun dev generate did not produce valid JSON; openapi.json left unchanged`, { cause })
 }
 const schemas = document.components?.schemas
 if (schemas) {
@@ -41,8 +67,11 @@ if (schemas) {
   for (const name of Object.keys(schemas)) {
     if (/^SessionNext\w+1$/.test(name) && !reachable.has(name)) delete schemas[name]
   }
-  await Bun.write("./openapi.json", JSON.stringify(document))
 }
+
+// Unconditional: the spec now only reaches disk here, so a document without
+// components.schemas must still be written for createClient to read it.
+await writeSpec(JSON.stringify(document))
 
 await createClient({
   input: "./openapi.json",

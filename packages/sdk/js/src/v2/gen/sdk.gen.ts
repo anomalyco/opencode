@@ -117,14 +117,14 @@ import type {
   LocationRef,
   LoopCancelErrors,
   LoopCancelResponses,
-  LoopNudgeErrors,
-  LoopNudgeResponses,
   LoopCreateErrors,
   LoopCreateResponses,
   LoopGetErrors,
   LoopGetResponses,
   LoopListErrors,
   LoopListResponses,
+  LoopNudgeErrors,
+  LoopNudgeResponses,
   LoopPauseErrors,
   LoopPauseResponses,
   LoopResumeErrors,
@@ -2855,14 +2855,14 @@ export class Loop extends HeyApiClient {
   /**
    * Steer loop
    *
-   * Give a running or paused loop a correction carried into every subsequent iteration.
+   * Give a running or paused loop a correction carried into every subsequent iteration. The in-flight iteration is not interrupted.
    */
   public nudge<ThrowOnError extends boolean = false>(
     parameters: {
       loopID: string
       directory?: string
       workspace?: string
-      text: string
+      text?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2883,6 +2883,11 @@ export class Loop extends HeyApiClient {
       url: "/loop/{loopID}/nudge",
       ...options,
       ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
