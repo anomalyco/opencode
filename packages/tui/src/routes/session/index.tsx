@@ -1222,6 +1222,11 @@ function TurnTokenUsage(props: {
 }) {
   const config = useConfig()
   const theme = useTheme()
+  const renderer = useRenderer()
+  // Collapsed by default: one summary line for the whole turn. Click to
+  // open the full per-step table, click again to close.
+  const [expanded, setExpanded] = createSignal(false)
+  const [hover, setHover] = createSignal(false)
   const verbose = () => config.data.debug?.turn_tokens === "verbose"
   const steps = createMemo(() => {
     let previousCache = props.previousCache
@@ -1257,49 +1262,82 @@ function TurnTokenUsage(props: {
     cached: Math.max("Cached".length, ...steps().map((item) => item.cached.toLocaleString().length)),
     total: Math.max("Total".length, ...steps().map((item) => item.total.toLocaleString().length)),
   }))
+  const summary = createMemo(() => {
+    const items = steps()
+    const last = items[items.length - 1]
+    return {
+      count: items.length,
+      newTokens: items.reduce((sum, item) => sum + item.newTokens, 0),
+      cached: last?.cached ?? 0,
+      total: last?.total ?? 0,
+      reuseDrops: items.filter((item) => item.reuseDrop !== undefined).length,
+    }
+  })
   return (
     <Show when={Boolean(config.data.debug?.turn_tokens) && steps().length > 0}>
       <box paddingLeft={3} flexDirection="column">
-        <box flexDirection="row">
+        <box
+          flexDirection="row"
+          onMouseOver={() => setHover(true)}
+          onMouseOut={() => setHover(false)}
+          onMouseUp={() => {
+            if (renderer.getSelection()?.getSelectedText()) return
+            setExpanded((value) => !value)
+          }}
+        >
           <text width={INLINE_TOOL_ICON_WIDTH} fg={theme.text.subdued}>
             ◈
           </text>
-          <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
-            Tokens
+          <text fg={hover() ? theme.text.default : theme.text.subdued} wrapMode="none">
+            <span>{expanded() ? "- " : "+ "}</span>
+            <span style={{ attributes: TextAttributes.BOLD }}>Tokens</span>
+            <span>
+              : {summary().count} {summary().count === 1 ? "step" : "steps"} ·{" "}
+              {summary().newTokens.toLocaleString()} new · {summary().cached.toLocaleString()} cached ·{" "}
+              {summary().total.toLocaleString()} total
+            </span>
+            <Show when={summary().reuseDrops > 0}>
+              <span style={{ fg: theme.text.feedback.warning.default }}>
+                {" "}
+                · ! {summary().reuseDrops} likely cache {summary().reuseDrops === 1 ? "bust" : "busts"}
+              </span>
+            </Show>
           </text>
         </box>
-        <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
-          <text fg={theme.text.subdued} attributes={TextAttributes.ITALIC}>
-            {"Step".padEnd(columns().step + 2)}
-            {"New".padStart(columns().newTokens)}
-            {"  "}
-            {"Cached".padStart(columns().cached)}
-            {"  "}
-            {"Total".padStart(columns().total)}
-          </text>
-        </box>
-        <For each={steps()}>
-          {(item) => (
-            <box paddingLeft={INLINE_TOOL_ICON_WIDTH} flexDirection="column">
-              <text fg={verbose() && item.finish === "tool-call" ? undefined : theme.text.subdued}>
-                {item.finish.padEnd(columns().step + 2)}
-                <span style={{ attributes: TextAttributes.BOLD }}>
-                  {item.newTokens.toLocaleString().padStart(columns().newTokens)}
-                </span>
-                {"  "}
-                {item.cached.toLocaleString().padStart(columns().cached)}
-                {"  "}
-                {item.total.toLocaleString().padStart(columns().total)}
-              </text>
-              <TurnTokenToolCalls tools={item.tools} />
-              <Show when={item.reuseDrop !== undefined}>
-                <text fg={theme.text.feedback.warning.default}>
-                  ! Likely cache bust: {item.reuseDrop?.toLocaleString()} fewer cached tokens than the previous step
+        <Show when={expanded()}>
+          <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
+            <text fg={theme.text.subdued} attributes={TextAttributes.ITALIC}>
+              {"Step".padEnd(columns().step + 2)}
+              {"New".padStart(columns().newTokens)}
+              {"  "}
+              {"Cached".padStart(columns().cached)}
+              {"  "}
+              {"Total".padStart(columns().total)}
+            </text>
+          </box>
+          <For each={steps()}>
+            {(item) => (
+              <box paddingLeft={INLINE_TOOL_ICON_WIDTH} flexDirection="column">
+                <text fg={verbose() && item.finish === "tool-call" ? undefined : theme.text.subdued}>
+                  {item.finish.padEnd(columns().step + 2)}
+                  <span style={{ attributes: TextAttributes.BOLD }}>
+                    {item.newTokens.toLocaleString().padStart(columns().newTokens)}
+                  </span>
+                  {"  "}
+                  {item.cached.toLocaleString().padStart(columns().cached)}
+                  {"  "}
+                  {item.total.toLocaleString().padStart(columns().total)}
                 </text>
-              </Show>
-            </box>
-          )}
-        </For>
+                <TurnTokenToolCalls tools={item.tools} />
+                <Show when={item.reuseDrop !== undefined}>
+                  <text fg={theme.text.feedback.warning.default}>
+                    ! Likely cache bust: {item.reuseDrop?.toLocaleString()} fewer cached tokens than the previous step
+                  </text>
+                </Show>
+              </box>
+            )}
+          </For>
+        </Show>
       </box>
     </Show>
   )

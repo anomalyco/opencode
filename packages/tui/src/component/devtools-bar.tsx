@@ -381,16 +381,18 @@ export function DevToolsBar() {
               >
                 {turnTokens() ? "[x]" : "[ ]"} Turn token usage
               </Action>
-              <Action
-                onClick={() =>
-                  void config.update((draft) => {
-                    draft.debug = { ...draft.debug, turn_tokens: verboseTurnTokens() ? true : "verbose" }
-                  })
-                }
-                hoverBackground
-              >
-                {verboseTurnTokens() ? "[x]" : "[ ]"} Turn token usage (verbose)
-              </Action>
+              <Show when={Boolean(turnTokens())}>
+                <Action
+                  onClick={() =>
+                    void config.update((draft) => {
+                      draft.debug = { ...draft.debug, turn_tokens: verboseTurnTokens() ? true : "verbose" }
+                    })
+                  }
+                  hoverBackground
+                >
+                  {verboseTurnTokens() ? "[x]" : "[ ]"} Turn token usage (verbose)
+                </Action>
+              </Show>
             </box>
             <For each={groups()}>
               {(group) => (
