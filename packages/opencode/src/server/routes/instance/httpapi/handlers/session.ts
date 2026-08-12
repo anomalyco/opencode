@@ -13,6 +13,7 @@ import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
+import { NotFoundError } from "@/storage/storage"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -229,8 +230,55 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* fork({ params: ctx.params, payload })
     })
 
+    const settleOrphanedTaskParts = Effect.fn("SessionHttpApi.settleOrphanedTaskParts")(function* (sessionID: SessionID) {
+      const messages = yield* session.messages({ sessionID }).pipe(
+        Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed([])),
+      )
+      const end = Date.now()
+      const interrupted = messages.filter((message) => {
+        if (message.info.role !== "assistant") return false
+        return message.parts.some(
+          (part): part is SessionV1.ToolPart & { state: SessionV1.ToolStatePending | SessionV1.ToolStateRunning } =>
+            part.type === "tool" &&
+            part.tool === "task" &&
+            (part.state.status === "pending" || part.state.status === "running"),
+        )
+      })
+      for (const message of interrupted) {
+        const tasks = message.parts.filter(
+          (part): part is SessionV1.ToolPart & { state: SessionV1.ToolStatePending | SessionV1.ToolStateRunning } =>
+            part.type === "tool" &&
+            part.tool === "task" &&
+            (part.state.status === "pending" || part.state.status === "running"),
+        )
+        for (const part of tasks) {
+          yield* session.updatePart({
+            ...part,
+            state: {
+              status: "error",
+              input: part.state.input,
+              error: "Tool execution aborted",
+              metadata: { ...(part.state.status === "running" ? part.state.metadata : {}), interrupted: true },
+              time: { start: part.state.status === "running" ? part.state.time.start : end, end },
+            },
+          } satisfies SessionV1.ToolPart)
+        }
+        if (message.info.time.completed) continue
+        yield* session.updateMessage({
+          ...message.info,
+          error:
+            message.info.error ??
+            MessageV2.fromError(new DOMException("Aborted", "AbortError"), {
+              providerID: message.info.providerID,
+              aborted: true,
+            }),
+          time: { ...message.info.time, completed: end },
+        })
+      }
+    })
+
     const abort = Effect.fn("SessionHttpApi.abort")(function* (ctx: { params: { sessionID: SessionID } }) {
-      yield* promptSvc.cancel(ctx.params.sessionID)
+      yield* runState.cancelOr(ctx.params.sessionID, settleOrphanedTaskParts(ctx.params.sessionID))
       return true
     })
 
