@@ -1814,7 +1814,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
             streaming={true}
             internalBlockMode="top-level"
             content={content()}
-            tableOptions={{ style: "grid" }}
+            tableOptions={{ style: "grid", cellPaddingX: 1 }}
             conceal={ctx.markdownMode() === "rendered"}
             fg={theme.markdown.text}
             bg={theme.background.default}
@@ -2264,7 +2264,7 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
           streaming={true}
           internalBlockMode="top-level"
           content={props.part.text.trim()}
-          tableOptions={{ style: "grid" }}
+          tableOptions={{ style: "grid", cellPaddingX: 1 }}
           conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdown.text}
           bg={theme.background.default}
