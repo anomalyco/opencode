@@ -52,11 +52,6 @@ function llamaSkeinClient(baseURL: string) {
   return new LlamaSkeinClient({ client: createClient({ baseUrl: normalizeControlBaseURL(baseURL) }) })
 }
 
-type ModelListResult = {
-  data?: { data?: Array<{ id?: string; default?: boolean; metadata?: { mtp?: MtpMetadata } }> }
-  error?: unknown
-}
-
 export type ModelProbeResult = {
   ids: string[]
   defaultModel: string | null
@@ -77,7 +72,7 @@ export async function probeModelIDs(
     llamaSkeinClient(baseURL)
       .listModels()
       .then((result) => {
-        const response = result as ModelListResult
+        const response = result
         if (response.error !== undefined || !response.data?.data) return null
         const models = response.data.data
         const ids = models.map((m) => m.id).filter((id): id is string => Boolean(id))
@@ -129,7 +124,7 @@ async function probeHost(
     llamaSkeinClient(baseURL)
       .listModels()
       .then((result) => {
-        const response = result as ModelListResult
+        const response = result
         if (response.error !== undefined || !response.data?.data) return null
         return { name: host, host, port, baseURL, source } satisfies LocalLlamaSwapService
       })
