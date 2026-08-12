@@ -94,32 +94,40 @@ export function copyCommand(
   }
 }
 
-let copyMethod: Promise<(text: string) => Promise<void>> | undefined
+export type ClipboardDeps = {
+  os: NodeJS.Platform
+  wayland: boolean
+  has: (name: string) => boolean
+  command: (command: string, args: string[], input?: string) => Promise<unknown>
+  clipboardy: { write(text: string): Promise<void> }
+}
 
-function getCopyMethod() {
-  return (copyMethod ??= (async () => {
-    const { which } = await import("@opencode-ai/core/util/which")
-    const native = copyCommand(platform(), Boolean(process.env.WAYLAND_DISPLAY), (name) => Boolean(which(name)))
-    if (native?.[0] === "osascript") {
-      return async (text: string) => {
-        const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
-        await command("osascript", ["-e", `set the clipboard to "${escaped}"`]).catch(() => undefined)
-      }
-    }
-    if (native) {
-      return async (text: string) => {
-        await command(native[0], native.slice(1), text).catch(() => undefined)
-      }
-    }
-    return async (text: string) => {
-      const { default: clipboardy } = await import("clipboardy")
-      await clipboardy.write(text).catch(() => undefined)
-    }
-  })())
+export async function writeWith(deps: ClipboardDeps, text: string): Promise<void> {
+  const native = copyCommand(deps.os, deps.wayland, deps.has)
+  if (native?.[0] === "osascript") {
+    const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+    await deps.command("osascript", ["-e", `set the clipboard to "${escaped}"`])
+    return
+  }
+  if (native) {
+    await deps.command(native[0], native.slice(1), text)
+    return
+  }
+  await deps.clipboardy.write(text)
 }
 
 export async function write(text: string) {
   writeOsc52(text)
-  const method = await getCopyMethod()
-  await method(text)
+  const { which } = await import("@opencode-ai/core/util/which")
+  const { default: clipboardy } = await import("clipboardy")
+  await writeWith(
+    {
+      os: platform(),
+      wayland: Boolean(process.env.WAYLAND_DISPLAY),
+      has: (name) => Boolean(which(name)),
+      command,
+      clipboardy,
+    },
+    text,
+  )
 }
