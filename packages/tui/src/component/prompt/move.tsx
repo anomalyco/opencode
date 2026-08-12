@@ -8,10 +8,6 @@ import { useToast } from "../../ui/toast"
 import { DialogMoveSession, type MoveSessionSelection } from "../dialog-move-session"
 import { useData } from "../../context/data"
 
-function moveReminderText(directory: string) {
-  return `<system-reminder>The user has changed the current working directory to "${directory}". This is still the same project but at a possibly new location; take this into account when working with any files from now on.</system-reminder>`
-}
-
 export function usePromptMove(input: { projectID: () => string | undefined; sessionID: () => string | undefined }) {
   const dialog = useDialog()
   const client = useClient()
@@ -103,9 +99,6 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     setProgress("Moving session")
     try {
       await client.api.session.move({ sessionID, directory })
-      await client.api.session
-        .synthetic({ sessionID, text: moveReminderText(directory), resume: false })
-        .catch(() => undefined)
       dialog.clear()
     } catch (error) {
       toast.error(error)

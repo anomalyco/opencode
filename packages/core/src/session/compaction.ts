@@ -136,6 +136,8 @@ const serialize = (message: SessionMessage.Info) => {
     const skills = message.skills?.map((skill) => `[Attached skill: ${skill.name}]\n${skill.text}`) ?? []
     return [`[User]: ${message.text}`, ...skills, ...files].join("\n")
   }
+  if (message.type === "location-switched")
+    return `[User]: The working directory has been changed to ${message.location.directory}.`
   if (message.type === "assistant") {
     return message.content
       .flatMap((part) => {

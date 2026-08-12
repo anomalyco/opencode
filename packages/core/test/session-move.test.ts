@@ -50,6 +50,23 @@ describe("Session.move", () => {
           yield* session.move({ sessionID: created.id, directory: destination })
 
           expect((yield* session.get(created.id)).location.directory).toBe(destination)
+          const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
+          expect(messages).toEqual([
+            expect.objectContaining({
+              type: "location-switched",
+              location: { directory: destination },
+              projectID: Project.ID.global,
+              previous: {
+                location: { directory: path.join(tmp.path, "deleted") },
+                projectID: Project.ID.global,
+                subpath: "",
+              },
+              subpath: "",
+            }),
+          ])
+
+          yield* session.move({ sessionID: created.id, directory: destination })
+          expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toEqual(messages)
         }),
       ),
     ),

@@ -134,6 +134,7 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreSessionMessage.AssistantRetry, SessionMessage.AssistantRetry],
     [coreSessionMessage.AgentSelected, SessionMessage.AgentSelected],
     [coreSessionMessage.ModelSelected, SessionMessage.ModelSelected],
+    [coreSessionMessage.LocationSwitched, SessionMessage.LocationSwitched],
     [coreSessionMessage.User, SessionMessage.User],
     [coreSessionMessage.Synthetic, SessionMessage.Synthetic],
     [coreSessionMessage.System, SessionMessage.System],

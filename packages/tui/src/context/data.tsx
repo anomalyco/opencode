@@ -431,14 +431,32 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               setStore("session", "info", event.data.sessionID, "title", event.data.title)
           })
           break
-        case "session.moved":
-          if (store.session.info[event.data.sessionID]) {
+        case "session.moved": {
+          const current = store.session.info[event.data.sessionID]
+          if (current) {
+            const previous = {
+              location: { ...current.location },
+              projectID: current.projectID,
+              subpath: current.subpath,
+            }
             setStore("session", "info", event.data.sessionID, "location", event.data.location)
             if (event.data.projectID)
               setStore("session", "info", event.data.sessionID, "projectID", event.data.projectID)
             setStore("session", "info", event.data.sessionID, "subpath", event.data.subpath)
+            message.update(event.data.sessionID, (draft, index) => {
+              message.append(draft, index, {
+                id: messageIDFromEvent(event.id),
+                type: "location-switched",
+                location: event.data.location,
+                projectID: event.data.projectID,
+                subpath: event.data.subpath,
+                previous,
+                time: { created: event.created },
+              })
+            })
           }
           break
+        }
         case "session.input.promoted": {
           const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inputID) ?? false
           removePending(event.data.sessionID, event.data.inputID)
