@@ -74,6 +74,25 @@ test("uses command IDs as keybind keys", () => {
   ).toBe(true)
 })
 
+test("preserves current navigation defaults", () => {
+  const config = resolve({}, { terminalSuspend: true })
+
+  expect(config.keybinds.get("open.menu")).toMatchObject([{ key: "ctrl+o" }])
+  expect(config.keybinds.get("session.tab.next")).toMatchObject([{ key: "ctrl+tab,alt+down" }])
+  expect(config.keybinds.get("session.tab.previous")).toMatchObject([{ key: "ctrl+shift+tab,alt+up" }])
+  expect(config.keybinds.get("session.tab.next_unread")).toMatchObject([{ key: "alt+shift+down" }])
+  expect(config.keybinds.get("session.tab.previous_unread")).toMatchObject([{ key: "alt+shift+up" }])
+  expect(config.keybinds.get("session.tab.reopen")).toMatchObject([{ key: "ctrl+shift+t" }])
+  expect(config.keybinds.get("session.tab.select.10")).toMatchObject([{ key: "<leader>0,ctrl+0" }])
+  expect(config.keybinds.get("session.message.next")).toEqual([])
+  expect(config.keybinds.get("session.message.previous")).toEqual([])
+  expect(config.keybinds.get("session.message.user.next")).toEqual([])
+  expect(config.keybinds.get("session.message.user.previous")).toEqual([])
+  expect(config.keybinds.get("input.buffer.home")).toEqual([])
+  expect(config.keybinds.get("input.buffer.end")).toEqual([])
+  expect(config.keybinds.get("prompt.images.view")).toMatchObject([{ key: "<leader>i" }])
+})
+
 test("preserves migrated v1 keybind defaults", () => {
   const pairs = [
     ["app.exit", "app_exit"],
