@@ -289,10 +289,17 @@ const layer = Layer.effect(
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }
 
+        // recruit: prefer edit/write for notes; never promote apply_patch (BL-014).
+        // build and other agents keep the gpt-* apply_patch preference.
         const usePatch =
-          input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
+          input.agent.name !== "recruit" &&
+          input.modelID.includes("gpt-") &&
+          !input.modelID.includes("oss") &&
+          !input.modelID.includes("gpt-4")
         if (tool.id === ApplyPatchTool.id) return usePatch
         if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
+        // Hide LSP analysis from recruit even if the experimental flag is on.
+        if (tool.id === LspTool.id && input.agent.name === "recruit") return false
 
         return true
       })

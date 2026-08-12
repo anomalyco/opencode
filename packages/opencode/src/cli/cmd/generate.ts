@@ -4,6 +4,7 @@ type Args = {}
 
 export const GenerateCommand = {
   command: "generate",
+  describe: false,
   builder: (yargs) => yargs,
   handler: async () => {
     const { Server } = await import("../../server/server")

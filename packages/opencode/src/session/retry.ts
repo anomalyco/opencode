@@ -7,7 +7,7 @@ import { isRecord } from "@/util/record"
 
 export type Err = ReturnType<NamedError["toObject"]>
 
-export const GO_UPSELL_MESSAGE = "Free usage limit reached for this provider"
+export const PROVIDER_LIMIT_MESSAGE = "Free usage limit reached for this provider"
 export type RetryReason = "free_tier_limit" | "account_rate_limit" | (string & {})
 
 export type Retryable = {
@@ -89,12 +89,13 @@ export function retryable(error: Err, provider: string) {
       return undefined
     if (error.data.responseBody?.includes("FreeUsageLimitError")) {
       return {
-        message: GO_UPSELL_MESSAGE,
+        message: PROVIDER_LIMIT_MESSAGE,
         action: {
           reason: "free_tier_limit",
           provider,
           title: "Free limit reached",
-          message: "This provider's free tier is exhausted. Connect another provider (/connect) or use your own API keys.",
+          message:
+            "This provider's free tier is exhausted. Connect another provider (/connect) or use your own API keys.",
           label: "dismiss",
         },
       }

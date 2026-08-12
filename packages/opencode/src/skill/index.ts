@@ -25,15 +25,14 @@ const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
 const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
 const SKILL_PATTERN = "**/SKILL.md"
 
-// Built-in skill that ships with opencode. The model's intuition for what an
-// opencode.json should look like is often wrong, and opencode hard-fails on
-// invalid config, so users hit cryptic startup errors. Loading this skill
-// when the model is asked to touch opencode's own config files gives it the
-// actual schemas instead of guesses.
-const CUSTOMIZE_OPENCODE_SKILL_NAME = "customize-opencode"
-const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
-  "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
-const CUSTOMIZE_OPENCODE_SKILL_BODY = SkillPlugin.CustomizeOpencodeContent
+// Built-in skill that ships with moks. The model's intuition for moks config
+// (recruit, .moks/, decision verbs, Ashby edge) is often wrong, and invalid
+// config hard-fails at startup. Loading this skill when the model is asked to
+// touch moks config gives product-correct shapes instead of coding-agent guesses.
+const CUSTOMIZE_MOKS_SKILL_NAME = "customize-moks"
+const CUSTOMIZE_MOKS_SKILL_DESCRIPTION =
+  "Use ONLY when the user is editing or creating moks configuration: moks.json, opencode.json dual-load paths, files under .moks/, .opencode/, or global moks/opencode config. Also use when creating or fixing recruit/plan agents, hiring skills, decision verbs (commit/status/push), Ashby MCP edge, permissions, plugins, or MCP servers. Do not use for the user's own application code, or for any project that is not configuring moks."
+const CUSTOMIZE_MOKS_SKILL_BODY = SkillPlugin.CustomizeMoksContent
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -276,11 +275,11 @@ const layer = Layer.effect(
         const s: State = { skills: {}, dirs: new Set() }
         // Register the built-in skill BEFORE disk discovery so a user-disk
         // skill with the same name can override it.
-        s.skills[CUSTOMIZE_OPENCODE_SKILL_NAME] = {
-          name: CUSTOMIZE_OPENCODE_SKILL_NAME,
-          description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
+        s.skills[CUSTOMIZE_MOKS_SKILL_NAME] = {
+          name: CUSTOMIZE_MOKS_SKILL_NAME,
+          description: CUSTOMIZE_MOKS_SKILL_DESCRIPTION,
           location: "<built-in>",
-          content: CUSTOMIZE_OPENCODE_SKILL_BODY,
+          content: CUSTOMIZE_MOKS_SKILL_BODY,
         }
         for (const item of HiringSkills) {
           s.skills[item.name] = {

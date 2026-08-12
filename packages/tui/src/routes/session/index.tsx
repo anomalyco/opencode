@@ -85,30 +85,32 @@ import { LocationProvider } from "../../context/location"
 
 addDefaultParsers(parsers.parsers)
 
-const GO_UPSELL_FREE_TIER_LAST_SEEN_AT = "go_upsell_last_seen_at"
-const GO_UPSELL_FREE_TIER_DONT_SHOW = "go_upsell_dont_show"
-const GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT = "go_upsell_account_rate_limit_last_seen_at"
-const GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW = "go_upsell_account_rate_limit_dont_show"
-const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
-const GO_UPSELL_PROVIDERS = new Set(["opencode", "opencode-go"])
+// KV key string values kept for existing "don't show again" prefs across upgrades
+const PROVIDER_LIMIT_FREE_TIER_LAST_SEEN_AT = "go_upsell_last_seen_at"
+const PROVIDER_LIMIT_FREE_TIER_DONT_SHOW = "go_upsell_dont_show"
+const PROVIDER_LIMIT_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT = "go_upsell_account_rate_limit_last_seen_at"
+const PROVIDER_LIMIT_ACCOUNT_RATE_LIMIT_DONT_SHOW = "go_upsell_account_rate_limit_dont_show"
+const PROVIDER_LIMIT_WINDOW = 86_400_000 // 24 hrs
+// Hosted OpenCode providers can surface free-tier / account rate-limit actions
+const PROVIDER_LIMIT_PROVIDERS = new Set(["opencode", "opencode-go"])
 
 export const alwaysSeparate = new WeakSet<BoxRenderable>()
 
 type RetryAction = Extract<SessionStatus, { type: "retry" }>["action"]
 
-function goUpsellKeys(action: RetryAction) {
+function providerLimitKeys(action: RetryAction) {
   if (!action) return
-  if (!GO_UPSELL_PROVIDERS.has(action.provider)) return
+  if (!PROVIDER_LIMIT_PROVIDERS.has(action.provider)) return
   if (action.reason === "free_tier_limit") {
     return {
-      lastSeenAt: GO_UPSELL_FREE_TIER_LAST_SEEN_AT,
-      dontShow: GO_UPSELL_FREE_TIER_DONT_SHOW,
+      lastSeenAt: PROVIDER_LIMIT_FREE_TIER_LAST_SEEN_AT,
+      dontShow: PROVIDER_LIMIT_FREE_TIER_DONT_SHOW,
     }
   }
   if (action.reason === "account_rate_limit") {
     return {
-      lastSeenAt: GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT,
-      dontShow: GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW,
+      lastSeenAt: PROVIDER_LIMIT_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT,
+      dontShow: PROVIDER_LIMIT_ACCOUNT_RATE_LIMIT_DONT_SHOW,
     }
   }
 }
@@ -361,11 +363,11 @@ export function Session() {
     if (!evt.properties.status.action) return
     if (dialog.stack.length > 0) return
 
-    const keys = goUpsellKeys(evt.properties.status.action)
+    const keys = providerLimitKeys(evt.properties.status.action)
     if (!keys) return
 
     const seen = kv.get(keys.lastSeenAt)
-    if (typeof seen === "number" && Date.now() - seen < GO_UPSELL_WINDOW) return
+    if (typeof seen === "number" && Date.now() - seen < PROVIDER_LIMIT_WINDOW) return
 
     if (kv.get(keys.dontShow)) return
 

@@ -12,17 +12,19 @@ const TRUNCATION_GLOB = path.join(Global.Path.data, "tool-output", "*")
 const BUILD_SYSTEM =
   "You are an AI coding agent. Help the user accomplish software engineering tasks by inspecting the workspace, making targeted changes, and using tools according to the configured permissions."
 
-const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
+const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring req materials, fixture trees, notes, and related local files.
 
 Your strengths:
 - Rapidly finding files using glob patterns
-- Searching code and text with powerful regex patterns
-- Reading and analyzing file contents
+- Searching text and notes with powerful regex patterns
+- Reading and analyzing file contents (JD, scorecard, resumes, ATS dumps, fixtures)
 
 Guidelines:
 - Use Glob for broad file pattern matching
 - Use Grep for searching file contents with regex
 - Use Read when you know the specific file path you need to read
+- Use Bash for file operations like listing directory contents (read-only)
+- Use webfetch for public company or candidate pages when relevant
 - Adapt your search approach based on the thoroughness level specified by the caller
 - Return file paths as absolute paths in your final response
 - For clear communication, avoid using emojis
@@ -30,7 +32,18 @@ Guidelines:
 
 Complete the user's search request efficiently and report your findings clearly.`
 
-const PROMPT_COMPACTION = `You are an anchored context summarization assistant for coding sessions.
+const PROMPT_GENERAL = `You are a general-purpose subagent for multi-step research and execution.
+
+Help the parent agent complete delegated work using tools and the workspace. Stay domain-neutral: do not assume you are a software engineer or that the task is about code unless the request clearly says so.
+
+Guidelines:
+- Follow the delegated task closely; prefer evidence from files and tools over speculation
+- When materials look like hiring work (JD, scorecard, resumes, notes, dispositions), use that vocabulary
+- Do not invent ATS state or silently write external systems
+- Prefer concise, actionable results the parent can use immediately
+- Avoid emojis`
+
+const PROMPT_COMPACTION = `You are an anchored context summarization assistant for session history.
 
 Summarize only the conversation history you are given. The newest turns may be kept verbatim outside your summary, so focus on the older context that still matters for continuing the work.
 
@@ -49,7 +62,7 @@ Follow all rules in <rules>
 Use the <examples> so you know what a good title looks like.
 Your output must be:
 - A single line
-- <=50 characters
+- ≤50 characters
 - No explanations
 </task>
 
@@ -60,7 +73,7 @@ Your output must be:
 - Focus on the main topic or question the user needs to retrieve
 - Vary your phrasing - avoid repetitive patterns like always starting with "Analyzing"
 - When a file is mentioned, focus on WHAT the user wants to do WITH the file, not just that they shared it
-- Keep exact: technical terms, numbers, filenames, HTTP codes
+- Keep exact: technical terms, numbers, filenames, candidate names, role titles
 - Remove: the, this, my, a, an
 - Never assume tech stack
 - Never use tools
@@ -69,33 +82,33 @@ Your output must be:
 - DO NOT SAY YOU CANNOT GENERATE A TITLE OR COMPLAIN ABOUT THE INPUT
 - Always output something meaningful, even if the input is minimal.
 - If the user message is short or conversational (e.g. "hello", "lol", "what's up", "hey"):
-  -> create a title that reflects the user's tone or intent (such as Greeting, Quick check-in, Light chat, Intro message, etc.)
+  → create a title that reflects the user's tone or intent (such as Greeting, Quick check-in, Light chat, Intro message, etc.)
 </rules>
 
 <examples>
-"debug 500 errors in production" -> Debugging production 500 errors
-"refactor user service" -> Refactoring user service
-"why is app.js failing" -> app.js failure investigation
-"implement rate limiting" -> Rate limiting implementation
-"how do I connect postgres to my API" -> Postgres API connection
-"best practices for React hooks" -> React hooks best practices
-"@src/credential.ts can you add refresh token support" -> Credential refresh token support
-"@utils/parser.ts this is broken" -> Parser bug fix
-"look at @config.json" -> Config review
-"@App.tsx add dark mode toggle" -> Dark mode toggle in App
+"score Jordan Lee for SWE II" → Score Jordan Lee for SWE II
+"draft outreach for Northline candidate" → Outreach draft — Northline
+"compare resumes against the scorecard" → Scorecard resume comparison
+"commit reject for candidate 4821" → Reject disposition commit
+"what's missing from this req brief" → Req brief gap check
+"debug 500 errors in production" → Debugging production 500 errors
+"refactor user service" → Refactoring user service
+"look at @scorecard.md" → Scorecard review
+"@resume.md score against JD" → Resume vs JD score
+"how do I connect postgres to my API" → Postgres API connection
 </examples>`
 
-const PROMPT_SUMMARY = `Summarize what was done in this conversation. Write like a pull request description.
+const PROMPT_SUMMARY = `Summarize what was done in this conversation. Write like a hiring session brief — what was scored, drafted, committed, or decided — or a neutral session brief when the work is not hiring-specific.
 
 Rules:
 - 2-3 sentences max
-- Describe the changes made, not the process
+- Describe outcomes and artifacts produced, not the process
 - Do not mention running tests, builds, or other validation steps
 - Do not explain what the user asked for
-- Write in first person (I added..., I fixed...)
+- Write in first person (I scored..., I drafted..., I recommended...)
 - Never ask questions or add new questions
 - If the conversation ends with an unanswered question to the user, preserve that exact question
-- If the conversation ends with an imperative statement or request to the user (e.g. "Now please run the command and paste the console output"), always include that exact request in the summary`
+- If the conversation ends with an imperative statement or request to the user (e.g. "Now please run moks status and paste the output"), always include that exact request in the summary`
 
 export const Plugin = define({
   id: "agent",
@@ -155,14 +168,15 @@ export const Plugin = define({
 
       draft.update(AgentV2.ID.make("general"), (item) => {
         item.description =
-          "General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel."
+          "General-purpose agent for multi-step research and execution. Use for parallel units of work that are not specialized file recon — domain-neutral, not a coding agent by default."
+        item.system = PROMPT_GENERAL
         item.mode = "subagent"
         item.permissions.push(...PermissionV2.merge(defaults, [{ action: "todowrite", resource: "*", effect: "deny" }]))
       })
 
       draft.update(AgentV2.ID.make("explore"), (item) => {
         item.description =
-          'Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.'
+          'Fast agent specialized for exploring hiring materials and local files. Use this when you need to quickly find files by patterns (eg. "**/jd.md", "**/scorecard*"), search notes for keywords (eg. "must-have", "comp range"), or answer questions about req trees, fixtures, ATS dumps, and public company/candidate pages. When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.'
         item.system = PROMPT_EXPLORE
         item.mode = "subagent"
         item.permissions.push(

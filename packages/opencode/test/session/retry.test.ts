@@ -312,7 +312,7 @@ describe("session.retry.retryable", () => {
     )
 
     expect(SessionRetry.retryable(error, "opencode")).toEqual({
-      message: SessionRetry.GO_UPSELL_MESSAGE,
+      message: SessionRetry.PROVIDER_LIMIT_MESSAGE,
       action: {
         reason: "free_tier_limit",
         provider: "opencode",

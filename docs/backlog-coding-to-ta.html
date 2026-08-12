@@ -650,15 +650,15 @@
     <div class="status-grid">
       <div class="stat done">
         <div class="n">Done</div>
-        <div class="l">Cast + plan mode already hiring-native (recruit doer, plan → execute hiring)</div>
+        <div class="l">Cast + plan + helpers hiring-native (recruit, explore, general, titles)</div>
       </div>
       <div class="stat done">
         <div class="n">Shipped</div>
-        <div class="l">Init / review / Diff / LSP hide / path-scoped edit / commit·push verbs</div>
+        <div class="l">Init / review / Diff / LSP / customize-moks / hide GH·console / neutral CTAs</div>
       </div>
       <div class="stat next">
         <div class="n">Next</div>
-        <div class="l">Stop subagents from sounding like coding bots; then onboarding tips</div>
+        <div class="l">First-run tips + moks identity paths (P2)</div>
       </div>
     </div>
   </section>
@@ -765,25 +765,47 @@
     </div>
   </article>
 
-  <!-- OPEN -->
-  <div class="band" id="open">
-    <h2>Still open — needs build work (direction clear)</h2>
-    <p>These don’t need a new philosophy debate; they need implementation or a small remaining product choice.</p>
-  </div>
-
-  <article class="decision">
+  <article class="decision locked done">
     <div class="decision-head">
       <div>
-        <h3>Research helpers still talk like codebase bots</h3>
-        <p class="plain">When Recruit asks a helper to “explore,” instructions still say “search the codebase.” They should say “search req materials, notes, and fixtures.”</p>
+        <h3>Research helpers explore req materials, not codebases</h3>
+        <p class="plain">Explore + general subagents use hiring / domain-neutral language. Mid-loop no longer snaps back to “search the codebase.”</p>
       </div>
       <div class="badges">
-        <span class="badge open">Open</span>
-        <span class="badge port">Next up</span>
+        <span class="badge done">Shipped</span>
       </div>
     </div>
-    <div class="decision-foot"><b>Why it matters:</b> Mid-loop, the product snaps back into sounding like a coding agent.</div>
   </article>
+
+  <article class="decision locked done">
+    <div class="decision-head">
+      <div>
+        <h3>Auto titles &amp; summaries read like hiring briefs</h3>
+        <p class="plain">Session names and recaps: “Scored Jordan for SWE II,” not PR bots. Compaction is domain-neutral session history.</p>
+      </div>
+      <div class="badges">
+        <span class="badge done">Shipped</span>
+      </div>
+    </div>
+  </article>
+
+  <article class="decision locked done">
+    <div class="decision-head">
+      <div>
+        <h3>Help menus no longer feature GitHub coding / OpenCode Go</h3>
+        <p class="plain">CLI hides github / pr / generate / console from root help. Provider limits say connect another provider — not OpenCode commercial as moks.</p>
+      </div>
+      <div class="badges">
+        <span class="badge done">Shipped</span>
+      </div>
+    </div>
+  </article>
+
+  <!-- OPEN -->
+  <div class="band" id="open">
+    <h2>Still open — P2 first impression + identity</h2>
+    <p>Helpers and front doors shipped. Remaining work is onboarding polish and path/config identity.</p>
+  </div>
 
   <article class="decision">
     <div class="decision-head">
@@ -793,33 +815,10 @@
       </div>
       <div class="badges">
         <span class="badge open">Open</span>
+        <span class="badge port">Next up · P2</span>
       </div>
     </div>
-  </article>
-
-  <article class="decision">
-    <div class="decision-head">
-      <div>
-        <h3>Auto titles &amp; summaries sound like pull requests</h3>
-        <p class="plain">Session names and recaps should read like hiring briefs (“Scored Jordan for SWE II”), not PR bots.</p>
-      </div>
-      <div class="badges">
-        <span class="badge open">Open</span>
-      </div>
-    </div>
-  </article>
-
-  <article class="decision">
-    <div class="decision-head">
-      <div>
-        <h3>Help menus still advertise GitHub coding features</h3>
-        <p class="plain">CLI help and upsells should not feature GitHub agent install or OpenCode commercial as if they <em>are</em> moks. Hide or relabel for TA users.</p>
-      </div>
-      <div class="badges">
-        <span class="badge open">Open</span>
-        <span class="badge hide">Hide from TA</span>
-      </div>
-    </div>
+    <div class="decision-foot"><b>Deferred:</b> saved for the identity / first-impression wave (not blocking helpers).</div>
   </article>
 
   <article class="decision">
@@ -849,17 +848,17 @@
         <div class="top"><span class="name">Dictionary + ship</span><span class="st">Done</span></div>
         <p>Init / review / Diff / LSP hide / path-scoped edit / commit·push verbs</p>
       </div>
+      <div class="wave done">
+        <div class="top"><span class="name">Helpers stop coding</span><span class="st">Done</span></div>
+        <p>Explore + general + titles/summaries use hiring / neutral language</p>
+      </div>
+      <div class="wave done">
+        <div class="top"><span class="name">Front doors remainder</span><span class="st">Done</span></div>
+        <p>customize-moks · hide GitHub/console/generate · neutral provider CTAs</p>
+      </div>
       <div class="wave next">
-        <div class="top"><span class="name">Helpers stop coding</span><span class="st">Next</span></div>
-        <p>Explore + general subagents use hiring language</p>
-      </div>
-      <div class="wave">
-        <div class="top"><span class="name">First impression</span><span class="st">Open</span></div>
-        <p>Tips, titles, summaries feel like a hiring workplace</p>
-      </div>
-      <div class="wave">
-        <div class="top"><span class="name">Front doors remainder</span><span class="st">Open</span></div>
-        <p>Customize skill · quiet GitHub/console upsells · neutral provider CTAs</p>
+        <div class="top"><span class="name">First impression</span><span class="st">Next · P2</span></div>
+        <p>Empty-state tips feel like a hiring workplace (open a req, score, commit, push)</p>
       </div>
       <div class="wave">
         <div class="top"><span class="name">Identity</span><span class="st">Later</span></div>
@@ -923,11 +922,18 @@
           <div class="d">Path-scoped permissions.</div>
         </div>
       </li>
+      <li class="yes">
+        <span class="mark">✓</span>
+        <div>
+          <div class="t">Subagents + titles no longer teach coding</div>
+          <div class="d">Explore, general, compaction/summary/title shipped hiring-native or neutral.</div>
+        </div>
+      </li>
       <li class="soon">
         <span class="mark">·</span>
         <div>
-          <div class="t">Subagents + tips + titles no longer teach coding</div>
-          <div class="d">Next implementation waves.</div>
+          <div class="t">First-run tips still teach coding (BL-003)</div>
+          <div class="d">Deferred to P2 with identity work.</div>
         </div>
       </li>
       <li class="soon">

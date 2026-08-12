@@ -12,6 +12,7 @@ import { ProviderTransform } from "@/provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_GENERAL from "./prompt/general.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import PROMPT_RECRUIT from "@/product/agents/recruit.txt"
@@ -152,6 +153,8 @@ const layer = Layer.effect(
               Permission.fromConfig({
                 question: "allow",
                 plan_enter: "allow",
+                // Coding-analysis tool; not useful on hiring loops (BL-014).
+                lsp: "deny",
                 ...ashbyPermissionDefaults(),
                 // Path-scoped edits: free under .moks/ + ship hiring fixtures; ask elsewhere.
                 // `edit` also gates write and apply_patch. Wildcard `*` matches nested path segments.
@@ -227,7 +230,8 @@ const layer = Layer.effect(
           },
           general: {
             name: "general",
-            description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
+            description: `General-purpose agent for multi-step research and execution. Use for parallel units of work that are not specialized file recon — domain-neutral, not a coding agent by default.`,
+            prompt: PROMPT_GENERAL,
             permission: Permission.merge(
               defaults,
               Permission.fromConfig({
@@ -256,7 +260,7 @@ const layer = Layer.effect(
               }),
               user,
             ),
-            description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
+            description: `Fast agent specialized for exploring hiring materials and local files. Use this when you need to quickly find files by patterns (eg. "**/jd.md", "**/scorecard*"), search notes for keywords (eg. "must-have", "comp range"), or answer questions about req trees, fixtures, ATS dumps, and public company/candidate pages. When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
             prompt: PROMPT_EXPLORE,
             options: {},
             mode: "subagent",

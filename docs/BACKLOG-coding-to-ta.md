@@ -99,11 +99,11 @@ system = [ agent.prompt ?? SystemPrompt.provider(model), ...env/skills, ... ]
 | **recruit** | Yes — `product/agents/recruit.txt` | Hiring (correct); product default doer |
 | **build** | No | Provider SE prompts — coding; **hidden** unless `default_agent: build` / `--agent build` |
 | **plan** | No custom agent.prompt; **hiring** reminders injected | `plan-mode.txt` / `plan.txt` are hiring strategy (done G3) |
-| **general** | No | Provider SE prompts → **spawns as coding agent** (open) |
-| **explore** | Yes — `agent/prompt/explore.txt` | Still codebase-flavored (open BL-005) |
-| **compaction / title / summary** | Yes | Coding/PR-flavored copy (open BL-006) |
+| **general** | Yes — `agent/prompt/general.txt` | Domain-neutral multi-step worker (done BL-016) |
+| **explore** | Yes — `agent/prompt/explore.txt` | Req materials / fixtures / notes (done BL-005) |
+| **compaction / title / summary** | Yes | Session-history / hiring brief / mixed titles (done BL-006) |
 
-**Port implication:** doer + plan exit/copy are hiring-native. Explore, general, and hidden summarizers still reintroduce coding semantics mid-loop.
+**Port implication:** doer + plan exit/copy + subagents + hidden summarizers are hiring-native or domain-neutral. Residual coding pedagogy is onboarding tips (BL-003) and identity paths (P2).
 
 ### Plan mode machinery (shipped G3 — keep; do not rebuild)
 
@@ -149,7 +149,8 @@ system = [ agent.prompt ?? SystemPrompt.provider(model), ...env/skills, ... ]
 - **Domain ontology:** req = repo; ATS = GitHub/remote; `.moks/` = local working tree; diff = local candidate/req changes; **`moks commit` / `moks push`** (git metaphor); `/init` = new req; `/review` = packet review skill (not git/PR).
 - **LSP:** not a TA product surface (defaults off; chrome hidden when off; code kept for `build`).
 - **Diff:** keep and lean into — real-time visibility of local hiring deltas (like code changes).
-- **Shipped 2026-08-11 (this wave):** BL-004, BL-007, BL-008, BL-013, BL-015 + verb rename propose→**commit**, apply→**push**.
+- **Shipped 2026-08-11 (dictionary wave):** BL-004, BL-007, BL-008, BL-013, BL-015 + verb rename propose→**commit**, apply→**push**.
+- **Shipped 2026-08-11 (helpers + front doors):** BL-005, BL-006, BL-009, BL-010, BL-011, BL-012, BL-014, BL-016. **Deferred to P2:** BL-003 home tips (first impression).
 
 ---
 
@@ -228,7 +229,7 @@ Default product path post-exit agent is `recruit` with hiring execute language. 
 ### Residual
 
 - Dead/unused `plan-reminder-anthropic.txt` still has coding copy (not imported on V1 path) — optional cleanup
-- Explore subagent prompt still codebase-flavored (BL-005) — can still bias parallel research from plan
+- Explore prompt ported (BL-005 done) — plan parallel research stays hiring-oriented
 
 ### Acceptance (met)
 
@@ -241,9 +242,9 @@ Default plan mode reads as **req strategy**, not implementation design.
 | | |
 |--|--|
 | **Action** | PORT |
-| **Priority** | P0 (W1) |
-| **Decision** | ☐ GO (still open — not this ship) |
-| **Rec** | **GO** |
+| **Priority** | **P2** (first impression — deferred after helpers/front doors) |
+| **Decision** | ☐ GO (deferred 2026-08-11; ship after P0/P1 helpers wave) |
+| **Rec** | **GO** when scheduled |
 
 ### Current (implementation)
 
@@ -355,47 +356,19 @@ Default product install (no `lsp` config) shows **no LSP chrome**. Diff/Modified
 
 | | |
 |--|--|
-| **Action** | PORT (prompt + description) |
+| **Action** | PORT (prompt + description) → **DONE** |
 | **Priority** | P0 |
-| **Decision** | ☐ GO |
-| **Rec** | **GO** |
+| **Decision** | ☑ GO (shipped) |
+| **Rec** | **GO** — shipped |
 
-### Current (implementation)
+### Shipped (implementation)
 
-| Layer | Content |
-|-------|---------|
-| Description (`agent/agent.ts`) | “exploring **codebases**”, examples `*.tsx`, “API endpoints”, “how do API endpoints work?” |
-| Prompt (`agent/prompt/explore.txt`) | “file search specialist… navigating and exploring **codebases**” |
-| Permissions | Read-only tool allowlist: grep/glob/list/bash/webfetch/websearch/read — **already domain-agnostic** |
-| V2 twin | Same copy in `packages/core/src/plugin/agent.ts` |
+1. Description (`agent/agent.ts`): hiring materials / local files; examples `**/jd.md`, scorecard, must-have, comp range, req trees / fixtures / ATS dumps / public pages; thoroughness levels kept
+2. Prompt (`agent/prompt/explore.txt`): file-search specialist for **req/fixture trees and notes** — not codebases
+3. V2 twin (`packages/core/src/plugin/agent.ts`): same description + PROMPT_EXPLORE
+4. Permissions unchanged (read-only search allowlist)
 
-### Coding intent
-
-Fast parallel codebase reconnaissance for implementation planning.
-
-### Correct port
-
-| Keep | Change |
-|------|--------|
-| Tool permissions (read-only search) | Description + system prompt |
-| Thoroughness levels (quick/medium/very thorough) | Domain: **hiring materials & local files** |
-
-**New description intent:**  
-“Explore hiring materials and local files — JD, scorecard, notes, fixtures, ATS dumps, public company/candidate pages. Use when finding evidence across req folders or attached resumes.”
-
-**Prompt:** file-search specialist for **req/fixture trees and notes**, not “codebases / implementations.”
-
-### Wrong-port risks
-
-- Restricting tools further “for safety” → breaks web research for companies.
-- Renaming agent to `research` without prompt change → same codebase behavior.
-- Forcing explore to only `.moks/` → can’t read user-attached paths outside.
-
-### Touches
-
-`agent/agent.ts`, `agent/prompt/explore.txt`, task-tool description if it hardcodes coding explore; V2 plugin when relevant
-
-### Acceptance
+### Acceptance (met)
 
 Spawning explore from `recruit` never instructs “search the codebase for implementations.”
 
@@ -405,45 +378,22 @@ Spawning explore from `recruit` never instructs “search the codebase for imple
 
 | | |
 |--|--|
-| **Action** | PORT |
-| **Priority** | P0 (W1) |
-| **Decision** | ☐ GO |
-| **Rec** | **GO** |
+| **Action** | PORT → **DONE** |
+| **Priority** | P0 |
+| **Decision** | ☑ GO (shipped) |
+| **Rec** | **GO** — shipped |
 
-### Current (implementation)
+### Shipped (implementation)
 
-| Agent | File | Coding bias |
-|-------|------|-------------|
-| compaction | `agent/prompt/compaction.txt` | “summarization assistant for **coding sessions**” |
-| summary | `agent/prompt/summary.txt` | “Write like a **pull request description**”; “changes made” |
-| title | `agent/prompt/title.txt` | Examples: debug 500s, refactor service, React hooks, dark mode |
+| Agent | Change |
+|-------|--------|
+| compaction | “coding sessions” → domain-neutral **session history** |
+| summary | Not PR copy → **hiring / neutral session brief** (scored, drafted, committed) |
+| title | Mixed hiring + generic examples (e.g. Score Jordan Lee for SWE II, Outreach draft — Northline) |
 
-Same strings duplicated in V2 `packages/core/src/plugin/agent.ts`.
+V1 `.txt` files and V2 `PROMPT_*` in `packages/core/src/plugin/agent.ts` stay in sync.
 
-### Coding intent
-
-Session UX helpers tuned for SE work products (PR summaries, code task titles).
-
-### Correct port
-
-| Helper | OpenCode | TA / neutral |
-|--------|----------|--------------|
-| compaction | coding sessions | **session history** (domain-neutral is OK) |
-| summary | PR description | **hiring session brief** (what was scored, drafted, proposed) — *not* “PR” |
-| title examples | SE tasks | Mix: “Score Jordan Lee for SWE II”, “Outreach draft — Northline”, keep some generic |
-
-**Keep:** hidden agents, no tools, short outputs, language-matching rules.
-
-### Wrong-port risks
-
-- Over-specific TA-only titles when user is on `build` dogfooding → prefer **neutral + mixed examples**.
-- Changing structure/format of compaction sections the runner expects.
-
-### Touches
-
-`packages/opencode/src/agent/prompt/{compaction,summary,title}.txt` (+ V2 copies when shipping V2)
-
-### Acceptance
+### Acceptance (met)
 
 Auto titles/summaries on `recruit` sessions don’t sound like PR bots.
 
@@ -497,42 +447,20 @@ Default `/review` is **packet review**, not PR review.
 
 | | |
 |--|--|
-| **Action** | PORT |
+| **Action** | PORT → **DONE** |
 | **Priority** | P1 |
-| **Decision** | ☐ GO |
-| **Rec** | **GO** (content now; paths dual-load can trail identity work) |
+| **Decision** | ☑ GO (shipped) |
+| **Rec** | **GO** — shipped |
 
-### Current (implementation)
+### Shipped (implementation)
 
-- Name: `customize-opencode` (`skill/index.ts`)
-- Body: `packages/core/src/plugin/skill/customize-opencode.md`
-- Teaches: `opencode.json`, `.opencode/`, `~/.config/opencode`, schema `https://opencode.ai/config.json`, restart **opencode**
-- Registered before disk skills; user can override by name
+1. Skill id **`customize-moks`** in V1 (`skill/index.ts`) and V2 (`core/src/plugin/skill.ts`)
+2. Body: `packages/core/src/plugin/skill/customize-moks.md` (removed `customize-opencode.md`)
+3. Content: recruit default, `.moks/` workspace, hiring skills, commit/status/push, Ashby edge; honest dual-load notes for `opencode.json` / `.opencode/` today
+4. No opencode.ai as primary moks config authority
+5. Test: `packages/core/test/plugin/skill.test.ts`
 
-### Coding intent
-
-Self-serve configuration skill for the OpenCode product.
-
-### Correct port
-
-| From | To |
-|------|-----|
-| Skill id `customize-opencode` | **`customize-moks`** (optional alias for old name) |
-| Primary docs opencode.ai | moks workspace config, **`recruit` permissions**, Ashby edge, hiring skills layout |
-| Paths only `.opencode` / `opencode.json` | Document **`.moks/` + `moks.json`**, note dual-load with OpenCode names |
-
-**Keep:** skill-loader mechanism, built-in registration pattern.
-
-### Wrong-port risks
-
-- Rename only → content still sends users to opencode.ai as source of truth for *moks*.
-- Teaching only new paths before dual-load ships → broken advice.
-
-### Touches
-
-`skill/index.ts`, `core/src/plugin/skill/customize-opencode.md` (or new md)
-
-### Acceptance
+### Acceptance (met)
 
 Skill picker shows moks-oriented customize skill; content doesn’t make opencode.ai the primary moks config authority.
 
@@ -542,41 +470,18 @@ Skill picker shows moks-oriented customize skill; content doesn’t make opencod
 
 | | |
 |--|--|
-| **Action** | DROP from TA help/GTM |
+| **Action** | HIDE from TA help → **DONE** |
 | **Priority** | P1 |
-| **Decision** | ☐ HIDE from help &nbsp; ☐ delete commands |
-| **Rec** | **HIDE** — keep code |
+| **Decision** | ☑ HIDE from help (keep code) |
+| **Rec** | **HIDE** — shipped |
 
-### Current (implementation)
+### Shipped (implementation)
 
-- Registered in `packages/opencode/src/index.ts`: `GithubCommand`, `PrCommand`
-- GitHub Actions coding-agent install + PR checkout workflows
-- Deep links to opencode.ai docs / api.opencode.ai
+- `GithubCommand` / `PrCommand`: `describe: false` (yargs hides from root help)
+- Still registered in `index.ts`; callable for contributor dogfood
+- Ontology: GitHub stays SWE remote — not ported to “GitHub recruiting”
 
-### Coding intent
-
-Ship OpenCode as a GitHub-native coding agent.
-
-### Correct port
-
-| From | To |
-|------|-----|
-| Featured in `moks --help` / GTM | **Unlisted** for TA install |
-| Code | **Keep** for contributor dogfood |
-| Docs | “Contributor” only, not eng-TA |
-
-**Ontology note:** GitHub is the *SWE* remote. Our remote is the **ATS**. Do not PORT these commands into “GitHub recruiting.”
-
-### Wrong-port risks
-
-- Deleting handlers while monorepo still uses them → pain.
-- PORT to “GitHub recruiting” — out of scope / wrong product.
-
-### Touches
-
-`index.ts` registration / help grouping, README
-
-### Acceptance
+### Acceptance (met)
 
 TA-facing help does not feature GitHub coding agent.
 
@@ -586,31 +491,18 @@ TA-facing help does not feature GitHub coding agent.
 
 | | |
 |--|--|
-| **Action** | DROP from TA help |
+| **Action** | HIDE from TA help → **DONE** |
 | **Priority** | P1 |
-| **Decision** | ☐ HIDE |
-| **Rec** | **HIDE** |
+| **Decision** | ☑ HIDE |
+| **Rec** | **HIDE** — shipped |
 
-### Current (implementation)
+### Shipped (implementation)
 
-- `GenerateCommand` — OpenAPI sample generator
-- `ConsoleCommand` / account — `defaultConsoleUrl = https://console.opencode.ai`
-- Both registered on root CLI
+- `GenerateCommand`: `describe: false`
+- `ConsoleCommand`: already `describe: false` (unchanged)
+- Both still registered and runnable
 
-### Coding intent
-
-SDK/console ecosystem for OpenCode cloud/org.
-
-### Correct port
-
-Hide or mark dev-only. No console.opencode.ai as **moks identity**.  
-TA help list: run / TUI / verbs / MCP / providers / session.
-
-### Touches
-
-`cli/cmd/generate.ts`, `cli/cmd/account.ts`, help presentation
-
-### Acceptance
+### Acceptance (met)
 
 TA-facing help is not SDK generate or upstream console.
 
@@ -620,44 +512,23 @@ TA-facing help is not SDK generate or upstream console.
 
 | | |
 |--|--|
-| **Action** | PORT (copy + CTAs) |
+| **Action** | PORT (copy + CTAs) → **DONE** |
 | **Priority** | P1 |
-| **Decision** | ☐ GO |
-| **Rec** | **GO** |
+| **Decision** | ☑ GO (shipped) |
+| **Rec** | **GO** — shipped |
 
-### Current (implementation)
+### Shipped (implementation)
 
-| Location | Behavior |
-|----------|----------|
-| `tui/.../dialog-retry-action.tsx` | `GO_URL = https://opencode.ai/go` |
-| `tui/.../session/index.tsx` | Go upsell free-tier / rate-limit KV keys |
-| `cli/cmd/providers.ts` | Links to opencode.ai/auth, docs |
-| `cli/cmd/account.ts` | console.opencode.ai |
-| Config writes | `$schema: https://opencode.ai/config.json` |
+| Location | Change |
+|----------|--------|
+| `dialog-retry-action.tsx` | Removed `GO_URL` / OpenCode Go special treatment; neutral dialog |
+| `session/index.tsx` | Provider-limit naming; KV string keys kept for prefs |
+| `session/retry.ts` | `PROVIDER_LIMIT_MESSAGE`; free/rate-limit actions dismiss + connect another provider (no Go link) |
+| `cli/cmd/providers.ts` | OpenCode auth framed as **optional third-party** hosted provider |
 
-### Coding intent
+**Keep residual:** multi-provider machinery; `console.opencode.ai` URL for hidden console command; schema URL identity deferred to BL-018/024.
 
-Monetize / onboard onto OpenCode’s hosted models and console.
-
-### Correct port
-
-| From | To |
-|------|-----|
-| Primary CTA OpenCode Go | **“Connect a provider”** (neutral) |
-| Free models via OpenCode as moks default identity | Optional backend, **labeled third-party** |
-| Failed auth → opencode.ai/go | Failed auth → provider setup for moks |
-
-**Keep:** multi-provider machinery; optional Zen/OpenCode backend as *one* choice.
-
-### Wrong-port risks
-
-- Shipping moks that funnels eng-TAs into OpenCode commercial as if moks *is* that product (affiliation + support liability).
-
-### Touches
-
-TUI upsell components, provider dialogs, CLI provider copy
-
-### Acceptance
+### Acceptance (met)
 
 Failed-auth / empty-provider UX does not push users into OpenCode Go *as moks*.
 
@@ -688,43 +559,22 @@ Fresh eng-TA install does not spawn language servers; no empty LSP chrome.
 
 | | |
 |--|--|
-| **Action** | HIDE for `recruit` |
+| **Action** | HIDE for `recruit` → **DONE** |
 | **Priority** | P1 |
-| **Decision** | ☐ GO |
-| **Rec** | **GO** |
+| **Decision** | ☑ GO (shipped) |
+| **Rec** | **GO** — shipped |
 
-### Current (implementation)
+### Shipped (implementation)
 
-`tool/registry.ts`:
+1. `recruit` permissions: `lsp: "deny"`
+2. `tool/registry.ts`: when `agent.name === "recruit"`, force edit/write (never prefer apply_patch); exclude LspTool even if experimental flag on
+3. **`build`** unchanged (gpt-* can still prefer apply_patch)
 
-- Full tool list includes edit/write/bash/… 
-- `apply_patch` (`patch`) participates in code-mode filtering with edit/write
-- `lsp` tool gated by `experimentalLspTool` flag but is a coding analysis tool
-- **No agent-specific stripping** for `recruit` beyond permissions
+### Residual
 
-### Coding intent
+Bash still broadly allow on recruit (decision verbs via shell) — not this card.
 
-Multi-file patch apply + IDE intelligence tools for SE agents.
-
-### Correct port
-
-| Agent | Tools |
-|-------|-------|
-| **`recruit`** | Prefer read / skill / bash(for verbs) / light edit-write for notes; **no LSP tool**; apply_patch not primary |
-| **`build`** | Full coding tool set |
-
-Implement via **agent permission / tool filter**, not deleting tools from registry.
-
-### Wrong-port risks
-
-- Global disable of apply_patch → `build` suffers.
-- Denying all edit on `recruit` without path exceptions → can’t draft notes (see BL-015).
-
-### Touches
-
-`tool/registry.ts` filtering, `agent/agent.ts` recruit permissions
-
-### Acceptance
+### Acceptance (met)
 
 `recruit` tool list does not include LSP; apply_patch is not the primary edit path.
 
@@ -756,7 +606,7 @@ defaults (*: allow, …)
 ### Residual
 
 - **Bash** still broadly allow (needed for `moks commit|status|push` via shell). Destructive bash patterns not yet ask/deny.
-- BL-014 tool prominence (hide LSP tool / demote apply_patch) still open.
+- BL-014 tool prominence **done** (lsp deny + no apply_patch prefer for recruit).
 
 ### Acceptance (edit path — met)
 
@@ -768,40 +618,19 @@ Note drafts under `.moks/` stay easy; edits outside ask first. Remote ATS still 
 
 | | |
 |--|--|
-| **Action** | PORT (light) |
+| **Action** | PORT (light) → **DONE** |
 | **Priority** | P1 |
-| **Decision** | ☐ Domain-neutral prompt &nbsp; ☐ Inherit parent persona |
-| **Rec** | **Domain-neutral prompt + optional parent-recruit hint** |
+| **Decision** | ☑ Domain-neutral prompt (shipped) |
+| **Rec** | **Domain-neutral** — shipped |
 
-### Current (implementation)
+### Shipped (implementation)
 
-- `general` in `agent/agent.ts`: description for multi-step tasks; **no `prompt` field**
-- Therefore `session/llm/request.ts` uses **`SystemPrompt.provider(model)`**
-- Provider prompts (`session/prompt/default.txt`, `anthropic.txt`, `codex.txt`, …) are explicitly **coding agents** (“helps users with software engineering tasks”, “best coding agent on the planet”)
-- Plan mode currently **denies** `task`→`general` (hiring plan path uses explore)
+1. V1: `prompt: PROMPT_GENERAL` from `agent/prompt/general.txt` — domain-neutral multi-step worker; light hiring vocabulary when materials look like hiring work
+2. Description no longer coding-biased
+3. V2 twin: `item.system = PROMPT_GENERAL` in `packages/core/src/plugin/agent.ts`
+4. Not a full copy of `recruit.txt`
 
-### Coding intent
-
-Parallel multi-step worker without a specialized niche.
-
-### Correct port
-
-| Approach | Effect |
-|----------|--------|
-| **A. Short domain-neutral system prompt on `general`** | Never auto-becomes “software engineer” |
-| **B. When parent session agent is `recruit`, inject hiring-safe addendum** | Subtasks stay in hiring vocabulary |
-| Avoid | Full duplicate of `recruit.txt` on every general spawn (heavy, may fight tools) |
-
-### Wrong-port risks
-
-- Leaving provider SE prompts → `task` from `recruit` **revives coding persona** mid-hiring loop.
-- Copying entire `recruit.txt` into general → confused permissions/skill assumptions.
-
-### Touches
-
-`agent/agent.ts`, possibly task tool / system assembly in `session/llm/request.ts`
-
-### Acceptance
+### Acceptance (met)
 
 `task` from `recruit` does not revive full coding persona mid-hiring loop.
 
@@ -1206,12 +1035,12 @@ Use this when reviewing any change:
 | **G3 Plan→execute** | BL-001, BL-002, BL-022 | **Done** |
 | **Ontology** | Req=repo; ATS=remote; commit/push; diff=local hiring deltas; init=new req; review=packet | **Done** (docs + ship) |
 | **Verbs** | `propose`/`apply` → **`commit`/`push`** | **Done** |
-| **G2 Chrome & defaults** | BL-004, BL-013 | **Done** (BL-014 open) |
-| **G5 Front doors** | BL-007, BL-008 | **Done** (BL-009–012 open) |
-| **G6 Guardrails** | BL-015 path-scoped edit | **Done** (bash residual; BL-014 open) |
-| **G4 Subagents** | BL-005 explore, BL-016 general | Open |
-| **G1 Session helpers** | BL-003 tips, BL-006 title/summary/compaction | Open |
-| **G7 Identity** | BL-018–021, BL-023–024 | Open |
+| **G2 Chrome & defaults** | BL-004, BL-013, BL-014 | **Done** |
+| **G5 Front doors** | BL-007–012 | **Done** (init/review + customize-moks + hide GH/console/generate + neutral CTAs) |
+| **G6 Guardrails** | BL-015 path-scoped edit | **Done** (bash residual only) |
+| **G4 Subagents** | BL-005 explore, BL-016 general | **Done** |
+| **G1 Session helpers** | BL-006 title/summary/compaction | **Done** (BL-003 tips deferred → P2) |
+| **G7 Identity + first impression** | BL-003 tips, BL-018–021, BL-023–024 | **Next** |
 | **G8 Later** | BL-017, BL-025–030 | Defer |
 
 ---
@@ -1223,12 +1052,12 @@ Use this when reviewing any change:
 | **Cast + G3** | recruit doer, BL-001/002/022, BL-027 hide | Plan→recruit hiring-native | **Done** |
 | **Ontology lock** | Thesis + cheat-sheet + 004/007/008/013/015 decisions | Shared SWE↔TA map | **Done (docs)** |
 | **Ontology ship** | BL-004/007/008/013/015 + verb rename commit/push | Front doors, chrome, guardrails | **Done** |
-| **G4 — Subagents** | BL-005, BL-016 | explore/general don’t pull back to coding | **Next** |
-| **G1 — Feel copy** | BL-003, BL-006 | Fresh session doesn’t teach IDE/PR | Open |
-| **G5 remainder** | BL-009–012 | customize skill; hide GH/console; neutral CTAs | Open |
-| **G6 residual** | BL-014 + bash patterns | tool filters; tighter shell | Open |
-| **G7 — Identity** | BL-018–021, BL-023; BL-024 copy | moks paths don’t fight installed OpenCode | Open |
-| **G8 — Later** | BL-017, BL-025–030 | Cosmetic, V2, hard-fork | Defer |
+| **G4 — Subagents** | BL-005, BL-016 | explore/general don’t pull back to coding | **Done** |
+| **G1 helpers** | BL-006 | Titles/summaries/compaction not PR bots | **Done** |
+| **G5 remainder** | BL-009–012 | customize-moks; hide GH/console/generate; neutral CTAs | **Done** |
+| **G6 residual** | BL-014 | recruit: no lsp; no apply_patch prefer | **Done** |
+| **G7 — Identity + tips** | BL-003, BL-018–021, BL-023; BL-024 copy | First impression + moks paths | **Next** |
+| **G8 — Later** | BL-017, BL-025–030; bash patterns | Cosmetic, V2, hard-fork, tighter shell | Defer / residual |
 
 ---
 
@@ -1253,7 +1082,7 @@ packages/opencode/src/index.ts
 packages/core/src/global.ts
 packages/core/src/agent.ts
 packages/core/src/plugin/agent.ts
-packages/core/src/plugin/skill/customize-opencode.md
+packages/core/src/plugin/skill/customize-moks.md
 packages/tui/src/feature-plugins/home/tips-view.tsx
 packages/tui/src/feature-plugins/system/diff-viewer*
 packages/tui/src/feature-plugins/sidebar/{files,lsp}.tsx
@@ -1278,12 +1107,18 @@ Mark when decided:
 - [x] **BL-008 shipped** — `/review` → packet review skill (not git/PR)
 - [x] **BL-013 shipped** — LSP/formatters defaults off; chrome gated
 - [x] **BL-015 shipped** — Path-scoped edit under `.moks/**` + fixtures (+ `.gitignore`)
+- [x] **BL-005 shipped** — explore prompt/description = hiring materials recon
+- [x] **BL-006 shipped** — compaction/summary/title not PR/coding-only
+- [x] **BL-016 shipped** — general domain-neutral system prompt
+- [x] **BL-009 shipped** — `customize-moks` skill
+- [x] **BL-010/011 shipped** — hide github/pr/generate from root help (console already hidden)
+- [x] **BL-012 shipped** — neutral provider-limit UX; no OpenCode Go as moks
+- [x] **BL-014 shipped** — recruit: lsp deny; no apply_patch prefer
 
 ### Open
-- [ ] **G4** — explore (BL-005) + general (BL-016) prompts
-- [ ] **G1** — tips (BL-003) + hidden prompts (BL-006)
-- [ ] **G5 remainder** — BL-009–012 (customize skill, hide GH/console, neutral CTAs)
-- [ ] **G6 residual** — BL-014 tool filters; bash path patterns for recruit
+- [ ] **BL-003** — home tips / first impression (deferred to **P2** with identity)
+- [ ] **G7 Identity** — BL-018–021, BL-023–024 (paths, env, instruction discovery, provider catalog copy)
+- [ ] **Bash residual** — tighter destructive patterns on recruit (not a numbered BL; residual of BL-015)
 - [ ] **BL-020** — Global dir migrate timing: now / after WAU / design-now-ship-mid (rec mid)
 - [ ] **BL-002 residual** — optional delete/port unused `plan-reminder-anthropic.txt`
 
@@ -1293,6 +1128,7 @@ Mark when decided:
 
 | Date | Note |
 |------|------|
+| 2026-08-11 | **Helpers + front doors:** BL-005/006/009/010/011/012/014/016 shipped; BL-003 tips deferred to P2; HTML companion synced |
 | 2026-08-11 | **Ontology ship:** BL-004/007/008/013/015 implemented; verbs `commit`/`push` (was propose/apply); skill `commit-disposition`; `/init-code` escape hatch; LSP chrome hidden when off |
 | 2026-08-11 | **Ontology lock:** thesis moks:TA::OpenCode:SWE; apply=push metaphor; `/init`=new req; `/review`=packet skill; keep Diff; LSP not TA; BL-007/008/004/013/015 decided; HTML companion |
 | 2026-08-11 | Docs sync: mark cast+G3 done; refresh Current/shipped; decision groups; HTML companion |
