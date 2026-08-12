@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { BoxRenderable, RGBA, type RootRenderable } from "@opentui/core"
+import { BoxRenderable, RGBA, TextRenderable, type RootRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import type { FormInfo } from "@opencode-ai/client/promise"
@@ -1612,6 +1612,35 @@ test("direct footer keeps complete status text ahead of the spinner", async () =
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("interrupt")
     expect(boxPath(footerStatusline(app.renderer.root), "SpinnerRenderable")).toBeUndefined()
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer renders armed interrupt confirmation with warning contrast", async () => {
+  const warning = RGBA.fromHex("#ffff00")
+  const app = await renderFooter({
+    theme: () => ({
+      ...RUN_THEME_FALLBACK,
+      footer: {
+        ...RUN_THEME_FALLBACK.footer,
+        highlight: RUN_THEME_FALLBACK.footer.status,
+        warning,
+      },
+    }),
+    state: { phase: "running", interrupt: 1 },
+  })
+
+  try {
+    await app.renderOnce()
+    const statusline = footerStatusline(app.renderer.root)
+    const text = boxPath(statusline, "TextRenderable")!
+      .at(-1)!
+      .getChildren()
+      .find((item): item is TextRenderable => item instanceof TextRenderable)!
+
+    expect(app.captureCharFrame()).toContain("esc again to interrupt")
+    expect(text.fg.toInts()).toEqual(warning.toInts())
   } finally {
     app.cleanup()
   }

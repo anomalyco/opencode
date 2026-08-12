@@ -455,7 +455,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
 
     if (armed()) {
-      return theme().highlight
+      return theme().warning
     }
 
     if (busy() || notice().length > 0 || stateStatus().length > 0) {
