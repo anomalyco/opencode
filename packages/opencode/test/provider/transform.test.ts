@@ -3272,6 +3272,37 @@ describe("ProviderTransform sampling defaults - Gemini", () => {
   })
 })
 
+describe("ProviderTransform sampling defaults - DeepSeek", () => {
+  const model = (providerID: string, id: string) =>
+    ({
+      id: `${providerID}/${id}`,
+      providerID,
+      api: { id },
+    }) as any
+
+  test.each([
+    ["deepseek", "deepseek-v4-flash"],
+    ["opencode", "deepseek-v4-flash"],
+    ["opencode-go", "deepseek-v4-flash"],
+    ["openrouter", "deepseek/deepseek-v4-flash-0731"],
+    ["ollama-cloud", "deepseek-v4-flash:0731"],
+  ])("defaults top_p for %s/%s", (providerID, id) => {
+    expect(ProviderTransform.temperature(model(providerID, id))).toBeUndefined()
+    expect(ProviderTransform.topP(model(providerID, id))).toBe(0.95)
+    expect(ProviderTransform.topK(model(providerID, id))).toBeUndefined()
+  })
+
+  test.each([
+    ["openrouter", "deepseek/deepseek-v4-flash"],
+    ["vercel", "deepseek/deepseek-v4-flash"],
+    ["custom", "deepseek-ai/DeepSeek-V4-Flash"],
+  ])("preserves legacy defaults for %s/%s", (providerID, id) => {
+    expect(ProviderTransform.temperature(model(providerID, id))).toBeUndefined()
+    expect(ProviderTransform.topP(model(providerID, id))).toBeUndefined()
+    expect(ProviderTransform.topK(model(providerID, id))).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.reasoningVariants", () => {
   const model = (reasoning_options: ModelsDev.Model["reasoning_options"]) => ({ reasoning_options }) as ModelsDev.Model
   const target = (npm: string, id = "test-model") =>
@@ -3339,6 +3370,7 @@ describe("ProviderTransform.reasoningVariants", () => {
     ["@ai-sdk/togetherai", { reasoningEffort: "high" }],
     ["venice-ai-sdk-provider", { reasoningEffort: "high" }],
     ["ai-gateway-provider", { reasoningEffort: "high" }],
+    ["merge-gateway-ai-sdk-provider", { reasoningEffort: "high" }],
     ["@ai-sdk/amazon-bedrock", { reasoningConfig: { type: "enabled", maxReasoningEffort: "high" } }],
   ])("converts effort for %s", (npm, expected, ...args) => {
     const id = args[0] as string | undefined
@@ -5521,6 +5553,25 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     // which @ai-sdk/openai-compatible never reads, silently dropping reasoningEffort.
     const result = ProviderTransform.providerOptions(createModel(), { reasoningEffort: "high" })
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
+  })
+})
+
+describe("ProviderTransform.providerOptions - merge-gateway-ai-sdk-provider", () => {
+  const model = {
+    id: "merge-gateway/openai/gpt-5.6-sol",
+    providerID: "merge-gateway",
+    api: {
+      id: "openai/gpt-5.6-sol",
+      url: "https://api-gateway.merge.dev/v1/ai-sdk",
+      npm: "merge-gateway-ai-sdk-provider",
+    },
+    capabilities: { reasoning: true },
+  } as any
+
+  test("routes normalized effort under the adapter's mergeGateway key", () => {
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "high" })).toEqual({
+      mergeGateway: { reasoningEffort: "high" },
+    })
   })
 })
 
