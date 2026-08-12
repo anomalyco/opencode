@@ -39,6 +39,7 @@ import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 import { nonEmptyToolContent } from "../util/tool-display"
 import type { SessionPending } from "@opencode-ai/schema/session-pending"
+import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
 import { createEffect, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
@@ -459,20 +460,13 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         }
         case "project.directory.resolved": {
           for (const [sessionID, info] of Object.entries(store.session.info)) {
-            if (info.projectID !== event.data.previous && info.projectID !== "global") continue
-            if (info.projectID === event.data.projectID) continue
-            const base = event.data.directory
-            const directory = info.location.directory
-            const separator = directory.startsWith(base + "/") ? "/" : directory.startsWith(base + "\\") ? "\\" : ""
-            if (directory !== base && !separator) continue
-            setStore("session", "info", sessionID, "projectID", event.data.projectID)
-            setStore(
-              "session",
-              "info",
-              sessionID,
-              "subpath",
-              directory === base ? "" : directory.slice(base.length + 1).replaceAll("\\", "/"),
+            const adopted = ProjectDirectories.adopt(
+              { projectID: info.projectID, directory: info.location.directory },
+              event.data,
             )
+            if (!adopted) continue
+            setStore("session", "info", sessionID, "projectID", adopted.projectID)
+            setStore("session", "info", sessionID, "subpath", adopted.subpath)
           }
           break
         }

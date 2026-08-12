@@ -25,3 +25,29 @@ const Resolved = durable({
   },
 })
 export const Event = { Updated, Resolved, Definitions: inventory(Updated, Resolved) }
+
+/**
+ * Client-side mirror of the server's `project.directory.resolved` session fold.
+ * Returns the ownership update for a cached session, or undefined when the
+ * session does not follow the resolution. Plain strings: callers hold
+ * generated client types, and the server projection remains authoritative.
+ */
+export function adopt(
+  session: { readonly projectID: string; readonly directory: string },
+  event: { readonly projectID: string; readonly directory: string; readonly previous: string },
+) {
+  if (session.projectID !== event.previous && session.projectID !== Project.ID.global) return
+  if (session.projectID === event.projectID) return
+  const inside =
+    session.directory === event.directory ||
+    session.directory.startsWith(event.directory + "/") ||
+    session.directory.startsWith(event.directory + "\\")
+  if (!inside) return
+  return {
+    projectID: event.projectID,
+    subpath:
+      session.directory === event.directory
+        ? undefined
+        : session.directory.slice(event.directory.length + 1).replaceAll("\\", "/"),
+  }
+}

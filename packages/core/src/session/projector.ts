@@ -16,6 +16,7 @@ import { Workspace } from "../workspace.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionPendingTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { Slug } from "../util/slug.js"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Money } from "@opencode-ai/schema/money"
 import { Event } from "@opencode-ai/schema/project-directories"
 import { Project } from "@opencode-ai/schema/project"
@@ -443,26 +444,32 @@ const layer = Layer.effectDiscard(
     // are untouched: the session did not move, its directory got identified.
     yield* bus.project(Event.Resolved, (event) =>
       Effect.gen(function* () {
-        const stale = [...new Set([event.data.previous, Project.ID.global])].filter(
-          (id) => id !== event.data.projectID,
-        )
+        const stale = [event.data.previous, Project.ID.global].filter((id) => id !== event.data.projectID)
         if (stale.length === 0) return
         const rows = yield* db
           .select({ id: SessionTable.id, directory: SessionTable.directory })
           .from(SessionTable)
-          .where(inArray(SessionTable.project_id, stale))
+          .where(
+            and(
+              inArray(SessionTable.project_id, stale),
+              // Lexicographic range narrows the scan to prefix neighbors without
+              // LIKE escaping; FSUtil.contains below decides containment exactly.
+              gte(SessionTable.directory, event.data.directory),
+              lte(SessionTable.directory, AbsolutePath.make(event.data.directory + "\uffff")),
+            ),
+          )
           .all()
           .pipe(Effect.orDie)
         yield* Effect.forEach(
           rows,
           (row) => {
-            const relative = path.relative(event.data.directory, row.directory)
-            if (relative.startsWith("..") || path.isAbsolute(relative)) return Effect.void
+            if (!FSUtil.contains(event.data.directory, row.directory)) return Effect.void
             return db
               .update(SessionTable)
               .set({
                 project_id: event.data.projectID,
-                path: RelativePath.make(relative.replaceAll("\\", "/")),
+                path: RelativePath.make(path.relative(event.data.directory, row.directory).replaceAll("\\", "/")),
+                // Self-assignment suppresses the column's $onUpdate: adoption is not activity.
                 time_updated: sql`${SessionTable.time_updated}`,
               })
               .where(eq(SessionTable.id, row.id))

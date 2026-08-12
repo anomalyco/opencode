@@ -97,35 +97,35 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const projectDirectories = yield* ProjectDirectories.Service
 
+    const announcing = new Set<string>()
     const persist = Effect.fnUntraced(function* (project: Resolved) {
-      yield* db.transaction((tx) => upsertProject(tx, project)).pipe(Effect.orDie)
+      yield* upsertProject(db, project).pipe(Effect.orDie)
       if (!project.vcs) return project
-      const directories = [
-        { directory: project.canonical, strategy: undefined },
-        ...(project.directory === project.canonical
-          ? []
-          : [
-              {
-                directory: project.directory,
-                strategy: project.vcs.type === "git" ? ("git_worktree" as const) : undefined,
-              },
-            ]),
-      ]
+      const directories: ProjectDirectories.CreateInput[] = [{ projectID: project.id, directory: project.canonical }]
+      if (project.directory !== project.canonical)
+        directories.push({
+          projectID: project.id,
+          directory: project.directory,
+          strategy: project.vcs.type === "git" ? "git_worktree" : undefined,
+        })
       // A missing directory row means this directory's resolution is a new durable
-      // fact. The row insert commits atomically with the event, so a crash between
-      // checks retries on the next resolve instead of stranding the announcement.
+      // fact (copy.ts registers copy directories directly; those never strand
+      // sessions and never announce). The row insert commits atomically with the
+      // event, so a crash between checks retries on the next resolve instead of
+      // stranding the announcement. The in-flight set keeps concurrent resolves
+      // from publishing the same fact twice.
       for (const item of directories) {
-        const existing = yield* projectDirectories.get({ projectID: project.id, directory: item.directory })
-        if (existing) continue
-        yield* bus.publish(
-          Event.Resolved,
-          {
-            projectID: project.id,
-            directory: item.directory,
-            previous: project.previous ?? ID.global,
-          },
-          { commit: () => Effect.asVoid(projectDirectories.create({ projectID: project.id, ...item })) },
-        )
+        const key = item.projectID + "\u0000" + item.directory
+        if (announcing.has(key)) continue
+        announcing.add(key)
+        yield* Effect.gen(function* () {
+          if (yield* projectDirectories.get({ projectID: item.projectID, directory: item.directory })) return
+          yield* bus.publish(
+            Event.Resolved,
+            { projectID: item.projectID, directory: item.directory, previous: project.previous ?? ID.global },
+            { commit: () => Effect.asVoid(projectDirectories.create(item)) },
+          )
+        }).pipe(Effect.ensuring(Effect.sync(() => announcing.delete(key))))
       }
       return project
     })

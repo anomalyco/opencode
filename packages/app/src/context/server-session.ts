@@ -1,4 +1,5 @@
 import { Binary } from "@opencode-ai/core/util/binary"
+import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
 import { retry } from "@opencode-ai/core/util/retry"
 import type { OpenCodeEvent, SessionApi, SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type { Message, Part, Todo } from "@/types"
@@ -897,22 +898,11 @@ export function createServerSession(
     if (event.type === "project.directory.resolved") {
       Object.values(data.info).forEach((info) => {
         if (!info) return
-        if (info.projectID !== event.data.previous && info.projectID !== "global") return
-        if (info.projectID === event.data.projectID) return
-        const directory = info.location.directory
-        const separator =
-          directory.startsWith(event.data.directory + "/") ? "/"
-          : directory.startsWith(event.data.directory + "\\") ? "\\"
-          : ""
-        if (directory !== event.data.directory && !separator) return
-        remember({
-          ...info,
-          projectID: event.data.projectID,
-          subpath:
-            directory === event.data.directory ? "" : (
-              directory.slice(event.data.directory.length + 1).replaceAll("\\", "/")
-            ),
-        })
+        const adopted = ProjectDirectories.adopt(
+          { projectID: info.projectID, directory: info.location.directory },
+          event.data,
+        )
+        if (adopted) remember({ ...info, ...adopted })
       })
       return
     }
