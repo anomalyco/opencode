@@ -259,7 +259,6 @@ Recent work
       source: { type: "uri", uri: pathToFileURL(location).href },
       name: "harness-engineering",
     })
-    expect(directory.source).toEqual({ type: "uri", uri: pathToFileURL(location).href })
     const messages = toLLMMessages(
       [
         SessionMessage.User.make({
@@ -390,7 +389,6 @@ Recent work
       source: { type: "uri", uri: pathToFileURL(location).href },
       name: "IMG_3480.JPG",
     })
-    expect(image.source).toEqual({ type: "uri", uri: pathToFileURL(location).href })
 
     const messages = toLLMMessages(
       [
@@ -409,6 +407,50 @@ Recent work
       { type: "text", text: "Inspect this image" },
       { type: "text", text: `Attached file: ${location}` },
       { type: "media", mediaType: "image/png", data, filename: "IMG_3480.JPG" },
+    ])
+  })
+
+  test("falls back to attachment names for invalid local source paths", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-invalid-local-paths"),
+          type: "user",
+          text: "Inspect these attachments",
+          files: [
+            FileAttachment.make({
+              data: Base64.make(Buffer.from("index.ts").toString("base64")),
+              mime: "application/x-directory",
+              source: { type: "uri", uri: "file:///project/src%2Flib" },
+              name: "src/",
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "uri", uri: "file:///project/image%2Fpreview.png" },
+              name: "preview.png",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Inspect these attachments" },
+      {
+        type: "text",
+        text: "\n\nAttached directory: src/\n\nindex.ts",
+        metadata: {
+          attachment: {
+            source: { type: "uri", uri: "file:///project/src%2Flib" },
+            name: "src/",
+          },
+        },
+      },
+      { type: "media", mediaType: "image/png", data, filename: "preview.png" },
     ])
   })
 

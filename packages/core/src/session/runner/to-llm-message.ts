@@ -19,7 +19,11 @@ const attachmentLocation = (file: FileAttachment) => {
   if (file.source.type !== "uri") return undefined
   const url = URL.parse(file.source.uri)
   if (url?.protocol !== "file:") return undefined
-  return fileURLToPath(url)
+  try {
+    return fileURLToPath(url)
+  } catch {
+    return undefined
+  }
 }
 
 const textAttachment = (file: FileAttachment): ContentPart => ({
