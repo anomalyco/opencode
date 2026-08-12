@@ -1,21 +1,16 @@
 import path from "path"
 import fs from "fs"
-import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import os from "os"
 import { Context, Effect, Layer } from "effect"
+// XDG on runtimes with a home directory; one tmp-rooted directory on workerd.
+// The variants resolve through the `workerd` bundle condition, like the
+// native-module stubs, so no runtime sniffing happens here.
+import { roots } from "#global-roots"
 import { Flock } from "./flock.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 
 const app = "opencode"
-// workerd has no home directory or XDG base dirs and only tmp is writable, so
-// root every global path under one directory there.
-const workerd = (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent === "Cloudflare-Workers"
-const root = workerd ? path.join(os.tmpdir(), app) : undefined
-const data = root ? path.join(root, "data") : path.join(xdgData!, app)
-const cache = root ? path.join(root, "cache") : path.join(xdgCache!, app)
-const config = root ? path.join(root, "config") : path.join(xdgConfig!, app)
-const state = root ? path.join(root, "state") : path.join(xdgState!, app)
-const tmp = root ? path.join(root, "tmp") : path.join(os.tmpdir(), app)
+const { data, cache, config, state, tmp } = roots(app)
 
 const paths = {
   get home() {
