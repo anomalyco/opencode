@@ -65,11 +65,7 @@ export function AnalyticsSidebar(props: { sessionID: string }) {
     return `${mins}m ${secs}s`
   }
 
-  const formatCost = (cost: number) => {
-    if (cost === 0) return "$0.00"
-    if (cost < 0.01) return `$${cost.toFixed(4)}`
-    return `$${cost.toFixed(2)}`
-  }
+
 
   const LABEL_WIDTH = 12
 
@@ -103,8 +99,7 @@ export function AnalyticsSidebar(props: { sessionID: string }) {
       <text fg={theme.text}>{"  " + padRight("Avg Response", LABEL_WIDTH) + formatDuration(avgResponseTime())}</text>
       <text fg={theme.text}>{"  " + padRight("Duration", LABEL_WIDTH) + formatDuration(sessionDuration())}</text>
 
-      <text fg={theme.textMuted} marginTop={1}>{"─ Cost ─"}</text>
-      <text fg={theme.success}>{"  " + padRight("Estimated", LABEL_WIDTH) + formatCost(totalCost())}</text>
+      
 
       <box flexGrow={1} />
     </box>
