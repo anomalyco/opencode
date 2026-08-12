@@ -1653,8 +1653,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       )
     }
 
-    const selected = await resolveSelectedModel(input, client, next)
-    if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
     input.trace?.write("send.command", { sessionID: input.sessionID, messageID, command: command.name, delivery })
     return client.session.command(
       {
@@ -1662,8 +1660,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         id: messageID,
         command: command.name,
         arguments: command.arguments,
-        agent: next.agent,
-        model: selected,
         files: attachments.files.length ? attachments.files : undefined,
         agents: agents.length ? agents : undefined,
         skills: skills.length ? skills : undefined,
@@ -1706,12 +1702,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       const client = sdk
       if (next.agent)
         await client.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
-      if (!next.prompt.command) {
-        const selected = await resolveSelectedModel(input, client, next)
-        if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
-        if (selected)
-          await client.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
-      }
+      const selected = await resolveSelectedModel(input, client, next)
+      if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
+      if (selected)
+        await client.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
       mergePending(await admitPrompt(next, client, delivery))
       settlementClient = client
     },
@@ -1750,6 +1744,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
       if (command) {
+        if (next.agent)
+          await client.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
+        const selected = await resolveSelectedModel(input, client, next)
+        if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
+        if (selected)
+          await client.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
         await runTurnWait(
           next,
           messageID,

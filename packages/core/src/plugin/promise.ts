@@ -310,8 +310,6 @@ export function fromPromise(plugin: Plugin) {
                   ...input,
                   sessionID: Session.ID.make(input.sessionID),
                   id: input.id == null ? undefined : SessionMessage.ID.make(input.id),
-                  agent: input.agent == null ? undefined : Agent.ID.make(input.agent),
-                  model: input.model == null ? undefined : model(input.model),
                   skills: input.skills?.map((skill) => ({ ...skill, id: Skill.ID.make(skill.id) })),
                   arguments: input.arguments ?? undefined,
                   delivery: input.delivery ?? undefined,

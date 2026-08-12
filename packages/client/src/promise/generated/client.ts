@@ -635,8 +635,6 @@ export function make(options: ClientOptions) {
               id: input["id"],
               command: input["command"],
               arguments: input["arguments"],
-              agent: input["agent"],
-              model: input["model"],
               files: input["files"],
               agents: input["agents"],
               skills: input["skills"],

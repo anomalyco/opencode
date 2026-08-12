@@ -2855,8 +2855,6 @@ describe("V2 mini transport", () => {
       id: "msg_cmd",
       command: "deploy",
       arguments: "prod",
-      agent: "build",
-      model: { providerID: "test", id: "model" },
       files: [
         { uri: "file:///tmp/context.txt", name: "context.txt" },
         {
@@ -2868,9 +2866,11 @@ describe("V2 mini transport", () => {
       skills: [{ id: "api-design", mention: { start: 13, end: 24, text: "/api-design" } }],
       delivery: "steer",
     })
-    // Selection rides the command payload; no separate client-side switch.
-    expect(client.session.switchAgent).not.toHaveBeenCalled()
-    expect(client.session.switchModel).not.toHaveBeenCalled()
+    expect(client.session.switchAgent).toHaveBeenCalledWith({ sessionID: "ses_1", agent: "build" }, expect.anything())
+    expect(client.session.switchModel).toHaveBeenCalledWith(
+      { sessionID: "ses_1", model: { providerID: "test", id: "model" } },
+      expect.anything(),
+    )
     await transport.close()
   })
 

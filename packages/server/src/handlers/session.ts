@@ -355,8 +355,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 id: ctx.payload.id,
                 command: ctx.payload.command,
                 arguments: ctx.payload.arguments,
-                agent: ctx.payload.agent,
-                model: ctx.payload.model,
                 files: ctx.payload.files,
                 agents: ctx.payload.agents,
                 skills: ctx.payload.skills,
