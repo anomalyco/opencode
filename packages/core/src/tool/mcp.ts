@@ -2,7 +2,7 @@ export * as McpTool from "./mcp.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
-import { Effect, Exit, type JsonSchema, Layer, Scope, Semaphore, Stream } from "effect"
+import { Context, Effect, Exit, Fiber, type JsonSchema, Layer, Scope, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "../bus.js"
 
@@ -16,7 +16,15 @@ import { Tool } from "../tool.js"
 export const namespace = (server: string) => server.replace(/[^a-zA-Z0-9_-]/g, "_")
 export const name = (server: string, tool: string) => `${namespace(server)}_${tool.replace(/[^a-zA-Z0-9_-]/g, "_")}`
 
-export const layer = Layer.effectDiscard(
+export interface Interface {
+  /** Wait for the initial MCP tool registration to settle. */
+  readonly flush: Effect.Effect<void>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/McpTool") {}
+
+export const layer = Layer.effect(
+  Service,
   Effect.gen(function* () {
     const mcp = yield* MCP.Service
     const tools = yield* Tool.Service
@@ -113,16 +121,17 @@ export const layer = Layer.effectDiscard(
       }),
     )
 
-    yield* reconcile.pipe(Effect.forkScoped)
+    const initial = yield* reconcile.pipe(Effect.forkScoped)
     yield* bus.subscribe(McpEvent.ToolsChanged).pipe(
       Stream.runForEach(() => reconcile),
       Effect.forkScoped({ startImmediately: true }),
     )
+    return Service.of({ flush: Effect.asVoid(Fiber.await(initial)) })
   }),
 )
 
 export const node = makeLocationNode({
-  name: "mcp-tools",
+  service: Service,
   layer,
   deps: [Tool.node, MCP.node, Bus.node, Permission.node],
 })

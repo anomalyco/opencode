@@ -10,6 +10,7 @@ import { Instructions } from "../instructions/index.js"
 import { InstructionBuiltIns } from "../instructions/builtins.js"
 import { Location } from "../location.js"
 import { McpInstructions } from "../mcp/instructions.js"
+import { McpTool } from "../tool/mcp.js"
 import { PluginSupervisor } from "../plugin/supervisor.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
 import { SkillInstructions } from "../skill/instructions.js"
@@ -64,6 +65,7 @@ const layer = Layer.effect(
     const entries = yield* InstructionEntry.Service
     const location = yield* Location.Service
     const mcpInstructions = yield* McpInstructions.Service
+    const mcpTools = yield* McpTool.Service
     const models = yield* SessionRunnerModel.Service
     const plugins = yield* PluginSupervisor.Service
     const referenceInstructions = yield* ReferenceInstructions.Service
@@ -78,6 +80,7 @@ const layer = Layer.effect(
         return yield* Effect.interrupt
 
       yield* plugins.flush
+      yield* mcpTools.flush
       const agent = yield* agents.select(session.agent)
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       const loaded = yield* Effect.all(
@@ -136,6 +139,7 @@ export const node = makeLocationNode({
     InstructionEntry.node,
     Location.node,
     McpInstructions.node,
+    McpTool.node,
     PluginSupervisor.node,
     ReferenceInstructions.node,
     SessionRunnerModel.node,
