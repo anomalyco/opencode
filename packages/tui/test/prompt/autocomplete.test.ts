@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "path"
 import type { KeymapCommand } from "@opencode-ai/plugin/tui/context"
 import {
   directoryAutocompleteExactValue,
@@ -58,7 +59,9 @@ describe("directoryAutocompleteSearch", () => {
       query: "pro",
     })
     expect(directoryAutocompleteSearch("~/projects/open", "/project", "/home/user")).toEqual({
-      directory: "/home/user/projects",
+      // The implementation resolves subdirectories with the platform path
+      // module, so expectations resolve too (drive-prefixed on Windows).
+      directory: path.resolve("/home/user/projects"),
       prefix: "~/projects/",
       query: "open",
     })
@@ -66,17 +69,17 @@ describe("directoryAutocompleteSearch", () => {
 
   test("searches from parent prefixes", () => {
     expect(directoryAutocompleteSearch("..", "/project/src", "/home/user")).toEqual({
-      directory: "/project",
+      directory: path.resolve("/project"),
       prefix: "../",
       query: "",
     })
     expect(directoryAutocompleteSearch("../../pac", "/project/src/lib", "/home/user")).toEqual({
-      directory: "/project",
+      directory: path.resolve("/project"),
       prefix: "../../",
       query: "pac",
     })
     expect(directoryAutocompleteSearch("../../..", "/project/src/lib", "/home/user")).toEqual({
-      directory: "/",
+      directory: path.resolve("/"),
       prefix: "../../../",
       query: "",
     })
@@ -89,12 +92,12 @@ describe("directoryAutocompleteSearch", () => {
       query: "src",
     })
     expect(directoryAutocompleteSearch("packages/core", "/project", "/home/user")).toEqual({
-      directory: "/project/packages",
+      directory: path.resolve("/project/packages"),
       prefix: "packages/",
       query: "core",
     })
     expect(directoryAutocompleteSearch("/root/pro", "/project", "/home/user")).toEqual({
-      directory: "/root",
+      directory: path.resolve("/root"),
       prefix: "/root/",
       query: "pro",
     })

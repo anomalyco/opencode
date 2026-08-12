@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image } from "../../src"
-import { ZAI } from "../../src/providers"
-import { recordedTests } from "../recorded-test"
+import { Image } from "../../src/index.js"
+import { ZAI } from "../../src/providers.js"
+import { recordedTests } from "../recorded-test.js"
 
 const model = ZAI.configure({ apiKey: process.env.ZAI_API_KEY ?? "fixture" }).image("cogview-4-250304")
 

@@ -26,8 +26,8 @@ import type { SQLiteTable } from "drizzle-orm/sqlite-core/table"
 import { SQLiteViewBase } from "drizzle-orm/sqlite-core/view-base"
 import { Subquery } from "drizzle-orm/subquery"
 import { type Assume, getTableColumns } from "drizzle-orm/utils"
-import { getViewSelectedFieldsRuntime, orderSelectedFields } from "../../internal/drizzle-utils"
-import type { SQLiteEffectPreparedQuery, SQLiteEffectSession } from "./session"
+import { getViewSelectedFieldsRuntime, orderSelectedFields } from "../../internal/drizzle-utils.js"
+import type { SQLiteEffectPreparedQuery, SQLiteEffectSession } from "./session.js"
 
 export type SQLiteEffectSelectPrepare<
   T extends AnySQLiteEffectSelect,

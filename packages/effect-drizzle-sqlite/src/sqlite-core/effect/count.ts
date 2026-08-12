@@ -5,7 +5,7 @@ import { entityKind } from "drizzle-orm/entity"
 import { SQL, sql, type SQLWrapper } from "drizzle-orm/sql/sql"
 import type { SQLiteTable } from "drizzle-orm/sqlite-core/table"
 import type { SQLiteView } from "drizzle-orm/sqlite-core/view"
-import type { SQLiteEffectSession } from "./session"
+import type { SQLiteEffectSession } from "./session.js"
 
 function buildSQLiteEmbeddedCount(source: SQLiteTable | SQLiteView | SQL | SQLWrapper, filters?: SQL<unknown>) {
   return sql<number>`(select count(*) from ${source}${sql.raw(" where ").if(filters)}${filters})`

@@ -1,0 +1,90 @@
+diff --git a/src/download.ts b/src/download.ts
+index 74918f3d27917197f4dce589937d0d8fa9956226..6515c40223fec909f9f80e5721b82ed1e4d87fcc 100644
+--- a/src/download.ts
++++ b/src/download.ts
+@@ -10,7 +10,7 @@ import { existsSync } from "node:fs";
+ import { createRequire } from "node:module";
+ import { dirname, join } from "node:path";
+ import { fileURLToPath } from "node:url";
+-import { getLibFilename, getNpmPackageName } from "./platform";
++import { getLibFilename, getNpmPackageName } from "./platform.js";
+ 
+ /**
+  * Get the current file's directory
+diff --git a/src/ffi.ts b/src/ffi.ts
+index 0a9f3b075a8153db8fbad9593cb1ebd5938279f1..3599a15d9da40ca0e78850651ac3b7e1952ba230 100644
+--- a/src/ffi.ts
++++ b/src/ffi.ts
+@@ -17,8 +17,8 @@ import {
+   ptr,
+   read,
+ } from "bun:ffi";
+-import { findBinary } from "./download";
+-import { embeddedLibPath } from "./embedded";
++import { findBinary } from "./download.js";
++import { embeddedLibPath } from "./embedded.js";
+ import type {
+   DirItem,
+   DirSearchResult,
+@@ -34,8 +34,8 @@ import type {
+   SearchResult,
+   WatchEvent,
+   WatchEventKind,
+-} from "./fff-api";
+-import { createGrepCursor, err } from "./fff-api";
++} from "./fff-api.js";
++import { createGrepCursor, err } from "./fff-api.js";
+ 
+ /** Grep mode constants matching the C API (u8). */
+ const GREP_MODE_PLAIN = 0;
+diff --git a/src/finder.ts b/src/finder.ts
+index d8210b43f4502527a2356fb0c3de837bc909ac97..31724f6a8aee51f76c76c5ebd6de5e12f3fafd99 100644
+--- a/src/finder.ts
++++ b/src/finder.ts
+@@ -36,7 +36,7 @@ import {
+   isAvailable,
+   type NativeHandle,
+   readWatchEventBatch,
+-} from "./ffi";
++} from "./ffi.js";
+ 
+ import type {
+   DirSearchOptions,
+@@ -56,9 +56,9 @@ import type {
+   WatchBatchCallback,
+   WatchOptions,
+   WatchUnsubscribe,
+-} from "./fff-api";
++} from "./fff-api.js";
+ 
+-import { err } from "./fff-api";
++import { err } from "./fff-api.js";
+ 
+ /**
+  * FileFinder - Fast file finder with fuzzy search
+diff --git a/src/index.ts b/src/index.ts
+index 3b54b82d03bd5d37f3665d59c91273dc62118c1b..17bf456ea78d6b1f432d514f12eb430cc8bfcab1 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,4 +1,4 @@
+-export { binaryExists, findBinary } from "./download";
++export { binaryExists, findBinary } from "./download.js";
+ export type {
+   DbHealth,
+   DirItem,
+@@ -29,12 +29,12 @@ export type {
+   WatchEventKind,
+   WatchOptions,
+   WatchUnsubscribe,
+-} from "./fff-api";
++} from "./fff-api.js";
+ 
+-export { FileFinder } from "./finder";
++export { FileFinder } from "./finder.js";
+ export {
+   getLibExtension,
+   getLibFilename,
+   getNpmPackageName,
+   getTriple,
+-} from "./platform";
++} from "./platform.js";

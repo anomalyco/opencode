@@ -12,19 +12,19 @@ import {
   ToolCallPart,
   ToolDefinition,
   Usage,
-} from "../../src"
-import * as Azure from "../../src/providers/azure"
-import * as OpenAI from "../../src/providers/openai"
-import * as OpenAICompatible from "../../src/providers/openai-compatible"
-import * as XAI from "../../src/providers/xai"
-import * as OpenAIChat from "../../src/protocols/openai-chat"
-import { ProviderShared } from "../../src/protocols/shared"
-import { Auth, LLMClient } from "../../src/route"
-import { compileRequest } from "../../src/route/client"
-import { it } from "../lib/effect"
-import { dynamicResponse, fixedResponse, truncatedStream } from "../lib/http"
-import { deltaChunk, usageChunk } from "../lib/openai-chunks"
-import { sseEvents } from "../lib/sse"
+} from "../../src/index.js"
+import * as Azure from "../../src/providers/azure.js"
+import * as OpenAI from "../../src/providers/openai.js"
+import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
+import * as XAI from "../../src/providers/xai.js"
+import * as OpenAIChat from "../../src/protocols/openai-chat.js"
+import { ProviderShared } from "../../src/protocols/shared.js"
+import { Auth, LLMClient } from "../../src/route.js"
+import { compileRequest } from "../../src/route/client.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse, fixedResponse, truncatedStream } from "../lib/http.js"
+import { deltaChunk, usageChunk } from "../lib/openai-chunks.js"
+import { sseEvents } from "../lib/sse.js"
 
 const TargetJson = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(TargetJson)

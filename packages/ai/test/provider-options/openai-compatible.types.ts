@@ -1,5 +1,5 @@
-import { LLM } from "../../src"
-import { OpenAICompatible } from "../../src/providers"
+import { LLM } from "../../src/index.js"
+import { OpenAICompatible } from "../../src/providers.js"
 
 const model = OpenAICompatible.deepseek.model("deepseek-chat")
 

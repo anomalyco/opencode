@@ -5,7 +5,7 @@ import type { AnyRelations } from "drizzle-orm/relations"
 import { type SQL, sql } from "drizzle-orm/sql/sql"
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core"
 import type { SQLiteSession } from "drizzle-orm/sqlite-core/session"
-import { GET_VERSION_FOR, MIGRATIONS_TABLE_VERSIONS, type UpgradeResult } from "./utils"
+import { GET_VERSION_FOR, MIGRATIONS_TABLE_VERSIONS, type UpgradeResult } from "./utils.js"
 
 /** @internal */
 export type SQLiteMigrationTableRow = { id: number | null; hash: string; created_at: number }

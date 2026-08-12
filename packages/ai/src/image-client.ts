@@ -1,7 +1,7 @@
 import { Context, Effect, Layer } from "effect"
-import { RequestExecutor } from "./route/executor"
-import type { ImageOptions, ImageRequest, ImageRequestFor, ImageResponse } from "./image"
-import type { AIError } from "./schema"
+import { RequestExecutor } from "./route/executor.js"
+import type { ImageOptions, ImageRequest, ImageRequestFor, ImageResponse } from "./image.js"
+import type { AIError } from "./schema/index.js"
 
 export type Execute = RequestExecutor.Interface["execute"]
 

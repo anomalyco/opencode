@@ -1,5 +1,5 @@
-import type { LLMRequest } from "../schema"
-import * as ProviderShared from "../protocols/shared"
+import type { LLMRequest } from "../schema/index.js"
+import * as ProviderShared from "../protocols/shared.js"
 
 export interface EndpointInput<Body> {
   readonly request: LLMRequest
@@ -53,4 +53,4 @@ export const render = <Body>(endpoint: Definition<Body>, input: EndpointInput<Bo
   return url
 }
 
-export * as Endpoint from "./endpoint"
+export * as Endpoint from "./endpoint.js"

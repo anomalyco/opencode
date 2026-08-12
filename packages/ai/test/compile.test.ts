@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Ref, Schema } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { LLM, mergeProviderOptions } from "../src"
-import { AnthropicMessages, OpenAIChat } from "../src/protocols"
-import { Auth, LLMClient } from "../src/route"
-import { compileRequest } from "../src/route/client"
-import { it } from "./lib/effect"
-import { dynamicResponse } from "./lib/http"
-import { deltaChunk } from "./lib/openai-chunks"
-import { sseEvents } from "./lib/sse"
+import { LLM, mergeProviderOptions } from "../src/index.js"
+import { AnthropicMessages, OpenAIChat } from "../src/protocols.js"
+import { Auth, LLMClient } from "../src/route.js"
+import { compileRequest } from "../src/route/client.js"
+import { it } from "./lib/effect.js"
+import { dynamicResponse } from "./lib/http.js"
+import { deltaChunk } from "./lib/openai-chunks.js"
+import { sseEvents } from "./lib/sse.js"
 
 const TargetJson = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(TargetJson)

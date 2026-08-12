@@ -11,13 +11,13 @@ import {
   ToolCallPart,
   ToolChoice,
   ToolDefinition,
-} from "../../src"
-import { LLMClient } from "../../src/route"
-import { compileRequest } from "../../src/route/client"
-import { AmazonBedrock } from "../../src/providers"
-import * as BedrockConverse from "../../src/protocols/bedrock-converse"
-import { it } from "../lib/effect"
-import { fixedResponse } from "../lib/http"
+} from "../../src/index.js"
+import { LLMClient } from "../../src/route.js"
+import { compileRequest } from "../../src/route/client.js"
+import { AmazonBedrock } from "../../src/providers.js"
+import * as BedrockConverse from "../../src/protocols/bedrock-converse.js"
+import { it } from "../lib/effect.js"
+import { fixedResponse } from "../lib/http.js"
 import {
   eventSummary,
   expectWeatherToolLoop,
@@ -25,8 +25,8 @@ import {
   weatherTool,
   weatherToolLoopRequest,
   weatherToolName,
-} from "../recorded-scenarios"
-import { recordedTests } from "../recorded-test"
+} from "../recorded-scenarios.js"
+import { recordedTests } from "../recorded-test.js"
 
 const codec = new EventStreamCodec(toUtf8, fromUtf8)
 const utf8Encoder = new TextEncoder()
