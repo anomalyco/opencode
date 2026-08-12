@@ -187,6 +187,28 @@ export function applyDirectoryEvent(input: {
       input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
       break
     }
+    case "project.directory.resolved": {
+      const properties = event.properties as { projectID: string; directory: string; previous: string }
+      input.store.session.forEach((session, index) => {
+        if (session.projectID !== properties.previous && session.projectID !== "global") return
+        if (session.projectID === properties.projectID) return
+        const directory = session.location.directory
+        const separator =
+          directory.startsWith(properties.directory + "/") ? "/"
+          : directory.startsWith(properties.directory + "\\") ? "\\"
+          : ""
+        if (directory !== properties.directory && !separator) return
+        input.setStore("session", index, (current) => ({
+          ...current,
+          projectID: properties.projectID,
+          subpath:
+            directory === properties.directory ? "" : (
+              directory.slice(properties.directory.length + 1).replaceAll("\\", "/")
+            ),
+        }))
+      })
+      break
+    }
     case "session.renamed": {
       const properties = event.properties as { sessionID: string; title: string }
       const result = Binary.search(input.store.session, properties.sessionID, (session) => session.id)

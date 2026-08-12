@@ -894,6 +894,28 @@ export function createServerSession(
   }
 
   const applyV2 = (event: OpenCodeEvent) => {
+    if (event.type === "project.directory.resolved") {
+      Object.values(data.info).forEach((info) => {
+        if (!info) return
+        if (info.projectID !== event.data.previous && info.projectID !== "global") return
+        if (info.projectID === event.data.projectID) return
+        const directory = info.location.directory
+        const separator =
+          directory.startsWith(event.data.directory + "/") ? "/"
+          : directory.startsWith(event.data.directory + "\\") ? "\\"
+          : ""
+        if (directory !== event.data.directory && !separator) return
+        remember({
+          ...info,
+          projectID: event.data.projectID,
+          subpath:
+            directory === event.data.directory ? "" : (
+              directory.slice(event.data.directory.length + 1).replaceAll("\\", "/")
+            ),
+        })
+      })
+      return
+    }
     if (!("data" in event) || !("sessionID" in event.data) || typeof event.data.sessionID !== "string") return
     const sessionID = event.data.sessionID
     const reduction = v2.reduce(data.session_message[sessionID] ?? [], event)

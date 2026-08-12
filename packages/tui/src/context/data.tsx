@@ -457,6 +457,25 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           }
           break
         }
+        case "project.directory.resolved": {
+          for (const [sessionID, info] of Object.entries(store.session.info)) {
+            if (info.projectID !== event.data.previous && info.projectID !== "global") continue
+            if (info.projectID === event.data.projectID) continue
+            const base = event.data.directory
+            const directory = info.location.directory
+            const separator = directory.startsWith(base + "/") ? "/" : directory.startsWith(base + "\\") ? "\\" : ""
+            if (directory !== base && !separator) continue
+            setStore("session", "info", sessionID, "projectID", event.data.projectID)
+            setStore(
+              "session",
+              "info",
+              sessionID,
+              "subpath",
+              directory === base ? "" : directory.slice(base.length + 1).replaceAll("\\", "/"),
+            )
+          }
+          break
+        }
         case "session.input.promoted": {
           const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inputID) ?? false
           removePending(event.data.sessionID, event.data.inputID)

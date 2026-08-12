@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Effect, Layer } from "effect"
+import { Event } from "@opencode-ai/schema/project-directories"
 import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -67,6 +68,37 @@ describe("Session.move", () => {
 
           yield* session.move({ sessionID: created.id, directory: destination })
           expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toEqual(messages)
+        }),
+      ),
+    ),
+  )
+
+  it.effect("keeps a moved session out of its former directory's new identity", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const bus = yield* Bus.Service
+          const previous = AbsolutePath.make(path.join(tmp.path, "previous"))
+          const destination = AbsolutePath.make(tmp.path)
+          const created = yield* session.create({ location: Location.Ref.make({ directory: previous }) })
+
+          yield* session.move({ sessionID: created.id, directory: destination })
+          // The former directory becomes a project after the session left it.
+          yield* bus.publish(Event.Resolved, {
+            projectID: Project.ID.make("adopting"),
+            directory: previous,
+            previous: Project.ID.global,
+          })
+
+          expect(yield* session.get(created.id)).toMatchObject({
+            projectID: Project.ID.global,
+            location: { directory: destination },
+            subpath: undefined,
+          })
         }),
       ),
     ),

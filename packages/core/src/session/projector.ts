@@ -1,7 +1,8 @@
 export * as SessionProjector from "./projector.js"
 
-import { and, asc, desc, eq, gt, gte, lt, lte, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, lt, lte, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema, Stream } from "effect"
+import path from "path"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
@@ -16,6 +17,8 @@ import { InstructionState } from "./instruction-state.js"
 import { SessionPendingTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { Slug } from "../util/slug.js"
 import { Money } from "@opencode-ai/schema/money"
+import { Event } from "@opencode-ai/schema/project-directories"
+import { Project } from "@opencode-ai/schema/project"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import type { SessionSchema } from "./schema.js"
 
@@ -433,6 +436,41 @@ const layer = Layer.effectDiscard(
           .run()
           .pipe(Effect.orDie)
         yield* InstructionState.reset(db, event.data.sessionID)
+      }),
+    )
+    // Sessions whose ownership came from the directory's previous resolution
+    // follow its new identity. Location, transcript, instructions, and recency
+    // are untouched: the session did not move, its directory got identified.
+    yield* bus.project(Event.Resolved, (event) =>
+      Effect.gen(function* () {
+        const stale = [...new Set([event.data.previous, Project.ID.global])].filter(
+          (id) => id !== event.data.projectID,
+        )
+        if (stale.length === 0) return
+        const rows = yield* db
+          .select({ id: SessionTable.id, directory: SessionTable.directory })
+          .from(SessionTable)
+          .where(inArray(SessionTable.project_id, stale))
+          .all()
+          .pipe(Effect.orDie)
+        yield* Effect.forEach(
+          rows,
+          (row) => {
+            const relative = path.relative(event.data.directory, row.directory)
+            if (relative.startsWith("..") || path.isAbsolute(relative)) return Effect.void
+            return db
+              .update(SessionTable)
+              .set({
+                project_id: event.data.projectID,
+                path: RelativePath.make(relative.replaceAll("\\", "/")),
+                time_updated: sql`${SessionTable.time_updated}`,
+              })
+              .where(eq(SessionTable.id, row.id))
+              .run()
+              .pipe(Effect.orDie)
+          },
+          { discard: true },
+        )
       }),
     )
     yield* bus.project(SessionEvent.Deleted, (event) =>

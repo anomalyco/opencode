@@ -1,4 +1,6 @@
 import { describe, expect } from "bun:test"
+import { $ } from "bun"
+import fs from "fs/promises"
 import path from "path"
 import { DateTime, Effect, Layer, Stream } from "effect"
 import { Money } from "@opencode-ai/schema/money"
@@ -7,6 +9,7 @@ import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Hash } from "@opencode-ai/util/hash"
 import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
@@ -53,6 +56,15 @@ const it = testEffect(
     ],
   ),
 )
+const liveIt = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, Session.node]),
+    [
+      [Bus.node, Bus.configured({ persist: true })],
+      [SessionExecution.node, SessionExecution.noopLayer],
+    ],
+  ),
+)
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = Session.ID.create()
 
@@ -78,6 +90,65 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
 }
 
 describe("Session.create", () => {
+  liveIt.live("follows the directory's project identity established after creation", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        const projects = yield* Project.Service
+        const { db } = yield* Database.Service
+        const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
+        const nested = Location.Ref.make({ directory: AbsolutePath.make(path.join(directory, "packages", "app")) })
+        const created = yield* session.create({ location: ref, title: "Before git" })
+        const child = yield* session.create({ location: nested, title: "Nested before git" })
+        const originalUpdated = created.time.updated
+
+        yield* Effect.promise(async () => {
+          await $`git init -q`.cwd(directory)
+          await $`git config user.email test@example.com`.cwd(directory)
+          await $`git config user.name Test`.cwd(directory)
+          await fs.writeFile(path.join(directory, "README.md"), "test\n")
+          await $`git add README.md`.cwd(directory)
+          await $`git commit -qm initial`.cwd(directory)
+          await $`git remote add origin git@github.com:owner/adopted.git`.cwd(directory)
+        })
+
+        const project = yield* projects.resolve(ref.directory)
+        const repeat = yield* projects.resolve(ref.directory)
+        const adopted = yield* session.get(created.id)
+        const nestedAdopted = yield* session.get(child.id)
+        const page = yield* session.list({ project: project.id })
+        const log = Array.from(yield* Stream.runCollect(logEvents(session, created.id)))
+
+        expect(created.projectID).toBe(Project.ID.global)
+        expect(project.id).toBe(Project.ID.make(Hash.fast("git-remote:github.com/owner/adopted")))
+        expect(repeat.id).toBe(project.id)
+        expect(page.data.map((item) => item.id)).toEqual(expect.arrayContaining([created.id, child.id]))
+        expect(adopted).toMatchObject({
+          projectID: project.id,
+          location: ref,
+          subpath: undefined,
+          time: { updated: originalUpdated },
+        })
+        expect(nestedAdopted).toMatchObject({
+          projectID: project.id,
+          location: nested,
+          subpath: RelativePath.make("packages/app"),
+        })
+        // Adoption is a project-domain fact; the session log records nothing new.
+        expect(log.map((event) => event.type)).toEqual(["session.created"])
+        expect(yield* session.messages({ sessionID: created.id })).toEqual([])
+        // Repeated resolution announces the directory's identity exactly once.
+        const announced = yield* db
+          .select({ type: EventTable.type })
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, project.id))
+          .all()
+          .pipe(Effect.orDie)
+        expect(announced.map((event) => event.type)).toEqual(["project.directory.resolved.1"])
+      }),
+    ),
+  )
+
   it.effect("persists a missing title until one is generated or supplied", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service

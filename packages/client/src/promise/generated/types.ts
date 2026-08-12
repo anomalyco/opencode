@@ -863,6 +863,16 @@ export type ProjectDirectoriesUpdated = {
   data: { projectID: string }
 }
 
+export type ProjectDirectoryResolved = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "project.directory.resolved"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { projectID: string; directory: string; previous: string }
+}
+
 export type CommandUpdated = {
   id: string
   created: number
@@ -2097,6 +2107,7 @@ export type V2Event =
   | PluginAdded
   | PluginUpdated
   | ProjectDirectoriesUpdated
+  | ProjectDirectoryResolved
   | CommandUpdated
   | ConfigUpdated
   | SkillUpdated

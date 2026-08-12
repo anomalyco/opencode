@@ -5,7 +5,9 @@ import { ChildProcess } from "effect/unstable/process"
 import { asc, desc } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
+import { Bus } from "./bus.js"
 import { Database } from "./database/database.js"
+import { Event } from "@opencode-ai/schema/project-directories"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "./git.js"
 import { AppProcess } from "@opencode-ai/util/process"
@@ -91,28 +93,40 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
     const proc = yield* AppProcess.Service
+    const bus = yield* Bus.Service
     const db = (yield* Database.Service).db
     const projectDirectories = yield* ProjectDirectories.Service
 
     const persist = Effect.fnUntraced(function* (project: Resolved) {
-      yield* db
-        .transaction((tx) =>
-          Effect.gen(function* () {
-            yield* upsertProject(tx, project)
-            if (!project.vcs) return
-            yield* projectDirectories.create({ projectID: project.id, directory: project.canonical }, tx)
-            if (project.directory === project.canonical) return
-            yield* projectDirectories.create(
+      yield* db.transaction((tx) => upsertProject(tx, project)).pipe(Effect.orDie)
+      if (!project.vcs) return project
+      const directories = [
+        { directory: project.canonical, strategy: undefined },
+        ...(project.directory === project.canonical
+          ? []
+          : [
               {
-                projectID: project.id,
                 directory: project.directory,
-                strategy: project.vcs.type === "git" ? "git_worktree" : undefined,
+                strategy: project.vcs.type === "git" ? ("git_worktree" as const) : undefined,
               },
-              tx,
-            )
-          }),
+            ]),
+      ]
+      // A missing directory row means this directory's resolution is a new durable
+      // fact. The row insert commits atomically with the event, so a crash between
+      // checks retries on the next resolve instead of stranding the announcement.
+      for (const item of directories) {
+        const existing = yield* projectDirectories.get({ projectID: project.id, directory: item.directory })
+        if (existing) continue
+        yield* bus.publish(
+          Event.Resolved,
+          {
+            projectID: project.id,
+            directory: item.directory,
+            previous: project.previous ?? ID.global,
+          },
+          { commit: () => Effect.asVoid(projectDirectories.create({ projectID: project.id, ...item })) },
         )
-        .pipe(Effect.orDie)
+      }
       return project
     })
 
@@ -250,5 +264,5 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [Database.node, FSUtil.node, Git.node, AppProcess.node, ProjectDirectories.node],
+  deps: [Bus.node, Database.node, FSUtil.node, Git.node, AppProcess.node, ProjectDirectories.node],
 })
