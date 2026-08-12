@@ -1,6 +1,7 @@
 export * as Npm from "./npm"
 
 import path from "path"
+import { pathToFileURL } from "url"
 import npa from "npm-package-arg"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
@@ -50,7 +51,8 @@ export function sanitize(pkg: string) {
 const resolveEntryPoint = (name: string, dir: string): EntryPoint => {
   let entrypoint: string | undefined
   try {
-    entrypoint = typeof Bun !== "undefined" ? import.meta.resolve(name, dir) : import.meta.resolve(dir)
+    const resolved = typeof Bun !== "undefined" ? import.meta.resolve(name, dir) : import.meta.resolve(dir)
+    entrypoint = resolved.startsWith("file://") ? resolved : pathToFileURL(resolved).href
   } catch {
     entrypoint = undefined
   }
