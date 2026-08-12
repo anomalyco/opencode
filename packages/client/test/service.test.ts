@@ -4,7 +4,8 @@ import { Effect } from "effect"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Service, type EnsureReason } from "../src/effect/service"
+import { Service, type EnsureOptions, type EnsureReason } from "../src/effect/service"
+import { accelerate } from "./fixture/service-timing"
 
 const fixture = join(import.meta.dir, "fixture/service.ts")
 const processes: Bun.Subprocess[] = []
@@ -25,7 +26,7 @@ test("a concurrent same-version start cannot invalidate a resolved endpoint", as
 
   const starts: EnsureReason[] = []
   const first = run(
-    Service.ensure({
+    ensure({
       file: registration,
       version: "test",
       command: [],
@@ -34,7 +35,7 @@ test("a concurrent same-version start cannot invalidate a resolved endpoint", as
   )
   await waitForFile(registration + ".first-request")
 
-  const resolved = await run(Service.ensure({ file: registration, version: "test" }))
+  const resolved = await run(ensure({ file: registration, version: "test" }))
   expect(resolved.url).toBe(original.url)
 
   await writeFile(registration + ".release", "")
@@ -50,9 +51,9 @@ test("waits for a registered service to finish starting", async () => {
   const registration = join(directory, "service.json")
   const process = spawn(registration, "starting")
   await waitForFile(registration)
-  const result = run(Service.ensure({ file: registration, version: "test", command: [] }))
+  const result = run(ensure({ file: registration, version: "test", command: [] }))
 
-  await Bun.sleep(500)
+  await Bun.sleep(100)
   expect(process.exitCode).toBe(null)
   await writeFile(registration + ".release", "")
   expect((await result).url).toBe((await Bun.file(registration).json()).url)
@@ -64,7 +65,7 @@ test("reports a failed registered service without spawning", async () => {
   const process = spawn(registration, "failed-owner")
   await waitForFile(registration)
 
-  await expect(run(Service.ensure({ file: registration, version: "test", command: [] }))).rejects.toThrow(
+  await expect(run(ensure({ file: registration, version: "test", command: [] }))).rejects.toThrow(
     "Background service failed to start",
   )
   expect(process.exitCode).toBe(null)
@@ -78,7 +79,7 @@ test("evicts an unresponsive registered service before starting its replacement"
   const original = await Bun.file(registration).json()
 
   const endpoint = await run(
-    Service.ensure({
+    ensure({
       file: registration,
       version: "test",
       command: [process.execPath, fixture, registration, "delayed", "10"],
@@ -114,7 +115,7 @@ test("does not spawn contenders while an incompatible service rejects replacemen
   await waitForFile(registration)
   const controller = new AbortController()
   const starting = Effect.runPromise(
-    Service.ensure({
+    ensure({
       file: registration,
       version: "test",
       command: [process.execPath, fixture, contender, "record-start"],
@@ -123,7 +124,7 @@ test("does not spawn contenders while an incompatible service rejects replacemen
   )
 
   await waitForFile(registration + ".stop-attempt")
-  await Bun.sleep(500)
+  await Bun.sleep(300)
   controller.abort()
   await starting.catch(() => undefined)
 
@@ -138,7 +139,7 @@ test("a legacy health response is still replaced", async () => {
   await waitForFile(registration)
 
   const starts: EnsureReason[] = []
-  const result = run(Service.ensure({ file: registration, command: [], onStart: (reason) => starts.push(reason) }))
+  const result = run(ensure({ file: registration, command: [], onStart: (reason) => starts.push(reason) }))
 
   await expect(result).rejects.toThrow("Missing service command")
   expect(starts).toEqual(["version-mismatch"])
@@ -149,7 +150,7 @@ test("waits for a slow winner while bounding lock probes", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
   const endpoint = await run(
-    Service.ensure({
+    ensure({
       file: registration,
       version: "test",
       command: [process.execPath, fixture, registration, "coordinated"],
@@ -169,10 +170,10 @@ test("waits for a live contender when another contender fails", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
   const endpoint = await run(
-    Service.ensure({
+    ensure({
       file: registration,
       version: "test",
-      command: [process.execPath, fixture, registration, "coordinated-failed-loser"],
+      command: [process.execPath, fixture, registration, "coordinated-failed-loser", "300"],
     }),
   )
   const info = await Bun.file(registration).json()
@@ -188,7 +189,7 @@ test("reports a contender that fails to start", async () => {
   const registration = join(directory, "service.json")
   await expect(
     run(
-      Service.ensure({
+      ensure({
         file: registration,
         version: "test",
         command: [process.execPath, fixture, registration, "failed"],
@@ -202,7 +203,7 @@ test("reports a contender terminated by a signal", async () => {
   const registration = join(directory, "service.json")
   await expect(
     run(
-      Service.ensure({
+      ensure({
         file: registration,
         version: "test",
         command: [process.execPath, fixture, registration, "signal"],
@@ -216,10 +217,10 @@ test("reports a slow contender that eventually fails", async () => {
   const registration = join(directory, "service.json")
   await expect(
     run(
-      Service.ensure({
+      ensure({
         file: registration,
         version: "test",
-        command: [process.execPath, fixture, registration, "delayed-failed", "8000"],
+        command: [process.execPath, fixture, registration, "delayed-failed", "500"],
       }),
     ),
   ).rejects.toThrow("Server process exited with code 1")
@@ -229,13 +230,13 @@ test("replaces an incompatible owner that appears during startup", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
   const starting = run(
-    Service.ensure({
+    ensure({
       file: registration,
       version: "test",
-      command: [process.execPath, fixture, registration, "delayed", "8000"],
+      command: [process.execPath, fixture, registration, "delayed", "500"],
     }),
   )
-  await Bun.sleep(1_000)
+  await Bun.sleep(100)
   const old = spawn(registration, "old")
   await waitForFile(registration)
   const endpoint = await starting
@@ -251,6 +252,10 @@ test("replaces an incompatible owner that appears during startup", async () => {
 
 function run<A, E>(effect: Effect.Effect<A, E>) {
   return Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)))
+}
+
+function ensure(options: EnsureOptions) {
+  return Service.ensure(accelerate(options))
 }
 
 function spawn(registration: string, mode: string, ...args: string[]) {

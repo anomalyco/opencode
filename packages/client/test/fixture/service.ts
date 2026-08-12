@@ -17,7 +17,7 @@ if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" ||
   if (!owner) process.exit(mode === "coordinated-failed-loser" ? 1 : 0)
   if (mode === "coordinated" || mode === "coordinated-failed-loser") {
     while ((await Bun.file(registration + ".starts").text()).trim().split("\n").length < 2) await Bun.sleep(10)
-    if (mode === "coordinated-failed-loser") await Bun.sleep(1_500)
+    if (mode === "coordinated-failed-loser") await Bun.sleep(Number(delay ?? 1_500))
   } else await Bun.sleep(Number(delay))
   if (mode === "delayed-failed") process.exit(1)
 }

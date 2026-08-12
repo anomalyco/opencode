@@ -2,7 +2,8 @@ import { afterEach, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Service, type EnsureReason } from "../src/promise/service"
+import { Service, type EnsureOptions, type EnsureReason } from "../src/promise/service"
+import { accelerate } from "./fixture/service-timing"
 
 const fixture = join(import.meta.dir, "fixture/service.ts")
 const processes: Bun.Subprocess[] = []
@@ -28,7 +29,7 @@ test("ensures a missing service with native promises", async () => {
   const registration = join(directory, "service.json")
   const starts: EnsureReason[] = []
 
-  const endpoint = await Service.ensure({
+  const endpoint = await ensure({
     file: registration,
     version: "test",
     command: [process.execPath, fixture, registration, "coordinated"],
@@ -48,10 +49,10 @@ test("waits for a live contender when another native contender fails", async () 
   const directory = await temp()
   const registration = join(directory, "service.json")
 
-  const endpoint = await Service.ensure({
+  const endpoint = await ensure({
     file: registration,
     version: "test",
-    command: [process.execPath, fixture, registration, "coordinated-failed-loser"],
+    command: [process.execPath, fixture, registration, "coordinated-failed-loser", "300"],
   })
   const info = await Bun.file(registration).json()
   try {
@@ -65,7 +66,7 @@ test("waits for a live contender when another native contender fails", async () 
 test("reports a failed registered service", async () => {
   const registration = await setup("failed-owner")
 
-  await expect(Service.ensure({ file: registration, version: "test", command: [] })).rejects.toThrow(
+  await expect(ensure({ file: registration, version: "test", command: [] })).rejects.toThrow(
     "Background service failed to start",
   )
 })
@@ -81,7 +82,7 @@ test("evicts an unresponsive registered service before starting its replacement"
   await waitForFile(registration)
   const original = await Bun.file(registration).json()
 
-  const endpoint = await Service.ensure({
+  const endpoint = await ensure({
     file: registration,
     version: "test",
     command: [process.execPath, fixture, registration, "delayed", "10"],
@@ -111,6 +112,10 @@ async function setup(mode: string) {
   processes.push(Bun.spawn([process.execPath, fixture, registration, mode], { stdout: "ignore", stderr: "inherit" }))
   await waitForFile(registration)
   return registration
+}
+
+function ensure(options: EnsureOptions) {
+  return Service.ensure(accelerate(options))
 }
 
 async function temp() {
