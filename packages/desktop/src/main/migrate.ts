@@ -10,7 +10,7 @@ const TAURI_MIGRATED_KEY = "tauriMigrated"
 
 // Resolve the directory where Tauri stored its .dat files for the given app identifier.
 // Mirrors Tauri's AppLocalData / AppData resolution per OS.
-function tauriDir(id: string) {
+export function tauriDir(id: string) {
   switch (process.platform) {
     case "darwin":
       return join(homedir(), "Library", "Application Support", id)
@@ -27,7 +27,7 @@ const TAURI_APP_IDS: Record<string, string> = {
   beta: "ai.opencode.desktop.beta",
   prod: "ai.opencode.desktop",
 }
-function tauriAppId() {
+export function tauriAppId() {
   return app.isPackaged ? TAURI_APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
 }
 

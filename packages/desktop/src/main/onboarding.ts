@@ -5,17 +5,28 @@ import { app } from "electron"
 import { getStore } from "./store"
 import { FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY, OLD_LAYOUT_ELIGIBLE_KEY } from "./store-keys"
 import { write as writeLog } from "./logging"
-import { hasExistingAppState } from "./install-state"
+import { hasExistingAppStateAny } from "./install-state"
+import { tauriAppId, tauriDir } from "./migrate"
 
 const DEFAULT_PROJECT_DIR = "Default Project"
 
+function listEntries(directory: string) {
+  return existsSync(directory) ? readdirSync(directory, { withFileTypes: true }) : []
+}
+
 export function initializeOldLayoutEligibility(userDataPath: string) {
-  const entries = existsSync(userDataPath) ? readdirSync(userDataPath, { withFileTypes: true }) : []
   const store = getStore()
   const current = store.get(OLD_LAYOUT_ELIGIBLE_KEY)
   if (typeof current === "boolean") return current
 
-  const eligible = hasExistingAppState(entries)
+  const entries = listEntries(userDataPath)
+  // The previous Tauri desktop app stored its state in a different directory on
+  // Linux/macOS (e.g. ~/.local/share/ai.opencode.desktop). Treat existing state
+  // there the same as the Electron userData so users can still opt back into the
+  // previous layout.
+  const tauriEntries = listEntries(tauriDir(tauriAppId()))
+
+  const eligible = hasExistingAppStateAny(entries, tauriEntries)
   store.set(OLD_LAYOUT_ELIGIBLE_KEY, eligible)
   return eligible
 }

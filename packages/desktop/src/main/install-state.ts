@@ -6,3 +6,9 @@ export function hasExistingAppState(entries: Array<{ name: string; isDirectory: 
     return entry.isDirectory() && entry.name === "opencode"
   })
 }
+
+export function hasExistingAppStateAny(
+  ...directories: Array<Array<{ name: string; isDirectory: () => boolean }>>
+) {
+  return directories.some(hasExistingAppState)
+}
