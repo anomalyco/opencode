@@ -293,7 +293,7 @@ describe("Session.create", () => {
       expect(yield* SessionInbox.find(db, forkContext[1].id)).toBeUndefined()
       expect(
         yield* session.prompt({ id: forkContext[0].id, sessionID: forked.id, text: "First", resume: false }),
-      ).toMatchObject({ id: forkContext[0].id, type: "user", data: { text: "First" } })
+      ).toMatchObject({ id: forkContext[0].id, type: "user", payload: { text: "First" } })
 
       yield* session.prompt({
         sessionID: parent.id,
@@ -505,7 +505,10 @@ describe("Session.create", () => {
         {
           durable: { seq: 1 },
           type: "session.inbox.enqueued",
-          data: { input: { type: "user", data: { text: "Hello" }, delivery: "steer" } },
+          data: {
+            inboxID: expect.any(String),
+            item: { type: "user", payload: { text: "Hello" }, delivery: "steer" },
+          },
         },
         { durable: { seq: 2 }, type: "session.inbox.delivered" },
       ])
@@ -567,7 +570,7 @@ describe("Session.create", () => {
           id: admitted.id,
           sessionID: created.id,
           type: "user",
-          data: { text: "Replay lifecycle" },
+          payload: { text: "Replay lifecycle" },
           delivery: "steer",
         })
         expect(yield* store.context(created.id)).toEqual([])
