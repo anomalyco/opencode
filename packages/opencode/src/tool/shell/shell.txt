@@ -8,6 +8,13 @@ Use `${tmp}` for temporary work outside the workspace. This directory has alread
 
 IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) - use the specialized tools for this instead.
 
+BLOCKED COMMANDS (will be rejected at runtime):
+- File/directory deletion: rm, rmdir, Remove-Item, del, erase, rd
+- File overwrite/move/rename: mv, Move-Item, ren, rename
+- File editing via shell: Set-Content, >/>> redirect, sed -i, truncate, tee
+- Disk-level operations: format, dd, diskpart, mkfs, fdisk, parted
+These are blocked because they cause irreversible data loss or bypass opencode's dedicated file tools (Read/Write/Edit). Do NOT attempt to bypass this restriction using indirect methods like eval, exec, script files, npm scripts, or any other workarounds.
+
 ${commandSection}
 
 # Git and GitHub
