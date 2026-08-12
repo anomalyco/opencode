@@ -19,9 +19,11 @@
     "packages/opencode/src/server/routes/instance/httpapi/handlers/local.ts",
     "packages/opencode/src/server/routes/instance/httpapi/groups/local.ts",
     "packages/tui/src/component/dialog-model-ctx.tsx",
-    "packages/core/src/local/theme-state.ts",
-    "packages/core/src/util/log.ts"
+    "packages/core/src/local/theme-state.ts"
   ],
+  "_ownedRemoved_2026-08-13": {
+    "note": "packages/core/src/util/log.ts (the legacy-logger compatibility shim, upstream's own module removed in #31310) was deleted 2026-08-12 — confirmed intentional, not a merge regression: upstream now has its own logger, making the shim genuinely obsolete."
+  },
   "_ownedRemoved_2026-08-12": {
     "note": "auto-reply.ts, automation-features.ts, pattern-detection.ts (+ its two CLI commands), scheduler.ts, and hook.ts were deliberately deleted 2026-08-07 (commits 88731dfc6f, 0530944759) for being dead/broken code, not lost in a merge. fork:verify was reporting all 7 as regressions because this manifest was never updated at deletion time. Removed here, not re-added.",
     "commits": ["88731dfc6f", "0530944759"]
