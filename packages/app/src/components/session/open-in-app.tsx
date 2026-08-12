@@ -75,7 +75,7 @@ export const WINDOWS_OPEN_APPS = [
     id: "sublime-text",
     label: "session.header.open.app.sublimeText",
     icon: "sublime-text",
-    openWith: "Sublime Text",
+    openWith: "subl",
   },
 ] as const
 
@@ -87,7 +87,7 @@ export const LINUX_OPEN_APPS = [
     id: "sublime-text",
     label: "session.header.open.app.sublimeText",
     icon: "sublime-text",
-    openWith: "Sublime Text",
+    openWith: "subl",
   },
 ] as const
 
