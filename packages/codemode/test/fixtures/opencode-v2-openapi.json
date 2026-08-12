@@ -2944,7 +2944,7 @@
                       "type": "string"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/SessionLogItemStream"
+                      "$ref": "#/components/schemas/SessionLogItemJsonString"
                     }
                   },
                   "required": ["id", "event", "data"],
@@ -7211,7 +7211,7 @@
                       "type": "string"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/V2EventStream"
+                      "$ref": "#/components/schemas/V2EventJsonString"
                     }
                   },
                   "required": ["id", "event", "data"],
@@ -14991,7 +14991,7 @@
           }
         ]
       },
-      "SessionLogItemStream": {
+      "SessionLogItemJsonString": {
         "type": "string",
         "contentSchema": {
           "$ref": "#/components/schemas/SessionLogItem"
@@ -23236,7 +23236,7 @@
           }
         ]
       },
-      "V2EventStream": {
+      "V2EventJsonString": {
         "type": "string",
         "contentSchema": {
           "$ref": "#/components/schemas/V2Event"

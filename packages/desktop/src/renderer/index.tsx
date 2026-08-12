@@ -33,6 +33,7 @@ import { Splash } from "@opencode-ai/ui/logo"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 
 const root = document.getElementById("root")
+const version = import.meta.env.OPENCODE_VERSION ?? pkg.version
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   throw new Error(t("desktop.error.dev.rootNotFound"))
 }
@@ -41,7 +42,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
     environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
-    release: import.meta.env.VITE_SENTRY_RELEASE ?? `desktop@${pkg.version}`,
+    release: import.meta.env.VITE_SENTRY_RELEASE ?? `desktop@${version}`,
     initialScope: {
       tags: {
         platform: "desktop",
@@ -168,7 +169,7 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
   return {
     platform: "desktop",
     os,
-    version: pkg.version,
+    version,
     windowID: windowState.id,
 
     async openDirectoryPickerDialog(opts) {

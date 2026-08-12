@@ -1,9 +1,9 @@
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
-import type { Service as LLMClientService } from "../../src/route/client"
-import type { Service as RequestExecutorService } from "../../src/route/executor"
-import type { Service as WebSocketExecutorService } from "../../src/route/transport/websocket"
+import { LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route.js"
+import type { Service as LLMClientService } from "../../src/route/client.js"
+import type { Service as RequestExecutorService } from "../../src/route/executor.js"
+import type { Service as WebSocketExecutorService } from "../../src/route/transport/websocket.js"
 
 export type HandlerInput = {
   readonly request: HttpClientRequest.HttpClientRequest

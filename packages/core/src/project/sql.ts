@@ -1,4 +1,4 @@
-import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
+import type { EffectDrizzleSqlite } from "../database/drizzle.js"
 import { isNotNull, isNull, ne, or } from "drizzle-orm"
 import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core"
 import { absoluteArrayColumn, absoluteColumn } from "../database/path.js"

@@ -233,7 +233,7 @@ import type {
   Endpoint29_0Input,
   Endpoint29_0Output,
 } from "../api/api.js"
-import { ClientError } from "./client-error"
+import { ClientError } from "./client-error.js"
 
 type RawClient = HttpApiClient.ForApi<typeof ClientApi>
 

@@ -655,6 +655,18 @@ test("updates session location when moved", async () => {
     await wait(() => data.session.get("ses_test")?.location.directory === destination)
     expect(data.session.get("ses_test")?.projectID).toBe("project-moved")
     expect(data.session.get("ses_test")?.subpath).toBe("packages/cli")
+    expect(data.session.message.list("ses_test")).toContainEqual({
+      id: "msg_moved_1",
+      type: "location-switched",
+      location: { directory: destination },
+      projectID: "project-moved",
+      subpath: "packages/cli",
+      previous: {
+        location: { directory },
+        projectID: "proj_test",
+      },
+      time: { created: 1 },
+    })
   } finally {
     app.renderer.destroy()
   }

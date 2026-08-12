@@ -5,8 +5,8 @@ import {
   type LanguageModel,
   type LanguageModelProviderOptions,
   type ProviderOptions,
-} from "../src"
-import { OpenAIChat } from "../src/protocols"
+} from "../src/index.js"
+import { OpenAIChat } from "../src/protocols.js"
 
 interface ExampleOptions {
   readonly [key: string]: unknown

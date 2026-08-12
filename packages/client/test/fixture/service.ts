@@ -3,6 +3,10 @@ import { appendFile, rename, writeFile } from "node:fs/promises"
 const [registration, mode, delay] = process.argv.slice(2)
 if (registration === undefined || mode === undefined) throw new Error("Missing service fixture arguments")
 if (mode === "failed") process.exit(1)
+if (mode === "stderr-failed") {
+  process.stderr.write("x".repeat(16_384) + "\nactionable startup failure\n")
+  process.exit(1)
+}
 if (mode === "record-start") {
   await writeFile(registration + ".started", "")
   process.exit(1)

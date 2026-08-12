@@ -72,6 +72,21 @@ test("reports a failed registered service", async () => {
   )
 })
 
+test("reports a bounded contender stderr tail with native promises", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const error = await Service.ensure({
+    file: registration,
+    version: "test",
+    command: [process.execPath, fixture, registration, "stderr-failed"],
+  }).catch((error: unknown) => error)
+
+  expect(error).toBeInstanceOf(Error)
+  if (!(error instanceof Error)) throw error
+  expect(error.message).toContain("actionable startup failure")
+  expect(error.message.length).toBeLessThan(9_000)
+}, 10_000)
+
 test("evicts an unresponsive registered service before starting its replacement", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")

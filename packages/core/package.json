@@ -100,7 +100,6 @@
     "@ff-labs/fff-bun": "0.10.1",
     "@ff-labs/fff-node": "0.10.1",
     "@opencode-ai/codemode": "workspace:*",
-    "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
     "@opencode-ai/ai": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",

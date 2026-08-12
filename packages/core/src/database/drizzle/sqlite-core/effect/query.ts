@@ -16,7 +16,7 @@ import type { KnownKeysOnly } from "drizzle-orm/utils"
 import type { SQLiteDialect } from "drizzle-orm/sqlite-core/dialect"
 import type { PreparedQueryConfig } from "drizzle-orm/sqlite-core/session"
 import type { SQLiteTable } from "drizzle-orm/sqlite-core/table"
-import type { SQLiteEffectPreparedQuery, SQLiteEffectSession } from "./session"
+import type { SQLiteEffectPreparedQuery, SQLiteEffectSession } from "./session.js"
 
 export class SQLiteEffectRelationalQueryBuilder<
   out TSchema extends TablesRelationalConfig,

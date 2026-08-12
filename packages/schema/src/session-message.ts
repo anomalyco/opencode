@@ -3,7 +3,9 @@ export * as SessionMessage from "./session-message.js"
 import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { Content } from "./tool.js"
+import { Location } from "./location.js"
 import { Model } from "./model.js"
+import { Project } from "./project.js"
 import { Prompt } from "./prompt.js"
 import { DateTimeUtcFromMillis, PositiveInt, RelativePath, statics } from "./schema.js"
 import { ascending } from "./identifier.js"
@@ -52,6 +54,20 @@ export const ModelSelected = Schema.Struct({
   model: Model.Ref,
   previous: Model.Ref.pipe(optional),
 }).annotate({ identifier: "Session.Message.ModelSelected" })
+
+export interface LocationSwitched extends Schema.Schema.Type<typeof LocationSwitched> {}
+export const LocationSwitched = Schema.Struct({
+  ...Base,
+  type: Schema.tag("location-switched"),
+  location: Location.Ref,
+  projectID: Project.ID.pipe(optional),
+  subpath: RelativePath.pipe(optional),
+  previous: Schema.Struct({
+    location: Location.Ref,
+    projectID: Project.ID.pipe(optional),
+    subpath: RelativePath.pipe(optional),
+  }).pipe(optional),
+}).annotate({ identifier: "Session.Message.LocationSwitched" })
 
 export interface User extends Schema.Schema.Type<typeof User> {}
 export const User = Schema.Struct({
@@ -243,6 +259,7 @@ export type Compaction = CompactionRunning | CompactionCompleted | CompactionFai
 export const Info = Schema.Union([
   AgentSelected,
   ModelSelected,
+  LocationSwitched,
   User,
   Synthetic,
   System,
@@ -251,5 +268,15 @@ export const Info = Schema.Union([
   Assistant,
   Compaction,
 ]).annotate({ identifier: "Session.Message.Info" })
-export type Info = AgentSelected | ModelSelected | User | Synthetic | System | Skill | Shell | Assistant | Compaction
+export type Info =
+  | AgentSelected
+  | ModelSelected
+  | LocationSwitched
+  | User
+  | Synthetic
+  | System
+  | Skill
+  | Shell
+  | Assistant
+  | Compaction
 export type Type = Info["type"]

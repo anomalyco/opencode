@@ -1,6 +1,14 @@
 import { Effect, Schema } from "effect"
-import { HttpOptions, InvalidRequestReason, AIError, ModelID, ProviderID, ProviderMetadata, Usage } from "./schema"
-import { ImageClient, Service, type Execute as ImageExecute } from "./image-client"
+import {
+  HttpOptions,
+  InvalidRequestReason,
+  AIError,
+  ModelID,
+  ProviderID,
+  ProviderMetadata,
+  Usage,
+} from "./schema/index.js"
+import { ImageClient, Service, type Execute as ImageExecute } from "./image-client.js"
 
 export interface ImageRoute<Options extends ImageOptions = ImageOptions> {
   readonly id: string

@@ -201,6 +201,23 @@ test("reports a contender that fails to start", async () => {
   ).rejects.toThrow("Server process exited with code 1")
 })
 
+test("reports a bounded contender stderr tail", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const error = await run(
+    Service.ensure({
+      file: registration,
+      version: "test",
+      command: [process.execPath, fixture, registration, "stderr-failed"],
+    }),
+  ).catch((error: unknown) => error)
+
+  expect(error).toBeInstanceOf(Error)
+  if (!(error instanceof Error)) throw error
+  expect(error.message).toContain("actionable startup failure")
+  expect(error.message.length).toBeLessThan(9_000)
+}, 10_000)
+
 test("reports a contender terminated by a signal", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")

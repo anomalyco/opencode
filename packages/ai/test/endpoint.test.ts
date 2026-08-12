@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { LLM } from "../src"
-import * as OpenAIChat from "../src/protocols/openai-chat"
-import { Endpoint } from "../src/route"
-import { LanguageModel } from "../src/schema"
+import { LLM } from "../src/index.js"
+import * as OpenAIChat from "../src/protocols/openai-chat.js"
+import { Endpoint } from "../src/route.js"
+import { LanguageModel } from "../src/schema/index.js"
 
 const request = () =>
   LLM.request({

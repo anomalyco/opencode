@@ -22,8 +22,8 @@ import {
   getViewSelectedFieldsRuntime,
   mapUpdateSet,
   orderSelectedFields,
-} from "../../internal/drizzle-utils"
-import type { SQLiteEffectPreparedQuery, SQLiteEffectSession } from "./session"
+} from "../../internal/drizzle-utils.js"
+import type { SQLiteEffectPreparedQuery, SQLiteEffectSession } from "./session.js"
 
 export type SQLiteEffectUpdateWithout<
   T extends AnySQLiteEffectUpdate,

@@ -24,10 +24,10 @@ import { fillPlaceholders, type Query, type SQL, sql } from "drizzle-orm/sql/sql
 import type { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core/dialect"
 import type { SelectedFieldsOrdered } from "drizzle-orm/sqlite-core/query-builders/select.types"
 import type { PreparedQueryConfig, SQLiteExecuteMethod, SQLiteTransactionConfig } from "drizzle-orm/sqlite-core/session"
-import { upgradeIfNeeded } from "../../up-migrations/effect-sqlite"
+import { upgradeIfNeeded } from "../../up-migrations/effect-sqlite.js"
 import { assertUnreachable, makeJitQueryMapper, type RowsMapper } from "drizzle-orm/utils"
-import { mapResultRow } from "../../internal/drizzle-utils"
-import { SQLiteEffectDatabase } from "./db"
+import { mapResultRow } from "../../internal/drizzle-utils.js"
+import { SQLiteEffectDatabase } from "./db.js"
 
 type MigrationConfigWithInit = MigrationConfig & { init?: boolean }
 

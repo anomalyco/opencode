@@ -1,6 +1,6 @@
 export * as Database from "./database.js"
 
-import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
+import { EffectDrizzleSqlite } from "./drizzle.js"
 import { sqliteLayer, supportsForeignKeyToggle, supportsTuningPragmas } from "#sqlite"
 import { Context, Effect, Layer, Schema } from "effect"
 import type { SqlClient } from "effect/unstable/sql"

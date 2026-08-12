@@ -25,6 +25,10 @@ export async function startBackgroundCli(logger: Logger) {
   const binary = app.isPackaged || isolated ? await installCli(bundled, version, logger) : bundled
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const service = await Service.ensure({
+    file:
+      isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
+        ? join(app.getPath("userData"), "opencode", "service-local.json")
+        : undefined,
     version,
     command: [binary, "serve", "--service"],
     onStart: (reason, previousVersion) => logger.log("v2 CLI background service starting", { reason, previousVersion }),

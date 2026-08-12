@@ -201,6 +201,15 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
     case "agent-switched":
     case "model-switched":
       return []
+    case "location-switched":
+      return [
+        Message.make({
+          id: message.id,
+          role: "user",
+          content: `The working directory has been changed to ${message.location.directory}.`,
+          metadata: message.metadata,
+        }),
+      ]
     case "user":
       const content = [
         ...(message.skills ?? []).map((skill) => Message.text(skill.text)),

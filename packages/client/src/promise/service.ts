@@ -1,8 +1,13 @@
 import { readFile } from "node:fs/promises"
-import { spawn, type ChildProcess } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
+import {
+  contenderFailure,
+  contenderFinished,
+  type ServiceContender,
+  spawnServiceContender,
+} from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import type { ServiceHealth, ServiceStopResponse } from "./generated/types.js"
 
@@ -13,11 +18,6 @@ export * from "../service.js"
 // The registration file is the complete discovery contract. This module is
 // intentionally implemented with Node APIs so Promise clients do not need
 // Effect or @effect/platform-node at runtime.
-
-type Contender = {
-  readonly child: ChildProcess
-  readonly error: () => Error | undefined
-}
 
 /** Discover a healthy, compatible local service without starting one. */
 export async function discover(options: DiscoverOptions = {}) {
@@ -35,7 +35,7 @@ async function discoverLocal(options: DiscoverOptions) {
 export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
   const deadline = Date.now() + timing.promiseTimeout
-  const contenders = new Set<Contender>()
+  const contenders = new Set<ServiceContender>()
   let timeouts: { readonly info: Info; readonly count: number } | undefined
   let announced = false
   let lastSpawn = 0
@@ -50,77 +50,61 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
     const [command, ...args] = options.command ?? ["opencode", "serve", "--service"]
     if (command === undefined) throw new Error("Missing service command")
     try {
-      const child = spawn(command, args, { detached: true, stdio: "ignore" })
-      let error: Error | undefined
-      child.once("error", (cause) => {
-        error = new Error("Failed to start server", { cause })
-      })
-      child.unref()
-      return { child, error: () => error }
+      return spawnServiceContender(command, args)
     } catch (cause) {
       throw new Error("Failed to start server", { cause })
     }
   }
 
-  while (true) {
-    if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
-    const registration = await registered(options.file, true, timing.requestTimeout)
-    if (registration.timedOut && registration.info !== undefined) {
-      timeouts = {
-        info: registration.info,
-        count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
-      }
-      if (timeouts.count >= 3) {
-        announce("missing")
-        await evict(registration.info, options, timing)
-        timeouts = undefined
-        lastSpawn = Date.now() - spawnDelay
-      }
-    } else timeouts = undefined
+  try {
+    while (true) {
+      if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
+      const registration = await registered(options.file, true, timing.requestTimeout)
+      if (registration.timedOut && registration.info !== undefined) {
+        timeouts = {
+          info: registration.info,
+          count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
+        }
+        if (timeouts.count >= 3) {
+          announce("missing")
+          await evict(registration.info, options, timing)
+          timeouts = undefined
+          lastSpawn = Date.now() - spawnDelay
+        }
+      } else timeouts = undefined
 
-    if (registration.service !== undefined) {
-      spawnDelay = timing.spawnDelay
-      const service = registration.service
-      const compatible = !service.legacy && (options.version === undefined || service.version === options.version)
-      if (compatible && service.state === "ready") return service.endpoint
-      if (compatible && service.state === "failed") throw new Error("Background service failed to start")
-      if (!compatible) {
-        announce("version-mismatch", service.version)
-        await kill(service, options, timing).catch(() => undefined)
-        lastSpawn = 0
+      if (registration.service !== undefined) {
+        spawnDelay = timing.spawnDelay
+        const service = registration.service
+        const compatible = !service.legacy && (options.version === undefined || service.version === options.version)
+        if (compatible && service.state === "ready") return service.endpoint
+        if (compatible && service.state === "failed") throw new Error("Background service failed to start")
+        if (!compatible) {
+          announce("version-mismatch", service.version)
+          await kill(service, options, timing).catch(() => undefined)
+          lastSpawn = 0
+        }
+      } else {
+        if (lastSpawn === 0 && registration.info !== undefined) lastSpawn = Date.now()
+        const finished = [...contenders].filter(contenderFinished)
+        const failure = finished.map(contenderFailure).find((error) => error !== undefined)
+        if (finished.some((item) => item.child.exitCode === 0)) {
+          spawnDelay = Math.min(spawnDelay * 2, timing.maxSpawnDelay)
+        }
+        finished.forEach((item) => contenders.delete(item))
+        if (failure !== undefined && contenders.size === 0) throw failure
+        // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
+        if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
+          announce("missing")
+          contenders.add(spawnContender())
+          lastSpawn = Date.now()
+        }
       }
-    } else {
-      if (lastSpawn === 0 && registration.info !== undefined) lastSpawn = Date.now()
-      const finished = [...contenders].filter(contenderFinished)
-      const failure = finished.map(contenderFailure).find((error) => error !== undefined)
-      if (finished.some((item) => item.child.exitCode === 0)) {
-        spawnDelay = Math.min(spawnDelay * 2, timing.maxSpawnDelay)
-      }
-      finished.forEach((item) => contenders.delete(item))
-      if (failure !== undefined && contenders.size === 0) throw failure
-      // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
-      if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
-        announce("missing")
-        contenders.add(spawnContender())
-        lastSpawn = Date.now()
-      }
+      await delay(timing.pollInterval)
     }
-    await delay(timing.pollInterval)
+  } finally {
+    contenders.forEach((contender) => contender.release())
   }
-}
-
-function contenderFailure(contender: Contender) {
-  const error = contender.error()
-  if (error !== undefined) return error
-  if (contender.child.exitCode !== null && contender.child.exitCode !== 0)
-    return new Error(`Server process exited with code ${contender.child.exitCode}`)
-  if (contender.child.signalCode !== null)
-    return new Error(`Server process terminated by ${contender.child.signalCode}`)
-  return undefined
-}
-
-function contenderFinished(contender: Contender) {
-  return contender.error() !== undefined || contender.child.exitCode !== null || contender.child.signalCode !== null
 }
 
 /** Stop the registered local service. */

@@ -9,7 +9,7 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { Effect } from "effect"
 import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
 import { isSqlError } from "effect/unstable/sql/SqlError"
-import { EffectDrizzleSqlite } from "../src"
+import { EffectDrizzleSqlite } from "@opencode-ai/core/database/drizzle"
 
 const users = sqliteTable("users", {
   id: integer().primaryKey({ autoIncrement: true }),

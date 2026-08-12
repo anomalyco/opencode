@@ -1,4 +1,4 @@
-export * from "./generated/index"
+export * from "./generated/index.js"
 export type {
   AgentApi,
   CatalogApi,
@@ -14,5 +14,5 @@ export type {
   SessionApi,
   SkillApi,
 } from "./api.js"
-export type { EventSubscribeOutput as OpenCodeEvent } from "./generated/types"
-export type OpenCodeClient = ReturnType<typeof import("./generated/client").make>
+export type { EventSubscribeOutput as OpenCodeEvent } from "./generated/types.js"
+export type OpenCodeClient = ReturnType<typeof import("./generated/client.js").make>

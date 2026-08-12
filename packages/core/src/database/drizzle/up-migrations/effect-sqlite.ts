@@ -5,13 +5,13 @@ import { EffectDrizzleError } from "drizzle-orm/effect-core/errors"
 import type { QueryEffectHKTBase } from "drizzle-orm/effect-core/query-effect"
 import type { MigrationMeta } from "drizzle-orm/migrator"
 import { sql } from "drizzle-orm/sql/sql"
-import type { SQLiteEffectSession } from "../sqlite-core/effect/session"
+import type { SQLiteEffectSession } from "../sqlite-core/effect/session.js"
 import {
   buildSQLiteMigrationBackfillStatements,
   prepareSQLiteMigrationBackfill,
   type SQLiteMigrationTableRow,
-} from "./sqlite"
-import { GET_VERSION_FOR, MIGRATIONS_TABLE_VERSIONS, type UpgradeResult } from "./utils"
+} from "./sqlite.js"
+import { GET_VERSION_FOR, MIGRATIONS_TABLE_VERSIONS, type UpgradeResult } from "./utils.js"
 
 const migrationUpgradeError = (cause: unknown) =>
   new EffectDrizzleError({

@@ -12795,6 +12795,63 @@
         "required": ["id", "time", "type", "model"],
         "additionalProperties": false
       },
+      "Session.Message.LocationSwitched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^msg_"
+              }
+            ]
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "type": {
+            "type": "string",
+            "enum": ["location-switched"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "subpath": {
+            "type": "string"
+          },
+          "previous": {
+            "type": "object",
+            "properties": {
+              "location": {
+                "$ref": "#/components/schemas/Location.Ref"
+              },
+              "projectID": {
+                "type": "string"
+              },
+              "subpath": {
+                "type": "string"
+              }
+            },
+            "required": ["location"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "time", "type", "location"],
+        "additionalProperties": false
+      },
       "Prompt.Base64": {
         "type": "string",
         "allOf": [
@@ -13718,6 +13775,9 @@
           },
           {
             "$ref": "#/components/schemas/Session.Message.ModelSelected"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.LocationSwitched"
           },
           {
             "$ref": "#/components/schemas/Session.Message.User"

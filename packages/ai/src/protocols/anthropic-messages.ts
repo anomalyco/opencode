@@ -1,10 +1,10 @@
 import { Effect, Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
-import { Route } from "../route/client"
-import { Auth } from "../route/auth"
-import { Endpoint } from "../route/endpoint"
-import { Framing } from "../route/framing"
-import { Protocol } from "../route/protocol"
+import { Route } from "../route/client.js"
+import { Auth } from "../route/auth.js"
+import { Endpoint } from "../route/endpoint.js"
+import { Framing } from "../route/framing.js"
+import { Protocol } from "../route/protocol.js"
 import {
   AIError,
   LLMEvent,
@@ -21,13 +21,13 @@ import {
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
-} from "../schema"
-import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
-import { classifyProviderFailure } from "../provider-error"
-import * as Cache from "./utils/cache"
-import { Lifecycle } from "./utils/lifecycle"
-import { ToolSchemaProjection } from "./utils/tool-schema"
-import { ToolStream } from "./utils/tool-stream"
+} from "../schema/index.js"
+import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { classifyProviderFailure } from "../provider-error.js"
+import * as Cache from "./utils/cache.js"
+import { Lifecycle } from "./utils/lifecycle.js"
+import { ToolSchemaProjection } from "./utils/tool-schema.js"
+import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "anthropic-messages"
 const MEDIA_MIMES = new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.PDF_MIMES])
@@ -1029,4 +1029,4 @@ export const route = Route.make({
   headers: () => ({ "anthropic-version": "2023-06-01" }),
 })
 
-export * as AnthropicMessages from "./anthropic-messages"
+export * as AnthropicMessages from "./anthropic-messages.js"

@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { ZipWriter, BlobWriter, BlobReader } from "@zip.js/zip.js"
 import { dirname, join } from "node:path"
 import { homedir } from "node:os"
+import { VERSION } from "./constants"
 
 const MAX_LOG_AGE_DAYS = 7
 const TAIL_LINES = 1000
@@ -133,7 +134,7 @@ function cleanup() {
 function manifest() {
   return {
     generated: new Date().toISOString(),
-    version: app.getVersion(),
+    version: VERSION,
     name: app.getName(),
     packaged: app.isPackaged,
     platform: process.platform,

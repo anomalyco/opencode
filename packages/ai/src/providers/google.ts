@@ -1,12 +1,12 @@
-import type { RouteDefaultsInput } from "../route/client"
-import { Auth } from "../route/auth"
-import type { ProviderAuthOption } from "../route/auth-options"
-import type { ProviderPackage } from "../provider-package"
-import { HttpOptions, ProviderID, mergeHttpOptions, type ModelID } from "../schema"
-import { Gemini } from "../protocols/gemini"
-import { GoogleImages } from "../protocols/google-images"
+import type { RouteDefaultsInput } from "../route/client.js"
+import { Auth } from "../route/auth.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderPackage } from "../provider-package.js"
+import { HttpOptions, ProviderID, mergeHttpOptions, type ModelID } from "../schema/index.js"
+import { Gemini } from "../protocols/gemini.js"
+import { GoogleImages } from "../protocols/google-images.js"
 
-export type { GoogleImageOptions } from "../protocols/google-images"
+export type { GoogleImageOptions } from "../protocols/google-images.js"
 export type GeminiOptionsInput = Gemini.OptionsInput
 export type GeminiProviderOptionsInput = Gemini.ProviderOptionsInput
 

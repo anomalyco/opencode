@@ -7,7 +7,7 @@ import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { AbsolutePath } from "../schema.js"
 import { ProjectSchema } from "./schema.js"
 import { ProjectDirectoryTable } from "./sql.js"
-import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
+import type { EffectDrizzleSqlite } from "../database/drizzle.js"
 import type { Project } from "../project.js"
 
 export type Directory = Project.Directory

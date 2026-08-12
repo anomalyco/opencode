@@ -16,6 +16,7 @@ import { InstructionState } from "./instruction-state.js"
 import { SessionPendingTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { Slug } from "../util/slug.js"
 import { Money } from "@opencode-ai/schema/money"
+import { AbsolutePath, RelativePath } from "../schema.js"
 import type { SessionSchema } from "./schema.js"
 
 type DatabaseService = Database.Interface["db"]
@@ -253,6 +254,33 @@ function run(db: DatabaseService, event: MessageEvent) {
             Effect.map((row) => (row?.model ? Schema.decodeUnknownSync(Model.Ref)(row.model) : undefined)),
           )
       },
+      getLocation() {
+        return db
+          .select({
+            directory: SessionTable.directory,
+            workspaceID: SessionTable.workspace_id,
+            projectID: SessionTable.project_id,
+            subpath: SessionTable.path,
+          })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.map((row) =>
+              row
+                ? {
+                    location: {
+                      directory: AbsolutePath.make(row.directory),
+                      workspaceID: row.workspaceID ? Workspace.ID.make(row.workspaceID) : undefined,
+                    },
+                    projectID: row.projectID,
+                    subpath: row.subpath === null ? undefined : RelativePath.make(row.subpath),
+                  }
+                : undefined,
+            ),
+          )
+      },
       getCurrentAssistant() {
         return Effect.gen(function* () {
           // A newer step supersedes stale incomplete rows; never resume an older assistant projection.
@@ -391,6 +419,7 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.Moved, (event) =>
       Effect.gen(function* () {
+        yield* run(db, event)
         yield* db
           .update(SessionTable)
           .set({

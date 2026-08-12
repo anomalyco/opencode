@@ -13,9 +13,9 @@ import {
   type ContentPart,
   type FinishReason,
   type LanguageModel,
-} from "../src"
-import { LLMClient } from "../src/route"
-import { Tool } from "../src/tool"
+} from "../src/index.js"
+import { LLMClient } from "../src/route.js"
+import { Tool } from "../src/tool.js"
 
 export const weatherToolName = "get_weather"
 
