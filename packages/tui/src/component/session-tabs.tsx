@@ -92,16 +92,17 @@ export function createMarquee(animations: () => boolean) {
     interval = setInterval(() => setOffset((value) => (value + 1) % cycleWidth), MARQUEE_INTERVAL)
   }
   const enter = (sessionID: string, title: string, width: number) => {
+    if (!marqueeOverflows(title, width)) {
+      const current = active()
+      if (current) leave(current)
+      return
+    }
     if (active() === sessionID && !returning) return
     clear()
     if (active() === sessionID) {
       returning = false
       leading.animate({ opacity: 1 })
       return scroll()
-    }
-    if (!marqueeOverflows(title, width)) {
-      reset()
-      return
     }
     cycleWidth = marqueeCycleWidth(title)
     setActive(sessionID)
@@ -368,6 +369,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const selected = () => activeID() === tab.sessionID
               const status = createMemo(() => itemStatus(tab))
               const [sweepLevel, setSweepLevel] = createSignal(0)
+              const [closeHovered, setCloseHovered] = createSignal(false)
               const session = createMemo(() => data.session.get(tab.sessionID))
               const project = createMemo(() => {
                 const value = session()
@@ -598,8 +600,10 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                         right={1}
                         zIndex={2}
                         width={1}
-                        fg={theme.text.subdued}
+                        fg={closeHovered() ? theme.text.default : theme.text.subdued}
                         selectable={false}
+                        onMouseOver={() => setCloseHovered(true)}
+                        onMouseOut={() => setCloseHovered(false)}
                         onMouseUp={(event) => {
                           if (event.button === RIGHT_MOUSE_BUTTON) return
                           if (hovered() !== tab.sessionID) return
@@ -607,7 +611,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                           tabs.close(tab.sessionID)
                         }}
                       >
-                        {hovered() === tab.sessionID ? "×" : ""}
+                        {hovered() === tab.sessionID ? "✕" : ""}
                       </text>
                     </box>
                   </box>
@@ -945,6 +949,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           }
           // The running sweep's level under the number cell, reported by the pulse renderable.
           const [sweepLevel, setSweepLevel] = createSignal(0)
+          const [closeHovered, setCloseHovered] = createSignal(false)
           const numberColor = () => {
             const feedback = feedbackColor()
             if (feedback) return feedback
@@ -1042,8 +1047,10 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   right={1}
                   zIndex={2}
                   width={1}
-                  fg={closeColor()}
+                  fg={closeHovered() ? theme.text.default : closeColor()}
                   selectable={false}
+                  onMouseOver={() => setCloseHovered(true)}
+                  onMouseOut={() => setCloseHovered(false)}
                   onMouseUp={(event) => {
                     if (event.button === RIGHT_MOUSE_BUTTON) return
                     // The close mark only renders while hovered; without motion events a click can
@@ -1053,7 +1060,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                     tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
                   }}
                 >
-                  {hovered() === tab.sessionID ? "×" : ""}
+                  {hovered() === tab.sessionID ? "✕" : ""}
                 </text>
               </box>
             </box>
