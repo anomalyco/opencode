@@ -36,10 +36,11 @@ export const create = Effect.fn("OpenCode.create")(function* (options: CreateOpt
     (runtime) => runtime.disposeEffect,
   )
   const context = yield* runtime.contextEffect
-  // Forked so the returned client is never delayed; resumed drains are already
-  // logged and durably recorded by the execution layer.
-  if (embed.resumeSuspendedSessions)
-    yield* Effect.forkDetach(Context.get(context, SessionRestart.Service).resumeSuspendedSessions)
+  // Unconditional, as on every runtime: the sweep is a no-op when nothing is
+  // suspended (always, for the default in-memory database). Forked so the
+  // returned client is never delayed; resumed drains are already logged and
+  // durably recorded by the execution layer.
+  yield* Effect.forkDetach(Context.get(context, SessionRestart.Service).resumeSuspendedSessions)
   const plugins = Context.get(context, SdkPlugins.Service)
   const router = Context.get(context, HttpRouter.HttpRouter)
   const handler = HttpEffect.toWebHandlerWith<never, HttpServerRequest.HttpServerRequest | Scope.Scope>(

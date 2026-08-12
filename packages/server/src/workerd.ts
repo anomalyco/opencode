@@ -51,12 +51,9 @@ export interface Options {
  */
 export function create(options: Options) {
   // Eviction can kill the isolate between a turn's Started and terminal events with no
-  // teardown. The write-ahead execution claim plus this boot-time resume recovers such
-  // orphaned turns by replaying the drain from durable history on the next wake.
-  return ServerFetch.make(serverOptions(options), {
-    overrides: replacements(options),
-    resumeSuspendedSessions: true,
-  })
+  // teardown. The write-ahead execution claim plus ServerFetch.make's boot-time resume
+  // recovers such orphaned turns by replaying the drain from durable history on the next wake.
+  return ServerFetch.make(serverOptions(options), { overrides: replacements(options) })
 }
 
 export function serverOptions(options: Options): ServerOptions {

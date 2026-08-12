@@ -15,21 +15,15 @@ export type CreateOptions = ServerWorkerd.Options & {
  * the injected `DurableObjectStorage` SQLite and every intentionally-local
  * service replaced or disabled (see `ServerWorkerd.replacements`).
  *
- * Suspended Sessions resume on boot because a Durable Object can be evicted
- * mid-turn with no teardown; the write-ahead execution claim marks the turn
- * and this boot-time sweep replays it.
+ * Suspended Sessions resume on boot (as on every runtime) because a Durable
+ * Object can be evicted mid-turn with no teardown; the write-ahead execution
+ * claim marks the turn and the boot-time sweep replays it.
  *
  * Returns the same typed `OpenCode.Interface` as `OpenCode.create` — typed
  * session operations plus the live `events.subscribe()` stream — served over
  * an in-process fetch transport, so no request leaves the isolate.
  */
 export const create = ({ log, ...options }: CreateOptions) =>
-  OpenCode.create(
-    { ...ServerWorkerd.serverOptions(options), log },
-    {
-      overrides: ServerWorkerd.replacements(options),
-      resumeSuspendedSessions: true,
-    },
-  )
+  OpenCode.create({ ...ServerWorkerd.serverOptions(options), log }, { overrides: ServerWorkerd.replacements(options) })
 
 export const layer = (options: CreateOptions) => Layer.effect(OpenCode.Service, create(options))
