@@ -1209,7 +1209,7 @@ describe("OpenAI Responses route", () => {
           providerExecuted: undefined,
           providerMetadata: { openai: { itemId: "item_1" } },
         },
-        { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
+{ type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
         {
           type: "finish",
           reason: "tool-calls",
@@ -1217,6 +1217,63 @@ describe("OpenAI Responses route", () => {
           usage,
         },
       ])
+    }),
+  )
+
+  it.effect("finalizes an announced function call when the response completes without output_item.done", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        {
+          type: "response.output_item.added",
+          item: { type: "function_call", id: "item_1", call_id: "call_1", name: "patch", arguments: "" },
+        },
+        { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
+      )
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, {
+          tools: [{ name: "patch", description: "Apply changes", inputSchema: { type: "object" } }],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+      const usage = new Usage({
+        inputTokens: 5,
+        outputTokens: 1,
+        nonCachedInputTokens: 5,
+        cacheReadInputTokens: undefined,
+        reasoningTokens: undefined,
+        totalTokens: 6,
+        providerMetadata: { openai: { input_tokens: 5, output_tokens: 1 } },
+      })
+
+      expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        {
+          type: "tool-input-start",
+          id: "call_1",
+          name: "patch",
+          providerMetadata: { openai: { itemId: "item_1" } },
+        },
+        {
+          type: "tool-input-end",
+          id: "call_1",
+          name: "patch",
+          providerMetadata: { openai: { itemId: "item_1" } },
+        },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "patch",
+          input: {},
+          providerExecuted: undefined,
+          providerMetadata: { openai: { itemId: "item_1" } },
+        },
+        { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
+        {
+          type: "finish",
+          reason: "tool-calls",
+          providerMetadata: undefined,
+          usage,
+        },
+])
     }),
   )
 
