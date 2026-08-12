@@ -297,7 +297,10 @@ async function renderOpen(
     data = useData()
     storage = useStorage()
     onMount(
-      () => void Promise.resolve(beforeOpen?.({ data, location })).then(() => dialog.replace(() => <DialogOpen />)),
+      () =>
+        void Promise.resolve(beforeOpen?.({ data, location })).then(() =>
+          dialog.replace(() => <DialogOpen />, undefined, { key: "open", size: "large" }),
+        ),
     )
     return null
   }

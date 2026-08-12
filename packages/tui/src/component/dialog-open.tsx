@@ -1,4 +1,4 @@
-import { createMemo, createResource, createSignal, onMount } from "solid-js"
+import { createMemo, createResource, createSignal } from "solid-js"
 import type { SessionInfo } from "@opencode-ai/client"
 import { useTerminalDimensions } from "@opentui/solid"
 import { dialogWidth, useDialog } from "../ui/dialog"
@@ -141,8 +141,6 @@ export function DialogOpen() {
 
     return [...sessionOptions, ...projectOptions]
   })
-
-  onMount(() => dialog.setSize("large"))
 
   return (
     <DialogSelect

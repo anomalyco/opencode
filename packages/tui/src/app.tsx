@@ -681,7 +681,8 @@ function App(props: { pair?: DialogPairCredentials }) {
         category: "Session",
         slash: { name: "open", aliases: ["projects", "project"] },
         run: () => {
-          dialog.replace(() => <DialogOpen />)
+          if (dialog.key === "open") return
+          dialog.replace(() => <DialogOpen />, undefined, { key: "open", size: "large" })
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
