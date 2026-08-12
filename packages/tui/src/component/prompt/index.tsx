@@ -28,6 +28,7 @@ import { parseSlashHead } from "../../prompt/parse"
 import { stringWidth } from "../../util/string-width"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
+import { saveDraft, takeDraft } from "./draft-stash"
 import { Skill } from "@opencode-ai/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
@@ -129,12 +130,6 @@ function formatEditorContext(selection: EditorSelection) {
 
   return `<system-reminder>${ranges.join("\n")} This may or may not be relevant to the current task.</system-reminder>\n`
 }
-
-// One in-progress draft survives remounts. By default a single slot follows
-// focus across tabs; the tab_drafts experiment keys drafts to the tab (session
-// or home) they were written in.
-let stashed: { prompt: PromptInfo; cursor: number } | undefined
-const stashedByTab = new Map<string, { prompt: PromptInfo; cursor: number }>()
 
 function argumentSlash(input: string, commands: readonly KeymapCommand[]) {
   const head = parseSlashHead(input, /\s/)
@@ -658,10 +653,7 @@ export function Prompt(props: PromptProps) {
   const stashKey = () => (config.experimental?.tab_drafts === true ? (stashSessionID ?? "home") : undefined)
 
   onMount(() => {
-    const key = stashKey()
-    const saved = key === undefined ? stashed : stashedByTab.get(key)
-    if (key === undefined) stashed = undefined
-    else stashedByTab.delete(key)
+    const saved = takeDraft(stashKey())
     if (store.prompt.text) return
     if (saved && saved.prompt.text) {
       input.setText(saved.prompt.text)
@@ -674,10 +666,7 @@ export function Prompt(props: PromptProps) {
   onCleanup(() => {
     disposed = true
     if (store.prompt.text) {
-      const entry = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
-      const key = stashKey()
-      if (key === undefined) stashed = entry
-      else stashedByTab.set(key, entry)
+      saveDraft(stashKey(), { prompt: unwrap(store.prompt), cursor: input.cursorOffset })
     }
     setInputTarget(undefined)
     props.ref?.(undefined)
