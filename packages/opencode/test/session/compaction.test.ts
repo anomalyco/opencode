@@ -1412,7 +1412,12 @@ describe("session.compaction.process", () => {
         expect(captured).not.toContain("keep this turn")
         expect(captured).not.toContain("and this one too")
         expect(captured).not.toContain("What did we do so far?")
-      }).pipe(withCompaction({ llm: stub.llmLayer }))
+      }).pipe(
+        withCompaction({
+          llm: stub.llmLayer,
+          config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }),
+        }),
+      )
     },
     { git: true },
   )

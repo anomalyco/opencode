@@ -44,10 +44,10 @@ Rules:
 - Use terse bullets, not prose paragraphs.
 - Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
 - Do not mention the summary process or that context was compacted.`
-const SUMMARY_UPDATE_INSTRUCTIONS = `Update the existing anchored summary with the new information.
+const SUMMARY_UPDATE_INSTRUCTIONS = `Update the <prior-summary> using the new messages in <conversation>.
 
 When updating:
-- Preserve all information from the <prior-summary> unless the new conversation shows that it is inaccurate, superseded, or no longer applicable.
+- Preserve relevant information from the <prior-summary>, revising or removing anything outdated or contradicted by the <conversation>.
 - Add new progress, decisions, constraints, and context from the conversation.
 - Move completed work from "Active" to "Completed".
 - If a blocker has been resolved, update the summary to reflect that while keeping any details still needed to continue the work.
