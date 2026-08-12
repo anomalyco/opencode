@@ -31,7 +31,7 @@ import {
   directoryAutocompleteResultValue,
   directoryAutocompleteSearch,
   slashArgumentAutocomplete,
-} from "../../prompt/autocomplete"
+} from "../../prompt/directory-completion"
 
 export type AutocompleteRef = {
   onInput: (value: string) => void

@@ -7,7 +7,7 @@ import {
   directoryAutocompleteSearch,
   directoryRecentValue,
   slashArgumentAutocomplete,
-} from "../../src/prompt/autocomplete"
+} from "../../src/prompt/directory-completion"
 
 const commands = [
   {

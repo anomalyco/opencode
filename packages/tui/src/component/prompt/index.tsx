@@ -67,7 +67,7 @@ import {
 } from "../../prompt/attachment"
 import { DialogImagePreview } from "../dialog-image-preview"
 import { useDirectoryRecents } from "../../prompt/directory-recents"
-import { directoryRecentValue } from "../../prompt/autocomplete"
+import { directoryRecentValue } from "../../prompt/directory-completion"
 
 export type PromptProps = {
   sessionID?: string
