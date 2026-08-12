@@ -53,7 +53,7 @@ export function createSessionComposerController(options?: { closeMs?: number | (
   const todos = createMemo((): Todo[] => {
     const id = params.id
     if (!id) return []
-    return serverSync().session.data.todo[id] ?? []
+    return serverSync.session.data.todo[id] ?? []
   })
 
   const done = createMemo(

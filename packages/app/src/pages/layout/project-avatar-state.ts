@@ -1,9 +1,8 @@
 import { createMemo, type Accessor } from "solid-js"
-import { useGlobal } from "@/context/global"
-import { useNotification } from "@/context/notification"
+import { useGlobal, useServerCtx } from "@/context/global"
 import { usePermission } from "@/context/permission"
 import { sessionPermissionRequest, sessionQuestionRequest } from "@/pages/session/composer/session-request-tree"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 
 export function useSessionTabAvatarState(
   server: Accessor<ServerConnection.Key>,
@@ -11,20 +10,17 @@ export function useSessionTabAvatarState(
   sessionId: Accessor<string>,
 ) {
   const global = useGlobal()
-  const notification = useNotification()
-  const permission = usePermission()
   const connection = createMemo(() => global.servers.list().find((item) => ServerConnection.key(item) === server()))
-  const sync = createMemo(() => {
-    const conn = connection()
-    if (conn) return global.ensureServerCtx(conn).sync
-  })
+  const serverCtx = useServerCtx(connection)
+  const sync = () => serverCtx()?.sync
   const hasPermissions = createMemo(() => {
-    const serverSync = sync()
-    if (!serverSync) return false
-    const permissionState = permission.ensureServerState(server())
-    const [store] = serverSync.child(directory(), { bootstrap: false })
-    return !!sessionPermissionRequest(store.session, serverSync.session.data.permission, sessionId(), (item) => {
-      return !permissionState.autoResponds(item, directory())
+    const ctx = serverCtx()
+    if (!ctx) return false
+    const sync = ctx.sync
+    const permission = ctx.permission
+    const [store] = sync.child(directory(), { bootstrap: false })
+    return !!sessionPermissionRequest(store.session, sync.session.data.permission, sessionId(), (item) => {
+      return !permission.autoResponds(item, directory())
     })
   })
   const hasQuestions = createMemo(() => {
@@ -34,11 +30,9 @@ export function useSessionTabAvatarState(
     return !!sessionQuestionRequest(store.session, serverSync.session.data.question, sessionId())
   })
   const needsAttention = createMemo(() => hasPermissions() || hasQuestions())
-  const notificationState = createMemo(() => {
-    if (!connection()) return
-    return notification.ensureServerState(server())
-  })
-  const unread = createMemo(() => needsAttention() || (notificationState()?.session.unseenCount(sessionId()) ?? 0) > 0)
+  const unread = createMemo(
+    () => needsAttention() || (serverCtx()?.notification.session.unseenCount(sessionId()) ?? 0) > 0,
+  )
   const loading = createMemo(() => {
     const serverSync = sync()
     if (!serverSync) return false

@@ -3,7 +3,7 @@ import { createMemo, createResource } from "solid-js"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { ServerConnection, useServer } from "@/context/server"
+import { ServerConnection, useServers } from "@/context/servers"
 import { useSettings } from "@/context/settings"
 import { useTabs } from "@/context/tabs"
 import { type ServerHealth } from "@/utils/server-health"
@@ -49,7 +49,7 @@ function useDefaultServer() {
 }
 
 export function useServerActionsController() {
-  const server = useServer()
+  const server = useServers()
   const tabs = useTabs()
   const platform = usePlatform()
   const language = useLanguage()
@@ -72,28 +72,16 @@ export function useServerActionsController() {
 export type ServerActionsController = ReturnType<typeof useServerActionsController>
 
 export function useServerCollectionController() {
-  const server = useServer()
+  const server = useServers()
   const global = useGlobal()
   const settings = useSettings()
   const actions = useServerActionsController()
 
-  const items = createMemo(() => {
-    const current = server.current
-    const list = server.list
-    if (!current) return list
-    if (!list.includes(current)) return [current, ...list]
-    return [current, ...list.filter((item) => item !== current)]
-  })
-  const current = createMemo<ServerConnection.Any | undefined>(() =>
-    settings.general.newLayoutDesigns()
-      ? undefined
-      : (items().find((item) => ServerConnection.key(item) === server.key) ?? items()[0]),
-  )
+  const items = createMemo(() => server.list)
   const sorted = createMemo(() => {
     const raw = items()
     const list = raw
     if (!list.length) return list
-    const active = current()
     const order = new Map(list.map((item, index) => [item, index] as const))
     const rank = (value?: ServerHealth) => {
       if (value?.healthy === true) return 0
@@ -101,8 +89,6 @@ export function useServerCollectionController() {
       return 1
     }
     return list.slice().sort((a, b) => {
-      if (a === active) return -1
-      if (b === active) return 1
       const diff =
         rank(global.servers.health[ServerConnection.key(a)]) - rank(global.servers.health[ServerConnection.key(b)])
       if (diff !== 0) return diff
@@ -113,7 +99,6 @@ export function useServerCollectionController() {
   return {
     collection: {
       items: sorted,
-      current,
       health: () => global.servers.health,
     },
     ...actions,
@@ -121,21 +106,3 @@ export function useServerCollectionController() {
 }
 
 export type ServerCollectionController = ReturnType<typeof useServerCollectionController>
-
-export function useServerDomainController(options: { onSelect?: () => void } = {}) {
-  const navigate = useNavigate()
-  const server = useServer()
-  const global = useGlobal()
-  const collection = useServerCollectionController()
-
-  const select = async (connection: ServerConnection.Any) => {
-    if (global.servers.health[ServerConnection.key(connection)]?.healthy === false) return
-    options.onSelect?.()
-    navigate("/")
-    queueMicrotask(() => server.setActive(ServerConnection.key(connection)))
-  }
-
-  return { ...collection, selection: { select } }
-}
-
-export type ServerDomainController = ReturnType<typeof useServerDomainController>

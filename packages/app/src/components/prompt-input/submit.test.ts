@@ -195,14 +195,6 @@ beforeAll(async () => {
     usePrompt: () => prompt,
   }))
 
-  mock.module("@/context/layout", () => ({
-    useLayout: () => ({
-      handoff: {
-        setTabs: () => undefined,
-      },
-    }),
-  }))
-
   mock.module("@/context/sdk", () => ({
     useSDK: () => {
       const sdk = {

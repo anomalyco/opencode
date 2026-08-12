@@ -104,7 +104,7 @@ function ProviderTip() {
   )
   const visible = createMemo(
     () =>
-      serverSync().child(sdk().directory)[0].provider_ready &&
+      serverSync.child(sdk().directory)[0].provider_ready &&
       persistedReady() &&
       providers.paid().length === 0 &&
       Date.now() - persistedState.dismissedAt >= providerTipDismissalDuration,

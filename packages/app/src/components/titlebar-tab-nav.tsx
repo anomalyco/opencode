@@ -4,9 +4,9 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMutation } from "@tanstack/solid-query"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { useGlobal } from "@/context/global"
+import { useGlobal, useServerCtx } from "@/context/global"
 import { useLanguage } from "@/context/language"
-import { ServerConnection, serverName } from "@/context/server"
+import { ServerConnection, serverName, useServers } from "@/context/servers"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import type { SessionInfo } from "@opencode-ai/client/promise"
@@ -46,11 +46,8 @@ export function TabNavItem(props: {
     event.stopPropagation()
     props.onClose()
   }
-  const global = useGlobal()
-  const serverCtx = createMemo(() => {
-    const conn = global.servers.list().find((item) => ServerConnection.key(item) === props.server)
-    if (conn) return global.ensureServerCtx(conn)
-  })
+  const servers = useServers()
+  const serverCtx = useServerCtx(() => servers.list.find((item) => ServerConnection.key(item) === props.server))
   const project = createMemo(() => {
     const session = props.session()
     if (!session) return
@@ -74,8 +71,8 @@ export function TabNavItem(props: {
   })
   // Only label the server when multiple servers are connected.
   const serverLabel = createMemo(() => {
-    if (global.servers.list().length <= 1) return
-    const conn = global.servers.list().find((item) => ServerConnection.key(item) === props.server)
+    if (servers.list.length <= 1) return
+    const conn = servers.list.find((item) => ServerConnection.key(item) === props.server)
     return conn ? serverName(conn) : undefined
   })
 

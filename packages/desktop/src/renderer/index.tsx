@@ -404,18 +404,12 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
       <Show when={ready()} fallback={<LoadingSplash />}>
         <Show when={effectiveDefaultServer()} keyed>
           {(key) => (
-            <AppInterface
-              defaultServer={key}
-              servers={servers()}
-              router={router}
-              startup={onboarding.promise}
-              serverScoped={
-                <DesktopFirstLaunchOnboarding
-                  initialUrl={getLastActiveUrl(platform.windowID ?? "browser")}
-                  onLoaded={onboarding.resolve}
-                />
-              }
-            >
+            <AppInterface defaultServer={key} servers={servers()} router={router} startup={onboarding.promise}>
+              <DesktopFirstLaunchOnboarding
+                initialUrl={getLastActiveUrl(platform.windowID ?? "browser")}
+                onLoaded={onboarding.resolve}
+                serverKey={key}
+              />
               <Inner />
             </AppInterface>
           )}

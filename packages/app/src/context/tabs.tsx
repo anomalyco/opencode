@@ -2,7 +2,7 @@ import type { SessionInfo } from "@opencode-ai/client/promise"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createStore, produce } from "solid-js/store"
 import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/utils/persist"
-import { ServerConnection, useServer } from "./server"
+import { ServerConnection, useServers } from "./servers"
 import { createEffect, getOwner, onCleanup, startTransition } from "solid-js"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { usePlatform } from "./platform"
@@ -13,6 +13,7 @@ import { createTabMemory } from "./tab-memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed-tabs"
 import { createDraftPromptSession, type PromptModel } from "./prompt-state"
 import { migrateTabs } from "./tab-migration"
+import { useCurrentRoute } from "./layout"
 
 export type SessionTab = {
   type: "session"
@@ -54,13 +55,12 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
   name: "Tabs",
   gate: false,
   init: () => {
-    const server = useServer()
+    const servers = useServers()
     const platform = usePlatform()
-    const fallback = server.key
     const [store, setStore, _, ready] = persisted(
       {
         ...Persist.window("tabs"),
-        migrate: (value: unknown) => migrateTabs(value, fallback),
+        migrate: (value: unknown) => migrateTabs(value, ServerConnection.key(servers.list[0])),
       },
       createStore<Tab[]>([]),
     )
@@ -72,6 +72,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const navigate = useNavigate()
     const location = useLocation()
     const memory = createTabMemory(getOwner())
+    const currentRoute = useCurrentRoute()
 
     const closing = new Set<string>()
     let recentWrite = 0
@@ -120,11 +121,11 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     createEffect(() => {
       if (!ready() || !recentReady()) return
-      const servers = new Set(server.list.map(ServerConnection.key))
-      const next = store.filter((tab) => servers.has(tab.server))
+      const serversSet = new Set(servers.list.map(ServerConnection.key))
+      const next = store.filter((tab) => serversSet.has(tab.server))
       if (next.length !== store.length) {
         for (const tab of store) {
-          if (!servers.has(tab.server)) {
+          if (!serversSet.has(tab.server)) {
             const key = tabKey(tab)
             memory.remove(key)
             removeInfo(key)
@@ -141,8 +142,8 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     createEffect(() => {
       if (!closedReady()) return
-      const servers = new Set(server.list.map(ServerConnection.key))
-      const next = closed.filter((entry) => servers.has(entry.tab.server))
+      const serversSet = new Set(servers.list.map(ServerConnection.key))
+      const next = closed.filter((entry) => serversSet.has(entry.tab.server))
       if (next.length !== closed.length) setClosed(() => next)
     })
 
@@ -293,10 +294,9 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         for (const key of removed) removeInfo(key)
         if (recent.key && removed.includes(recent.key)) setRecentKey(undefined)
         for (const draftID of drafts) removeDraftPersisted(draftID)
-        if (server.key === key) navigate("/")
       },
       removeSessions: (input: SessionTabsRemovedDetail) => {
-        const targetServer = input.server ?? server.key
+        const targetServer = input.server
         updateClosed((stack) => removeClosedTabs(stack, targetServer, input.sessionIDs))
         const removed = store
           .filter(
@@ -307,17 +307,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           setStore(
             produce((tabs) => {
               const sessionIDs = new Set(input.sessionIDs)
-              const currentHref =
-                targetServer === server.key && params.dir && params.id
-                  ? tabHref({
-                      type: "session",
-                      server: targetServer,
-                      sessionId: params.id,
-                    })
-                  : undefined
-              const currentIndex = currentHref
+              const route = currentRoute()
+              const sessionRoute = route.type === "session" ? route : undefined
+              const currentIndex = sessionRoute
                 ? tabs.findIndex(
-                    (tab) => tab.type === "session" && tab.server === targetServer && tabHref(tab) === currentHref,
+                    (tab) =>
+                      tab.type === "session" &&
+                      tab.server === sessionRoute.server &&
+                      tab.sessionId === sessionRoute.sessionId,
                   )
                 : -1
               const currentTab = tabs[currentIndex]

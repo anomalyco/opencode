@@ -8,9 +8,9 @@ import { RestrictToHorizontalAxis } from "@dnd-kit/abstract/modifiers"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { arrayMove } from "@dnd-kit/helpers"
 import { tabHref, tabKey, type SessionTab, type Tab } from "@/context/tabs"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { DraftTabItem, TabNavItem } from "@/components/titlebar-tab-nav"
-import { useGlobal, type ServerCtx } from "@/context/global"
+import { useGlobal, useServerCtx, type ServerCtx } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
 import { useTabs } from "@/context/tabs"
@@ -339,10 +339,9 @@ export function TitlebarTabStrip(props: {
                 let ref!: HTMLDivElement
                 const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
                 useTabShortcut(visibleIndex, () => props.onNavigate(tab, ref))
-                const serverCtx = createMemo(() => {
+                const serverCtx = useServerCtx(() => {
                   if (tab.type !== "session") return
-                  const conn = global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
-                  if (conn) return global.ensureServerCtx(conn)
+                  return global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
                 })
 
                 if (tab.type === "session") {

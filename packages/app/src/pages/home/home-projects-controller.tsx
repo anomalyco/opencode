@@ -6,7 +6,7 @@ import { type LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { usePlatform } from "@/context/platform"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { closeHomeProject, errorMessage, homeProjectDirectories } from "@/pages/layout/helpers"
 import { Persist, persisted } from "@/utils/persist"
 import { showToast } from "@/utils/toast"
@@ -14,15 +14,16 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { HomeController } from "./home-controller"
+import { useGlobal } from "@/context/global"
 
 export function createHomeProjectsController(home: HomeController) {
   const platform = usePlatform()
   const pickDirectory = useDirectoryPicker()
   const dialog = useDialog()
   const language = useLanguage()
-  const notification = useNotification()
   const openSettings = useSettingsCommand()
   const serverManagement = useServerActionsController()
+  const global = useGlobal()
   const [_state, setState, _, ready] = persisted(
     Persist.global("home.servers", ["home.servers.v1"]),
     createStore({ collapsed: {} as Record<string, boolean> }),
@@ -78,14 +79,14 @@ export function createHomeProjectsController(home: HomeController) {
         })
       },
       unseenCount: (conn: ServerConnection.Any, project: LocalProject) => {
-        const state = notification.ensureServerState(ServerConnection.key(conn))
-        return directories(project).reduce((total, directory) => total + state.project.unseenCount(directory), 0)
+        const notification = global.ensureServerCtx(conn).notification
+        return directories(project).reduce((total, directory) => total + notification.project.unseenCount(directory), 0)
       },
       clearNotifications: (conn: ServerConnection.Any, project: LocalProject) => {
-        const state = notification.ensureServerState(ServerConnection.key(conn))
+        const notification = global.ensureServerCtx(conn).notification
         directories(project)
-          .filter((directory) => state.project.unseenCount(directory) > 0)
-          .forEach((directory) => state.project.markViewed(directory))
+          .filter((directory) => notification.project.unseenCount(directory) > 0)
+          .forEach((directory) => notification.project.markViewed(directory))
       },
       choose: (conn: ServerConnection.Any) => {
         if (home.server.health(conn)?.healthy === false) return

@@ -378,7 +378,7 @@ function ProviderConnection(props: {
   const directory = () => props.directory?.() ?? decode64(params.dir)
 
   const provider = createMemo(
-    () => providers.all().get(props.provider) ?? serverSync().data.provider.all.get(props.provider)!,
+    () => providers.all().get(props.provider) ?? serverSync.data.provider.all.get(props.provider)!,
   )
   const controller = createProviderConnectionController({
     provider: () => props.provider,

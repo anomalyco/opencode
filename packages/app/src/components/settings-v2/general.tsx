@@ -24,6 +24,7 @@ import {
   type SoundSettingsController,
 } from "./general-controllers"
 import "./settings-v2.css"
+import { ServerConnection } from "@/context/servers"
 
 const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
 const fontSettings = {
@@ -269,16 +270,20 @@ const LanguageSetting = () => {
   )
 }
 
-export const SettingsGeneralV2: Component<{
+export const SettingsGeneral: Component<{
   sessionID?: string
+  server?: ServerConnection.Any
 }> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
   const settings = useSettings()
   const mobile = createMediaQuery("(max-width: 767px)")
   const updater = useUpdaterAction()
-  const permissionScope = createPermissionScopeController(() => props.sessionID)
-  const shell = createShellSettingsController()
+  const permissionScope = createPermissionScopeController(
+    () => props.server,
+    () => props.sessionID,
+  )
+  const shell = createShellSettingsController(() => props.server)
   const appearance = createAppearanceSettingsController()
   const sounds = createSoundSettingsController()
   const desktop = createMemo(() => platform.platform === "desktop")
@@ -512,7 +517,6 @@ export const SettingsGeneralV2: Component<{
       <div class="settings-v2-tab-header">
         <h2 class="settings-v2-tab-title">{language.t("settings.tab.general")}</h2>
       </div>
-
       <div class="settings-v2-tab-body">
         <GeneralSection />
 

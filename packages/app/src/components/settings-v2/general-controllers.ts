@@ -17,17 +17,24 @@ import {
 } from "@/context/settings"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { createSoundPreviewController, type ShellOption } from "./general-controller-behavior"
+import { ServerConnection } from "@/context/servers"
+import { useGlobal, useServerCtx } from "@/context/global"
 
 export { createShellOptions, createSoundPreviewController } from "./general-controller-behavior"
 export type { ShellOption, ShellSelectOption } from "./general-controller-behavior"
 
-export function createPermissionScopeController(sessionID: Accessor<string | undefined>) {
-  const permission = usePermission()
-  const serverSync = useServerSync()
+export function createPermissionScopeController(
+  server: Accessor<ServerConnection.Any | undefined>,
+  sessionID: Accessor<string | undefined>,
+) {
+  const serverCtx = useServerCtx(server)
+  const permission = () => serverCtx()?.permission
+
   const directory = createMemo(() => {
+    const s = server()
     const id = sessionID()
-    if (!id) return undefined
-    return serverSync().session.lineage.peek(id)?.session.location.directory
+    if (!s || !id) return undefined
+    return serverCtx()?.sync.session.lineage.peek(id)?.session.location.directory
   })
 
   return {
@@ -35,21 +42,21 @@ export function createPermissionScopeController(sessionID: Accessor<string | und
       const id = sessionID()
       const dir = directory()
       if (!id || !dir) return false
-      return permission.isAutoAccepting(id, dir)
+      return permission()?.isAutoAccepting(id, dir)
     }),
     enabled: createMemo(() => !!directory()),
     set: (checked: boolean) => {
       const id = sessionID()
       const dir = directory()
       if (!id || !dir) return
-      if (checked) return permission.enableAutoAccept(id, dir)
-      permission.disableAutoAccept(id, dir)
+      if (checked) return permission()?.enableAutoAccept(id, dir)
+      permission()?.disableAutoAccept(id, dir)
     },
   }
 }
 
-export function createShellSettingsController() {
-  const serverSync = useServerSync()
+export function createShellSettingsController(server: Accessor<ServerConnection.Any | undefined>) {
+  const serverCtx = useServerCtx(server)
   const [shells] = createResource(
     async () => {
       // TODO: Dax is considering the V2 shell discovery and config update APIs.
@@ -58,7 +65,7 @@ export function createShellSettingsController() {
     },
     { initialValue: [] as ShellOption[] },
   )
-  const current = createMemo(() => serverSync().data.config.shell ?? "")
+  const current = createMemo(() => serverCtx()?.sync.data.config.shell ?? "")
 
   return {
     shells: () => shells.latest,
@@ -66,7 +73,7 @@ export function createShellSettingsController() {
     select: (value: string) => {
       if (value === current()) return
       // TODO: Dax is considering the V2 shell discovery and config update APIs.
-      // void serverSync().updateConfig({ shell: value })
+      // void serverSync.updateConfig({ shell: value })
     },
   }
 }

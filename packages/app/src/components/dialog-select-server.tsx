@@ -1,17 +1,13 @@
 import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { List } from "@opencode-ai/ui/list"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Show } from "solid-js"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
-import { ServerConnection } from "@/context/server"
-import { useSettings } from "@/context/settings"
-import { type ServerDomainController } from "@/components/server/server-management-controller"
+import { ServerConnection } from "@/context/servers"
+import { ServerCollectionController } from "@/components/server/server-management-controller"
 
 type ServerConnectionFormController = {
   state: {
@@ -117,12 +113,11 @@ function ServerForm(props: ServerFormProps) {
 }
 
 export function ServerConnectionList(props: {
-  domain: ServerDomainController
+  domain: ServerCollectionController
   onAdd: () => void
   onEdit: (server: ServerConnection.Http) => void
 }) {
   const language = useLanguage()
-  const settings = useSettings()
 
   return (
     <div class="flex flex-1 min-h-0 flex-col gap-4">
@@ -136,9 +131,6 @@ export function ServerConnectionList(props: {
         emptyMessage={language.t("dialog.server.empty")}
         items={props.domain.collection.items}
         key={(x) => x.http.url}
-        onSelect={(x) => {
-          if (x && !settings.general.newLayoutDesigns()) void props.domain.selection.select(x)
-        }}
         divider={true}
       >
         {(i) => {
@@ -163,15 +155,6 @@ export function ServerConnectionList(props: {
                 showCredentials
               />
               <div class="flex items-center justify-center gap-4 pl-4">
-                <Show
-                  when={
-                    props.domain.collection.current() &&
-                    ServerConnection.key(props.domain.collection.current()!) === key
-                  }
-                >
-                  <Icon name="check" class="h-6" />
-                </Show>
-
                 <Show when={i.type === "http"}>
                   <DropdownMenu>
                     <DropdownMenu.Trigger

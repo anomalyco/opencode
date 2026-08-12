@@ -9,7 +9,7 @@ import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { getProjectAvatarVariant, type LocalProject } from "@/context/layout"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { getProjectAvatarSource } from "@/pages/layout/helpers"
 import { createEditProjectModel } from "./edit-project"
 

@@ -5,7 +5,7 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Suspense, createMemo, createSignal, lazy, Show, type JSX } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { ServerConnection, useServer } from "@/context/server"
+import { ServerConnection, useServers } from "@/context/servers"
 import { useServerSDK } from "@/context/server-sdk"
 import { useSync } from "@/context/sync"
 import { useGlobal } from "@/context/global"
@@ -14,6 +14,7 @@ import {
   hasServiceNeedingAttention,
   serverStatusDotClass,
 } from "./status-popover-indicator"
+import { useServer } from "@/context/server"
 
 const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
 
@@ -82,16 +83,12 @@ export function StatusPopover() {
 }
 
 export function StatusPopoverV2() {
-  return <DirectoryStatusPopover />
-}
-
-function DirectoryStatusPopover() {
   const language = useLanguage()
-  const server = useServerSDK()
+  const server = useServer()
   const global = useGlobal()
   const sync = useSync()
   const [shown, setShown] = createSignal(false)
-  const serverHealth = () => global.servers.health[ServerConnection.key(server().server)]?.healthy
+  const serverHealth = () => global.servers.health[server.key]?.healthy
   const ready = createMemo(() => serverHealth() === false || (sync().data.mcp_ready && sync().data.lsp_ready))
   const attention = createMemo(() =>
     hasServiceNeedingAttention({

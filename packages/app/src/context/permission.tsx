@@ -8,7 +8,7 @@ import type { ServerSync } from "./server-sync"
 import { useParams, useSearchParams } from "@solidjs/router"
 import { decode64 } from "@/utils/base64"
 import { useGlobal } from "./global"
-import { ServerConnection, useServer } from "./server"
+import { ServerConnection, useServers } from "./servers"
 import { type DraftTab, useTabs } from "./tabs"
 import { useSettings } from "./settings"
 import { requireServerKey } from "@/utils/session-route"
@@ -20,6 +20,7 @@ import {
   autoRespondsPermission,
   sessionAutoAccept,
 } from "./permission-auto-respond"
+import { useServer } from "./server"
 
 type PermissionRespondFn = (input: {
   sessionID: string
@@ -51,142 +52,9 @@ function hasPermissionPromptRules(permission: unknown) {
   return Object.values(config).some(isNonAllowRule)
 }
 
-export const { use: usePermission, provider: PermissionProvider } = createSimpleContext({
-  name: "Permission",
-  gate: false,
-  init: () => {
-    const params = useParams<{ serverKey?: string; dir?: string; id?: string }>()
-    const [search] = useSearchParams<{ draftId?: string }>()
-    const global = useGlobal()
-    const server = useServer()
-    const tabs = useTabs()
-    const settings = useSettings()
-    const owner = getOwner()
-    const states = new Map<ServerScope, { key: ServerConnection.Key; dispose: () => void; state: PermissionState }>()
-
-    const activeDraft = createMemo(() => {
-      if (!search.draftId) return
-      return tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)
-    })
-
-    const activeServer = createMemo(() => {
-      if (params.serverKey && settings.general.newLayoutDesigns()) return requireServerKey(params.serverKey)
-      return activeDraft()?.server ?? server.key
-    })
-
-    const ensure = (key: ServerConnection.Key) => {
-      const conn = global.servers.list().find((item) => ServerConnection.key(item) === key)
-      if (!conn) throw new Error(`Permission server not found: ${key}`)
-      const ctx = global.ensureServerCtx(conn)
-      const existing = states.get(ctx.sdk.scope)
-      if (existing && global.servers.list().some((item) => ServerConnection.key(item) === existing.key)) {
-        return existing.state
-      }
-      if (existing) {
-        existing.dispose()
-        states.delete(ctx.sdk.scope)
-      }
-      const root = createRoot(
-        (dispose) => ({
-          key,
-          dispose,
-          state: createServerPermissionState({ sdk: ctx.sdk, sync: ctx.sync }),
-        }),
-        owner ?? undefined,
-      )
-      states.set(ctx.sdk.scope, root)
-      return root.state
-    }
-
-    createEffect(() => {
-      global.servers.list().forEach((conn) => ensure(ServerConnection.key(conn)))
-    })
-
-    createEffect(() => {
-      const list = global.servers.list()
-      const keys = new Set(list.map(ServerConnection.key))
-      states.forEach((value, scope) => {
-        if (keys.has(value.key)) return
-        value.dispose()
-        states.delete(scope)
-        const replacement = list.find((conn) => server.scope(ServerConnection.key(conn)) === scope)
-        if (replacement) ensure(ServerConnection.key(replacement))
-      })
-    })
-
-    onCleanup(() => states.forEach((value) => value.dispose()))
-
-    let lastSelected: PermissionState | undefined
-    const selected = () => {
-      const key = activeServer()
-      if (global.servers.list().some((conn) => ServerConnection.key(conn) === key)) {
-        lastSelected = ensure(key)
-      }
-      if (lastSelected) return lastSelected
-      return ensure(server.key)
-    }
-    const activeDirectory = createMemo(() => {
-      const directory = decode64(params.dir)
-      if (directory) return directory
-      const draft = activeDraft()
-      if (draft) return draft.directory
-      if (!params.id) return
-      if (!global.servers.list().some((conn) => ServerConnection.key(conn) === activeServer())) return
-      return selected().sync.session.lineage.peek(params.id)?.session.location.directory
-    })
-
-    createEffect(() => {
-      const directory = activeDirectory()
-      if (!directory) return
-      selected().enableConfiguredDirectory(directory)
-    })
-
-    const permissionsEnabled = createMemo(() => {
-      const directory = activeDirectory()
-      if (!directory) return false
-      return selected().permissionsEnabled(directory)
-    })
-
-    return {
-      ready: () => selected().ready(),
-      ensureServerState: (key: ServerConnection.Key) => ensure(key).api,
-      currentServerState: () => selected().api,
-      respond(input: Parameters<PermissionRespondFn>[0]) {
-        selected().respond(input)
-      },
-      autoResponds(permission: PermissionRequest, directory?: string) {
-        return selected().autoResponds(permission, directory)
-      },
-      isAutoAccepting(sessionID: string, directory?: string) {
-        return selected().isAutoAccepting(sessionID, directory)
-      },
-      isAutoAcceptingDirectory(directory: string) {
-        return selected().isAutoAcceptingDirectory(directory)
-      },
-      toggleAutoAccept(sessionID: string, directory: string) {
-        selected().toggleAutoAccept(sessionID, directory)
-      },
-      toggleAutoAcceptDirectory(directory: string) {
-        selected().toggleAutoAcceptDirectory(directory)
-      },
-      enableAutoAccept(sessionID: string, directory: string) {
-        selected().enableAutoAccept(sessionID, directory)
-      },
-      disableAutoAccept(sessionID: string, directory?: string) {
-        selected().disableAutoAccept(sessionID, directory)
-      },
-      permissionsEnabled,
-      isPermissionAllowAll(directory: string) {
-        return selected().isPermissionAllowAll(directory)
-      },
-    }
-  },
-})
-
-type PermissionState = ReturnType<typeof createServerPermissionState>
 type PermissionEvent = Parameters<Parameters<ServerSDK["event"]["listen"]>[0]>[0]
 
-function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }) {
+export function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }) {
   const [store, setStore, _, ready] = persisted(
     {
       ...Persist.serverGlobal(input.sdk.scope, "permission", ["permission.v3"]),
@@ -473,4 +341,9 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
       return hasPermissionPromptRules(childStore.config.permission)
     },
   }
+}
+
+export const usePermission = () => {
+  const server = useServer()
+  return server.ctx.permission
 }

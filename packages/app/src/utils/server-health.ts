@@ -1,5 +1,5 @@
 import { usePlatform } from "@/context/platform"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { authTokenFromCredentials } from "./server"
 import { ClientError, OpenCode } from "@opencode-ai/client"
 import { Accessor, createEffect, onCleanup } from "solid-js"

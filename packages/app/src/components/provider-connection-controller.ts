@@ -27,8 +27,8 @@ export function createProviderConnectionController(options: {
   const [integration] = createResource(
     () => ({ provider: options.provider(), directory: options.directory() }),
     (input) =>
-      serverSDK()
-        .api.integration.get({ integrationID: input.provider, location: location() })
+      serverSDK.api.integration
+        .get({ integrationID: input.provider, location: location() })
         .then((result) => result.data),
   )
   const methods = createMemo<ProviderConnectMethod[]>(() => {
@@ -120,14 +120,14 @@ export function createProviderConnectionController(options: {
     cancelPolling()
     const directory = options.directory()
     await queryClient
-      .refetchQueries(serverSync().queryOptions.providers(directory ? pathKey(directory) : null))
+      .refetchQueries(serverSync.queryOptions.providers(directory ? pathKey(directory) : null))
       .catch(() => undefined)
     if (polling.disposed) return
     options.onComplete()
   }
   const poll = async (authorization: Authorization, generation: number) => {
-    const result = await serverSDK()
-      .api.integration.oauth.status({
+    const result = await serverSDK.api.integration.oauth
+      .status({
         integrationID: options.provider(),
         attemptID: authorization.attemptID,
         location: location(),
@@ -175,8 +175,8 @@ export function createProviderConnectionController(options: {
       return
     }
     dispatch({ type: "auth.pending" })
-    const result = await serverSDK()
-      .api.integration.oauth.connect({
+    const result = await serverSDK.api.integration.oauth
+      .connect({
         integrationID: options.provider(),
         methodID: selected.id,
         ...(answer ? { answer } : {}),
@@ -197,7 +197,7 @@ export function createProviderConnectionController(options: {
     dispatch({ type: "method.reset" })
   }
   const connectKey = async (key: string) => {
-    await serverSDK().api.integration.connect.key({
+    await serverSDK.api.integration.connect.key({
       integrationID: options.provider(),
       location: location(),
       key,
@@ -208,8 +208,8 @@ export function createProviderConnectionController(options: {
   const completeCode = async (code: string) => {
     const authorization = store.authorization
     if (!authorization) return language.t("provider.connect.oauth.code.invalid")
-    const result = await serverSDK()
-      .api.integration.oauth.complete({
+    const result = await serverSDK.api.integration.oauth
+      .complete({
         integrationID: options.provider(),
         attemptID: authorization.attemptID,
         location: location(),

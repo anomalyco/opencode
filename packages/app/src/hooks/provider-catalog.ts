@@ -1,6 +1,6 @@
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 
-const emptyProviderCatalog: NormalizedProviderListResponse = { all: new Map(), connected: [], default: {} }
+export const emptyProviderCatalog: NormalizedProviderListResponse = { all: new Map(), connected: [], default: {} }
 
 type DirectoryCatalog = {
   ready: boolean

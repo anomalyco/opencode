@@ -8,7 +8,6 @@ import { batch, startTransition, type Accessor } from "solid-js"
 import { useTabs } from "@/context/tabs"
 import { useServerSync, type ServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
-import { useLayout } from "@/context/layout"
 import { useLocal, type ModelSelection } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, type usePrompt } from "@/context/prompt"
@@ -258,7 +257,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const local = useLocal()
   const permission = usePermission()
   const prompt = input.prompt
-  const layout = useLayout()
   const language = useLanguage()
   const params = useParams()
   const [search] = useSearchParams<{ draftId?: string }>()
@@ -279,7 +277,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const sessionID = params.id
     if (!sessionID) return Promise.resolve()
 
-    serverSync().session.set("todo", sessionID, [])
+    serverSync.session.set("todo", sessionID, [])
 
     input.onAbort?.()
 
@@ -320,8 +318,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   }
 
   const seed = (dir: string, info: SessionInfo) => {
-    serverSync().session.remember(info)
-    const [, setStore] = serverSync().child(dir)
+    serverSync.session.remember(info)
+    const [, setStore] = serverSync.child(dir)
     setStore("session", (list: SessionInfo[]) => {
       const result = Binary.search(list, info.id, (item) => item.id)
       const next = [...list]
@@ -370,7 +368,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     input.resetHistoryNavigation()
 
     const projectDirectory = sdk().directory
-    const permissionState = permission.currentServerState()
     const isNewSession = !params.id
     const shouldAutoAccept = isNewSession && input.autoAccept()
     const worktreeSelection = input.newSessionWorktree?.() || "main"
@@ -402,7 +399,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
 
       if (sessionDirectory !== projectDirectory) {
-        serverSync().child(sessionDirectory)
+        serverSync.child(sessionDirectory)
       }
 
       input.onNewSessionWorktreeReset?.()
@@ -428,13 +425,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         session = created
         await startTransition(() => {
           if (!session) return
-          if (shouldAutoAccept) permissionState.enableAutoAccept(session.id, sessionDirectory)
+          if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
           local.session.promote(sessionDirectory, session.id, {
             agent: currentAgent.name,
             model: { providerID: currentModel.provider.id, modelID: currentModel.id },
             variant: variant ?? null,
           })
-          layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
           const draftID = search.draftId
           if (draftID) tabs.promoteDraft(draftID, { server: tabs.draft(draftID).server, sessionId: session.id })
           else navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
@@ -523,7 +519,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       if (customCommand) {
         clearInput()
         const messageID = Identifier.ascending("message")
-        serverSync().session.set("session_status", session.id, { type: "busy" })
+        serverSync.session.set("session_status", session.id, { type: "busy" })
         sdk()
           .api.session.command({
             sessionID: session.id,
@@ -540,7 +536,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             ),
           })
           .catch((err) => {
-            serverSync().session.set("session_status", session.id, { type: "idle" })
+            serverSync.session.set("session_status", session.id, { type: "idle" })
             showToast({
               title: language.t("prompt.toast.commandSendFailed.title"),
               description: formatServerError(err, language.t, language.t("common.requestFailed")),
@@ -626,7 +622,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     void sendFollowupDraft({
       api: sdk().api.session,
       sync: sync(),
-      serverSync: serverSync(),
+      serverSync: serverSync,
       session: () => input.info() ?? session,
       draft,
       messageID,

@@ -8,12 +8,13 @@ import { useFile } from "@/context/file"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { useLayout, type LocalProject } from "@/context/layout"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { useServerSDK } from "@/context/server-sdk"
 import { useTabs } from "@/context/tabs"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { useServer } from "@/context/server"
 
 export type CommandPaletteEntry = {
   id: string
@@ -83,7 +84,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
   const language = useLanguage()
   const file = useFile()
   const dialog = useDialog()
-  const serverSDK = useServerSDK()()
+  const serverSDK = useServerSDK()
   const serverCtx = global.ensureServerCtx(serverSDK.server)
   const appTabs = useTabs()
   const { tabs: sessionTabs } = useSessionLayout()

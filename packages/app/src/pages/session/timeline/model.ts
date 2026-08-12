@@ -24,7 +24,7 @@ export function createTimelineModel(input: { session: Pick<SessionController, "i
       if (!id) return
 
       const cached = untrack(() => sync().data.message[id] !== undefined)
-      const stale = cached && !serverSync().session.fresh(id, sessionFreshness)
+      const stale = cached && !serverSync.session.fresh(id, sessionFreshness)
 
       refreshFrame = requestAnimationFrame(() => {
         refreshFrame = undefined
@@ -42,7 +42,7 @@ export function createTimelineModel(input: { session: Pick<SessionController, "i
   )
   const ready = createMemo(() => {
     const id = input.session.identity.sessionID()
-    return !id || isTimelineReady(sync().data.message[id], serverSync().session.history.loading(id))
+    return !id || isTimelineReady(sync().data.message[id], serverSync.session.history.loading(id))
   })
   const more = createMemo(() => {
     const id = input.session.identity.sessionID()

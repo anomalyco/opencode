@@ -13,10 +13,12 @@ import type { EventSessionError } from "@/types"
 import { Persist, persisted } from "@/utils/persist"
 import { playSoundById } from "@/utils/sound"
 import { useGlobal } from "./global"
-import { ServerConnection, useServer } from "./server"
+import { ServerConnection, useServers } from "./servers"
 import { type DraftTab, useTabs } from "./tabs"
 import { requireServerKey } from "@/utils/session-route"
 import type { ServerScope } from "@/utils/server-scope"
+import { useCurrentRoute } from "./layout"
+import { useServer } from "./server"
 
 type NotificationBase = {
   directory?: string
@@ -109,131 +111,18 @@ function buildNotificationIndex(list: Notification[]) {
   return index
 }
 
-export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
-  name: "Notification",
-  gate: false,
-  init: () => {
-    const params = useParams<{ serverKey?: string; dir?: string; id?: string }>()
-    const [search] = useSearchParams<{ draftId?: string }>()
-    const global = useGlobal()
-    const server = useServer()
-    const tabs = useTabs()
-    const navigate = useNavigate()
-    const platform = usePlatform()
-    const settings = useSettings()
-    const language = useLanguage()
-    const owner = getOwner()
-    const states = new Map<ServerScope, { dispose: () => void; state: NotificationState }>()
-
-    const activeServer = createMemo(() => {
-      if (params.serverKey) return requireServerKey(params.serverKey)
-      if (search.draftId) {
-        const draft = tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)
-        if (draft) return draft.server
-      }
-      return server.key
-    })
-    const activeDirectory = createMemo(() => decode64(params.dir))
-    const activeSession = createMemo(() => params.id)
-
-    const ensure = (key: ServerConnection.Key) => {
-      const conn = global.servers.list().find((item) => ServerConnection.key(item) === key)
-      if (!conn) throw new Error(`Notification server not found: ${key}`)
-      const ctx = global.ensureServerCtx(conn)
-      const existing = states.get(ctx.sdk.scope)
-      if (existing) return existing.state
-      const root = createRoot(
-        (dispose) => ({
-          dispose,
-          state: createServerNotificationState({
-            sdk: ctx.sdk,
-            sync: ctx.sync,
-            active: () => server.scope(activeServer()) === ctx.sdk.scope,
-            directory: activeDirectory,
-            sessionID: activeSession,
-            platform,
-            settings,
-            language,
-            navigate,
-          }),
-        }),
-        owner ?? undefined,
-      )
-      states.set(ctx.sdk.scope, root)
-      return root.state
-    }
-
-    createEffect(() => {
-      global.servers.list().forEach((conn) => ensure(ServerConnection.key(conn)))
-    })
-
-    createEffect(() => {
-      const scopes = new Set(global.servers.list().map((conn) => server.scope(ServerConnection.key(conn))))
-      states.forEach((value, scope) => {
-        if (scopes.has(scope)) return
-        value.dispose()
-        states.delete(scope)
-      })
-    })
-
-    onCleanup(() => states.forEach((value) => value.dispose()))
-
-    const selected = () => {
-      const list = global.servers.list()
-      const key = activeServer()
-      if (list.some((conn) => ServerConnection.key(conn) === key)) return ensure(key)
-      const conn = list.find((conn) => ServerConnection.key(conn) === server.key) ?? list[0]
-      if (!conn) throw new Error("Notification server not found")
-      return ensure(ServerConnection.key(conn))
-    }
-
-    return {
-      ready: () => selected().ready(),
-      ensureServerState: ensure,
-      session: {
-        all: (session: string) => selected().session.all(session),
-        unseen: (session: string) => selected().session.unseen(session),
-        unseenCount: (session: string) => selected().session.unseenCount(session),
-        unseenHasError: (session: string) => selected().session.unseenHasError(session),
-        markViewed: (session: string) => selected().session.markViewed(session),
-      },
-      project: {
-        all: (directory: string) => selected().project.all(directory),
-        unseen: (directory: string) => selected().project.unseen(directory),
-        unseenCount: (directory: string) => selected().project.unseenCount(directory),
-        unseenHasError: (directory: string) => selected().project.unseenHasError(directory),
-        markViewed: (directory: string) => selected().project.markViewed(directory),
-      },
-    }
-  },
-})
-
-type NotificationState = ReturnType<typeof createServerNotificationState>
-
-function createServerNotificationState(input: {
-  sdk: ServerSDK
-  sync: ServerSync
-  active: Accessor<boolean>
-  directory: Accessor<string | undefined>
-  sessionID: Accessor<string | undefined>
-  platform: ReturnType<typeof usePlatform>
-  settings: ReturnType<typeof useSettings>
-  language: ReturnType<typeof useLanguage>
-  navigate: (href: string) => void
-}) {
-  const serverSDK = () => input.sdk
-  const serverSync = () => input.sync
-  const platform = input.platform
-  const settings = input.settings
-  const language = input.language
+export function createServerNotificationState(input: { sdk: ServerSDK; sync: ServerSync; key: ServerConnection.Key }) {
+  const platform = usePlatform()
+  const settings = useSettings()
+  const language = useLanguage()
+  const navigate = useNavigate()
 
   const empty: Notification[] = []
 
-  const currentDirectory = input.directory
-  const currentSession = input.sessionID
+  const route = useCurrentRoute()
 
   const [store, setStore, _, ready] = persisted(
-    Persist.serverGlobal(serverSDK().scope, "notification", ["notification.v1"]),
+    Persist.serverGlobal(input.sdk.scope, "notification", ["notification.v1"]),
     createStore({
       list: [] as Notification[],
     }),
@@ -316,7 +205,7 @@ function createServerNotificationState(input: {
 
   const lookup = async (directory: string, sessionID?: string) => {
     if (!sessionID) return undefined
-    const sync = serverSync().ensureDirSyncContext(directory)
+    const sync = input.sync.ensureDirSyncContext(directory)
     const session = sync.session.get(sessionID)
     if (session) return session
     return sync.session
@@ -325,17 +214,12 @@ function createServerNotificationState(input: {
       .catch(() => undefined)
   }
 
-  const viewedInCurrentSession = (directory: string, sessionID?: string) => {
-    if (!input.active()) return false
-    const activeDirectory = currentDirectory()
-    const activeSession = currentSession()
-    if (!activeSession) return false
-    if (!sessionID) return false
-    if (activeDirectory && directory !== activeDirectory) return false
-    return sessionID === activeSession
+  const viewedInCurrentSession = (sessionID: string) => {
+    const currentRoute = route()
+    return currentRoute.type === "session" && currentRoute.server === input.key && currentRoute.sessionId === sessionID
   }
 
-  const handleSessionIdle = (directory: string, event: { properties: { sessionID?: string } }, time: number) => {
+  const handleSessionIdle = (directory: string, event: { properties: { sessionID: string } }, time: number) => {
     const sessionID = event.properties.sessionID
     void lookup(directory, sessionID).then((session) => {
       if (meta.disposed) return
@@ -349,15 +233,15 @@ function createServerNotificationState(input: {
       append({
         directory,
         time,
-        viewed: viewedInCurrentSession(directory, sessionID),
+        viewed: viewedInCurrentSession(sessionID),
         type: "turn-complete",
         session: sessionID,
       })
 
-      const href = `/${base64Encode(directory)}/session/${sessionID}`
+      const href = `/server/${input.key}/session/${sessionID}`
       if (settings.notifications.agent()) {
         void platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
-          input.navigate(href),
+          navigate(href),
         )
       }
     })
@@ -381,7 +265,7 @@ function createServerNotificationState(input: {
       append({
         directory,
         time,
-        viewed: viewedInCurrentSession(directory, sessionID),
+        viewed: viewedInCurrentSession(sessionID),
         type: "error",
         session: sessionID ?? "global",
         error,
@@ -389,14 +273,14 @@ function createServerNotificationState(input: {
       const description =
         session?.title ??
         (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
-      const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
+      const href = `/server/${input.key}/session/${sessionID}`
       if (settings.notifications.errors()) {
-        void platform.notify(language.t("notification.session.error.title"), description, () => input.navigate(href))
+        void platform.notify(language.t("notification.session.error.title"), description, () => navigate(href))
       }
     })
   }
 
-  const unsub = serverSDK().event.listen((e) => {
+  const unsub = input.sdk.event.listen((e) => {
     const event = e.details
     if (event.type !== "session.idle" && event.type !== "session.execution.failed") return
 
@@ -480,4 +364,9 @@ function createServerNotificationState(input: {
       },
     },
   }
+}
+
+export const useNotification = () => {
+  const server = useServer()
+  return server.ctx.notification
 }

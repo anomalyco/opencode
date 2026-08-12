@@ -7,10 +7,11 @@ import { type Accessor, batch, createMemo, onCleanup, onMount } from "solid-js"
 import { createApiForServer, type ServerApi } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
-import { ServerConnection, useServer } from "./server"
+import { ServerConnection, useServers } from "./servers"
 import { createRefCountMap } from "@/utils/refcount"
 import { useGlobal } from "./global"
 import { ServerScope } from "@/utils/server-scope"
+import { useServer } from "./server"
 
 const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
@@ -266,22 +267,10 @@ export function createServerSdkContext(server: ServerConnection.Any, scope: Serv
   })
 }
 
-export const { use: useServerSDK, provider: ServerSDKProvider } = createSimpleContext({
-  name: "ServerSDK",
-  // Returns an accessor so the resolved server can change reactively (e.g. a
-  // /new-session draft retargeting its server) without re-instantiating the subtree.
-  init: (props: { server?: Accessor<ServerConnection.Any | undefined> }) => {
-    const global = useGlobal()
-    const language = useLanguage()
-    const server = useServer()
-
-    return createMemo<ServerSDK>(() => {
-      const conn = props.server?.() ?? server.current
-      if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
-      return global.ensureServerCtx(conn).sdk
-    })
-  },
-})
+export const useServerSDK = () => {
+  const server = useServer()
+  return server.ctx.sdk
+}
 
 type SDKEventMap = {
   [key in Event["type"]]: Extract<ServerEvent, { type: key }>

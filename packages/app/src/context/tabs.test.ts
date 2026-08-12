@@ -4,7 +4,7 @@ import { createTabMemory } from "./tab-memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed-tabs"
 import type { SessionTab, Tab } from "./tabs"
 import { migrateTabs } from "./tab-migration"
-import type { ServerConnection } from "./server"
+import type { ServerConnection } from "./servers"
 
 const server = "local\nhttp://localhost:4096" as ServerConnection.Key
 

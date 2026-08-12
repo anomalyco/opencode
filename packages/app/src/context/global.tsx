@@ -1,7 +1,7 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { createEffect, createMemo, createRoot } from "solid-js"
+import { Accessor, createEffect, createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
+import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServers } from "./servers"
 import { pathKey } from "@/utils/path-key"
 import { useServerHealth } from "@/utils/server-health"
 import { createServerSdkContext } from "./server-sdk"
@@ -9,11 +9,13 @@ import { createServerSyncContext } from "./server-sync"
 import { getOwner } from "solid-js/web"
 import { QueryClient } from "@tanstack/solid-query"
 import type { ServerScope } from "@/utils/server-scope"
+import { createServerPermissionState } from "./permission"
+import { createServerNotificationState } from "./notification"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
   init: () => {
-    const server = useServer()
+    const server = useServers()
     const serverHealth = useServerHealth(
       () => server.list,
       () => true,
@@ -35,23 +37,21 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       if (store.settings.serverKey !== key) setStore("settings", "serverKey", key)
     })
 
-    const serverCtxs = new Map<
-      ServerConnection.Key,
-      { dispose: () => void; serverCtx: ReturnType<typeof createServerCtx> }
-    >()
+    const serverCtxs = new Map<ServerConnection.Key, ReturnType<typeof createServerController>>()
+    const serverCtxDisposers = new Map<ServerConnection.Key, () => void>()
 
     const owner = getOwner()
 
     const ensureServerCtx = (conn: ServerConnection.Any) => {
       const key = ServerConnection.key(conn)
       const existing = serverCtxs.get(key)
-      if (existing) return existing.serverCtx
-      const root = createRoot((dispose) => {
-        const serverCtx = createServerCtx(conn, server.scope(key), server.projects.forServer(key))
-        return { dispose, serverCtx }
+      if (existing) return existing
+      const serverCtx = createRoot((dispose) => {
+        serverCtxDisposers.set(key, dispose)
+        return createServerController(conn, server.scope(key), server.projects.forServer(key))
       }, owner as any)
-      serverCtxs.set(key, root)
-      return root.serverCtx
+      serverCtxs.set(key, serverCtx)
+      return serverCtx
     }
 
     createMemo(() => {
@@ -63,8 +63,8 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
     createEffect(() => {
       for (const [key] of serverCtxs) {
         if (!server.list.find((conn) => ServerConnection.key(conn) === key)) {
-          const { dispose } = serverCtxs.get(key)!
-          dispose()
+          serverCtxDisposers.get(key)?.()
+          serverCtxDisposers.delete(key)
           serverCtxs.delete(key)
         }
       }
@@ -93,22 +93,26 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
   },
 })
 
-function createServerCtx(
+function createServerController(
   conn: ServerConnection.Any,
   scope: ServerScope,
   projects: ReturnType<typeof createServerProjects>,
 ) {
+  const connKey = ServerConnection.key(conn)
+
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
         refetchOnReconnect: false,
-        refetchOnMount: false,
         refetchOnWindowFocus: false,
+        refetchOnMount: false,
       },
     },
   })
   const sdk = createServerSdkContext(conn, scope)
   const sync = createServerSyncContext(sdk)
+  const permission = createServerPermissionState({ sdk, sync })
+  const notification = createServerNotificationState({ sdk, sync, key: connKey })
 
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })
@@ -150,10 +154,22 @@ function createServerCtx(
       list: projectsList,
       recentlyClosed: recentlyClosedList,
     },
+    permission,
+    notification,
   }
 }
 
-export type ServerCtx = ReturnType<typeof createServerCtx>
+export function useServerCtx(server: Accessor<ServerConnection.Any>): Accessor<ServerCtx>
+export function useServerCtx(server: Accessor<ServerConnection.Any | undefined>): Accessor<ServerCtx | undefined>
+export function useServerCtx(server: Accessor<ServerConnection.Any | undefined>) {
+  const global = useGlobal()
+  return () => {
+    const s = server()
+    if (s) return global.ensureServerCtx(s)
+  }
+}
+
+export type ServerCtx = ReturnType<typeof createServerController>
 
 function isLocalHost(url: string) {
   const host = url.replace(/^https?:\/\//, "").split(":")[0]

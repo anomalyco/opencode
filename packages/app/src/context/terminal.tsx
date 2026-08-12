@@ -440,7 +440,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
     const serverSDK = useServerSDK()
     const params = useParams()
     const cache = new Map<string, TerminalCacheEntry>()
-    const scope = () => serverSDK().scope
+    const scope = () => serverSDK.scope
     const directory = createMemo(() => base64Encode(sdk().directory))
 
     caches.add(cache)

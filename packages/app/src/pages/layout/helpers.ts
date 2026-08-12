@@ -1,7 +1,7 @@
 import { getFilename } from "@opencode-ai/core/util/path"
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { pathKey } from "@/utils/path-key"
-import type { ServerConnection } from "@/context/server"
+import type { ServerConnection } from "@/context/servers"
 import type { HomeProjectSelection } from "@/context/layout"
 
 type SessionStore = {
@@ -61,10 +61,10 @@ export function toggleHomeProjectSelection(
 export function closeHomeProject(
   selected: HomeProjectSelection | undefined,
   server: ServerConnection.Key,
-  projects: { close: (directory: string) => void },
+  projects: { close: (serverKey: ServerConnection.Key, directory: string) => void },
   directory: string,
 ) {
-  projects.close(directory)
+  projects.close(server, directory)
   if (selected?.server === server && selected.directory === directory) return { server }
   return selected
 }

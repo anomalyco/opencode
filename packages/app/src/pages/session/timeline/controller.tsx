@@ -21,6 +21,7 @@ import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from
 import { showToast } from "@/utils/toast"
 import { timelineChildTitle, timelineRemovedSessionIDs } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
+import { useServer } from "@/context/server"
 
 const emptyMessages: Message[] = []
 const emptyParts: Part[] = []
@@ -46,6 +47,7 @@ export function createTimelineController(input: {
   const navigate = useNavigate()
   const sdk = useSDK()
   const sync = useSync()
+  const server = useServer()
   const settings = useSettings()
   const tabs = useTabs()
   const dialog = useDialog()
@@ -195,7 +197,7 @@ export function createTimelineController(input: {
     void navigateAfterRemoval(id, session.parentID, next?.id)
     sync().set(produce((draft) => void (draft.session = draft.session.filter((item) => !removed.has(item.id)))))
     removed.forEach((sessionID) => sync().session.evict(sessionID))
-    notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [...removed] })
+    notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: [...removed] })
     return true
   }
 

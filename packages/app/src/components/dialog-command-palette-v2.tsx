@@ -10,7 +10,7 @@ import { createEffect, createMemo, createResource, createSignal, For, Match, onC
 import { commandPaletteOptions, formatKeybindParts, useCommand } from "@/context/command"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { useTabs } from "@/context/tabs"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import { getRelativeTime } from "@/utils/time"
