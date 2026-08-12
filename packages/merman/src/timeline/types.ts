@@ -24,4 +24,8 @@ export interface TimelineDiagramRenderOptions {
   direction?: TimelineDirection
 }
 
-export type TimelineCellStyle = "title" | "section" | "period" | "spine" | "event"
+export type TimelineBaseCellStyle = "title" | "section" | "period" | "spine" | "event"
+export type TimelineFadeStep = 1 | 2 | 3
+export type TimelineSectionFadeStyle = `sectionFade${TimelineFadeStep}`
+export type TimelinePeriodFadeStyle = `periodFade${TimelineFadeStep}`
+export type TimelineCellStyle = TimelineBaseCellStyle | TimelineSectionFadeStyle | TimelinePeriodFadeStyle

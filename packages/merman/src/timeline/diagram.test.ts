@@ -38,17 +38,17 @@ timeline LR
 
     expect(output).toBe(
       [
-        "          Product &",
+        "           Product &",
         "           Platform",
         "",
-        "Foundation   │",
-        "     phase   │",
-        "             │",
-        "      2024 ──●  Prototype",
-        "             │  ready",
-        "             │  First release",
-        "             │  Scale ≥ 10k",
-        "             │",
+        "Foundation ───┐",
+        "     phase    │",
+        "              │",
+        "      2024 ───●  Prototype",
+        "              │  ready",
+        "              │  First release",
+        "              │  Scale ≥ 10k",
+        "              │",
       ].join("\n"),
     )
   })
@@ -130,10 +130,59 @@ timeline LR
     )
     const styles = new Set(grid.rows.flatMap((row) => row.map((cell) => cell.style).filter(Boolean)))
 
-    expect(styles).toEqual(new Set(["title", "section", "spine", "period", "event"]))
-    expect(Object.keys(resolveTimelineStyleColors()).sort()).toEqual(["event", "period", "section", "spine", "title"])
+    expect(styles).toEqual(
+      new Set([
+        "title",
+        "section",
+        "sectionFade1",
+        "sectionFade2",
+        "sectionFade3",
+        "spine",
+        "period",
+        "periodFade1",
+        "periodFade2",
+        "periodFade3",
+        "event",
+      ]),
+    )
+    expect(Object.keys(resolveTimelineStyleColors()).sort()).toEqual([
+      "event",
+      "period",
+      "periodFade1",
+      "periodFade2",
+      "periodFade3",
+      "section",
+      "sectionFade1",
+      "sectionFade2",
+      "sectionFade3",
+      "spine",
+      "title",
+    ])
     expect(renderTimelineGridText(grid)).toBe(
       renderTimelineDiagram("timeline\n title Roadmap\n section Now\n 2026 : Ship"),
     )
+  })
+
+  test("uses section starts and joins with ordered color ramps", () => {
+    const grid = drawTimelineDiagramGrid(
+      parseMermaidTimelineDiagram("timeline\n section Morning\n 09:00 : Start\n section Midday\n 12:00 : Continue"),
+    )
+    const text = renderTimelineGridText(grid)
+
+    expect(text).toContain("Morning ───┐")
+    expect(text).toContain("Midday ───┤")
+    expect(grid.rows[0]?.map((cell) => cell.style).filter(Boolean)).toEqual([
+      "section",
+      "section",
+      "section",
+      "section",
+      "section",
+      "section",
+      "section",
+      "sectionFade1",
+      "sectionFade2",
+      "sectionFade3",
+      "spine",
+    ])
   })
 })
