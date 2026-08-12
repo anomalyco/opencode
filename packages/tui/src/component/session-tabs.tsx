@@ -34,7 +34,6 @@ const FADE_WIDTH = 4
 const ADD_TAB_WIDTH = 3
 const MARQUEE_DELAY = 600
 const MARQUEE_INTERVAL = 100
-const MARQUEE_FADE_DURATION = 250
 const CONTEXT_MENU_WIDTH = 16
 const RIGHT_MOUSE_BUTTON = 2
 
@@ -80,7 +79,6 @@ export function createMarquee(animations: () => boolean) {
   let delay: ReturnType<typeof setTimeout> | undefined
   let interval: ReturnType<typeof setInterval> | undefined
   let cycleWidth = 0
-  let returning = false
 
   const clear = () => {
     if (delay) clearTimeout(delay)
@@ -93,21 +91,14 @@ export function createMarquee(animations: () => boolean) {
   }
   const enter = (sessionID: string, title: string, width: number) => {
     if (!marqueeOverflows(title, width)) {
-      const current = active()
-      if (current) leave(current)
+      reset()
       return
     }
-    if (active() === sessionID && !returning) return
+    if (active() === sessionID) return
     clear()
-    if (active() === sessionID) {
-      returning = false
-      leading.animate({ opacity: 1 })
-      return scroll()
-    }
     cycleWidth = marqueeCycleWidth(title)
     setActive(sessionID)
     setOffset(0)
-    returning = false
     leading.jump({ opacity: 0 })
     delay = setTimeout(() => {
       setOffset(1)
@@ -117,34 +108,10 @@ export function createMarquee(animations: () => boolean) {
   }
   const leave = (sessionID: string) => {
     if (active() !== sessionID) return
-    clear()
-    if (offset() === 0) {
-      returning = true
-      leading.animate({ opacity: 0 })
-      delay = setTimeout(() => {
-        returning = false
-        setActive(undefined)
-      }, MARQUEE_FADE_DURATION)
-      return
-    }
-    returning = true
-    interval = setInterval(() => {
-      setOffset((value) => {
-        const next = (value + 1) % cycleWidth
-        if (next !== 0) return next
-        clear()
-        leading.animate({ opacity: 0 })
-        delay = setTimeout(() => {
-          returning = false
-          setActive(undefined)
-        }, MARQUEE_FADE_DURATION)
-        return 0
-      })
-    }, MARQUEE_INTERVAL)
+    reset()
   }
   const reset = () => {
     clear()
-    returning = false
     setActive(undefined)
     setOffset(0)
     leading.jump({ opacity: 0 })
@@ -172,11 +139,17 @@ function createTabMarquee(animations: () => boolean) {
       marquee.leave(sessionID)
     })
   }
+  const reset = () => {
+    if (hoverClear) clearTimeout(hoverClear)
+    hoverClear = undefined
+    setHovered(undefined)
+    marquee.reset()
+  }
   onCleanup(() => {
     if (hoverClear) clearTimeout(hoverClear)
   })
 
-  return { ...marquee, hovered, enter, leave }
+  return { ...marquee, hovered, enter, leave, reset }
 }
 
 function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsController; onClose: () => void }) {
