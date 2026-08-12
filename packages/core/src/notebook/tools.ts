@@ -9,7 +9,7 @@ import { PermissionV2 } from "../permission"
 import { ToolRegistry } from "../tool/registry"
 import { Tool } from "../tool/tool"
 import { Tools } from "../tool/tools"
-import { NotebookEvidence } from "./evidence"
+import { NotebookEvidence, isDirty } from "./evidence"
 import { allNotebooks, buildSkeleton, hydrateBasedOn, itemFreshness, loadNotebook, notebookPathFor } from "./store"
 import {
   applyOps,
@@ -195,7 +195,7 @@ const layer = Layer.effectDiscard(
 
     const notesCommit = Tool.make({
       description:
-        "Persist what a task learned into the per-folder notebooks (`.note.yaml`), the way a senior engineer's mental model accumulates. Call when a task produced durable understanding — including explaining code or answering a question. Three kinds of knowledge:\n- `folder_summaries`: the role of a whole subtree (abstract; the higher the folder, the more abstract).\n- `entries`: knowledge about ONE file/dir, stored in the notebook of its direct parent.\n- `relations`: a connection between two files/dirs, stored at their lowest common ancestor.\nPass REWRITTEN compact summaries (fold prior summaries in), one paragraph each; skip line-level detail. Write every summary in English even if the user wrote in another language. Requires user approval (a diff is shown) and the user may reject — that is fine. Write nothing that escapes the project root.",
+        "Persist what a task learned into the per-folder notebooks (`.note.yaml`), the way a senior engineer's mental model accumulates. Call when a task produced durable understanding — including explaining code or answering a question. Three kinds of knowledge:\n- `folder_summaries`: the role of a whole subtree (abstract; the higher the folder, the more abstract).\n- `entries`: knowledge about ONE file/dir, stored in the notebook of its direct parent.\n- `relations`: a connection between two files/dirs, stored at their lowest common ancestor.\nPass REWRITTEN, condensed summaries that FOLD the prior summary in (do not merely append a fresh paragraph), one paragraph each; skip line-level detail. Write every summary in English even if the user wrote in another language, ground each in based_on file paths, and make them concrete rather than decorative — the tool rejects empty, non-Latin, or too-thin summaries and gives you an actionable reason to retry deeper. The user must approve: a diff is shown and they may edit by rejecting with feedback — that is fine. Requires the session to have explored the files (read/grep/tools touching a path); pure removals are exempt. Approval is suppressed in the TUI 'auto' permission mode (`--auto`), so verify the user can see the diff before relying on it. Write nothing that escapes the project root.",
       input: CommitInput,
       output: Output,
       toModelOutput,
@@ -257,6 +257,11 @@ const layer = Layer.effectDiscard(
             pushOp(folder, { kind: "removeRelation", from: relTo(from, folder), to: relTo(to, folder) })
           }
 
+          const gate = validateCommit(input, context.sessionID)
+          if (gate) {
+            return { text: gate } satisfies Output
+          }
+
           if (opsByFolder.size === 0) {
             return { text: "Nothing to write — provide folder_summaries, entries, relations, or removed." } satisfies Output
           }
@@ -284,9 +289,14 @@ const layer = Layer.effectDiscard(
 
           if (diffs.length > 0) {
             yield* permission.assert({
-              action: "edit",
+              action: "write-notes",
               resources: edits.map((edit) => edit.abs),
-              save: ["*"],
+              save: edits.map((edit) => `${edit.label}`),
+              metadata: {
+                title: "Save notebook memory",
+                filepath: edits.length === 1 ? edits[0].abs : "",
+                diff: diffs.join("\n\n"),
+              },
               sessionID: context.sessionID,
               agent: context.agent,
               source: {
@@ -322,6 +332,77 @@ export const node = makeLocationNode({
   layer,
   deps: [ToolRegistry.node, FSUtil.node, PermissionV2.node, Location.node],
 })
+
+// ---------- commit quality gate ----------
+
+const MIN_SUMMARY_CHARS = 40
+
+/** Heuristic scan for script ranges that indicate a summary was written in a non-English script. */
+function hasNonLatinScript(text: string): boolean {
+  // eslint-disable-next-line no-control-regex
+  return /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF\u0400-\u04FF\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0900-\u097F]./u.test(text)
+}
+
+function summarizeGateProblems(input: typeof CommitInput.Type): Map<string, string[]> {
+  const problems = new Map<string, string[]>()
+  const note = (where: string, issue: string) => {
+    const list = problems.get(where) ?? []
+    list.push(issue)
+    problems.set(where, list)
+  }
+
+  for (const item of input.folder_summaries ?? []) {
+    const where = `folder_summaries[${item.path}]`
+    if (!item.summary?.trim()) note(where, "empty summary")
+    else if (hasNonLatinScript(item.summary)) note(where, "not written in English (a non-Latin script was detected)")
+    else if (item.summary.trim().length < MIN_SUMMARY_CHARS) note(where, `summary is too thin (< ${MIN_SUMMARY_CHARS} chars); fold in the prior folder summary and the concrete role`)
+  }
+
+  for (const item of input.entries ?? []) {
+    const where = `entries[${item.path}]`
+    if (!item.summary?.trim()) note(where, "empty summary")
+    else if (hasNonLatinScript(item.summary)) note(where, "not written in English (a non-Latin script was detected)")
+    else if (item.summary.trim().length < MIN_SUMMARY_CHARS) note(where, `summary is too thin (< ${MIN_SUMMARY_CHARS} chars); fold in the prior entry summary and concrete detail`)
+  }
+
+  for (const item of input.relations ?? []) {
+    const where = `relations[${item.from} → ${item.to}]`
+    if (!item.description?.trim()) note(where, "empty description")
+    else if (hasNonLatinScript(item.description)) note(where, "not written in English (a non-Latin script was detected)")
+    else if (item.description.trim().length < MIN_SUMMARY_CHARS) note(where, `description is too thin (< ${MIN_SUMMARY_CHARS} chars); describe the concrete connection`)
+  }
+
+  return problems
+}
+
+function validateCommit(input: typeof CommitInput.Type, sessionID?: string): string | undefined {
+  const problems = summarizeGateProblems(input)
+
+  const listing = (where: string, issues: string[]) => `- ${where}: ${issues.join("; ")}`
+  const lines: string[] = []
+
+  if (problems.size > 0) {
+    lines.push(
+      "notes_commit was NOT applied. These entries need deeper, English, source-backed summaries before they can be saved:",
+    )
+    for (const [where, issues] of problems) lines.push(listing(where, issues))
+    lines.push(
+      "Re-read the relevant file(s) with `read`/`grep`, fold the existing summary into a rewritten one, and call notes_commit again.",
+    )
+  }
+
+  const hasAddedContent =
+    (input.folder_summaries?.length ?? 0) > 0 ||
+    (input.entries?.length ?? 0) > 0 ||
+    (input.relations?.length ?? 0) > 0
+  if (sessionID && hasAddedContent && !isDirty(sessionID)) {
+    lines.push(
+      "The session has not marked this repository as explored. Commit nothing that is not grounded: read/grep the files you are describing first, then retry. (Pure removals are exempt.)",
+    )
+  }
+
+  return lines.length > 0 ? lines.join("\n") : undefined
+}
 
 // ---------- scoring helpers ----------
 

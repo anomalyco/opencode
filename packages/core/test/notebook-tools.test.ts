@@ -6,6 +6,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
 import { NotebookTools } from "@opencode-ai/core/notebook/tools"
+import { NotebookEvidence } from "@opencode-ai/core/notebook/evidence"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
@@ -137,17 +138,28 @@ describe("NotebookTools", () => {
     ),
   )
 
-  it.live("notes_commit asks to write and persists an entry", () =>
+    it.live("notes_commit asks to write and persists an entry", () =>
     inTemp((tmp) =>
       Effect.gen(function* () {
         const src = path.join(tmp.path, "src")
         yield* Effect.promise(() => fs.mkdir(src, { recursive: true }))
         yield* Effect.promise(() => fs.writeFile(path.join(src, "lib.ts"), "export const util = 1\n"))
+        NotebookEvidence.markExplore(sessionID)
 
         const settled = yield* withTools(tmp.path, (registry) =>
           settleTool(
             registry,
-            commitCall({ task: "learn-lib", entries: [{ path: "src/lib.ts", summary: "Exposes util helper." }] }),
+            commitCall({
+              task: "learn-lib",
+              entries: [
+                {
+                  path: "src/lib.ts",
+                  summary:
+                    "The util module exposes a single exported constant that other modules import for the shared helper value.",
+                  based_on: ["src/lib.ts"],
+                },
+              ],
+            }),
           ),
         )
         const value = textValue(settled.result)
@@ -155,12 +167,12 @@ describe("NotebookTools", () => {
         expect(value).toContain("entry lib.ts added")
 
         const target = path.join(src, ".note.yaml")
-        expect(asserts.some((a) => a.action === "edit" && a.resources.includes(target))).toBe(true)
+        expect(asserts.some((a) => a.action === "write-notes" && a.resources.includes(target))).toBe(true)
         const written = yield* Effect.promise(() => fs.readFile(target, "utf8"))
-        expect(written).toContain("Exposes util helper.")
+        expect(written).toContain("single exported constant")
 
         const again = yield* withTools(tmp.path, (registry) => settleTool(registry, getCall({ path: "src/lib.ts" })))
-        expect(textValue(again.result)).toContain("Exposes util helper.")
+        expect(textValue(again.result)).toContain("single exported constant")
       }),
     ),
   )

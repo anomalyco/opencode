@@ -188,6 +188,7 @@ export const dict = {
   "ui.message.forkMessage": "从此消息创建新会话",
   "ui.message.revertMessage": "撤销此消息",
   "ui.message.copyResponse": "复制回复",
+  "ui.message.saveLearnings": "保存学习",
   "ui.message.copied": "已复制！",
   "ui.message.interrupted": "已中断",
   "ui.message.queued": "排队中",

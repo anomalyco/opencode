@@ -178,6 +178,7 @@ export const dict = {
   "ui.message.forkMessage": "ແຍກໄປຫາເຊດຊັນໃໝ່",
   "ui.message.revertMessage": "ກັບຄືນຂໍ້ຄວາມ",
   "ui.message.copyResponse": "ສຳເນົາຄຳຕອບ",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "ສຳເນົາແລ້ວ",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",

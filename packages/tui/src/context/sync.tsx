@@ -195,7 +195,8 @@ export const {
 
         case "permission.asked": {
           const request = event.properties
-          if (permission.mode === "auto") {
+          const alwaysPrompt = request.permission === "write-notes"
+          if (permission.mode === "auto" && !alwaysPrompt) {
             void sdk.client.permission.reply({
               requestID: request.id,
               reply: "once",

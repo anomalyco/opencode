@@ -182,6 +182,7 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Deschide într-o sesiune nouă",
   "ui.message.revertMessage": "Revino la mesaj",
   "ui.message.copyResponse": "Copiază răspunsul",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Copiat",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
