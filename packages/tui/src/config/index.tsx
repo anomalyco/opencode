@@ -57,6 +57,7 @@ export const Prompt = Schema.Struct({
     description: "Home prompt max width: a positive integer for a fixed cap, or 'auto' to scale with terminal width",
   }),
 }).annotate({ description: "Prompt size settings" })
+const ContentPadding = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(20))
 
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
@@ -72,6 +73,9 @@ export const Info = Schema.Struct({
   diff_style: Schema.optional(DiffStyle),
   cursor: Schema.optional(Cursor),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  content_padding: Schema.optional(ContentPadding).annotate({
+    description: "Horizontal padding of the session content area in columns (default: 2)",
+  }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
