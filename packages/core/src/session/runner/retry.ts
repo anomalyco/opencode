@@ -48,10 +48,12 @@ export const schedule = (
   assistantMessageID: () => SessionMessage.ID,
 ) =>
   Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(4)]).pipe(
+    Schedule.jittered,
     Schedule.setInputType<RetryableFailure>(),
     Schedule.modifyDelay(({ input: failure, duration: delay }) => {
       const minimum = retryAfter(failure)
-      return Effect.succeed(minimum === undefined ? delay : Duration.max(delay, Duration.millis(minimum)))
+      const duration = minimum === undefined ? delay : Duration.max(delay, Duration.millis(minimum))
+      return Effect.succeed(Duration.millis(Math.ceil(Duration.toMillis(duration))))
     }),
     Schedule.tap((metadata) =>
       bus.publish(SessionEvent.RetryScheduled, {

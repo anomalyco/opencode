@@ -3947,7 +3947,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("retries eligible pre-output failures after exponential backoff", () =>
+  it.effect("bounds jittered exponential backoff for eligible pre-output failures", () =>
     Effect.gen(function* () {
       const session = yield* setup
       yield* admit(session, "Retry transport")
@@ -3956,9 +3956,9 @@ describe("SessionRunnerLLM", () => {
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* TestLLM.wait(1)
-      yield* TestClock.adjust("1999 millis")
+      yield* TestClock.adjust("1599 millis")
       expect(requests).toHaveLength(1)
-      yield* TestClock.adjust("1 millis")
+      yield* TestClock.adjust("801 millis")
       yield* Fiber.join(run)
 
       expect(requests).toHaveLength(2)
@@ -3983,7 +3983,7 @@ describe("SessionRunnerLLM", () => {
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* TestLLM.wait(1)
-      yield* TestClock.adjust("2 seconds")
+      yield* TestClock.adjust("2400 millis")
       yield* Fiber.join(run)
 
       expect(requests).toHaveLength(2)
@@ -4028,7 +4028,7 @@ describe("SessionRunnerLLM", () => {
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* TestLLM.wait(1)
-      yield* TestClock.adjust("2 seconds")
+      yield* TestClock.adjust("2400 millis")
       yield* Fiber.join(run)
 
       expect(requests).toHaveLength(2)
@@ -4085,7 +4085,7 @@ describe("SessionRunnerLLM", () => {
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* TestLLM.wait(1)
-      yield* TestClock.adjust("2 seconds")
+      yield* TestClock.adjust("2400 millis")
       yield* Fiber.join(run)
 
       expect(requests[1]?.messages.at(-2)).toMatchObject({
@@ -4126,7 +4126,7 @@ describe("SessionRunnerLLM", () => {
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* TestLLM.wait(1)
       while (!(yield* recordedEventTypes(sessionID)).includes("session.retry.scheduled.1")) yield* Effect.yieldNow
-      yield* TestClock.adjust("2 seconds")
+      yield* TestClock.adjust("2400 millis")
       yield* Fiber.join(run)
 
       expect(executions).toEqual(["settled"])
@@ -4165,7 +4165,7 @@ describe("SessionRunnerLLM", () => {
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* TestLLM.wait(1)
       while (!(yield* recordedEventTypes(sessionID)).includes("session.retry.scheduled.1")) yield* Effect.yieldNow
-      yield* TestClock.adjust("2 seconds")
+      yield* TestClock.adjust("2400 millis")
       yield* Fiber.join(run)
 
       expect(messageRoles(requests[1])).toEqual(["user", "assistant", "tool", "user"])
@@ -4203,7 +4203,7 @@ describe("SessionRunnerLLM", () => {
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* TestLLM.wait(1)
-      for (const [index, delay] of [2_000, 4_000, 8_000, 16_000].entries()) {
+      for (const [index, delay] of [2_400, 4_800, 9_600, 19_200].entries()) {
         yield* TestClock.adjust(delay)
         yield* TestLLM.wait(index + 2)
       }
@@ -4224,7 +4224,7 @@ describe("SessionRunnerLLM", () => {
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* TestLLM.wait(1)
-      for (const [index, delay] of [2_000, 4_000, 8_000, 16_000].entries()) {
+      for (const [index, delay] of [2_400, 4_800, 9_600, 19_200].entries()) {
         yield* TestClock.adjust(delay)
         yield* TestLLM.wait(index + 2)
       }
@@ -4239,12 +4239,15 @@ describe("SessionRunnerLLM", () => {
         .orderBy(asc(EventTable.seq))
         .all()
         .pipe(Effect.orDie)
-      expect(retries.map((event) => event.data)).toMatchObject([
-        { attempt: 2, at: 2_000 },
-        { attempt: 3, at: 6_000 },
-        { attempt: 4, at: 14_000 },
-        { attempt: 5, at: 30_000 },
-      ])
+      for (const [index, range] of [
+        [1_600, 2_400],
+        [4_800, 7_200],
+        [11_200, 16_800],
+        [24_000, 36_000],
+      ].entries()) {
+        expect(retries[index]?.data.at).toBeGreaterThanOrEqual(range[0]!)
+        expect(retries[index]?.data.at).toBeLessThanOrEqual(range[1]!)
+      }
       expect((yield* recordedEventTypes(sessionID)).filter((type) => type === "session.step.started.1")).toHaveLength(5)
       const assistant = requireAssistant(yield* session.context(sessionID))
       expect(yield* recordedStepSettlementEvents(sessionID, assistant.id)).toMatchObject([
@@ -4274,7 +4277,7 @@ describe("SessionRunnerLLM", () => {
 
       const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* TestLLM.wait(1)
-      yield* TestClock.adjust("2 seconds")
+      yield* TestClock.adjust("2400 millis")
       yield* Fiber.join(run)
 
       expect(requests).toHaveLength(3)
