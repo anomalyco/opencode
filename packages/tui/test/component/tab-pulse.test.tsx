@@ -20,10 +20,12 @@ test("a prompt pulse restarts the neutral edge flash while the tab remains busy"
     () => (
       <box width={8} height={1} backgroundColor={background}>
         <TabPulse
-          active={true}
-          promptPulse={promptPulse()}
-          color={background}
-          flashColor={flash}
+          layer={{
+            active: true,
+            promptPulse: promptPulse(),
+            color: background,
+            flashColor: flash,
+          }}
           backgroundColor={background}
         />
       </box>

@@ -1,29 +1,28 @@
 import { OptimizedBuffer, Renderable, RGBA, type RenderableOptions, type RenderContext } from "@opentui/core"
 import { extend } from "@opentui/solid"
 
+export type TabPulseState = {
+  active?: boolean
+  promptPulse?: number
+  complete?: boolean
+  glow?: boolean
+  breathe?: boolean
+}
+
+export type TabPulseLayer = TabPulseState & {
+  timeline?: TabPulseTimeline
+  color: RGBA
+  glowColor?: RGBA
+  glowTail?: number
+  flashColor?: RGBA
+  completionColor?: RGBA
+}
+
 type TabPulseOptions = RenderableOptions<TabPulseRenderable> & {
   edge?: "above" | "below"
   enabled?: boolean
-  active?: boolean
-  outerActive?: boolean
-  promptPulse?: number
-  outerPromptPulse?: number
-  complete?: boolean
-  outerComplete?: boolean
-  glow?: boolean
-  outerGlow?: boolean
-  breathe?: boolean
-  outerBreathe?: boolean
-  color?: RGBA
-  outerColor?: RGBA
-  glowColor?: RGBA
-  outerGlowColor?: RGBA
-  glowTail?: number
-  outerGlowTail?: number
-  flashColor?: RGBA
-  outerFlashColor?: RGBA
-  completionColor?: RGBA
-  outerCompletionColor?: RGBA
+  layer?: TabPulseLayer
+  edgeLayer?: TabPulseLayer
   backgroundColor?: RGBA
   /** Reports the running sweep's intensity at the tab number's cell, quantized; 0 when idle. */
   onLevel?: (level: number) => void
@@ -310,71 +309,163 @@ class PulseState {
   }
 }
 
+export class TabPulseTimeline {
+  private state: PulseState
+  private frame = -1
+
+  constructor(options: TabPulseState = {}, enabled = true) {
+    this.state = new PulseState({
+      enabled,
+      active: options.active ?? false,
+      promptPulse: options.promptPulse ?? 0,
+      complete: options.complete ?? false,
+      glow: options.glow ?? false,
+      breathe: options.breathe ?? false,
+    })
+  }
+
+  set(options: TabPulseState, enabled: boolean) {
+    return [
+      this.state.setEnabled(enabled),
+      // Stopping a run arms completion; apply complete afterward so an atomic idle update can consume it.
+      this.state.setActive(options.active ?? false),
+      this.state.setPromptPulse(options.promptPulse ?? 0),
+      this.state.setComplete(options.complete ?? false),
+      this.state.setGlow(options.glow ?? false),
+      this.state.setBreathe(options.breathe ?? false),
+    ].some(Boolean)
+  }
+
+  setEnabled(value: boolean) {
+    return this.state.setEnabled(value)
+  }
+
+  advance(deltaTime: number, frame: number) {
+    if (frame === this.frame) return
+    this.frame = frame
+    this.state.advance(deltaTime)
+  }
+
+  get live() {
+    return this.state.live
+  }
+
+  get running() {
+    return this.state.running
+  }
+
+  get completion() {
+    return this.state.completion
+  }
+
+  get flash() {
+    return this.state.flash
+  }
+
+  get glowLevel() {
+    return this.state.glowLevel
+  }
+
+  fronts(width: number) {
+    return this.state.fronts(width)
+  }
+}
+
+class PulseLayer {
+  timeline: TabPulseTimeline
+  private source: TabPulseTimeline | undefined
+  private enabled: boolean
+  color: RGBA
+  glowColor: RGBA
+  glowTail: number
+  flashColor: RGBA
+  completionColor: RGBA
+
+  constructor(options: TabPulseLayer, enabled: boolean) {
+    this.enabled = enabled
+    this.source = options.timeline
+    this.timeline = options.timeline ?? new TabPulseTimeline(options, enabled)
+    if (options.timeline) options.timeline.set(options, enabled)
+    this.color = options.color
+    this.glowColor = options.glowColor ?? options.color
+    this.glowTail = options.glowTail ?? GLOW_TAIL
+    this.flashColor = options.flashColor ?? options.color
+    this.completionColor = options.completionColor ?? options.color
+  }
+
+  set(options: TabPulseLayer) {
+    const sourceChanged = options.timeline !== this.source
+    if (sourceChanged) {
+      this.source = options.timeline
+      this.timeline = options.timeline ?? new TabPulseTimeline(options, this.enabled)
+    }
+    const stateChanged = sourceChanged
+      ? (options.timeline?.set(options, this.enabled) ?? false)
+      : this.timeline.set(options, this.enabled)
+    const color = options.color
+    const glowColor = options.glowColor ?? color
+    const glowTail = options.glowTail ?? GLOW_TAIL
+    const flashColor = options.flashColor ?? color
+    const completionColor = options.completionColor ?? color
+    const changed = [
+      sourceChanged,
+      stateChanged,
+      !color.equals(this.color),
+      !glowColor.equals(this.glowColor),
+      glowTail !== this.glowTail,
+      !flashColor.equals(this.flashColor),
+      !completionColor.equals(this.completionColor),
+    ].some(Boolean)
+    this.color = color
+    this.glowColor = glowColor
+    this.glowTail = glowTail
+    this.flashColor = flashColor
+    this.completionColor = completionColor
+    return changed
+  }
+
+  setEnabled(value: boolean) {
+    this.enabled = value
+    return this.timeline.setEnabled(value)
+  }
+}
+
+const DEFAULT_LAYER: TabPulseLayer = { color: RGBA.defaultForeground() }
+
 class TabPulseRenderable extends Renderable {
   private _enabled: boolean
-  private inner: PulseState
-  private outer: PulseState
-  private _color: RGBA
-  private _outerColor: RGBA
-  private _glowColor: RGBA
-  private _outerGlowColor: RGBA
-  private _glowTail: number
-  private _outerGlowTail: number
+  private primary: PulseLayer
+  private adjacent: PulseLayer
+  private primaryAssigned: boolean
+  private adjacentAssigned: boolean
   private _edge: "above" | "below" | undefined
-  private _flashColor: RGBA
-  private _outerFlashColor: RGBA
-  private _completionColor: RGBA
-  private _outerCompletionColor: RGBA
   private _backgroundColor: RGBA
-  private renderColor = RGBA.fromInts(0, 0, 0)
-  private outerRenderColor = RGBA.fromInts(0, 0, 0)
+  private primaryRenderColor = RGBA.fromInts(0, 0, 0)
+  private adjacentRenderColor = RGBA.fromInts(0, 0, 0)
   private _onLevel: ((level: number) => void) | undefined
   private lastLevel = 0
 
   constructor(ctx: RenderContext, options: TabPulseOptions = {}) {
     const enabled = options.enabled ?? true
-    const active = options.active ?? false
-    const glow = options.glow ?? false
-    const breathe = options.breathe ?? false
+    const primary = options.layer ?? DEFAULT_LAYER
+    const adjacent = options.edgeLayer ?? DEFAULT_LAYER
     const edge = options.edge
-    const outerActive = options.outerActive ?? active
-    const outerGlow = options.outerGlow ?? glow
-    const outerBreathe = options.outerBreathe ?? breathe
     super(ctx, {
       ...options,
       height: 1,
       live:
         enabled &&
-        (active || (glow && breathe) || (edge !== undefined && (outerActive || (outerGlow && outerBreathe)))),
+        ((primary.active ?? false) ||
+          ((primary.glow ?? false) && (primary.breathe ?? false)) ||
+          (edge !== undefined &&
+            ((adjacent.active ?? false) || ((adjacent.glow ?? false) && (adjacent.breathe ?? false))))),
     })
     this._enabled = enabled
-    this.inner = new PulseState({
-      enabled,
-      active,
-      promptPulse: options.promptPulse ?? 0,
-      complete: options.complete ?? false,
-      glow,
-      breathe,
-    })
-    this.outer = new PulseState({
-      enabled: enabled && edge !== undefined,
-      active: outerActive,
-      promptPulse: options.outerPromptPulse ?? options.promptPulse ?? 0,
-      complete: options.outerComplete ?? options.complete ?? false,
-      glow: outerGlow,
-      breathe: outerBreathe,
-    })
-    this._color = options.color ?? RGBA.defaultForeground()
-    this._outerColor = options.outerColor ?? this._color
-    this._glowColor = options.glowColor ?? this._color
-    this._outerGlowColor = options.outerGlowColor ?? this._glowColor
-    this._glowTail = options.glowTail ?? GLOW_TAIL
-    this._outerGlowTail = options.outerGlowTail ?? this._glowTail
+    this.primary = new PulseLayer(primary, enabled)
+    this.adjacent = new PulseLayer(adjacent, enabled && edge !== undefined)
+    this.primaryAssigned = options.layer !== undefined
+    this.adjacentAssigned = options.edgeLayer !== undefined
     this._edge = edge
-    this._flashColor = options.flashColor ?? this._color
-    this._outerFlashColor = options.outerFlashColor ?? options.flashColor ?? this._outerColor
-    this._completionColor = options.completionColor ?? this._color
-    this._outerCompletionColor = options.outerCompletionColor ?? options.completionColor ?? this._outerColor
     this._backgroundColor = options.backgroundColor ?? RGBA.defaultBackground()
     this._onLevel = options.onLevel
   }
@@ -388,129 +479,42 @@ class TabPulseRenderable extends Renderable {
     const quantized = Math.round(value * 32) / 32
     if (quantized === this.lastLevel) return
     this.lastLevel = quantized
-    this._onLevel?.(quantized)
+    this._onLevel(quantized)
   }
 
   set enabled(value: boolean) {
     if (value === this._enabled) return
     this._enabled = value
-    this.inner.setEnabled(value)
-    this.outer.setEnabled(value && this._edge !== undefined)
-    this.live = this.inner.live || this.outer.live
-    this.requestRender()
+    this.primary.setEnabled(value)
+    this.adjacent.setEnabled(value && this._edge !== undefined)
+    this.changed()
   }
 
-  set active(value: boolean) {
-    if (this.inner.setActive(value)) this.changed()
+  set layer(value: TabPulseLayer) {
+    if (!this.primaryAssigned) {
+      this.primaryAssigned = true
+      this.primary = new PulseLayer(value, this._enabled)
+      this.changed()
+      return
+    }
+    if (this.primary.set(value)) this.changed()
   }
 
-  set outerActive(value: boolean) {
-    if (this.outer.setActive(value)) this.changed()
-  }
-
-  set promptPulse(value: number) {
-    if (this.inner.setPromptPulse(value)) this.changed()
-  }
-
-  set outerPromptPulse(value: number) {
-    if (this.outer.setPromptPulse(value)) this.changed()
-  }
-
-  set complete(value: boolean) {
-    if (this.inner.setComplete(value)) this.changed()
-  }
-
-  set outerComplete(value: boolean) {
-    if (this.outer.setComplete(value)) this.changed()
-  }
-
-  set glow(value: boolean) {
-    if (this.inner.setGlow(value)) this.changed()
-  }
-
-  set outerGlow(value: boolean) {
-    if (this.outer.setGlow(value)) this.changed()
-  }
-
-  set breathe(value: boolean) {
-    if (this.inner.setBreathe(value)) this.changed()
-  }
-
-  set outerBreathe(value: boolean) {
-    if (this.outer.setBreathe(value)) this.changed()
-  }
-
-  private changed() {
-    this.live = this.inner.live || this.outer.live
-    this.requestRender()
-  }
-
-  set color(value: RGBA) {
-    if (value.equals(this._color)) return
-    this._color = value
-    this.requestRender()
-  }
-
-  set glowColor(value: RGBA) {
-    if (value.equals(this._glowColor)) return
-    this._glowColor = value
-    this.requestRender()
-  }
-
-  set outerColor(value: RGBA) {
-    if (value.equals(this._outerColor)) return
-    this._outerColor = value
-    this.requestRender()
-  }
-
-  set outerGlowColor(value: RGBA) {
-    if (value.equals(this._outerGlowColor)) return
-    this._outerGlowColor = value
-    this.requestRender()
-  }
-
-  set glowTail(value: number) {
-    if (value === this._glowTail) return
-    this._glowTail = value
-    this.requestRender()
-  }
-
-  set outerGlowTail(value: number) {
-    if (value === this._outerGlowTail) return
-    this._outerGlowTail = value
-    this.requestRender()
+  set edgeLayer(value: TabPulseLayer) {
+    if (!this.adjacentAssigned) {
+      this.adjacentAssigned = true
+      this.adjacent = new PulseLayer(value, this._enabled && this._edge !== undefined)
+      this.changed()
+      return
+    }
+    if (this.adjacent.set(value)) this.changed()
   }
 
   set edge(value: "above" | "below" | undefined) {
     if (value === this._edge) return
     this._edge = value
-    this.outer.setEnabled(this._enabled && value !== undefined)
-    this.live = this.inner.live || this.outer.live
-    this.requestRender()
-  }
-
-  set flashColor(value: RGBA) {
-    if (value.equals(this._flashColor)) return
-    this._flashColor = value
-    this.requestRender()
-  }
-
-  set outerFlashColor(value: RGBA) {
-    if (value.equals(this._outerFlashColor)) return
-    this._outerFlashColor = value
-    this.requestRender()
-  }
-
-  set completionColor(value: RGBA) {
-    if (value.equals(this._completionColor)) return
-    this._completionColor = value
-    this.requestRender()
-  }
-
-  set outerCompletionColor(value: RGBA) {
-    if (value.equals(this._outerCompletionColor)) return
-    this._outerCompletionColor = value
-    this.requestRender()
+    this.adjacent.setEnabled(this._enabled && value !== undefined)
+    this.changed()
   }
 
   set backgroundColor(value: RGBA) {
@@ -519,38 +523,43 @@ class TabPulseRenderable extends Renderable {
     this.requestRender()
   }
 
+  private changed() {
+    this.live = this.primary.timeline.live || this.adjacent.timeline.live
+    this.requestRender()
+  }
+
   protected override onUpdate(deltaTime: number): void {
     if (!this._enabled) return
-    this.inner.advance(deltaTime)
-    this.outer.advance(deltaTime)
-    this.live = this.inner.live || this.outer.live
+    this.primary.timeline.advance(deltaTime, this.ctx.frameId)
+    this.adjacent.timeline.advance(deltaTime, this.ctx.frameId)
+    this.live = this.primary.timeline.live || this.adjacent.timeline.live
   }
 
   protected override renderSelf(buffer: OptimizedBuffer): void {
     if (!this.visible || this.isDestroyed || this.width <= 0) return
-    const running = this.inner.running
-    const completion = this.inner.completion
-    const flash = this.inner.flash
-    const glowLevel = this.inner.glowLevel
-    const outerRunning = this.outer.running
-    const outerCompletion = this.outer.completion
-    const outerFlash = this.outer.flash
-    const outerGlowLevel = this.outer.glowLevel
+    const running = this.primary.timeline.running
+    const completion = this.primary.timeline.completion
+    const flash = this.primary.timeline.flash
+    const glowLevel = this.primary.timeline.glowLevel
+    const adjacentRunning = this.adjacent.timeline.running
+    const adjacentCompletion = this.adjacent.timeline.completion
+    const adjacentFlash = this.adjacent.timeline.flash
+    const adjacentGlowLevel = this.adjacent.timeline.glowLevel
     if (
       glowLevel === 0 &&
       running === 0 &&
       completion === 0 &&
       flash === 0 &&
-      outerGlowLevel === 0 &&
-      outerRunning === 0 &&
-      outerCompletion === 0 &&
-      outerFlash === 0
+      adjacentGlowLevel === 0 &&
+      adjacentRunning === 0 &&
+      adjacentCompletion === 0 &&
+      adjacentFlash === 0
     ) {
       this.emitLevel(0)
       return
     }
-    const [front, secondFront] = this.inner.fronts(this.width)
-    const [outerFront, outerSecondFront] = this.outer.fronts(this.width)
+    const [front, secondFront] = this.primary.timeline.fronts(this.width)
+    const [adjacentFront, adjacentSecondFront] = this.adjacent.timeline.fronts(this.width)
     if (this._onLevel)
       this.emitLevel(
         running === 0
@@ -558,8 +567,8 @@ class TabPulseRenderable extends Renderable {
           : Math.max(intensityAt(1, front, RUN_HEAD, RUN_TAIL), intensityAt(1, secondFront, RUN_HEAD, RUN_TAIL)) *
               running,
       )
-    const glowTail = Math.min(this._glowTail, Math.max(1, this.width - 2))
-    const outerGlowTail = Math.min(this._outerGlowTail, Math.max(1, this.width - 2))
+    const glowTail = Math.min(this.primary.glowTail, Math.max(1, this.width - 2))
+    const adjacentGlowTail = Math.min(this.adjacent.glowTail, Math.max(1, this.width - 2))
     for (let index = 0; index < this.width; index++) {
       // Skip per-cell sweep and glow math when that stage is idle, e.g. a steady breathing glow.
       const sweep =
@@ -571,49 +580,49 @@ class TabPulseRenderable extends Renderable {
             ) *
             0.14 *
             running
-      const outerSweep =
-        outerRunning === 0
+      const adjacentSweep =
+        adjacentRunning === 0
           ? 0
           : Math.max(
-              intensityAt(index, outerFront, RUN_HEAD, RUN_TAIL),
-              intensityAt(index, outerSecondFront, RUN_HEAD, RUN_TAIL),
+              intensityAt(index, adjacentFront, RUN_HEAD, RUN_TAIL),
+              intensityAt(index, adjacentSecondFront, RUN_HEAD, RUN_TAIL),
             ) *
             0.14 *
-            outerRunning
+            adjacentRunning
       blendTabPulseColor(
-        this.renderColor,
+        this.primaryRenderColor,
         this._backgroundColor,
-        this._glowColor,
-        this._color,
-        this._flashColor,
-        this._completionColor,
+        this.primary.glowColor,
+        this.primary.color,
+        this.primary.flashColor,
+        this.primary.completionColor,
         glowLevel === 0 ? 0 : glowIntensityAt(index, glowTail) * GLOW_OPACITY * glowLevel,
         sweep,
         flash,
         completion,
       )
       if (!this._edge) {
-        buffer.setCell(this.screenX + index, this.screenY, " ", DEFAULT_FOREGROUND, this.renderColor)
+        buffer.setCell(this.screenX + index, this.screenY, " ", DEFAULT_FOREGROUND, this.primaryRenderColor)
         continue
       }
       blendTabPulseColor(
-        this.outerRenderColor,
+        this.adjacentRenderColor,
         this._backgroundColor,
-        this._outerGlowColor,
-        this._outerColor,
-        this._outerFlashColor,
-        this._outerCompletionColor,
-        outerGlowLevel === 0 ? 0 : glowIntensityAt(index, outerGlowTail) * GLOW_OPACITY * outerGlowLevel,
-        outerSweep,
-        outerFlash,
-        outerCompletion,
+        this.adjacent.glowColor,
+        this.adjacent.color,
+        this.adjacent.flashColor,
+        this.adjacent.completionColor,
+        adjacentGlowLevel === 0 ? 0 : glowIntensityAt(index, adjacentGlowTail) * GLOW_OPACITY * adjacentGlowLevel,
+        adjacentSweep,
+        adjacentFlash,
+        adjacentCompletion,
       )
       buffer.setCell(
         this.screenX + index,
         this.screenY,
         this._edge === "above" ? "▄" : "▀",
-        this.renderColor,
-        this.outerRenderColor,
+        this.primaryRenderColor,
+        this.adjacentRenderColor,
       )
     }
   }
@@ -632,26 +641,8 @@ export function TabPulse(props: {
   width?: number
   edge?: "above" | "below"
   enabled?: boolean
-  active: boolean
-  outerActive?: boolean
-  promptPulse?: number
-  outerPromptPulse?: number
-  complete?: boolean
-  outerComplete?: boolean
-  glow?: boolean
-  outerGlow?: boolean
-  breathe?: boolean
-  outerBreathe?: boolean
-  color: RGBA
-  outerColor?: RGBA
-  glowColor?: RGBA
-  outerGlowColor?: RGBA
-  glowTail?: number
-  outerGlowTail?: number
-  flashColor?: RGBA
-  outerFlashColor?: RGBA
-  completionColor?: RGBA
-  outerCompletionColor?: RGBA
+  layer: TabPulseLayer
+  edgeLayer?: TabPulseLayer
   backgroundColor: RGBA
   onLevel?: (level: number) => void
 }) {
@@ -663,26 +654,8 @@ export function TabPulse(props: {
       zIndex={0}
       width={props.width ?? "100%"}
       enabled={props.enabled ?? true}
-      active={props.active}
-      outerActive={props.outerActive ?? props.active}
-      promptPulse={props.promptPulse ?? 0}
-      outerPromptPulse={props.outerPromptPulse ?? props.promptPulse ?? 0}
-      complete={props.complete ?? false}
-      outerComplete={props.outerComplete ?? props.complete ?? false}
-      glow={props.glow ?? false}
-      outerGlow={props.outerGlow ?? props.glow ?? false}
-      breathe={props.breathe ?? false}
-      outerBreathe={props.outerBreathe ?? props.breathe ?? false}
-      color={props.color}
-      outerColor={props.outerColor ?? props.color}
-      glowColor={props.glowColor ?? props.color}
-      outerGlowColor={props.outerGlowColor ?? props.glowColor ?? props.color}
-      glowTail={props.glowTail ?? GLOW_TAIL}
-      outerGlowTail={props.outerGlowTail ?? props.glowTail ?? GLOW_TAIL}
-      flashColor={props.flashColor ?? props.color}
-      outerFlashColor={props.outerFlashColor ?? props.flashColor ?? props.outerColor ?? props.color}
-      completionColor={props.completionColor ?? props.color}
-      outerCompletionColor={props.outerCompletionColor ?? props.completionColor ?? props.outerColor ?? props.color}
+      layer={props.layer}
+      edgeLayer={props.edge === undefined ? undefined : (props.edgeLayer ?? props.layer)}
       backgroundColor={props.backgroundColor}
       onLevel={props.onLevel}
     />

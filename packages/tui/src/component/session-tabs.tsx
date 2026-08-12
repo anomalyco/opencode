@@ -19,7 +19,7 @@ import {
 import { createAnimatable, spring, tween } from "../ui/animation"
 import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
-import { TabPulse, unreadGlowIntensity } from "./tab-pulse"
+import { TabPulse, TabPulseTimeline, unreadGlowIntensity } from "./tab-pulse"
 import { tint } from "../theme/color"
 import { SESSION_SIDEBAR_WIDTH } from "../ui/layout"
 import { projectName } from "../util/project"
@@ -137,6 +137,14 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
       ),
   )
   const itemStatus = (tab: SessionTab) => statuses().get(tab.sessionID)!
+  const pulseTimelines = new Map<string, TabPulseTimeline>()
+  const pulseTimeline = (sessionID: string) => {
+    const existing = pulseTimelines.get(sessionID)
+    if (existing) return existing
+    const created = new TabPulseTimeline()
+    pulseTimelines.set(sessionID, created)
+    return created
+  }
   let rail: { screenY: number } | undefined
   let scroll: ScrollBoxRenderable | undefined
 
@@ -174,6 +182,8 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
         <box flexShrink={0} flexDirection="column" gap={1}>
           <For each={items()}>
             {(tab, index) => {
+              const timeline = pulseTimeline(tab.sessionID)
+              onCleanup(() => pulseTimelines.delete(tab.sessionID))
               const selected = () => activeID() === tab.sessionID
               const status = createMemo(() => itemStatus(tab))
               const [sweepLevel, setSweepLevel] = createSignal(0)
@@ -231,6 +241,10 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const detailColor = createMemo(() => tint(theme.text.subdued, pulseBackground(), 0.35))
               const glows = () => status().glows
               const previous = createMemo(() => items()[index() - 1])
+              const previousTimeline = () => {
+                const tab = previous()
+                return tab ? pulseTimeline(tab.sessionID) : undefined
+              }
               const previousStatus = createMemo(() => {
                 const tab = previous()
                 return tab
@@ -299,24 +313,30 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                     top={-1}
                     edge="above"
                     enabled={animations()}
-                    active={runs()}
-                    outerActive={previousRuns()}
-                    promptPulse={status().promptPulse}
-                    outerPromptPulse={previousStatus().promptPulse}
-                    complete={complete() && !status().attention}
-                    outerComplete={previousStatus().complete && !previousStatus().attention}
-                    glow={glows()}
-                    outerGlow={previousGlows()}
-                    breathe={status().attention}
-                    outerBreathe={previousStatus().attention}
-                    color={separatorLowerPulseColor()}
-                    outerColor={separatorUpperPulseColor()}
-                    glowColor={separatorLowerColor()}
-                    outerGlowColor={separatorUpperColor()}
-                    glowTail={8}
-                    outerGlowTail={5}
-                    completionColor={separatorLowerColor()}
-                    outerCompletionColor={separatorUpperColor()}
+                    layer={{
+                      timeline,
+                      active: runs(),
+                      promptPulse: status().promptPulse,
+                      complete: complete() && !status().attention,
+                      glow: glows(),
+                      breathe: status().attention,
+                      color: separatorLowerPulseColor(),
+                      glowColor: separatorLowerColor(),
+                      glowTail: 8,
+                      completionColor: separatorLowerColor(),
+                    }}
+                    edgeLayer={{
+                      timeline: previousTimeline(),
+                      active: previousRuns(),
+                      promptPulse: previousStatus().promptPulse,
+                      complete: previousStatus().complete && !previousStatus().attention,
+                      glow: previousGlows(),
+                      breathe: previousStatus().attention,
+                      color: separatorUpperPulseColor(),
+                      glowColor: separatorUpperColor(),
+                      glowTail: 5,
+                      completionColor: separatorUpperColor(),
+                    }}
                     backgroundColor={theme.background.default}
                   />
                   <Show when={index() === items().length - 1}>
@@ -324,38 +344,41 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       top={2}
                       edge="below"
                       enabled={animations()}
-                      active={runs()}
-                      outerActive={false}
-                      promptPulse={status().promptPulse}
-                      outerPromptPulse={0}
-                      complete={complete() && !status().attention}
-                      outerComplete={false}
-                      glow={glows()}
-                      outerGlow={false}
-                      breathe={status().attention}
-                      outerBreathe={false}
-                      color={tint(theme.background.default, theme.text.default, 0.04)}
-                      outerColor={tint(theme.background.default, theme.text.default, 0.006)}
-                      glowColor={tint(theme.background.default, glowHue(), 0.1)}
-                      outerGlowColor={theme.background.default}
-                      glowTail={8}
-                      outerGlowTail={5}
-                      completionColor={tint(theme.background.default, glowHue(), 0.1)}
-                      outerCompletionColor={theme.background.default}
+                      layer={{
+                        timeline,
+                        active: runs(),
+                        promptPulse: status().promptPulse,
+                        complete: complete() && !status().attention,
+                        glow: glows(),
+                        breathe: status().attention,
+                        color: tint(theme.background.default, theme.text.default, 0.04),
+                        glowColor: tint(theme.background.default, glowHue(), 0.1),
+                        glowTail: 8,
+                        completionColor: tint(theme.background.default, glowHue(), 0.1),
+                      }}
+                      edgeLayer={{
+                        color: tint(theme.background.default, theme.text.default, 0.006),
+                        glowColor: theme.background.default,
+                        glowTail: 5,
+                        completionColor: theme.background.default,
+                      }}
                       backgroundColor={theme.background.default}
                     />
                   </Show>
                   <box height={1} width="100%" flexDirection="row" position="relative">
                     <TabPulse
                       enabled={animations()}
-                      active={runs()}
-                      promptPulse={status().promptPulse}
-                      complete={complete() && !status().attention}
-                      glow={glows()}
-                      breathe={status().attention}
-                      color={pulseColor()}
-                      glowColor={glowColor()}
-                      completionColor={glowColor()}
+                      layer={{
+                        timeline,
+                        active: runs(),
+                        promptPulse: status().promptPulse,
+                        complete: complete() && !status().attention,
+                        glow: glows(),
+                        breathe: status().attention,
+                        color: pulseColor(),
+                        glowColor: glowColor(),
+                        completionColor: glowColor(),
+                      }}
                       backgroundColor={pulseBackground()}
                       onLevel={setSweepLevel}
                     />
@@ -401,15 +424,18 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   <box height={1} width="100%" position="relative" flexDirection="row">
                     <TabPulse
                       enabled={animations()}
-                      active={runs()}
-                      promptPulse={status().promptPulse}
-                      complete={complete() && !status().attention}
-                      glow={glows()}
-                      breathe={status().attention}
-                      color={detailPulseColor()}
-                      glowColor={detailGlowColor()}
-                      glowTail={10}
-                      completionColor={detailGlowColor()}
+                      layer={{
+                        timeline,
+                        active: runs(),
+                        promptPulse: status().promptPulse,
+                        complete: complete() && !status().attention,
+                        glow: glows(),
+                        breathe: status().attention,
+                        color: detailPulseColor(),
+                        glowColor: detailGlowColor(),
+                        glowTail: 10,
+                        completionColor: detailGlowColor(),
+                      }}
                       backgroundColor={pulseBackground()}
                     />
                     <box zIndex={1} width="100%" flexDirection="row" paddingLeft={numberWidth() + 1} paddingRight={2}>
@@ -758,15 +784,17 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
             >
               <TabPulse
                 enabled={animations()}
-                active={status().busy && !status().attention}
-                promptPulse={status().promptPulse}
-                complete={status().complete && !status().attention}
-                glow={glows()}
-                breathe={status().attention}
-                color={pulseColor()}
-                glowColor={glowColor()}
-                flashColor={flashColor()}
-                completionColor={accent()}
+                layer={{
+                  active: status().busy && !status().attention,
+                  promptPulse: status().promptPulse,
+                  complete: status().complete && !status().attention,
+                  glow: glows(),
+                  breathe: status().attention,
+                  color: pulseColor(),
+                  glowColor: glowColor(),
+                  flashColor: flashColor(),
+                  completionColor: accent(),
+                }}
                 backgroundColor={background()}
                 onLevel={setSweepLevel}
               />
