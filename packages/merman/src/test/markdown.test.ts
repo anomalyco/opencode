@@ -333,3 +333,31 @@ stateDiagram-v2
   expect(frame).toContain("Idle")
   expect(frame).not.toContain("stateDiagram-v2")
 })
+
+test("renders a Mermaid timeline fence inside MarkdownRenderable", async () => {
+  const testRenderer = await createTestRenderer({ width: 80, height: 18 })
+  renderer = testRenderer.renderer
+  const { renderOnce, captureCharFrame } = testRenderer
+  const markdown = new MarkdownRenderable(renderer, {
+    id: "markdown-timeline",
+    content: `\`\`\`mermaid
+timeline
+  title Product history
+  section Foundation
+  2024 : Prototype
+       : First release
+\`\`\``,
+    syntaxStyle,
+    treeSitterClient,
+    renderNode: createMermaidMarkdownRenderer(renderer),
+  })
+
+  renderer.root.add(markdown)
+  await renderMarkdown(markdown, renderOnce)
+
+  const frame = captureCharFrame()
+  expect(frame).toContain("Product history")
+  expect(frame).toContain("Foundation")
+  expect(frame).toContain("First release")
+  expect(frame).not.toContain("timeline")
+})

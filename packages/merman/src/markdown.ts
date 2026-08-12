@@ -25,6 +25,10 @@ import { drawStateDiagramGrid } from "./state/drawing.js"
 import { parseMermaidStateDiagram } from "./state/parser.js"
 import { renderStateGridStyledText } from "./state/render-grid.js"
 import { resolveStateStyleColors } from "./state/style.js"
+import { drawTimelineDiagramGrid } from "./timeline/drawing.js"
+import { parseMermaidTimelineDiagram } from "./timeline/parser.js"
+import { renderTimelineGridStyledText } from "./timeline/render-grid.js"
+import { resolveTimelineStyleColors } from "./timeline/style.js"
 
 type DiagramKind = NonNullable<ReturnType<typeof detectMermaidDiagram>>
 
@@ -175,6 +179,25 @@ function prepareDiagram(
             start: color(colors.muted),
             end: color(colors.muted),
             choice: color(colors.secondary),
+          }),
+        ),
+        height: size.height,
+      }
+    }
+    case "timeline": {
+      const grid = drawTimelineDiagramGrid(parseMermaidTimelineDiagram(source))
+      const size = grid.getTextSize({ trimBottom: true })
+      return {
+        kind,
+        source,
+        text: renderTimelineGridStyledText(
+          grid,
+          resolveTimelineStyleColors({
+            title: color(colors.text),
+            section: color(colors.secondary),
+            period: color(colors.warning),
+            spine: color(colors.muted),
+            event: color(colors.primary),
           }),
         ),
         height: size.height,

@@ -3,6 +3,7 @@ import { MermaidSyntaxError } from "../diagnostics.js"
 import { parseMermaidFlowchartDiagram } from "../flowchart/parser.js"
 import { parseMermaidSequenceDiagram } from "../sequence/parser.js"
 import { parseMermaidStateDiagram } from "../state/parser.js"
+import { renderTimelineDiagram } from "../timeline/diagram.js"
 import { renderSequenceDiagram } from "../sequence/diagram.js"
 
 describe("parser diagnostics", () => {
@@ -102,6 +103,12 @@ describe("parser diagnostics", () => {
       parseMermaidSequenceDiagram(`sequenceDiagram
   end`),
     ).toThrow('Unexpected "end" without an open block in sequence diagram at line 2: "end"')
+  })
+
+  test("reports malformed timeline continuations with timeline diagnostics", () => {
+    expect(() => renderTimelineDiagram("timeline\n  : orphan event")).toThrow(
+      'Timeline continuation requires a preceding period in timeline diagram at line 2: ": orphan event"',
+    )
   })
 
   test("does not attach else through an unclosed nested sequence block", () => {
