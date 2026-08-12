@@ -1,0 +1,23 @@
+{
+  "name": "@opencode-ai/ghes-exchange",
+  "version": "0.0.1",
+  "$schema": "https://json.schemastore.org/package.json",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@octokit/auth-app": "8.0.1",
+    "@octokit/rest": "catalog:",
+    "hono": "catalog:",
+    "jose": "6.0.11"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}
