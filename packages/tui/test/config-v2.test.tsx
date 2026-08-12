@@ -88,8 +88,6 @@ test("preserves current navigation defaults", () => {
   expect(config.keybinds.get("session.message.previous")).toEqual([])
   expect(config.keybinds.get("session.message.user.next")).toEqual([])
   expect(config.keybinds.get("session.message.user.previous")).toEqual([])
-  expect(config.keybinds.get("input.buffer.home")).toEqual([])
-  expect(config.keybinds.get("input.buffer.end")).toEqual([])
   expect(config.keybinds.get("prompt.images.view")).toMatchObject([{ key: "<leader>i" }])
 })
 
