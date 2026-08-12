@@ -9,6 +9,8 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useUpdaterAction } from "../updater-action"
 import { useSettings } from "@/context/settings"
+import type { TranscriptionLanguage } from "@/context/settings"
+import { useProviders } from "@/hooks/use-providers"
 import { ExternalLink } from "../external-link"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
@@ -268,6 +270,83 @@ const LanguageSetting = () => {
         onSelect={(option) => option && language.setLocale(option.value)}
       />
     </SettingsRowV2>
+  )
+}
+
+const VoiceInputSection: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const providers = useProviders(() => undefined)
+  const options = createMemo(() => [
+    { id: "local", name: language.t("settings.general.row.voiceProvider.local") },
+    ...providers.connected().map((provider) => ({ id: provider.id, name: provider.name })),
+  ])
+  const modelOptions = createMemo(() => {
+    if (settings.voice.provider() === "local") {
+      return ["tiny", "base", "small", "medium", "large-v3"].map((id) => ({ id, name: `Whisper ${id}` }))
+    }
+    const provider = providers.connected().find((item) => item.id === settings.voice.provider())
+    return Object.values(provider?.models ?? {}).map((model) => ({ id: model.id, name: model.name }))
+  })
+  const languageOptions = createMemo(() => [
+    { id: "auto" as const, name: language.t("settings.general.row.voiceLanguage.auto") },
+    ...language.locales.map((locale) => ({ id: locale as TranscriptionLanguage, name: language.label(locale) })),
+  ])
+
+  return (
+    <div class="settings-v2-section">
+      <h3 class="settings-v2-section-title">{language.t("settings.general.section.voice")}</h3>
+      <SettingsListV2>
+        <SettingsRowV2
+          title={language.t("settings.general.row.voiceProvider.title")}
+          description={language.t("settings.general.row.voiceProvider.description")}
+        >
+          <SelectV2
+            appearance="inline"
+            data-action="settings-voice-provider"
+            options={options()}
+            current={options().find((option) => option.id === settings.voice.provider())}
+            placement="bottom-end"
+            gutter={6}
+            value={(option) => option.id}
+            label={(option) => option.name}
+            onSelect={(option) => option && settings.voice.setProvider(option.id)}
+          />
+        </SettingsRowV2>
+        <SettingsRowV2
+          title={language.t("settings.general.row.voiceModel.title")}
+          description={language.t("settings.general.row.voiceModel.description")}
+        >
+          <SelectV2
+              appearance="inline"
+              data-action="settings-voice-model"
+              options={modelOptions()}
+              current={modelOptions().find((option) => option.id === settings.voice.model())}
+              placement="bottom-end"
+              gutter={6}
+              value={(option) => option.id}
+              label={(option) => option.name}
+              onSelect={(option) => option && settings.voice.setModel(option.id)}
+            />
+        </SettingsRowV2>
+        <SettingsRowV2
+          title={language.t("settings.general.row.voiceLanguage.title")}
+          description={language.t("settings.general.row.voiceLanguage.description")}
+        >
+          <SelectV2
+            appearance="inline"
+            data-action="settings-voice-language"
+            options={languageOptions()}
+            current={languageOptions().find((option) => option.id === settings.voice.language())}
+            placement="bottom-end"
+            gutter={6}
+            value={(option) => option.id}
+            label={(option) => option.name}
+            onSelect={(option) => option && settings.voice.setLanguage(option.id)}
+          />
+        </SettingsRowV2>
+      </SettingsListV2>
+    </div>
   )
 }
 
@@ -551,6 +630,8 @@ export const SettingsGeneralV2: Component<{
         </Show>
 
         <GeneralSection />
+
+        <VoiceInputSection />
 
         <AppearanceSection controller={appearance} />
 

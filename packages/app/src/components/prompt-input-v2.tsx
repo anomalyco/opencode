@@ -24,9 +24,15 @@ import { type ImageAttachmentPart, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { useSettings } from "@/context/settings"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { showToast } from "@/utils/toast"
-import { PromptInputV2, type PromptInputV2Suggestion } from "@opencode-ai/session-ui/v2/prompt-input"
+import { createMediaRecorderInput } from "@/components/prompt-input/media-recorder-input"
+import {
+  PromptInputV2,
+  type PromptInputV2Suggestion,
+  type PromptInputV2VoiceInput,
+} from "@opencode-ai/session-ui/v2/prompt-input"
 import {
   createPromptInputV2Controller,
   createPromptInputV2State,
@@ -42,6 +48,7 @@ export type PromptInputV2ComposerProps = {
 export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "submission">
 export type PromptInputV2ComposerController = PromptInputV2Interaction & {
   readonly model: PromptInputProps["controls"]["model"]
+  readonly voiceInput: PromptInputV2VoiceInput
 }
 
 export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
@@ -58,6 +65,7 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
         variantControlVisible={!props.controller.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
+        voiceInput={props.controller.voiceInput}
         modelControl={
           <PromptInputV2ModelControl
             loading={props.controller.model.loading}
@@ -87,9 +95,23 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   const dialog = useDialog()
   const command = useCommand()
   const permission = usePermission()
+  const settings = useSettings()
   const language = useLanguage()
   const platform = usePlatform()
   const prompt = props.state ?? usePrompt()
+  const voiceInput = createMediaRecorderInput({
+    serverUrl: () => sdk().url,
+    directory: () => sdk().directory,
+    providerID: () => settings.voice.provider() || props.controls.model.selection.current()?.provider?.id,
+    modelID: () => settings.voice.model(),
+    language: () => settings.voice.language(),
+    onError: (message) =>
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: message || language.t("ui.promptInput.voice.error"),
+      }),
+  })
   let editor: HTMLDivElement | undefined
 
   const interaction = createPromptInputV2State()
@@ -409,6 +431,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     },
   })
   Object.defineProperty(controller, "model", { get: () => props.controls.model })
+  Object.defineProperty(controller, "voiceInput", { value: voiceInput })
 
   command.register("prompt-input", () => [
     {

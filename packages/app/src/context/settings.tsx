@@ -3,6 +3,9 @@ import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { persisted } from "@/utils/persist"
 import { usePlatform } from "@/context/platform"
+import type { Locale } from "@/context/language"
+
+export type TranscriptionLanguage = "auto" | Locale
 
 export interface NotificationSettings {
   agent: boolean
@@ -52,6 +55,11 @@ export interface Settings {
   }
   notifications: NotificationSettings
   sounds: SoundSettings
+  voice: {
+    provider: string
+    model: string
+    language: TranscriptionLanguage
+  }
 }
 
 export const monoDefault = "System Mono"
@@ -218,6 +226,11 @@ const defaultSettings: Settings = {
     permissions: "staplebops-02",
     errorsEnabled: true,
     errors: "nope-03",
+  },
+  voice: {
+    provider: "local",
+    model: "medium",
+    language: "en",
   },
 }
 
@@ -540,6 +553,20 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         errors: withFallback(() => store.sounds?.errors, defaultSettings.sounds.errors),
         setErrors(value: string) {
           setStore("sounds", "errors", value)
+        },
+      },
+      voice: {
+        provider: withFallback(() => store.voice?.provider, defaultSettings.voice.provider),
+        setProvider(value: string) {
+          setStore("voice", "provider", value)
+        },
+        model: withFallback(() => store.voice?.model, defaultSettings.voice.model),
+        setModel(value: string) {
+          setStore("voice", "model", value)
+        },
+        language: withFallback(() => store.voice?.language, defaultSettings.voice.language),
+        setLanguage(value: TranscriptionLanguage) {
+          setStore("voice", "language", value)
         },
       },
     }

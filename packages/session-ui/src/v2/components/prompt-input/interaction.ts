@@ -298,6 +298,10 @@ export function createPromptInputV2Controller(input: {
     value() {
       return draft.state.prompt.map((part) => ("content" in part ? part.content : "")).join("")
     },
+    setText(content: string) {
+      draft.setText(content)
+      restoreFocus(content.length)
+    },
     parts() {
       return draft.state.prompt
     },

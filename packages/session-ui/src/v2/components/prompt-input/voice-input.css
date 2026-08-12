@@ -1,0 +1,26 @@
+.voice-input-meter {
+  background: var(--v2-background-bg-contrast);
+  box-shadow: var(--v2-elevation-button-contrast);
+}
+
+.voice-input-meter-bar {
+  width: 2px;
+  height: 5px;
+  flex: 1;
+  min-width: 2px;
+  max-width: 5px;
+  border-radius: 999px;
+  background: var(--v2-state-fg-danger);
+  opacity: 0.9;
+  transition: height 80ms linear;
+}
+
+.voice-input-spinner {
+  animation: voice-input-spin 800ms linear infinite;
+}
+
+@keyframes voice-input-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

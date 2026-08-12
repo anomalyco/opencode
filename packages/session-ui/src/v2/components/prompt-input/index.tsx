@@ -23,6 +23,7 @@ import type {
 } from "./types"
 import type { PromptInputV2Interaction, PromptInputV2SelectControl } from "./interaction"
 import "./attachments.css"
+import "./voice-input.css"
 
 export type {
   PromptInputV2Attachment,
@@ -33,6 +34,15 @@ export type {
 } from "./types"
 
 export type PromptInputV2Mode = "normal" | "shell"
+export type PromptInputV2VoiceInputState = "idle" | "recording" | "processing"
+
+export type PromptInputV2VoiceInput = {
+  supported: boolean
+  state: Accessor<PromptInputV2VoiceInputState>
+  levels: Accessor<number[]>
+  start: () => void
+  stop: () => Promise<string>
+}
 
 export type PromptInputV2Props = {
   controller: PromptInputV2Interaction
@@ -44,6 +54,7 @@ export type PromptInputV2Props = {
   variantControlVisible?: boolean
   attachKeybind?: string[]
   attachShortcut?: string
+  voiceInput?: PromptInputV2VoiceInput
 }
 
 export function PromptInputV2(props: PromptInputV2Props) {
@@ -52,6 +63,8 @@ export function PromptInputV2(props: PromptInputV2Props) {
   const view = props.controller.view
   let editor: HTMLDivElement | undefined
   let localInput = false
+  let voicePointerActive = false
+  const voiceProcessing = () => props.voiceInput?.state() === "processing"
   const updateCursor = () => {
     if (!editor || !window.getSelection()?.isCollapsed) return
     props.controller.onCursor(promptInputV2Cursor(editor))
@@ -62,6 +75,25 @@ export function PromptInputV2(props: PromptInputV2Props) {
     "pointer-events": mode() === "normal" ? ("auto" as const) : ("none" as const),
     transition: "opacity 200ms ease",
   }))
+  const stopVoiceInput = () => {
+    if (!voicePointerActive || !props.voiceInput) return
+    voicePointerActive = false
+    void props.voiceInput.stop().then((text) => {
+      if (!text.trim()) return
+      const current = props.controller.value()
+      props.controller.setText(current ? `${current}\n${text.trim()}` : text.trim())
+      props.controller.submit()
+    })
+  }
+  const toggleVoiceInput = () => {
+    if (!props.voiceInput || props.voiceInput.state() === "processing") return
+    if (props.voiceInput.state() === "idle") {
+      voicePointerActive = true
+      props.voiceInput.start()
+      return
+    }
+    stopVoiceInput()
+  }
 
   createEffect(() => {
     const parts = props.controller.parts()
@@ -109,6 +141,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
       </Show>
       <form
         data-component="prompt-input-v2"
+        aria-busy={voiceProcessing()}
         data-dock-border-underlay={props.borderUnderlay ? "v2" : undefined}
         class="group/prompt-input relative min-h-[96px] w-full overflow-clip rounded-xl bg-v2-background-bg-base"
         classList={{
@@ -143,6 +176,13 @@ export function PromptInputV2(props: PromptInputV2Props) {
           />
         </Show>
 
+        <Show when={props.voiceInput?.state() === "recording"}>
+          <div class="voice-input-meter pointer-events-none mx-3 mt-2 flex h-7 items-center gap-px rounded-md px-2">
+            <For each={props.voiceInput?.levels() ?? []}>
+              {(level) => <span class="voice-input-meter-bar" style={{ height: `${Math.max(4, level * 22)}px` }} />}
+            </For>
+          </div>
+        </Show>
         <div class="relative min-h-[60px]">
           <div
             ref={(element) => {
@@ -154,14 +194,18 @@ export function PromptInputV2(props: PromptInputV2Props) {
             role="textbox"
             aria-multiline="true"
             aria-label={i18n.t("ui.promptInput.label")}
-            contenteditable={!props.disabled && !props.readOnly}
+            contenteditable={!props.disabled && !props.readOnly && !voiceProcessing()}
             autocapitalize={state.mode === "normal" ? "sentences" : "off"}
             autocorrect={state.mode === "normal" ? "on" : "off"}
             spellcheck={state.mode === "normal"}
             // @ts-expect-error
             autocomplete="off"
             class="relative z-10 block min-h-[60px] max-h-[180px] w-full overflow-y-auto whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none empty:before:content-['\200B'] [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
-            classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
+            classList={{
+              "font-mono!": state.mode === "shell",
+              "opacity-50": props.disabled || voiceProcessing(),
+              "pointer-events-none": voiceProcessing(),
+            }}
             onInput={(event) => {
               const cursor = promptInputV2Cursor(event.currentTarget)
               const prompt = parsePromptInputV2Editor(event.currentTarget)
@@ -195,7 +239,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
           </Show>
         </div>
 
-        <div class="flex h-11 items-center px-2">
+        <div class="flex h-11 items-center gap-1 px-2">
           <div
             class="flex min-w-0 flex-1 items-center gap-1"
             aria-hidden={state.mode === "shell"}
@@ -263,6 +307,66 @@ export function PromptInputV2(props: PromptInputV2Props) {
             onSubmit={props.controller.submit}
             onStop={props.controller.stop}
           />
+          <Show when={props.voiceInput} keyed>
+            {(voice) => (
+              <TooltipV2
+              value={
+                voice.state() === "processing"
+                  ? i18n.t("ui.promptInput.voice.processing")
+                  : !voice.supported
+                  ? i18n.t("ui.promptInput.voice.unsupported")
+                  : voice.state() === "recording"
+                  ? i18n.t("ui.promptInput.voice.recording")
+                  : i18n.t("ui.promptInput.voice.start")
+              }
+            >
+              <button
+                type="button"
+                aria-label={
+                  voice.state() === "processing"
+                    ? i18n.t("ui.promptInput.voice.processing")
+                    : !voice.supported
+                    ? i18n.t("ui.promptInput.voice.unsupported")
+                    : voice.state() === "recording"
+                    ? i18n.t("ui.promptInput.voice.recording")
+                    : i18n.t("ui.promptInput.voice.start")
+                }
+                aria-pressed={voice.state() === "recording"}
+                disabled={
+                  props.disabled ||
+                  props.readOnly ||
+                  !voice.supported ||
+                  state.mode === "shell" ||
+                  voice.state() === "processing"
+                }
+                class="inline-flex size-7 items-center justify-center rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:cursor-not-allowed disabled:opacity-50"
+                classList={{
+                  "bg-v2-overlay-simple-overlay-pressed": voice.state() === "recording",
+                  "text-v2-icon-icon-error": voice.state() === "recording",
+                }}
+                onClick={toggleVoiceInput}
+              >
+                <Show
+                  when={voice.state() === "processing"}
+                  fallback={
+                    <Show when={voice.state() === "recording"} fallback={<IconV2 name="microphone" />}>
+                      <span
+                        class="size-2 animate-pulse rounded-full"
+                        style={{ background: "var(--v2-state-fg-danger)" }}
+                        aria-hidden="true"
+                      />
+                    </Show>
+                  }
+                >
+                  <span
+                    class="voice-input-spinner size-3 rounded-full border border-current border-t-transparent"
+                    aria-hidden="true"
+                  />
+                </Show>
+              </button>
+            </TooltipV2>
+            )}
+          </Show>
         </div>
       </form>
     </div>
