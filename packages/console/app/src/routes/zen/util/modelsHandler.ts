@@ -1,11 +1,20 @@
+export const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+}
+
+export function withCorsHeaders(headers?: HeadersInit) {
+  return new Headers({
+    ...corsHeaders,
+    ...Object.fromEntries(new Headers(headers).entries()),
+  })
+}
+
 export async function buildOptionsResponse() {
   return new Response(null, {
     status: 200,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    },
+    headers: corsHeaders,
   })
 }
 
@@ -23,9 +32,9 @@ export async function buildModelsResponse(models: string[]) {
         })),
     }),
     {
-      headers: {
+      headers: withCorsHeaders({
         "Content-Type": "application/json",
-      },
+      }),
     },
   )
 }
