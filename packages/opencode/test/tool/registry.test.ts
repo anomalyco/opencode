@@ -50,6 +50,27 @@ const brokenPluginLayer = Layer.succeed(
   }),
 )
 
+const missingDescriptionPluginLayer = Layer.succeed(
+  Plugin.Service,
+  Plugin.Service.of({
+    init: () => Effect.void,
+    trigger: ((_name: unknown, _input: unknown, output: unknown) =>
+      Effect.succeed(output)) as Plugin.Interface["trigger"],
+    list: () =>
+      Effect.succeed([
+        {
+          tool: {
+            broken_description_tool: {
+              description: undefined as unknown as string,
+              args: {},
+              execute: async () => "ok",
+            },
+          },
+        },
+      ]),
+  }),
+)
+
 const root = LayerNode.group([ToolRegistry.node, Agent.node])
 const replacements = [
   [Config.node, configLayer],
@@ -94,6 +115,9 @@ const withEmptyCodeMode = testEffect(
   ]),
 )
 const withBrokenPlugin = testEffect(LayerNode.compile(root, [...replacements, [Plugin.node, brokenPluginLayer]]))
+const withMissingDescriptionPlugin = testEffect(
+  LayerNode.compile(root, [...replacements, [Plugin.node, missingDescriptionPluginLayer]]),
+)
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -269,6 +293,23 @@ describe("tool.registry", () => {
       const ids = yield* registry.ids()
       expect(ids).toContain("read")
       expect(ids).toContain("broken_plugin_tool")
+    }),
+  )
+
+  withMissingDescriptionPlugin.instance("skips plugin tools with missing descriptions", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const ids = yield* registry.ids()
+      const tools = yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent: yield* agents.defaultInfo(),
+      })
+
+      expect(ids).toContain("read")
+      expect(ids).not.toContain("broken_description_tool")
+      expect(tools.map((tool) => tool.id)).not.toContain("broken_description_tool")
     }),
   )
 

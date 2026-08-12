@@ -194,6 +194,7 @@ const layer = Layer.effect(
         const plugins = yield* plugin.list()
         for (const p of plugins) {
           for (const [id, def] of Object.entries(p.tool ?? {})) {
+            if (!isPluginTool(def)) continue
             custom.push(fromPlugin(id, def))
           }
         }
@@ -348,7 +349,14 @@ function isZodType(value: unknown): value is z.ZodType {
 }
 
 function isPluginTool(value: unknown): value is ToolDefinition {
-  return typeof value === "object" && value !== null && "args" in value && "description" in value && "execute" in value
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "args" in value &&
+    "execute" in value &&
+    "description" in value &&
+    typeof value.description === "string"
+  )
 }
 
 function isJsonSchemaDefinition(value: unknown): value is JSONSchema7Definition {
