@@ -24,3 +24,12 @@ export const PartID = Schema.String.check(Schema.isStartsWith("prt")).pipe(
 )
 
 export type PartID = Schema.Schema.Type<typeof PartID>
+
+export const AgentMemoryID = Schema.String.check(Schema.isStartsWith("mem")).pipe(
+  Schema.brand("AgentMemoryID"),
+  statics((s) => ({
+    descending: (id?: string) => s.make(Identifier.descending("memory", id)),
+  })),
+)
+
+export type AgentMemoryID = Schema.Schema.Type<typeof AgentMemoryID>
