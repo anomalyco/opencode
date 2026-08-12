@@ -82,14 +82,9 @@ export const layer = (options?: ShellSelect.Options) =>
       const exitOrder: string[] = []
 
       const outputDir = path.join(global.data, "shell", location.project.id)
-      const storage = yield* Effect.cached(
-        Effect.gen(function* () {
-          const { mkdir, unlink } = yield* Effect.promise(() => import("fs/promises"))
-          const { createWriteStream, createReadStream } = yield* Effect.promise(() => import("fs"))
-          yield* Effect.promise(() => mkdir(outputDir, { recursive: true }))
-          return { createReadStream, createWriteStream, unlink }
-        }),
-      )
+      const { mkdir, unlink } = yield* Effect.promise(() => import("fs/promises"))
+      const { createWriteStream, createReadStream } = yield* Effect.promise(() => import("fs"))
+      yield* Effect.promise(() => mkdir(outputDir, { recursive: true }))
 
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
@@ -118,8 +113,7 @@ export const layer = (options?: ShellSelect.Options) =>
         if (session.timeoutFiber) yield* Fiber.interrupt(session.timeoutFiber)
         // Unblock any wait still pending when the command is removed before it terminated.
         yield* Deferred.fail(session.done, new NotFoundError({ id }))
-        const files = yield* storage
-        yield* Effect.promise(() => files.unlink(session.file).catch(() => {}))
+        yield* Effect.promise(() => unlink(session.file).catch(() => {}))
         yield* bus.publish(Shell.Event.Deleted, { id })
       })
 
@@ -164,11 +158,10 @@ export const layer = (options?: ShellSelect.Options) =>
         const start = Math.max(0, cursor)
         const length = Math.min(limit, session.size - start)
         const buffer = Buffer.alloc(length)
-        const files = yield* storage
         const bytesRead = yield* Effect.promise(
           () =>
             new Promise<number>((resolve) => {
-              const stream = files.createReadStream(session.file, { start, end: start + length - 1 })
+              const stream = createReadStream(session.file, { start, end: start + length - 1 })
               let offset = 0
               stream.on("data", (chunk: string | Buffer) => {
                 const bytes = Buffer.from(chunk)
@@ -250,8 +243,7 @@ export const layer = (options?: ShellSelect.Options) =>
               }
               sessions.set(id, session)
 
-              const files = yield* storage
-              const stream = files.createWriteStream(file)
+              const stream = createWriteStream(file)
               const outputDone = Deferred.makeUnsafe<void>()
               const pump = handle.all.pipe(
                 Stream.runForEach((chunk: Uint8Array) =>
