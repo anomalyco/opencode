@@ -499,7 +499,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         toast.show({
           variant: "error",
           title: `MCP server failed: ${server.name}`,
-          message: "Open MCP servers to view details.",
+          message: "Run /mcps to view details.",
         })
     }
   })

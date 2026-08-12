@@ -1,22 +1,26 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
-import { createMemo, createSignal } from "solid-js"
+import { createEffect, createMemo, createSignal, Show } from "solid-js"
 import { usePlugin } from "../../plugin/context"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
+import { useDialog } from "../../ui/dialog"
+import { DialogErrorDetails } from "../../component/dialog-error-details"
 
 const id = "opencode.plugins"
 
 function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePlugin> }) {
   const [locked, setLocked] = createSignal(false)
-  const options = createMemo(() =>
-    props.plugins
+  const [focused, setFocused] = createSignal<string>()
+  const [detail, setDetail] = createSignal<{ title: string; error: string }>()
+  const dialog = useDialog()
+  const options = createMemo(() => {
+    const builtins = props.plugins
       .registered()
-      .filter((plugin) => plugin.id !== id)
-      .sort((a, b) => a.id.localeCompare(b.id))
+      .filter((plugin) => plugin.id !== id && plugin.source === "builtin")
       .map(
         (plugin): DialogSelectOption<string> => ({
           title: plugin.id,
           value: plugin.id,
-          category: plugin.source === "builtin" ? "Built-in" : "External",
+          category: "Built-in",
           footer: (
             <span
               style={{
@@ -29,8 +33,46 @@ function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePl
             </span>
           ),
         }),
-      ),
-  )
+      )
+    const external = props.plugins
+      .list()
+      .filter((plugin) => plugin.status !== "unsupported")
+      .map(
+        (plugin): DialogSelectOption<string> => ({
+          title: plugin.id ?? plugin.target,
+          value: plugin.id ?? plugin.target,
+          category: "External",
+          searchText: plugin.target,
+          footer: (
+            <span
+              style={{
+                fg:
+                  plugin.status === "active"
+                    ? props.context.theme.text.feedback.success.default
+                    : plugin.status === "failed"
+                      ? props.context.theme.text.feedback.error.default
+                      : props.context.theme.text.subdued,
+              }}
+            >
+              {plugin.status}
+            </span>
+          ),
+        }),
+      )
+    return [...builtins, ...external].sort((a, b) => a.title.localeCompare(b.title))
+  })
+
+  const failure = (value: string | undefined) =>
+    props.plugins.list().find((plugin) => {
+      if (plugin.status !== "failed") return false
+      return (plugin.id ?? plugin.target) === value
+    })
+
+  createEffect(() => {
+    if (focused()) return
+    const first = options()[0]
+    if (first) setFocused(first.value)
+  })
 
   const toggle = (plugin: DialogSelectOption<string>) => {
     if (locked()) return
@@ -51,15 +93,56 @@ function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePl
       .finally(() => setLocked(false))
   }
 
+  const select = (plugin: DialogSelectOption<string>) => {
+    const failed = failure(plugin.value)
+    if (!failed || failed.status !== "failed") return toggle(plugin)
+    setDetail({ title: failed.target, error: failed.error })
+  }
+
   return (
-    <DialogSelect
-      title="Plugins"
-      options={options()}
-      locked={locked()}
-      preserveSelection={true}
-      actions={[{ title: "toggle", command: "plugins.toggle", onTrigger: toggle }]}
-      onSelect={toggle}
-    />
+    <box>
+      <Show
+        when={detail()}
+        fallback={
+          <DialogSelect
+            title="Plugins"
+            options={options()}
+            current={focused()}
+            locked={locked()}
+            preserveSelection={true}
+            onMove={(option) => setFocused(option.value)}
+            actions={[
+              {
+                title: "toggle",
+                command: "plugins.toggle",
+                disabled: (option) => {
+                  const failed = failure(option?.value)
+                  return Boolean(failed && !("id" in failed && failed.id))
+                },
+                onTrigger: toggle,
+              },
+            ]}
+            onSelect={select}
+            footer={
+              <Show when={failure(focused())}>
+                <text fg={props.context.theme.text.subdued}>enter to view error</text>
+              </Show>
+            }
+          />
+        }
+      >
+        {(item) => (
+          <DialogErrorDetails
+            title={`Plugin: ${item().title}`}
+            error={item().error}
+            onBack={() => {
+              setDetail()
+              dialog.setSize("medium")
+            }}
+          />
+        )}
+      </Show>
+    </box>
   )
 }
 
@@ -72,6 +155,7 @@ function Commands(props: { context: Plugin.Context }) {
         id: "plugins.list",
         title: "Plugins",
         group: "System",
+        slash: { name: "plugins" },
         palette: true,
         run() {
           props.context.ui.dialog.show(() => <View context={props.context} plugins={plugins} />)
