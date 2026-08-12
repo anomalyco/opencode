@@ -1,7 +1,7 @@
 import fs from "node:fs/promises"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ChildProcessSpawner } from "effect/unstable/process"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import {
@@ -10,6 +10,7 @@ import {
   makeFiles,
   makeLocalDriver,
   makeMemoryDriver,
+  noExecutionPlaneSpawner,
   NotFound,
   typeFollowing,
 } from "../src/environment/index"
@@ -31,6 +32,19 @@ describe("typeFollowing", () => {
       expect(yield* typeFollowing(files, "/directory-link")).toBe("directory")
       expect(yield* typeFollowing(files, "/file-link")).toBe("file")
       expect(yield* typeFollowing(files, "/dangling-link").pipe(Effect.flip)).toBeInstanceOf(NotFound)
+    }),
+  )
+})
+
+describe("no execution plane", () => {
+  it.effect("fails spawn with a typed location error", () =>
+    Effect.gen(function* () {
+      const error = yield* noExecutionPlaneSpawner
+        .spawn(ChildProcess.make("echo", ["hello"]))
+        .pipe(Effect.flip)
+
+      expect(error._tag).toBe("PlatformError")
+      expect(error.message).toContain("location has no execution plane")
     }),
   )
 })

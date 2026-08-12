@@ -15,6 +15,7 @@ export {
 export { execDefaults } from "./exec-defaults.js"
 export { makeLocalDriver } from "./local.js"
 export { makeMemoryDriver, type MemoryDriver } from "./memory.js"
+export { layer as noExecutionPlaneLayer, spawner as noExecutionPlaneSpawner } from "./unavailable.js"
 export { type Interface, node, Service } from "./environment.js"
 
 import type { Driver } from "./driver.js"

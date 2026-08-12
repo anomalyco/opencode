@@ -5,6 +5,7 @@ import { Context, Deferred, Duration, Effect, Fiber, Layer, Schema, Stream } fro
 import { ChildProcess } from "effect/unstable/process"
 import { produce } from "immer"
 import { Shell } from "@opencode-ai/schema/shell"
+import { AppProcess } from "@opencode-ai/util/process"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Config } from "./config.js"
 import { Bus } from "./bus.js"
@@ -50,7 +51,7 @@ export interface Interface {
   readonly create: <E = never, R = never>(
     input: Shell.CreateInput,
     before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
-  ) => Effect.Effect<Shell.Info, E, R>
+  ) => Effect.Effect<Shell.Info, E | AppProcess.AppProcessError, R>
   // Currently running commands only; exited shells are retained for get/output but excluded here.
   readonly list: () => Effect.Effect<Shell.Info[]>
   readonly get: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
@@ -215,19 +216,23 @@ export const layer = (options?: ShellSelect.Options) =>
         // Spawn through the Environment and stream combined output to the file. The handle is scope-bound, so
         // the managing fiber keeps its scope open until the command terminates (it awaits `done` at the
         // end). `create` returns once `ready` resolves with the registered session.
-        const ready = Deferred.makeUnsafe<Active>()
+        const ready = Deferred.makeUnsafe<Active, AppProcess.AppProcessError>()
         runFork(
           Effect.scoped(
             Effect.gen(function* () {
-              const handle = yield* environment.spawner.spawn(
-                ChildProcess.make(invocation.shell, args, {
-                  cwd: invocation.cwd,
-                  env: invocation.env,
-                  stdin: "ignore",
-                  detached: process.platform !== "win32",
-                  forceKillAfter: Duration.seconds(3),
-                }),
-              )
+              const handle = yield* environment.spawner
+                .spawn(
+                  ChildProcess.make(invocation.shell, args, {
+                    cwd: invocation.cwd,
+                    env: invocation.env,
+                    stdin: "ignore",
+                    detached: process.platform !== "win32",
+                    forceKillAfter: Duration.seconds(3),
+                  }),
+                )
+                .pipe(
+                  Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })),
+                )
               const session: Active = {
                 info: produce(info, (draft) => {
                   draft.pid = handle.pid
@@ -329,7 +334,7 @@ export const layer = (options?: ShellSelect.Options) =>
               // release (kill) the process before its exit is observed.
               yield* Deferred.await(session.done).pipe(Effect.catch(() => Effect.void))
             }),
-          ).pipe(Effect.catch(() => Effect.void)),
+          ).pipe(Effect.catchTag("AppProcessError", (error) => Deferred.fail(ready, error))),
         )
 
         const session = yield* Deferred.await(ready)

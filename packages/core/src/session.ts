@@ -640,7 +640,9 @@ const layer = Layer.effect(
             yield* execution.awaitIdle(input.sessionID)
             const started = yield* Effect.gen(function* () {
               const shell = yield* Shell.Service
-              return yield* shell.create({ command: input.command, cwd: session.location.directory, timeout: 0 })
+              return yield* shell
+                .create({ command: input.command, cwd: session.location.directory, timeout: 0 })
+                .pipe(Effect.orDie)
             }).pipe(Effect.provide(locations.get(session.location)))
             yield* bus.publish(
               SessionEvent.Shell.Started,

@@ -184,6 +184,25 @@ it("runs a full prompt turn against a fake provider and reads the durable log", 
   expect(eventTypes).toContain("log.synced")
 })
 
+it("fails a shell command through the no-execution-plane spawner and leaves the session usable", async () => {
+  const sessionID = await createSession()
+  const shell = await request("/api/shell?directory=/tmp/project", {
+    method: "POST",
+    body: JSON.stringify({ command: "pwd", timeout: 1_000 }),
+  })
+  expect(shell.status).toBe(500)
+
+  mockLLM()
+  const prompt = await request(`/api/session/${sessionID}/prompt`, {
+    method: "POST",
+    body: JSON.stringify({ text: "Say hello after the shell failure" }),
+  })
+  expect(prompt.status).toBe(200)
+  const wait = await request(`/api/session/${sessionID}/wait`, { method: "POST" })
+  expect(wait.status).toBe(204)
+  expect((await readLog(sessionID)).map((item) => item.type)).toContain("session.execution.succeeded")
+})
+
 // A5 question 1 (ack-then-continue): the Slack flow returns the prompt request
 // immediately and lets the turn continue inside the DO with no request held
 // open. The turn runs on the coordinator's background fiber in the app layer
