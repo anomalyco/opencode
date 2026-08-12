@@ -38,17 +38,17 @@ timeline LR
 
     expect(output).toBe(
       [
-        "       Product &",
-        "        Platform",
+        "          Product &",
+        "           Platform",
         "",
-        "       ◆  Foundation",
-        "       │  phase",
-        "       │",
-        "2024 ──●── Prototype",
-        "       │   ready",
-        "       │── First release",
-        "       │── Scale ≥ 10k",
-        "       │",
+        "Foundation   │",
+        "     phase   │",
+        "             │",
+        "      2024 ──●  Prototype",
+        "             │  ready",
+        "             │  First release",
+        "             │  Scale ≥ 10k",
+        "             │",
       ].join("\n"),
     )
   })

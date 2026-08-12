@@ -11,8 +11,6 @@ interface PeriodLayout {
   height: number
 }
 
-const BRANCH = "──"
-
 export function drawTimelineDiagramGrid(
   diagram: TimelineDiagram,
   _options: TimelineDiagramRenderOptions = {},
@@ -26,7 +24,7 @@ export function drawTimelineDiagramGrid(
     if (entry.type === "section") {
       const lines = splitDiagramLines(entry.section.label)
       bodyHeight += lines.length + 1
-      rightWidth = Math.max(rightWidth, ...lines.map(diagramTextWidth))
+      leftWidth = Math.max(leftWidth, ...lines.map(diagramTextWidth))
       continue
     }
     const periodLines = splitDiagramLines(entry.period.period)
@@ -57,9 +55,11 @@ export function drawTimelineDiagramGrid(
   for (const entry of diagram.entries) {
     if (entry.type === "section") {
       const lines = splitDiagramLines(entry.section.label)
-      setCell(grid, spineX, y, "◆", "section")
-      lines.forEach((line, index) => setText(grid, spineX + 3, y + index, line, "section"))
-      for (let row = y + 1; row < y + lines.length + 1; row++) setCell(grid, spineX, row, "│", "spine")
+      lines.forEach((line, index) => {
+        setText(grid, leftWidth - diagramTextWidth(line), y + index, line, "section")
+        setCell(grid, spineX, y + index, "│", "spine")
+      })
+      setCell(grid, spineX, y + lines.length, "│", "spine")
       y += lines.length + 1
       continue
     }
@@ -75,8 +75,7 @@ export function drawTimelineDiagramGrid(
 
     let eventY = y
     for (const lines of layout.eventLines) {
-      setText(grid, spineX + 1, eventY, BRANCH, "spine")
-      lines.forEach((line, index) => setText(grid, spineX + 4, eventY + index, line, "event"))
+      lines.forEach((line, index) => setText(grid, spineX + 3, eventY + index, line, "event"))
       eventY += lines.length
     }
     y += layout.height + 1
