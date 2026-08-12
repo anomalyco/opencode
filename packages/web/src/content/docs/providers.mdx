@@ -759,7 +759,7 @@ Cloudflare Workers AI lets you run AI models on Cloudflare's global network dire
 
 ### DigitalOcean
 
-DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inference/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/genai-platform/concepts/inference-routers/) that route each request to the cheapest, fastest, or best-fit model for a task.
+DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inference/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/inference/how-to/use-inference-router/) that route each request to the cheapest, fastest, or best-fit model for a task.
 
 OpenCode supports two authentication methods:
 
@@ -2487,7 +2487,7 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
-         "name": "My AI ProviderDisplay Name",
+         "name": "My AI Provider Display Name",
          "options": {
            "baseURL": "https://api.myprovider.com/v1"
          },
@@ -2525,7 +2525,7 @@ Here's an example setting the `apiKey`, `headers`, and model `limit` options.
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "My AI ProviderDisplay Name",
+      "name": "My AI Provider Display Name",
       "options": {
         "baseURL": "https://api.myprovider.com/v1",
         "apiKey": "{env:ANTHROPIC_API_KEY}",
