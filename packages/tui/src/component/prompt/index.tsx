@@ -503,6 +503,7 @@ export function Prompt(props: PromptProps) {
           if (store.interrupt >= 2) {
             void client.api.session.interrupt({
               sessionID: props.sessionID,
+              continue: true,
             })
             setStore("interrupt", 0)
           }
