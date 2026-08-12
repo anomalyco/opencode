@@ -1,6 +1,16 @@
-import { RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
-import { For, Show, createComputed, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
-import { useTerminalDimensions } from "@opentui/solid"
+import { RGBA, ScrollBoxRenderable, TextAttributes, type MouseEvent } from "@opentui/core"
+import {
+  For,
+  Show,
+  createComputed,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+  untrack,
+} from "solid-js"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
 import { useData } from "../context/data"
@@ -24,6 +34,9 @@ import { tint } from "../theme/color"
 import { SESSION_SIDEBAR_WIDTH } from "../ui/layout"
 import { projectName } from "../util/project"
 import { marqueeText } from "../util/marquee"
+import { useDialog } from "../ui/dialog"
+import { DialogSessionRename } from "./dialog-session-rename"
+import { Keymap } from "../context/keymap"
 
 // A long title fades out over its last cells instead of cutting hard.
 const FADE_WIDTH = 4
@@ -31,6 +44,15 @@ const FADE_WIDTH = 4
 const ADD_TAB_WIDTH = 3
 const MARQUEE_DELAY = 600
 const MARQUEE_INTERVAL = 100
+const CONTEXT_MENU_WIDTH = 16
+const RIGHT_MOUSE_BUTTON = 2
+
+type TabContextMenuState = {
+  x: number
+  y: number
+  sessionID?: string
+  title?: string
+}
 
 type ContextController = ReturnType<typeof useSessionTabs>
 export type SessionTabsStatus = Omit<ReturnType<ContextController["status"]>, "unread"> & {
@@ -83,6 +105,89 @@ function createMarquee(hovered: () => string | undefined, animations: () => bool
   return { offset, leading: () => leading.value().opacity }
 }
 
+function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsController; onClose: () => void }) {
+  const dimensions = useTerminalDimensions()
+  const theme = useTheme("overlay")
+  const dialog = useDialog()
+  const keymap = Keymap.use()
+  const renderer = useRenderer()
+  const sessionID = props.state.sessionID
+  const actions = [
+    ...(props.tabs.add ? [{ title: "New tab", run: () => props.tabs.add?.() }] : []),
+    ...(sessionID
+      ? [
+          {
+            title: "Rename",
+            run: () => DialogSessionRename.show(dialog, sessionID, props.state.title),
+          },
+          { title: "Close", run: () => props.tabs.close(sessionID) },
+        ]
+      : []),
+  ]
+  const [selected, setSelected] = createSignal(0)
+  const top = () => Math.max(0, Math.min(props.state.y + 1, dimensions().height - actions.length))
+  const left = () => Math.max(0, Math.min(props.state.x, dimensions().width - CONTEXT_MENU_WIDTH))
+  const run = (index: number) => {
+    props.onClose()
+    actions[index]?.run()
+  }
+
+  onMount(() => {
+    const popMode = keymap.mode.push("modal")
+    const onKey = (event: { name: string; preventDefault(): void; stopPropagation(): void }) => {
+      if (event.name === "escape") props.onClose()
+      if (event.name === "up") setSelected((selected() + actions.length - 1) % actions.length)
+      if (event.name === "down") setSelected((selected() + 1) % actions.length)
+      if (event.name === "return" || event.name === "enter") run(selected())
+      if (!["escape", "up", "down", "return", "enter"].includes(event.name)) return
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    renderer.keyInput.prependListener("keypress", onKey)
+    onCleanup(() => {
+      renderer.keyInput.off("keypress", onKey)
+      popMode()
+    })
+  })
+  return (
+    <box
+      position="absolute"
+      left={left()}
+      top={top()}
+      height={actions.length}
+      width={CONTEXT_MENU_WIDTH}
+      zIndex={2500}
+      flexDirection="column"
+      backgroundColor={theme.background.default}
+      onMouseDown={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+    >
+      <For each={actions}>
+        {(action, index) => (
+          <text
+            width="100%"
+            paddingLeft={2}
+            paddingRight={2}
+            fg={selected() === index() ? theme.text.action.primary.default : theme.text.default}
+            bg={selected() === index() ? theme.background.action.primary.default : theme.background.default}
+            selectable={false}
+            onMouseOver={() => setSelected(index())}
+            onMouseUp={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              run(index())
+            }}
+          >
+            {action.title}
+          </text>
+        )}
+      </For>
+    </box>
+  )
+}
+
 export function SessionTabs(
   props: { controller?: SessionTabsController; animations?: boolean; orientation?: "horizontal" | "vertical" } = {},
 ) {
@@ -110,6 +215,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
   const marquee = createMarquee(hovered, animations)
   const [dragging, setDragging] = createSignal<string>()
   const [preview, setPreview] = createSignal<{ sessionID: string; index: number }>()
+  const [contextMenu, setContextMenu] = createSignal<TabContextMenuState>()
   const newTab = () => tabs.newTab?.() ?? false
   const activeID = createMemo(() => (newTab() ? undefined : tabs.current()))
   const ordered = createMemo(() => {
@@ -137,7 +243,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
       ),
   )
   const itemStatus = (tab: SessionTab) => statuses().get(tab.sessionID)!
-  let rail: { screenY: number } | undefined
+  let rail: { screenX: number; screenY: number } | undefined
   let scroll: ScrollBoxRenderable | undefined
 
   createEffect(() => {
@@ -167,6 +273,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
       height="100%"
       flexShrink={0}
       flexDirection="column"
+      position="relative"
       paddingTop={1}
       backgroundColor={theme.background.default}
     >
@@ -276,11 +383,27 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   backgroundColor={background()}
                   onMouseOver={() => setHovered(tab.sessionID)}
                   onMouseOut={() => setHovered(undefined)}
-                  onMouseDown={() => {
+                  onMouseDown={(event) => {
+                    if (event.button === RIGHT_MOUSE_BUTTON) {
+                      setDragging(undefined)
+                      if (!rail) return
+                      setContextMenu({
+                        x: event.x - rail.screenX,
+                        y: event.y - rail.screenY,
+                        sessionID: tab.sessionID,
+                        title: tab.title,
+                      })
+                      event.preventDefault()
+                      event.stopPropagation()
+                      return
+                    }
                     setHovered(tab.sessionID)
                     setDragging(tab.sessionID)
                   }}
-                  onMouseUp={release}
+                  onMouseUp={(event) => {
+                    if (event.button === RIGHT_MOUSE_BUTTON) return
+                    release()
+                  }}
                   onMouseDrag={(event) => {
                     if (!rail) return
                     const target = Math.max(
@@ -389,6 +512,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                         fg={theme.text.subdued}
                         selectable={false}
                         onMouseUp={(event) => {
+                          if (event.button === RIGHT_MOUSE_BUTTON) return
                           if (hovered() !== tab.sessionID) return
                           event.stopPropagation()
                           tabs.close(tab.sessionID)
@@ -440,7 +564,15 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               }
               onMouseOver={() => setAddHovered(true)}
               onMouseOut={() => setAddHovered(false)}
-              onMouseUp={() => {
+              onMouseDown={(event: MouseEvent) => {
+                if (event.button !== RIGHT_MOUSE_BUTTON) return
+                if (!rail) return
+                setContextMenu({ x: event.x - rail.screenX, y: event.y - rail.screenY })
+                event.preventDefault()
+                event.stopPropagation()
+              }}
+              onMouseUp={(event: MouseEvent) => {
+                if (event.button === RIGHT_MOUSE_BUTTON) return
                 if (!newTab()) tabs.add?.()
               }}
             >
@@ -469,6 +601,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   fg={theme.text.subdued}
                   selectable={false}
                   onMouseUp={(event) => {
+                    if (event.button === RIGHT_MOUSE_BUTTON) return
                     if (!addHovered()) return
                     event.stopPropagation()
                     tabs.close()
@@ -481,6 +614,9 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
           </Show>
         </box>
       </scrollbox>
+      <Show when={contextMenu()}>
+        {(state) => <TabContextMenu state={state()} tabs={tabs} onClose={() => setContextMenu(undefined)} />}
+      </Show>
     </box>
   )
 }
@@ -500,7 +636,8 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
   // per slot crossing; the preview holds after release until the store reflects the move,
   // so the strip never flashes the pre-drag order while the write is in flight.
   const [preview, setPreview] = createSignal<{ sessionID: string; index: number }>()
-  let strip: { screenX: number } | undefined
+  const [contextMenu, setContextMenu] = createSignal<TabContextMenuState>()
+  let strip: { screenX: number; screenY: number } | undefined
   const hueStep = () => (mode() === "light" ? 800 : 200)
   const accent = () => theme.hue.accent[hueStep()]
   const activeNumber = () => theme.hue.interactive[hueStep()]
@@ -743,11 +880,26 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
               backgroundColor={background()}
               onMouseOver={() => setHovered(tab.sessionID)}
               onMouseOut={() => setHovered(undefined)}
-              onMouseDown={() => {
+              onMouseDown={(event) => {
+                if (event.button === RIGHT_MOUSE_BUTTON) {
+                  setDragging(undefined)
+                  setContextMenu({
+                    x: event.x - (strip?.screenX ?? 0),
+                    y: event.y - (strip?.screenY ?? 0),
+                    sessionID: tab === NEW_SESSION_TAB ? undefined : tab.sessionID,
+                    title: tab === NEW_SESSION_TAB ? undefined : tab.title,
+                  })
+                  event.preventDefault()
+                  event.stopPropagation()
+                  return
+                }
                 setHovered(tab.sessionID)
                 setDragging(tab.sessionID)
               }}
-              onMouseUp={release}
+              onMouseUp={(event) => {
+                if (event.button === RIGHT_MOUSE_BUTTON) return
+                release()
+              }}
               onMouseDrag={(event) => {
                 if (tab === NEW_SESSION_TAB) return
                 const slot = slotAt(event.x)
@@ -798,6 +950,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   fg={closeColor()}
                   selectable={false}
                   onMouseUp={(event) => {
+                    if (event.button === RIGHT_MOUSE_BUTTON) return
                     // The close mark only renders while hovered; without motion events a click can
                     // land here first, and must select the tab instead of closing it invisibly.
                     if (hovered() !== tab.sessionID) return
@@ -825,10 +978,22 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           selectable={false}
           onMouseOver={() => setAddHovered(true)}
           onMouseOut={() => setAddHovered(false)}
-          onMouseUp={() => tabs.add?.()}
+          onMouseDown={(event) => {
+            if (event.button !== RIGHT_MOUSE_BUTTON) return
+            setContextMenu({ x: event.x - (strip?.screenX ?? 0), y: event.y - (strip?.screenY ?? 0) })
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onMouseUp={(event) => {
+            if (event.button === RIGHT_MOUSE_BUTTON) return
+            tabs.add?.()
+          }}
         >
           {" + "}
         </text>
+      </Show>
+      <Show when={contextMenu()}>
+        {(state) => <TabContextMenu state={state()} tabs={tabs} onClose={() => setContextMenu(undefined)} />}
       </Show>
     </box>
   )
