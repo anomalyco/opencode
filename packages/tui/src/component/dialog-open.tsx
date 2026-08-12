@@ -23,7 +23,7 @@ const RECENT_LIMIT = 8
 
 type OpenTarget = { type: "session"; sessionID: string } | { type: "project"; directory: string }
 
-export function DialogOpen() {
+export function DialogOpen(props: { sessions: SessionInfo[] }) {
   const dialog = useDialog()
   const route = useRoute()
   const data = useData()
@@ -39,18 +39,6 @@ export function DialogOpen() {
   const [filter, setFilter] = createSignal("")
   const [selectionMoved, setSelectionMoved] = createSignal(false)
 
-  void data.project.sync().catch(() => {})
-
-  // One background fetch fills in recent sessions from other projects; the menu renders
-  // immediately from the local store and never blocks on the network.
-  const [fetched] = createResource(
-    () =>
-      client.api.session
-        .list({ limit: 50, order: "desc", parentID: null })
-        .then((response) => response.data)
-        .catch(() => [] as SessionInfo[]),
-    { initialValue: [] },
-  )
   const [matched] = createResource(
     () => {
       const value = filter().trim()
@@ -72,7 +60,7 @@ export function DialogOpen() {
   const sessions = createMemo(() => {
     const seen = new Set<string>()
     const match = matched()
-    return [...data.session.list(), ...fetched(), ...(match ? [match] : [])]
+    return [...data.session.list(), ...props.sessions, ...(match ? [match] : [])]
       .filter((session) => {
         if (session.parentID || seen.has(session.id)) return false
         seen.add(session.id)

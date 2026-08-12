@@ -2,7 +2,7 @@ import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { Deferred, Effect } from "effect"
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
-import { OpenCode } from "@opencode-ai/client"
+import { OpenCode, type SessionInfo } from "@opencode-ai/client"
 import { Global } from "@opencode-ai/util/global"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, useLog, type LogSink } from "./context/log"
@@ -478,6 +478,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   const promptRef = usePromptRef()
   const plugins = usePlugin()
   const clipboard = useClipboard()
+  let openingOpen: Promise<SessionInfo[]> | undefined
   // Toast once when an MCP server enters a failed or needs-auth state so the user knows to act,
   // without having to open the status panel. Tracking the last alerted status avoids re-toasting
   // the same problem on every refresh while still re-alerting if the state changes.
@@ -680,9 +681,20 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "Open session or project",
         category: "Session",
         slash: { name: "open", aliases: ["projects", "project"] },
-        run: () => {
-          if (dialog.key === "open") return
-          dialog.replace(() => <DialogOpen />, undefined, { key: "open", size: "large" })
+        run: async () => {
+          if (dialog.key === "open" || openingOpen) return
+          const previous = dialog.stack.at(-1)
+          openingOpen = Promise.all([
+            data.project.sync().catch(() => {}),
+            client.api.session
+              .list({ limit: 50, order: "desc", parentID: null })
+              .then((response) => response.data)
+              .catch(() => [] as SessionInfo[]),
+          ]).then(([, sessions]) => sessions)
+          const sessions = await openingOpen
+          openingOpen = undefined
+          if (dialog.stack.at(-1) !== previous) return
+          dialog.replace(() => <DialogOpen sessions={sessions} />, undefined, { key: "open", size: "large" })
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({

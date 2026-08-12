@@ -4,7 +4,7 @@ import { testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
 import { DialogOpen } from "../../../src/component/dialog-open"
 import { ConfigProvider } from "../../../src/config"
-import { ClientProvider } from "../../../src/context/client"
+import { ClientProvider, useClient } from "../../../src/context/client"
 import { DataProvider, useData } from "../../../src/context/data"
 import { Keymap } from "../../../src/context/keymap"
 import { LocationProvider, useLocation } from "../../../src/context/location"
@@ -157,8 +157,8 @@ test("preserves a moved project when sessions arrive", async () => {
   })
 
   try {
-    await fixture.app.waitForFrame((frame) => frame.includes("Second project"))
-    fixture.app.mockInput.pressArrow("down")
+    await fixture.app.renderOnce()
+    expect(fixture.app.captureCharFrame()).not.toContain("Search sessions and projects")
 
     resolveSessions(
       json({
@@ -176,7 +176,9 @@ test("preserves a moved project when sessions arrive", async () => {
         cursor: {},
       }),
     )
-    await fixture.app.waitForFrame((frame) => frame.includes("Recent session"))
+    await fixture.app.waitForFrame((frame) => frame.includes("Recent session") && frame.includes("Second project"))
+    fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressArrow("down")
     fixture.app.mockInput.pressEnter()
     await fixture.app.waitFor(() => fixture.route.data.type === "home")
 
@@ -292,14 +294,22 @@ async function renderOpen(
 
   function Probe() {
     const dialog = useDialog()
+    const client = useClient()
     route = useRoute()
     location = useLocation()
     data = useData()
     storage = useStorage()
     onMount(
       () =>
-        void Promise.resolve(beforeOpen?.({ data, location })).then(() =>
-          dialog.replace(() => <DialogOpen />, undefined, { key: "open", size: "large" }),
+        void Promise.all([
+          beforeOpen?.({ data, location }),
+          data.project.sync().catch(() => {}),
+          client.api.session
+            .list({ limit: 50, order: "desc", parentID: null })
+            .then((response) => response.data)
+            .catch(() => []),
+        ]).then(([, , sessions]) =>
+          dialog.replace(() => <DialogOpen sessions={sessions} />, undefined, { key: "open", size: "large" }),
         ),
     )
     return null
