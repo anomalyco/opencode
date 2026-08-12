@@ -164,6 +164,17 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
       return { type: "text", value: output }
     }
 
+    // A tool that ran and returned NOTHING (null/undefined output, e.g. a binary
+    // with no stdout/stderr) is still a COMPLETED, valid tool result. `typeof
+    // null === "object"`, so without this guard a null output would fall through
+    // to the object branch below and crash on `outputObject.attachments`,
+    // surfacing as a render-time TypeError. Treat null/undefined as an empty
+    // text result so the tool call stays paired with its result — no dangling
+    // tool-call, no bare assistant, no consecutive-assistant provider 400.
+    if (output === null || output === undefined) {
+      return { type: "text", value: "" }
+    }
+
     if (typeof output === "object") {
       const outputObject = output as {
         text: string
@@ -192,7 +203,22 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     return { type: "json", value: output as never }
   }
 
-  for (const msg of input) {
+  // Forward lookahead: for each message index, the role of the next message in
+  // `input` that has at least one part (skipping part-less messages). Used by the
+  // source fix below — a user message with no renderable parts must NOT be dropped
+  // when it separates two assistant turns, or the wire collapses to
+  // assistant,assistant (provider 400). This is an extension of the renderer's
+  // existing user-role normalization (compaction/subtask sentinels): we preserve
+  // the boundary of a real user turn instead of silently removing it.
+  const nextRoleAt: Array<"user" | "assistant" | undefined> = new Array(input.length).fill(undefined)
+  let nextRole: "user" | "assistant" | undefined
+  for (let i = input.length - 1; i >= 0; i--) {
+    nextRoleAt[i] = nextRole
+    if (input[i].parts.length > 0) nextRole = input[i].info.role
+  }
+
+  for (let i = 0; i < input.length; i++) {
+    const msg = input[i]
     if (msg.parts.length === 0) continue
 
     if (msg.info.role === "user") {
@@ -238,7 +264,28 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         }
       }
-      if (userMessage.parts.length > 0) result.push(userMessage)
+      if (userMessage.parts.length > 0) {
+        result.push(userMessage)
+      } else if (
+        // SOURCE FIX (Phase 4, priority 1): a user whose parts render to nothing
+        // must be PRESERVED as a boundary when it separates two assistant turns.
+        // Without this the renderer drops the user, the wire collapses to
+        // assistant,assistant, and the provider 400s. This extends the renderer's
+        // existing user-role normalization (compaction/subtask sentinels) — we
+        // emit a transparent boundary token for a REAL user turn whose content is
+        // unavailable on the wire, rather than removing the separator entirely.
+        // The sentinel is emitted ONLY when the guardrail holds: the previous
+        // emitted message is an assistant AND the next part-bearing message is an
+        // assistant. We did NOT alter any assistant content, and this is the
+        // renderer completing its contract — no guard (hank/blart) changed behavior.
+        result[result.length - 1]?.role === "assistant" && nextRoleAt[i] === "assistant"
+      ) {
+        result.push({
+          id: msg.info.id,
+          role: "user",
+          parts: [{ type: "text" as const, text: "[User message omitted]" }],
+        })
+      }
     }
 
     if (msg.info.role === "assistant") {
@@ -577,30 +624,27 @@ export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: Ses
 
 // filterCompacted reorders messages for model consumption
 // ([compaction-user, summary, ...retained tail..., continue-user]), so array
-// position is not chronological. IDs are only a deterministic tie-breaker
-// because imported messages do not necessarily have monotonic IDs.
+// position is not chronological. Derive each binding by max id (MessageID
+// is monotonic via MessageID.ascending) so a pre-compaction overflowing tail
+// assistant doesn't get mistaken for the most recent turn. tasks are
+// compaction/subtask parts attached to user messages newer than the latest
+// finished assistant — i.e. unprocessed work.
 export function latest(msgs: WithParts[]) {
   let user: User | undefined
   let assistant: Assistant | undefined
   let finished: Assistant | undefined
   for (const msg of msgs) {
     const info = msg.info
-    if (info.role === "user" && isAfter(info, user)) user = info
-    if (info.role === "assistant" && isAfter(info, assistant)) assistant = info
-    if (info.role === "assistant" && info.finish && isAfter(info, finished)) finished = info
+    if (info.role === "user" && (!user || info.id > user.id)) user = info
+    if (info.role === "assistant" && (!assistant || info.id > assistant.id)) assistant = info
+    if (info.role === "assistant" && info.finish && (!finished || info.id > finished.id)) finished = info
   }
   const tasks = msgs.flatMap((m) =>
-    finished && !isAfter(m.info, finished)
+    finished && m.info.id <= finished.id
       ? []
       : m.parts.filter((p): p is CompactionPart | SubtaskPart => p.type === "compaction" || p.type === "subtask"),
   )
   return { user, assistant, finished, tasks }
-}
-
-function isAfter(info: Info, other?: Info) {
-  if (!other) return true
-  if (info.time.created !== other.time.created) return info.time.created > other.time.created
-  return info.id > other.id
 }
 
 export function fromError(
