@@ -1,14 +1,13 @@
 import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
-import { checksum } from "@opencode-ai/core/util/encode"
 import { findLast } from "@opencode-ai/core/util/array"
 import { same } from "@/utils/same"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
-import { File } from "@opencode-ai/session-ui/file"
+import { JsonViewer } from "@opencode-ai/session-ui/json-viewer"
 import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
@@ -40,23 +39,21 @@ function Stat(props: { label: string; value: JSX.Element }) {
 }
 
 function RawMessageContent(props: { message: Message; getParts: (id: string) => Part[]; onRendered: () => void }) {
-  const file = createMemo(() => {
+  const contents = createMemo(() => {
     const parts = props.getParts(props.message.id)
-    const contents = JSON.stringify({ message: props.message, parts }, null, 2)
-    return {
-      name: `${props.message.role}-${props.message.id}.json`,
-      contents,
-      cacheKey: checksum(contents),
-    }
+    return JSON.stringify({ message: props.message, parts }, null, 2)
   })
 
+  createEffect(
+    on(contents, () => {
+      requestAnimationFrame(props.onRendered)
+    }),
+  )
+
   return (
-    <File
-      mode="text"
-      file={file()}
-      overflow="wrap"
+    <JsonViewer
+      json={contents()}
       class="select-text"
-      onRendered={() => requestAnimationFrame(props.onRendered)}
     />
   )
 }
