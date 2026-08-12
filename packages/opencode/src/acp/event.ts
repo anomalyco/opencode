@@ -11,6 +11,7 @@ import type {
 import { Effect } from "effect"
 import { ACPSession } from "./session"
 import { ACPPermission } from "./permission"
+import { ACPElicitation } from "./elicitation"
 import { partsToContentChunks, type ReplayPart } from "./content"
 import {
   duplicateRunningToolUpdate,
@@ -22,7 +23,7 @@ import {
 } from "./tool"
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate"> &
-  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
+  Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile" | "unstable_createElicitation">>
 type GlobalEventEnvelope = {
   payload?: Event
 }
@@ -43,6 +44,7 @@ export class Subscription {
   private readonly connectionWaiters = new Set<() => void>()
   private readonly idleWaiters = new Map<string, Set<ReturnType<typeof signal>>>()
   private readonly permission: ACPPermission.Handler
+  private readonly elicitation: ACPElicitation.Handler
   private connected = false
   private started = false
 
@@ -54,6 +56,7 @@ export class Subscription {
     },
   ) {
     this.permission = new ACPPermission.Handler(input)
+    this.elicitation = new ACPElicitation.Handler(input)
   }
 
   start() {
@@ -301,6 +304,10 @@ export class Subscription {
         return
 
       case "running":
+        if (part.tool === "question") {
+          this.elicitation.handle(part as unknown as ACPElicitation.QuestionToolPart)
+          return
+        }
         await this.runningTool(sessionId, part, cwd)
         return
 
