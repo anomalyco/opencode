@@ -2,20 +2,20 @@ export * as Project from "./project.js"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { asc, desc } from "drizzle-orm"
+import { and, asc, desc, eq } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
 import { Database } from "./database/database.js"
-import { Event } from "@opencode-ai/schema/project-directories"
+import { Worktree } from "@opencode-ai/schema/worktree"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Git } from "./git.js"
 import { AppProcess } from "@opencode-ai/util/process"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Hash } from "@opencode-ai/util/hash"
-import { ProjectDirectories } from "./project/directories.js"
 import { ProjectSchema } from "./project/schema.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
+import { WorktreeTable } from "./worktree/sql.js"
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID
@@ -26,17 +26,8 @@ export type Vcs = ProjectSchema.Vcs
 export const Current = ProjectSchema.Current
 export type Current = ProjectSchema.Current
 
-export const Directory = ProjectSchema.Directory
-export type Directory = ProjectSchema.Directory
-
 export const Info = ProjectSchema.Info
 export interface Info extends Schema.Schema.Type<typeof Info> {}
-
-export const DirectoriesInput = ProjectSchema.DirectoriesInput
-export type DirectoriesInput = typeof DirectoriesInput.Type
-
-export const Directories = ProjectSchema.Directories
-export type Directories = typeof Directories.Type
 
 export interface Resolved {
   readonly previous?: ID
@@ -56,7 +47,6 @@ export const root = Effect.fn("Project.root")(function* (fs: FSUtil.Interface, i
 
 export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
-  readonly directories: (input: DirectoriesInput) => Effect.Effect<Directories>
   readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>
 }
 
@@ -95,18 +85,19 @@ const layer = Layer.effect(
     const proc = yield* AppProcess.Service
     const bus = yield* Bus.Service
     const db = (yield* Database.Service).db
-    const projectDirectories = yield* ProjectDirectories.Service
 
     const announcing = new Set<string>()
     const persist = Effect.fnUntraced(function* (project: Resolved) {
       yield* upsertProject(db, project).pipe(Effect.orDie)
       if (!project.vcs) return project
-      const directories: ProjectDirectories.CreateInput[] = [{ projectID: project.id, directory: project.canonical }]
+      const directories: Array<{ projectID: ID; directory: AbsolutePath; strategy?: string }> = [
+        { projectID: project.id, directory: project.canonical },
+      ]
       if (project.directory !== project.canonical)
         directories.push({
           projectID: project.id,
           directory: project.directory,
-          strategy: project.vcs.type === "git" ? "git_worktree" : undefined,
+          strategy: project.vcs.type === "git" ? "git" : undefined,
         })
       // A missing directory row means this directory's resolution is a new durable
       // fact (copy.ts registers copy directories directly; those never strand
@@ -119,11 +110,25 @@ const layer = Layer.effect(
         if (announcing.has(key)) continue
         announcing.add(key)
         yield* Effect.gen(function* () {
-          if (yield* projectDirectories.get({ projectID: item.projectID, directory: item.directory })) return
+          const stored = yield* db
+            .select({ directory: WorktreeTable.directory })
+            .from(WorktreeTable)
+            .where(and(eq(WorktreeTable.project_id, item.projectID), eq(WorktreeTable.directory, item.directory)))
+            .get()
+            .pipe(Effect.orDie)
+          if (stored) return
           yield* bus.publish(
-            Event.Resolved,
+            Worktree.Event.Resolved,
             { projectID: item.projectID, directory: item.directory, previous: project.previous ?? ID.global },
-            { commit: () => Effect.asVoid(projectDirectories.create(item)) },
+            {
+              commit: () =>
+                db
+                  .insert(WorktreeTable)
+                  .values({ project_id: item.projectID, directory: item.directory, strategy: item.strategy })
+                  .onConflictDoNothing()
+                  .run()
+                  .pipe(Effect.orDie, Effect.asVoid),
+            },
           )
         }).pipe(Effect.ensuring(Effect.sync(() => announcing.delete(key))))
       }
@@ -138,10 +143,6 @@ const layer = Layer.effect(
         .all()
         .pipe(Effect.orDie)
       return rows.map(fromRow)
-    })
-
-    const directories = Effect.fn("Project.directories")(function* (input: DirectoriesInput) {
-      return yield* projectDirectories.list(input.projectID)
     })
 
     const cached = Effect.fnUntraced(function* (dir: string) {
@@ -257,12 +258,12 @@ const layer = Layer.effect(
       return yield* persist({ id: ID.global, directory, canonical: directory, vcs: undefined })
     })
 
-    return Service.of({ list, directories, resolve })
+    return Service.of({ list, resolve })
   }),
 )
 
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [Bus.node, Database.node, FSUtil.node, Git.node, AppProcess.node, ProjectDirectories.node],
+  deps: [Bus.node, Database.node, FSUtil.node, Git.node, AppProcess.node],
 })

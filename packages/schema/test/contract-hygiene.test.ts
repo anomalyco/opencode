@@ -17,6 +17,7 @@ import { Money } from "../src/money.js"
 import { Skill } from "../src/skill.js"
 import { Shell } from "../src/shell.js"
 import { Vcs } from "../src/vcs.js"
+import { Worktree } from "../src/worktree.js"
 import { PersistedRevert } from "../src/session-revert.js"
 import { AbsolutePath, optional } from "../src/schema.js"
 
@@ -157,9 +158,9 @@ describe("contract hygiene", () => {
       Model.Cost,
       Model.Variant,
       Project.Current,
-      Project.Directory,
-      Project.DirectoriesInput,
-      Project.Directories,
+      Worktree.Directory,
+      Worktree.ListInput,
+      Worktree.List,
       Project.Icon,
       Project.Commands,
       Project.Time,

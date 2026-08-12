@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Effect } from "effect"
-import { Event } from "@opencode-ai/schema/project-directories"
+import { Worktree } from "@opencode-ai/schema/worktree"
 import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -92,7 +92,7 @@ describe("Session.move", () => {
             projectID: Project.ID.global,
           })
           // The former directory becomes a project after the session left it.
-          yield* bus.publish(Event.Resolved, {
+          yield* bus.publish(Worktree.Event.Resolved, {
             projectID: Project.ID.make("adopting"),
             directory: previous,
             previous: Project.ID.global,

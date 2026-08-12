@@ -19,7 +19,7 @@ import { ModelsDev } from "./models-dev.js"
 import { Permission } from "./permission.js"
 import { Plugin } from "./plugin.js"
 import { Project } from "./project.js"
-import { ProjectDirectories } from "./project-directories.js"
+import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
 import { Question } from "./question.js"
 import { Reference } from "./reference.js"
@@ -50,7 +50,7 @@ const featureDefinitions = Event.inventory(
   ...Reference.Event.Definitions,
   ...Permission.Event.Definitions,
   ...Plugin.Event.Definitions,
-  ...ProjectDirectories.Event.Definitions,
+  ...Worktree.Event.Definitions,
   ...Command.Event.Definitions,
   ...Config.Event.Definitions,
   ...Skill.Event.Definitions,

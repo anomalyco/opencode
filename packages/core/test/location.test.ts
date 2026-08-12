@@ -13,7 +13,6 @@ const projectLayer = Layer.succeed(
   Project.Service,
   Project.Service.of({
     list: () => Effect.succeed([]),
-    directories: () => Effect.succeed([]),
     resolve: () =>
       Effect.succeed({
         id: Project.ID.make("project"),

@@ -10,17 +10,8 @@ export type ID = typeof ID.Type
 export const Current = Project.Current
 export type Current = typeof Current.Type
 
-export const Directory = Project.Directory
-export type Directory = typeof Directory.Type
-
 export const Info = Project.Info
 export interface Info extends Schema.Schema.Type<typeof Info> {}
-
-export const DirectoriesInput = Project.DirectoriesInput
-export type DirectoriesInput = typeof DirectoriesInput.Type
-
-export const Directories = Project.Directories
-export type Directories = typeof Directories.Type
 
 export const Vcs = Schema.Union([
   Schema.Struct({

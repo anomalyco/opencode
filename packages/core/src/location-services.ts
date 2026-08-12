@@ -25,7 +25,7 @@ import { MCP } from "./mcp/index.js"
 import { Permission } from "./permission.js"
 import { Plugin } from "./plugin.js"
 import { PluginSupervisor } from "./plugin/supervisor.js"
-import { ProjectCopy } from "./project/copy.js"
+import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
 import { Question } from "./question.js"
 import { Shell } from "./shell.js"
@@ -66,8 +66,7 @@ const locationServiceNodes = [
   AISDK.node,
   Plugin.node,
   PluginSupervisor.node,
-  ProjectCopy.node,
-  ProjectCopy.refreshNode,
+  Worktree.refreshNode,
   FileSystemSearch.node,
   FileSystem.node,
   Pty.node,
