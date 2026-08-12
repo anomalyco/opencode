@@ -1,16 +1,6 @@
 import { RGBA, ScrollBoxRenderable, TextAttributes, type MouseEvent } from "@opentui/core"
-import {
-  For,
-  Show,
-  createComputed,
-  createEffect,
-  createMemo,
-  createSignal,
-  onCleanup,
-  onMount,
-  untrack,
-} from "solid-js"
-import { useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { For, Show, createComputed, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
+import { useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
 import { useData } from "../context/data"
@@ -37,6 +27,7 @@ import { marqueeText } from "../util/marquee"
 import { useDialog } from "../ui/dialog"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { Keymap } from "../context/keymap"
+import { moveSelection } from "../ui/select-controller"
 
 // A long title fades out over its last cells instead of cutting hard.
 const FADE_WIDTH = 4
@@ -110,51 +101,58 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
   const theme = useTheme("elevated")
   const dialog = useDialog()
   const keymap = Keymap.use()
-  const renderer = useRenderer()
-  const sessionID = props.state.sessionID
-  const actions = [
-    ...(props.tabs.add ? [{ title: "New tab", run: () => props.tabs.add?.() }] : []),
-    ...(sessionID
-      ? [
-          {
-            title: "Rename",
-            run: () => DialogSessionRename.show(dialog, sessionID, props.state.title),
-          },
-          { title: "Close", run: () => props.tabs.close(sessionID) },
-        ]
-      : []),
-  ]
+  const actions = createMemo(() => {
+    const sessionID = props.state.sessionID
+    return [
+      ...(props.tabs.add ? [{ title: "New tab", run: () => props.tabs.add?.() }] : []),
+      ...(sessionID
+        ? [
+            {
+              title: "Rename",
+              run: () => DialogSessionRename.show(dialog, sessionID, props.state.title),
+            },
+            { title: "Close", run: () => props.tabs.close(sessionID) },
+          ]
+        : []),
+    ]
+  })
   const [selected, setSelected] = createSignal(0)
-  const top = () => Math.max(0, Math.min(props.state.y + 1, dimensions().height - actions.length))
+  const top = () => Math.max(0, Math.min(props.state.y + 1, dimensions().height - actions().length))
   const left = () => Math.max(0, Math.min(props.state.x, dimensions().width - CONTEXT_MENU_WIDTH))
   const run = (index: number) => {
     props.onClose()
-    actions[index]?.run()
+    actions()[index]?.run()
   }
 
-  onMount(() => {
+  createEffect(() => {
     const popMode = keymap.mode.push("modal")
-    const onKey = (event: { name: string; preventDefault(): void; stopPropagation(): void }) => {
-      if (event.name === "escape") props.onClose()
-      if (event.name === "up") setSelected((selected() + actions.length - 1) % actions.length)
-      if (event.name === "down") setSelected((selected() + 1) % actions.length)
-      if (event.name === "return" || event.name === "enter") run(selected())
-      if (!["escape", "up", "down", "return", "enter"].includes(event.name)) return
-      event.preventDefault()
-      event.stopPropagation()
-    }
-    renderer.keyInput.prependListener("keypress", onKey)
-    onCleanup(() => {
-      renderer.keyInput.off("keypress", onKey)
-      popMode()
-    })
+    onCleanup(popMode)
   })
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    commands: [
+      { bind: "escape", title: "Close tab menu", group: "Tabs", run: props.onClose },
+      {
+        bind: "up",
+        title: "Previous tab menu item",
+        group: "Tabs",
+        run: () => setSelected(moveSelection(selected(), { count: actions().length, delta: -1, policy: "wrap" })),
+      },
+      {
+        bind: "down",
+        title: "Next tab menu item",
+        group: "Tabs",
+        run: () => setSelected(moveSelection(selected(), { count: actions().length, delta: 1, policy: "wrap" })),
+      },
+      { bind: "return", title: "Select tab menu item", group: "Tabs", run: () => run(selected()) },
+    ],
+  }))
   return (
     <box
       position="absolute"
       left={left()}
       top={top()}
-      height={actions.length}
+      height={actions().length}
       width={CONTEXT_MENU_WIDTH}
       zIndex={2500}
       flexDirection="column"
@@ -164,7 +162,7 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
         event.stopPropagation()
       }}
     >
-      <For each={actions}>
+      <For each={actions()}>
         {(action, index) => (
           <box
             width="100%"
