@@ -1,0 +1,33 @@
+[data-component="badge"] {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 16px;
+  padding: 0 4px;
+  user-select: none;
+
+  border-radius: 2px;
+  border: 0.5px solid var(--oc-border-base);
+  background: var(--oc-bg-layer-02);
+
+  font-style: normal;
+  font-weight: 530;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.05px;
+  color: var(--oc-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-component="badge"][data-high-contrast] {
+  border-color: var(--oc-border-strong);
+}
+
+[data-component="badge"][data-variant="accent"] {
+  border: 0;
+  background: var(--oc-bg-accent);
+  color: var(--oc-text-contrast);
+}

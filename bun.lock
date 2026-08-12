@@ -418,6 +418,10 @@
         "drizzle-kit": "catalog:",
       },
     },
+    "packages/css": {
+      "name": "@opencode-ai/css",
+      "version": "1.18.4",
+    },
     "packages/desktop": {
       "name": "@opencode-ai/desktop",
       "version": "1.18.15",
@@ -2067,6 +2071,8 @@
     "@opencode-ai/console-support": ["@opencode-ai/console-support@workspace:packages/console/support"],
 
     "@opencode-ai/core": ["@opencode-ai/core@workspace:packages/core"],
+
+    "@opencode-ai/css": ["@opencode-ai/css@workspace:packages/css"],
 
     "@opencode-ai/desktop": ["@opencode-ai/desktop@workspace:packages/desktop"],
 

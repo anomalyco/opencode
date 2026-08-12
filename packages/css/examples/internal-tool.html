@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en" data-color-scheme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>OpenCode CSS internal tool</title>
+    <link rel="stylesheet" href="../index.css" />
+    <style>
+      :root {
+        --oc-font-family-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+      }
+      [data-slot="release-meta"] {
+        color: var(--oc-text-muted);
+      }
+    </style>
+  </head>
+  <body data-oc-root>
+    <main data-component="page">
+      <header data-slot="page-header">
+        <div data-slot="page-heading">
+          <p data-slot="page-eyebrow">Release control</p>
+          <h1 data-slot="page-title">Artifacts</h1>
+        </div>
+        <span data-component="badge">dax@anoma.ly</span>
+      </header>
+
+      <section data-component="surface" data-padding="none">
+        <header data-slot="surface-header">
+          <h2 data-slot="surface-title">Published builds</h2>
+          <p data-slot="surface-description">
+            Every build received from the trusted publishing workflow, newest first.
+          </p>
+        </header>
+        <div data-slot="surface-content">
+          <div data-component="table-container">
+            <table data-component="table">
+              <thead>
+                <tr>
+                  <th>Channel</th>
+                  <th>Name</th>
+                  <th>Distribution</th>
+                  <th>Version</th>
+                  <th>Created</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>next</td>
+                  <td data-numeric>cli</td>
+                  <td>npm</td>
+                  <td data-numeric>0.0.0-next-16020</td>
+                  <td data-slot="release-meta">2026-07-22T13:23:42.642Z</td>
+                  <td><span data-component="badge" data-variant="accent">Active</span></td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td>next</td>
+                  <td data-numeric>cli</td>
+                  <td>npm</td>
+                  <td data-numeric>0.0.0-next-16019</td>
+                  <td data-slot="release-meta">2026-07-22T10:33:24.519Z</td>
+                  <td><span data-component="badge">Inactive</span></td>
+                  <td data-align="end">
+                    <button data-component="button" data-variant="neutral" data-size="normal">Activate</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td>next</td>
+                  <td data-numeric>cli</td>
+                  <td>npm</td>
+                  <td data-numeric>0.0.0-next-16018</td>
+                  <td data-slot="release-meta">2026-07-22T10:03:19.411Z</td>
+                  <td><span data-component="badge">Inactive</span></td>
+                  <td data-align="end">
+                    <button data-component="button" data-variant="neutral" data-size="normal">Activate</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td>next</td>
+                  <td data-numeric>cli</td>
+                  <td>npm</td>
+                  <td data-numeric>0.0.0-next-16017</td>
+                  <td data-slot="release-meta">2026-07-22T09:28:50.782Z</td>
+                  <td><span data-component="badge">Inactive</span></td>
+                  <td data-align="end">
+                    <button data-component="button" data-variant="neutral" data-size="normal">Activate</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

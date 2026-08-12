@@ -1,0 +1,24 @@
+[data-component="field"] {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+[data-component="field"] [data-slot="field-label"] {
+  color: var(--oc-text-base);
+  font-size: 13px;
+  font-weight: 530;
+  line-height: 1.25;
+}
+
+[data-component="field"] [data-slot="field-description"] {
+  margin: 0;
+  color: var(--oc-text-muted);
+  font-size: 11px;
+}
+
+[data-component="field"] [data-slot="field-error"] {
+  margin: 0;
+  color: var(--oc-state-fg-danger);
+  font-size: 11px;
+}

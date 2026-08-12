@@ -1,0 +1,55 @@
+[data-component="input"],
+[data-component="select"],
+[data-component="textarea"] {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 6px;
+  outline: 1px solid transparent;
+  background: linear-gradient(180deg, var(--oc-alpha-light-2) 0%, var(--oc-alpha-light-0) 100%), var(--oc-bg-base);
+  box-shadow: var(--oc-elevation-button-neutral);
+  color: var(--oc-text-base);
+  font: inherit;
+  font-size: 13px;
+  transition:
+    outline-color 85ms ease-out,
+    background 85ms ease-out;
+}
+
+[data-component="input"],
+[data-component="select"] {
+  height: 32px;
+  padding: 0 10px;
+}
+
+[data-component="textarea"] {
+  min-height: 88px;
+  padding: 8px 10px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+:is([data-component="input"], [data-component="select"], [data-component="textarea"])::placeholder {
+  color: var(--oc-text-faint);
+}
+
+:is([data-component="input"], [data-component="select"], [data-component="textarea"]):hover:not(:disabled) {
+  background: linear-gradient(0deg, var(--oc-overlay-hover), var(--oc-overlay-hover)), var(--oc-bg-base);
+}
+
+:is([data-component="input"], [data-component="select"], [data-component="textarea"]):focus-visible {
+  outline: 2px solid var(--oc-border-focus);
+  outline-offset: 1px;
+}
+
+:is([data-component="input"], [data-component="select"], [data-component="textarea"]):is(:disabled, [data-disabled]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+:is([data-component="input"], [data-component="select"], [data-component="textarea"]):is(
+  [aria-invalid="true"],
+  [data-invalid]
+) {
+  outline-color: var(--oc-state-fg-danger);
+}

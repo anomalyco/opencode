@@ -1,0 +1,38 @@
+[data-component="surface"] {
+  overflow: hidden;
+  border: 1px solid var(--oc-border-muted);
+  border-radius: 12px;
+  background: var(--oc-bg-layer-01);
+  box-shadow: var(--oc-elevation-raised);
+}
+
+[data-component="surface"][data-variant="flat"] {
+  box-shadow: none;
+}
+
+[data-component="surface"] [data-slot="surface-header"] {
+  padding: 24px 24px 16px;
+}
+
+[data-component="surface"] [data-slot="surface-title"] {
+  margin: 0;
+  color: var(--oc-text-base);
+  font-size: 16px;
+  font-weight: 530;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+[data-component="surface"] [data-slot="surface-description"] {
+  margin: 6px 0 0;
+  color: var(--oc-text-muted);
+  font-size: 13px;
+}
+
+[data-component="surface"] [data-slot="surface-content"] {
+  padding: 0 24px 24px;
+}
+
+[data-component="surface"][data-padding="none"] [data-slot="surface-content"] {
+  padding: 0;
+}

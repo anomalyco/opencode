@@ -1,0 +1,52 @@
+[data-component="table-container"] {
+  width: 100%;
+  overflow-x: auto;
+}
+
+[data-component="table"] {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--oc-text-base);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-component="table"] :is(th, td) {
+  height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--oc-border-muted);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+[data-component="table"] th {
+  height: 40px;
+  color: var(--oc-text-muted);
+  font-size: 11px;
+  font-weight: 530;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+[data-component="table"] tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+[data-component="table"] tbody tr:is(:hover, [data-state="hover"]) td {
+  background: var(--oc-overlay-hover);
+}
+
+[data-component="table"] [data-align="end"] {
+  text-align: right;
+}
+
+[data-component="table"] [data-numeric] {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+[data-component="table"] [data-slot="table-actions"] {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

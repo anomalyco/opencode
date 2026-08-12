@@ -70,6 +70,9 @@ if (Script.channel !== "beta") {
   await $`bun ./packages/ui/script/publish.ts`
 }
 
+console.log("\n=== css ===\n")
+await $`bun ./packages/css/script/publish.ts`
+
 if (Script.release) {
   await $`bun ./packages/desktop/scripts/finalize-latest-json.ts`
   await $`bun ./packages/desktop/scripts/finalize-latest-yml.ts`

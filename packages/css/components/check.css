@@ -1,0 +1,20 @@
+[data-component="check"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--oc-text-base);
+  font-size: 13px;
+  user-select: none;
+}
+
+[data-component="check"] :is(input[type="checkbox"], input[type="radio"]) {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--oc-bg-accent);
+}
+
+[data-component="check"]:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

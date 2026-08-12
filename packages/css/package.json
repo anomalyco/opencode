@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/css",
+  "version": "1.18.4",
+  "description": "OpenCode's framework-agnostic CSS design system",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/css"
+  },
+  "homepage": "https://github.com/anomalyco/opencode/tree/v2/packages/css",
+  "bugs": "https://github.com/anomalyco/opencode/issues",
+  "keywords": [
+    "css",
+    "design-system",
+    "opencode"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "style": "./index.css",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "*.css",
+    "components",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": "./index.css",
+    "./index.css": "./index.css",
+    "./base.css": "./base.css",
+    "./tokens.css": "./tokens.css",
+    "./components.css": "./components.css",
+    "./components/*.css": "./components/*.css",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "bun test"
+  }
+}

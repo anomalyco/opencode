@@ -1,0 +1,32 @@
+@layer base {
+  :root {
+    --font-weight-regular: 440;
+    --line-height-normal: 1.5;
+    --letter-spacing-normal: normal;
+    --oc-page-max-width: 1200px;
+    --oc-page-padding-block: 56px;
+  }
+
+  :where([data-component], [data-component] *, [data-slot]) {
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: geometricPrecision;
+  }
+
+  :where([data-component]) {
+    font-family: var(--oc-font-family-sans);
+  }
+}
+
+@layer base {
+  [data-oc-root] {
+    min-height: 100%;
+    margin: 0;
+    background: var(--oc-bg-deep);
+    color: var(--oc-text-base);
+    font-family: var(--oc-font-family-sans);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+}

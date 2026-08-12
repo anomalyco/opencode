@@ -1,0 +1,107 @@
+@layer theme {
+  :root {
+    --oc-font-family-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  :root,
+  [data-color-scheme="light"] {
+    color-scheme: light;
+
+    --oc-bg-base: var(--oc-grey-50);
+    --oc-bg-deep: var(--oc-grey-100);
+    --oc-bg-layer-01: var(--oc-grey-100);
+    --oc-bg-layer-02: var(--oc-grey-200);
+    --oc-bg-layer-03: var(--oc-grey-300);
+    --oc-bg-contrast: var(--oc-grey-1000);
+    --oc-bg-button-neutral: var(--oc-grey-50);
+    --oc-bg-accent: var(--oc-blue-600);
+
+    --oc-text-base: var(--oc-grey-1100);
+    --oc-text-muted: var(--oc-grey-700);
+    --oc-text-faint: var(--oc-grey-600);
+    --oc-text-contrast: var(--oc-grey-50);
+    --oc-icon-base: var(--oc-grey-800);
+    --oc-icon-muted: var(--oc-grey-600);
+
+    --oc-border-muted: var(--oc-alpha-dark-8);
+    --oc-border-base: var(--oc-alpha-dark-10);
+    --oc-border-strong: var(--oc-alpha-dark-20);
+    --oc-border-focus: var(--oc-blue-500);
+
+    --oc-overlay-hover: var(--oc-alpha-dark-4);
+    --oc-overlay-pressed: var(--oc-alpha-dark-8);
+    --oc-overlay-contrast-hover: var(--oc-alpha-light-12);
+    --oc-overlay-contrast-pressed: var(--oc-alpha-light-24);
+
+    --oc-state-bg-success: var(--oc-green-100);
+    --oc-state-fg-success: var(--oc-green-800);
+    --oc-state-border-success: var(--oc-green-300);
+    --oc-state-bg-warning: var(--oc-yellow-100);
+    --oc-state-fg-warning: var(--oc-yellow-800);
+    --oc-state-border-warning: var(--oc-yellow-300);
+    --oc-state-bg-danger: var(--oc-red-100);
+    --oc-state-fg-danger: var(--oc-red-800);
+    --oc-state-border-danger: var(--oc-red-300);
+    --oc-state-bg-info: var(--oc-blue-100);
+    --oc-state-fg-info: var(--oc-blue-800);
+    --oc-state-border-info: var(--oc-blue-300);
+
+    --oc-elevation-raised:
+      0 2px 4px var(--oc-alpha-dark-4), 0 1px 2px -1px var(--oc-alpha-dark-8), 0 0 0 0.5px var(--oc-alpha-dark-12);
+    --oc-elevation-button-neutral: 0 1px 1.5px var(--oc-alpha-dark-10), 0 0 0 0.5px var(--oc-alpha-dark-14);
+    --oc-elevation-button-contrast:
+      0 1px 1.5px var(--oc-alpha-dark-20), 0 0 0 0.5px var(--oc-grey-800), inset 0 1px 2px var(--oc-alpha-light-14),
+      inset 0 -1px 2px var(--oc-alpha-dark-6);
+  }
+
+  [data-color-scheme="dark"] {
+    color-scheme: dark;
+
+    --oc-bg-base: var(--oc-grey-1100);
+    --oc-bg-deep: var(--oc-grey-1200);
+    --oc-bg-layer-01: var(--oc-grey-1000);
+    --oc-bg-layer-02: var(--oc-grey-900);
+    --oc-bg-layer-03: var(--oc-grey-800);
+    --oc-bg-contrast: var(--oc-grey-700);
+    --oc-bg-button-neutral: var(--oc-alpha-light-6);
+    --oc-bg-accent: var(--oc-blue-600);
+
+    --oc-text-base: var(--oc-grey-100);
+    --oc-text-muted: var(--oc-grey-500);
+    --oc-text-faint: var(--oc-grey-600);
+    --oc-text-contrast: var(--oc-grey-50);
+    --oc-icon-base: var(--oc-grey-400);
+    --oc-icon-muted: var(--oc-grey-600);
+
+    --oc-border-muted: var(--oc-alpha-light-8);
+    --oc-border-base: var(--oc-alpha-light-10);
+    --oc-border-strong: var(--oc-alpha-light-20);
+    --oc-border-focus: var(--oc-blue-500);
+
+    --oc-overlay-hover: var(--oc-alpha-light-6);
+    --oc-overlay-pressed: var(--oc-alpha-light-10);
+    --oc-overlay-contrast-hover: var(--oc-alpha-dark-24);
+    --oc-overlay-contrast-pressed: var(--oc-alpha-dark-40);
+
+    --oc-state-bg-success: var(--oc-green-1200);
+    --oc-state-fg-success: var(--oc-green-500);
+    --oc-state-border-success: var(--oc-green-900);
+    --oc-state-bg-warning: var(--oc-yellow-1200);
+    --oc-state-fg-warning: var(--oc-yellow-500);
+    --oc-state-border-warning: var(--oc-yellow-900);
+    --oc-state-bg-danger: var(--oc-red-1200);
+    --oc-state-fg-danger: var(--oc-red-500);
+    --oc-state-border-danger: var(--oc-red-900);
+    --oc-state-bg-info: var(--oc-blue-1200);
+    --oc-state-fg-info: var(--oc-blue-500);
+    --oc-state-border-info: var(--oc-blue-900);
+
+    --oc-elevation-raised:
+      0 2px 4px var(--oc-alpha-dark-30), 0 1px 2px var(--oc-alpha-dark-30), 0 0 0 0.5px var(--oc-alpha-light-16),
+      0 -0.5px 0 var(--oc-alpha-light-6);
+    --oc-elevation-button-neutral:
+      0 1px 2px var(--oc-alpha-dark-40), 0 0 0 0.5px var(--oc-alpha-light-20), 0 -0.5px 0 var(--oc-alpha-light-10);
+    --oc-elevation-button-contrast:
+      0 1px 2px var(--oc-alpha-dark-40), 0 0 0 0.5px var(--oc-alpha-light-40), 0 -0.5px 0 var(--oc-alpha-light-30);
+  }
+}
