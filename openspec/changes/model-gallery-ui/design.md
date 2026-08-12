@@ -27,6 +27,22 @@ has redesigned V2 model selection/settings, improved model search, context
 tooltips, and model-selection E2E coverage. Gallery UI work must extend those
 new seams after an isolated merge, not deepen the old components.
 
+llmfit's sister projects, `llmserve` and `llama-panel`, were also inspected
+(source read directly, not just documentation). Both are strictly
+single-machine: neither has mDNS, a fleet concept, or any notion of comparing
+the same model across more than one host. `llmserve`'s three-panel TUI
+(Sources / Models / Serve+Logs) and its serve dialog (backend picker, port,
+live log tail) are a relevant *interaction* reference for the terminal
+Operations view. `llama-panel`'s end-to-end flow (HF search → quant/shard
+picker with sizes → download progress with ETA → per-server tuning →
+playground) is a relevant reference for the web Discover/Operations views —
+it maps closely to what the generated `ModelOperation` progress stream
+already carries. Its "OpenCode integration" is a ~20-line Tauri command that
+patches `~/.config/opencode/opencode.json` with one hardcoded
+`http://127.0.0.1:<port>/v1` provider entry; `local.connect` (fed by mDNS
+across the whole fleet) is already a strict superset of it, so there is
+nothing there to avoid re-implementing.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -174,6 +190,24 @@ From llmfit:
   TUI, benchmark submission, and hardware-upgrade simulator until separately
   justified.
 
+From llmserve (interaction pattern only — no source is MIT-compatible-adopted,
+it is UX reference):
+
+- the Sources/Models/Serve+Logs panel split and its serve confirmation dialog
+  (pick backend, pick port, see live log tail) for the terminal Operations
+  view;
+- per-backend preset shape (ctx size, batch size, GPU layers, extra args) as a
+  precedent for how host-side flags could be previewed before an install plan
+  is confirmed.
+
+From llama-panel (interaction pattern only, same reason):
+
+- download progress with ETA and a persistent history list, for the web
+  Operations view built on the generated `ModelOperation` progress stream;
+- the quant/shard file picker showing per-variant size, for candidate detail;
+- do not adopt its single-process server-spawn/ownership model — that is
+  llama-skein's job across a fleet, not a UI concern.
+
 From Skein:
 
 - port bounded top/related Hugging Face search, installed-family keyword
@@ -238,6 +272,102 @@ gallery, and model-selection E2E.
 Generic improvements to provider discovery or model UI extension seams should
 be proposed upstream. Skein-specific behavior remains isolated.
 
+### 11. Distribution: build fork-native now; plugin distribution deferred
+
+**Decided 2026-08-12**: sections 6-8 ship as fork modules per decisions 1-10,
+unchanged. Plugin distribution is not adopted for this change. Reasons:
+
+- adoption risk is real, not hypothetical — plugins exist in this exact
+  codebase (`specs/tui-plugins.md`, an in-TUI plugin manager) and the
+  person shipping this feature has never installed one. A gallery nobody
+  opens because it needed an opt-in install step is worse than one that
+  costs a rebase hook;
+- the fork's custom-surface discipline (`fork/manifest.json`,
+  `bun run fork:verify`) already exists, is tooled, and — as of a
+  2026-08-12 audit — is now accurate (11/11 owned, 18/18 patched, zero
+  outstanding regressions). The upstream gap is 22 commits, not a wall.
+  Fork maintenance cost is real but currently small and known, not the
+  crisis it can feel like from inside a stalled rebase attempt;
+- sequencing: `model-gallery-ui` task 1.1 (upstream sync) is explicitly
+  deferred for now (see project notes), so nothing in sections 6-8 can
+  start before that regardless of distribution model. Deciding fork-vs-plugin
+  today would be deciding ahead of information a working implementation
+  would surface anyway.
+
+The analysis below is kept as a reference for *if this is revisited later*
+— e.g., if the fork's fork:verify-tracked patch count keeps growing, or if
+a second, non-opencode-skein consumer of the same fleet-gallery logic shows
+up and a plugin's independent versioning becomes worth the adoption cost.
+It is not a plan of record.
+
+**What a TUI plugin can actually do**, read from
+`specs/tui-plugins.md` and `packages/plugin/src/index.ts`:
+
+- a `tui` target gets `api.route.register` (full-screen routes),
+  `api.ui.Dialog*`/`ui.dialog` (modal stack), `api.keymap.registerLayer`
+  (commands + bindings + command palette), `api.kv`, `api.state`
+  (live host state), and `api.client` (the runtime SDK client) — enough to
+  build the entire Discover/Installed/Operations experience as plugin routes
+  instead of new `packages/tui` modules;
+- a `server` target gets declarative `Hooks`: `config`, `provider.models`
+  (supply/enrich a provider's model list at call time), `tool`, plus the
+  chat/tool/permission lifecycle hooks — there is no hook to register an
+  arbitrary new REST endpoint like `local`/`gallery`'s `HttpApiBuilder.group`;
+- `server` and `tui` must be separate module exports (`./server` /
+  `./tui`) but can ship in one npm package, installable from `tui.json` or
+  the in-TUI plugin manager, versioned independently of the fork.
+
+**What this means for the three kinds of logic this change touches:**
+
+1. **Discovery and fit fan-out** (`mdns.ts`, `model-gallery/{hosts,fit,join,
+   filter,rank,classify,catalog}.ts`) — plain async TypeScript with no
+   dependency on Effect, `HttpApiBuilder`, or any opencode server internal.
+   The `local`/`gallery` HttpApi groups exist only so the web frontend can
+   reach this logic over HTTP; a TUI plugin runs in the same Bun/Node process
+   and could call these functions directly, or scan/fit-compute independently
+   of whether the fork's HTTP groups exist at all. **Portable to a plugin
+   with no loss of fleet-awareness** — this is exactly the "multi local API
+   provider" capability neither llmfit nor llama-panel has, and nothing about
+   a plugin boundary weakens it.
+2. **TUI presentation** (Discover/Installed/Operations views, the
+   llmfit-inspired ranked/filterable table, llmserve/llama-panel-inspired
+   serve dialog and progress UI) — buildable entirely as plugin routes/dialogs
+   per the API surface above. A plugin here means gallery UI work stops
+   needing `bun run sync-upstream` worktree merges against `packages/tui`
+   entirely, which is the direct answer to the "easier to maintain" concern:
+   it is not fork code, so it cannot go stale against upstream TUI refactors.
+3. **Provider registration** — `local.connect`/`disconnect` currently
+   read-modify-write `opencode.json` on disk. `Hooks.provider.models` and/or
+   `Hooks.config` may let a plugin supply discovered llama-skein hosts as
+   live providers without ever touching the config file — **unverified**:
+   it is not confirmed from the type signatures alone whether these hooks
+   re-run per-request/per-config-read or only once at startup. Needs a
+   throwaway spike before this replaces `local.connect`, not an assumption.
+
+**What plugins cannot reach**, and why the fork still owns some of this
+regardless of the outcome above:
+
+- `provider.ts`'s prompt-overflow/`context_too_large` interception (the
+  actual 413 retry-with-patched-`ctx_size` logic) is wired into opencode's
+  model-resolution/streaming pipeline at a point no exposed `Hooks` entry
+  covers (`chat.params`/`chat.headers` run before the request, not on a
+  fetch-level error);
+- the generated llama-skein Go/TS client *generation step*
+  (`bun run build:llama-skein-client`) is fork tooling; a plugin would import
+  or vendor the generated types as a dependency, not regenerate them itself;
+- anything that must be visible to both the web app and a plugin-less TUI
+  (a user who never installs the gallery plugin) needs a fork-level fallback,
+  per decision 9's degrade-by-capability requirement.
+
+**Net effect if adopted**: decisions 2, 7, and 8 would change from "new
+`src/local/` modules + `packages/tui` additions" to "a `@opencode-skein`
+(or similarly named) plugin package depending on the generated llama-skein
+client, with only provider-registration and the prompt-overflow interception
+remaining fork-only." Decisions 3-6, 9, and 10 are distribution-agnostic and
+would not change. This also reopens whether such a plugin should be
+llama-skein-specific or generalized enough to work against any llama-skein-
+compatible fleet — a broader question than this change needs to answer now.
+
 ## Risks / Trade-offs
 
 - **Catalog logic in TypeScript duplicates some Go parsing.** → Keep the host
@@ -289,3 +419,15 @@ disabling the UI.
   cache/catalog file?
 - When should MLX artifact discovery enter scope relative to GGUF-first
   delivery?
+- Decision 11 is resolved for this change (fork-native, plugin deferred).
+  Kept as an open question only for a *future* revisit trigger: if or when
+  the fork's `patched` count or upstream drift grows enough that plugin
+  distribution's independent-versioning benefit outweighs the adoption-risk
+  cost above, or a second consumer of the fleet-gallery logic appears.
+- Do `Hooks.config`/`Hooks.provider.models` re-evaluate live, or only once at
+  plugin activation? Unverified either way — not worth spiking now that
+  decision 11 is deferred, but relevant background for that future revisit.
+- If gallery presentation ever becomes a plugin, does `provider.ts`'s
+  prompt-overflow interception need a new exposed hook upstream, or does it
+  permanently stay fork-only regardless of where the rest of the gallery
+  lives?

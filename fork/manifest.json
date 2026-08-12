@@ -7,27 +7,25 @@
     "upstreamBranch": "upstream/dev",
     "syncedAt": "2026-06-18",
     "forkTag": "fork/2026-06-18.1",
-    "comment": "Last upstream commit fully merged into dev. sync:check compares upstream/dev against this ref. Bump it (and forkTag) after every sync."
+    "comment": "Last upstream commit fully merged into dev. sync:check compares upstream/dev against this ref. Bump it (and forkTag) after every sync. As of 2026-08-12, sync:check reports upstream 22 commits ahead — a sync is due but deliberately deferred until in-flight gallery/skein-migration planning lands."
   },
   "owned": [
     "packages/opencode/src/fork/commands.ts",
     "packages/opencode/src/fork/distribution.ts",
-    "packages/opencode/src/auto-reply/auto-reply.ts",
-    "packages/opencode/src/automation/automation-features.ts",
-    "packages/opencode/src/pattern-detection/pattern-detection.ts",
-    "packages/opencode/src/scheduler/scheduler.ts",
-    "packages/opencode/src/cli/cmd/loop.ts",
-    "packages/opencode/src/cli/cmd/auto-reply.ts",
-    "packages/opencode/src/cli/cmd/pattern-detection.ts",
-    "packages/opencode/src/cli/cmd/hook.ts",
     "packages/opencode/src/local/mdns.ts",
     "packages/opencode/src/local/skein-loading.ts",
+    "packages/opencode/src/local/config-lock.ts",
+    "packages/opencode/src/session/tool-activity.ts",
     "packages/opencode/src/server/routes/instance/httpapi/handlers/local.ts",
     "packages/opencode/src/server/routes/instance/httpapi/groups/local.ts",
     "packages/tui/src/component/dialog-model-ctx.tsx",
     "packages/core/src/local/theme-state.ts",
     "packages/core/src/util/log.ts"
   ],
+  "_ownedRemoved_2026-08-12": {
+    "note": "auto-reply.ts, automation-features.ts, pattern-detection.ts (+ its two CLI commands), scheduler.ts, and hook.ts were deliberately deleted 2026-08-07 (commits 88731dfc6f, 0530944759) for being dead/broken code, not lost in a merge. fork:verify was reporting all 7 as regressions because this manifest was never updated at deletion time. Removed here, not re-added.",
+    "commits": ["88731dfc6f", "0530944759"]
+  },
   "patched": [
     {
       "file": "packages/opencode/src/index.ts",
@@ -62,7 +60,62 @@
     {
       "file": "packages/tui/src/context/theme.tsx",
       "marker": "ThemeState.set",
-      "note": "createEffect writing ThemeState.set(store.active) — the writer half of the local-backend themed-loading-screen feature (reader is provider.ts ThemeState.get). theme-state.ts now lives in packages/core/src/local so both the TUI (writer) and the opencode provider (reader) can share the singleton across the package boundary."
+      "note": "createEffect writing ThemeState.set(store.active) — the writer half of the local-backend themed-loading-screen feature (reader is provider.ts ThemeState.get). theme-state.ts now lives in packages/core/src/local so both the TUI (writer) and the opencode provider (reader) can share the singleton across the package boundary. Confirmed present 2026-08-12 — this was flagged REGRESSED in FORK_WORKFLOW.md since 2026-06-18 but had already been re-applied; that stale note is removed."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/handlers/global.ts",
+      "marker": "A dev/working-tree build cannot self-upgrade",
+      "note": "Names the binary location in the self-upgrade 400 error so a dev build's bare 'Update failed' becomes actionable."
+    },
+    {
+      "file": "packages/opencode/src/mcp/index.ts",
+      "marker": "fork(mcp-dual-era-client",
+      "note": "Two patches, only the first is machine-checked: (1) diagnosticsFor's legacy/modern era detection from getDiscoverResult() plus tolerating a capability-discovery read failure without throwing a defect (marker above); (2) the v2 logging-level switch's default case (SEP-2577) — return logInfo, never silently drop a server log line for a level value outside the 8-value RFC 5424 enum the switch enumerates."
+    },
+    {
+      "file": "packages/opencode/src/mcp/catalog.ts",
+      "marker": "TolerantListToolsResultSchema",
+      "note": "@modelcontextprotocol/core re-exports the Zod schema values needed for .extend()/.omit(); the plain inferred type lives on @modelcontextprotocol/client instead — bridges list-tools parsing across that package split from v1's single sdk/types.js export."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/tui.ts",
+      "marker": "opencode server worker crashed during startup",
+      "note": "Surfaces a dead server worker's real error (module-eval crash, OOM kill) instead of leaving the TUI on a black screen with every pending RPC call unresolved."
+    },
+    {
+      "file": "packages/opencode/src/tool/task.ts",
+      "marker": "LocalPlacement.pick",
+      "note": "Three patches, only the first is machine-checked: (1) hop a subagent inheriting a local provider to an idle local peer instead of queueing behind its parent on the same often-single-slot llama.cpp server, honoring an explicit host request loudly rather than silently placing elsewhere (marker above); (2) SUBAGENT_TASK_TIMEOUT_MS backstop, deliberately above provider.ts's header-timeout default; (3) 'Foreground is the default' prompt wording fix — the original wording reliably produced all-foreground fan-out."
+    },
+    {
+      "file": "packages/opencode/src/session/compaction.ts",
+      "marker": "SessionCompaction.estimate",
+      "note": "Leading-indicator overflow check: estimates the outgoing prompt (not just the last completed turn's reported usage) so a single large tool result or file read triggers pre-emptive compaction before it causes a mid-session 413 on local backends."
+    },
+    {
+      "file": "packages/opencode/src/session/prompt.ts",
+      "marker": "LoopSimilarityThreshold",
+      "note": "Three patches, only the first is machine-checked: (1) bigram-similarity (>=0.92) loop detection breaking after 3 consecutive near-identical no-tool-call turns (marker above, LoopMaxStreak); (2) DefaultSubAgentSteps step cap for parentID sessions, overridable by the agent's own steps setting; (3) single forced-tool-choice retry state at the loop-exit empty-turn check."
+    },
+    {
+      "file": "packages/opencode/src/session/summary.ts",
+      "marker": "MinFullRunIntervalMs",
+      "note": "Throttles summarize()'s full-diff persist to once per MinFullRunIntervalMs per session, plus a single-in-flight cap. processor.ts calls summarize() every step of every turn and event-sourced storage never overwrites, so unthrottled this grew one real session to 12,881 message.updated rows / 1.6 GB (observed 2026-07-26)."
+    },
+    {
+      "file": "packages/opencode/src/session/tools.ts",
+      "marker": "ToolActivity.begin",
+      "note": "Marks a tool (registry and MCP) as active so the stream watchdog doesn't count our own tool's runtime as provider silence. Pairs with the new owned file session/tool-activity.ts."
+    },
+    {
+      "file": "packages/tui/src/app.tsx",
+      "marker": "no error detail from server",
+      "note": "Surfaces the self-upgrade endpoint's actual error (dev build, script exit code, network) instead of a bare 'Update failed'."
+    },
+    {
+      "file": "packages/tui/src/routes/session/index.tsx",
+      "marker": "Background subagents are disabled",
+      "note": "Three patches, only the first is machine-checked: (1) explains why the background-subagents keybind silently no-ops when OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS is unset, instead of discarding the response (marker above); (2) AssistantMessage prefixes the provider id onto the model name so 'which machine ran this' is answerable when local models share an ID across hosts (see provider?.options?.[\"baseURL\"]); (3) markdown code blocks draw unstyled text immediately instead of blocking render on tree-sitter highlighting."
     }
   ]
 }
