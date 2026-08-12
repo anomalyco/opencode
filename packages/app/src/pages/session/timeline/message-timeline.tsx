@@ -63,6 +63,7 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
+import { displayName } from "@/pages/layout/helpers"
 import { useServerSDK } from "@/context/server-sdk"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
@@ -312,6 +313,7 @@ export function MessageTimeline(props: {
     return sync().data.message[id] ?? emptyMessages
   })
   const parentTitle = createMemo(() => sessionTitle(parent()?.title) ?? language.t("command.session.new"))
+  const projectLabel = createMemo(() => displayName(sync().project ?? { worktree: sdk().directory }))
   const getMsgParts = (msgId: string) => sync().data.part[msgId] ?? emptyParts
   const getMsgPart = (messageID: string, partID: string) => getMsgParts(messageID).find((part) => part.id === partID)
   const childTaskDescription = createMemo(() => {
@@ -1510,6 +1512,14 @@ export function MessageTimeline(props: {
                       />
                     </Show>
                   </Show>
+                  <span
+                    data-slot="session-title-project"
+                    class="ml-2 flex min-w-0 shrink items-center gap-1 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint"
+                    title={projectLabel()}
+                  >
+                    <IconV2 name="folder" class="size-4 shrink-0" />
+                    <span class="min-w-0 truncate">{projectLabel()}</span>
+                  </span>
                 </div>
               </div>
               <Show when={sessionID()} keyed>
