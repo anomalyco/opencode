@@ -367,6 +367,56 @@ describe("Instruction.system", () => {
         }),
     ),
   )
+
+  it.live("attaches the only book req at the worktree root", () =>
+    withFiles(
+      {
+        ".moks/reqs/senior-backend/jd.md": "# Senior Backend",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const jd = path.join(dir, ".moks", "reqs", "senior-backend", "jd.md")
+          const paths = yield* svc.systemPaths()
+          expect(paths.has(jd)).toBe(true)
+        }),
+    ),
+  )
+
+  it.live("does not attach every book req when several exist", () =>
+    withFiles(
+      {
+        ".moks/reqs/senior-backend/jd.md": "# Senior Backend",
+        ".moks/reqs/staff-ml/jd.md": "# Staff ML",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const paths = yield* svc.systemPaths()
+          expect(paths.has(path.join(dir, ".moks", "reqs", "senior-backend", "jd.md"))).toBe(false)
+          expect(paths.has(path.join(dir, ".moks", "reqs", "staff-ml", "jd.md"))).toBe(false)
+        }),
+    ),
+  )
+
+  it.live("attaches the book req that contains cwd", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* writeFiles(dir, {
+        ".moks/reqs/senior-backend/jd.md": "# Senior Backend",
+        ".moks/reqs/staff-ml/jd.md": "# Staff ML",
+        ".moks/reqs/staff-ml/scores/keep.txt": "x",
+      })
+      const nested = path.join(dir, ".moks", "reqs", "staff-ml", "scores")
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+        expect(paths.has(path.join(dir, ".moks", "reqs", "staff-ml", "jd.md"))).toBe(true)
+        expect(paths.has(path.join(dir, ".moks", "reqs", "senior-backend", "jd.md"))).toBe(false)
+      }).pipe(provideInstance(nested), provideInstruction({ home: dir, config: dir }))
+    }),
+  )
 })
 
 describe("Instruction.systemPaths global config", () => {

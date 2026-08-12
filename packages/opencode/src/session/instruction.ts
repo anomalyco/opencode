@@ -11,8 +11,8 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@opencode-ai/core/global"
 import type { MessageID } from "./schema"
+import { ReqWorkspace } from "@/product/req-workspace"
 
-const REQ_MATERIAL_NAMES = ["jd.md", "scorecard.md", "notes.md"] as const
 const MAX_INSTRUCTION_CHARS = 32_000
 
 function extract(messages: SessionV1.WithParts[]) {
@@ -33,9 +33,7 @@ function extract(messages: SessionV1.WithParts[]) {
 }
 
 function isReqMaterial(filepath: string) {
-  if (!(REQ_MATERIAL_NAMES as readonly string[]).includes(path.basename(filepath))) return false
-  const dir = path.dirname(filepath)
-  return path.basename(dir) === "req" && path.basename(path.dirname(dir)) === ".moks"
+  return ReqWorkspace.isReqMaterial(filepath)
 }
 
 function truncateInstruction(content: string) {
@@ -161,14 +159,11 @@ const layer: Layer.Layer<
         }
       }
 
-      // Nearest `.moks/req` wins; attach bounded hiring materials (not resume.md by default).
+      // Attach one req: cwd inside a req, else the only req in the book. Never dump every JD.
       if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-        const reqDirs = yield* fs
-          .findUp(path.join(".moks", "req"), ctx.directory, ctx.worktree)
-          .pipe(Effect.catch(() => Effect.succeed([] as string[])))
-        const reqDir = reqDirs[0]
+        const reqDir = yield* Effect.promise(() => ReqWorkspace.resolve(ctx.directory, ctx.worktree))
         if (reqDir) {
-          for (const name of REQ_MATERIAL_NAMES) {
+          for (const name of ReqWorkspace.MATERIAL_NAMES) {
             const file = path.resolve(path.join(reqDir, name))
             if (yield* fs.existsSafe(file)) paths.add(file)
           }

@@ -363,6 +363,42 @@ export function Autocomplete(props: {
     },
   )
 
+  const [reqs] = createResource(
+    () => location(),
+    async (loc) => {
+      const query = {
+        directory: loc?.directory,
+        workspace: loc?.workspaceID ?? project.workspace.current(),
+      }
+      const book = await sdk.client.v2.fs.list({ path: ".moks/reqs", location: query })
+      const listed: { slug: string; relative: string; absolute: string }[] = []
+      if (!book.error && book.data) {
+        for (const item of book.data.data) {
+          if (item.type !== "directory") continue
+          const slug = path.basename(item.path.replace(/[/\\]+$/, ""))
+          if (!slug) continue
+          listed.push({
+            slug,
+            relative: item.path.replace(/[/\\]+$/, ""),
+            absolute: path.join(book.data.location.directory, item.path),
+          })
+        }
+      }
+      if (!listed.some((item) => item.slug === "req")) {
+        const legacy = await sdk.client.v2.fs.list({ path: ".moks/req", location: query })
+        if (!legacy.error && legacy.data) {
+          listed.push({
+            slug: "req",
+            relative: ".moks/req",
+            absolute: path.join(legacy.data.location.directory, ".moks", "req"),
+          })
+        }
+      }
+      return listed
+    },
+    { initialValue: [] },
+  )
+
   const mcpResources = createMemo(() => {
     if (!store.visible || store.visible === "/") return []
 
@@ -444,6 +480,29 @@ export function Autocomplete(props: {
       ),
   )
 
+  const reqAliases = createMemo(() =>
+    (reqs() ?? []).map(
+      (req): AutocompleteOption => ({
+        display: "@" + req.slug,
+        description: " req",
+        path: req.relative,
+        onSelect: () => {
+          insertPart(req.slug, {
+            type: "file",
+            mime: "application/x-directory",
+            filename: req.slug,
+            url: pathToFileURL(req.absolute).href,
+            source: {
+              type: "file",
+              text: { start: 0, end: 0, value: "" },
+              path: req.relative,
+            },
+          })
+        },
+      }),
+    ),
+  )
+
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...slashes()]
 
@@ -479,6 +538,7 @@ export function Autocomplete(props: {
     const referenceMatchValue = referenceMatch()
     const agentsValue = agents()
     const referenceAliasesValue = referenceAliases()
+    const reqAliasesValue = reqAliases()
     const commandsValue = commands()
     const searchValue = search()
 
@@ -490,7 +550,9 @@ export function Autocomplete(props: {
     // it shouldn't be additionally sorted by fuzzysort as it will loose the results
     const fileOptions: AutocompleteOption[] = store.visible === "@" ? filesValue || [] : []
     const nonFileOptions: AutocompleteOption[] =
-      store.visible === "@" ? [...referenceAliasesValue, ...agentsValue, ...mcpResources()] : [...commandsValue]
+      store.visible === "@"
+        ? [...reqAliasesValue, ...referenceAliasesValue, ...agentsValue, ...mcpResources()]
+        : [...commandsValue]
 
     if (!searchValue) {
       return [...nonFileOptions, ...fileOptions]

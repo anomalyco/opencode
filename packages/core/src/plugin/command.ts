@@ -14,7 +14,7 @@ export const Plugin = define({
     yield* ctx.command.transform((draft) => {
       draft.update("init", (command) => {
         command.template = PROMPT_INITIALIZE.replace("${path}", location.project.directory)
-        command.description = "scaffold a new requisition workspace under .moks"
+        command.description = "scaffold a requisition under .moks/reqs/<slug>"
       })
       draft.update("init-code", (command) => {
         command.template = PROMPT_INITIALIZE_CODE.replace("${path}", location.project.directory)

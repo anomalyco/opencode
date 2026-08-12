@@ -193,6 +193,50 @@ describe("InstructionContext", () => {
     ),
   )
 
+  it.live("attaches the book req that contains the location directory", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          const directory = path.join(project, ".moks", "reqs", "staff-ml", "scores")
+          const chosen = path.join(project, ".moks", "reqs", "staff-ml", "jd.md")
+          const other = path.join(project, ".moks", "reqs", "senior-backend", "jd.md")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(directory, { recursive: true })
+            await fs.mkdir(path.join(project, ".moks", "reqs", "senior-backend"), { recursive: true })
+            await fs.writeFile(chosen, "staff-ml-jd")
+            await fs.writeFile(other, "senior-backend-jd")
+          })
+
+          const context = yield* SystemContextRegistry.Service.pipe(
+            Effect.flatMap((service) => service.load()),
+            Effect.provide(
+              instructionLayer({
+                config: path.join(tmp.path, "global"),
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(
+                    location(
+                      { directory: AbsolutePath.make(directory) },
+                      { projectDirectory: AbsolutePath.make(project) },
+                    ),
+                  ),
+                ),
+              }),
+            ),
+          )
+
+          const baseline = (yield* SystemContext.initialize(context)).baseline
+          expect(baseline).toContain(`Req materials from: ${chosen}\nstaff-ml-jd`)
+          expect(baseline).not.toContain("senior-backend-jd")
+        }),
+      ),
+    ),
+  )
+
   it.effect("preserves admitted instructions while observation is unavailable", () =>
     Effect.gen(function* () {
       const failingFS = Layer.effect(

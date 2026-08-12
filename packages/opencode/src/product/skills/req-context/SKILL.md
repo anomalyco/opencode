@@ -14,7 +14,7 @@ Resolve in order (stop when found):
 1. User-attached paths (`-f` / @ files)
 2. If Ashby MCP tools are available (`ashby_list_jobs`, `ashby_get_job`, …), prefer reading open jobs/req metadata via those tools
 3. Cwd: `jd.md`, optional `notes.md` / `scorecard.md`
-4. `.moks/req/jd.md`, `.moks/req/notes.md`, `.moks/req/scorecard.md`
+4. `@<slug>` / `.moks/reqs/<slug>/{jd,notes,scorecard}.md` (legacy `.moks/req/` if that is the only req)
 5. Samples only if nothing else: ship path under product fixtures/hiring
 
 Read every file or MCP payload you will cite. Never call Ashby write tools (`ashby_change_stage`, `ashby_create_note`); dispositions go through `moks commit` / `moks push`.

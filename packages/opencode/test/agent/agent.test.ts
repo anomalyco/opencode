@@ -70,7 +70,7 @@ it.instance("recruit agent has correct default properties", () =>
     expect(recruit?.prompt).toBeTruthy()
     // Path-scoped edit: wildcard asks; .moks/** and hiring fixtures allow
     expect(evalPerm(recruit, "edit")).toBe("ask")
-    expect(Permission.evaluate("edit", ".moks/req/notes.md", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("edit", ".moks/reqs/senior-backend/notes.md", recruit!.permission).action).toBe("allow")
     expect(Permission.evaluate("edit", ".moks/plans/hiring.md", recruit!.permission).action).toBe("allow")
     expect(Permission.evaluate("edit", "src/index.ts", recruit!.permission).action).toBe("ask")
     expect(Permission.evaluate("edit", "jd.md", recruit!.permission).action).toBe("ask")

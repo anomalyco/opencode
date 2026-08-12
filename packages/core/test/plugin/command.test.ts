@@ -34,7 +34,7 @@ describe("CommandPlugin.Plugin", () => {
 
       expect(yield* command.get("init")).toMatchObject({
         name: "init",
-        description: "scaffold a new requisition workspace under .moks",
+        description: "scaffold a requisition under .moks/reqs/<slug>",
       })
       expect((yield* command.get("init"))?.template).toContain("`/repo`")
       expect((yield* command.get("init"))?.template).toContain(".moks/")

@@ -60,7 +60,7 @@ moks is a separate product. It does **not** read OpenCode files or `OPENCODE_*` 
 
 | Surface | Path / behavior |
 | ------- | --------------- |
-| Req materials | `.moks/req/{jd,resume,scorecard,notes}.md` |
+| Req materials | `.moks/reqs/<slug>/{jd,resume,scorecard,notes}.md` (`@<slug>`); legacy `.moks/req/` |
 | Hiring plans | `.moks/plans/*.md` |
 | Decision receipts | `.moks/receipts/` when `.moks/` exists; else user data dir `…/receipts/` |
 | Built-in hiring skills | registered in-process (see below); disk skills can override by name |
@@ -370,7 +370,7 @@ agent: recruit
 (prompt body; $ARGUMENTS for user input; $1, $2, … positional)
 ```
 
-Product built-in: **`init`** scaffolds a requisition under `.moks/`.
+Product built-in: **`init`** scaffolds a requisition under `.moks/reqs/<slug>`. `@<slug>` attaches that req.
 
 ## Plugins
 

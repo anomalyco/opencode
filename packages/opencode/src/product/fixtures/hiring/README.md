@@ -12,7 +12,7 @@ Fake eng-TA sample materials so moks can run req → score → outreach → disp
 
 1. Paths you pass (`moks run -f …` or @ attachments)
 2. Cwd: `jd.md`, `resume.md`, `scorecard.md`
-3. Workspace: `.moks/req/jd.md`, `.moks/req/resume.md`, `.moks/req/scorecard.md`
+3. Workspace: `.moks/reqs/<slug>/jd.md`, `.moks/reqs/<slug>/resume.md`, `.moks/reqs/<slug>/scorecard.md`
 4. These samples (reference / copy)
 
 ## Quick start
@@ -35,7 +35,7 @@ Or copy fixtures into a scratch dir / moks workspace:
 ```bash
 cp packages/opencode/src/product/fixtures/hiring/*.md .
 # or
-mkdir -p .moks/req && cp packages/opencode/src/product/fixtures/hiring/{jd,resume,scorecard}.md .moks/req/
+mkdir -p .moks/reqs/senior-backend && cp packages/opencode/src/product/fixtures/hiring/{jd,resume,scorecard}.md .moks/reqs/senior-backend/
 
 moks run --agent recruit \
   -f jd.md -f resume.md -f scorecard.md \

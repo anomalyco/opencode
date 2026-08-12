@@ -17,12 +17,12 @@
 | **Job** | Write and ship software | Fill requisitions; move candidates with evidence |
 | **Unit of work** | Repo / project | **Requisition (req)** |
 | **Remote / system of record** | GitHub | **ATS (e.g. Ashby)** |
-| **Local working tree** | Filesystem clone of the repo | **`.moks/` req workspace** (JD, scorecard, notes, drafts, receipts) |
+| **Local working tree** | Filesystem clone of the repo | **Hiring book** `.moks/reqs/<slug>/` (JD, scorecard, notes, drafts); `@slug` focuses a req |
 | **See what changed** | Diff / modified files | **Diff of local candidate & req artifacts** (real-time, like code) |
 | **Review before merge** | PR / code review | **Packet review** (resume vs JD/scorecard, outreach, disposition) |
 | **Commit locally / stage intent** | `git commit` (and related) | Local artifacts + **`moks commit`** (receipt) |
 | **Push to remote** | `git push` / merge to default | **`moks push`** (records push after commit; ATS write path later) |
-| **Bootstrap unit of work** | `/init` → project rules (AGENTS.md) | `/init` → **new req workspace** |
+| **Bootstrap unit of work** | `/init` → project rules (AGENTS.md) | `/init <role>` → **`.moks/reqs/<slug>`** |
 | **Primary doer** | `build` | **`recruit`** (`build` = hidden escape hatch) |
 | **Strategy mode** | Plan → implement code | Plan → **execute hiring next steps** |
 | **Recon subagent** | Explore codebase | Explore **req materials / fixtures / notes** |
@@ -43,6 +43,7 @@ A **correct port** preserves the *machinery* and rewrites the *job* to eng-TA: l
 |--------------|--------|
 | Diff *only* = remote ATS fields | **No** — diff shows **local** working-tree + pending commit deltas (like uncommitted + staged). Remote ATS truth updates on **push** (when write sink exists). |
 | Branch = pipeline stage | **Don’t force** git-branch UX onto ATS stages |
+| Branch = req, or req = git repo | **No** — 20–30 remotes or exclusive checkouts. Book + `@slug` |
 | “Candidates are code” | **No** — *workflow shape* is portable; people aren’t files. Working set = materials + records + drafts |
 | Delete LSP/diff subsystems | **No** — hide/demote on `recruit`; keep code for rare `build` escape hatch (not our moks-dev loop) |
 
@@ -76,7 +77,7 @@ Understanding these layers is required for correct ports. Product path today is 
 ├─────────────────────────────────────────────────────────────────┤
 │  WORKFLOWS                                                      │
 │  plan_enter → plan agent → plan file → plan_exit → recruit      │
-│  /init → .moks/req · /review → packet · skills · MCP            │
+│  /init → .moks/reqs/<slug> · @slug · /review → packet · skills  │
 ├─────────────────────────────────────────────────────────────────┤
 │  WORKSPACE IDENTITY                                             │
 │  opencode.json · .opencode/ · ~/.config/opencode · OPENCODE_*    │
@@ -146,7 +147,7 @@ system = [ agent.prompt ?? SystemPrompt.provider(model), ...env/skills, ... ]
 
 - **Cast:** OpenCode Build doer → **`recruit`**; Plan stays; **`build` hidden** optional escape hatch for end users who need coding tools (not our internal moks-dev workflow).
 - **G3 plan wave:** BL-001, BL-002, BL-022 **done** — exit/copy/path are hiring-native.
-- **Domain ontology:** req = repo; ATS = GitHub/remote; `.moks/` = local working tree; diff = local candidate/req changes; **`moks commit` / `moks push`** (git metaphor); `/init` = new req; `/review` = packet review skill (not git/PR).
+- **Domain ontology:** hiring **book** = repo; **req = directory** `.moks/reqs/<slug>/` (`@slug` to focus); ATS = GitHub/remote; `.moks/` = local working tree; diff = local candidate/req changes; **`moks commit` / `moks push`** (git metaphor); `/init` = add a req to the book; `/review` = packet review skill (not git/PR). Not req=repo (20–30 remotes) and not branch=req.
 - **AGENTS.md:** keep as workspace instruction injection (hiring norms, same as coding constitution). Not the hero bootstrap; not removed.
 - **LSP:** not a TA product surface (defaults off; chrome hidden when off; code kept only for optional `build` escape hatch).
 - **Diff:** keep and lean into — real-time visibility of local hiring deltas (like code changes).
@@ -900,7 +901,7 @@ Use this when reviewing any change:
 
 | OpenCode coding concept | Correct moks TA concept | Incorrect “port” |
 |-------------------------|-------------------------|------------------|
-| **Repo / project** | **Requisition (req)** | “Project” with moks logo still meaning a git repo of product code |
+| **Repo / project** | **Hiring book** (one workspace); **req** = `.moks/reqs/<slug>` | One git repo per req, or branch-per-req |
 | **GitHub (remote)** | **ATS (Ashby)** | GitHub Actions / “GitHub recruiting” as product |
 | **Local working tree** | **`.moks/` req workspace** | Only cloud ATS with no local drafts |
 | **Diff / modified files** | **Local candidate & req artifact changes** (real-time) | Delete diff; or only show remote ATS |
@@ -926,7 +927,7 @@ Use this when reviewing any change:
 |-------|--------|--------|
 | **Cast** | Doer = `recruit`; plan stays; build hidden | **Done** |
 | **G3 Plan→execute** | BL-001, BL-002, BL-022 | **Done** |
-| **Ontology** | Req=repo; ATS=remote; commit/push; diff=local hiring deltas; init=new req; review=packet | **Done** (docs + ship) |
+| **Ontology** | Book=repo; req=`.moks/reqs/<slug>` (`@slug`); ATS=remote; commit/push; init=add req | **Done** (docs + ship; unlocked from req=repo 2026-08-12) |
 | **Verbs** | `propose`/`apply` → **`commit`/`push`** | **Done** |
 | **G2 Chrome & defaults** | BL-004, BL-013, BL-014 | **Done** |
 | **G5 Front doors** | BL-007–012 | **Done** (init/review + customize-moks + hide GH/console/generate + neutral CTAs) |

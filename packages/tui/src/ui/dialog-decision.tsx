@@ -120,23 +120,43 @@ async function showResult(dialog: DialogContext, title: string, result: Decision
 }
 
 async function newestScore(cwd: string) {
-  const dir = path.join(cwd, ".moks", "req", "scores")
-  const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
-  const names = entries.flatMap((entry) =>
-    entry.isFile() && entry.name.endsWith(".md") && entry.name !== ".gitkeep" ? [entry.name] : [],
-  )
-  if (names.length === 0) return
+  const book = path.join(cwd, ".moks", "reqs")
+  const slugs = await readdir(book, { withFileTypes: true })
+    .then((entries) => entries.flatMap((entry) => (entry.isDirectory() ? [entry.name] : [])))
+    .catch(() => [] as string[])
+  const dirs = [
+    ...slugs.map((slug) => ({ abs: path.join(book, slug, "scores"), rel: `.moks/reqs/${slug}/scores` })),
+    { abs: path.join(cwd, ".moks", "req", "scores"), rel: ".moks/req/scores" },
+  ]
   const rows = await Promise.all(
-    names.map(async (name) => ({
-      name,
-      mtime: await stat(path.join(dir, name))
-        .then((info) => info.mtimeMs)
-        .catch(() => 0),
-    })),
+    dirs.map(async ({ abs, rel }) => {
+      const entries = await readdir(abs, { withFileTypes: true }).catch(() => [])
+      return Promise.all(
+        entries.flatMap((entry) => {
+          if (!entry.isFile() || !entry.name.endsWith(".md") || entry.name === ".gitkeep") return []
+          return [
+            stat(path.join(abs, entry.name))
+              .then((info) => ({
+                name: entry.name,
+                score: `${rel}/${entry.name}`,
+                mtime: info.mtimeMs,
+              }))
+              .catch(() => undefined),
+          ]
+        }),
+      )
+    }),
   )
-  const newest = rows.reduce((a, b) => (b.mtime > a.mtime ? b : a))
+  const newest = rows
+    .flat()
+    .filter((row) => row !== undefined)
+    .reduce<(typeof rows)[number][number] | undefined>(
+      (best, row) => (!best || row.mtime > best.mtime ? row : best),
+      undefined,
+    )
+  if (!newest) return
   return {
     slug: path.basename(newest.name, ".md"),
-    score: `.moks/req/scores/${newest.name}`,
+    score: newest.score,
   }
 }

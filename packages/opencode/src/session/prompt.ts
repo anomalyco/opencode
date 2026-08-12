@@ -1370,7 +1370,8 @@ const layer = Layer.effect(
       }
       if (input.command === Command.Default.INIT) {
         const ctx = yield* InstanceState.context
-        yield* Effect.promise(() => ReqWorkspace.scaffold(ctx.worktree))
+        const slug = ReqWorkspace.slugify(input.arguments.split("\n")[0] ?? "")
+        if (slug) yield* Effect.promise(() => ReqWorkspace.scaffold(ctx.worktree, slug))
       }
       const agentName = cmd.agent ?? input.agent
 
@@ -1397,6 +1398,17 @@ const layer = Layer.effect(
 
       if (placeholders.length === 0 && !usesArgumentsPlaceholder && input.arguments.trim()) {
         template = template + "\n\n" + input.arguments
+      }
+
+      if (input.command === Command.Default.INIT) {
+        const ctx = yield* InstanceState.context
+        const slug = ReqWorkspace.slugify(input.arguments.split("\n")[0] ?? "")
+        const listed = yield* Effect.promise(() => ReqWorkspace.list(ctx.worktree))
+        const existing = listed.map((item) => `@${item.slug}`).join(", ") || "(none)"
+        template = template
+          .replaceAll("${slug}", slug || "<slug>")
+          .replaceAll("${req}", slug ? ReqWorkspace.dir(slug) : ".moks/reqs/<slug>")
+          .replaceAll("${existing}", existing)
       }
 
       const shellMatches = ConfigMarkdown.shell(template)

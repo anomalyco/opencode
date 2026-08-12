@@ -28,6 +28,7 @@ import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.edit
 import { FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import type { RunFooterTheme } from "./theme"
 import type { FooterState, RunAgent, RunCommand, RunPrompt, RunPromptPart, RunResource, RunTuiConfig } from "./types"
+import { ReqWorkspace } from "@/product/req-workspace"
 
 const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
 const AUTOCOMPLETE_BOTTOM_ROWS = 1
@@ -333,6 +334,37 @@ export function createPromptState(input: PromptInput): PromptState {
         },
       }))
   })
+  const [reqs] = createResource(
+    () => input.directory,
+    async (directory) => {
+      const listed = await ReqWorkspace.list(directory)
+      return listed.map(
+        (item): Auto => ({
+          kind: "mention",
+          display: "@" + item.slug,
+          value: item.slug,
+          description: "req",
+          directory: true,
+          part: {
+            type: "file",
+            mime: "application/x-directory",
+            filename: item.slug,
+            url: pathToFileURL(item.path).href,
+            source: {
+              type: "file",
+              path: item.relative,
+              text: {
+                start: 0,
+                end: 0,
+                value: "",
+              },
+            },
+          },
+        }),
+      )
+    },
+    { initialValue: [] as Auto[] },
+  )
   const resources = createMemo<Auto[]>(() => {
     return input.resources().map((item) => ({
       kind: "mention",
@@ -402,7 +434,7 @@ export function createPromptState(input: PromptInput): PromptState {
     },
     { initialValue: [] as Auto[] },
   )
-  const mentionOptions = createMemo(() => [...agents(), ...files(), ...resources()])
+  const mentionOptions = createMemo(() => [...reqs(), ...agents(), ...files(), ...resources()])
   const skillCommands = createMemo(() => (input.commands() ?? []).filter((item) => item.source === "skill"))
   const hasSkillsCommand = createMemo(() =>
     (input.commands() ?? []).some((item) => item.source !== "skill" && item.name === "skills"),

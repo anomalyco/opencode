@@ -12,9 +12,7 @@ Local receipts only. Push does not write to an ATS.
 export async function appendLedger(receipt: Receipt, cwd: string) {
   const root = path.join(cwd, ".moks")
   if (!Filesystem.stat(root)?.isDirectory()) return
-  const dir = path.join(root, "req")
-  const file = path.join(dir, "ledger.md")
-  await fs.mkdir(dir, { recursive: true })
+  const file = path.join(root, "ledger.md")
   const row = formatRow(receipt) + "\n"
   if (!Filesystem.stat(file)) {
     await fs.writeFile(file, HEADER + row, "utf-8")

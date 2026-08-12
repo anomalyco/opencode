@@ -19,7 +19,7 @@ Adverse actions: reject, offer, hire. Push requires `--confirm` for those.
 
 ## Before recommending
 
-Look for `.moks/req/scores/<slug>.md` and cite it. If no score file exists, say so and prefer running **score-candidate** first unless the user wants a `note`.
+Look for `.moks/reqs/<req-slug>/scores/<candidate-slug>.md` (or the @-mentioned req) and cite it. If no score file exists, say so and prefer running **score-candidate** first unless the user wants a `note`.
 
 ## Output format
 
@@ -29,7 +29,7 @@ Look for `.moks/req/scores/<slug>.md` and cite it. If no score file exists, say 
 ## Recommendation
 - Action: <action>
 - Rationale: ...
-- Evidence: bullets with source paths (include `.moks/req/scores/<slug>.md` when present)
+- Evidence: bullets with source paths (include `.moks/reqs/<req-slug>/scores/<candidate-slug>.md` when present)
 
 ## Risks
 - ...
@@ -38,7 +38,7 @@ Look for `.moks/req/scores/<slug>.md` and cite it. If no score file exists, say 
 
 Run (dry-run default):
 
-moks commit --action <action> --target-kind candidate --target-id <slug-or-id> --reason "<one line>" --meta '{"score":".moks/req/scores/<slug>.md"}'
+moks commit --action <action> --target-kind candidate --target-id <slug-or-id> --reason "<one line>" --meta '{"score":".moks/reqs/<req-slug>/scores/<candidate-slug>.md"}'
 
 Inspect:
 

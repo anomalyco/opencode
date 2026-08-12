@@ -71,7 +71,7 @@ const layer = Layer.effect(
 
       commands[Default.INIT] = {
         name: Default.INIT,
-        description: "scaffold a new requisition workspace under .moks",
+        description: "scaffold a requisition under .moks/reqs/<slug>",
         source: "command",
         get template() {
           return PROMPT_INITIALIZE.replace("${path}", ctx.worktree)

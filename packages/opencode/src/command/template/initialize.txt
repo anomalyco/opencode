@@ -1,27 +1,33 @@
-Fill the requisition workspace already scaffolded under `.moks/` at `${path}`.
+Add or fill a requisition in the hiring book at `${path}`.
 
-Default `/init` bootstraps a hiring req, not a coding AGENTS.md bible. (Coding AGENTS.md setup is `/init-code` / `build` agent — not this path.)
+Default `/init` adds a req under `.moks/reqs/<slug>`, not a coding AGENTS.md bible. (Coding AGENTS.md setup is `/init-code` / `build` agent — not this path.)
+
+If `${slug}` is `<slug>`, ask once for a role title, slugify it (lowercase, hyphens), create `.moks/reqs/<that-slug>/`, then fill stubs. If stubs already exist at `${req}`, fill those — do not create directories.
 
 User-provided focus or constraints (honor these):
 $ARGUMENTS
 
 ## Goal
 
-A local hiring workspace so recruit can load req materials, score candidates, draft outreach, and record dispositions.
+A local hiring book so recruit can @ a req slug, load materials, score candidates, draft outreach, and record dispositions. One workspace holds many reqs. Do not create a new git repo per req. Do not use a singleton `.moks/req`.
+
+Slug: `${slug}`
+Req path: `${req}`
+Existing reqs ( @ these slugs ): ${existing}
 
 The scaffolder already wrote stubs if they were missing or empty:
-- `.moks/req/jd.md`
-- `.moks/req/scorecard.md`
-- `.moks/req/notes.md`
-- `.moks/req/scores/.gitkeep`
+- `${req}/jd.md`
+- `${req}/scorecard.md`
+- `${req}/notes.md`
+- `${req}/scores/.gitkeep`
 
-Do not create directories — they should already be there. Fill stubs from `$ARGUMENTS`. Do not overwrite non-empty user content.
+Fill stubs from `$ARGUMENTS`. Do not overwrite non-empty user content. Do not touch other reqs.
 
 ## Fill stubs
 
-`.moks/req/jd.md` — role title, team, must-haves / nice-to-haves
-`.moks/req/scorecard.md` — dimensions and bar
-`.moks/req/notes.md` — owners and open questions
+`${req}/jd.md` — role title, team, must-haves / nice-to-haves
+`${req}/scorecard.md` — dimensions and bar
+`${req}/notes.md` — owners and open questions
 
 Optional: write `resume.md` only if the user already named a candidate.
 
@@ -32,7 +38,7 @@ Run or invoke **req-context** to synthesize a structured req brief and list miss
 ## Hiring skills (use via skill tool)
 
 - **req-context** — structured req brief from JD/notes; list gaps
-- **score-candidate** — resume vs JD/scorecard with evidence citations; writes `.moks/req/scores/`
+- **score-candidate** — resume vs JD/scorecard with evidence citations; writes `${req}/scores/`
 - **draft-outreach** — recruiter email/LinkedIn drafts; never send
 - **commit-disposition** — recommend reject/offer/hire/advance; user records via decision verbs
 
@@ -48,7 +54,7 @@ Never invent ATS stage moves or claim a remote write happened.
 
 ## Done criteria
 
-- `.moks/req/jd.md`, `.moks/req/scorecard.md`, and `.moks/req/notes.md` exist (they should)
-- `.moks/req/scores/` exists
+- `${req}/jd.md`, `${req}/scorecard.md`, and `${req}/notes.md` exist (they should)
+- `${req}/scores/` exists
 - Short summary of what was filled vs left as stub
-- Next step: add a resume → **score-candidate** (writes `.moks/req/scores/<slug>.md`)
+- Next step: @${slug} later, or add a resume → **score-candidate** (writes `${req}/scores/<candidate-slug>.md`)

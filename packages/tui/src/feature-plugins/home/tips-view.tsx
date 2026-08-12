@@ -164,7 +164,7 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
 
 const TIPS: Tip[] = [
   // Hero hiring loop
-  "Run {highlight}/init{/highlight} to scaffold a new req under {highlight}.moks/{/highlight} (JD, scorecard, notes)",
+  "Run {highlight}/init senior-backend{/highlight} to add a req; {highlight}@senior-backend{/highlight} to work in it",
   "Use {highlight}/review{/highlight} for packet review before {highlight}moks commit{/highlight} / {highlight}push{/highlight}",
   "Ask for the {highlight}req-context{/highlight} skill to load JD, scorecard, and notes for the open req",
   "Score a resume with the {highlight}score-candidate{/highlight} skill against the req scorecard",

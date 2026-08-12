@@ -61,8 +61,10 @@ const layer = Layer.effectDiscard(
         ),
       )
 
-      // Nearest `.moks/req` wins; attach bounded hiring materials (not resume.md by default).
-      const reqDir = found.find((item) => basename(item) === "req")
+      // One req only: cwd inside a req, else the only book/legacy req. Never dump every JD.
+      const reqDir = scanProject
+        ? yield* nearestReqDir(fs, start, stop, found.find((item) => isLegacyReq(item)))
+        : undefined
       const reqPaths: string[] = []
       if (reqDir) {
         for (const name of REQ_MATERIAL_NAMES) {
@@ -116,11 +118,46 @@ export const node = makeLocationNode({
   deps: [FSUtil.node, Global.node, Location.node, SystemContextRegistry.node],
 })
 
+function isBookReq(dirpath: string) {
+  return basename(dirname(dirpath)) === "reqs" && basename(dirname(dirname(dirpath))) === ".moks"
+}
+
+function isLegacyReq(dirpath: string) {
+  return basename(dirpath) === "req" && basename(dirname(dirpath)) === ".moks"
+}
+
 function isReqMaterial(filepath: string) {
   if (!(REQ_MATERIAL_NAMES as readonly string[]).includes(basename(filepath))) return false
   const dir = dirname(filepath)
-  return basename(dir) === "req" && basename(dirname(dir)) === ".moks"
+  return isBookReq(dir) || isLegacyReq(dir)
 }
+
+const nearestReqDir = Effect.fnUntraced(function* (
+  fs: FSUtil.Interface,
+  start: string,
+  stop: string,
+  legacy: string | undefined,
+) {
+  let current = start
+  while (true) {
+    if (isBookReq(current) || isLegacyReq(current)) return current
+    if (current === stop) break
+    const parent = dirname(current)
+    if (parent === current) break
+    current = parent
+  }
+
+  const book = join(stop, ".moks", "reqs")
+  if (yield* fs.isDir(book)) {
+    const children = (yield* fs.readDirectoryEntries(book).pipe(Effect.catch(() => Effect.succeed([])))).filter(
+      (entry) => entry.type === "directory",
+    )
+    if (children.length === 1) return join(book, children[0].name)
+    if (children.length > 1) return
+  }
+
+  return legacy
+})
 
 function truncateInstruction(content: string) {
   if (content.length <= MAX_INSTRUCTION_CHARS) return content

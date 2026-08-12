@@ -12,7 +12,7 @@ Score one candidate against the active req. Cite evidence; never invent employme
 1. User-attached paths
 2. If Ashby MCP tools are available, prefer `ashby_get_candidate` / `ashby_list_candidates` (and job reads) over inventing ATS state; still load local resume text when scoring depth needs it
 3. Cwd: `jd.md`, `resume.md`, `scorecard.md`
-4. `.moks/req/{jd,resume,scorecard}.md`
+4. `@<slug>` / `.moks/reqs/<slug>/{jd,resume,scorecard}.md` (legacy `.moks/req/` if that is the only req)
 5. Product fixture samples only as last resort
 
 Load JD + resume at minimum. Use scorecard dimensions when present; otherwise derive dimensions from JD must-haves. Never call Ashby write tools; stage moves use `moks commit` / `moks push` only.
@@ -46,7 +46,7 @@ Load JD + resume at minimum. Use scorecard dimensions when present; otherwise de
 
 ## Write the score file (required)
 
-After the table, write the full score markdown to `.moks/req/scores/<candidate-slug>.md` (slug: lowercase, hyphens). Create `.moks/req/scores/` if needed.
+After the table, write the full score markdown to `.moks/reqs/<req-slug>/scores/<candidate-slug>.md` (slugs: lowercase, hyphens). Create the scores directory if needed. Use the @-mentioned or active req; do not write into another req.
 
 Chat may show the same table; the file is the source of truth. You are not done until the file is written (unless the workspace is read-only or the user forbade writes).
 

@@ -59,7 +59,7 @@ Record a disposition (receipts only — no ATS write):
 bun run --conditions=browser src/index.ts commit --action advance \
   --target-kind candidate --target-id jordan-lee \
   --reason "strong event + postgres signal" \
-  --meta '{"score":".moks/req/scores/jordan-lee.md"}'
+   --meta '{"score":".moks/reqs/senior-backend/scores/jordan-lee.md"}'
 
 # weekly decision signal (local receipts; "real req" is still a human judgment)
 bun run --conditions=browser src/index.ts activity --days 7

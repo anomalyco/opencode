@@ -11,7 +11,7 @@ Worktree: `${path}`
 Resolve packet materials in order:
 
 1. Paths or focus from `$ARGUMENTS` / attachments
-2. Workspace: `.moks/req/` — `jd.md`, `scorecard.md`, `resume.md`, `notes.md`, outreach drafts, `.moks/req/scores/`
+2. Workspace: `@<slug>` / `.moks/reqs/<slug>/` — `jd.md`, `scorecard.md`, `resume.md`, `notes.md`, outreach drafts, `scores/` (legacy `.moks/req/` if that is the only req)
 3. Session-visible local hiring file changes (Modified Files / session diffs of candidate & req artifacts)
 4. Pending decision receipts via `moks status` when disposition readiness matters
 5. Cwd fixtures only if no `.moks/` packet exists

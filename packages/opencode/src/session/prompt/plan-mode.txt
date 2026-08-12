@@ -15,7 +15,7 @@ Goal: Understand the hiring request and gather req materials. Critical: In this 
 1. Focus on the user's hiring goal (e.g. open a req, score a slate, outreach sequence, disposition recommendations).
 
 2. **Launch up to 3 explore agents IN PARALLEL** (single message, multiple tool calls) when materials are spread out.
-  - Use 1 agent when paths are known (attached JD/resume/scorecard, clear `.moks/req/` tree).
+  - Use 1 agent when paths are known (attached JD/resume/scorecard, @slug / `.moks/reqs/<slug>/` tree).
   - Use multiple agents when: scope is uncertain, multiple candidates/req folders, or you need public company/candidate context plus local files.
   - Quality over quantity - 3 agents maximum; prefer the minimum (usually 1).
   - Example focuses: JD + scorecard; candidate resumes/notes; company/role public context (webfetch) when relevant.

@@ -10,7 +10,7 @@ Draft outreach only. Do not send email, LinkedIn, or ATS messages.
 ## Discover inputs
 
 1. User-attached paths / pasted notes
-2. Cwd or `.moks/req/`: `jd.md`, optional `resume.md`, notes
+2. Cwd, `@<slug>`, or `.moks/reqs/<slug>/`: `jd.md`, optional `resume.md`, notes (legacy `.moks/req/` if that is the only req)
 3. Prior score brief in the conversation if present
 
 ## Clarify channel
