@@ -114,9 +114,10 @@ export const make = Effect.fn("OpenCodeInstance.make")(function* (
   const files = join(artifacts, "files")
   let mediaGeneration = 0
   let media = runMediaDirectory(artifacts, mediaGeneration)
+  const uiPort = yield* freePort
   const endpoints = {
-    ui: `ws://127.0.0.1:${yield* freePort}`,
-    backend: `ws://127.0.0.1:${yield* freePort}`,
+    ui: `ws://127.0.0.1:${uiPort}`,
+    backend: `ws://127.0.0.1:${yield* distinctPort(uiPort)}`,
   }
   const toolController = configuredTools ?? (yield* ToolController.make(options.tools))
   const database = yield* Config.string("OPENCODE_DRIVE_DB").pipe(
@@ -613,3 +614,8 @@ function recordingPaths(directory: string): RecordingPaths {
 }
 
 export * as OpenCodeInstance from "./runtime.js"
+
+const distinctPort = (excluded: number): Effect.Effect<number, OpenCodeInstanceError> =>
+  freePort.pipe(
+    Effect.flatMap((port) => port === excluded ? distinctPort(excluded) : Effect.succeed(port)),
+  )

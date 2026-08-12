@@ -13,6 +13,7 @@ export const freePort = Effect.tryPromise({
     })
     const port = server.port
     await server.stop(true)
+    if (port === undefined) throw new Error("ephemeral server did not expose a port")
     return port
   },
   catch: (cause) => instanceError("allocate port", cause),
