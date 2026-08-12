@@ -163,7 +163,7 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
   if (!input.previousSummary)
     return [
       conversation,
-      "Create a new anchored summary from the conversation history in the <conversation> tags above.",
+      "Create a new anchored summary from the conversation history in the <conversation> tags above so another coding agent can continue the work.",
       SUMMARY_TEMPLATE,
     ].join("\n\n")
   return [
