@@ -118,4 +118,39 @@ describe("Session.compact", () => {
       expect((yield* session.context(created.id)).find((message) => message.id === first.id)).toBeUndefined()
     }),
   )
+
+  it.effect("commits a staged revert before admitting manual compaction", () =>
+    Effect.gen(function* () {
+      requests = []
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const created = yield* session.create({ location })
+      const boundary = SessionMessage.ID.create()
+      yield* bus.publish(SessionEvent.InputAdmitted, {
+        sessionID: created.id,
+        inputID: boundary,
+        input: {
+          type: "user",
+          data: { text: "Discard this turn." },
+          delivery: "steer",
+        },
+      })
+      yield* bus.publish(SessionEvent.InputPromoted, {
+        sessionID: created.id,
+        inputID: boundary,
+      })
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID: created.id,
+        revert: { messageID: boundary, files: [] },
+      })
+
+      const compacted = yield* session.compact({ sessionID: created.id })
+
+      expect((yield* session.get(created.id)).revert).toBeUndefined()
+      expect(yield* session.context(created.id)).toEqual([])
+      expect(yield* SessionPending.compaction((yield* Database.Service).db, created.id)).toMatchObject({
+        id: compacted.id,
+      })
+    }),
+  )
 })

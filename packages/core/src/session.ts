@@ -756,22 +756,27 @@ const layer = Layer.effect(
           { location: current.location },
         )
       }),
-      compact: Effect.fn("Session.compact")(function* (input) {
-        yield* result.get(input.sessionID)
-        const inputID = input.id ?? SessionMessage.ID.create()
-        const admitted = yield* SessionPending.admitCompaction(db, bus, {
-          id: inputID,
-          sessionID: input.sessionID,
-        }).pipe(
-          Effect.catchDefect((defect) =>
-            defect instanceof SessionPending.LifecycleConflict
-              ? new CompactionConflictError({ sessionID: input.sessionID, inputID })
-              : Effect.die(defect),
-          ),
-        )
-        yield* execution.wake(input.sessionID)
-        return admitted
-      }),
+      compact: Effect.fn("Session.compact")((input) =>
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            const session = yield* result.get(input.sessionID)
+            if (session.revert) yield* SessionRevert.commit(session).pipe(Effect.provideService(Bus.Service, bus))
+            const inputID = input.id ?? SessionMessage.ID.create()
+            const admitted = yield* SessionPending.admitCompaction(db, bus, {
+              id: inputID,
+              sessionID: input.sessionID,
+            }).pipe(
+              Effect.catchDefect((defect) =>
+                defect instanceof SessionPending.LifecycleConflict
+                  ? new CompactionConflictError({ sessionID: input.sessionID, inputID })
+                  : Effect.die(defect),
+              ),
+            )
+            yield* execution.wake(input.sessionID)
+            return admitted
+          }),
+        ),
+      ),
       wait: Effect.fn("Session.wait")(function* (sessionID) {
         yield* result.get(sessionID)
         yield* execution.awaitIdle(sessionID)
