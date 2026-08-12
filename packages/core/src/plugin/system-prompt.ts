@@ -23,7 +23,11 @@ export const GooglePlugin = make("google", (id) => (id.includes("gemini-") ? PRO
 export const AnthropicPlugin = make("anthropic", (id) => (id.includes("claude") ? PROMPT_ANTHROPIC : undefined))
 export const KimiPlugin = make("kimi", (id) => (id.includes("kimi") ? PROMPT_KIMI : undefined))
 export const ArceePlugin = make("arcee", (id) => (id.includes("trinity") ? PROMPT_TRINITY : undefined))
-export const MetaPlugin = make("meta", (id) => (id.includes("muse-spark") ? PROMPT_META : undefined))
+export const MetaPlugin = make("meta", (id) => {
+  if (!id.includes("muse")) return
+  const name = id.includes("muse-glimmer") ? "Muse Glimmer" : "Muse Spark"
+  return PROMPT_META.replaceAll("{{MODEL_NAME}}", name)
+})
 
 export const Plugins = [OpenAIPlugin, GooglePlugin, AnthropicPlugin, KimiPlugin, ArceePlugin, MetaPlugin] as const
 
