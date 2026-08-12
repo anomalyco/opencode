@@ -8,10 +8,9 @@ import { makeGlobalNode } from "./effect/app-node.js"
 
 const app = "opencode"
 // workerd has no home directory or XDG base dirs and only tmp is writable, so
-// root every global path under one directory there. OPENCODE_GLOBAL_ROOT
-// overrides the root on any runtime.
+// root every global path under one directory there.
 const workerd = (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent === "Cloudflare-Workers"
-const root = process.env.OPENCODE_GLOBAL_ROOT ?? (workerd ? path.join(os.tmpdir(), app) : undefined)
+const root = workerd ? path.join(os.tmpdir(), app) : undefined
 const data = root ? path.join(root, "data") : path.join(xdgData!, app)
 const cache = root ? path.join(root, "cache") : path.join(xdgCache!, app)
 const config = root ? path.join(root, "config") : path.join(xdgConfig!, app)
