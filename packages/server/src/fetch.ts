@@ -7,15 +7,6 @@ import { isAllowedCorsOrigin } from "./cors"
 import { createRoutes } from "./routes"
 import type { ServerOptions } from "./options"
 
-export interface BootOptions {
-  /**
-   * Resumes execution-journaled Sessions once the application layer boots. Pair with
-   * `SessionExecution.configured({ suspendOnStart: true })` on runtimes that can die without
-   * teardown, so turns orphaned by a hard death replay on the next boot.
-   */
-  readonly resumeSuspendedSessions?: boolean
-}
-
 /**
  * Builds a web-standard fetch handler — `(request: Request) => Promise<Response>` — serving the
  * same HttpApi routes as the Node server process without binding a port, owning a listener, or
@@ -32,13 +23,17 @@ export interface BootOptions {
  * Auth follows `createRoutes` semantics: `options.password` enforces Basic auth; omitting it
  * serves unauthenticated, so an embedder without a password must front the handler with its own
  * access control.
+ *
+ * Sessions whose execution claim was never released resume once the layer is built, exactly as
+ * the Node server process does: a runtime that dies without teardown — an evicted Durable
+ * Object leaves the same durable signature as a killed process — replays orphaned turns on the
+ * next boot, and the sweep is a no-op when nothing is suspended.
  */
-export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOptions = {}, boot: BootOptions = {}) {
+export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOptions = {}) {
   const context = yield* Layer.build(createRoutes(options, () => []).pipe(Layer.provide(HttpServer.layerServices)))
   // Forked so the returned handler is never delayed; resumed drains are already
   // logged and durably recorded by the execution layer.
-  if (boot.resumeSuspendedSessions)
-    yield* Effect.forkDetach(Context.get(context, SessionRestart.Service).resumeSuspendedSessions)
+  yield* Effect.forkDetach(Context.get(context, SessionRestart.Service).resumeSuspendedSessions)
   return Context.get(context, HttpRouter.HttpRouter)
     .asHttpEffect()
     .pipe(
