@@ -1548,6 +1548,33 @@ test("models.dev reasoning options replace generated variants and unsupported to
   expect(models["gemini-3-pro-fast"].variants).toEqual(models.override.variants)
 })
 
+test("MERGE Gateway exposes declared effort variants without model-specific handling", () => {
+  const provider = {
+    id: "merge-gateway",
+    name: "MERGE Gateway",
+    env: ["MERGE_GATEWAY_API_KEY"],
+    npm: "merge-gateway-ai-sdk-provider",
+    models: {
+      "openai/gpt-5.6-sol": {
+        id: "openai/gpt-5.6-sol",
+        name: "GPT-5.6 Sol",
+        reasoning: true,
+        reasoning_options: [{ type: "effort", values: ["none", "low", "medium", "high", "xhigh", "max"] }],
+        limit: { context: 128_000, output: 64_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  expect(Provider.fromModelsDevProvider(provider).models["openai/gpt-5.6-sol"].variants).toEqual({
+    none: { reasoningEffort: "none" },
+    low: { reasoningEffort: "low" },
+    medium: { reasoningEffort: "medium" },
+    high: { reasoningEffort: "high" },
+    xhigh: { reasoningEffort: "xhigh" },
+    max: { reasoningEffort: "max" },
+  })
+})
+
 test("public provider info omits invalid models", () => {
   const provider = Provider.fromModelsDevProvider({
     id: "test",
