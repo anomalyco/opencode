@@ -1,6 +1,6 @@
-import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { createMemo, createSignal, onMount } from "solid-js"
+import { CliRenderEvents, TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
+import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { useConfig } from "../config"
 import { useClipboard } from "../context/clipboard"
 import { Keymap } from "../context/keymap"
@@ -15,13 +15,32 @@ export function DialogErrorDetails(props: { title: string; error: string; onBack
   const toast = useToast()
   const theme = useTheme("elevated")
   const overlayTheme = useTheme("overlay")
+  const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const config = useConfig().data
   const [copied, setCopied] = createSignal(false)
+  const [scrollable, setScrollable] = createSignal(false)
   const height = createMemo(() => Math.max(3, Math.floor(dimensions().height / 2) - 5))
   let scroll: ScrollBoxRenderable | undefined
+  let measure: (() => void) | undefined
 
   onMount(() => dialog.setSize("large"))
+
+  createEffect(() => {
+    dimensions()
+    props.error
+    if (measure) renderer.off(CliRenderEvents.FRAME, measure)
+    measure = () => {
+      measure = undefined
+      setScrollable(Boolean(scroll && scroll.scrollHeight > scroll.viewport.height))
+    }
+    renderer.once(CliRenderEvents.FRAME, measure)
+    renderer.requestRender()
+  })
+
+  onCleanup(() => {
+    if (measure) renderer.off(CliRenderEvents.FRAME, measure)
+  })
 
   const copy = () => {
     void clipboard
@@ -37,6 +56,7 @@ export function DialogErrorDetails(props: { title: string; error: string; onBack
 
   useKeyboard((event) => {
     if (event.name === "c") return copy()
+    if (!scrollable()) return
     if (event.name === "up") return scroll?.scrollBy(-1)
     if (event.name === "down") return scroll?.scrollBy(1)
     if (event.name === "pageup") return scroll?.scrollBy(-height())
@@ -75,9 +95,12 @@ export function DialogErrorDetails(props: { title: string; error: string; onBack
         </scrollbox>
       </box>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text.subdued}>↑↓ scroll</text>
-        <text fg={theme.text.subdued} onMouseUp={copy}>
-          {copied() ? "✓ copied" : "c copy details"}
+        <text fg={theme.text.subdued}>{scrollable() ? "↑↓ scroll" : ""}</text>
+        <text onMouseUp={copy}>
+          <span style={{ fg: copied() ? theme.text.feedback.success.default : theme.text.default }}>
+            <b>{copied() ? "✓ copied" : "copy details"}</b>
+          </span>
+          <span style={{ fg: theme.text.subdued }}>{copied() ? "" : "  c"}</span>
         </text>
       </box>
     </box>
