@@ -544,6 +544,24 @@ const Cache = Schema.Struct({
 })
 const defaultSource = "https://models.opencode.ai"
 
+// Bundled snapshot of https://models.opencode.ai/api.json, committed at
+// packages/core/src/models-dev/snapshot.txt and refreshed via
+// `bun run script/update-models-snapshot.ts`. Decoded and normalized once per
+// isolate: the snapshot is a multi-MB module-level constant and one isolate can
+// host many runtimes (Cloudflare colocates Durable Object instances), so
+// per-runtime decoding would multiply the cost.
+let bundledCache: readonly Snapshot[] | undefined
+const bundledSnapshot = Effect.suspend(() =>
+  bundledCache
+    ? Effect.succeed(bundledCache)
+    : decodeCatalog(snapshotText).pipe(
+        Effect.map((catalog) => {
+          bundledCache = normalize(catalog)
+          return bundledCache
+        }),
+      ),
+)
+
 function cacheKey(source: string) {
   if (source === defaultSource) return "models-dev:catalog"
   return `models-dev:catalog:${Hash.fast(source)}`
@@ -607,11 +625,9 @@ export const layer = (options?: Options) =>
           )
         : Effect.succeed(undefined)
 
-      // Bundled snapshot of https://models.opencode.ai/api.json, committed at
-      // packages/core/src/models-dev/snapshot.txt and refreshed via
-      // `bun run script/update-models-snapshot.ts`. It is the boot-time floor
-      // for the catalog; the periodic fetch below still refreshes on top.
-      const loadSnapshot = options?.snapshot === false ? Effect.succeed(undefined) : decodeCatalog(snapshotText)
+      // The bundled snapshot is the boot-time floor for the catalog; the
+      // periodic fetch below still refreshes on top.
+      const loadSnapshot = options?.snapshot === false ? Effect.succeed(undefined) : bundledSnapshot
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const text = yield* fetchApi()
@@ -635,7 +651,7 @@ export const layer = (options?: Options) =>
         const cached = options?.file ? undefined : yield* loadFromCache()
         if (cached) return normalize(cached.catalog)
         const bundled = yield* loadSnapshot
-        if (bundled) return normalize(bundled)
+        if (bundled) return bundled
         if (!fetch) return []
         const catalog = yield* lock.withPermit(
           Effect.gen(function* () {

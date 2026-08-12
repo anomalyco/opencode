@@ -36,26 +36,31 @@
       "default": "./src/database/sqlite.node.ts"
     },
     "#pty": {
+      "workerd": "./src/pty/pty.workerd.ts",
       "bun": "./src/pty/pty.bun.ts",
       "node": "./src/pty/pty.node.ts",
       "default": "./src/pty/pty.bun.ts"
     },
     "#fff": {
+      "workerd": "./src/filesystem/fff.workerd.ts",
       "bun": "./src/filesystem/fff.bun.ts",
       "node": "./src/filesystem/fff.node.ts",
       "default": "./src/filesystem/fff.bun.ts"
     },
     "#photon-wasm": {
+      "workerd": "./src/image/photon-wasm.workerd.ts",
       "bun": "./src/image/photon-wasm.bun.ts",
       "node": "./src/image/photon-wasm.node.ts",
       "default": "./src/image/photon-wasm.bun.ts"
     },
     "#shell-parser-wasm": {
+      "workerd": "./src/shell/parser-wasm.workerd.ts",
       "bun": "./src/shell/parser-wasm.bun.ts",
       "node": "./src/shell/parser-wasm.node.ts",
       "default": "./src/shell/parser-wasm.bun.ts"
     },
     "#process-lock-ffi": {
+      "workerd": "./src/util/process-lock-ffi.workerd.ts",
       "bun": "./src/util/process-lock-ffi.bun.ts",
       "node": "./src/util/process-lock-ffi.node.ts",
       "default": "./src/util/process-lock-ffi.bun.ts"

@@ -56,6 +56,10 @@
     "@opencode-ai/session-ui#test": {
       "dependsOn": ["^build"],
       "outputs": []
+    },
+    "@opencode-ai/workerd-spike#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
     }
   }
 }

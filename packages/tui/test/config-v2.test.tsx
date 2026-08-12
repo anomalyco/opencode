@@ -180,6 +180,11 @@ test("uses ctrl+z for input undo when terminal suspend is unavailable", () => {
   expect(overridden.keybinds.get("input.undo")).toMatchObject([{ key: "ctrl+u" }])
 })
 
+test("keeps turn token usage inside developer tools", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "debug.devtools")?.title).toBe("Developer tools")
+  expect(settings.some((setting) => setting.path.join(".") === "debug.turn_tokens")).toBe(false)
+})
+
 test("provides config and its host interface", async () => {
   const config = resolve({}, { terminalSuspend: true })
   let current = {}

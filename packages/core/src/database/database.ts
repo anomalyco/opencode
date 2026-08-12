@@ -65,4 +65,13 @@ export function configured(options?: Options) {
   return makeGlobalNode({ service: Service, layer: layer(options), deps: [Global.node] })
 }
 
+/** `configured`, but over an injected SqlClient layer instead of a filesystem path. */
+export function configuredClient(client: Layer.Layer<SqlClient.SqlClient>) {
+  return makeGlobalNode({
+    service: Service,
+    layer: layerFromClient.pipe(Layer.provide(client)),
+    deps: [Global.node],
+  })
+}
+
 export const node = configured({ path: ":memory:" })

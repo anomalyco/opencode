@@ -28,6 +28,20 @@ export interface EffectSQLiteQueryEffectHKT extends QueryEffectHKTBase {
   readonly context: never
 }
 
+/**
+ * A SqlClient whose runtime rejects SQL transaction statements (BEGIN/COMMIT/SAVEPOINT) and
+ * manages transactions natively instead — Cloudflare Durable Object SQLite. Producers set
+ * `transactionStatements: false` (see `database/sqlite.workerd.ts`) and the session delegates
+ * to the client's `withTransaction` rather than issuing transaction statements.
+ */
+export interface NativeTransactionSqlClient extends SqlClient {
+  readonly transactionStatements: false
+}
+
+export function managesTransactionsNatively(client: SqlClient): client is NativeTransactionSqlClient {
+  return (client as SqlClient & { readonly transactionStatements?: boolean }).transactionStatements === false
+}
+
 export type EffectSQLiteRunResult = readonly never[]
 
 export interface EffectSQLiteSessionOptions {
@@ -120,6 +134,7 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
   }
 
   private withTransaction<A, E, R>(effect: Effect.Effect<A, E, R>, config: SQLiteTransactionConfig | undefined) {
+    if (managesTransactionsNatively(this.client)) return this.client.withTransaction(effect)
     return Effect.uninterruptibleMask((restore) =>
       Effect.withFiber<A, E | SqlError, R>((fiber) => {
         const services = fiber.context

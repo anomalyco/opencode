@@ -15,7 +15,10 @@ export type FlowchartNodeEdgeFadeStyle = `nodeEdgeFade${DiagramFadeStep}`
 export type FlowchartDatabaseEdgeFadeStyle = `databaseEdgeFade${DiagramFadeStep}`
 export type FlowchartEdgeFadeStyle = FlowchartNodeEdgeFadeStyle | FlowchartDatabaseEdgeFadeStyle
 export type FlowchartCellStyle = FlowchartBaseCellStyle | FlowchartEdgeFadeStyle
-export type FlowchartGrid = DiagramCanvas<FlowchartCellStyle>
+export interface FlowchartCellMetadata {
+  attributes?: number
+}
+export type FlowchartGrid = DiagramCanvas<FlowchartCellStyle, FlowchartCellMetadata>
 export type FlowchartStyleColors = Required<Record<FlowchartCellStyle, RGBA>>
 export const DEFAULT_THEME_RGB = {
   node: [228, 239, 232],
@@ -47,6 +50,8 @@ export function resolveFlowchartStyleColors(
 
 export function renderGridStyledText(grid: FlowchartGrid, colors: FlowchartStyleColors): StyledText {
   return renderDiagramGridStyledText(grid, (run) => (run.style ? colors[run.style] : undefined), undefined, {
+    key: (cell) => [cell.style, cell.attributes],
+    attributes: (run) => run.cell.attributes,
     trimTop: true,
     trimBottom: true,
   })

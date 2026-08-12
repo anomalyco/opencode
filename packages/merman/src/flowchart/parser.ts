@@ -31,7 +31,7 @@ const ID_ONLY_RE = new RegExp(`^${ID_RE}$`)
 const EXPLICIT_NODE_SHAPE_RE = new RegExp(`^${ID_RE}(?:\\[|\\(|\\{)`)
 const CIRCLE_NODE_RE = new RegExp(`^${ID_RE}\\(\\(.+\\)\\)$`)
 const EDGE_OPERATOR_RE =
-  /(-\.(?!->)(.+?)\.(?:->|-))|(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->|\.-)|(<-->|-->|==>|-\.->|---|~~~)\s*(?:\|([^|]*)\|\s*)?/g
+  /(-\.(?!->)(.+?)\.(?:->|-))|(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->|\.-)|(<-->|-->|==>|-\.->|---|~~~)\s*(?:\|([^|]*)\|\s*)?/dg
 
 function normalizeDirection(value?: string): FlowchartDirection {
   const upper = value?.toUpperCase()
@@ -161,10 +161,12 @@ function parseEdgeOperators(line: string): ParsedEdgeOperator[] {
     const inlineDashedArrow = match[1]
     const startArrow = inlineDashedArrow ?? match[3] ?? match[6]!
     const endArrow = inlineDashedArrow ?? match[5] ?? match[6]!
+    const labelGroup = match[2] ? 2 : match[4] ? 4 : match[7] ? 7 : undefined
+    const labelRange = labelGroup === undefined ? undefined : match.indices?.[labelGroup]
     return {
       index: match.index,
       end: match.index + match[0].length,
-      label: decodeMermaidText((match[2] ?? match[4] ?? match[7] ?? "").trim()),
+      label: stripQuotes(labelRange ? line.slice(labelRange[0], labelRange[1]) : ""),
       style: edgeStyleFromArrow(startArrow, endArrow),
       arrowhead: endArrow === "~~~" || endArrow.endsWith(">"),
       sourceArrowhead: startArrow.startsWith("<"),

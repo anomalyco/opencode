@@ -3,9 +3,18 @@ export * as ServerFetch from "./fetch"
 import { Context, Effect, Layer } from "effect"
 import { HttpEffect, HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
+import type { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { isAllowedCorsOrigin } from "./cors"
 import { createRoutes } from "./routes"
 import type { ServerOptions } from "./options"
+
+export interface BootOptions {
+  /**
+   * Runtime-profile service replacements, applied after the standard set so later entries
+   * win — swaps services the standard graph assumes are local. See `ServerWorkerd.replacements`.
+   */
+  readonly overrides?: LayerNode.Replacements
+}
 
 /**
  * Builds a web-standard fetch handler — `(request: Request) => Promise<Response>` — serving the
@@ -29,8 +38,10 @@ import type { ServerOptions } from "./options"
  * Object leaves the same durable signature as a killed process — replays orphaned turns on the
  * next boot, and the sweep is a no-op when nothing is suspended.
  */
-export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOptions = {}) {
-  const context = yield* Layer.build(createRoutes(options, () => []).pipe(Layer.provide(HttpServer.layerServices)))
+export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOptions = {}, boot: BootOptions = {}) {
+  const context = yield* Layer.build(
+    createRoutes(options, () => [], boot.overrides ?? []).pipe(Layer.provide(HttpServer.layerServices)),
+  )
   // Forked so the returned handler is never delayed; resumed drains are already
   // logged and durably recorded by the execution layer.
   yield* Effect.forkDetach(Context.get(context, SessionRestart.Service).resumeSuspendedSessions)

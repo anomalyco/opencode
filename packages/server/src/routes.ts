@@ -66,27 +66,34 @@ const applicationServices = LayerNode.group([
   SessionRestart.node,
 ])
 
-export function createRoutes(options: ServerOptions = {}, serviceURLs: () => ReadonlyArray<string> = () => []) {
+export function createRoutes(
+  options: ServerOptions = {},
+  serviceURLs: () => ReadonlyArray<string> = () => [],
+  overrides: LayerNode.Replacements = [],
+) {
   return makeRoutes(
     options.password
       ? ServerAuth.Config.configLayer({ password: Option.some(options.password) })
       : ServerAuth.Config.layer,
     options,
     serviceURLs,
+    overrides,
   )
 }
 
-export function createEmbeddedRoutes(options: ServerOptions = {}) {
-  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [])
+export function createEmbeddedRoutes(options: ServerOptions = {}, overrides: LayerNode.Replacements = []) {
+  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], overrides)
 }
 
 function makeRoutes<AuthError, AuthServices>(
   auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>,
   options: ServerOptions,
   serviceURLs: () => ReadonlyArray<string>,
+  // Runtime-profile replacements (e.g. workerd) applied after the standard set, so later entries win.
+  overrides: LayerNode.Replacements,
 ) {
   const pluginRuntimeCell = PluginRuntime.makeCell()
-  const replacements: LayerNode.Replacements = [
+  const standard: LayerNode.Replacements = [
     [Database.node, Database.configured(options.database)],
     [Bus.node, Bus.configured({ persist: options.events?.persist })],
     [App.node, App.configured(options.app)],
@@ -113,6 +120,7 @@ function makeRoutes<AuthError, AuthServices>(
           name: options.app?.name ?? "opencode",
           version: options.app?.version ?? "unknown",
         },
+        stdio: options.mcp?.stdio,
       }),
     ],
     [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],
@@ -122,6 +130,7 @@ function makeRoutes<AuthError, AuthServices>(
       WorkspaceDriver.registryNode({ [modalProvider]: modalWorkspaceDriver({ app: "opencode-workspaces" }) }),
     ],
   ]
+  const replacements: LayerNode.Replacements = [...standard, ...overrides]
   const serviceLayer = options.simulation
     ? Layer.unwrap(
         Effect.gen(function* () {

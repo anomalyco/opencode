@@ -40,5 +40,11 @@ export const ServerOptions = Schema.Struct({
       fff: Schema.optional(Schema.Boolean),
     }),
   ),
+  mcp: Schema.optional(
+    Schema.Struct({
+      /** Set false on runtimes that cannot spawn child processes; local (stdio) MCP servers report failed instead of connecting. */
+      stdio: Schema.optional(Schema.Boolean),
+    }),
+  ),
 })
 export type ServerOptions = typeof ServerOptions.Type
