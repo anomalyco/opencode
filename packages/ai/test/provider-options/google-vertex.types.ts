@@ -1,5 +1,5 @@
-import { LLM } from "../../src"
-import { GoogleVertex } from "../../src/providers"
+import { LLM } from "../../src/index.js"
+import { GoogleVertex } from "../../src/providers.js"
 
 const model = GoogleVertex.provider.configure({ apiKey: "test" }).model("gemini-2.5-pro")
 

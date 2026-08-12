@@ -1,8 +1,8 @@
 import { Context, Effect, Layer, LayerMap } from "effect"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Node } from "@opencode-ai/util/effect/app-node"
-import { Location } from "./location"
-import type { LocationError, LocationServices } from "./location-services"
+import { Location } from "./location.js"
+import type { LocationError, LocationServices } from "./location-services.js"
 
 export class Service extends Context.Service<
   Service,
@@ -15,4 +15,4 @@ export class Service extends Context.Service<
 
 export const node = LayerNode.unbound(Service, Node.tags.values.global)
 
-export * as LocationServiceMap from "./location-service-map"
+export * as LocationServiceMap from "./location-service-map.js"

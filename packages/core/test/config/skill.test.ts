@@ -16,6 +16,7 @@ import { SkillFile } from "@opencode-ai/core/config/plugin/skill-file"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Bus } from "@opencode-ai/core/bus"
+import { Credential } from "@opencode-ai/core/credential"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -23,6 +24,8 @@ import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Skill } from "@opencode-ai/core/skill"
 import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
+import { WellKnown } from "@opencode-ai/core/wellknown"
+import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
 import { tmpdir } from "../fixture/tmpdir"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
@@ -89,6 +92,25 @@ const start = (skills: string[], directory: string) =>
       }),
     ],
     directory,
+  )
+
+const discover = (directory: string, global: string) =>
+  Effect.gen(function* () {
+    const config = yield* Config.Service
+    return yield* config.entries()
+  }).pipe(
+    Effect.provide(
+      AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
+        [
+          Location.node,
+          Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+        ],
+        [Global.node, Global.layerWith({ config: global, home: path.join(global, "home") })],
+        [Credential.node, emptyCredentialNode],
+        [WellKnown.node, emptyWellknownNode],
+        [Watcher.node, Watcher.testLayer],
+      ]),
+    ),
   )
 
 function emitAndWait(update: Watcher.Update) {
@@ -213,6 +235,37 @@ describe("ConfigSkillPlugin.Plugin", () => {
           const skill = yield* start([first, "https://example.test/skills/"], tmp.path)
           expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Second")
           expect(pulls).toBe(1)
+        }),
+      ),
+    ),
+  )
+
+  it.live("prefers a worktree skill over the parent checkout copy", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const checkout = path.join(tmp.path, "repo")
+          const worktree = path.join(checkout, ".worktrees", "feature")
+          const parentSkills = path.join(checkout, ".agents", "skills")
+          const worktreeSkills = path.join(worktree, ".agents", "skills")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(checkout, ".git"), { recursive: true })
+            await fs.mkdir(path.join(parentSkills, "review"), { recursive: true })
+            await fs.mkdir(path.join(worktreeSkills, "review"), { recursive: true })
+            await fs.writeFile(path.join(worktree, ".git"), "gitdir: ../../../.git/worktrees/feature\n")
+            await write(parentSkills, "review", "Parent checkout")
+            await write(worktreeSkills, "review", "Worktree")
+          })
+
+          const entries = yield* discover(worktree, path.join(tmp.path, "global"))
+          const skill = yield* startEntries(entries, worktree)
+          const review = (yield* skill.list()).find((item) => item.id === "review")
+
+          expect(review?.description).toBe("Worktree")
+          expect(review?.location).toBe(AbsolutePath.make(path.join(worktreeSkills, "review", "SKILL.md")))
         }),
       ),
     ),

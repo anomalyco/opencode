@@ -12,18 +12,18 @@ import {
   ToolDefinition,
   ToolResultPart,
   Usage,
-} from "../../src"
-import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
-import { compileRequest } from "../../src/route/client"
-import * as Azure from "../../src/providers/azure"
-import * as OpenAI from "../../src/providers/openai"
-import * as XAI from "../../src/providers/xai"
-import * as OpenAIResponses from "../../src/protocols/openai-responses"
-import * as ProviderShared from "../../src/protocols/shared"
-import { continuationRequest, nativeOpenAIResponsesContinuation } from "../continuation-scenarios"
-import { it } from "../lib/effect"
-import { dynamicResponse, fixedResponse } from "../lib/http"
-import { sseEvents } from "../lib/sse"
+} from "../../src/index.js"
+import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route.js"
+import { compileRequest } from "../../src/route/client.js"
+import * as Azure from "../../src/providers/azure.js"
+import * as OpenAI from "../../src/providers/openai.js"
+import * as XAI from "../../src/providers/xai.js"
+import * as OpenAIResponses from "../../src/protocols/openai-responses.js"
+import * as ProviderShared from "../../src/protocols/shared.js"
+import { continuationRequest, nativeOpenAIResponsesContinuation } from "../continuation-scenarios.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse, fixedResponse } from "../lib/http.js"
+import { sseEvents } from "../lib/sse.js"
 
 const model = OpenAIResponses.route
   .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })

@@ -1,22 +1,23 @@
-export * as SessionProjector from "./projector"
+export * as SessionProjector from "./projector.js"
 
 import { and, asc, desc, eq, gt, gte, lt, lte, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema, Stream } from "effect"
-import { Database } from "../database/database"
-import { Bus } from "../bus"
+import { Database } from "../database/database.js"
+import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Agent } from "../agent"
-import { Model } from "../model"
-import { SessionEvent } from "./event"
-import { SessionMessage } from "./message"
-import { SessionMessageUpdater } from "./message-updater"
-import { SessionPending } from "./pending"
-import { Workspace } from "../workspace"
-import { InstructionState } from "./instruction-state"
-import { SessionPendingTable, SessionMessageTable, SessionTable } from "./sql"
-import { Slug } from "../util/slug"
+import { Agent } from "../agent.js"
+import { Model } from "../model.js"
+import { SessionEvent } from "./event.js"
+import { SessionMessage } from "./message.js"
+import { SessionMessageUpdater } from "./message-updater.js"
+import { SessionPending } from "./pending.js"
+import { Workspace } from "../workspace.js"
+import { InstructionState } from "./instruction-state.js"
+import { SessionPendingTable, SessionMessageTable, SessionTable } from "./sql.js"
+import { Slug } from "../util/slug.js"
 import { Money } from "@opencode-ai/schema/money"
-import type { SessionSchema } from "./schema"
+import { AbsolutePath, RelativePath } from "../schema.js"
+import type { SessionSchema } from "./schema.js"
 
 type DatabaseService = Database.Interface["db"]
 type CurrentDurableEvent = Extract<SessionEvent.Event, { readonly durable: object }>
@@ -253,6 +254,33 @@ function run(db: DatabaseService, event: MessageEvent) {
             Effect.map((row) => (row?.model ? Schema.decodeUnknownSync(Model.Ref)(row.model) : undefined)),
           )
       },
+      getLocation() {
+        return db
+          .select({
+            directory: SessionTable.directory,
+            workspaceID: SessionTable.workspace_id,
+            projectID: SessionTable.project_id,
+            subpath: SessionTable.path,
+          })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .get()
+          .pipe(
+            Effect.orDie,
+            Effect.map((row) =>
+              row
+                ? {
+                    location: {
+                      directory: AbsolutePath.make(row.directory),
+                      workspaceID: row.workspaceID ? Workspace.ID.make(row.workspaceID) : undefined,
+                    },
+                    projectID: row.projectID,
+                    subpath: row.subpath === null ? undefined : RelativePath.make(row.subpath),
+                  }
+                : undefined,
+            ),
+          )
+      },
       getCurrentAssistant() {
         return Effect.gen(function* () {
           // A newer step supersedes stale incomplete rows; never resume an older assistant projection.
@@ -391,6 +419,7 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.Moved, (event) =>
       Effect.gen(function* () {
+        yield* run(db, event)
         yield* db
           .update(SessionTable)
           .set({

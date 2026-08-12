@@ -1,4 +1,4 @@
-export * as App from "./app"
+export * as App from "./app.js"
 
 import { Context, Layer } from "effect"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"

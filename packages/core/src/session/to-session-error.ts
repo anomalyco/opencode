@@ -1,11 +1,11 @@
 import { AIError, ToolFailure } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Permission } from "../permission"
-import { Question } from "../question"
-import { Integration } from "../integration"
-import { AgentNotFoundError, StepFailedError, UserInterruptedError } from "./error"
-import { SessionRunnerModel } from "./runner/model"
+import { Permission } from "../permission.js"
+import { Question } from "../question.js"
+import { Integration } from "../integration.js"
+import { AgentNotFoundError, StepFailedError, UserInterruptedError } from "./error.js"
+import { SessionRunnerModel } from "./runner/model.js"
 
 export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof AIError) {

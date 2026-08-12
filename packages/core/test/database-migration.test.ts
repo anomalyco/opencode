@@ -3,7 +3,7 @@ import { $ } from "bun"
 import { fileURLToPath } from "url"
 import path from "path"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
-import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
+import { EffectDrizzleSqlite } from "@opencode-ai/core/database/drizzle"
 import { Effect, Layer } from "effect"
 import { sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
@@ -82,6 +82,19 @@ describe("DatabaseMigration", () => {
         }),
       ),
     ).rejects.toThrow("Database is not empty and has no session table")
+  })
+
+  test("bootstraps alongside underscore-prefixed embedder tables", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE _embedder_state (id text PRIMARY KEY)`)
+        yield* DatabaseMigration.apply(db)
+        expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'`)).toEqual(
+          { name: "session_v2" },
+        )
+      }),
+    )
   })
 
   test("applies generic migrations once and records their order", async () => {

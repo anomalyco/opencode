@@ -1,11 +1,11 @@
-export * as SessionRunner from "./index"
+export * as SessionRunner from "./index.js"
 
 import type { AIError } from "@opencode-ai/ai"
 import { Context, Effect } from "effect"
-import { SessionSchema } from "../schema"
-import type { AgentNotFoundError, MessageDecodeError, StepFailedError, UserInterruptedError } from "../error"
-import { SessionRunnerModel } from "./model"
-import type { Instructions } from "../../instructions/index"
+import { SessionSchema } from "../schema.js"
+import type { AgentNotFoundError, MessageDecodeError, StepFailedError, UserInterruptedError } from "../error.js"
+import { SessionRunnerModel } from "./model.js"
+import type { Instructions } from "../../instructions/index.js"
 
 export type RunError =
   | AIError

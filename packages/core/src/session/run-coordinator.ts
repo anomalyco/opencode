@@ -1,4 +1,4 @@
-export * as SessionRunCoordinator from "./run-coordinator"
+export * as SessionRunCoordinator from "./run-coordinator.js"
 
 import { Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
 

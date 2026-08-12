@@ -1,4 +1,4 @@
-export * as ConfigSkillPlugin from "./skill"
+export * as ConfigSkillPlugin from "./skill.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import type { Entry } from "@opencode-ai/schema/config"
@@ -6,13 +6,13 @@ import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
 import path from "path"
 import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
-import { Config } from "../../config"
-import { Watcher } from "../../filesystem/watcher"
-import { Location } from "../../location"
-import { AbsolutePath } from "../../schema"
-import { Skill } from "../../skill"
-import { SkillDiscovery } from "../../skill/discovery"
-import { SkillFile } from "./skill-file"
+import { Config } from "../../config.js"
+import { Watcher } from "../../filesystem/watcher.js"
+import { Location } from "../../location.js"
+import { AbsolutePath } from "../../schema.js"
+import { Skill } from "../../skill.js"
+import { SkillDiscovery } from "../../skill/discovery.js"
+import { SkillFile } from "./skill-file.js"
 
 type Source = Skill.DirectorySource | Skill.UrlSource
 

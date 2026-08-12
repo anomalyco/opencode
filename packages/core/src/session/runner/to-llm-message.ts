@@ -1,7 +1,7 @@
 import { Message, ToolCallPart, ToolResultPart, type ContentPart, type ProviderMetadata } from "@opencode-ai/ai"
 import { Option, Schema } from "effect"
-import type { Model } from "../../model"
-import { SessionMessage } from "../message"
+import type { Model } from "../../model.js"
+import { SessionMessage } from "../message.js"
 import type { FileAttachment } from "@opencode-ai/schema/prompt"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
@@ -201,6 +201,15 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
     case "agent-switched":
     case "model-switched":
       return []
+    case "location-switched":
+      return [
+        Message.make({
+          id: message.id,
+          role: "user",
+          content: `The working directory has been changed to ${message.location.directory}.`,
+          metadata: message.metadata,
+        }),
+      ]
     case "user":
       const content = [
         ...(message.skills ?? []).map((skill) => Message.text(skill.text)),

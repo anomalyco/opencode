@@ -8,9 +8,9 @@ import {
   type ImageOptions,
   type ImageRequestFor,
   type ImageRoute,
-} from "../src"
-import type { Service } from "../src/image-client"
-import { Google, OpenAI, XAI, ZAI } from "../src/providers"
+} from "../src/index.js"
+import type { Service } from "../src/image-client.js"
+import { Google, OpenAI, XAI, ZAI } from "../src/providers.js"
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
 type Equal<A, B> = [A, B] extends [B, A] ? true : false

@@ -1,4 +1,3 @@
-import MarkdownWorkerUrl from "./markdown.worker.ts?worker&url"
 import {
   applyMarkdownWorkerResponse,
   shouldReleaseMarkdownWorkerState,
@@ -117,7 +116,7 @@ function getWorker() {
   if (worker) return worker
   if (disabled) throw new MarkdownWorkerUnavailableError(disabled.message)
   try {
-    worker = new Worker(MarkdownWorkerUrl, { type: "module" })
+    worker = new Worker(new URL("./markdown.worker.ts", import.meta.url), { type: "module" })
   } catch (error) {
     disabled = error instanceof Error ? error : new Error(String(error))
     throw new MarkdownWorkerUnavailableError(disabled.message)

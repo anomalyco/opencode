@@ -1,4 +1,4 @@
-export * as File from "./file"
+export * as File from "./file.js"
 
 import { FileDiff } from "@opencode-ai/schema/file-diff"
 

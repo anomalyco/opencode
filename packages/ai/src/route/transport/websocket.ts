@@ -1,8 +1,8 @@
 import { Cause, Context, Effect, Layer, Queue, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
-import { AIError, TransportReason, type TransportOperation } from "../../schema"
-import * as HttpTransport from "./http"
-import type { Transport } from "./index"
+import { AIError, TransportReason, type TransportOperation } from "../../schema/index.js"
+import * as HttpTransport from "./http.js"
+import type { Transport } from "./index.js"
 
 export interface WebSocketRequest {
   readonly url: string

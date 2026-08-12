@@ -10,4 +10,4 @@ export const requestExecutor = makeGlobalNode({
 
 export const llmClient = makeGlobalNode({ service: LLMClient.Service, layer: LLMClient.layer, deps: [requestExecutor] })
 
-export * as LayerNodePlatform from "./app-node-platform"
+export * as LayerNodePlatform from "./app-node-platform.js"

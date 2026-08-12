@@ -150,24 +150,89 @@ export interface Page {
   readonly render: (input: { readonly data?: Record<string, any> }) => JSX.Element
 }
 
+type PromptFooterInput = { readonly sessionID?: string; readonly mode: "normal" | "shell" }
+
+/**
+ * The host UI's slot tree. Every path is one slot: a named boundary a plugin
+ * may render around, inside, or take over. Paths are absolute and
+ * dot-separated, and a path contains every path it prefixes — replacing
+ * `prompt.footer` owns everything under `prompt.footer.*`.
+ *
+ * Each slot publishes an input: reactive props passed to every claim render
+ * targeting it. Inputs carry only what the SDK cannot answer — instance
+ * identity and client-local state. Paths and their inputs are documented
+ * API: coarse, few, and kept stable across host refactors.
+ */
 export interface SlotMap {
   readonly app: Readonly<Record<string, never>>
   readonly "home.footer": Readonly<Record<string, never>>
-  readonly "prompt.footer.end": {
-    readonly sessionID?: string
-    readonly mode: "normal" | "shell"
-  }
-  readonly "session.composer.top": {
-    readonly sessionID: string
-  }
-  readonly "sidebar.content": {
-    readonly sessionID: string
-  }
+  readonly "prompt.footer": PromptFooterInput
+  readonly "prompt.footer.status": PromptFooterInput
+  readonly "prompt.footer.file": PromptFooterInput
+  readonly "session.composer.top": { readonly sessionID: string }
+  readonly "sidebar.content": { readonly sessionID: string }
   readonly "sidebar.footer": Readonly<Record<string, never>>
 }
+export type SlotPath = keyof SlotMap
 
-export type SlotName = keyof SlotMap
-export type Slot<Name extends SlotName = SlotName> = (props: SlotMap[Name]) => JSX.Element
+/**
+ * One contribution to the slot tree. Exactly one placement key names an
+ * absolute target path:
+ * - `prepend` / `append`: first/last inside the target's boundary
+ * - `before` / `after`: siblings adjacent to the target, outside its boundary
+ * - `replace`: take over the target. The boundary itself survives — siblings
+ *   anchored `before`/`after` it still compose — but the original content and
+ *   every claim inside the boundary are suppressed and recorded, never
+ *   silently dropped. At the same target the last-enabled claim wins; an
+ *   ancestor replacement beats a descendant one regardless of enable order.
+ *
+ * A claim aimed at a path the host no longer publishes degrades: additive
+ * claims append to the nearest surviving ancestor, replacements are
+ * suppressed. Several claims at one anchor coexist in plugin enable order.
+ *
+ * `render` receives the target slot's input, reactively. The `?: never`
+ * fields make the variants mutually exclusive: a claim with two placement
+ * keys is a type error, not a silent priority pick.
+ */
+export type SlotClaim<Path extends SlotPath = SlotPath> = Path extends SlotPath
+  ? { readonly render: (input: SlotMap[Path]) => JSX.Element } & (
+      | {
+          readonly prepend: Path
+          readonly append?: never
+          readonly before?: never
+          readonly after?: never
+          readonly replace?: never
+        }
+      | {
+          readonly append: Path
+          readonly prepend?: never
+          readonly before?: never
+          readonly after?: never
+          readonly replace?: never
+        }
+      | {
+          readonly before: Path
+          readonly prepend?: never
+          readonly append?: never
+          readonly after?: never
+          readonly replace?: never
+        }
+      | {
+          readonly after: Path
+          readonly prepend?: never
+          readonly append?: never
+          readonly before?: never
+          readonly replace?: never
+        }
+      | {
+          readonly replace: Path
+          readonly prepend?: never
+          readonly append?: never
+          readonly before?: never
+          readonly after?: never
+        }
+    )
+  : never
 
 export interface App {
   readonly version: string
@@ -394,7 +459,8 @@ export interface UI {
     /** Closes an open tab, or the active tab when omitted, and returns false when no tab matched. */
     close(sessionID?: string): boolean
   }
-  readonly slot: <Name extends SlotName>(name: Name, render: Slot<Name>) => () => void
+  /** Claims a place in the slot tree; see SlotClaim. */
+  readonly slot: (claim: SlotClaim) => () => void
 }
 
 export interface Context {

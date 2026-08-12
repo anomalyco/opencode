@@ -3,7 +3,7 @@ import path from "path"
 import { Global } from "../global.js"
 import { runID } from "./shared.js"
 
-function formatter(id: string = runID) {
+function formatter(id: string = runID()) {
   return Logger.map(Logger.formatStructured, (output) => {
     const messages = Array.isArray(output.message) ? output.message : [output.message]
     return [
@@ -51,7 +51,7 @@ export function file(local = true, channel = "local") {
   return path.join(Global.Path.log, `opencode-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.log`)
 }
 
-export function fileLogger(target = file(), id: string = runID) {
+export function fileLogger(target = file(), id: string = runID()) {
   // Do not set batchWindow to 0; it causes high idle CPU usage.
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem

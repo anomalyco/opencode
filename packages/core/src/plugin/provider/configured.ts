@@ -1,8 +1,8 @@
 import { Effect, Option } from "effect"
 import type { Document } from "@opencode-ai/schema/config"
-import { Catalog } from "../../catalog"
-import { Config } from "../../config"
-import { Provider } from "../../provider"
+import { Catalog } from "../../catalog.js"
+import { Config } from "../../config.js"
+import { Provider } from "../../provider.js"
 
 export const configuredSettings = Effect.fn("ProviderPlugin.configuredSettings")(function* (id: Provider.ID) {
   const catalog = yield* Catalog.Service

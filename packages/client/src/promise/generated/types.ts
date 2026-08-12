@@ -65,6 +65,7 @@ export type SessionMessageSystem = {
   time: { created: number }
   type: "system"
   text: string
+  description?: string
 }
 
 export type SessionMessageSkill = {
@@ -407,6 +408,17 @@ export type ProviderRequest = {
 }
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
+
+export type SessionMessageLocationSwitched = {
+  id: string
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  type: "location-switched"
+  location: LocationRef
+  projectID?: string
+  subpath?: string
+  previous?: { location: LocationRef; projectID?: string; subpath?: string }
+}
 
 export type SessionCreated = {
   id: string
@@ -1943,6 +1955,7 @@ export type SessionInputAdmitted = {
 export type SessionMessageInfo =
   | SessionMessageAgentSelected
   | SessionMessageModelSelected
+  | SessionMessageLocationSwitched
   | SessionMessageUser
   | SessionMessageSynthetic
   | SessionMessageSystem
@@ -2550,6 +2563,20 @@ export type SessionImportInput = {
           readonly id: string
           readonly metadata?: { readonly [x: string]: JsonValue }
           readonly time: { readonly created: number }
+          readonly type: "location-switched"
+          readonly location: { readonly directory: string; readonly workspaceID?: string }
+          readonly projectID?: string
+          readonly subpath?: string
+          readonly previous?: {
+            readonly location: { readonly directory: string; readonly workspaceID?: string }
+            readonly projectID?: string
+            readonly subpath?: string
+          }
+        }
+      | {
+          readonly id: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly time: { readonly created: number }
           readonly text: string
           readonly files?: ReadonlyArray<{
             readonly data: string
@@ -2585,6 +2612,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "system"
           readonly text: string
+          readonly description?: string
         }
       | {
           readonly id: string
@@ -2802,6 +2830,20 @@ export type SessionImportInput = {
           readonly id: string
           readonly metadata?: { readonly [x: string]: JsonValue }
           readonly time: { readonly created: number }
+          readonly type: "location-switched"
+          readonly location: { readonly directory: string; readonly workspaceID?: string }
+          readonly projectID?: string
+          readonly subpath?: string
+          readonly previous?: {
+            readonly location: { readonly directory: string; readonly workspaceID?: string }
+            readonly projectID?: string
+            readonly subpath?: string
+          }
+        }
+      | {
+          readonly id: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly time: { readonly created: number }
           readonly text: string
           readonly files?: ReadonlyArray<{
             readonly data: string
@@ -2837,6 +2879,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "system"
           readonly text: string
+          readonly description?: string
         }
       | {
           readonly id: string
@@ -3054,6 +3097,20 @@ export type SessionImportInput = {
           readonly id: string
           readonly metadata?: { readonly [x: string]: JsonValue }
           readonly time: { readonly created: number }
+          readonly type: "location-switched"
+          readonly location: { readonly directory: string; readonly workspaceID?: string }
+          readonly projectID?: string
+          readonly subpath?: string
+          readonly previous?: {
+            readonly location: { readonly directory: string; readonly workspaceID?: string }
+            readonly projectID?: string
+            readonly subpath?: string
+          }
+        }
+      | {
+          readonly id: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly time: { readonly created: number }
           readonly text: string
           readonly files?: ReadonlyArray<{
             readonly data: string
@@ -3089,6 +3146,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "system"
           readonly text: string
+          readonly description?: string
         }
       | {
           readonly id: string
@@ -3892,7 +3950,10 @@ export type SessionLogInput = {
 
 export type SessionLogOutput = SessionLogItem
 
-export type SessionInterruptInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionInterruptInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly continue?: { readonly continue?: boolean | undefined }["continue"]
+}
 
 export type SessionInterruptOutput = void
 

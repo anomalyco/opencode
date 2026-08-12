@@ -1,11 +1,11 @@
-export * as Generate from "./generate"
+export * as Generate from "./generate.js"
 
 import { LLM, LLMClient, AIError } from "@opencode-ai/ai"
 import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { llmClient } from "./effect/app-node-platform"
-import { ModelResolver } from "./model-resolver"
-import { Model } from "./model"
+import { llmClient } from "./effect/app-node-platform.js"
+import { ModelResolver } from "./model-resolver.js"
+import { Model } from "./model.js"
 
 export interface TextInput {
   readonly prompt: string

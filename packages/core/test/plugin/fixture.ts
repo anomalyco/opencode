@@ -4,7 +4,6 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { Command } from "@opencode-ai/core/command"
 import { Config } from "@opencode-ai/core/config"
 import { Credential } from "@opencode-ai/core/credential"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
@@ -35,7 +34,7 @@ const npmLayer = Layer.succeed(
   }),
 )
 
-export const PluginTestLayer = AppNodeBuilder.build(
+export const PluginTestLayer = LayerNode.compile(
   LayerNode.group([
     FileSystem.node,
     FSUtil.node,

@@ -161,8 +161,8 @@ Skills are keyed by ID. If several sources define the same ID, the later source
 wins. Sources are registered in this order, from lower to higher precedence:
 
 1. Built-in skills
-2. `.claude/skills` sources, global first and then from the current directory upward
-3. `.agents/skills` sources, global first and then from the current directory upward
+2. `.claude/skills` sources, global first and then from the farthest ancestor toward the current directory
+3. `.agents/skills` sources, global first and then from the farthest ancestor toward the current directory
 4. `~/.config/opencode/skills`
 5. Project `.opencode/skills`, from the project root toward the current directory
 6. Explicit `skills` config entries, in config priority and array order

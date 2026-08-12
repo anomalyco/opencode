@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { Image, ImageClient } from "../../src"
-import { XAI } from "../../src/providers"
-import { Auth } from "../../src/route"
-import { it } from "../lib/effect"
-import { dynamicResponse } from "../lib/http"
+import { Image, ImageClient } from "../../src/index.js"
+import { XAI } from "../../src/providers.js"
+import { Auth } from "../../src/route.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse } from "../lib/http.js"
 
 describe("xAI Images", () => {
   it.effect("generates through the OpenAI-compatible Images API", () =>

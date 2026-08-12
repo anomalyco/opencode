@@ -7,6 +7,7 @@ import path from "path"
 import { ConfigProvider } from "../../src/config"
 import { ClientProvider, useClient } from "../../src/context/client"
 import { DataProvider, useData } from "../../src/context/data"
+import { LocationProvider } from "../../src/context/location"
 import { RouteProvider, useRoute } from "../../src/context/route"
 import { TuiAppProvider } from "../../src/context/runtime"
 import { SessionTabsProvider, useSessionTabs } from "../../src/context/session-tabs"
@@ -86,9 +87,11 @@ async function renderSessionTabs(
             >
               <ClientProvider api={createApi(calls.fetch)}>
                 <DataProvider>
-                  <SessionTabsProvider>
-                    <Probe />
-                  </SessionTabsProvider>
+                  <LocationProvider>
+                    <SessionTabsProvider>
+                      <Probe />
+                    </SessionTabsProvider>
+                  </LocationProvider>
                 </DataProvider>
               </ClientProvider>
             </RouteProvider>
@@ -268,6 +271,20 @@ test("tracks a temporary new session tab across close and creation", async () =>
 
     expect(setup.tabs.newTab()).toBe(false)
     expect(setup.tabs.tabs().find((tab) => tab.sessionID === "third")?.title).toBe(NEW_SESSION_TAB_TITLE)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("add opens the new session tab carrying the current session's location", async () => {
+  const setup = await renderSessionTabs("first")
+
+  try {
+    await wait(() => setup.tabs.current() === "first" && setup.data.session.get("first") !== undefined)
+    setup.tabs.add()
+    expect(setup.route.data).toEqual({ type: "home", location: { directory } })
+    await wait(() => setup.tabs.newTab())
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first"])
   } finally {
     await setup.destroy()
   }

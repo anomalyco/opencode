@@ -1,11 +1,11 @@
-export * as WebSearch from "./websearch"
+export * as WebSearch from "./websearch.js"
 
 import { WebSearch } from "@opencode-ai/schema/websearch"
 import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Bus } from "./bus"
-import { KV } from "./kv"
-import { State } from "./state"
+import { Bus } from "./bus.js"
+import { KV } from "./kv.js"
+import { State } from "./state.js"
 
 export const ID = WebSearch.ID
 export type ID = WebSearch.ID

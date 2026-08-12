@@ -1,9 +1,9 @@
-import type { ProviderPackage } from "../provider-package"
-import { OpenAICompatibleResponses } from "../protocols/openai-compatible-responses"
-import type { RouteDefaultsInput } from "../route/client"
-import { ProviderID, type ModelID } from "../schema"
-import { GoogleVertexShared } from "./google-vertex-shared"
-import type { OpenResponsesProviderOptionsInput } from "./open-responses-options"
+import type { ProviderPackage } from "../provider-package.js"
+import { OpenAICompatibleResponses } from "../protocols/openai-compatible-responses.js"
+import type { RouteDefaultsInput } from "../route/client.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
+import { GoogleVertexShared } from "./google-vertex-shared.js"
+import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
 export const id = ProviderID.make("google-vertex")
 

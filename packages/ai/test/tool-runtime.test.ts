@@ -10,18 +10,18 @@ import {
   ToolChoice,
   ToolOutput,
   toDefinitions,
-} from "../src"
-import { Auth, LLMClient } from "../src/route"
-import * as AnthropicMessages from "../src/protocols/anthropic-messages"
-import * as OpenAIChat from "../src/protocols/openai-chat"
-import * as OpenAIResponses from "../src/protocols/openai-responses"
-import { Tool, ToolFailure, type ToolExecuteContext } from "../src/tool"
-import { ToolRuntime } from "../src/tool-runtime"
-import { it } from "./lib/effect"
-import * as TestToolRuntime from "./lib/tool-runtime"
-import { dynamicResponse, scriptedResponses } from "./lib/http"
-import { deltaChunk, finishChunk, toolCallChunk } from "./lib/openai-chunks"
-import { sseEvents } from "./lib/sse"
+} from "../src/index.js"
+import { Auth, LLMClient } from "../src/route.js"
+import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
+import * as OpenAIChat from "../src/protocols/openai-chat.js"
+import * as OpenAIResponses from "../src/protocols/openai-responses.js"
+import { Tool, ToolFailure, type ToolExecuteContext } from "../src/tool.js"
+import { ToolRuntime } from "../src/tool-runtime.js"
+import { it } from "./lib/effect.js"
+import * as TestToolRuntime from "./lib/tool-runtime.js"
+import { dynamicResponse, scriptedResponses } from "./lib/http.js"
+import { deltaChunk, finishChunk, toolCallChunk } from "./lib/openai-chunks.js"
+import { sseEvents } from "./lib/sse.js"
 
 const model = OpenAIChat.route
   .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })

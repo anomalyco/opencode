@@ -3871,6 +3871,22 @@
               ]
             },
             "required": true
+          },
+          {
+            "name": "continue",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
           }
         ],
         "security": [],
@@ -3916,7 +3932,7 @@
             }
           }
         },
-        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op.",
+        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes if durable pending work remains after interruption.",
         "summary": "Interrupt session execution"
       }
     },
@@ -10930,7 +10946,7 @@
         "summary": "List references"
       }
     },
-    "/experimental/project/{projectID}/copy": {
+    "/api/experimental/project/{projectID}/copy": {
       "post": {
         "tags": ["projectCopy"],
         "operationId": "v2.projectCopy.create",
@@ -11156,7 +11172,7 @@
         }
       }
     },
-    "/experimental/project/{projectID}/copy/refresh": {
+    "/api/experimental/project/{projectID}/copy/refresh": {
       "post": {
         "tags": ["projectCopy"],
         "operationId": "v2.projectCopy.refresh",
@@ -12779,6 +12795,63 @@
         "required": ["id", "time", "type", "model"],
         "additionalProperties": false
       },
+      "Session.Message.LocationSwitched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^msg_"
+              }
+            ]
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "type": {
+            "type": "string",
+            "enum": ["location-switched"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "subpath": {
+            "type": "string"
+          },
+          "previous": {
+            "type": "object",
+            "properties": {
+              "location": {
+                "$ref": "#/components/schemas/Location.Ref"
+              },
+              "projectID": {
+                "type": "string"
+              },
+              "subpath": {
+                "type": "string"
+              }
+            },
+            "required": ["location"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "time", "type", "location"],
+        "additionalProperties": false
+      },
       "Prompt.Base64": {
         "type": "string",
         "allOf": [
@@ -13009,6 +13082,9 @@
             "enum": ["system"]
           },
           "text": {
+            "type": "string"
+          },
+          "description": {
             "type": "string"
           }
         },
@@ -13702,6 +13778,9 @@
           },
           {
             "$ref": "#/components/schemas/Session.Message.ModelSelected"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.LocationSwitched"
           },
           {
             "$ref": "#/components/schemas/Session.Message.User"

@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { DatabaseMigration } from "./migration"
+import type { DatabaseMigration } from "./migration.js"
 
 const schema: Omit<DatabaseMigration.Migration, "id"> = {
   up(tx) {
@@ -200,6 +200,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`time_compacting\` integer,
           \`time_archived\` integer,
           \`time_suspended\` integer,
+          \`resume_attempts\` integer DEFAULT 0 NOT NULL,
           CONSTRAINT \`fk_session_v2_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
         );
       `)

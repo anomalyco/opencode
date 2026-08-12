@@ -1,54 +1,54 @@
-export * as Session from "./session"
-export * from "./session/schema"
+export * as Session from "./session.js"
+export * from "./session/schema.js"
 
 import { Effect, Layer, Schema, Context, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, ne, or, type SQL } from "drizzle-orm"
-import { Project } from "./project"
-import { Workspace } from "./workspace"
-import { Model } from "./model"
-import { Location } from "./location"
-import { SessionMessage } from "./session/message"
+import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
+import { Project } from "./project.js"
+import { Workspace } from "./workspace.js"
+import { Model } from "./model.js"
+import { Location } from "./location.js"
+import { SessionMessage } from "./session/message.js"
 import { Base64, FileAttachment, Prompt } from "@opencode-ai/schema/prompt"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
-import { Bus } from "./bus"
-import { Database } from "./database/database"
-import { SessionProjector } from "./session/projector"
-import { SessionMessageTable, SessionTable } from "./session/sql"
-import { SessionSchema } from "./session/schema"
-import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
-import { Agent } from "./agent"
+import { Bus } from "./bus.js"
+import { Database } from "./database/database.js"
+import { SessionProjector } from "./session/projector.js"
+import { SessionMessageTable, SessionTable } from "./session/sql.js"
+import { SessionSchema } from "./session/schema.js"
+import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
+import { Agent } from "./agent.js"
 import { Money } from "@opencode-ai/schema/money"
-import { App } from "./app"
-import { Slug } from "./util/slug"
-import { ProjectTable } from "./project/sql"
+import { App } from "./app.js"
+import { Slug } from "./util/slug.js"
+import { upsertProject } from "./project/sql.js"
 import path from "path"
-import { fromRow } from "./session/info"
-import { SessionRunner } from "./session/runner/index"
-import { SessionStore } from "./session/store"
-import { SessionExecution } from "./session/execution"
-import { ForkEmptyError, MessageDecodeError, NotFoundError } from "./session/error"
+import { fromRow } from "./session/info.js"
+import { SessionRunner } from "./session/runner/index.js"
+import { SessionStore } from "./session/store.js"
+import { SessionExecution } from "./session/execution.js"
+import { ForkEmptyError, MessageDecodeError, NotFoundError } from "./session/error.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { LocationServiceMap } from "./location-service-map"
-import { SessionEvent } from "./session/event"
-import { SessionPending } from "./session/pending"
-import { InstructionState } from "./session/instruction-state"
-import { SessionGenerate } from "./session/generate"
-import { Snapshot } from "./snapshot"
-import { SessionRevert } from "./session/revert"
+import { LocationServiceMap } from "./location-service-map.js"
+import { SessionEvent } from "./session/event.js"
+import { SessionPending } from "./session/pending.js"
+import { InstructionState } from "./session/instruction-state.js"
+import { SessionGenerate } from "./session/generate.js"
+import { Snapshot } from "./snapshot.js"
+import { SessionRevert } from "./session/revert.js"
 import { Session } from "@opencode-ai/schema/session"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Image } from "./image"
-import { Mime } from "./mime"
+import { Image } from "./image.js"
+import { Mime } from "./mime.js"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import { Event } from "@opencode-ai/schema/event"
-import { Skill } from "./skill"
-import { Job } from "./job"
-import { Command } from "./command"
-import { Shell } from "./shell"
+import { Skill } from "./skill.js"
+import { Job } from "./job.js"
+import { Command } from "./command.js"
+import { Shell } from "./shell.js"
 import { Global } from "@opencode-ai/util/global"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
-import { KeyedMutex } from "./effect/keyed-mutex"
+import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { fileURLToPath } from "url"
 
 // get project -> project.locations
@@ -267,7 +267,7 @@ export interface Interface {
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
-  readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<void>
   readonly synthetic: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -309,22 +309,7 @@ const layer = Layer.effect(
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Info)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
-    const persistProject = (project: Project.Resolved) => {
-      const vcs = project.vcs?.type
-      return db
-        .insert(ProjectTable)
-        .values({ id: project.id, worktree: project.canonical, vcs, sandboxes: [] })
-        .onConflictDoUpdate({
-          target: ProjectTable.id,
-          set: { worktree: project.canonical, vcs: vcs ?? null },
-          setWhere: or(
-            ne(ProjectTable.worktree, project.canonical),
-            vcs ? or(isNull(ProjectTable.vcs), ne(ProjectTable.vcs, vcs)) : isNotNull(ProjectTable.vcs),
-          ),
-        })
-        .run()
-        .pipe(Effect.orDie)
-    }
+    const persistProject = (project: Project.Resolved) => upsertProject(db, project).pipe(Effect.orDie)
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
         Effect.mapError(
@@ -850,7 +835,14 @@ const layer = Layer.effect(
           }),
         ),
       ),
-      interrupt: Effect.fn("Session.interrupt")((sessionID) => Effect.uninterruptible(execution.interrupt(sessionID))),
+      interrupt: Effect.fn("Session.interrupt")((sessionID, options) =>
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            yield* execution.interrupt(sessionID)
+            if (options?.continue && (yield* SessionPending.has(db, sessionID, "any"))) yield* execution.wake(sessionID)
+          }),
+        ),
+      ),
       revert: {
         stage: Effect.fn("Session.revert.stage")(function* (input) {
           const session = yield* result.get(input.sessionID)

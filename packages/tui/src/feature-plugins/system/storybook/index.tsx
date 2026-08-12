@@ -137,6 +137,6 @@ export default Plugin.define({
         return <StorybookIndex context={context} />
       },
     })
-    context.ui.slot("app", () => <Commands context={context} />)
+    context.ui.slot({ append: "app", render: () => <Commands context={context} /> })
   },
 })

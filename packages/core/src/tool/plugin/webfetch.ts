@@ -1,4 +1,4 @@
-export * as WebFetchTool from "./webfetch"
+export * as WebFetchTool from "./webfetch.js"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
@@ -6,8 +6,8 @@ import { Duration, Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
 import TurndownService from "turndown"
-import { Permission } from "../../permission"
-import { collectBoundedResponseBody } from "../http-body"
+import { Permission } from "../../permission.js"
+import { collectBoundedResponseBody } from "../http-body.js"
 
 export const name = "webfetch"
 export const MAX_RESPONSE_BYTES = 5 * 1024 * 1024

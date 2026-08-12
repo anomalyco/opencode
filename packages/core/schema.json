@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "15060ec5-05f7-4b86-b2a5-9108609432b3",
-  "prevIds": ["1551a157-8959-4ba9-a52b-4ea3b7b28cae"],
+  "id": "00924d88-1842-4d71-ac74-5682ddc47e1c",
+  "prevIds": ["15060ec5-05f7-4b86-b2a5-9108609432b3"],
   "ddl": [
     {
       "name": "account_state",
@@ -1299,6 +1299,16 @@
       "default": null,
       "generated": null,
       "name": "time_suspended",
+      "entityType": "columns",
+      "table": "session_v2"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "resume_attempts",
       "entityType": "columns",
       "table": "session_v2"
     },

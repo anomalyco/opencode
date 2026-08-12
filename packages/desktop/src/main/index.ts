@@ -12,7 +12,7 @@ import contextMenu from "electron-context-menu"
 
 import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
-import { CHANNEL } from "./constants"
+import { CHANNEL, VERSION } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
 import { forwardInitializationFailure } from "./initialization"
 import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
@@ -25,6 +25,7 @@ import {
 } from "./onboarding"
 import { getDefaultServerUrl, preferAppEnv, setDefaultServerUrl } from "./server"
 import { setupAutoUpdater, showUpdaterDialog } from "./updater"
+import { registerUpdaterIpc } from "./updater-ipc"
 import { safeWebContentsURL } from "./window-state"
 import {
   getLastFocusedWindow,
@@ -134,7 +135,7 @@ const main = Effect.gen(function* () {
   initCrashReporter()
 
   const wslServers = createWslServersController(
-    app.getVersion(),
+    VERSION,
     async (distro) => {
       logger.log("spawning wsl sidecar", { distro })
       return spawnWslSidecar(distro, {
@@ -164,7 +165,7 @@ const main = Effect.gen(function* () {
   }
 
   logger.log("app starting", {
-    version: app.getVersion(),
+    version: VERSION,
     packaged: app.isPackaged,
     onboardingTest: Boolean(onboardingTestRoot),
   })
@@ -283,7 +284,6 @@ const main = Effect.gen(function* () {
     setDisplayBackend: async () => undefined,
     checkAppExists: (appName) => checkAppExists(appName),
     resolveAppPath: async (appName) => resolveAppPath(appName),
-    updater,
     showUpdater: () => showUpdaterDialog(updater, true),
     setBackgroundColor: (color) => setBackgroundColor(color),
     exportDebugLogs: () => exportDebugLogs(),
@@ -292,6 +292,7 @@ const main = Effect.gen(function* () {
       if (setNativeTranslations(bundle)) createMenu(menuDeps)
     },
   })
+  registerUpdaterIpc(updater)
   registerWslIpcHandlers(wslServers)
   void updater.start()
   const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)

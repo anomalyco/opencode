@@ -168,10 +168,41 @@ describe("Session.prompt", () => {
       yield* setup
       const session = yield* Session.Service
       interruptCalls.length = 0
+      wakeCalls.length = 0
 
       yield* session.interrupt(sessionID)
       expect(interruptCalls).toEqual([sessionID])
+      expect(wakeCalls).toEqual([])
       expect(yield* session.messages({ sessionID })).toEqual([])
+    }),
+  )
+
+  it.effect("continues after interruption when pending work remains", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      yield* session.synthetic({ sessionID, text: "Continue after interrupt", resume: false })
+      interruptCalls.length = 0
+      wakeCalls.length = 0
+
+      yield* session.interrupt(sessionID, { continue: true })
+
+      expect(interruptCalls).toEqual([sessionID])
+      expect(wakeCalls).toEqual([sessionID])
+    }),
+  )
+
+  it.effect("does not continue after interruption without pending work", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      interruptCalls.length = 0
+      wakeCalls.length = 0
+
+      yield* session.interrupt(sessionID, { continue: true })
+
+      expect(interruptCalls).toEqual([sessionID])
+      expect(wakeCalls).toEqual([])
     }),
   )
 

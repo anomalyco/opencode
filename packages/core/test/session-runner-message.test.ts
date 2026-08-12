@@ -8,6 +8,8 @@ import { Skill } from "@opencode-ai/schema/skill"
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { Agent } from "@opencode-ai/core/agent"
 import { Shell } from "@opencode-ai/schema/shell"
+import { Location } from "@opencode-ai/schema/location"
+import { AbsolutePath } from "@opencode-ai/schema/schema"
 import { DateTime } from "effect"
 
 const created = DateTime.makeUnsafe(0)
@@ -67,6 +69,15 @@ describe("toLLMMessages", () => {
           model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
           time: { created },
         }),
+        SessionMessage.LocationSwitched.make({
+          id: id("location"),
+          type: "location-switched",
+          location: Location.Ref.make({ directory: AbsolutePath.make("/destination") }),
+          previous: {
+            location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+          },
+          time: { created },
+        }),
         SessionMessage.System.make({
           id: id("system"),
           type: "system",
@@ -110,9 +121,16 @@ describe("toLLMMessages", () => {
       model,
     )
 
-    expect(messages.map((message) => message.role)).toEqual(["system", "user", "user", "user", "user"])
-    expect(messages[0]).toEqual(Message.system("Updated context\n\nOther context"))
-    expect(messages[1]).toEqual(
+    expect(messages.map((message) => message.role)).toEqual(["user", "system", "user", "user", "user", "user"])
+    expect(messages[0]).toEqual(
+      Message.make({
+        id: id("location"),
+        role: "user",
+        content: "The working directory has been changed to /destination.",
+      }),
+    )
+    expect(messages[1]).toEqual(Message.system("Updated context\n\nOther context"))
+    expect(messages[2]).toEqual(
       Message.make({
         id: id("user"),
         role: "user",
@@ -123,7 +141,7 @@ describe("toLLMMessages", () => {
         metadata: { agents: [{ name: "build" }] },
       }),
     )
-    expect(messages.slice(2).map((message) => message.content)).toEqual([
+    expect(messages.slice(3).map((message) => message.content)).toEqual([
       [{ type: "text", text: "Synthetic context" }],
       [
         {

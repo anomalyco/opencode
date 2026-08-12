@@ -7,8 +7,8 @@ import {
   type ImageInput,
   type ImageRequestFor,
   type ImageRoute,
-} from "../image"
-import { Auth, type Definition as AuthDefinition } from "../route/auth"
+} from "../image.js"
+import { Auth, type Definition as AuthDefinition } from "../route/auth.js"
 import {
   InvalidProviderOutputReason,
   AIError,
@@ -16,10 +16,10 @@ import {
   mergeHttpOptions,
   mergeJsonRecords,
   type HttpOptions,
-} from "../schema"
-import { ProviderShared } from "./shared"
-import { ImageInputs } from "./utils/image-input"
-import { OpenAIImage } from "./utils/openai-image"
+} from "../schema/index.js"
+import { ProviderShared } from "./shared.js"
+import { ImageInputs } from "./utils/image-input.js"
+import { OpenAIImage } from "./utils/openai-image.js"
 
 const ADAPTER = "openai-images"
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"

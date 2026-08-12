@@ -94,6 +94,15 @@ export const settings: Setting[] = [
     keywords: ["attachments", "images", "tool output"],
   },
   {
+    title: "New session location",
+    category: "Session",
+    path: ["session", "new_location"],
+    default: "launch",
+    values: ["launch", "inherit"],
+    labels: ["launch directory", "active session"],
+    keywords: ["directory", "cwd", "inherit"],
+  },
+  {
     title: "Enabled",
     category: "Tabs",
     path: ["tabs", "enabled"],

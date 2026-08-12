@@ -1,7 +1,7 @@
-export * as AISDKNative from "./aisdk-native"
+export * as AISDKNative from "./aisdk-native.js"
 
 import { isRecord } from "@opencode-ai/ai/utils/record"
-import { Provider } from "./provider"
+import { Provider } from "./provider.js"
 
 export interface Mapping {
   readonly package: string
@@ -51,6 +51,27 @@ export function map(input: MapInput): Mapping | undefined {
           ...mapGoogleOptions(input.settings),
         },
       }
+    case "@ai-sdk/google-vertex/anthropic":
+      return {
+        package: "@opencode-ai/ai/providers/google-vertex/messages",
+        settings: {
+          ...baseSettings,
+          ...(typeof input.settings.accessToken === "string" ? { accessToken: input.settings.accessToken } : {}),
+          ...(typeof input.settings.location === "string" ? { location: input.settings.location } : {}),
+          ...(typeof input.settings.project === "string" ? { project: input.settings.project } : {}),
+          ...(isRecord(input.settings.thinking) || typeof input.settings.effort === "string"
+            ? {
+                providerOptions: {
+                  anthropic: {
+                    ...(isRecord(input.settings.thinking) ? { thinking: input.settings.thinking } : {}),
+                    ...(typeof input.settings.effort === "string" ? { effort: input.settings.effort } : {}),
+                  },
+                },
+              }
+            : {}),
+        },
+        ...(isStringRecord(input.settings.headers) ? { headers: input.settings.headers } : {}),
+      }
     case "@openrouter/ai-sdk-provider":
       return mapOpenRouter(input.settings, baseSettings)
     case "@ai-sdk/xai":
@@ -88,9 +109,13 @@ function mapBedrockSettings(
       : typeof settings.bearerToken === "string"
         ? settings.bearerToken
         : undefined
-  const credentials = mapBedrockCredentials(settings)
+  const region = bedrockRegion(settings)
+  const credentials = mapBedrockCredentials(settings, region)
   return {
     ...baseSettings,
+    ...(typeof baseSettings.baseURL === "string" && region !== undefined
+      ? { baseURL: baseSettings.baseURL.replaceAll("${AWS_REGION}", region) }
+      : {}),
     ...(typeof settings.baseURL !== "string" && typeof settings.endpoint === "string"
       ? { baseURL: settings.endpoint }
       : {}),
@@ -155,14 +180,8 @@ function mapBedrockRequest(input: MapInput): Pick<Mapping, "headers" | "body"> {
   }
 }
 
-function mapBedrockCredentials(settings: Readonly<Record<string, unknown>>) {
+function mapBedrockCredentials(settings: Readonly<Record<string, unknown>>, region: string | undefined) {
   const credentials = isRecord(settings.credentials) ? settings.credentials : settings
-  const region =
-    typeof settings.region === "string"
-      ? settings.region
-      : typeof credentials.region === "string"
-        ? credentials.region
-        : undefined
   if (
     region === undefined ||
     typeof credentials.accessKeyId !== "string" ||
@@ -175,6 +194,15 @@ function mapBedrockCredentials(settings: Readonly<Record<string, unknown>>) {
     secretAccessKey: credentials.secretAccessKey,
     ...(typeof credentials.sessionToken === "string" ? { sessionToken: credentials.sessionToken } : {}),
   }
+}
+
+function bedrockRegion(settings: Readonly<Record<string, unknown>>) {
+  const credentials = isRecord(settings.credentials) ? settings.credentials : settings
+  return typeof settings.region === "string"
+    ? settings.region
+    : typeof credentials.region === "string"
+      ? credentials.region
+      : undefined
 }
 
 function mapOpenAIOptions(settings: Readonly<Record<string, unknown>>) {

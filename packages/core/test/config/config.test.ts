@@ -1464,13 +1464,13 @@ describe("Config", () => {
             ])
             expect(entries.filter((entry) => entry.type === "agents").map((entry) => entry.path)).toEqual([
               AbsolutePath.make(globalAgents),
-              AbsolutePath.make(path.join(directory, ".agents")),
               AbsolutePath.make(path.join(root, ".agents")),
+              AbsolutePath.make(path.join(directory, ".agents")),
             ])
             expect(entries.filter((entry) => entry.type === "claude").map((entry) => entry.path)).toEqual([
               AbsolutePath.make(globalClaude),
-              AbsolutePath.make(path.join(directory, ".claude")),
               AbsolutePath.make(path.join(root, ".claude")),
+              AbsolutePath.make(path.join(directory, ".claude")),
             ])
             expect(documents.map((document) => document.info.$schema)).toEqual([
               "global",
@@ -1483,11 +1483,11 @@ describe("Config", () => {
             ])
             expect(entries.map((entry) => (entry.type === "document" ? entry.info.$schema : entry.path))).toEqual([
               AbsolutePath.make(globalClaude),
-              AbsolutePath.make(path.join(directory, ".claude")),
               AbsolutePath.make(path.join(root, ".claude")),
+              AbsolutePath.make(path.join(directory, ".claude")),
               AbsolutePath.make(globalAgents),
-              AbsolutePath.make(path.join(directory, ".agents")),
               AbsolutePath.make(path.join(root, ".agents")),
+              AbsolutePath.make(path.join(directory, ".agents")),
               "global",
               AbsolutePath.make(global),
               "outside",

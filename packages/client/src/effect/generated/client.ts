@@ -233,7 +233,7 @@ import type {
   Endpoint29_0Input,
   Endpoint29_0Output,
 } from "../api/api.js"
-import { ClientError } from "./client-error"
+import { ClientError } from "./client-error.js"
 
 type RawClient = HttpApiClient.ForApi<typeof ClientApi>
 
@@ -596,7 +596,10 @@ const Endpoint5_31 = (raw: RawClient["server.session"]) => (input: Endpoint5_31I
 
 const Endpoint5_32 = (raw: RawClient["server.session"]) => (input: Endpoint5_32Input) =>
   preserveEffect<Endpoint5_32Output>()(
-    raw["session.interrupt"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+    raw["session.interrupt"]({
+      params: { sessionID: input["sessionID"] },
+      query: { continue: input["continue"] },
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const Endpoint5_33 = (raw: RawClient["server.session"]) => (input: Endpoint5_33Input) =>

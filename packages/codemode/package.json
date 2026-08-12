@@ -3,13 +3,24 @@
   "name": "@opencode-ai/codemode",
   "version": "1.18.4",
   "description": "Effect-native confined code execution over schema-described tools",
-  "private": true,
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/codemode"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
+    "build": "bun run script/build.ts",
     "typecheck": "tsgo --noEmit",
     "test": "bun test"
   },

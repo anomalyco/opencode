@@ -1,8 +1,8 @@
-import type { ProviderOptions } from "../schema"
-import { mergeProviderOptions } from "../schema"
-import type { OpenResponsesOptionsInput } from "./open-responses-options"
+import type { ProviderOptions } from "../schema/index.js"
+import { mergeProviderOptions } from "../schema/index.js"
+import type { OpenResponsesOptionsInput } from "./open-responses-options.js"
 
-export type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/utils/openai-options"
+export type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/utils/openai-options.js"
 
 export type OpenAIOptionsInput = OpenResponsesOptionsInput
 
@@ -67,4 +67,4 @@ export const withOpenAIOptions = <Options extends { readonly providerOptions?: O
   }
 }
 
-export * as OpenAIProviderOptions from "./openai-options"
+export * as OpenAIProviderOptions from "./openai-options.js"

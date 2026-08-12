@@ -1,13 +1,13 @@
-export * as Skill from "./skill"
+export * as Skill from "./skill.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Types } from "effect"
 import { Skill } from "@opencode-ai/schema/skill"
-import { Agent } from "./agent"
-import { Bus } from "./bus"
-import { Permission } from "./permission"
-import { State } from "./state"
+import { Agent } from "./agent.js"
+import { Bus } from "./bus.js"
+import { Permission } from "./permission.js"
+import { State } from "./state.js"
 
 export const DirectorySource = Skill.DirectorySource
 export type DirectorySource = Skill.DirectorySource

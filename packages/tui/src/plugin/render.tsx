@@ -1,15 +1,21 @@
 import {
   createComponent,
+  createContext,
   createMemo,
   ErrorBoundary,
   For,
   mergeProps,
+  onCleanup,
   onMount,
   Show,
+  useContext,
   type JSX,
   type ParentProps,
 } from "solid-js"
-import type { SlotMap, SlotName } from "@opencode-ai/plugin/tui/context"
+import { isShallowEqual } from "remeda"
+import type { SlotMap, SlotPath } from "@opencode-ai/plugin/tui/context"
+import type { SlotRender } from "./api"
+import { contains, emptySlotted, type Claim } from "./structure"
 import { useRoute } from "../context/route"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
@@ -64,31 +70,75 @@ export function PluginRoute(props: { readonly fallback: (id: string, name: strin
   )
 }
 
-export function PluginSlot<Name extends SlotName>(props: {
-  readonly name: Name
-  readonly input: SlotMap[Name]
-  readonly mode: "all" | "replace"
-}) {
+// The nearest enclosing slot's path. Root slots mount outside any provider.
+const SlotParent = createContext<string>()
+
+// `input` is required exactly when the path publishes a non-empty input.
+type SlotProps<Path extends SlotPath> = ParentProps<{ readonly path: Path }> &
+  ({} extends SlotMap[Path] ? { readonly input?: SlotMap[Path] } : { readonly input: SlotMap[Path] })
+
+// One named boundary of the host UI's slot tree. The host's own content are
+// the children; every active plugin claim targeting this path resolves into
+// siblings around it, contributions inside it, or one takeover of it.
+// Placement policy lives in resolveSlots; this component only renders its
+// own path's buckets.
+export function Slot<Path extends SlotPath>(props: SlotProps<Path>) {
   const plugins = usePlugin()
-  const renderers = createMemo(() => {
-    const items = plugins.slot(props.name)
-    if (props.mode === "replace") return items.slice(-1)
-    return items
-  })
+  // A slot's path is its identity for the whole mount; instances are
+  // reference-counted so the same path may be mounted several times (one
+  // composer footer per session tab).
+  const path = props.path
+  // Paths are declared, not inferred: nesting under the wrong parent would
+  // silently publish a mislocated public path, so containment fails loudly
+  // at mount. Only host code can trip this — plugins cannot mount slots.
+  const parent = useContext(SlotParent)
+  if (parent !== undefined && !contains(parent, path)) {
+    throw new Error(`Slot "${path}" is mounted inside "${parent}" but its path does not extend it`)
+  }
+  onCleanup(plugins.slots.register(path))
+  const input = () => (props as { readonly input?: SlotMap[Path] }).input ?? ({} as SlotMap[Path])
+  const slotted = createMemo(
+    () => plugins.slots.resolved().slotted.get(path) ?? emptySlotted<SlotRender>(),
+    emptySlotted<SlotRender>(),
+    // Claim objects are reference-stable across resolutions, so a bucketwise
+    // comparison makes a claim change elsewhere in the tree a no-op here.
+    {
+      equals: (a, b) =>
+        isShallowEqual(a.before, b.before) &&
+        isShallowEqual(a.prepend, b.prepend) &&
+        isShallowEqual(a.append, b.append) &&
+        isShallowEqual(a.after, b.after) &&
+        a.replace === b.replace,
+    },
+  )
+  // Component semantics: the render body runs once and untracked, so state
+  // created inside is stable while the slot input stays reactive through the
+  // merged getter.
+  const contribution = (claim: Claim<SlotRender>) => (
+    <PluginBoundary id={claim.plugin} where={`slot ${path}`}>
+      {createComponent(claim.render, mergeProps(input))}
+    </PluginBoundary>
+  )
   return (
-    <For each={renderers()}>
-      {(item) => (
-        <PluginBoundary id={item.id} where={`slot ${props.name}`}>
-          {
-            // Component semantics: the render body runs once and untracked, so
-            // signals and intervals created inside are stable, while props stay
-            // reactive through the merged getter. A bare item.render(props.input)
-            // call would run inside the host's tracked scope and re-execute the
-            // whole body (resetting plugin state) on every tracked read.
-            createComponent(item.render, mergeProps(() => props.input) as SlotMap[Name])
+    <>
+      <For each={slotted().before}>{contribution}</For>
+      {/* before/after are siblings outside the boundary, so outside the provider. */}
+      <SlotParent.Provider value={path}>
+        <Show
+          keyed
+          when={slotted().replace}
+          fallback={
+            <>
+              <For each={slotted().prepend}>{contribution}</For>
+              {props.children}
+              <For each={slotted().append}>{contribution}</For>
+            </>
           }
-        </PluginBoundary>
-      )}
-    </For>
+        >
+          {contribution}
+        </Show>
+      </SlotParent.Provider>
+      <For each={slotted().after}>{contribution}</For>
+    </>
   )
 }

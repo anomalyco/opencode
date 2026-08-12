@@ -1,10 +1,10 @@
-export * as SkillInstructions from "./instructions"
+export * as SkillInstructions from "./instructions.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Agent } from "../agent"
-import { Skill } from "../skill"
-import { Instructions } from "../instructions/index"
+import { Agent } from "../agent.js"
+import { Skill } from "../skill.js"
+import { Instructions } from "../instructions/index.js"
 
 const Summary = Schema.Struct({
   id: Skill.ID,

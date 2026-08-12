@@ -1,17 +1,13 @@
 /// <reference path="../markdown.d.ts" />
 
-export * as SkillPlugin from "./skill"
+export * as SkillPlugin from "./skill.js"
 
 import { define, type Context } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
-import { AbsolutePath } from "../schema"
-import { Skill } from "../skill"
-import { Config } from "../config"
-import { Location } from "../location"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { AbsolutePath } from "../schema.js"
+import { Skill } from "../skill.js"
+import { ConfigPluginSource } from "../config/plugin/source.js"
 import os from "os"
-import path from "path"
-import { fileURLToPath } from "url"
 import opencodeContent from "./skill/opencode.md" with { type: "text" }
 import reportContent from "./skill/report.md" with { type: "text" }
 
@@ -72,32 +68,10 @@ const reportContentWithDiagnostics = Effect.fn("SkillPlugin.reportContentWithDia
 })
 
 const configuredPlugins = Effect.fn("SkillPlugin.configuredPlugins")(function* () {
-  const config = yield* Config.Service
-  const fs = yield* FSUtil.Service
-  const location = yield* Location.Service
-  return yield* Effect.forEach(yield* config.entries(), (entry) => {
-    if (entry.type === "document") {
-      const directory = entry.path ? path.dirname(entry.path) : location.directory
-      return Effect.succeed(
-        (entry.info.plugins ?? []).map((item) => {
-          const ref = typeof item === "string" ? { package: item } : item
-          if (ref.package.startsWith("file://")) return fileURLToPath(ref.package)
-          if (ref.package.startsWith("./") || ref.package.startsWith("../")) return path.resolve(directory, ref.package)
-          return ref.package
-        }),
-      )
-    }
-    if (entry.type !== "directory") return Effect.succeed([])
-    return fs
-      .scan("{plugin,plugins}/*.{ts,js}", {
-        cwd: entry.path,
-        absolute: true,
-        include: "file",
-        dot: true,
-        symlink: true,
-      })
-      .pipe(Effect.orElseSucceed(() => []))
-  }).pipe(Effect.map((items) => items.flat().toSorted()))
+  const sources = yield* ConfigPluginSource.Service
+  return (yield* sources.operations())
+    .map((operation) => (operation.type === "remove" ? `-${operation.target}` : operation.target))
+    .toSorted()
 })
 
 function terminal() {

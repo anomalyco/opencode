@@ -38,6 +38,7 @@ import {
   TuiStartupProvider,
   TuiTerminalEnvironmentProvider,
   useTuiApp,
+  useTuiPaths,
   useTuiStartup,
   type TuiApp,
 } from "./context/runtime"
@@ -85,9 +86,10 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
+import { newSessionLocation } from "./config/new-session-location"
 import { PluginProvider, usePlugin, type PackageResolver } from "./plugin/context"
 import { tuiPluginDirectories } from "./plugin/discovery"
-import { PluginRoute, PluginSlot } from "./plugin/render"
+import { PluginRoute, Slot } from "./plugin/render"
 import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
@@ -453,6 +455,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   const log = useLog({ component: "app" })
   const app = useTuiApp()
   const startup = useTuiStartup()
+  const paths = useTuiPaths()
   const config = useConfig()
   const devtools = createMemo(() => config.data.debug?.devtools ?? app.channel === "local")
   const route = useRoute()
@@ -659,10 +662,13 @@ function App(props: { pair?: DialogPairCredentials }) {
         run: () => {
           route.navigate({
             type: "home",
-            location:
+            location: newSessionLocation(
+              config.data.session.new_location,
+              paths.cwd,
               route.data.type === "session"
                 ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
                 : undefined,
+            ),
           })
           dialog.clear()
         },
@@ -882,7 +888,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       {
         name: "server.pair",
         title: "Pair device",
-        slash: { name: "pair" },
+        slash: { name: "pair", aliases: ["web"] },
         run: () => {
           dialog.replace(() => <DialogPair credentials={props.pair} />)
         },
@@ -1240,7 +1246,7 @@ function App(props: { pair?: DialogPairCredentials }) {
                 </Match>
               </Switch>
             </box>
-            <PluginSlot name="app" input={{}} mode="all" />
+            <Slot path="app" />
           </Show>
         </box>
       </box>

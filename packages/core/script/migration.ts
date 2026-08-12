@@ -130,7 +130,7 @@ async function typescriptMigrations() {
 
 function renderMigration(name: string, sql: string) {
   return `import { Effect } from "effect"
-import type { DatabaseMigration } from "../migration"
+import type { DatabaseMigration } from "../migration.js"
 
 const migration: DatabaseMigration.Migration = {
   id: ${JSON.stringify(name)},
@@ -147,7 +147,7 @@ export default migration
 
 function renderSchema(sql: string) {
   return `import { Effect } from "effect"
-import type { DatabaseMigration } from "./migration"
+import type { DatabaseMigration } from "./migration.js"
 
 const schema: Omit<DatabaseMigration.Migration, "id"> = {
   up(tx) {
@@ -193,8 +193,8 @@ async function formatTypescript(input: string) {
 }
 
 function renderRegistry(names: string[]) {
-  return `import type { DatabaseMigration } from "./migration"
-${names.map((name, index) => `import m${index.toString().padStart(2, "0")} from "./migration/${name}"`).join("\n")}
+  return `import type { DatabaseMigration } from "./migration.js"
+${names.map((name, index) => `import m${index.toString().padStart(2, "0")} from "./migration/${name}.js"`).join("\n")}
 
 export const migrations = [
 ${names.map((_, index) => `  m${index.toString().padStart(2, "0")},`).join("\n")}

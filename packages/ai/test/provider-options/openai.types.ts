@@ -1,5 +1,5 @@
-import { LLM } from "../../src"
-import { OpenAI } from "../../src/providers"
+import { LLM } from "../../src/index.js"
+import { OpenAI } from "../../src/providers.js"
 
 const model = OpenAI.responses("gpt-5")
 

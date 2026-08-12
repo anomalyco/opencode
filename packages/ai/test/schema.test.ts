@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import * as OpenAIChat from "../src/protocols/openai-chat"
-import * as OpenAIResponses from "../src/protocols/openai-responses"
+import * as OpenAIChat from "../src/protocols/openai-chat.js"
+import * as OpenAIResponses from "../src/protocols/openai-responses.js"
 import {
   AIError,
   ContentPart,
@@ -12,8 +12,8 @@ import {
   ModelID,
   ProviderID,
   Usage,
-} from "../src/schema"
-import { ProviderShared } from "../src/protocols/shared"
+} from "../src/schema/index.js"
+import { ProviderShared } from "../src/protocols/shared.js"
 
 const model = new LanguageModel({
   id: ModelID.make("fake-model"),

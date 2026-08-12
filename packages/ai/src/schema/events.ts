@@ -1,7 +1,7 @@
 import { Schema } from "effect"
-import { ContentBlockID, FinishReason, ProviderMetadata, ToolCallID } from "./ids"
-import { Message, ToolCallPart, ToolOutput, ToolResultPart, ToolResultValue, type ContentPart } from "./messages"
-import { ProviderFailureClassification } from "./errors"
+import { ContentBlockID, FinishReason, ProviderMetadata, ToolCallID } from "./ids.js"
+import { Message, ToolCallPart, ToolOutput, ToolResultPart, ToolResultValue, type ContentPart } from "./messages.js"
+import { ProviderFailureClassification } from "./errors.js"
 
 /**
  * Token usage reported by an LLM provider.

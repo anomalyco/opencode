@@ -655,6 +655,18 @@ test("updates session location when moved", async () => {
     await wait(() => data.session.get("ses_test")?.location.directory === destination)
     expect(data.session.get("ses_test")?.projectID).toBe("project-moved")
     expect(data.session.get("ses_test")?.subpath).toBe("packages/cli")
+    expect(data.session.message.list("ses_test")).toContainEqual({
+      id: "msg_moved_1",
+      type: "location-switched",
+      location: { directory: destination },
+      projectID: "project-moved",
+      subpath: "packages/cli",
+      previous: {
+        location: { directory },
+        projectID: "proj_test",
+      },
+      time: { created: 1 },
+    })
   } finally {
     app.renderer.destroy()
   }
@@ -2889,14 +2901,26 @@ test("skips initial instruction state and projects later updates with their mess
         delta: { "core/date": "1".repeat(64) },
       },
     })
+    emitEvent(events, {
+      id: "evt_instructions_3",
+      created: 2,
+      type: "session.instructions.updated",
+      durable: durable("session-1", 2, 2),
+      data: {
+        sessionID: "session-1",
+        delta: { "core/date": "2".repeat(64) },
+        text: "The current date has changed.",
+      },
+    })
 
-    await wait(() => sync.session.message.list("session-1")?.some((message) => message.time.created === 1))
+    await wait(() => sync.session.message.list("session-1")?.some((message) => message.time.created === 2))
     expect(sync.session.message.list("session-1")).toHaveLength(1)
     expect(sync.session.message.list("session-1")?.[0]).toMatchObject({
-      id: SessionMessage.ID.fromEvent(Event.ID.make("evt_instructions_2")),
+      id: SessionMessage.ID.fromEvent(Event.ID.make("evt_instructions_3")),
       type: "system",
-      text: "Instructions updated: core/date",
-      time: { created: 1 },
+      text: "The current date has changed.",
+      description: "Instructions updated: core/date",
+      time: { created: 2 },
     })
   } finally {
     app.renderer.destroy()

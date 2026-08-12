@@ -86,7 +86,7 @@ import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
-import { PluginSlot } from "../../plugin/render"
+import { Slot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
 import {
   cacheReuseDrop,
@@ -1088,7 +1088,7 @@ export function Session() {
               <Show when={!composer.open && !disabled() && queuedPrompts().length > 0}>
                 <QueuedPromptDock prompts={queuedPrompts()} onOpen={openQueuedPrompts} />
               </Show>
-              <PluginSlot name="session.composer.top" input={{ sessionID: route.sessionID }} mode="all" />
+              <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
               <Composer
                 sessionID={route.sessionID}
                 open={composer.open || (!!session()?.parentID && forms().length === 0)}
@@ -1222,6 +1222,11 @@ function TurnTokenUsage(props: {
 }) {
   const config = useConfig()
   const theme = useTheme()
+  const renderer = useRenderer()
+  // Collapsed by default: one summary line for the whole turn. Click to
+  // open the full per-step table, click again to close.
+  const [expanded, setExpanded] = createSignal(false)
+  const [hover, setHover] = createSignal(false)
   const verbose = () => config.data.debug?.turn_tokens === "verbose"
   const steps = createMemo(() => {
     let previousCache = props.previousCache
@@ -1257,49 +1262,78 @@ function TurnTokenUsage(props: {
     cached: Math.max("Cached".length, ...steps().map((item) => item.cached.toLocaleString().length)),
     total: Math.max("Total".length, ...steps().map((item) => item.total.toLocaleString().length)),
   }))
+  const summary = createMemo(() => {
+    const items = steps()
+    const last = items[items.length - 1]
+    return {
+      count: items.length,
+      newTokens: items.reduce((sum, item) => sum + item.newTokens, 0),
+      cached: last?.cached ?? 0,
+      total: last?.total ?? 0,
+      reuseDrops: items.filter((item) => item.reuseDrop !== undefined).length,
+    }
+  })
   return (
     <Show when={Boolean(config.data.debug?.turn_tokens) && steps().length > 0}>
       <box paddingLeft={3} flexDirection="column">
-        <box flexDirection="row">
-          <text width={INLINE_TOOL_ICON_WIDTH} fg={theme.text.subdued}>
-            ◈
-          </text>
-          <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
-            Tokens
+        <box
+          flexDirection="row"
+          onMouseOver={() => setHover(true)}
+          onMouseOut={() => setHover(false)}
+          onMouseUp={() => {
+            if (renderer.getSelection()?.getSelectedText()) return
+            setExpanded((value) => !value)
+          }}
+        >
+          <text fg={hover() ? theme.text.default : theme.text.subdued} wrapMode="none">
+            <span>{expanded() ? "- " : "+ "}</span>
+            <span style={{ attributes: TextAttributes.BOLD }}>Tokens</span>
+            <span>
+              : {summary().count} {summary().count === 1 ? "step" : "steps"} · {summary().newTokens.toLocaleString()}{" "}
+              new · {summary().cached.toLocaleString()} cached · {summary().total.toLocaleString()} total
+            </span>
+            <Show when={summary().reuseDrops > 0}>
+              <span style={{ fg: theme.text.feedback.warning.default }}>
+                {" "}
+                · ! {summary().reuseDrops} likely cache {summary().reuseDrops === 1 ? "bust" : "busts"}
+              </span>
+            </Show>
           </text>
         </box>
-        <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
-          <text fg={theme.text.subdued} attributes={TextAttributes.ITALIC}>
-            {"Step".padEnd(columns().step + 2)}
-            {"New".padStart(columns().newTokens)}
-            {"  "}
-            {"Cached".padStart(columns().cached)}
-            {"  "}
-            {"Total".padStart(columns().total)}
-          </text>
-        </box>
-        <For each={steps()}>
-          {(item) => (
-            <box paddingLeft={INLINE_TOOL_ICON_WIDTH} flexDirection="column">
-              <text fg={verbose() && item.finish === "tool-call" ? undefined : theme.text.subdued}>
-                {item.finish.padEnd(columns().step + 2)}
-                <span style={{ attributes: TextAttributes.BOLD }}>
-                  {item.newTokens.toLocaleString().padStart(columns().newTokens)}
-                </span>
-                {"  "}
-                {item.cached.toLocaleString().padStart(columns().cached)}
-                {"  "}
-                {item.total.toLocaleString().padStart(columns().total)}
-              </text>
-              <TurnTokenToolCalls tools={item.tools} />
-              <Show when={item.reuseDrop !== undefined}>
-                <text fg={theme.text.feedback.warning.default}>
-                  ! Likely cache bust: {item.reuseDrop?.toLocaleString()} fewer cached tokens than the previous step
+        <Show when={expanded()}>
+          <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
+            <text fg={theme.text.subdued} attributes={TextAttributes.ITALIC}>
+              {"Step".padEnd(columns().step + 2)}
+              {"New".padStart(columns().newTokens)}
+              {"  "}
+              {"Cached".padStart(columns().cached)}
+              {"  "}
+              {"Total".padStart(columns().total)}
+            </text>
+          </box>
+          <For each={steps()}>
+            {(item) => (
+              <box paddingLeft={INLINE_TOOL_ICON_WIDTH} flexDirection="column">
+                <text fg={verbose() && item.finish === "tool-call" ? undefined : theme.text.subdued}>
+                  {item.finish.padEnd(columns().step + 2)}
+                  <span style={{ attributes: TextAttributes.BOLD }}>
+                    {item.newTokens.toLocaleString().padStart(columns().newTokens)}
+                  </span>
+                  {"  "}
+                  {item.cached.toLocaleString().padStart(columns().cached)}
+                  {"  "}
+                  {item.total.toLocaleString().padStart(columns().total)}
                 </text>
-              </Show>
-            </box>
-          )}
-        </For>
+                <TurnTokenToolCalls tools={item.tools} />
+                <Show when={item.reuseDrop !== undefined}>
+                  <text fg={theme.text.feedback.warning.default}>
+                    ! Likely cache bust: {item.reuseDrop?.toLocaleString()} fewer cached tokens than the previous step
+                  </text>
+                </Show>
+              </box>
+            )}
+          </For>
+        </Show>
       </box>
     </Show>
   )
@@ -1379,7 +1413,13 @@ function SessionMessageView(props: { message: SessionMessageInfo }) {
       <Match when={props.message.type === "shell"}>
         <ShellMessage message={props.message as Extract<SessionMessageInfo, { type: "shell" }>} />
       </Match>
-      <Match when={props.message.type === "agent-switched" || props.message.type === "model-switched"}>
+      <Match
+        when={
+          props.message.type === "agent-switched" ||
+          props.message.type === "model-switched" ||
+          props.message.type === "location-switched"
+        }
+      >
         <SessionSwitchMessageV2 message={props.message} />
       </Match>
       <Match
@@ -1670,6 +1710,7 @@ function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
     }
     if (props.message.type === "model-switched")
       return switchLabel(props.message.model, ctx.models(), props.message.previous)
+    if (props.message.type === "location-switched") return `Switched location to ${props.message.location.directory}`
     return ""
   }
   return (
@@ -1688,7 +1729,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const state = () => stringValue(metadata()?.state)
   const actor = () => (source() === "shell" ? "Shell" : Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent"))
   const text = () => {
-    if (props.message.type === "system") return props.message.text
+    if (props.message.type === "system") return props.message.description ?? "Instructions updated"
     if (props.message.type === "synthetic") return props.message.description ?? ""
     return ""
   }
@@ -2819,10 +2860,15 @@ function Shell(props: ToolProps) {
   })
   const maxLines = 10
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
+  const prompt = createMemo(() => (workdir() && workdir() !== "." ? `${workdir()}$` : "$"))
   const input = createMemo(() => {
-    if (!command()) return ""
-    const prompt = workdir() && workdir() !== "." ? `${workdir()}$ ` : isRunning() ? "" : "$ "
-    return `${prompt}${command()}`
+    const cmd = command()
+    if (!cmd) return ""
+    // While running, the workdir prompt shares the spinner's text column; when
+    // settled, the prompt renders as its own column so wrapped command lines
+    // keep a stable hanging indent instead of jumping to the card inset.
+    if (isRunning() && prompt() !== "$") return `${prompt()} ${cmd}`
+    return cmd
   })
   const content = createMemo(() => [input(), output()].filter(Boolean).join("\n\n"))
   const collapsed = createMemo(() => collapseToolOutput(content(), maxLines, maxChars()))
@@ -2830,6 +2876,8 @@ function Shell(props: ToolProps) {
     if (expanded() || !collapsed().overflow) return content()
     return collapsed().output
   })
+  const limitedInput = createMemo(() => limited().slice(0, input().length))
+  const limitedOutput = createMemo(() => limited().slice(Math.min(limited().length, input().length + 2)))
   const expandable = createMemo(() => Boolean(shellID()) || collapsed().overflow)
   const toggle = () => {
     const next = !expanded()
@@ -2853,16 +2901,16 @@ function Shell(props: ToolProps) {
           <Show
             when={isRunning()}
             fallback={
-              <text>
-                <span style={{ fg: theme.text.default }}>{limited().slice(0, input().length)}</span>
-                <span style={{ fg: theme.text.subdued }}>{limited().slice(input().length)}</span>
-              </text>
+              <box flexDirection="row" gap={1}>
+                <text fg={theme.text.default}>{prompt()}</text>
+                <text fg={theme.text.default}>{limitedInput()}</text>
+              </box>
             }
           >
-            <Spinner color={color()}>
-              <span style={{ fg: theme.text.default }}>{limited().slice(0, input().length)}</span>
-              <span style={{ fg: theme.text.subdued }}>{limited().slice(input().length)}</span>
-            </Spinner>
+            <Spinner color={color()}>{limitedInput()}</Spinner>
+          </Show>
+          <Show when={limitedOutput()}>
+            <text fg={theme.text.subdued}>{limitedOutput()}</text>
           </Show>
         </Show>
         <Show when={background()}>
@@ -2883,7 +2931,7 @@ function Write(props: ToolProps) {
 
   return (
     <Switch>
-      <Match when={props.metadata.diagnostics !== undefined}>
+      <Match when={props.part.state.status === "completed"}>
         <BlockTool
           path={{ label: "# Wrote", value: pathFormatter.format(stringValue(props.input.path)) }}
           part={props.part}

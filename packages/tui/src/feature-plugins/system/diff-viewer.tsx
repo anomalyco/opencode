@@ -1090,6 +1090,6 @@ export default Plugin.define({
       name: ROUTE,
       render: () => <DiffViewer context={context} />,
     })
-    context.ui.slot("app", () => <Commands context={context} />)
+    context.ui.slot({ append: "app", render: () => <Commands context={context} /> })
   },
 })

@@ -20,8 +20,6 @@ import {
   setTitlebar,
   updateTitlebar,
 } from "./windows"
-import type { UpdaterController } from "./updater-controller"
-import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
 import { nativeT } from "./native-translations"
 
@@ -46,7 +44,6 @@ type Deps = {
   setDisplayBackend: (backend: string | null) => Promise<void> | void
   checkAppExists: (appName: string) => Promise<boolean> | boolean
   resolveAppPath: (appName: string) => Promise<string | null>
-  updater: UpdaterController
   showUpdater: () => Promise<void> | void
   setBackgroundColor: (color: string) => void
   exportDebugLogs: () => Promise<string>
@@ -56,8 +53,6 @@ type Deps = {
 
 export function registerIpcHandlers(deps: Deps) {
   const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
-  const updaterSubscriptions = createUpdaterSubscriptions()
-  app.once("will-quit", updaterSubscriptions.clear)
   app.on("before-quit", () => drafts.flush())
   app.once("will-quit", () => drafts.close())
   app.on("browser-window-created", (_event, win) => win.on("session-end", () => drafts.flush()))
@@ -80,20 +75,6 @@ export function registerIpcHandlers(deps: Deps) {
   )
   ipcMain.handle("check-app-exists", (_event: IpcMainInvokeEvent, appName: string) => deps.checkAppExists(appName))
   ipcMain.handle("resolve-app-path", (_event: IpcMainInvokeEvent, appName: string) => deps.resolveAppPath(appName))
-  ipcMain.handle("updater-subscribe", (event) => {
-    const id = event.sender.id
-    updaterSubscriptions.set(
-      id,
-      deps.updater.subscribe((state) => {
-        if (event.sender.isDestroyed()) return updaterSubscriptions.delete(id)
-        event.sender.send("updater-state", state)
-      }),
-    )
-    event.sender.once("destroyed", () => updaterSubscriptions.delete(id))
-  })
-  ipcMain.handle("updater-unsubscribe", (event) => updaterSubscriptions.delete(event.sender.id))
-  ipcMain.handle("updater-check", () => deps.updater.check())
-  ipcMain.handle("updater-install", () => deps.updater.install())
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
   ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
   ipcMain.handle("set-force-focus", (event: IpcMainInvokeEvent, enabled: boolean) =>

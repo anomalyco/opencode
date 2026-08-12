@@ -1,18 +1,18 @@
 import { describe, expect } from "bun:test"
-import { NodeFileSystem } from "@effect/platform-node"
-import { Config } from "@opencode-ai/core/config"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Location } from "@opencode-ai/core/location"
-import { Effect, Stream } from "effect"
+import { ConfigPluginSource } from "@opencode-ai/core/config/plugin/source"
+import { Effect, Layer, Stream } from "effect"
 import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
-import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Skill } from "@opencode-ai/core/skill"
-import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
 
 const it = testEffect(AppNodeBuilder.build(Skill.node))
+const sources = (operations: readonly ConfigPluginSource.Operation[] = []) =>
+  Layer.succeed(
+    ConfigPluginSource.Service,
+    ConfigPluginSource.Service.of({ operations: () => Effect.succeed(operations), changes: () => Stream.never }),
+  )
 
 describe("SkillPlugin.Plugin", () => {
   it.effect("registers built-in skills", () =>
@@ -27,15 +27,7 @@ describe("SkillPlugin.Plugin", () => {
             reload: skill.reload,
           },
         }),
-      ).pipe(
-        Effect.provide(Config.testLayer()),
-        Effect.provideService(
-          Location.Service,
-          Location.Service.of(location({ directory: AbsolutePath.make(import.meta.dir) })),
-        ),
-        Effect.provide(AppNodeBuilder.build(FSUtil.node)),
-        Effect.provide(NodeFileSystem.layer),
-      )
+      ).pipe(Effect.provide(sources()))
       const skills = yield* skill.list()
       const report = skills.find((item) => item.id === "report")
 
@@ -57,5 +49,31 @@ describe("SkillPlugin.Plugin", () => {
       expect(report?.content).toContain("- opencode version: 1.2.3")
       expect(report?.content).toContain("- install/channel: beta")
     }),
+  )
+
+  it.effect("reports canonical configured plugin sources with existing labels and ordering", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      yield* SkillPlugin.Plugin.effect(
+        host({
+          skill: {
+            list: () => Effect.die("unused skill.list"),
+            transform: skill.transform,
+            reload: skill.reload,
+          },
+        }),
+      )
+      const report = (yield* skill.list()).find((item) => item.id === "report")
+      expect(report?.content).toContain("- Active plugins: -disabled, local.ts, package-plugin, package-plugin")
+    }).pipe(
+      Effect.provide(
+        sources([
+          { type: "add", target: "package-plugin", options: {} },
+          { type: "remove", target: "disabled" },
+          { type: "add", target: "local.ts", options: {}, mtime: 1 },
+          { type: "add", target: "package-plugin", options: { enabled: true } },
+        ]),
+      ),
+    ),
   )
 })
