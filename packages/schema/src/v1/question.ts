@@ -27,6 +27,9 @@ const base = {
 export const Info = Schema.Struct({
   ...base,
   custom: Schema.optional(Schema.Boolean).annotate({ description: "Allow typing a custom answer (default: true)" }),
+  default: Schema.optional(Schema.String).annotate({
+    description: "Pre-fill the custom answer field with this text (for review/edit workflows)",
+  }),
 }).annotate({ identifier: "QuestionInfo" })
 export const Prompt = Schema.Struct(base).annotate({ identifier: "QuestionPrompt" })
 export const Tool = Schema.Struct({ messageID: SessionV1.MessageID, callID: Schema.String }).annotate({

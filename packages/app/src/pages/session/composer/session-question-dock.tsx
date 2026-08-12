@@ -108,6 +108,18 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const hidden = createMemo(() => Math.max(0, Math.min(1, collapse())))
   const optionsOff = createMemo(() => hidden() > 0.98)
 
+  // Pre-fill the custom textarea with a question's proposed content (e.g. a
+  // review/edit workflow) so the user can revise it before submitting.
+  createEffect(() => {
+    const proposed = question()?.default
+    const tab = store.tab
+    if (!proposed) return
+    if (store.customOn[tab]) return
+    if ((store.custom[tab] ?? "") !== "") return
+    setStore("custom", tab, proposed)
+    setStore("customOn", tab, true)
+  })
+
   const customUpdate = (value: string, selected: boolean = on()) => {
     const prev = input().trim()
     const next = value.trim()

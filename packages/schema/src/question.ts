@@ -37,6 +37,9 @@ export const Info = Schema.Struct({
   custom: Schema.Boolean.pipe(optional).annotate({
     description: "Allow typing a custom answer (default: true)",
   }),
+  default: Schema.String.pipe(optional).annotate({
+    description: "Pre-fill the custom answer field with this text (for review/edit workflows)",
+  }),
 }).annotate({ identifier: "QuestionV2.Info" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
