@@ -1,5 +1,5 @@
 import { RGBA, ScrollBoxRenderable, TextAttributes, type MouseEvent } from "@opentui/core"
-import { For, Show, createComputed, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
+import { For, Match, Show, Switch, createComputed, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
@@ -57,12 +57,29 @@ export const EMPTY_SESSION_TAB_STATUS: SessionTabsStatus = {
 export type SessionTabsController = Pick<ContextController, "tabs" | "current" | "select" | "close" | "move"> & {
   newTab?: () => boolean
   add?: () => void
+  detail?: (sessionID: string) => string | undefined
   status(sessionID: string): SessionTabsStatus
 }
-
 const NEW_SESSION_TAB: SessionTab = { sessionID: "new", title: NEW_SESSION_TAB_TITLE }
 const glowTextColor = (base: RGBA, glow: RGBA, index: number, width: number) =>
   tint(base, glow, 0.12 * unreadGlowIntensity(index, width))
+
+function createNumberIgnition(runs: () => boolean, prompt: () => number, animations: () => boolean) {
+  const ignition = createAnimatable({ level: 0 }, { enabled: animations, transition: tween({ duration: 0.7 }) })
+  let wasRunning = runs()
+  let promptPulse = prompt()
+  createEffect(() => {
+    const running = runs()
+    const nextPromptPulse = prompt()
+    if (running !== wasRunning || nextPromptPulse !== promptPulse) {
+      ignition.jump({ level: 0.85 })
+      ignition.animate({ level: 0 })
+    }
+    wasRunning = running
+    promptPulse = nextPromptPulse
+  })
+  return ignition
+}
 
 function fadeTitleColor(color: RGBA, background: RGBA, index: number, length: number, leading: number) {
   const fade = (position: number) => (position <= 0 ? 0 : 0.2 + 0.72 * ((position - 1) / Math.max(1, FADE_WIDTH - 1)))
@@ -247,15 +264,30 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
 }
 
 export function SessionTabs(
-  props: { controller?: SessionTabsController; animations?: boolean; orientation?: "horizontal" | "vertical" } = {},
+  props: {
+    controller?: SessionTabsController
+    animations?: boolean
+    orientation?: "horizontal" | "vertical"
+  } = {},
 ) {
-  if (props.orientation === "vertical")
-    return <VerticalSessionTabs controller={props.controller} animations={props.animations} />
-  return <HorizontalSessionTabs controller={props.controller} animations={props.animations} />
+  return (
+    <Switch>
+      <Match when={props.orientation === "vertical"}>
+        <VerticalSessionTabs
+          controller={props.controller}
+          animations={props.animations}
+        />
+      </Match>
+      <Match when={true}>
+        <HorizontalSessionTabs controller={props.controller} animations={props.animations} />
+      </Match>
+    </Switch>
+  )
 }
 
 function VerticalSessionTabs(props: { controller?: SessionTabsController; animations?: boolean }) {
-  const tabs = props.controller ?? useSessionTabs()
+  const contextTabs = useSessionTabs()
+  const tabs: SessionTabsController = props.controller ?? contextTabs
   const data = useData()
   const theme = useTheme("elevated")
   const { mode } = useThemes()
@@ -367,6 +399,8 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
               const titleFades = createMemo(() => marqueeOverflows(title(), titleWidth()) && titleWidth() > FADE_WIDTH)
               const detail = createMemo(() => {
+                const fixture = tabs.detail?.(tab.sessionID)
+                if (fixture !== undefined) return Locale.takeWidth(fixture, titleWidth())
                 const value = session()
                 return Locale.takeWidth(projectName(project(), value?.location.directory) ?? "", titleWidth())
               })
@@ -377,15 +411,30 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                 return theme.background.default
               })
               const pulseBackground = createMemo(() => tint(theme.background.default, background(), background().a))
+              const runs = () => status().runs
+              const numberIgnition = createNumberIgnition(runs, () => status().promptPulse, animations)
               const numberColor = () => {
-                if (status().attention) return theme.text.feedback.warning.default
-                if (status().unread === "error") return theme.text.feedback.error.default
                 const base =
                   hovered() === tab.sessionID && !selected()
                     ? foreground()
-                    : tint(idleNumber(), activeNumber(), Number(selected()))
-                const color = tint(base, accent(), Number(complete()))
-                return sweepLevel() === 0 ? color : tint(color, theme.text.default, 0.15 * sweepLevel())
+                    : tint(
+                        idleNumber(),
+                        tint(theme.text.default, pulseBackground(), 0.25),
+                        Number(selected()),
+                      )
+                const color = status().attention
+                  ? theme.text.feedback.warning.default
+                  : status().unread === "error"
+                    ? theme.text.feedback.error.default
+                    : tint(base, accent(), Number(complete()))
+                const runningColor = runs() ? activeNumber() : color
+                return sweepLevel() === 0
+                  ? tint(runningColor, theme.text.default, numberIgnition.value().level)
+                  : tint(
+                      runningColor,
+                      theme.text.default,
+                      Math.max(numberIgnition.value().level, 0.35 * sweepLevel()),
+                    )
               }
               const foreground = () => {
                 if (hovered() === tab.sessionID) return theme.text.default
@@ -398,8 +447,10 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                 return accent()
               }
               const pulseColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.25))
+              const flashColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.7))
               const glowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.45))
               const detailPulseColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.13))
+              const detailFlashColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.42))
               const detailGlowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.25))
               const detailColor = createMemo(() => tint(theme.text.subdued, pulseBackground(), 0.35))
               const glows = () => status().glows
@@ -411,8 +462,8 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   : { ...EMPTY_SESSION_TAB_STATUS, complete: false, runs: false, glows: false }
               })
               const previousGlows = () => previousStatus().glows
-              const runs = () => status().runs
               const previousRuns = () => previousStatus().runs
+              const indicatorWidth = 10
               const previousGlowHue = () => {
                 if (previousStatus().attention) return theme.text.feedback.warning.default
                 if (previousStatus().unread === "error") return theme.text.feedback.error.default
@@ -499,7 +550,11 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                     breathe={status().attention}
                     outerBreathe={previousStatus().attention}
                     color={separatorLowerPulseColor()}
+                    width={indicatorWidth}
                     outerColor={separatorUpperPulseColor()}
+                    flashColor={tint(theme.background.default, theme.text.default, 0.22)}
+                    outerFlashColor={tint(theme.background.default, theme.text.default, 0.18)}
+                    flashTail={8}
                     glowColor={separatorLowerColor()}
                     outerGlowColor={separatorUpperColor()}
                     glowTail={8}
@@ -524,7 +579,10 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       breathe={status().attention}
                       outerBreathe={false}
                       color={tint(theme.background.default, theme.text.default, 0.04)}
+                      width={indicatorWidth}
                       outerColor={tint(theme.background.default, theme.text.default, 0.006)}
+                      flashColor={tint(theme.background.default, theme.text.default, 0.18)}
+                      flashTail={8}
                       glowColor={tint(theme.background.default, glowHue(), 0.1)}
                       outerGlowColor={theme.background.default}
                       glowTail={8}
@@ -543,7 +601,10 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       glow={glows()}
                       breathe={status().attention}
                       color={pulseColor()}
+                      width={indicatorWidth}
                       glowColor={glowColor()}
+                      flashColor={flashColor()}
+                      flashTail={8}
                       completionColor={glowColor()}
                       backgroundColor={pulseBackground()}
                       onLevel={setSweepLevel}
@@ -599,8 +660,11 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       glow={glows()}
                       breathe={status().attention}
                       color={detailPulseColor()}
+                      width={indicatorWidth}
                       glowColor={detailGlowColor()}
                       glowTail={10}
+                      flashColor={detailFlashColor()}
+                      flashTail={8}
                       completionColor={detailGlowColor()}
                       backgroundColor={pulseBackground()}
                     />
@@ -646,7 +710,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
             >
               <text
                 width={2}
-                fg={newTab() ? activeNumber() : addHovered() ? theme.text.default : idleNumber()}
+                fg={newTab() || addHovered() ? theme.text.default : idleNumber()}
                 selectable={false}
                 attributes={newTab() ? TextAttributes.BOLD : undefined}
               >
@@ -903,6 +967,8 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           const titleFades = createMemo(
             () => marqueeOverflows(title(), availableTitleWidth()) && availableTitleWidth() > FADE_WIDTH,
           )
+          const runs = () => status().busy && !status().attention
+          const numberIgnition = createNumberIgnition(runs, () => status().promptPulse, animations)
           const foreground = () => {
             if (hovered() === tab.sessionID) return theme.text.default
             return tint(theme.text.subdued, theme.text.default, selection())
@@ -927,14 +993,17 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           const [closeHovered, setCloseHovered] = createSignal(false)
           const numberColor = () => {
             const feedback = feedbackColor()
-            if (feedback) return feedback
             const base =
               hovered() === tab.sessionID && !selected()
                 ? foreground()
-                : tint(idleNumber(), activeNumber(), selection())
-            const color = tint(base, accent(), activity())
+                : tint(idleNumber(), tint(theme.text.default, background(), 0.25), selection())
+            const color = feedback ?? (runs() ? activeNumber() : tint(base, accent(), activity()))
             // The number brightens faintly as the running sweep passes beneath it.
-            return sweepLevel() === 0 ? color : tint(color, theme.text.default, 0.15 * sweepLevel())
+            return tint(
+              color,
+              theme.text.default,
+              Math.max(numberIgnition.value().level, 0.15 * sweepLevel()),
+            )
           }
           const bold = () => (selected() || dragged() ? TextAttributes.BOLD : undefined)
           const closeColor = () => tint(theme.text.subdued, theme.text.default, 0.6)

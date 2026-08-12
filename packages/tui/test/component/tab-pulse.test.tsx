@@ -4,6 +4,7 @@ import {
   blendTabPulseColor,
   completionPulseOpacity,
   glowIgnitionLevel,
+  tabFlashIntensity,
   unreadGlowIntensity,
 } from "../../src/component/tab-pulse"
 import { tint } from "../../src/theme/color"
@@ -37,6 +38,16 @@ test("unread glow peaks behind the tab number and fades to the normal background
 test("unread glow reaches the normal background on compact tabs", () => {
   expect(unreadGlowIntensity(0, 8)).toBe(1)
   expect(unreadGlowIntensity(7, 8)).toBe(0)
+})
+
+test("tab flash holds behind the shortcut then feathers to the background", () => {
+  const intensities = Array.from({ length: 10 }, (_, index) => tabFlashIntensity(index, 8))
+
+  expect(intensities[0]).toBe(1)
+  expect(intensities[1]).toBe(1)
+  expect(intensities[2]).toBeLessThan(1)
+  expect(intensities.slice(1)).toEqual(intensities.slice(1).sort((a, b) => b - a))
+  expect(intensities.at(-1)).toBe(0)
 })
 
 test("reuses a color while preserving the original glow and pulse blend stages", () => {
