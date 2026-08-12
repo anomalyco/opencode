@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test"
-import { marqueeCycleWidth, marqueeText } from "../../src/util/marquee"
+import { marqueeCycleWidth, marqueeOverflows, marqueeText } from "../../src/util/marquee"
 import { stringWidth } from "../../src/util/string-width"
 
 describe("marquee text", () => {
   test("keeps short text stationary", () => {
     expect(marqueeText("Short", 10, 8)).toBe("Short")
+  })
+
+  test("does not classify an exact fit as overflow", () => {
+    expect(marqueeOverflows("Exact fit", 9)).toBe(false)
+    expect(marqueeOverflows("Exact fit", 8)).toBe(true)
   })
 
   test("starts clipped and scrolls through a long title", () => {

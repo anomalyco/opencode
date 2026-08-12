@@ -7,6 +7,10 @@ export function marqueeCycleWidth(value: string) {
   return stringWidth(value + GAP)
 }
 
+export function marqueeOverflows(value: string, width: number) {
+  return stringWidth(value) > width
+}
+
 export function marqueeText(value: string, width: number, offset: number) {
   if (width <= 0) return ""
   if (stringWidth(value) <= width || offset <= 0) return Locale.takeWidth(value, width)
