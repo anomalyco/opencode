@@ -1,0 +1,45 @@
+diff --git a/dist/cjs/index.cjs b/dist/cjs/index.cjs
+index 7e97823ea769398ccd9cf449b178c77675ed252c..d75183f11421af0e20e4e8a996af99c300ad936d 100644
+--- a/dist/cjs/index.cjs
++++ b/dist/cjs/index.cjs
+@@ -39,7 +39,9 @@ function createVirtualizerBase(options) {
+         (_a = options.onChange) == null ? void 0 : _a.call(options, instance2, sync);
+       }
+     }));
+-    virtualizer.measure();
++    virtualizer._willUpdate();
++    setVirtualItems(store.reconcile(instance.getVirtualItems(), { key: "index" }));
++    setTotalSize(instance.getTotalSize());
+   });
+   return virtualizer;
+ }
+diff --git a/dist/esm/index.js b/dist/esm/index.js
+index 1d525463775fef3e8ece6ab191061ef9d0a36d73..14c680a2088c49a33959d8118cf32ee599ab83c2 100644
+--- a/dist/esm/index.js
++++ b/dist/esm/index.js
+@@ -38,7 +38,9 @@ function createVirtualizerBase(options) {
+         (_a = options.onChange) == null ? void 0 : _a.call(options, instance2, sync);
+       }
+     }));
+-    virtualizer.measure();
++    virtualizer._willUpdate();
++    setVirtualItems(reconcile(instance.getVirtualItems(), { key: "index" }));
++    setTotalSize(instance.getTotalSize());
+   });
+   return virtualizer;
+ }
+diff --git a/src/index.tsx b/src/index.tsx
+index 69ac34fd70753b9bd00683c2540be7f62630f8f2..9f16672aa0f4a044aa2b35754d385d7d8031f743 100644
+--- a/src/index.tsx
++++ b/src/index.tsx
+@@ -81,7 +81,9 @@ function createVirtualizerBase<
+         },
+       }),
+     )
+-    virtualizer.measure()
++    virtualizer._willUpdate()
++    setVirtualItems(reconcile(instance.getVirtualItems(), { key: 'index' }))
++    setTotalSize(instance.getTotalSize())
+   })
+
+   return virtualizer
