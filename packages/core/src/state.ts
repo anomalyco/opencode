@@ -46,8 +46,15 @@ export interface Options<State, DraftApi> {
   readonly initial: () => State
   /** Wraps mutable state in a domain-specific draft API. */
   readonly draft: MakeDraft<State, DraftApi>
-  /** Runs after all active transforms and before the rebuilt state becomes visible. */
+  /**
+   * Completes the rebuilt state before it becomes visible. Do not publish
+   * update events here: a finalizer runs before `get` exposes the new state,
+   * so a client reacting to the event could refetch the stale snapshot. Emit
+   * update events from `notify` instead.
+   */
   readonly finalize?: (draft: DraftApi) => Effect.Effect<void>
+  /** Runs after the rebuilt state becomes visible; publish update events here. */
+  readonly notify?: () => Effect.Effect<void>
 }
 
 export interface Interface<State, DraftApi> extends Transformable<DraftApi> {
@@ -67,6 +74,7 @@ export function create<State, DraftApi>(options: Options<State, DraftApi>): Inte
     const api = options.draft(next)
     if (options.finalize) yield* options.finalize(api)
     state = next
+    if (options.notify) yield* options.notify()
   })
 
   const apply = (transform: TransformCallback<DraftApi>, draft: DraftApi) =>

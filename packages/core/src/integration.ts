@@ -282,7 +282,7 @@ export const locationLayer = Layer.effect(
           },
         },
       }),
-      finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
+      notify: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     const resolveConnections = (entry: Entry | undefined, saved: readonly Credential.Info[]) => {

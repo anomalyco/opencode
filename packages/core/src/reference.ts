@@ -102,8 +102,8 @@ const layer = Layer.effect(
               Effect.forkIn(scope),
             )
           }
-          yield* events.publish(Event.Updated, {})
         }),
+      notify: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     return Service.of({

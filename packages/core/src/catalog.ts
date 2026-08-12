@@ -165,8 +165,8 @@ const layer = Layer.effect(
             }
           }
         }
-        yield* events.publish(Event.Updated, {})
       }),
+      notify: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
     })
     const result: Interface = {
       transform: state.transform,
