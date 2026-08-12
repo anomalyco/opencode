@@ -1656,6 +1656,16 @@ export function reasoningVariants(model: ModelsDev.Model, target: Provider.Model
   if (options === undefined) return
   if (options.length === 0) return {}
 
+  // DeepSeek V4 exposes a thinking toggle; `reasoning_effort: "none"` turns it
+  // off. Add a `none` variant alongside its effort tiers so thinking can be
+  // disabled from the model variants menu.
+  if (target.api.id.toLowerCase().includes("deepseek-v4")) {
+    return nonEmptyVariants({
+      none: { reasoningEffort: "none" },
+      ...effortVariants(target, options.find((option) => option.type === "effort")?.values ?? []),
+    })
+  }
+
   const effort = options.find((option) => option.type === "effort")
   if (effort) return effortVariants(target, effort.values)
 
