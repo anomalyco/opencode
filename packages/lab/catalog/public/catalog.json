@@ -1,0 +1,5156 @@
+{
+  "format": "opencode-terminal-catalog-v3",
+  "generatedBy": "scripts/capture-opencode-drive.ts",
+  "variants": [
+    {
+      "id": "opencode",
+      "label": "Opencode",
+      "source": "opencode",
+      "revision": "2a0ccdbfd4589ba2181624f25c55ed4ac0546b2d",
+      "ref": "2a0ccdbfd4589ba2181624f25c55ed4ac0546b2d",
+      "committedAt": "2026-08-12T12:45:43-04:00",
+      "theme": "opencode"
+    },
+    {
+      "id": "tokyonight",
+      "label": "Tokyo Night",
+      "source": "opencode",
+      "revision": "2a0ccdbfd4589ba2181624f25c55ed4ac0546b2d",
+      "ref": "2a0ccdbfd4589ba2181624f25c55ed4ac0546b2d",
+      "committedAt": "2026-08-12T12:45:43-04:00",
+      "theme": "tokyonight"
+    },
+    {
+      "id": "everforest",
+      "label": "Everforest",
+      "source": "opencode",
+      "revision": "2a0ccdbfd4589ba2181624f25c55ed4ac0546b2d",
+      "ref": "2a0ccdbfd4589ba2181624f25c55ed4ac0546b2d",
+      "committedAt": "2026-08-12T12:45:43-04:00",
+      "theme": "everforest"
+    }
+  ],
+  "screenTaxonomy": [
+    {
+      "id": "getting-started",
+      "label": "Getting started",
+      "items": [
+        {
+          "id": "start-screen",
+          "label": "Start screen"
+        },
+        {
+          "id": "new-session",
+          "label": "New session"
+        }
+      ]
+    },
+    {
+      "id": "conversation",
+      "label": "Conversation",
+      "items": [
+        {
+          "id": "composer",
+          "label": "Composer"
+        },
+        {
+          "id": "question-response",
+          "label": "Question response"
+        },
+        {
+          "id": "tool-execution",
+          "label": "Tool execution"
+        },
+        {
+          "id": "diff-review",
+          "label": "Diff review"
+        },
+        {
+          "id": "subagent-activity",
+          "label": "Subagent activity"
+        },
+        {
+          "id": "shell-activity",
+          "label": "Shell activity"
+        }
+      ]
+    },
+    {
+      "id": "session-management",
+      "label": "Session management",
+      "items": [
+        {
+          "id": "session-list",
+          "label": "Session list"
+        },
+        {
+          "id": "rename-session",
+          "label": "Rename session"
+        },
+        {
+          "id": "fork-session",
+          "label": "Fork session"
+        },
+        {
+          "id": "export-session",
+          "label": "Export session"
+        }
+      ]
+    },
+    {
+      "id": "notifications",
+      "label": "Notifications",
+      "items": [
+        {
+          "id": "toast-info",
+          "label": "Info toast"
+        },
+        {
+          "id": "toast-success",
+          "label": "Success toast"
+        },
+        {
+          "id": "toast-error",
+          "label": "Error toast"
+        }
+      ]
+    },
+    {
+      "id": "models-and-agents",
+      "label": "Models & agents",
+      "items": [
+        {
+          "id": "model-selection",
+          "label": "Model selection"
+        },
+        {
+          "id": "agent-selection",
+          "label": "Agent selection"
+        },
+        {
+          "id": "skill-selection",
+          "label": "Skill selection"
+        }
+      ]
+    },
+    {
+      "id": "configuration",
+      "label": "Configuration",
+      "items": [
+        {
+          "id": "integration-setup",
+          "label": "Integration setup"
+        },
+        {
+          "id": "mcp-management",
+          "label": "MCP management"
+        },
+        {
+          "id": "theme-selection",
+          "label": "Theme selection"
+        },
+        {
+          "id": "device-pairing",
+          "label": "Device pairing"
+        }
+      ]
+    },
+    {
+      "id": "system",
+      "label": "System",
+      "items": [
+        {
+          "id": "command-navigation",
+          "label": "Command navigation"
+        },
+        {
+          "id": "system-status",
+          "label": "System status"
+        },
+        {
+          "id": "help-reference",
+          "label": "Help & reference"
+        },
+        {
+          "id": "debugging",
+          "label": "Debugging"
+        },
+        {
+          "id": "error-recovery",
+          "label": "Error recovery"
+        }
+      ]
+    }
+  ],
+  "uiElementTaxonomy": [
+    {
+      "id": "navigation",
+      "label": "Navigation",
+      "items": [
+        {
+          "id": "command-palette",
+          "label": "Command palette"
+        },
+        {
+          "id": "tabs",
+          "label": "Tabs"
+        },
+        {
+          "id": "keyboard-hints",
+          "label": "Keyboard hints"
+        },
+        {
+          "id": "shortcut-list",
+          "label": "Shortcut list"
+        }
+      ]
+    },
+    {
+      "id": "selection",
+      "label": "Selection",
+      "items": [
+        {
+          "id": "picker",
+          "label": "Picker"
+        },
+        {
+          "id": "search-field",
+          "label": "Search field"
+        },
+        {
+          "id": "single-select",
+          "label": "Single select"
+        },
+        {
+          "id": "list",
+          "label": "List"
+        }
+      ]
+    },
+    {
+      "id": "input",
+      "label": "Input",
+      "items": [
+        {
+          "id": "text-input",
+          "label": "Text input"
+        },
+        {
+          "id": "form",
+          "label": "Form"
+        },
+        {
+          "id": "composer",
+          "label": "Composer"
+        },
+        {
+          "id": "question-prompt",
+          "label": "Question prompt"
+        }
+      ]
+    },
+    {
+      "id": "actions",
+      "label": "Actions",
+      "items": [
+        {
+          "id": "button-group",
+          "label": "Button group"
+        },
+        {
+          "id": "approval-actions",
+          "label": "Approval actions"
+        },
+        {
+          "id": "destructive-action",
+          "label": "Destructive action"
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "label": "Feedback",
+      "items": [
+        {
+          "id": "empty-state",
+          "label": "Empty state"
+        },
+        {
+          "id": "status-indicator",
+          "label": "Status indicator"
+        },
+        {
+          "id": "toast",
+          "label": "Toast"
+        },
+        {
+          "id": "confirmation",
+          "label": "Confirmation"
+        },
+        {
+          "id": "error-report",
+          "label": "Error report"
+        }
+      ]
+    },
+    {
+      "id": "content",
+      "label": "Content",
+      "items": [
+        {
+          "id": "terminal-output",
+          "label": "Terminal output"
+        },
+        {
+          "id": "transcript",
+          "label": "Transcript"
+        },
+        {
+          "id": "tool-card",
+          "label": "Tool card"
+        },
+        {
+          "id": "qr-code",
+          "label": "QR code"
+        },
+        {
+          "id": "debug-information",
+          "label": "Debug information"
+        }
+      ]
+    },
+    {
+      "id": "containers",
+      "label": "Containers",
+      "items": [
+        {
+          "id": "dialog",
+          "label": "Dialog"
+        },
+        {
+          "id": "inline-prompt",
+          "label": "Inline prompt"
+        },
+        {
+          "id": "panel",
+          "label": "Panel"
+        },
+        {
+          "id": "full-screen-view",
+          "label": "Full-screen view"
+        }
+      ]
+    }
+  ],
+  "surfaces": [
+    "full-screen",
+    "inline",
+    "modal",
+    "panel",
+    "toast"
+  ],
+  "patterns": [
+    "approval",
+    "error-report",
+    "form",
+    "info",
+    "landing",
+    "list",
+    "navigation",
+    "notification",
+    "pairing",
+    "palette",
+    "picker",
+    "status",
+    "terminal"
+  ],
+  "features": [
+    "agent",
+    "assistant",
+    "commands",
+    "debug",
+    "device",
+    "diff",
+    "export",
+    "help",
+    "integration",
+    "mcp",
+    "model",
+    "navigation",
+    "notification",
+    "patch",
+    "permission",
+    "question",
+    "read",
+    "response",
+    "search",
+    "session",
+    "shell",
+    "shortcuts",
+    "skill",
+    "subagent",
+    "system",
+    "tabs",
+    "theme",
+    "thinking",
+    "tool",
+    "web"
+  ],
+  "states": [
+    "confirmation",
+    "default",
+    "empty",
+    "error",
+    "expanded",
+    "idle",
+    "pending",
+    "populated",
+    "running",
+    "selected",
+    "streaming",
+    "success"
+  ],
+  "screens": [
+    {
+      "id": "home",
+      "title": "Home",
+      "category": "system",
+      "summary": "",
+      "tags": [
+        "start-screen",
+        "new-session",
+        "composer",
+        "composer",
+        "keyboard-hints",
+        "full-screen-view",
+        "empty-state",
+        "full-screen",
+        "landing",
+        "system",
+        "session",
+        "empty"
+      ],
+      "screenLabels": [
+        "start-screen",
+        "new-session",
+        "composer"
+      ],
+      "uiElements": [
+        "composer",
+        "keyboard-hints",
+        "full-screen-view",
+        "empty-state"
+      ],
+      "surfaces": [
+        "full-screen"
+      ],
+      "patterns": [
+        "landing"
+      ],
+      "features": [
+        "system",
+        "session"
+      ],
+      "states": [
+        "empty"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/home.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/home.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/home.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "command-palette",
+      "title": "Command palette",
+      "category": "navigation",
+      "summary": "",
+      "tags": [
+        "command-navigation",
+        "command-palette",
+        "search-field",
+        "list",
+        "keyboard-hints",
+        "dialog",
+        "modal",
+        "palette",
+        "commands",
+        "navigation",
+        "default"
+      ],
+      "screenLabels": [
+        "command-navigation"
+      ],
+      "uiElements": [
+        "command-palette",
+        "search-field",
+        "list",
+        "keyboard-hints",
+        "dialog"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "palette"
+      ],
+      "features": [
+        "commands",
+        "navigation"
+      ],
+      "states": [
+        "default"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/command-palette.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/command-palette.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/command-palette.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "model-picker",
+      "title": "Model picker",
+      "category": "picker",
+      "summary": "",
+      "tags": [
+        "model-selection",
+        "picker",
+        "search-field",
+        "single-select",
+        "list",
+        "dialog",
+        "keyboard-hints",
+        "modal",
+        "picker",
+        "model",
+        "default"
+      ],
+      "screenLabels": [
+        "model-selection"
+      ],
+      "uiElements": [
+        "picker",
+        "search-field",
+        "single-select",
+        "list",
+        "dialog",
+        "keyboard-hints"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "picker"
+      ],
+      "features": [
+        "model"
+      ],
+      "states": [
+        "default"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/model-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/model-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/model-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "agent-picker",
+      "title": "Agent picker",
+      "category": "picker",
+      "summary": "",
+      "tags": [
+        "agent-selection",
+        "picker",
+        "search-field",
+        "single-select",
+        "list",
+        "dialog",
+        "keyboard-hints",
+        "modal",
+        "picker",
+        "agent",
+        "default"
+      ],
+      "screenLabels": [
+        "agent-selection"
+      ],
+      "uiElements": [
+        "picker",
+        "search-field",
+        "single-select",
+        "list",
+        "dialog",
+        "keyboard-hints"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "picker"
+      ],
+      "features": [
+        "agent"
+      ],
+      "states": [
+        "default"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/agent-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/agent-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/agent-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "integration-picker",
+      "title": "Integrations",
+      "category": "picker",
+      "summary": "",
+      "tags": [
+        "integration-setup",
+        "picker",
+        "single-select",
+        "list",
+        "dialog",
+        "modal",
+        "picker",
+        "integration",
+        "default"
+      ],
+      "screenLabels": [
+        "integration-setup"
+      ],
+      "uiElements": [
+        "picker",
+        "single-select",
+        "list",
+        "dialog"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "picker"
+      ],
+      "features": [
+        "integration"
+      ],
+      "states": [
+        "default"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/integration-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/integration-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/integration-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "theme-picker",
+      "title": "Theme picker",
+      "category": "picker",
+      "summary": "",
+      "tags": [
+        "theme-selection",
+        "picker",
+        "single-select",
+        "list",
+        "dialog",
+        "modal",
+        "picker",
+        "theme",
+        "default"
+      ],
+      "screenLabels": [
+        "theme-selection"
+      ],
+      "uiElements": [
+        "picker",
+        "single-select",
+        "list",
+        "dialog"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "picker"
+      ],
+      "features": [
+        "theme"
+      ],
+      "states": [
+        "default"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/theme-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/theme-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/theme-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "mcp-list",
+      "title": "MCPs",
+      "category": "status",
+      "summary": "",
+      "tags": [
+        "mcp-management",
+        "list",
+        "dialog",
+        "empty-state",
+        "modal",
+        "list",
+        "mcp",
+        "empty"
+      ],
+      "screenLabels": [
+        "mcp-management"
+      ],
+      "uiElements": [
+        "list",
+        "dialog",
+        "empty-state"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "list"
+      ],
+      "features": [
+        "mcp"
+      ],
+      "states": [
+        "empty"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/mcp-list.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/mcp-list.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/mcp-list.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "status",
+      "title": "Status",
+      "category": "status",
+      "summary": "",
+      "tags": [
+        "system-status",
+        "mcp-management",
+        "status-indicator",
+        "list",
+        "dialog",
+        "empty-state",
+        "modal",
+        "status",
+        "system",
+        "mcp",
+        "empty"
+      ],
+      "screenLabels": [
+        "system-status",
+        "mcp-management"
+      ],
+      "uiElements": [
+        "status-indicator",
+        "list",
+        "dialog",
+        "empty-state"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "system",
+        "mcp"
+      ],
+      "states": [
+        "empty"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/status.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/status.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/status.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "debug",
+      "title": "Debug",
+      "category": "information",
+      "summary": "",
+      "tags": [
+        "debugging",
+        "system-status",
+        "debug-information",
+        "dialog",
+        "modal",
+        "info",
+        "debug",
+        "system",
+        "default"
+      ],
+      "screenLabels": [
+        "debugging",
+        "system-status"
+      ],
+      "uiElements": [
+        "debug-information",
+        "dialog"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "info"
+      ],
+      "features": [
+        "debug",
+        "system"
+      ],
+      "states": [
+        "default"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/debug.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/debug.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/debug.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "help",
+      "title": "Help",
+      "category": "information",
+      "summary": "",
+      "tags": [
+        "help-reference",
+        "command-navigation",
+        "shortcut-list",
+        "keyboard-hints",
+        "dialog",
+        "list",
+        "modal",
+        "info",
+        "help",
+        "shortcuts",
+        "default"
+      ],
+      "screenLabels": [
+        "help-reference",
+        "command-navigation"
+      ],
+      "uiElements": [
+        "shortcut-list",
+        "keyboard-hints",
+        "dialog",
+        "list"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "info"
+      ],
+      "features": [
+        "help",
+        "shortcuts"
+      ],
+      "states": [
+        "default"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/help.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/help.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/help.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "pair",
+      "title": "Pair device",
+      "category": "information",
+      "summary": "",
+      "tags": [
+        "device-pairing",
+        "integration-setup",
+        "qr-code",
+        "dialog",
+        "modal",
+        "pairing",
+        "device",
+        "default"
+      ],
+      "screenLabels": [
+        "device-pairing",
+        "integration-setup"
+      ],
+      "uiElements": [
+        "qr-code",
+        "dialog"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "pairing"
+      ],
+      "features": [
+        "device"
+      ],
+      "states": [
+        "default"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/pair.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/pair.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/pair.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "session-picker",
+      "title": "Session picker",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "session-list",
+        "picker",
+        "search-field",
+        "single-select",
+        "list",
+        "dialog",
+        "keyboard-hints",
+        "empty-state",
+        "modal",
+        "picker",
+        "session",
+        "empty"
+      ],
+      "screenLabels": [
+        "session-list"
+      ],
+      "uiElements": [
+        "picker",
+        "search-field",
+        "single-select",
+        "list",
+        "dialog",
+        "keyboard-hints",
+        "empty-state"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "picker"
+      ],
+      "features": [
+        "session"
+      ],
+      "states": [
+        "empty"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/session-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/session-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/session-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "skill-picker",
+      "title": "Skill picker",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "skill-selection",
+        "picker",
+        "search-field",
+        "single-select",
+        "list",
+        "dialog",
+        "keyboard-hints",
+        "modal",
+        "picker",
+        "skill",
+        "default"
+      ],
+      "screenLabels": [
+        "skill-selection"
+      ],
+      "uiElements": [
+        "picker",
+        "search-field",
+        "single-select",
+        "list",
+        "dialog",
+        "keyboard-hints"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "picker"
+      ],
+      "features": [
+        "skill"
+      ],
+      "states": [
+        "default"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/skill-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/skill-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/skill-picker.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "patch-input-streaming",
+      "title": "Patch input streaming",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "status-indicator",
+        "inline",
+        "status",
+        "tool",
+        "patch",
+        "streaming"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "patch"
+      ],
+      "states": [
+        "streaming"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/patch-input-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/patch-input-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/patch-input-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "permission-prompt",
+      "title": "Permission prompt",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "inline-prompt",
+        "approval-actions",
+        "button-group",
+        "keyboard-hints",
+        "confirmation",
+        "destructive-action",
+        "inline",
+        "approval",
+        "permission",
+        "tool",
+        "patch",
+        "confirmation"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "inline-prompt",
+        "approval-actions",
+        "button-group",
+        "keyboard-hints",
+        "confirmation",
+        "destructive-action"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "approval"
+      ],
+      "features": [
+        "permission",
+        "tool",
+        "patch"
+      ],
+      "states": [
+        "confirmation"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/permission-prompt.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/permission-prompt.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/permission-prompt.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "permission-always-selected",
+      "title": "Permission prompt (always selected)",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "inline-prompt",
+        "approval-actions",
+        "button-group",
+        "keyboard-hints",
+        "confirmation",
+        "inline",
+        "approval",
+        "permission",
+        "tool",
+        "patch",
+        "selected"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "inline-prompt",
+        "approval-actions",
+        "button-group",
+        "keyboard-hints",
+        "confirmation"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "approval"
+      ],
+      "features": [
+        "permission",
+        "tool",
+        "patch"
+      ],
+      "states": [
+        "selected"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/permission-always-selected.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/permission-always-selected.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/permission-always-selected.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "permission-always-confirmation",
+      "title": "Always allow confirmation",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "inline-prompt",
+        "approval-actions",
+        "button-group",
+        "keyboard-hints",
+        "confirmation",
+        "inline",
+        "approval",
+        "permission",
+        "tool",
+        "patch",
+        "confirmation"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "inline-prompt",
+        "approval-actions",
+        "button-group",
+        "keyboard-hints",
+        "confirmation"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "approval"
+      ],
+      "features": [
+        "permission",
+        "tool",
+        "patch"
+      ],
+      "states": [
+        "confirmation"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/permission-always-confirmation.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/permission-always-confirmation.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/permission-always-confirmation.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "permission-reject-selected",
+      "title": "Permission prompt (reject selected)",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "inline-prompt",
+        "approval-actions",
+        "button-group",
+        "keyboard-hints",
+        "destructive-action",
+        "inline",
+        "approval",
+        "permission",
+        "tool",
+        "patch",
+        "selected"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "inline-prompt",
+        "approval-actions",
+        "button-group",
+        "keyboard-hints",
+        "destructive-action"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "approval"
+      ],
+      "features": [
+        "permission",
+        "tool",
+        "patch"
+      ],
+      "states": [
+        "selected"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/permission-reject-selected.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/permission-reject-selected.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/permission-reject-selected.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "permission-fullscreen",
+      "title": "Permission prompt (fullscreen)",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "inline-prompt",
+        "approval-actions",
+        "button-group",
+        "keyboard-hints",
+        "confirmation",
+        "full-screen-view",
+        "full-screen",
+        "approval",
+        "permission",
+        "tool",
+        "patch",
+        "expanded"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "inline-prompt",
+        "approval-actions",
+        "button-group",
+        "keyboard-hints",
+        "confirmation",
+        "full-screen-view"
+      ],
+      "surfaces": [
+        "full-screen"
+      ],
+      "patterns": [
+        "approval"
+      ],
+      "features": [
+        "permission",
+        "tool",
+        "patch"
+      ],
+      "states": [
+        "expanded"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/permission-fullscreen.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/permission-fullscreen.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/permission-fullscreen.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "patch-success",
+      "title": "Patch succeeded",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "confirmation",
+        "inline",
+        "status",
+        "tool",
+        "patch",
+        "success"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "confirmation"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "patch"
+      ],
+      "states": [
+        "success"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/patch-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/patch-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/patch-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "session-rename",
+      "title": "Rename session",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "rename-session",
+        "dialog",
+        "form",
+        "text-input",
+        "modal",
+        "form",
+        "session",
+        "default"
+      ],
+      "screenLabels": [
+        "rename-session"
+      ],
+      "uiElements": [
+        "dialog",
+        "form",
+        "text-input"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "form"
+      ],
+      "features": [
+        "session"
+      ],
+      "states": [
+        "default"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/session-rename.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/session-rename.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/session-rename.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "session-fork",
+      "title": "Fork session",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "fork-session",
+        "dialog",
+        "picker",
+        "single-select",
+        "list",
+        "modal",
+        "picker",
+        "session",
+        "default"
+      ],
+      "screenLabels": [
+        "fork-session"
+      ],
+      "uiElements": [
+        "dialog",
+        "picker",
+        "single-select",
+        "list"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "picker"
+      ],
+      "features": [
+        "session"
+      ],
+      "states": [
+        "default"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/session-fork.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/session-fork.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/session-fork.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "session-export",
+      "title": "Export session",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "export-session",
+        "dialog",
+        "form",
+        "single-select",
+        "button-group",
+        "modal",
+        "form",
+        "session",
+        "export",
+        "default"
+      ],
+      "screenLabels": [
+        "export-session"
+      ],
+      "uiElements": [
+        "dialog",
+        "form",
+        "single-select",
+        "button-group"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "form"
+      ],
+      "features": [
+        "session",
+        "export"
+      ],
+      "states": [
+        "default"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/session-export.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/session-export.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/session-export.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "question-prompt",
+      "title": "Question prompt",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "question-response",
+        "tool-execution",
+        "inline-prompt",
+        "question-prompt",
+        "form",
+        "single-select",
+        "button-group",
+        "confirmation",
+        "inline",
+        "form",
+        "question",
+        "tool",
+        "confirmation"
+      ],
+      "screenLabels": [
+        "question-response",
+        "tool-execution"
+      ],
+      "uiElements": [
+        "inline-prompt",
+        "question-prompt",
+        "form",
+        "single-select",
+        "button-group",
+        "confirmation"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "form"
+      ],
+      "features": [
+        "question",
+        "tool"
+      ],
+      "states": [
+        "confirmation"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/question-prompt.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/question-prompt.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/question-prompt.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "session-picker-populated",
+      "title": "Session picker (populated)",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "session-list",
+        "picker",
+        "search-field",
+        "single-select",
+        "list",
+        "dialog",
+        "keyboard-hints",
+        "modal",
+        "picker",
+        "session",
+        "populated"
+      ],
+      "screenLabels": [
+        "session-list"
+      ],
+      "uiElements": [
+        "picker",
+        "search-field",
+        "single-select",
+        "list",
+        "dialog",
+        "keyboard-hints"
+      ],
+      "surfaces": [
+        "modal"
+      ],
+      "patterns": [
+        "picker"
+      ],
+      "features": [
+        "session"
+      ],
+      "states": [
+        "populated"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/session-picker-populated.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/session-picker-populated.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/session-picker-populated.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "toast-success",
+      "title": "Success toast",
+      "category": "system",
+      "summary": "",
+      "tags": [
+        "export-session",
+        "toast-success",
+        "toast",
+        "confirmation",
+        "transcript",
+        "toast",
+        "notification",
+        "session",
+        "export",
+        "notification",
+        "success"
+      ],
+      "screenLabels": [
+        "export-session",
+        "toast-success"
+      ],
+      "uiElements": [
+        "toast",
+        "confirmation",
+        "transcript"
+      ],
+      "surfaces": [
+        "toast"
+      ],
+      "patterns": [
+        "notification"
+      ],
+      "features": [
+        "session",
+        "export",
+        "notification"
+      ],
+      "states": [
+        "success"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/toast-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/toast-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/toast-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "toast-error",
+      "title": "Error toast",
+      "category": "system",
+      "summary": "",
+      "tags": [
+        "error-recovery",
+        "toast-error",
+        "toast",
+        "error-report",
+        "toast",
+        "notification",
+        "notification",
+        "error"
+      ],
+      "screenLabels": [
+        "error-recovery",
+        "toast-error"
+      ],
+      "uiElements": [
+        "toast",
+        "error-report"
+      ],
+      "surfaces": [
+        "toast"
+      ],
+      "patterns": [
+        "notification"
+      ],
+      "features": [
+        "notification"
+      ],
+      "states": [
+        "error"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/toast-error.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/toast-error.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/toast-error.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "toast-info",
+      "title": "Info toast",
+      "category": "system",
+      "summary": "",
+      "tags": [
+        "debugging",
+        "toast-info",
+        "toast",
+        "confirmation",
+        "toast",
+        "notification",
+        "debug",
+        "notification",
+        "default"
+      ],
+      "screenLabels": [
+        "debugging",
+        "toast-info"
+      ],
+      "uiElements": [
+        "toast",
+        "confirmation"
+      ],
+      "surfaces": [
+        "toast"
+      ],
+      "patterns": [
+        "notification"
+      ],
+      "features": [
+        "debug",
+        "notification"
+      ],
+      "states": [
+        "default"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/toast-info.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/toast-info.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/toast-info.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "diff-viewer",
+      "title": "Diff viewer",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "diff-review",
+        "full-screen-view",
+        "list",
+        "keyboard-hints",
+        "empty-state",
+        "full-screen",
+        "list",
+        "diff",
+        "session",
+        "empty"
+      ],
+      "screenLabels": [
+        "diff-review"
+      ],
+      "uiElements": [
+        "full-screen-view",
+        "list",
+        "keyboard-hints",
+        "empty-state"
+      ],
+      "surfaces": [
+        "full-screen"
+      ],
+      "patterns": [
+        "list"
+      ],
+      "features": [
+        "diff",
+        "session"
+      ],
+      "states": [
+        "empty"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/diff-viewer.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/diff-viewer.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/diff-viewer.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "thinking-streaming",
+      "title": "Thinking streaming",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "shell-activity",
+        "transcript",
+        "status-indicator",
+        "inline",
+        "status",
+        "thinking",
+        "shell",
+        "streaming"
+      ],
+      "screenLabels": [
+        "shell-activity"
+      ],
+      "uiElements": [
+        "transcript",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "thinking",
+        "shell"
+      ],
+      "states": [
+        "streaming"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/thinking-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/thinking-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/thinking-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "shell-input-streaming",
+      "title": "Shell input streaming",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "shell-activity",
+        "transcript",
+        "tool-card",
+        "terminal-output",
+        "status-indicator",
+        "inline",
+        "terminal",
+        "tool",
+        "shell",
+        "streaming"
+      ],
+      "screenLabels": [
+        "tool-execution",
+        "shell-activity"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "terminal-output",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "terminal"
+      ],
+      "features": [
+        "tool",
+        "shell"
+      ],
+      "states": [
+        "streaming"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/shell-input-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/shell-input-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/shell-input-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "shell-output-streaming",
+      "title": "Shell output streaming",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "shell-activity",
+        "transcript",
+        "tool-card",
+        "terminal-output",
+        "status-indicator",
+        "inline",
+        "terminal",
+        "tool",
+        "shell",
+        "running",
+        "streaming"
+      ],
+      "screenLabels": [
+        "tool-execution",
+        "shell-activity"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "terminal-output",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "terminal"
+      ],
+      "features": [
+        "tool",
+        "shell"
+      ],
+      "states": [
+        "running",
+        "streaming"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/shell-output-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/shell-output-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/shell-output-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "shell-execute-succeeded",
+      "title": "Shell execution succeeded",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "shell-activity",
+        "transcript",
+        "tool-card",
+        "terminal-output",
+        "confirmation",
+        "inline",
+        "terminal",
+        "tool",
+        "shell",
+        "success"
+      ],
+      "screenLabels": [
+        "tool-execution",
+        "shell-activity"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "terminal-output",
+        "confirmation"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "terminal"
+      ],
+      "features": [
+        "tool",
+        "shell"
+      ],
+      "states": [
+        "success"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/shell-execute-succeeded.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/shell-execute-succeeded.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/shell-execute-succeeded.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "shell-execute-failed",
+      "title": "Shell execution failed",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "shell-activity",
+        "error-recovery",
+        "transcript",
+        "tool-card",
+        "terminal-output",
+        "error-report",
+        "inline",
+        "terminal",
+        "error-report",
+        "tool",
+        "shell",
+        "error"
+      ],
+      "screenLabels": [
+        "tool-execution",
+        "shell-activity",
+        "error-recovery"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "terminal-output",
+        "error-report"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "terminal",
+        "error-report"
+      ],
+      "features": [
+        "tool",
+        "shell"
+      ],
+      "states": [
+        "error"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/shell-execute-failed.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/shell-execute-failed.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/shell-execute-failed.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "glob-success",
+      "title": "Glob finds files",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "status-indicator",
+        "inline",
+        "status",
+        "tool",
+        "search",
+        "success"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "search"
+      ],
+      "states": [
+        "success"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/glob-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/glob-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/glob-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "glob-empty",
+      "title": "Glob finds no files",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "empty-state",
+        "inline",
+        "status",
+        "tool",
+        "search",
+        "empty"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "empty-state"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "search"
+      ],
+      "states": [
+        "empty"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/glob-empty.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/glob-empty.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/glob-empty.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "grouped-exploration",
+      "title": "Grouped project exploration",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "status-indicator",
+        "inline",
+        "status",
+        "tool",
+        "search",
+        "running"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "search"
+      ],
+      "states": [
+        "running"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/grouped-exploration.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/grouped-exploration.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/grouped-exploration.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "grep-success",
+      "title": "Grep finds matches",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "status-indicator",
+        "inline",
+        "status",
+        "tool",
+        "search",
+        "success"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "search"
+      ],
+      "states": [
+        "success"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/grep-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/grep-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/grep-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "grep-empty",
+      "title": "Grep finds no matches",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "empty-state",
+        "inline",
+        "status",
+        "tool",
+        "search",
+        "empty"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "empty-state"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "search"
+      ],
+      "states": [
+        "empty"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/grep-empty.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/grep-empty.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/grep-empty.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "grep-failure",
+      "title": "Grep pattern fails",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "error-recovery",
+        "transcript",
+        "tool-card",
+        "error-report",
+        "inline",
+        "error-report",
+        "tool",
+        "search",
+        "error"
+      ],
+      "screenLabels": [
+        "tool-execution",
+        "error-recovery"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "error-report"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "error-report"
+      ],
+      "features": [
+        "tool",
+        "search"
+      ],
+      "states": [
+        "error"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/grep-failure.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/grep-failure.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/grep-failure.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "webfetch-streaming",
+      "title": "WebFetch streaming",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "status-indicator",
+        "inline",
+        "status",
+        "tool",
+        "web",
+        "streaming"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "web"
+      ],
+      "states": [
+        "streaming"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/webfetch-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/webfetch-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/webfetch-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "webfetch-success",
+      "title": "WebFetch succeeds",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "confirmation",
+        "inline",
+        "status",
+        "tool",
+        "web",
+        "success"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "confirmation"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "web"
+      ],
+      "states": [
+        "success"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/webfetch-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/webfetch-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/webfetch-success.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "websearch-running",
+      "title": "WebSearch running",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "status-indicator",
+        "inline",
+        "status",
+        "tool",
+        "web",
+        "search",
+        "running"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "web",
+        "search"
+      ],
+      "states": [
+        "running"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/websearch-running.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/websearch-running.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/websearch-running.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "websearch-failure",
+      "title": "WebSearch fails",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "error-recovery",
+        "transcript",
+        "tool-card",
+        "error-report",
+        "inline",
+        "error-report",
+        "tool",
+        "web",
+        "search",
+        "error"
+      ],
+      "screenLabels": [
+        "tool-execution",
+        "error-recovery"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "error-report"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "error-report"
+      ],
+      "features": [
+        "tool",
+        "web",
+        "search"
+      ],
+      "states": [
+        "error"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/websearch-failure.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/websearch-failure.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/websearch-failure.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "assistant-response-succeeded",
+      "title": "Assistant response succeeded",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "question-response",
+        "transcript",
+        "confirmation",
+        "inline",
+        "status",
+        "assistant",
+        "response",
+        "success"
+      ],
+      "screenLabels": [
+        "question-response"
+      ],
+      "uiElements": [
+        "transcript",
+        "confirmation"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "assistant",
+        "response"
+      ],
+      "states": [
+        "success"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/assistant-response-succeeded.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/assistant-response-succeeded.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/assistant-response-succeeded.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "assistant-response-failed",
+      "title": "Assistant response failed",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "question-response",
+        "error-recovery",
+        "transcript",
+        "error-report",
+        "inline",
+        "error-report",
+        "assistant",
+        "response",
+        "error"
+      ],
+      "screenLabels": [
+        "question-response",
+        "error-recovery"
+      ],
+      "uiElements": [
+        "transcript",
+        "error-report"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "error-report"
+      ],
+      "features": [
+        "assistant",
+        "response"
+      ],
+      "states": [
+        "error"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/assistant-response-failed.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/assistant-response-failed.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/assistant-response-failed.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "assistant-response-interrupted",
+      "title": "Assistant response interrupted",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "question-response",
+        "error-recovery",
+        "transcript",
+        "status-indicator",
+        "inline",
+        "status",
+        "assistant",
+        "response",
+        "error"
+      ],
+      "screenLabels": [
+        "question-response",
+        "error-recovery"
+      ],
+      "uiElements": [
+        "transcript",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "assistant",
+        "response"
+      ],
+      "states": [
+        "error"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/assistant-response-interrupted.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/assistant-response-interrupted.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/assistant-response-interrupted.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "question-input-streaming",
+      "title": "Question input streaming",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "status-indicator",
+        "inline",
+        "status",
+        "tool",
+        "question",
+        "streaming"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "question"
+      ],
+      "states": [
+        "streaming"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/question-input-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/question-input-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/question-input-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "question-awaiting-form",
+      "title": "Question awaiting form",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "question-response",
+        "question-prompt",
+        "button-group",
+        "keyboard-hints",
+        "inline",
+        "form",
+        "tool",
+        "question",
+        "pending"
+      ],
+      "screenLabels": [
+        "tool-execution",
+        "question-response"
+      ],
+      "uiElements": [
+        "question-prompt",
+        "button-group",
+        "keyboard-hints"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "form"
+      ],
+      "features": [
+        "tool",
+        "question"
+      ],
+      "states": [
+        "pending"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/question-awaiting-form.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/question-awaiting-form.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/question-awaiting-form.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "question-review",
+      "title": "Question review",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "question-response",
+        "question-prompt",
+        "confirmation",
+        "keyboard-hints",
+        "inline",
+        "form",
+        "tool",
+        "question",
+        "confirmation"
+      ],
+      "screenLabels": [
+        "tool-execution",
+        "question-response"
+      ],
+      "uiElements": [
+        "question-prompt",
+        "confirmation",
+        "keyboard-hints"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "form"
+      ],
+      "features": [
+        "tool",
+        "question"
+      ],
+      "states": [
+        "confirmation"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/question-review.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/question-review.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/question-review.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "question-succeeded",
+      "title": "Question succeeded",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "confirmation",
+        "inline",
+        "status",
+        "tool",
+        "question",
+        "success"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "confirmation"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "question"
+      ],
+      "states": [
+        "success"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/question-succeeded.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/question-succeeded.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/question-succeeded.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "question-denied",
+      "title": "Question denied",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "error-recovery",
+        "transcript",
+        "tool-card",
+        "destructive-action",
+        "inline",
+        "status",
+        "tool",
+        "question",
+        "error"
+      ],
+      "screenLabels": [
+        "tool-execution",
+        "error-recovery"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "destructive-action"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "question"
+      ],
+      "states": [
+        "error"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/question-denied.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/question-denied.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/question-denied.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "read-input-streaming",
+      "title": "Read input streaming",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "status-indicator",
+        "inline",
+        "status",
+        "tool",
+        "read",
+        "streaming"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "read"
+      ],
+      "states": [
+        "streaming"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/read-input-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/read-input-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/read-input-streaming.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "read-permission",
+      "title": "Read permission",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "inline-prompt",
+        "approval-actions",
+        "button-group",
+        "keyboard-hints",
+        "confirmation",
+        "inline",
+        "approval",
+        "tool",
+        "read",
+        "confirmation"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "inline-prompt",
+        "approval-actions",
+        "button-group",
+        "keyboard-hints",
+        "confirmation"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "approval"
+      ],
+      "features": [
+        "tool",
+        "read"
+      ],
+      "states": [
+        "confirmation"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/read-permission.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/read-permission.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/read-permission.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "read-succeeded",
+      "title": "Read succeeded",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "status-indicator",
+        "inline",
+        "status",
+        "tool",
+        "read",
+        "success"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "read"
+      ],
+      "states": [
+        "success"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/read-succeeded.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/read-succeeded.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/read-succeeded.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "read-denied",
+      "title": "Read denied",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "error-recovery",
+        "transcript",
+        "tool-card",
+        "status-indicator",
+        "inline",
+        "status",
+        "tool",
+        "read",
+        "error"
+      ],
+      "screenLabels": [
+        "tool-execution",
+        "error-recovery"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "read"
+      ],
+      "states": [
+        "error"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/read-denied.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/read-denied.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/read-denied.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "patch-created",
+      "title": "Patch created file",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "confirmation",
+        "inline",
+        "status",
+        "tool",
+        "patch",
+        "success"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "confirmation"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "patch"
+      ],
+      "states": [
+        "success"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/patch-created.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/patch-created.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/patch-created.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "patch-updated",
+      "title": "Patch updated file",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "confirmation",
+        "inline",
+        "status",
+        "tool",
+        "patch",
+        "success"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "confirmation"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "patch"
+      ],
+      "states": [
+        "success"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/patch-updated.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/patch-updated.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/patch-updated.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "patch-deleted",
+      "title": "Patch deleted file",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "transcript",
+        "tool-card",
+        "confirmation",
+        "inline",
+        "status",
+        "tool",
+        "patch",
+        "success"
+      ],
+      "screenLabels": [
+        "tool-execution"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "confirmation"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "tool",
+        "patch"
+      ],
+      "states": [
+        "success"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/patch-deleted.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/patch-deleted.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/patch-deleted.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "patch-failed",
+      "title": "Patch failed",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "tool-execution",
+        "error-recovery",
+        "transcript",
+        "tool-card",
+        "error-report",
+        "inline",
+        "error-report",
+        "tool",
+        "patch",
+        "error"
+      ],
+      "screenLabels": [
+        "tool-execution",
+        "error-recovery"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "error-report"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "error-report"
+      ],
+      "features": [
+        "tool",
+        "patch"
+      ],
+      "states": [
+        "error"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/patch-failed.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/patch-failed.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/patch-failed.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "session-tabs-running",
+      "title": "Session tabs (running)",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "session-list",
+        "tabs",
+        "full-screen-view",
+        "status-indicator",
+        "keyboard-hints",
+        "transcript",
+        "full-screen",
+        "navigation",
+        "session",
+        "tabs",
+        "running"
+      ],
+      "screenLabels": [
+        "session-list"
+      ],
+      "uiElements": [
+        "tabs",
+        "full-screen-view",
+        "status-indicator",
+        "keyboard-hints",
+        "transcript"
+      ],
+      "surfaces": [
+        "full-screen"
+      ],
+      "patterns": [
+        "navigation"
+      ],
+      "features": [
+        "session",
+        "tabs"
+      ],
+      "states": [
+        "running"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/session-tabs-running.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/session-tabs-running.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/session-tabs-running.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "session-tabs-idle",
+      "title": "Session tabs (idle)",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "session-list",
+        "tabs",
+        "full-screen-view",
+        "status-indicator",
+        "keyboard-hints",
+        "full-screen",
+        "navigation",
+        "session",
+        "tabs",
+        "idle"
+      ],
+      "screenLabels": [
+        "session-list"
+      ],
+      "uiElements": [
+        "tabs",
+        "full-screen-view",
+        "status-indicator",
+        "keyboard-hints"
+      ],
+      "surfaces": [
+        "full-screen"
+      ],
+      "patterns": [
+        "navigation"
+      ],
+      "features": [
+        "session",
+        "tabs"
+      ],
+      "states": [
+        "idle"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/session-tabs-idle.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/session-tabs-idle.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/session-tabs-idle.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "subagent-running",
+      "title": "Subagent running",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "subagent-activity",
+        "transcript",
+        "tool-card",
+        "status-indicator",
+        "inline",
+        "status",
+        "agent",
+        "subagent",
+        "running"
+      ],
+      "screenLabels": [
+        "subagent-activity"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "agent",
+        "subagent"
+      ],
+      "states": [
+        "running"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/subagent-running.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/subagent-running.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/subagent-running.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "subagent-completed",
+      "title": "Subagent completed",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "subagent-activity",
+        "transcript",
+        "tool-card",
+        "confirmation",
+        "inline",
+        "status",
+        "agent",
+        "subagent",
+        "success"
+      ],
+      "screenLabels": [
+        "subagent-activity"
+      ],
+      "uiElements": [
+        "transcript",
+        "tool-card",
+        "confirmation"
+      ],
+      "surfaces": [
+        "inline"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "agent",
+        "subagent"
+      ],
+      "states": [
+        "success"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/subagent-completed.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/subagent-completed.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/subagent-completed.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    },
+    {
+      "id": "subagent-session",
+      "title": "Subagent session",
+      "category": "session",
+      "summary": "",
+      "tags": [
+        "subagent-activity",
+        "session-list",
+        "transcript",
+        "panel",
+        "status-indicator",
+        "full-screen",
+        "panel",
+        "status",
+        "agent",
+        "subagent",
+        "session",
+        "populated"
+      ],
+      "screenLabels": [
+        "subagent-activity",
+        "session-list"
+      ],
+      "uiElements": [
+        "transcript",
+        "panel",
+        "status-indicator"
+      ],
+      "surfaces": [
+        "full-screen",
+        "panel"
+      ],
+      "patterns": [
+        "status"
+      ],
+      "features": [
+        "agent",
+        "subagent",
+        "session"
+      ],
+      "states": [
+        "populated"
+      ],
+      "dimensions": [],
+      "viewport": {
+        "cols": 118,
+        "rows": 34
+      },
+      "variations": [],
+      "frames": [
+        {
+          "variantId": "opencode",
+          "src": "captures/opencode/subagent-session.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "tokyonight",
+          "src": "captures/tokyonight/subagent-session.frame.json",
+          "cols": 118,
+          "rows": 34
+        },
+        {
+          "variantId": "everforest",
+          "src": "captures/everforest/subagent-session.frame.json",
+          "cols": 118,
+          "rows": 34
+        }
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "id": "starting-a-session",
+      "title": "Starting a session",
+      "group": "Getting started",
+      "description": "Begin from the OpenCode start screen and prepare a new conversation.",
+      "replayable": false,
+      "steps": [
+        {
+          "screenId": "home",
+          "title": "Start a new conversation",
+          "trigger": "Open OpenCode"
+        },
+        {
+          "screenId": "model-picker",
+          "title": "Choose a model",
+          "trigger": "Open the model picker"
+        },
+        {
+          "screenId": "agent-picker",
+          "title": "Choose an agent",
+          "trigger": "Open the agent picker"
+        }
+      ]
+    },
+    {
+      "id": "session-tabs-lifecycle",
+      "title": "Monitoring session tabs",
+      "group": "Session management",
+      "description": "Compare an idle session strip with a session actively running work.",
+      "replayable": true,
+      "steps": [
+        {
+          "screenId": "session-tabs-running",
+          "title": "Review a running tab",
+          "trigger": "Start the selected session"
+        },
+        {
+          "screenId": "session-tabs-idle",
+          "title": "Review idle tabs"
+        }
+      ]
+    },
+    {
+      "id": "switching-sessions",
+      "title": "Switching sessions",
+      "group": "Session management",
+      "description": "Find an existing conversation and resume it from the session picker.",
+      "replayable": false,
+      "steps": [
+        {
+          "screenId": "command-palette",
+          "title": "Open session navigation",
+          "trigger": "Open the command palette"
+        },
+        {
+          "screenId": "session-picker",
+          "title": "Open the session picker",
+          "trigger": "Run Switch session"
+        },
+        {
+          "screenId": "session-picker-populated",
+          "title": "Select a session",
+          "trigger": "Search, then press Enter"
+        }
+      ]
+    },
+    {
+      "id": "renaming-a-session",
+      "title": "Renaming a session",
+      "group": "Session management",
+      "description": "Give the current conversation a recognizable name.",
+      "replayable": false,
+      "steps": [
+        {
+          "screenId": "session-picker-populated",
+          "title": "Identify the current session"
+        },
+        {
+          "screenId": "session-rename",
+          "title": "Enter the new name",
+          "trigger": "Run /rename"
+        }
+      ]
+    },
+    {
+      "id": "forking-a-session",
+      "title": "Forking a session",
+      "group": "Session management",
+      "description": "Branch an existing conversation from a selected message.",
+      "replayable": false,
+      "steps": [
+        {
+          "screenId": "session-picker-populated",
+          "title": "Open the source session"
+        },
+        {
+          "screenId": "session-fork",
+          "title": "Choose the fork point",
+          "trigger": "Run /fork"
+        }
+      ]
+    },
+    {
+      "id": "exporting-a-session",
+      "title": "Exporting a session",
+      "group": "Session management",
+      "description": "Choose an export format and confirm the transcript was copied.",
+      "replayable": false,
+      "steps": [
+        {
+          "screenId": "session-export",
+          "title": "Choose an export format",
+          "trigger": "Run /export"
+        },
+        {
+          "screenId": "toast-success",
+          "title": "Confirm the export",
+          "trigger": "Complete the export action"
+        }
+      ]
+    },
+    {
+      "id": "patch-success-lifecycle",
+      "title": "Patch succeeds",
+      "group": "Tool use",
+      "description": "Watch a patch stream its input, request permission, and complete successfully.",
+      "replayable": true,
+      "steps": [
+        {
+          "screenId": "patch-input-streaming",
+          "title": "Input streams"
+        },
+        {
+          "screenId": "permission-prompt",
+          "title": "Permission is requested"
+        },
+        {
+          "screenId": "permission-always-selected",
+          "title": "Persistent permission is selected",
+          "trigger": "Choose Allow always"
+        },
+        {
+          "screenId": "permission-always-confirmation",
+          "title": "Persistent permission is confirmed",
+          "trigger": "Confirm Allow always"
+        },
+        {
+          "screenId": "permission-reject-selected",
+          "title": "Rejection is selected",
+          "trigger": "Select Reject"
+        },
+        {
+          "screenId": "permission-fullscreen",
+          "title": "Permission is inspected fullscreen",
+          "trigger": "Toggle fullscreen"
+        },
+        {
+          "screenId": "patch-success",
+          "title": "Patch succeeds"
+        }
+      ]
+    },
+    {
+      "id": "shell-lifecycle",
+      "title": "Foreground shell lifecycle",
+      "group": "Tool use",
+      "description": "Watch thinking and shell input stream before foreground commands succeed and fail.",
+      "replayable": true,
+      "steps": [
+        {
+          "screenId": "thinking-streaming",
+          "title": "Thinking streams"
+        },
+        {
+          "screenId": "shell-input-streaming",
+          "title": "Command input streams"
+        },
+        {
+          "screenId": "shell-output-streaming",
+          "title": "Command output streams"
+        },
+        {
+          "screenId": "shell-execute-succeeded",
+          "title": "Command succeeds"
+        },
+        {
+          "screenId": "shell-execute-failed",
+          "title": "Command fails"
+        }
+      ]
+    },
+    {
+      "id": "search-lifecycle",
+      "title": "Project search lifecycle",
+      "group": "Tool use",
+      "description": "Run built-in glob and grep tools through distinct streaming, grouped, success, empty, and failure states.",
+      "replayable": true,
+      "steps": [
+        {
+          "screenId": "glob-success",
+          "title": "Glob succeeds"
+        },
+        {
+          "screenId": "glob-empty",
+          "title": "Glob is empty"
+        },
+        {
+          "screenId": "grouped-exploration",
+          "title": "Glob and grep run together"
+        },
+        {
+          "screenId": "grep-success",
+          "title": "Grep succeeds"
+        },
+        {
+          "screenId": "grep-empty",
+          "title": "Grep is empty"
+        },
+        {
+          "screenId": "grep-failure",
+          "title": "Grep fails"
+        }
+      ]
+    },
+    {
+      "id": "web-lifecycle",
+      "title": "Web tool lifecycle",
+      "group": "Tool use",
+      "description": "Run the v2 WebFetch and WebSearch renderers with real tool calls.",
+      "replayable": true,
+      "steps": [
+        {
+          "screenId": "webfetch-streaming",
+          "title": "WebFetch input streams"
+        },
+        {
+          "screenId": "webfetch-success",
+          "title": "WebFetch succeeds"
+        },
+        {
+          "screenId": "websearch-running",
+          "title": "WebSearch runs"
+        },
+        {
+          "screenId": "websearch-failure",
+          "title": "WebSearch reports provider failure"
+        }
+      ]
+    },
+    {
+      "id": "question-lifecycle",
+      "title": "Question lifecycle",
+      "group": "Tool use",
+      "description": "Stream a question call, answer its form, review it, submit it, and deny a second call.",
+      "replayable": true,
+      "steps": [
+        {
+          "screenId": "question-input-streaming",
+          "title": "Question input streams"
+        },
+        {
+          "screenId": "question-awaiting-form",
+          "title": "Question awaits an answer"
+        },
+        {
+          "screenId": "question-review",
+          "title": "Answers are reviewed"
+        },
+        {
+          "screenId": "question-succeeded",
+          "title": "Answers are submitted"
+        },
+        {
+          "screenId": "question-denied",
+          "title": "Question is denied"
+        }
+      ]
+    },
+    {
+      "id": "read-file-lifecycle",
+      "title": "Read file lifecycle",
+      "group": "Tool use",
+      "description": "Stream a read call, approve it, then observe success and denial.",
+      "replayable": true,
+      "steps": [
+        {
+          "screenId": "read-input-streaming",
+          "title": "Input streams"
+        },
+        {
+          "screenId": "read-permission",
+          "title": "Permission is requested"
+        },
+        {
+          "screenId": "read-succeeded",
+          "title": "Read succeeds"
+        },
+        {
+          "screenId": "read-denied",
+          "title": "Read is denied"
+        }
+      ]
+    },
+    {
+      "id": "patch-file-changes",
+      "title": "Patch file changes",
+      "group": "Tool use",
+      "description": "Apply real patches that create, update, and delete files, then show verification failure.",
+      "replayable": true,
+      "steps": [
+        {
+          "screenId": "patch-created",
+          "title": "Patch creates a file"
+        },
+        {
+          "screenId": "patch-updated",
+          "title": "Patch updates a file"
+        },
+        {
+          "screenId": "patch-deleted",
+          "title": "Patch deletes a file"
+        },
+        {
+          "screenId": "patch-failed",
+          "title": "Patch fails verification"
+        }
+      ]
+    },
+    {
+      "id": "answering-a-question",
+      "title": "Answering an agent question",
+      "group": "Tool use",
+      "description": "Respond to a structured question without leaving the conversation.",
+      "replayable": false,
+      "steps": [
+        {
+          "screenId": "question-prompt",
+          "title": "Choose or enter an answer",
+          "trigger": "Submit the question form"
+        }
+      ]
+    },
+    {
+      "id": "subagent-lifecycle",
+      "title": "Subagent lifecycle",
+      "group": "Subagents",
+      "description": "Delegate work, observe its completion, and open the child session.",
+      "replayable": true,
+      "steps": [
+        {
+          "screenId": "subagent-running",
+          "title": "Subagent runs"
+        },
+        {
+          "screenId": "subagent-completed",
+          "title": "Subagent completes"
+        },
+        {
+          "screenId": "subagent-session",
+          "title": "Open the subagent session"
+        }
+      ]
+    },
+    {
+      "id": "assistant-lifecycle",
+      "title": "Assistant response lifecycle",
+      "group": "Responses",
+      "description": "Observe assistant text while it streams, succeeds, fails, and is interrupted.",
+      "replayable": true,
+      "steps": [
+        {
+          "screenId": "assistant-response-succeeded",
+          "title": "Response succeeds"
+        },
+        {
+          "screenId": "assistant-response-failed",
+          "title": "Response fails"
+        },
+        {
+          "screenId": "assistant-response-interrupted",
+          "title": "Response is interrupted"
+        }
+      ]
+    },
+    {
+      "id": "connecting-an-integration",
+      "title": "Connecting an integration",
+      "group": "Configuration",
+      "description": "Choose an integration and verify its connection state.",
+      "replayable": false,
+      "steps": [
+        {
+          "screenId": "integration-picker",
+          "title": "Choose an integration"
+        },
+        {
+          "screenId": "status",
+          "title": "Check the connection status"
+        }
+      ]
+    },
+    {
+      "id": "managing-mcp-servers",
+      "title": "Managing MCP servers",
+      "group": "Configuration",
+      "description": "Inspect configured MCP servers and their runtime status.",
+      "replayable": false,
+      "steps": [
+        {
+          "screenId": "mcp-list",
+          "title": "Open MCP management"
+        },
+        {
+          "screenId": "status",
+          "title": "Inspect MCP status"
+        }
+      ]
+    },
+    {
+      "id": "pairing-a-device",
+      "title": "Pairing a device",
+      "group": "Configuration",
+      "description": "Open the pairing code used to connect another device.",
+      "replayable": false,
+      "steps": [
+        {
+          "screenId": "pair",
+          "title": "Scan the pairing code"
+        }
+      ]
+    },
+    {
+      "id": "reviewing-a-diff",
+      "title": "Reviewing a diff",
+      "group": "Review",
+      "description": "Inspect the working tree and verify whether files have changed.",
+      "replayable": false,
+      "steps": [
+        {
+          "screenId": "diff-viewer",
+          "title": "Open the diff viewer",
+          "trigger": "Run /diff"
+        }
+      ]
+    }
+  ]
+}

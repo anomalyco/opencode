@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "opencode-lab-catalog",
+  "main": "worker.ts",
+  "compatibility_date": "2026-08-12",
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "routes": [
+    {
+      "pattern": "dev.opencode.ai/lab/catalog*",
+      "zone_name": "opencode.ai"
+    }
+  ]
+}

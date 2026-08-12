@@ -1,0 +1,38 @@
+name: deploy-lab-catalog
+
+on:
+  push:
+    branches: [v2]
+    paths:
+      - ".github/workflows/deploy-lab-catalog.yml"
+      - "bun.lock"
+      - "package.json"
+      - "packages/drive/**"
+      - "packages/lab/catalog/**"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-lab-catalog-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.repository == 'anomalyco/opencode' && github.ref_name == 'v2'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Validate
+        working-directory: packages/lab/catalog
+        run: bun run lint && bun typecheck && bun run test
+
+      - name: Deploy
+        working-directory: packages/lab/catalog
+        run: bun run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
