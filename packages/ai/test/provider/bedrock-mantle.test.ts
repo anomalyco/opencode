@@ -1,12 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM } from "../../src"
-import { AmazonBedrockMantle } from "../../src/providers"
-import { compileRequest, LLMClient } from "../../src/route/client"
-import { it } from "../lib/effect"
-import { dynamicResponse } from "../lib/http"
-import { recordedTests } from "../recorded-test"
+import { LLM } from "../../src/index.js"
+import { AmazonBedrockMantle } from "../../src/providers.js"
+import { compileRequest, LLMClient } from "../../src/route/client.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse } from "../lib/http.js"
+import { recordedTests } from "../recorded-test.js"
 
 const credentials = {
   region: "us-east-2",

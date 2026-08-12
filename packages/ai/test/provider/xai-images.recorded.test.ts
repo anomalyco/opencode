@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, ImageInput } from "../../src"
-import { XAI } from "../../src/providers"
-import { dimensions } from "../lib/image"
-import { recordedTests } from "../recorded-test"
+import { Image, ImageInput } from "../../src/index.js"
+import { XAI } from "../../src/providers.js"
+import { dimensions } from "../lib/image.js"
+import { recordedTests } from "../recorded-test.js"
 
 const model = XAI.configure({
   apiKey: process.env.XAI_API_KEY ?? "fixture",

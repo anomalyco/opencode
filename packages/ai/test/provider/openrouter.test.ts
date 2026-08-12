@@ -1,12 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, Message } from "../../src"
-import { LLMClient } from "../../src/route"
-import { compileRequest } from "../../src/route/client"
-import * as OpenRouter from "../../src/providers/openrouter"
-import { it } from "../lib/effect"
-import { fixedResponse } from "../lib/http"
-import { sseEvents } from "../lib/sse"
+import { CacheHint, LLM, Message } from "../../src/index.js"
+import { LLMClient } from "../../src/route.js"
+import { compileRequest } from "../../src/route/client.js"
+import * as OpenRouter from "../../src/providers/openrouter.js"
+import { it } from "../lib/effect.js"
+import { fixedResponse } from "../lib/http.js"
+import { sseEvents } from "../lib/sse.js"
 
 describe("OpenRouter", () => {
   it.effect("prepares OpenRouter models through the OpenAI-compatible Chat route", () =>

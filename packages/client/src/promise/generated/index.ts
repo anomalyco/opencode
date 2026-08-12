@@ -1,3 +1,3 @@
-export { ClientError, type ClientErrorReason } from "./client-error"
-export * as OpenCode from "./client"
-export * from "./types"
+export { ClientError, type ClientErrorReason } from "./client-error.js"
+export * as OpenCode from "./client.js"
+export * from "./types.js"

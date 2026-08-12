@@ -1,1 +1,1 @@
-export * from "./route/index"
+export * from "./route/index.js"

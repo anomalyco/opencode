@@ -1,12 +1,12 @@
-import { Auth } from "../route/auth"
-import { type AtLeastOne, type ProviderAuthOption } from "../route/auth-options"
-import type { Route as RouteDef, RouteDefaultsInput } from "../route/client"
-import type { ProviderPackage } from "../provider-package"
-import { ProviderID, type ModelID } from "../schema"
-import * as OpenAIChat from "../protocols/openai-chat"
-import * as OpenAIResponses from "../protocols/openai-responses"
-import { ProviderShared } from "../protocols/shared"
-import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
+import { Auth } from "../route/auth.js"
+import { type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
+import type { Route as RouteDef, RouteDefaultsInput } from "../route/client.js"
+import type { ProviderPackage } from "../provider-package.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
+import * as OpenAIChat from "../protocols/openai-chat.js"
+import * as OpenAIResponses from "../protocols/openai-responses.js"
+import { ProviderShared } from "../protocols/shared.js"
+import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("azure")
 const routeAuth = Auth.remove("authorization")

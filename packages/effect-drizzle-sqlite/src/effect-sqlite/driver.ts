@@ -7,10 +7,10 @@ import { EffectLogger } from "drizzle-orm/effect-core"
 import { entityKind } from "drizzle-orm/entity"
 import type { AnyRelations, EmptyRelations } from "drizzle-orm/relations"
 import { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core/dialect"
-import { SQLiteEffectDatabase } from "../sqlite-core/effect/db"
+import { SQLiteEffectDatabase } from "../sqlite-core/effect/db.js"
 import type { DrizzleConfig } from "drizzle-orm/utils"
-import { jitCompatCheck } from "../internal/drizzle-utils"
-import { type EffectSQLiteQueryEffectHKT, type EffectSQLiteRunResult, EffectSQLiteSession } from "./session"
+import { jitCompatCheck } from "../internal/drizzle-utils.js"
+import { type EffectSQLiteQueryEffectHKT, type EffectSQLiteRunResult, EffectSQLiteSession } from "./session.js"
 
 export class EffectSQLiteDatabase<TRelations extends AnyRelations = EmptyRelations> extends SQLiteEffectDatabase<
   EffectSQLiteQueryEffectHKT,

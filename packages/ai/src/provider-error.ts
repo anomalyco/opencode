@@ -12,7 +12,7 @@ import {
   type HttpContext,
   type HttpRateLimitDetails,
   type ProviderMetadata,
-} from "./schema"
+} from "./schema/index.js"
 
 const patterns = [
   /prompt is too long/i,

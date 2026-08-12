@@ -1,5 +1,5 @@
 import type { Config, Redacted } from "effect"
-import { Auth } from "./auth"
+import { Auth } from "./auth.js"
 
 export type ApiKeyMode = "optional" | "required"
 
@@ -61,4 +61,4 @@ export const bearer = (
     .bearer()
 }
 
-export * as AuthOptions from "./auth-options"
+export * as AuthOptions from "./auth-options.js"

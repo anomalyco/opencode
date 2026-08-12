@@ -1,7 +1,7 @@
 import { Schema } from "effect"
-import { JsonSchema, ModelID, ProviderID } from "./ids"
-import type { AnyRoute } from "../route/client"
-import { isRecord } from "../utils/record"
+import { JsonSchema, ModelID, ProviderID } from "./ids.js"
+import type { AnyRoute } from "../route/client.js"
+import { isRecord } from "../utils/record.js"
 
 export const mergeJsonRecords = (
   ...items: ReadonlyArray<Record<string, unknown> | undefined>

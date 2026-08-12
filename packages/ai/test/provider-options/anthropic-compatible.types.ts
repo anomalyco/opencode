@@ -1,5 +1,5 @@
-import { LLM } from "../../src"
-import { AnthropicCompatible } from "../../src/providers"
+import { LLM } from "../../src/index.js"
+import { AnthropicCompatible } from "../../src/providers.js"
 
 const model = AnthropicCompatible.configure({ baseURL: "https://example.com" }).model("claude")
 

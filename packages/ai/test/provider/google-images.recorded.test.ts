@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, ImageInput } from "../../src"
-import { Google } from "../../src/providers"
-import { dimensions } from "../lib/image"
-import { recordedTests } from "../recorded-test"
+import { Image, ImageInput } from "../../src/index.js"
+import { Google } from "../../src/providers.js"
+import { dimensions } from "../lib/image.js"
+import { recordedTests } from "../recorded-test.js"
 
 const model = Google.configure({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture",

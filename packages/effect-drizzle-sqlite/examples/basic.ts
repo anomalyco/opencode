@@ -5,7 +5,7 @@ import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
-import { EffectDrizzleSqlite } from "../src"
+import { EffectDrizzleSqlite } from "../src/index.js"
 
 const users = sqliteTable("users", {
   id: integer().primaryKey({ autoIncrement: true }),

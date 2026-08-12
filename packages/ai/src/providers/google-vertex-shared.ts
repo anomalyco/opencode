@@ -1,6 +1,6 @@
 import type { AnyAuthClient } from "google-auth-library"
 import { Effect, Redacted } from "effect"
-import { Auth, MissingCredentialError } from "../route/auth"
+import { Auth, MissingCredentialError } from "../route/auth.js"
 
 const SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 
@@ -74,4 +74,4 @@ export const oauth = (input: OAuthOptions, project?: string) => {
   return adc(project)
 }
 
-export * as GoogleVertexShared from "./google-vertex-shared"
+export * as GoogleVertexShared from "./google-vertex-shared.js"

@@ -1,7 +1,11 @@
 import { Effect, JsonSchema, Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
-import type { ToolCallPart, ToolDefinition as ToolDefinitionClass, ToolOutput as ToolOutputType } from "./schema"
-import { ToolDefinition, ToolFailure, ToolOutput } from "./schema"
+import type {
+  ToolCallPart,
+  ToolDefinition as ToolDefinitionClass,
+  ToolOutput as ToolOutputType,
+} from "./schema/index.js"
+import { ToolDefinition, ToolFailure, ToolOutput } from "./schema/index.js"
 
 /**
  * Schema constraint for tool parameters / success values: no decoding or
@@ -245,4 +249,4 @@ const project = (
 
 export { ToolFailure }
 
-export * as Tool from "./tool"
+export * as Tool from "./tool.js"

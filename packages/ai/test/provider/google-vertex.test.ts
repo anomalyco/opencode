@@ -1,14 +1,14 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM } from "../../src"
-import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers"
-import { LLMClient } from "../../src/route"
-import { compileRequest } from "../../src/route/client"
-import { it } from "../lib/effect"
-import { dynamicResponse } from "../lib/http"
-import { deltaChunk, finishChunk } from "../lib/openai-chunks"
-import { sseEvents } from "../lib/sse"
+import { LLM } from "../../src/index.js"
+import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers.js"
+import { LLMClient } from "../../src/route.js"
+import { compileRequest } from "../../src/route/client.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse } from "../lib/http.js"
+import { deltaChunk, finishChunk } from "../lib/openai-chunks.js"
+import { sseEvents } from "../lib/sse.js"
 
 describe("Google Vertex providers", () => {
   it.effect("sends Gemini requests to the global Vertex endpoint", () =>

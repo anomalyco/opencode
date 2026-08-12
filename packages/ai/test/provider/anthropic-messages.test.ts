@@ -1,14 +1,14 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { CacheHint, LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src"
-import { Auth, LLMClient } from "../../src/route"
-import { compileRequest } from "../../src/route/client"
-import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
-import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios"
-import { it } from "../lib/effect"
-import { dynamicResponse, fixedResponse } from "../lib/http"
-import { sseEvents } from "../lib/sse"
+import { CacheHint, LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src/index.js"
+import { Auth, LLMClient } from "../../src/route.js"
+import { compileRequest } from "../../src/route/client.js"
+import * as AnthropicMessages from "../../src/protocols/anthropic-messages.js"
+import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse, fixedResponse } from "../lib/http.js"
+import { sseEvents } from "../lib/sse.js"
 
 const model = AnthropicMessages.route
   .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
