@@ -21,8 +21,7 @@
     "@opencode-ai/simulation": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "drizzle-orm": "catalog:",
-    "effect": "catalog:",
-    "modal": "0.9.0"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",

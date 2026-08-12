@@ -1,6 +1,8 @@
 import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
+import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
+import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { Deferred, Effect, Latch, Layer, Option, Ref, Schema, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
@@ -429,6 +431,58 @@ it.live("embedded client is available as a Layer service", () =>
       const opencode = yield* fixture.sdk.OpenCode.Service
       const created = yield* opencode.sessions.create({ id, location: location(fixture) })
       expect(created.id).toBe(id)
-    }).pipe(Effect.provide(fixture.sdk.OpenCode.layer))
+    }).pipe(Effect.provide(fixture.sdk.OpenCode.layer()))
   }),
+)
+
+it.live("configures workspace providers through the SDK facade", () =>
+  withEmbedded("opencode-embedded-workspace-", (fixture) =>
+    Effect.gen(function* () {
+      const calls: Array<{ readonly operation: string; readonly workspaceID: string }> = []
+      const driver = WorkspaceDriver.make({
+        create: ({ workspaceID }) => {
+          calls.push({ operation: "create", workspaceID })
+          return Effect.succeed({ binding: { externalID: workspaceID } })
+        },
+        connect: ({ workspaceID }) => {
+          calls.push({ operation: "connect", workspaceID })
+          return Effect.succeed(makeMemoryDriver())
+        },
+        suspendForIdle: () => Effect.void,
+        destroy: ({ workspaceID }) => {
+          calls.push({ operation: "destroy", workspaceID })
+          return Effect.void
+        },
+      })
+      const opencode = yield* fixture.sdk.OpenCode.create({ workspaceProviders: { fake: driver } })
+      const workspace = yield* opencode.workspace.create({ provider: "fake" })
+
+      expect(workspace.provider).toBe("fake")
+      expect(workspace.binding).toEqual({ externalID: workspace.id })
+      expect(calls).toEqual([{ operation: "create", workspaceID: workspace.id }])
+
+      const workspaceLocation = fixture.sdk.Location.Ref.make({
+        directory: fixture.sdk.AbsolutePath.make("/"),
+        workspaceID: workspace.id,
+      })
+      const session = yield* opencode.sessions.create({ location: workspaceLocation })
+      expect(session.location.workspaceID).toBe(workspace.id)
+
+      yield* opencode.workspace.destroy({ workspaceID: workspace.id })
+      expect(calls.map((call) => call.operation)).toEqual(["create", "destroy"])
+      expect((yield* opencode.workspace.destroy({ workspaceID: workspace.id }).pipe(Effect.flip))._tag).toBe(
+        "Workspace.NotFound",
+      )
+    }),
+  ),
+)
+
+it.live("preserves unknown workspace provider errors", () =>
+  withEmbedded("opencode-embedded-workspace-provider-", (fixture) =>
+    Effect.gen(function* () {
+      const opencode = yield* fixture.sdk.OpenCode.create()
+      const error = yield* opencode.workspace.create({ provider: "missing" }).pipe(Effect.flip)
+      expect(error).toEqual(new WorkspaceDriver.ProviderNotFound({ provider: "missing" }))
+    }),
+  ),
 )

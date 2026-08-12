@@ -29,6 +29,7 @@ test("re-exports canonical contracts directly from Schema", () => {
   expect(SDK.Model).toBe(Model)
   expect(SDK.WebSearch).toBe(WebSearch)
   expect(SDK.Session).toBe(Session)
+  expect(SDK.Workspace).toBe(Workspace)
   expect(Object.keys(SDK).sort()).toEqual([
     "AbsolutePath",
     "Agent",
@@ -58,6 +59,7 @@ test("re-exports canonical contracts directly from Schema", () => {
     "Skill",
     "Tool",
     "WebSearch",
+    "Workspace",
   ])
 })
 

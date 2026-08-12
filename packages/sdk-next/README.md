@@ -36,7 +36,15 @@ const program = Effect.gen(function* () {
   return yield* opencode.sessions.get({ sessionID })
 })
 
-yield * program.pipe(Effect.provide(OpenCode.layer))
+yield * program.pipe(Effect.provide(OpenCode.layer()))
 ```
 
-`OpenCode.layer` adapts the silent default `OpenCode.create()` for dependency injection; use `OpenCode.layerWith(options)` to configure the host.
+`OpenCode.layer(options)` adapts the scoped `OpenCode.create(options)` convenience constructor for dependency injection.
+
+Workspace providers are host infrastructure configured when the SDK is constructed. Workspace lifecycle operations remain on the typed facade:
+
+```ts
+const opencode = yield * OpenCode.create({ workspaceProviders: { modal: modalWorkspaceProvider } })
+const workspace = yield * opencode.workspace.create({ provider: "modal" })
+yield * opencode.workspace.destroy({ workspaceID: workspace.id })
+```

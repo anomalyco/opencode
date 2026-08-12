@@ -3,11 +3,8 @@ export * as OpenCodeWorkerd from "./workerd"
 import { ServerWorkerd } from "@opencode-ai/server/workerd"
 import { Layer } from "effect"
 import * as OpenCode from "./opencode"
-import type { LogOptions } from "./logging"
 
-export type CreateOptions = ServerWorkerd.Options & {
-  readonly log?: LogOptions
-}
+export type CreateOptions = ServerWorkerd.Options & Pick<OpenCode.CreateOptions, "log" | "workspaceProviders">
 
 /**
  * Boots the embedded opencode SDK on the workerd runtime profile: the full
@@ -23,7 +20,10 @@ export type CreateOptions = ServerWorkerd.Options & {
  * session operations plus the live `events.subscribe()` stream — served over
  * an in-process fetch transport, so no request leaves the isolate.
  */
-export const create = ({ log, ...options }: CreateOptions) =>
-  OpenCode.create({ ...ServerWorkerd.serverOptions(options), log }, { overrides: ServerWorkerd.replacements(options) })
+export const create = ({ log, workspaceProviders, ...options }: CreateOptions) =>
+  OpenCode.create(
+    { ...ServerWorkerd.serverOptions(options), log, workspaceProviders },
+    { overrides: ServerWorkerd.replacements(options) },
+  )
 
 export const layer = (options: CreateOptions) => Layer.effect(OpenCode.Service, create(options))
