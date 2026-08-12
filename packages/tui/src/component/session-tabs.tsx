@@ -66,6 +66,58 @@ function isPlaceholderSessionTitle(value: string | undefined) {
   return value === NEW_SESSION_TAB_TITLE || value === "Untitled session" || isFallbackTitle(value)
 }
 
+// The soft edge of the title wipe spans a few cells behind the front.
+const WIPE_FEATHER = 3
+// The outgoing title sits dimmed toward the background while it is being replaced.
+const WIPE_OUTGOING_DIM = 0.5
+
+// The first real title wipes in from the left over the placeholder it replaces. Only the
+// placeholder → real transition animates; every other title change jumps, so routine
+// syncs and renames never lag behind the data (the reason the original wipe was removed).
+function createTitleWipe(title: () => string, parts: () => readonly string[], width: () => number, animations: () => boolean) {
+  const [outgoing, setOutgoing] = createSignal<string>()
+  const wipe = createAnimatable(
+    { front: 1 },
+    { enabled: animations, transition: tween({ duration: 0.45, ease: (progress) => 1 - (1 - progress) ** 3 }) },
+  )
+  createEffect((previous: string) => {
+    const next = title()
+    if (next === previous) return next
+    if (!isPlaceholderSessionTitle(previous) || isPlaceholderSessionTitle(next)) {
+      setOutgoing(undefined)
+      wipe.jump({ front: 1 })
+      return next
+    }
+    setOutgoing(previous)
+    wipe.jump({ front: 0 })
+    wipe.animate({ front: 1 })
+    return next
+  }, untrack(title))
+  const active = () => outgoing() !== undefined && wipe.value().front < 1
+  const displayed = createMemo(() => {
+    const front = wipe.value().front
+    const incoming = parts()
+    const previous = outgoing()
+    if (previous === undefined || front >= 1) return incoming
+    const previousParts = Locale.graphemes(Locale.takeWidth(previous, width()))
+    const length = Math.max(incoming.length, previousParts.length)
+    const cut = front * length
+    return Array.from({ length }, (_, index) => (cut - index > 0 ? (incoming[index] ?? " ") : (previousParts[index] ?? " ")))
+  })
+  // Tint toward the background per cell: the outgoing text dims as a block (deepening slightly
+  // as the wipe advances), and freshly revealed characters brighten over the feather behind the
+  // front, so the edge reads as a soft gradient instead of a hard cut.
+  const mix = (index: number) => {
+    if (!active()) return 0
+    const front = wipe.value().front
+    const distance = front * displayed().length - index
+    if (distance <= 0) return Math.min(1, front * 6) * (WIPE_OUTGOING_DIM + 0.25 * front)
+    if (distance < WIPE_FEATHER) return WIPE_OUTGOING_DIM * (1 - distance / WIPE_FEATHER)
+    return 0
+  }
+  return { parts: displayed, mix, active }
+}
+
 function createMarquee(hovered: () => string | undefined, animations: () => boolean) {
   const [offset, setOffset] = createSignal(0)
   const leading = createAnimatable({ opacity: 0 }, { enabled: animations, transition: tween({ duration: 0.25 }) })
@@ -198,7 +250,13 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   ? marqueeText(title(), titleWidth(), marquee.offset())
                   : Locale.takeWidth(title(), titleWidth()),
               )
-              const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
+              const wipe = createTitleWipe(
+                title,
+                createMemo(() => Locale.graphemes(visibleTitle())),
+                titleWidth,
+                animations,
+              )
+              const visibleTitleParts = wipe.parts
               const titleFades = createMemo(() => stringWidth(title()) >= titleWidth() && titleWidth() > FADE_WIDTH)
               const detail = createMemo(() => {
                 const value = session()
@@ -260,7 +318,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                 const color = glows()
                   ? glowTextColor(foreground(), glowColor(), 1 + numberWidth() + index, width())
                   : foreground()
-                return titleFades()
+                const faded = titleFades()
                   ? fadeTitleColor(
                       color,
                       pulseBackground(),
@@ -269,6 +327,8 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       scrolling() ? marquee.leading() : 0,
                     )
                   : color
+                const mix = wipe.mix(index)
+                return mix > 0 ? tint(faded, pulseBackground(), mix) : faded
               }
               const release = () => {
                 setDragging(undefined)
@@ -387,7 +447,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                           undefined
                         }
                       >
-                        <Show when={glows() || titleFades()} fallback={visibleTitle()}>
+                        <Show when={glows() || titleFades() || wipe.active()} fallback={visibleTitleParts().join("")}>
                           <For each={visibleTitleParts()}>
                             {(character, index) => <span style={{ fg: titleColor(index()) }}>{character}</span>}
                           </For>
@@ -701,7 +761,13 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
               ? marqueeText(title(), availableTitleWidth(), marquee.offset())
               : Locale.takeWidth(title(), availableTitleWidth()),
           )
-          const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
+          const wipe = createTitleWipe(
+            title,
+            createMemo(() => Locale.graphemes(visibleTitle())),
+            availableTitleWidth,
+            animations,
+          )
+          const visibleTitleParts = wipe.parts
           const titleFades = createMemo(
             () => stringWidth(title()) >= availableTitleWidth() && availableTitleWidth() > FADE_WIDTH,
           )
@@ -716,7 +782,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           const characterColor = (index: number) => {
             const base = foreground()
             const color = glows() ? glowTextColor(base, glowColor(), 1 + numberWidth() + index, width()) : base
-            return titleFades()
+            const faded = titleFades()
               ? fadeTitleColor(
                   color,
                   background(),
@@ -725,6 +791,8 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   scrolling() ? marquee.leading() : 0,
                 )
               : color
+            const mix = wipe.mix(index)
+            return mix > 0 ? tint(faded, background(), mix) : faded
           }
           // The running sweep's level under the number cell, reported by the pulse renderable.
           const [sweepLevel, setSweepLevel] = createSignal(0)
@@ -799,7 +867,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   selectable={false}
                   attributes={(bold() ?? 0) | (placeholder() ? TextAttributes.ITALIC : 0) || undefined}
                 >
-                  <Show when={glows() || titleFades()} fallback={visibleTitle()}>
+                  <Show when={glows() || titleFades() || wipe.active()} fallback={visibleTitleParts().join("")}>
                     <For each={visibleTitleParts()}>
                       {(character, index) => <span style={{ fg: characterColor(index()) }}>{character}</span>}
                     </For>
