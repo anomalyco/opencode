@@ -120,6 +120,7 @@ function makeRoutes<AuthError, AuthServices>(
           name: options.app?.name ?? "opencode",
           version: options.app?.version ?? "unknown",
         },
+        stdio: options.mcp?.stdio,
       }),
     ],
     [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],

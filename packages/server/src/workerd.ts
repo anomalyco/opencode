@@ -7,13 +7,10 @@ import { sqliteLayer } from "@opencode-ai/core/database/sqlite.workerd"
 import type { DurableObjectStorage } from "@opencode-ai/core/database/sqlite.workerd"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { FileSystemSearch } from "@opencode-ai/core/filesystem/search"
-import { MCP } from "@opencode-ai/core/mcp/index"
 import { Pty } from "@opencode-ai/core/pty"
 import { Shell } from "@opencode-ai/core/shell"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Vcs } from "@opencode-ai/core/vcs"
-import { Global } from "@opencode-ai/util/global"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import type { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { ServerFetch } from "./fetch"
 import type { ServerOptions } from "./options"
@@ -45,8 +42,6 @@ export interface Options {
   readonly config?: { readonly content?: string }
   /** models.dev catalog options; the bundled snapshot is the boot-time floor either way. */
   readonly models?: ServerOptions["models"]
-  /** Overrides for the injected Global paths; defaults root everything under tmp on workerd. */
-  readonly paths?: Partial<Global.Interface>
 }
 
 /**
@@ -58,7 +53,10 @@ export function create(options: Options) {
   // Eviction can kill the isolate between a turn's Started and terminal events with no
   // teardown. The write-ahead execution claim plus this boot-time resume recovers such
   // orphaned turns by replaying the drain from durable history on the next wake.
-  return ServerFetch.make(serverOptions(options), replacements(options), { resumeSuspendedSessions: true })
+  return ServerFetch.make(serverOptions(options), {
+    overrides: replacements(options),
+    resumeSuspendedSessions: true,
+  })
 }
 
 export function serverOptions(options: Options): ServerOptions {
@@ -72,41 +70,26 @@ export function serverOptions(options: Options): ServerOptions {
     events: { persist: true },
     config: { content: options.config?.content },
     models: options.models,
+    // No child processes on workerd: local (stdio) MCP servers report failed
+    // instead of connecting; remote transports work unchanged.
+    mcp: { stdio: false },
   }
 }
 
 /** The workerd replacement graph, applied after the standard server replacements. */
 export function replacements(options: Options): LayerNode.Replacements {
   return [
-    [
-      Database.node,
-      makeGlobalNode({
-        service: Database.Service,
-        layer: Database.layerFromClient.pipe(Layer.provide(sqliteLayer({ storage: options.storage }))),
-        deps: [Global.node],
-      }),
-    ],
-    [Global.node, Global.layerWith({ ...options.paths })],
+    [Database.node, Database.configuredClient(sqliteLayer({ storage: options.storage }))],
     [Snapshot.node, Snapshot.noopLayer],
     [Vcs.node, vcsLayer],
     [Shell.node, shellLayer],
     [FileSystem.node, fileSystemLayer],
     [FileSystemSearch.node, fileSystemSearchLayer],
     [Pty.node, ptyLayer],
-    [
-      MCP.node,
-      MCP.configured({
-        clientInfo: {
-          name: options.app?.name ?? "opencode",
-          version: options.app?.version ?? "unknown",
-        },
-        stdio: false,
-      }),
-    ],
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.
     [ConfigPluginSource.node, ConfigPluginSource.empty],
-  ] satisfies LayerNode.Replacements
+  ]
 }
 
 const unavailable = (what: string) => Effect.die(new Error(`${what} is unavailable in the workerd profile`))

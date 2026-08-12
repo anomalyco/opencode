@@ -8,6 +8,15 @@ import { isAllowedCorsOrigin } from "./cors"
 import { createRoutes } from "./routes"
 import type { ServerOptions } from "./options"
 
+export interface BootOptions {
+  /**
+   * Runtime-profile service replacements, applied after the standard set so later entries
+   * win — swaps services the standard graph assumes are local. See `ServerWorkerd.replacements`.
+   */
+  readonly overrides?: LayerNode.Replacements
+}
+
+
 /**
  * Builds a web-standard fetch handler — `(request: Request) => Promise<Response>` — serving the
  * same HttpApi routes as the Node server process without binding a port, owning a listener, or
@@ -29,16 +38,10 @@ import type { ServerOptions } from "./options"
  * the Node server process does: a runtime that dies without teardown — an evicted Durable
  * Object leaves the same durable signature as a killed process — replays orphaned turns on the
  * next boot, and the sweep is a no-op when nothing is suspended.
- *
- * `overrides` are layer replacements applied after the standard set, so a runtime profile can
- * swap services the standard graph assumes are local — see `ServerWorkerd.replacements`.
  */
-export const make = Effect.fn("ServerFetch.make")(function* (
-  options: ServerOptions = {},
-  overrides: LayerNode.Replacements = [],
-) {
+export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOptions = {}, boot: BootOptions = {}) {
   const context = yield* Layer.build(
-    createRoutes(options, () => [], overrides).pipe(Layer.provide(HttpServer.layerServices)),
+    createRoutes(options, () => [], boot.overrides ?? []).pipe(Layer.provide(HttpServer.layerServices)),
   )
   // Forked so the returned handler is never delayed; resumed drains are already
   // logged and durably recorded by the execution layer.

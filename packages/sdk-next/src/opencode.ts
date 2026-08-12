@@ -1,9 +1,9 @@
 import { OpenCode } from "@opencode-ai/client/effect"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
+import type { ServerFetch } from "@opencode-ai/server/fetch"
 import { createEmbeddedRoutes } from "@opencode-ai/server/routes"
 import type { ServerOptions } from "@opencode-ai/server/options"
-import type { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Context, Effect, Layer, ManagedRuntime, Scope } from "effect"
 import { FetchHttpClient, HttpEffect, HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
 import * as Logging from "./logging"
@@ -16,16 +16,7 @@ export type CreateOptions = ServerOptions & {
 }
 
 /** Host hooks for embedding opencode on a non-default runtime profile (e.g. workerd). */
-export interface EmbedOptions {
-  /** Runtime-profile service replacements, applied after the standard set so later entries win. */
-  readonly overrides?: LayerNode.Replacements
-  /**
-   * Resumes Sessions whose execution claim was never released once the application layer boots.
-   * Turn it on for runtimes that can die without teardown — an evicted Durable Object leaves the
-   * same durable signature as a killed process — so orphaned turns replay on the next boot.
-   */
-  readonly resumeSuspendedSessions?: boolean
-}
+export type EmbedOptions = ServerFetch.BootOptions
 
 export const create = Effect.fn("OpenCode.create")(function* (options: CreateOptions = {}, embed: EmbedOptions = {}) {
   const { log, ...server } = options

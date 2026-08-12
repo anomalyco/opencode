@@ -4,6 +4,7 @@ import { Reactivity } from "effect/unstable/reactivity"
 import { SqlClient, Statement } from "effect/unstable/sql"
 import type { Connection } from "effect/unstable/sql/SqlConnection"
 import { classifySqliteError, SqlError, UnknownError } from "effect/unstable/sql/SqlError"
+import type { NativeTransactionSqlClient } from "./drizzle/effect-sqlite/session.js"
 import { Sqlite } from "./sqlite.js"
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name"
@@ -215,10 +216,10 @@ const make = (options: Config) =>
         config: options,
         withTransaction: makeWithTransaction(native, connection, semaphore),
         // Durable Object SQLite rejects BEGIN/COMMIT/SAVEPOINT; consumers such
-        // as the drizzle session must route through withTransaction instead.
+        // as the drizzle session detect this and route through withTransaction.
         transactionStatements: false,
-      },
-    )
+      } as const,
+    ) satisfies NativeTransactionSqlClient
 
     return client
   })

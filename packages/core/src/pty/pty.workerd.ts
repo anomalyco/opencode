@@ -1,6 +1,6 @@
-import type { Proc } from "./pty"
+import type { Proc } from "./pty.js"
 
-export type { Disp, Exit, Opts, Proc } from "./pty"
+export type { Disp, Exit, Opts, Proc } from "./pty.js"
 
 // workerd cannot spawn processes; the Pty service surfaces this as a defect if
 // a terminal is ever requested on this runtime.

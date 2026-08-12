@@ -1,3 +1,10 @@
+// package.json pins vitest 3.2.7 AND its @vitest/* runtime packages exactly.
+// The pool (0.12.6, the newest that doesn't segfault on macOS) requires vitest
+// <=3.2 while the workspace also carries vitest 4.x, and hoisting differs by
+// platform: on windows the pool loaded @vitest/utils 4.x against
+// @vitest/pretty-format 3.2.7 and died on a missing export before any test
+// ran. Declaring the full 3.2.7 set on this package makes resolution identical
+// under either layout. Revisit the pins when bumping the pool.
 import { defineWorkersConfig } from "@cloudflare/vitest-pool-workers/config"
 
 // Node builtins that workerd does not implement natively resolve to unenv

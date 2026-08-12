@@ -52,17 +52,19 @@ afterEach(() => {
   fetchMock.assertNoPendingInterceptors()
 })
 
+const completions = (origin: string) =>
+  fetchMock
+    .get(origin)
+    .intercept({ method: "POST", path: (path) => path.endsWith("/chat/completions") })
+    .reply(200, FAKE_SSE, { headers: { "content-type": "text/event-stream" } })
+
 // Persisted once: tests run sequentially in one runtime (isolatedStorage:false)
 // and the same interceptor serves every completed turn in the file.
 const mocked = { llm: false }
 const mockLLM = () => {
   if (mocked.llm) return
   mocked.llm = true
-  fetchMock
-    .get(FAKE_LLM_ORIGIN)
-    .intercept({ method: "POST", path: (path) => path.endsWith("/chat/completions") })
-    .reply(200, FAKE_SSE, { headers: { "content-type": "text/event-stream" } })
-    .persist()
+  completions(FAKE_LLM_ORIGIN).persist()
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -173,15 +175,7 @@ it("runs a full prompt turn against a fake provider and reads the durable log", 
 
   // Durable log over the cursor route (non-follow): SSE body that ends once
   // the reader catches up with the aggregate sequence.
-  const log = await timed("session log read", () =>
-    request(`/api/experimental/session/${sessionID}/log?after=0&follow=false`),
-  )
-  expect(log.status).toBe(200)
-  const sse = await log.text()
-  const items = sse
-    .split("\n")
-    .filter((line) => line.startsWith("data: "))
-    .map((line) => JSON.parse(line.slice("data: ".length)) as { type?: string })
+  const items = await timed("session log read", () => readLog(sessionID))
   console.log(`[info] durable log events: ${JSON.stringify(items.map((item) => item.type))}`)
   const eventTypes = items.map((item) => item.type)
   expect(eventTypes).toContain("session.input.admitted")
@@ -237,16 +231,8 @@ it("recovers an evicted mid-turn session by replay on the next boot", async () =
   mockLLM()
   // Hold the slow provider's first call open long enough to evict mid-call,
   // then serve the replayed call instantly.
-  fetchMock
-    .get(SLOW_LLM_ORIGIN)
-    .intercept({ method: "POST", path: (path) => path.endsWith("/chat/completions") })
-    .reply(200, FAKE_SSE, { headers: { "content-type": "text/event-stream" } })
-    .delay(60_000)
-  fetchMock
-    .get(SLOW_LLM_ORIGIN)
-    .intercept({ method: "POST", path: (path) => path.endsWith("/chat/completions") })
-    .reply(200, FAKE_SSE, { headers: { "content-type": "text/event-stream" } })
-    .persist()
+  completions(SLOW_LLM_ORIGIN).delay(60_000)
+  completions(SLOW_LLM_ORIGIN).persist()
 
   await request("/api/health")
   const sessionID = await createSession({ providerID: "slow", id: "slow-model" })
