@@ -34,7 +34,7 @@ const it = testEffect(
 )
 
 describe("Session.move", () => {
-  it.effect("moves a session whose source directory no longer exists", () =>
+  it.effect("enqueues one move when the source directory no longer exists", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -49,24 +49,28 @@ describe("Session.move", () => {
 
           yield* session.move({ sessionID: created.id, directory: destination })
 
-          expect((yield* session.get(created.id)).location.directory).toBe(destination)
-          const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
-          expect(messages).toEqual([
-            expect.objectContaining({
-              type: "location-switched",
-              location: { directory: destination },
-              projectID: Project.ID.global,
-              previous: {
-                location: { directory: path.join(tmp.path, "deleted") },
+          expect((yield* session.get(created.id)).location.directory).toBe(
+            AbsolutePath.make(path.join(tmp.path, "deleted")),
+          )
+          expect(yield* session.inbox(created.id)).toMatchObject([
+            {
+              type: "move",
+              delivery: "queue",
+              payload: {
+                location: { directory: destination },
                 projectID: Project.ID.global,
-                subpath: "",
               },
-              subpath: "",
-            }),
+            },
           ])
 
           yield* session.move({ sessionID: created.id, directory: destination })
-          expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toEqual(messages)
+          expect(yield* session.inbox(created.id)).toHaveLength(2)
+
+          const steered = yield* session.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(path.join(tmp.path, "other")) }),
+          })
+          yield* session.move({ sessionID: steered.id, directory: destination, delivery: "steer" })
+          expect(yield* session.inbox(steered.id)).toMatchObject([{ type: "move", delivery: "steer" }])
         }),
       ),
     ),

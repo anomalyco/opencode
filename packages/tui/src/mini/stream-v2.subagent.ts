@@ -644,22 +644,22 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
   }
 
   const reduce = (child: ChildState, event: V2Event) => {
-    if (event.type === "session.input.admitted") {
-      if (event.data.input.type === "user") child.prompts.set(event.data.inputID, event.data.input.data.text)
+    if (event.type === "session.inbox.enqueued") {
+      if (event.data.item.type === "user") child.prompts.set(event.data.inboxID, event.data.item.payload.text)
       return
     }
-    if (event.type === "session.input.promoted") {
-      const prompt = child.prompts.get(event.data.inputID)
+    if (event.type === "session.inbox.delivered") {
+      const prompt = child.prompts.get(event.data.inboxID)
       if (prompt === undefined) return
-      child.prompts.delete(event.data.inputID)
-      if (userFrame(child, event.data.inputID, prompt)) {
+      child.prompts.delete(event.data.inboxID)
+      if (userFrame(child, event.data.inboxID, prompt)) {
         touch(child, event.created)
         notifyDetail(child)
       }
       return
     }
-    if (event.type === "session.input.cancelled") {
-      child.prompts.delete(event.data.inputID)
+    if (event.type === "session.inbox.cancelled") {
+      child.prompts.delete(event.data.inboxID)
       return
     }
     if (event.type === "session.step.started") {

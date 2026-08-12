@@ -109,11 +109,10 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       "session.renamed": () => Effect.void,
       "session.deleted": () => Effect.void,
       "session.forked": () => Effect.void,
-      "session.input.promoted": () => Effect.void,
-      "session.input.admitted": () => Effect.void,
-      "session.input.cancelled": () => Effect.void,
-      "session.input.steered": () => Effect.void,
-      "session.input.queued": () => Effect.void,
+      "session.inbox.delivered": () => Effect.void,
+      "session.inbox.enqueued": () => Effect.void,
+      "session.inbox.cancelled": () => Effect.void,
+      "session.inbox.delivery.changed": () => Effect.void,
       "session.execution.started": () => Effect.void,
       "session.execution.succeeded": () => clearCurrentRetry,
       "session.execution.failed": () => clearCurrentRetry,
@@ -380,7 +379,6 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           }
         })
       },
-      "session.compaction.admitted": () => Effect.void,
       "session.compaction.started": (event) =>
         adapter.appendMessage(
           SessionMessage.CompactionRunning.make({

@@ -114,14 +114,14 @@ const prompt = (sessionID: Session.ID, text: string) =>
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const messageID = SessionMessage.ID.create()
-    yield* bus.publish(SessionEvent.InputAdmitted, {
+    yield* bus.publish(SessionEvent.InboxEnqueued, {
       sessionID,
-      inputID: messageID,
-      input: { type: "user", data: { text }, delivery: "steer" },
+      inboxID: messageID,
+      item: { type: "user", payload: { text }, delivery: "steer" },
     })
-    yield* bus.publish(SessionEvent.InputPromoted, {
+    yield* bus.publish(SessionEvent.InboxDelivered, {
       sessionID,
-      inputID: messageID,
+      inboxID: messageID,
     })
   })
 

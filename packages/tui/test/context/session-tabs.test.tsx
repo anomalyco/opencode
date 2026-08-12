@@ -199,15 +199,15 @@ test("concurrent TUIs do not alternate shared tab titles from divergent session 
 
 test("user prompt admissions pulse an already-busy background tab", async () => {
   const setup = await renderSessionTabs("background")
-  const admitted = (sessionID: string, inputID: string): OpenCodeEvent => ({
-    id: `evt_${inputID}`,
+  const admitted = (sessionID: string, inboxID: string): OpenCodeEvent => ({
+    id: `evt_${inboxID}`,
     created: Date.now(),
-    type: "session.input.admitted",
-    durable: { aggregateID: sessionID, seq: Number(inputID.replace(/\D/g, "")), version: 1 },
+    type: "session.inbox.enqueued",
+    durable: { aggregateID: sessionID, seq: Number(inboxID.replace(/\D/g, "")), version: 1 },
     data: {
       sessionID,
-      inputID,
-      input: { type: "user", data: { text: inputID }, delivery: "steer" },
+      inboxID,
+      item: { type: "user", payload: { text: inboxID }, delivery: "steer" },
     },
   })
 
@@ -219,12 +219,12 @@ test("user prompt admissions pulse an already-busy background tab", async () => 
     setup.emit({
       id: "evt_context",
       created: Date.now(),
-      type: "session.input.admitted",
+      type: "session.inbox.enqueued",
       durable: { aggregateID: "background", seq: 0, version: 1 },
       data: {
         sessionID: "background",
-        inputID: "msg_context",
-        input: { type: "synthetic", data: { text: "editor context" }, delivery: "steer" },
+        inboxID: "msg_context",
+        item: { type: "synthetic", payload: { text: "editor context" }, delivery: "steer" },
       },
     })
     await Bun.sleep(20)

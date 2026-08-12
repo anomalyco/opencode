@@ -81,7 +81,7 @@ function promptAdmission(input: Parameters<OpenCodeClient["session"]["prompt"]>[
     id: input.id ?? "msg_prompt",
     sessionID,
     type: "user" as const,
-    data: {
+    payload: {
       text: input.text,
       files: input.files,
       agents: input.agents,
@@ -140,7 +140,7 @@ function sdk(input: {
   globals?: FormInfo[]
   globalLocation?: { directory: string; workspaceID?: string }
   permissions?: Record<string, PermissionRequest[]>
-  pending?: Record<string, Awaited<ReturnType<OpenCodeClient["session"]["pending"]["list"]>>>
+  pending?: Record<string, Awaited<ReturnType<OpenCodeClient["session"]["inbox"]["list"]>>>
   wait?: () => Promise<void>
 }) {
   const client = OpenCode.make({ baseUrl: "https://opencode.test" })
@@ -178,7 +178,7 @@ function sdk(input: {
     }),
   )
   spyOn(client.session, "active").mockImplementation(() => ok(input.active?.() ?? {}))
-  spyOn(client.session.pending, "list").mockImplementation((request) => ok(input.pending?.[request.sessionID] ?? []))
+  spyOn(client.session.inbox, "list").mockImplementation((request) => ok(input.pending?.[request.sessionID] ?? []))
   spyOn(client.session, "wait").mockImplementation(() => input.wait?.() ?? ok(undefined))
   spyOn(client.session, "message").mockImplementation((request) => {
     const message = input.messages?.[request.sessionID]?.find((item) => item.id === request.messageID)
@@ -606,11 +606,11 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_prompted",
       created: 0,
-      type: "session.input.promoted",
+      type: "session.inbox.delivered",
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
-        inputID: "msg_prompt",
+        inboxID: "msg_prompt",
       },
     })
     events.push({
@@ -667,7 +667,7 @@ describe("V2 mini transport", () => {
             sessionID: "ses_1",
             timeCreated: 1,
             type: "user",
-            data: { text: "follow up" },
+            payload: { text: "follow up" },
             delivery: "queue",
           },
           {
@@ -675,7 +675,7 @@ describe("V2 mini transport", () => {
             sessionID: "ses_1",
             timeCreated: 2,
             type: "user",
-            data: { text: "remove me" },
+            payload: { text: "remove me" },
             delivery: "queue",
           },
         ],
@@ -700,9 +700,9 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_steered",
       created: 3,
-      type: "session.input.steered",
+      type: "session.inbox.delivery.changed",
       durable: durable("ses_1", 2),
-      data: { sessionID: "ses_1", inputID: "msg_queued" },
+      data: { sessionID: "ses_1", inboxID: "msg_queued", delivery: "steer" },
     })
     while (!ui.commits.some((item) => item.messageID === "msg_queued")) await Bun.sleep(0)
 
@@ -713,9 +713,9 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_queued",
       created: 4,
-      type: "session.input.queued",
+      type: "session.inbox.delivery.changed",
       durable: durable("ses_1", 3),
-      data: { sessionID: "ses_1", inputID: "msg_queued" },
+      data: { sessionID: "ses_1", inboxID: "msg_queued", delivery: "queue" },
     })
     while (pending()?.length !== 2) await Bun.sleep(0)
     expect(pending()).toEqual([
@@ -725,18 +725,18 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_cancelled",
       created: 5,
-      type: "session.input.cancelled",
+      type: "session.inbox.cancelled",
       durable: durable("ses_1", 4),
-      data: { sessionID: "ses_1", inputID: "msg_cancelled" },
+      data: { sessionID: "ses_1", inboxID: "msg_cancelled" },
     })
     while (pending()?.length !== 1) await Bun.sleep(0)
     expect(pending()).toEqual([["msg_queued", "queue"]])
     events.push({
       id: "evt_promoted",
       created: 6,
-      type: "session.input.promoted",
+      type: "session.inbox.delivered",
       durable: durable("ses_1", 5),
-      data: { sessionID: "ses_1", inputID: "msg_queued" },
+      data: { sessionID: "ses_1", inboxID: "msg_queued" },
     })
     while (pending()?.length !== 0) await Bun.sleep(0)
     expect(ui.commits.filter((item) => item.messageID === "msg_queued")).toHaveLength(1)
@@ -763,12 +763,12 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_earlier_admission",
       created: 3,
-      type: "session.input.admitted",
+      type: "session.inbox.enqueued",
       durable: durable("ses_1", 1),
       data: {
         sessionID: "ses_1",
-        inputID: "msg_earlier",
-        input: { type: "user", data: { text: "earlier" }, delivery: "steer" },
+        inboxID: "msg_earlier",
+        item: { type: "user", payload: { text: "earlier" }, delivery: "steer" },
       },
     })
     await Bun.sleep(10)
@@ -851,9 +851,9 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_prompt_promoted",
       created: 2,
-      type: "session.input.promoted",
+      type: "session.inbox.delivered",
       durable: durable("ses_1", 2),
-      data: { sessionID: "ses_1", inputID: "msg_prompt" },
+      data: { sessionID: "ses_1", inboxID: "msg_prompt" },
     })
     await transport.admitPromptTurn(
       {
@@ -869,9 +869,9 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_queued_promoted",
       created: 3,
-      type: "session.input.promoted",
+      type: "session.inbox.delivered",
       durable: durable("ses_1", 3),
-      data: { sessionID: "ses_1", inputID: "msg_queued" },
+      data: { sessionID: "ses_1", inboxID: "msg_queued" },
     })
     events.push({
       id: "evt_failed",
@@ -922,11 +922,11 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_prompted",
           created: 0,
-          type: "session.input.promoted",
+          type: "session.inbox.delivered",
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
-            inputID: "msg_prompt",
+            inboxID: "msg_prompt",
           },
         })
         events.push({
@@ -1011,11 +1011,11 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_prompted",
           created: 0,
-          type: "session.input.promoted",
+          type: "session.inbox.delivered",
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
-            inputID: "msg_prompt",
+            inboxID: "msg_prompt",
           },
         })
         events.push({
@@ -1099,11 +1099,11 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_prompted",
           created: 0,
-          type: "session.input.promoted",
+          type: "session.inbox.delivered",
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
-            inputID: "msg_prompt",
+            inboxID: "msg_prompt",
           },
         })
         events.push({
@@ -1253,9 +1253,9 @@ describe("V2 mini transport", () => {
     second.push({
       id: "evt_prompted",
       created: 2,
-      type: "session.input.promoted",
+      type: "session.inbox.delivered",
       durable: durable("ses_1", 2),
-      data: { sessionID: "ses_1", inputID: "msg_prompt" },
+      data: { sessionID: "ses_1", inboxID: "msg_prompt" },
     })
     first.close()
     while (!ui.events.some((event) => event.type === "stream.patch" && event.patch.status === "reconnecting"))
@@ -1471,9 +1471,9 @@ describe("V2 mini transport", () => {
         secondEvents.push({
           id: "evt_replacement_prompt",
           created: 3,
-          type: "session.input.promoted",
+          type: "session.inbox.delivered",
           durable: durable("ses_1", 1),
-          data: { sessionID: "ses_1", inputID: "msg_replacement" },
+          data: { sessionID: "ses_1", inboxID: "msg_replacement" },
         })
         secondEvents.push({
           id: "evt_replacement_settled",
@@ -2317,11 +2317,11 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_prompted",
       created: 0,
-      type: "session.input.promoted",
+      type: "session.inbox.delivered",
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
-        inputID: "msg_prompt",
+        inboxID: "msg_prompt",
       },
     })
     events.push({
@@ -2378,11 +2378,11 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_prompted",
       created: 0,
-      type: "session.input.promoted",
+      type: "session.inbox.delivered",
       durable: durable("ses_1"),
       data: {
         sessionID: "ses_1",
-        inputID: "msg_prompt",
+        inboxID: "msg_prompt",
       },
     })
     await Bun.sleep(0)
@@ -2799,11 +2799,11 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_prompted",
           created: 0,
-          type: "session.input.promoted",
+          type: "session.inbox.delivered",
           durable: durable("ses_1"),
           data: {
             sessionID: "ses_1",
-            inputID: "msg_cmd",
+            inboxID: "msg_cmd",
           },
         })
         events.push({
@@ -2818,7 +2818,7 @@ describe("V2 mini transport", () => {
         id: input.id ?? "msg_cmd",
         sessionID: "ses_1",
         type: "user" as const,
-        data: { text: "evaluated template" },
+        payload: { text: "evaluated template" },
         delivery: "steer" as const,
         timeCreated: 2,
       })
@@ -2956,9 +2956,9 @@ describe("V2 mini transport", () => {
         events.push({
           id: "evt_prompted",
           created: 0,
-          type: "session.input.promoted",
+          type: "session.inbox.delivered",
           durable: durable("ses_1"),
-          data: { sessionID: "ses_1", inputID: "msg_skill_attachment" },
+          data: { sessionID: "ses_1", inboxID: "msg_skill_attachment" },
         })
         events.push({
           id: "evt_settled",
@@ -2972,7 +2972,7 @@ describe("V2 mini transport", () => {
         id: input.id ?? "msg_skill_attachment",
         sessionID: "ses_1",
         type: "user" as const,
-        data: { text: input.text },
+        payload: { text: input.text },
         delivery: "steer" as const,
         timeCreated: 2,
       })
@@ -3477,12 +3477,12 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_admitted",
       created: 1,
-      type: "session.input.admitted",
+      type: "session.inbox.enqueued",
       durable: durable("ses_child"),
       data: {
         sessionID: "ses_child",
-        inputID: "msg_child_prompt",
-        input: { type: "user", data: { text: "actual child prompt" }, delivery: "steer" },
+        inboxID: "msg_child_prompt",
+        item: { type: "user", payload: { text: "actual child prompt" }, delivery: "steer" },
       },
     })
     await Bun.sleep(0)
@@ -3495,9 +3495,9 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_promoted",
       created: 2,
-      type: "session.input.promoted",
+      type: "session.inbox.delivered",
       durable: durable("ses_child", 1),
-      data: { sessionID: "ses_child", inputID: "msg_child_prompt" },
+      data: { sessionID: "ses_child", inboxID: "msg_child_prompt" },
     })
     while (
       !states()
@@ -3541,12 +3541,12 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_admitted_race",
       created: 1,
-      type: "session.input.admitted",
+      type: "session.inbox.enqueued",
       durable: durable("ses_child"),
       data: {
         sessionID: "ses_child",
-        inputID: "msg_child_race",
-        input: { type: "user", data: { text: "prompt admitted before hydration" }, delivery: "steer" },
+        inboxID: "msg_child_race",
+        item: { type: "user", payload: { text: "prompt admitted before hydration" }, delivery: "steer" },
       },
     })
     await Bun.sleep(0)
@@ -3555,9 +3555,9 @@ describe("V2 mini transport", () => {
     events.push({
       id: "evt_child_promoted_race",
       created: 2,
-      type: "session.input.promoted",
+      type: "session.inbox.delivered",
       durable: durable("ses_child", 1),
-      data: { sessionID: "ses_child", inputID: "msg_child_race" },
+      data: { sessionID: "ses_child", inboxID: "msg_child_race" },
     })
     await Bun.sleep(0)
     releaseHydration()

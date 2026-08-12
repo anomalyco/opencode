@@ -199,8 +199,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     onCleanup(event.on("session.execution.interrupted", (evt) => markUnread(evt.data.sessionID, "activity")))
     onCleanup(event.on("session.execution.failed", (evt) => markUnread(evt.data.sessionID, "error")))
     onCleanup(
-      event.on("session.input.admitted", (evt) => {
-        if (!enabled() || evt.data.input.type !== "user") return
+      event.on("session.inbox.enqueued", (evt) => {
+        if (!enabled() || evt.data.item.type !== "user") return
         const sessionID = root(evt.data.sessionID)
         if (current() === sessionID || !state().tabs.some((tab) => tab.sessionID === sessionID)) return
         setPromptPulses((pulses) => ({ ...pulses, [sessionID]: (pulses[sessionID] ?? 0) + 1 }))

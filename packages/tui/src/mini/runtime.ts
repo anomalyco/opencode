@@ -392,14 +392,14 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       log?.write("send.background", { sessionID: state.sessionID })
       void state.sdk.session.background({ sessionID: state.sessionID }).catch(() => {})
     },
-    onQueuedPromptAction: async (action, inputID) => {
+    onQueuedPromptAction: async (action, inboxID) => {
       if (!state.sessionID) return
-      log?.write(`send.pending.${action}`, { sessionID: state.sessionID, inputID })
+      log?.write(`send.pending.${action}`, { sessionID: state.sessionID, inboxID })
       if (action === "steer") {
-        await state.sdk.session.pending.steer({ sessionID: state.sessionID, inputID })
+        await state.sdk.session.inbox.steer({ sessionID: state.sessionID, inboxID })
         return
       }
-      await state.sdk.session.pending.cancel({ sessionID: state.sessionID, inputID })
+      await state.sdk.session.inbox.cancel({ sessionID: state.sessionID, inboxID })
     },
     onSubagentInterrupt: (sessionID) => {
       log?.write("send.subagent.interrupt", { sessionID })

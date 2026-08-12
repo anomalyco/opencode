@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
+import type { SessionInboxEnqueued, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useConfig } from "../../config"
@@ -17,7 +17,7 @@ export type CacheUsage = {
 
 export type SessionRow =
   | { type: "message"; messageID: string }
-  | { type: "compaction-queued"; inputID: string }
+  | { type: "compaction-queued"; inboxID: string }
   | { type: "part"; ref: PartRef }
   | {
       type: "group"
@@ -64,7 +64,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
       0,
       ...pending
         .filter((item) => item.type === "compaction")
-        .map((item): SessionRow => ({ type: "compaction-queued", inputID: item.id })),
+        .map((item): SessionRow => ({ type: "compaction-queued", inboxID: item.id })),
     )
     return rows
   }
@@ -209,21 +209,16 @@ export function createSessionRows(sessionID: Accessor<string>) {
   const message = (event: { id: string; data: { sessionID: string } }) => {
     if (event.data.sessionID === sessionID()) appendMessage(event.id.replace(/^evt_/, "msg_"))
   }
-  const input = (event: {
-    data: {
-      sessionID: string
-      inputID: string
-      input: { type: "user" } | { type: "synthetic"; data: { description?: string } }
-    }
-  }) => {
+  const input = (event: SessionInboxEnqueued) => {
     if (
       event.data.sessionID === sessionID() &&
-      (event.data.input.type === "user" || event.data.input.data.description?.trim())
+      (event.data.item.type === "user" ||
+        (event.data.item.type === "synthetic" && event.data.item.payload.description?.trim()))
     )
-      appendMessage(event.data.inputID)
+      appendMessage(event.data.inboxID)
   }
   const subscriptions = [
-    data.on("session.input.admitted", input),
+    data.on("session.inbox.enqueued", input),
     data.on("session.compaction.started", (event) => {
       if (event.data.sessionID === sessionID()) appendMessage(event.data.inputID ?? event.id.replace(/^evt_/, "msg_"))
     }),

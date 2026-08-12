@@ -34,7 +34,7 @@ test("acp prompt resolves after ordered turn updates", async () => {
           send(events, {
             id: "evt_promoted",
             created: 1,
-            type: "session.input.promoted",
+            type: "session.inbox.delivered",
             data: { sessionID: "ses_test", inputID: id },
           })
           send(events, {

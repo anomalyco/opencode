@@ -23,7 +23,7 @@ import type {
 } from "@opencode-ai/client/promise"
 import type { Config } from "../config"
 import type { CliRenderer } from "@opentui/core"
-import type { SessionPending } from "@opencode-ai/schema/session-pending"
+import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 
 export type RunFilePart = {
   type: "file"
@@ -73,7 +73,7 @@ export type RunProvider = {
   models: Record<string, RunProviderModel>
 }
 
-export type RunDelivery = SessionPending.Delivery
+export type RunDelivery = SessionInbox.Delivery
 
 export type RunPrompt = {
   messageID?: string

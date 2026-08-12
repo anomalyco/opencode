@@ -102,7 +102,7 @@ type RunFooterViewProps = {
   onCycle: () => void
   onInterrupt: () => boolean
   onBackground?: () => void
-  onQueuedPromptAction?: (action: QueuedPromptAction, inputID: string) => Promise<void>
+  onQueuedPromptAction?: (action: QueuedPromptAction, inboxID: string) => Promise<void>
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onInputClear: () => void
   onExitRequest?: () => boolean
@@ -324,11 +324,11 @@ export function RunFooterView(props: RunFooterViewProps) {
   }
 
   const runQueuedAction = createSingleFlight<string>()
-  const queuedPromptAction = async (action: QueuedPromptAction, inputID: string) => {
+  const queuedPromptAction = async (action: QueuedPromptAction, inboxID: string) => {
     const run = props.onQueuedPromptAction
     if (!run) return false
-    const result = await runQueuedAction(inputID, async () => {
-      const error = await run(action, inputID).then(
+    const result = await runQueuedAction(inboxID, async () => {
+      const error = await run(action, inboxID).then(
         () => undefined,
         (error) => error,
       )
@@ -379,7 +379,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     mono: () => props.mono,
     history: props.history,
     queuedPrompts: queue,
-    onQueuedPromptSteer: (inputID) => queuedPromptAction("steer", inputID),
+    onQueuedPromptSteer: (inboxID) => queuedPromptAction("steer", inboxID),
     onSubmit: props.onSubmit,
     onCycle: props.onCycle,
     onInterrupt: props.onInterrupt,

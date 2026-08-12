@@ -6,7 +6,7 @@ import type {
   PermissionRequest,
   SessionMessageAssistantTool,
   SessionMessageInfo,
-  SessionPendingInfo,
+  SessionInboxInfo,
 } from "@opencode-ai/client/promise"
 import { Event } from "@opencode-ai/schema/event"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
@@ -182,11 +182,11 @@ function errorMessage(error: { message?: string; _tag?: string }) {
   return error.message || error._tag || "Session execution failed"
 }
 
-function pendingPrompt(item: SessionPendingInfo): FooterQueuedPrompt | undefined {
+function pendingPrompt(item: SessionInboxInfo): FooterQueuedPrompt | undefined {
   if (item.type !== "user") return undefined
   return {
     messageID: item.id,
-    prompt: { messageID: item.id, text: item.data.text, parts: [] },
+    prompt: { messageID: item.id, text: item.payload.text, parts: [] },
     delivery: item.delivery,
   }
 }
@@ -542,7 +542,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     input.footer.event({ type: "queued.prompts", prompts })
   }
 
-  const mergePending = (item: SessionPendingInfo) => {
+  const mergePending = (item: SessionInboxInfo) => {
     const prompt = pendingPrompt(item)
     if (!prompt || state.messageIDs.has(prompt.messageID)) return
     state.admitted.add(prompt.messageID)
@@ -839,7 +839,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const options = { signal: attempt.signal }
     const [projected, pending, permissions, forms, globals, active] = await Promise.all([
       projectedMessages(client, attempt.signal),
-      client.session.pending.list({ sessionID: input.sessionID }, options),
+      client.session.inbox.list({ sessionID: input.sessionID }, options),
       client.permission.list({ sessionID: input.sessionID }, options),
       client.form.list({ sessionID: input.sessionID }, options),
       input.location
@@ -927,25 +927,25 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       input.onSessionTitle?.(event.data.title)
       return
     }
-    if (event.type === "session.input.admitted") {
-      if (event.data.input.type !== "user") return
+    if (event.type === "session.inbox.enqueued") {
+      if (event.data.item.type !== "user") return
       mergePending({
-        id: event.data.inputID,
+        id: event.data.inboxID,
         sessionID: event.data.sessionID,
         timeCreated: event.created,
-        ...event.data.input,
+        ...event.data.item,
       })
       return
     }
-    if (event.type === "session.input.promoted") {
-      const waiting = state.wait?.messageID === event.data.inputID
-      if (state.wait) promoteWait(state.wait, true, event.data.inputID)
-      state.admitted.delete(event.data.inputID)
-      const pending = state.pending.get(event.data.inputID)
-      state.pending.delete(event.data.inputID)
+    if (event.type === "session.inbox.delivered") {
+      const waiting = state.wait?.messageID === event.data.inboxID
+      if (state.wait) promoteWait(state.wait, true, event.data.inboxID)
+      state.admitted.delete(event.data.inboxID)
+      const pending = state.pending.get(event.data.inboxID)
+      state.pending.delete(event.data.inboxID)
       syncPending()
-      const visible = state.messageIDs.has(event.data.inputID)
-      if (waiting || pending) state.messageIDs.add(event.data.inputID)
+      const visible = state.messageIDs.has(event.data.inboxID)
+      if (waiting || pending) state.messageIDs.add(event.data.inboxID)
       if (!waiting && pending && !visible) {
         write([
           {
@@ -953,41 +953,35 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             source: "system",
             text: pending.prompt.text,
             phase: "start",
-            messageID: event.data.inputID,
+            messageID: event.data.inboxID,
           },
         ])
       }
       write([], { phase: "running", status: "waiting for assistant" })
       return
     }
-    if (event.type === "session.input.steered") {
-      const pending = state.pending.get(event.data.inputID)
+    if (event.type === "session.inbox.delivery.changed") {
+      const pending = state.pending.get(event.data.inboxID)
       if (!pending) return
-      state.pending.set(event.data.inputID, { ...pending, delivery: "steer" })
+      state.pending.set(event.data.inboxID, { ...pending, delivery: event.data.delivery })
       syncPending()
-      if (state.messageIDs.has(event.data.inputID)) return
-      state.messageIDs.add(event.data.inputID)
+      if (event.data.delivery === "queue") return
+      if (state.messageIDs.has(event.data.inboxID)) return
+      state.messageIDs.add(event.data.inboxID)
       write([
         {
           kind: "user",
           source: "system",
           text: pending.prompt.text,
           phase: "start",
-          messageID: event.data.inputID,
+          messageID: event.data.inboxID,
         },
       ])
       return
     }
-    if (event.type === "session.input.queued") {
-      const pending = state.pending.get(event.data.inputID)
-      if (!pending) return
-      state.pending.set(event.data.inputID, { ...pending, delivery: "queue" })
-      syncPending()
-      return
-    }
-    if (event.type === "session.input.cancelled") {
-      state.admitted.delete(event.data.inputID)
-      if (state.pending.delete(event.data.inputID)) syncPending()
+    if (event.type === "session.inbox.cancelled") {
+      state.admitted.delete(event.data.inboxID)
+      if (state.pending.delete(event.data.inboxID)) syncPending()
       return
     }
     if (event.type === "session.step.started") {
@@ -1514,7 +1508,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     next: SessionTurnInput,
     messageID: string,
     client: OpenCodeClient,
-    send: () => Promise<SessionPendingInfo | void>,
+    send: () => Promise<SessionInboxInfo | void>,
     onAdmitted?: () => void,
   ) => {
     const active: Wait = {

@@ -105,7 +105,7 @@ import { useArgs } from "../../context/args"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { useSessionTabs } from "../../context/session-tabs"
 import { createSingleFlight } from "../../util/single-flight"
-import type { SessionPending } from "@opencode-ai/schema/session-pending"
+import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { generateThinkingSyntax } from "./thinking-syntax"
 import { createDelayedPresence } from "../../util/delayed-presence"
 
@@ -133,8 +133,8 @@ const context = createContext<{
   diffWrapMode: () => "word" | "none"
   models: () => ModelInfo[]
   config: ReturnType<typeof useConfig>["data"]
-  mutatePending: (action: PendingAction, inputID: string) => Promise<boolean>
-  pendingDelivery: (inputID: string) => SessionPending.Delivery | undefined
+  mutatePending: (action: PendingAction, inboxID: string) => Promise<boolean>
+  pendingDelivery: (inboxID: string) => SessionInbox.Delivery | undefined
 }>()
 
 function use() {
@@ -207,7 +207,7 @@ export function Session() {
   )
   const pendingDeliveries = createMemo(() => new Map(pendingUsers().map((item) => [item.id, item.delivery])))
   const queuedPrompts = createMemo(() =>
-    pendingUsers().flatMap((item) => (item.delivery === "queue" ? [{ id: item.id, text: item.data.text }] : [])),
+    pendingUsers().flatMap((item) => (item.delivery === "queue" ? [{ id: item.id, text: item.payload.text }] : [])),
   )
   const [composer, setComposer] = createStore({
     open: false,
@@ -398,14 +398,14 @@ export function Session() {
   const dialog = useDialog()
   const renderer = useRenderer()
   const runPendingAction = createSingleFlight<string>()
-  const mutatePending = async (action: PendingAction, inputID: string) => {
-    const result = await runPendingAction(inputID, async () => {
+  const mutatePending = async (action: PendingAction, inboxID: string) => {
+    const result = await runPendingAction(inboxID, async () => {
       const request =
         action === "steer"
-          ? client.api.session.pending.steer({ sessionID: route.sessionID, inputID })
+          ? client.api.session.inbox.steer({ sessionID: route.sessionID, inboxID })
           : action === "queue"
-            ? client.api.session.pending.queue({ sessionID: route.sessionID, inputID })
-            : client.api.session.pending.cancel({ sessionID: route.sessionID, inputID })
+            ? client.api.session.inbox.queue({ sessionID: route.sessionID, inboxID })
+            : client.api.session.inbox.cancel({ sessionID: route.sessionID, inboxID })
       const error = await request.then(
         () => undefined,
         (error) => error,
@@ -1033,7 +1033,7 @@ export function Session() {
         models,
         config,
         mutatePending,
-        pendingDelivery: (inputID) => pendingDeliveries().get(inputID),
+        pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>

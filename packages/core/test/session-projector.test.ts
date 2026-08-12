@@ -20,11 +20,11 @@ import { Money } from "@opencode-ai/schema/money"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { fromRow } from "@opencode-ai/core/session/info"
-import { SessionPending } from "@opencode-ai/core/session/pending"
+import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { Shell } from "@opencode-ai/schema/shell"
 import {
   InstructionStateTable,
-  SessionPendingTable,
+  SessionInboxTable,
   SessionMessageTable,
   SessionTable,
 } from "@opencode-ai/core/session/sql"
@@ -81,7 +81,7 @@ describe("SessionProjector", () => {
         .run()
       const bus = yield* Bus.Service
       const inputID = SessionMessage.ID.make("msg_manual_compaction")
-      yield* SessionPending.admitCompaction(db, bus, { id: inputID, sessionID })
+      yield* SessionInbox.admitCompaction(db, bus, { id: inputID, sessionID, delivery: "queue" })
 
       yield* bus.publish(SessionEvent.Compaction.Failed, {
         sessionID,
@@ -89,7 +89,7 @@ describe("SessionProjector", () => {
         error: { type: "compaction.failed", message: "Auto compaction failed" },
       })
 
-      expect(yield* SessionPending.compaction(db, sessionID)).toMatchObject({ id: inputID })
+      expect(yield* SessionInbox.find(db, inputID)).toMatchObject({ id: inputID })
     }),
   )
 
@@ -247,29 +247,29 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const bus = yield* Bus.Service
 
-      yield* bus.publish(SessionEvent.InputAdmitted, {
+      yield* bus.publish(SessionEvent.InboxEnqueued, {
         sessionID,
-        inputID: SessionMessage.ID.make("msg_first"),
-        input: { type: "user", data: { text: "first" }, delivery: "steer" },
+        inboxID: SessionMessage.ID.make("msg_first"),
+        item: { type: "user", payload: { text: "first" }, delivery: "steer" },
       })
       yield* bus.publish(
-        SessionEvent.InputPromoted,
+        SessionEvent.InboxDelivered,
         {
           sessionID,
-          inputID: SessionMessage.ID.make("msg_first"),
+          inboxID: SessionMessage.ID.make("msg_first"),
         },
         { id: Event.ID.make("evt_z") },
       )
-      yield* bus.publish(SessionEvent.InputAdmitted, {
+      yield* bus.publish(SessionEvent.InboxEnqueued, {
         sessionID,
-        inputID: SessionMessage.ID.make("msg_second"),
-        input: { type: "user", data: { text: "second" }, delivery: "steer" },
+        inboxID: SessionMessage.ID.make("msg_second"),
+        item: { type: "user", payload: { text: "second" }, delivery: "steer" },
       })
       yield* bus.publish(
-        SessionEvent.InputPromoted,
+        SessionEvent.InboxDelivered,
         {
           sessionID,
-          inputID: SessionMessage.ID.make("msg_second"),
+          inboxID: SessionMessage.ID.make("msg_second"),
         },
         { id: Event.ID.make("evt_a") },
       )
@@ -320,20 +320,20 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const bus = yield* Bus.Service
       const id = SessionMessage.ID.make("msg_admitted")
-      const admitted = yield* SessionPending.admit(db, bus, {
+      const admitted = yield* SessionInbox.admit(db, bus, {
         id,
         sessionID,
-        input: { type: "user", data: { text: "promote me" }, delivery: "steer" },
+        item: { type: "user", payload: { text: "promote me" }, delivery: "steer" },
       })
       if (!admitted) return yield* Effect.die("Prompt admission failed")
 
-      const event = yield* bus.publish(SessionEvent.InputPromoted, {
+      const event = yield* bus.publish(SessionEvent.InboxDelivered, {
         sessionID,
-        inputID: id,
+        inboxID: id,
       })
 
       expect(
-        yield* db.select().from(SessionPendingTable).where(eq(SessionPendingTable.id, id)).get().pipe(Effect.orDie),
+        yield* db.select().from(SessionInboxTable).where(eq(SessionInboxTable.id, id)).get().pipe(Effect.orDie),
       ).toBeUndefined()
       expect(
         yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, id)).get().pipe(Effect.orDie),

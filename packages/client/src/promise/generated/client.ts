@@ -56,14 +56,14 @@ import type {
   SessionRevertCommitOutput,
   SessionContextInput,
   SessionContextOutput,
-  SessionPendingListInput,
-  SessionPendingListOutput,
-  SessionPendingCancelInput,
-  SessionPendingCancelOutput,
-  SessionPendingSteerInput,
-  SessionPendingSteerOutput,
-  SessionPendingQueueInput,
-  SessionPendingQueueOutput,
+  SessionInboxListInput,
+  SessionInboxListOutput,
+  SessionInboxCancelInput,
+  SessionInboxCancelOutput,
+  SessionInboxSteerInput,
+  SessionInboxSteerOutput,
+  SessionInboxQueueInput,
+  SessionInboxQueueOutput,
   SessionInstructionsEntryListInput,
   SessionInstructionsEntryListOutput,
   SessionInstructionsEntryPutInput,
@@ -598,7 +598,7 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/move`,
-            body: { directory: input["directory"], workspaceID: input["workspaceID"] },
+            body: { directory: input["directory"], workspaceID: input["workspaceID"], delivery: input["delivery"] },
             successStatus: 204,
             declaredStatuses: [404, 400, 401],
             empty: true,
@@ -697,7 +697,7 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/compact`,
-            body: { id: input["id"] },
+            body: { id: input["id"], delivery: input["delivery"] },
             successStatus: 200,
             declaredStatuses: [409, 404, 400, 401],
             empty: false,
@@ -762,45 +762,45 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
-      pending: {
-        list: (input: SessionPendingListInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: SessionPendingListOutput }>(
+      inbox: {
+        list: (input: SessionInboxListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: SessionInboxListOutput }>(
             {
               method: "GET",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/pending`,
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox`,
               successStatus: 200,
               declaredStatuses: [404, 401, 400],
               empty: false,
             },
             requestOptions,
           ).then((value) => value.data),
-        cancel: (input: SessionPendingCancelInput, requestOptions?: RequestOptions) =>
-          request<SessionPendingCancelOutput>(
+        cancel: (input: SessionInboxCancelInput, requestOptions?: RequestOptions) =>
+          request<SessionInboxCancelOutput>(
             {
               method: "DELETE",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/pending/${encodeURIComponent(input.inputID)}`,
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}`,
               successStatus: 204,
               declaredStatuses: [409, 404, 401, 400],
               empty: true,
             },
             requestOptions,
           ),
-        steer: (input: SessionPendingSteerInput, requestOptions?: RequestOptions) =>
-          request<SessionPendingSteerOutput>(
+        steer: (input: SessionInboxSteerInput, requestOptions?: RequestOptions) =>
+          request<SessionInboxSteerOutput>(
             {
               method: "POST",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/pending/${encodeURIComponent(input.inputID)}/steer`,
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}/steer`,
               successStatus: 204,
               declaredStatuses: [409, 404, 401, 400],
               empty: true,
             },
             requestOptions,
           ),
-        queue: (input: SessionPendingQueueInput, requestOptions?: RequestOptions) =>
-          request<SessionPendingQueueOutput>(
+        queue: (input: SessionInboxQueueInput, requestOptions?: RequestOptions) =>
+          request<SessionInboxQueueOutput>(
             {
               method: "POST",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/pending/${encodeURIComponent(input.inputID)}/queue`,
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}/queue`,
               successStatus: 204,
               declaredStatuses: [409, 404, 401, 400],
               empty: true,

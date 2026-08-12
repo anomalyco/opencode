@@ -373,7 +373,7 @@ test("session instructions methods use the public HTTP contract", async () => {
   ])
 })
 
-test("session.pending.list uses the public HTTP contract", async () => {
+test("session.inbox.list uses the public HTTP contract", async () => {
   const requests: Array<{ method: string; url: string }> = []
   const pending = [
     {
@@ -381,7 +381,7 @@ test("session.pending.list uses the public HTTP contract", async () => {
       sessionID: "ses_test",
       timeCreated: 1_717_171_717_000,
       type: "user",
-      data: { text: "Fix the failing tests" },
+      payload: { text: "Fix the failing tests" },
       delivery: "steer",
     },
   ]
@@ -394,13 +394,13 @@ test("session.pending.list uses the public HTTP contract", async () => {
     },
   })
 
-  const result = await client.session.pending.list({ sessionID: "ses_test" })
+  const result = await client.session.inbox.list({ sessionID: "ses_test" })
 
   expect(result).toEqual(pending)
-  expect(requests).toEqual([{ method: "GET", url: "http://localhost:3000/api/session/ses_test/pending" }])
+  expect(requests).toEqual([{ method: "GET", url: "http://localhost:3000/api/session/ses_test/inbox" }])
 })
 
-test("session.pending mutations use the public HTTP contract", async () => {
+test("session.inbox mutations use the public HTTP contract", async () => {
   const requests: Array<{ method: string; url: string }> = []
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
@@ -411,14 +411,14 @@ test("session.pending mutations use the public HTTP contract", async () => {
     },
   })
 
-  await client.session.pending.cancel({ sessionID: "ses_test", inputID: "msg_cancel" })
-  await client.session.pending.steer({ sessionID: "ses_test", inputID: "msg_steer" })
-  await client.session.pending.queue({ sessionID: "ses_test", inputID: "msg_queue" })
+  await client.session.inbox.cancel({ sessionID: "ses_test", inboxID: "msg_cancel" })
+  await client.session.inbox.steer({ sessionID: "ses_test", inboxID: "msg_steer" })
+  await client.session.inbox.queue({ sessionID: "ses_test", inboxID: "msg_queue" })
 
   expect(requests).toEqual([
-    { method: "DELETE", url: "http://localhost:3000/api/session/ses_test/pending/msg_cancel" },
-    { method: "POST", url: "http://localhost:3000/api/session/ses_test/pending/msg_steer/steer" },
-    { method: "POST", url: "http://localhost:3000/api/session/ses_test/pending/msg_queue/queue" },
+    { method: "DELETE", url: "http://localhost:3000/api/session/ses_test/inbox/msg_cancel" },
+    { method: "POST", url: "http://localhost:3000/api/session/ses_test/inbox/msg_steer/steer" },
+    { method: "POST", url: "http://localhost:3000/api/session/ses_test/inbox/msg_queue/queue" },
   ])
 })
 

@@ -1,6 +1,6 @@
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { SessionTransfer } from "@opencode-ai/schema/session-transfer"
-import { SessionPending } from "@opencode-ai/schema/session-pending"
+import { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Session } from "@opencode-ai/schema/session"
 import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
@@ -301,7 +301,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
     .add(
       HttpApiEndpoint.post("session.move", "/api/session/:sessionID/move", {
         params: { sessionID: Session.ID },
-        payload: Location.Ref,
+        payload: Schema.Struct({ ...Location.Ref.fields, delivery: SessionInbox.Delivery.pipe(Schema.optional) }),
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, InvalidRequestError],
       }).annotateMerge(
@@ -318,11 +318,11 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         payload: Schema.Struct({
           id: SessionMessage.ID.pipe(Schema.optional),
           ...PromptInput.Prompt.fields,
-          metadata: SessionPending.UserData.fields.metadata,
-          delivery: SessionPending.Delivery.pipe(Schema.optional),
+          metadata: SessionInbox.UserPayload.fields.metadata,
+          delivery: SessionInbox.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
-        success: Schema.Struct({ data: SessionPending.User }),
+        success: Schema.Struct({ data: SessionInbox.User }),
         error: [ConflictError, InvalidRequestError, SessionNotFoundError],
       })
         .middleware(sessionLocationMiddleware)
@@ -346,10 +346,10 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           files: PromptInput.Prompt.fields.files,
           agents: PromptInput.Prompt.fields.agents,
           skills: PromptInput.Prompt.fields.skills,
-          delivery: SessionPending.Delivery.pipe(Schema.optional),
+          delivery: SessionInbox.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
-        success: Schema.Struct({ data: SessionPending.User }),
+        success: Schema.Struct({ data: SessionInbox.User }),
         error: [ConflictError, InvalidRequestError, SessionNotFoundError, CommandNotFoundError, CommandEvaluationError],
       })
         .middleware(sessionLocationMiddleware)
@@ -390,10 +390,10 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           text: Schema.String,
           description: Schema.String.pipe(Schema.optional),
           metadata: SessionMessage.Synthetic.fields.metadata,
-          delivery: SessionPending.Delivery.pipe(Schema.optional),
+          delivery: SessionInbox.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
-        success: Schema.Struct({ data: SessionPending.Synthetic }),
+        success: Schema.Struct({ data: SessionInbox.Synthetic }),
         error: [ConflictError, SessionNotFoundError],
       })
         .middleware(sessionLocationMiddleware)
@@ -428,8 +428,11 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
     .add(
       HttpApiEndpoint.post("session.compact", "/api/session/:sessionID/compact", {
         params: { sessionID: Session.ID },
-        payload: Schema.Struct({ id: SessionMessage.ID.pipe(Schema.optional) }),
-        success: Schema.Struct({ data: SessionPending.Compaction }),
+        payload: Schema.Struct({
+          id: SessionMessage.ID.pipe(Schema.optional),
+          delivery: SessionInbox.Delivery.pipe(Schema.optional),
+        }),
+        success: Schema.Struct({ data: SessionInbox.Compaction }),
         error: [ConflictError, SessionNotFoundError],
       })
         .middleware(sessionLocationMiddleware)
@@ -506,55 +509,55 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
       ),
     )
     .add(
-      HttpApiEndpoint.get("session.pending.list", "/api/session/:sessionID/pending", {
+      HttpApiEndpoint.get("session.inbox.list", "/api/session/:sessionID/inbox", {
         params: { sessionID: Session.ID },
-        success: Schema.Struct({ data: Schema.Array(SessionPending.Info) }),
+        success: Schema.Struct({ data: Schema.Array(SessionInbox.Info) }),
         error: SessionNotFoundError,
       }).annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.session.pending.list",
-          summary: "List pending session work",
+          identifier: "v2.session.inbox.list",
+          summary: "List session inbox",
           description:
-            "List durable admitted session work not yet visible in projected history, ordered by admission. Includes unpromoted user and synthetic inputs and unhandled compaction barriers. The runner owns consumption; items disappear once promoted or handled.",
+            "List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items.",
         }),
       ),
     )
     .add(
-      HttpApiEndpoint.delete("session.pending.cancel", "/api/session/:sessionID/pending/:inputID", {
-        params: { sessionID: Session.ID, inputID: SessionMessage.ID },
+      HttpApiEndpoint.delete("session.inbox.cancel", "/api/session/:sessionID/inbox/:inboxID", {
+        params: { sessionID: Session.ID, inboxID: SessionMessage.ID },
         success: HttpApiSchema.NoContent,
         error: [ConflictError, SessionNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.session.pending.cancel",
-          summary: "Cancel pending input",
-          description: "Cancel an input that has not yet been promoted into session history.",
+          identifier: "v2.session.inbox.cancel",
+          summary: "Cancel inbox input",
+          description: "Cancel an inbox item that has not yet been delivered.",
         }),
       ),
     )
     .add(
-      HttpApiEndpoint.post("session.pending.steer", "/api/session/:sessionID/pending/:inputID/steer", {
-        params: { sessionID: Session.ID, inputID: SessionMessage.ID },
+      HttpApiEndpoint.post("session.inbox.steer", "/api/session/:sessionID/inbox/:inboxID/steer", {
+        params: { sessionID: Session.ID, inboxID: SessionMessage.ID },
         success: HttpApiSchema.NoContent,
         error: [ConflictError, SessionNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.session.pending.steer",
-          summary: "Steer queued input",
-          description: "Change a queued input to steer delivery and wake session execution.",
+          identifier: "v2.session.inbox.steer",
+          summary: "Steer queued item",
+          description: "Change a queued inbox item to steer delivery and wake session execution.",
         }),
       ),
     )
     .add(
-      HttpApiEndpoint.post("session.pending.queue", "/api/session/:sessionID/pending/:inputID/queue", {
-        params: { sessionID: Session.ID, inputID: SessionMessage.ID },
+      HttpApiEndpoint.post("session.inbox.queue", "/api/session/:sessionID/inbox/:inboxID/queue", {
+        params: { sessionID: Session.ID, inboxID: SessionMessage.ID },
         success: HttpApiSchema.NoContent,
         error: [ConflictError, SessionNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.session.pending.queue",
-          summary: "Queue pending steer",
-          description: "Change a pending steer to queued delivery.",
+          identifier: "v2.session.inbox.queue",
+          summary: "Queue steered item",
+          description: "Change a steered inbox item to queued delivery.",
         }),
       ),
     )
@@ -657,7 +660,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.interrupt",
             summary: "Interrupt session execution",
             description:
-              "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes if durable pending work remains after interruption.",
+              "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes if durable inbox work remains after interruption.",
           }),
         ),
     )
