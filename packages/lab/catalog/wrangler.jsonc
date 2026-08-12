@@ -8,6 +8,7 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
+    "html_handling": "none",
   },
   "routes": [
     {
