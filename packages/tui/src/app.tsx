@@ -886,11 +886,12 @@ function App(props: { pair?: DialogPairCredentials }) {
         category: "System",
       },
       {
-        // Deliberately absent from the command palette; reachable only as /experiments.
+        // Deliberately absent from the command palette; reachable only by the
+        // secret /baldbeard incantation.
         name: "opencode.experiments",
         title: "Experiments",
         palette: undefined,
-        slash: { name: "experiments" },
+        slash: { name: "baldbeard" },
         run: () => {
           dialog.replace(() => <DialogExperiments />)
         },
