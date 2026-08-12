@@ -171,8 +171,6 @@ export const Plugin = {
                   title: input.description,
                   agent: Agent.ID.make(input.agent),
                   model,
-                  // TODO(opencode kkdvxn): derive restricted subagent permissions from the parent
-                  // session (V1 deriveSubagentSessionPermission). MVP uses the agent's own permissions.
                 })
                 .pipe(
                   Effect.mapError(

@@ -135,6 +135,135 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("does not inherit ancestor asks", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: Session.ID.make("ses_child"),
+          project_id: Project.ID.global,
+          parent_id: Session.ID.make("ses_test"),
+          slug: "child",
+          directory: "/project",
+          title: "child",
+          version: "test",
+          agent: "child",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const agents = yield* Agent.Service
+      yield* agents.transform((editor) =>
+        editor.update(Agent.ID.make("child"), (agent) => {
+          agent.permissions = [{ action: "read", resource: "*", effect: "allow" }]
+        }),
+      )
+      const service = yield* Permission.Service
+      const child = assertion({ sessionID: Session.ID.make("ses_child") })
+
+      expect(yield* service.ask(child)).toMatchObject({ effect: "allow" })
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("inherits denies from every ancestor and denies override remembered allows", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "read", resource: "*", effect: "deny" }])
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(SessionTable)
+        .values([
+          {
+            id: Session.ID.make("ses_child"),
+            project_id: Project.ID.global,
+            parent_id: Session.ID.make("ses_test"),
+            slug: "child",
+            directory: "/project",
+            title: "child",
+            version: "test",
+            agent: "child",
+          },
+          {
+            id: Session.ID.make("ses_grandchild"),
+            project_id: Project.ID.global,
+            parent_id: Session.ID.make("ses_child"),
+            slug: "grandchild",
+            directory: "/project",
+            title: "grandchild",
+            version: "test",
+            agent: "grandchild",
+          },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+      const agents = yield* Agent.Service
+      yield* agents.transform((editor) => {
+        editor.update(Agent.ID.make("child"), (agent) => {
+          agent.permissions = [{ action: "read", resource: "*", effect: "allow" }]
+        })
+        editor.update(Agent.ID.make("grandchild"), (agent) => {
+          agent.permissions = [{ action: "read", resource: "*", effect: "allow" }]
+        })
+      })
+      const service = yield* Permission.Service
+      const grandchild = assertion({ sessionID: Session.ID.make("ses_grandchild") })
+
+      expect(yield* service.ask(grandchild)).toMatchObject({ effect: "deny" })
+      const saved = yield* PermissionSaved.Service
+      yield* saved.add({ projectID: Project.ID.global, action: "read", resources: ["src/index.ts"] })
+      expect(yield* service.ask(grandchild)).toMatchObject({ effect: "deny" })
+      const denied = yield* service.assert(grandchild).pipe(Effect.flip)
+      expect(denied).toBeInstanceOf(Permission.BlockedError)
+      if (denied instanceof Permission.BlockedError)
+        expect(Permission.evaluate("read", "src/index.ts", denied.rules).effect).toBe("deny")
+    }),
+  )
+
+  it.effect("ignores a missing ancestor agent", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "read", resource: "*", effect: "deny" }])
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: Session.ID.make("ses_child"),
+          project_id: Project.ID.global,
+          parent_id: Session.ID.make("ses_test"),
+          slug: "child",
+          directory: "/project",
+          title: "child",
+          version: "test",
+          agent: "child",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const agents = yield* Agent.Service
+      yield* agents.transform((editor) => {
+        editor.remove(Agent.ID.make("test"))
+        editor.update(Agent.ID.make("child"), (agent) => {
+          agent.permissions = [{ action: "read", resource: "*", effect: "allow" }]
+        })
+      })
+
+      const service = yield* Permission.Service
+      expect(yield* service.ask(assertion({ sessionID: Session.ID.make("ses_child") }))).toMatchObject({
+        effect: "allow",
+      })
+    }),
+  )
+
+  it.effect("denies all when the current session agent is missing", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "read", resource: "*", effect: "allow" }])
+      const agents = yield* Agent.Service
+      yield* agents.transform((editor) => editor.remove(Agent.ID.make("test")))
+
+      const service = yield* Permission.Service
+      expect(yield* service.ask(assertion())).toMatchObject({ effect: "deny" })
+    }),
+  )
+
   it.effect("allows and denies from explicit rules without asking", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])

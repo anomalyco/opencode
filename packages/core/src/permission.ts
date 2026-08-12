@@ -115,6 +115,11 @@ interface Pending {
   readonly deferred: Deferred.Deferred<void, DeclinedError | CorrectedError>
 }
 
+interface ConfiguredPermissions {
+  readonly own: Permission.Ruleset
+  readonly ancestors: ReadonlyArray<Permission.Ruleset>
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -147,15 +152,54 @@ const layer = Layer.effect(
       )
     })
 
-    const configured = Effect.fn("Permission.configured")(function* (sessionID: SessionSchema.ID, agentID?: Agent.ID) {
-      const session = yield* sessions.get(sessionID)
-      if (!session) return yield* new SessionErrors.NotFoundError({ sessionID })
-      const agent = yield* agents.resolve(agentID ?? session.agent)
-      return agent?.permissions ?? missingAgentPermissions
-    })
+    const configured = Effect.fn("Permission.configured")(configuredPermissions)
 
-    function denied(input: AssertInput, rules: Permission.Ruleset) {
-      return input.resources.some((resource) => evaluate(input.action, resource, rules).effect === "deny")
+    function configuredPermissions(
+      sessionID: SessionSchema.ID,
+      agentID?: Agent.ID,
+    ): Effect.Effect<ConfiguredPermissions, SessionErrors.NotFoundError> {
+      return Effect.gen(function* () {
+        const session = yield* sessions.get(sessionID)
+        if (!session) return yield* new SessionErrors.NotFoundError({ sessionID })
+        const agent = yield* agents.resolve(agentID ?? session.agent)
+        const own = agent?.permissions ?? missingAgentPermissions
+        if (!session.parentID) return { own, ancestors: [] }
+        return { own, ancestors: yield* ancestorPermissions(session.parentID) }
+      })
+    }
+
+    function ancestorPermissions(
+      sessionID: SessionSchema.ID,
+    ): Effect.Effect<ReadonlyArray<Permission.Ruleset>, SessionErrors.NotFoundError> {
+      return Effect.gen(function* () {
+        const session = yield* sessions.get(sessionID)
+        if (!session) return yield* new SessionErrors.NotFoundError({ sessionID })
+        const agent = yield* agents.resolve(session.agent)
+        const own = agent?.permissions ?? []
+        if (!session.parentID) return [own]
+        return [...(yield* ancestorPermissions(session.parentID)), own]
+      })
+    }
+
+    function evaluateResource(
+      input: AssertInput,
+      resource: string,
+      rules: ConfiguredPermissions,
+      remembered: Permission.Ruleset,
+    ) {
+      if (rules.ancestors.some((ruleset) => evaluate(input.action, resource, ruleset).effect === "deny")) return "deny"
+      if (evaluate(input.action, resource, rules.own).effect === "deny") return "deny"
+      return evaluate(input.action, resource, rules.own, remembered).effect
+    }
+
+    function evaluateRules(
+      input: AssertInput,
+      rules: ConfiguredPermissions,
+      remembered: Permission.Ruleset,
+    ) {
+      const effects = input.resources.map((resource) => evaluateResource(input, resource, rules, remembered))
+      const effect: Permission.Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
+      return effect
     }
 
     function relevant(input: AssertInput, rules: Permission.Ruleset) {
@@ -164,11 +208,18 @@ const layer = Layer.effect(
 
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID, input.agent)
-      if (denied(input, rules)) return { effect: "deny" as const, rules }
-      const all = [...rules, ...(yield* savedRules())]
-      const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
-      const effect: Permission.Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
-      return { effect, rules: all }
+      const remembered = yield* savedRules()
+      const effect = evaluateRules(input, rules, remembered)
+      const denied = input.resources
+        .filter((resource) => evaluateResource(input, resource, rules, remembered) === "deny")
+        .map((resource): Permission.Rule => ({ action: input.action, resource, effect: "deny" }))
+      return {
+        effect,
+        rules:
+          effect === "deny"
+            ? [...rules.ancestors.flat(), ...rules.own, ...denied]
+            : [...rules.own, ...remembered],
+      }
     })
 
     function request(input: AssertInput): Request {
@@ -283,14 +334,7 @@ const layer = Layer.effect(
               Effect.catchTag("Session.NotFoundError", () => Effect.succeed(undefined)),
             )
             if (!rules) continue
-            if (denied(input, rules)) continue
-            const effective = [...rules, ...rememberedRules]
-            if (
-              !item.request.resources.every(
-                (resource) => evaluate(item.request.action, resource, effective).effect === "allow",
-              )
-            )
-              continue
+            if (evaluateRules(input, rules, rememberedRules) !== "allow") continue
             yield* bus.publish(Permission.Event.Replied, {
               sessionID: item.request.sessionID,
               requestID: item.request.id,
