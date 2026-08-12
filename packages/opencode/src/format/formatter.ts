@@ -327,6 +327,16 @@ export const gleam: Info = {
   },
 }
 
+export const swiftformat: Info = {
+  name: "swiftformat",
+  extensions: [".swift"],
+  async enabled() {
+    const match = which("swiftformat")
+    if (!match) return false
+    return [match, "$FILE"]
+  },
+}
+
 export const shfmt: Info = {
   name: "shfmt",
   extensions: [".sh", ".bash"],

@@ -36,6 +36,20 @@ describe("Format", () => {
   )
 
   it.instance(
+    "swiftformat is registered for .swift files",
+    () =>
+      Format.Service.use((fmt) =>
+        Effect.gen(function* () {
+          const statuses = yield* fmt.status()
+          const swiftformat = statuses.find((item) => item.name === "swiftformat")
+          expect(swiftformat).toBeDefined()
+          expect(swiftformat!.extensions).toEqual([".swift"])
+        }),
+      ),
+    { config: { formatter: true } },
+  )
+
+  it.instance(
     "status() keeps built-in formatters when config object is provided",
     () =>
       Format.Service.use((fmt) =>
