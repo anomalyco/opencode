@@ -29,6 +29,11 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ffmpeg
+
       - name: Validate
         run: |
           bun --cwd packages/protocol typecheck

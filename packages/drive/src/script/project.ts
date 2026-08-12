@@ -1,5 +1,4 @@
 import { lstat, readdir, rm } from "node:fs/promises"
-import { devNull } from "node:os"
 import { join } from "node:path"
 import * as NodeServices from "@effect/platform-node/NodeServices"
 import * as Effect from "effect/Effect"
@@ -50,7 +49,7 @@ async function git(cwd: string, args: ReadonlyArray<string>) {
       cwd,
       env: {
         ...stripGitEnvironment(Bun.env),
-        GIT_CONFIG_GLOBAL: devNull,
+        GIT_CONFIG_GLOBAL: "/dev/null",
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_AUTHOR_DATE: "2000-01-01T00:00:00Z",
         GIT_COMMITTER_DATE: "2000-01-01T00:00:00Z",
