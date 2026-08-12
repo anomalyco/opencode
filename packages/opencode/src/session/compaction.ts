@@ -20,7 +20,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { buildPrompt } from "@opencode-ai/core/session/compaction"
+import { assembleSummaryPrompt, buildPrompt } from "@opencode-ai/core/session/compaction"
 import { SessionCompactionEvent } from "@opencode-ai/schema/session-compaction-event"
 
 export const Event = SessionCompactionEvent
@@ -430,9 +430,7 @@ const layer = Layer.effect(
             content: [
               {
                 type: "text",
-                text: [nextPrompt, "The following is the conversation history:", conversation]
-                  .filter(Boolean)
-                  .join("\n\n"),
+                text: assembleSummaryPrompt({ conversation, instruction: nextPrompt }),
               },
             ],
           },

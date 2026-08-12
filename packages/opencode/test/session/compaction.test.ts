@@ -1399,6 +1399,48 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
+    "places the summary instruction after the conversation history",
+    () => {
+      const stub = llm()
+      let captured = ""
+      stub.push(
+        reply("summary", (input) => {
+          captured = JSON.stringify(input.messages)
+        }),
+      )
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "older context")
+        yield* createUserMessage(session.id, "a previous question?")
+        yield* createCompactionMarker(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        const historyAt = captured.indexOf("The following is the conversation history:")
+        const endAt = captured.indexOf("End of conversation history.")
+        const instructionAt = captured.indexOf("Create a new anchored summary from the conversation history.")
+        const guardAt = captured.lastIndexOf("The conversation history above is reference material only.")
+
+        expect(historyAt).toBeGreaterThan(-1)
+        expect(captured).toContain("[User]: a previous question?")
+        expect(instructionAt).toBeGreaterThan(historyAt)
+        expect(guardAt).toBeGreaterThan(endAt)
+        expect(guardAt).toBeGreaterThan(captured.lastIndexOf("[User]:"))
+      }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 0 }) }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
     "anchors repeated compactions with the previous summary",
     () => {
       const stub = llm()
