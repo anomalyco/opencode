@@ -44,10 +44,11 @@ Rules:
 - Use terse bullets, not prose paragraphs.
 - Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
 - Do not mention the summary process or that context was compacted.`
-const SUMMARY_UPDATE_INSTRUCTIONS = `Update the <prior-summary> using the new messages in <conversation>.
+const SUMMARY_UPDATE_INSTRUCTIONS = `The <prior-summary> summarizes everything that happened before the <conversation>. Construct a new summary that combines both. The <prior-summary> is discarded after this: anything you do not carry into the new summary is lost.
 
-When updating:
-- Preserve relevant information from the <prior-summary>, revising or removing anything outdated or contradicted by the <conversation>.
+When combining:
+- Carry forward objectives, constraints, user directives, decisions, and parallel workstreams from the <prior-summary> even when the <conversation> does not mention them. Drop only what is finished and no longer needed.
+- The <conversation> is more recent than the <prior-summary>. Where they conflict, the conversation wins: state the corrected fact and drop the old claim.
 - Add new progress, decisions, constraints, and context from the conversation.
 - Move completed work from "Active" to "Completed".
 - If a blocker has been resolved, update the summary to reflect that while keeping any details still needed to continue the work.
@@ -166,8 +167,7 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
     ].join("\n\n")
   return [
     conversation,
-    `Here is the previous summary:\n\n<prior-summary>\n${input.previousSummary}\n</prior-summary>`,
-    "The <conversation> tags above contain new conversation history to incorporate into the existing summary in the <prior-summary> tags.",
+    `Here is the summary of the conversation before the <conversation> above:\n\n<prior-summary>\n${input.previousSummary}\n</prior-summary>`,
     SUMMARY_UPDATE_INSTRUCTIONS,
     SUMMARY_TEMPLATE,
   ].join("\n\n")
