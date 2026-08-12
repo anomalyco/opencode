@@ -516,7 +516,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .find((x) => x.parentID === undefined)?.id
     if (!match) {
-      if (sync.status !== "complete") return
       if (!args.fork) return
       continued = true
       forkFailed("No session to fork")

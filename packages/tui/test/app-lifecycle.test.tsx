@@ -126,3 +126,54 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     mock.restore()
   }
 })
+
+test("continue fork returns home when the blocking session list is empty", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const core = await import("@opentui/core")
+  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
+  const events = createEventSource()
+  let started!: () => void
+  const ready = new Promise<void>((resolve) => {
+    started = resolve
+  })
+  let commandStarted!: () => void
+  const command = new Promise<void>((resolve) => {
+    commandStarted = resolve
+  })
+  const calls = createFetch((url) => {
+    if (url.pathname === "/command") {
+      commandStarted()
+      return new Promise<Response>(() => {})
+    }
+  })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        url: "http://test",
+        directory,
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        fetch: calls.fetch,
+        events: events.source,
+        args: { continue: true, fork: true },
+        pluginHost: {
+          async start() {
+            started()
+          },
+          async dispose() {},
+        },
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
+    )
+
+    await Promise.all([ready, command])
+    const frame = await setup.waitForFrame((frame) => frame.includes("No session to fork"))
+    expect(frame).toContain("No session to fork")
+
+    setup.renderer.destroy()
+    await task
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    mock.restore()
+  }
+})
