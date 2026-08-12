@@ -1,4 +1,4 @@
-import { TextAttributes, type Renderable } from "@opentui/core"
+import { CliRenderEvents, TextAttributes, type Renderable } from "@opentui/core"
 import { TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { open } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -45,6 +45,7 @@ export function DevToolsBar() {
   const [dumpPath, setDumpPath] = createSignal<string>()
   const [dumpError, setDumpError] = createSignal<string>()
   const [frontendSamples, setFrontendSamples] = createSignal<readonly ProcessSample[]>([])
+  const [debugOverlay, setDebugOverlay] = createSignal(renderer.debugOverlay.enabled)
   let focus: Renderable | null
   const connected = createMemo(() => client.connection.status() === "connected")
   const serverIndicator = createMemo(() => connectionIndicator(client.connection.status(), client.connection.attempt()))
@@ -93,6 +94,10 @@ export function DevToolsBar() {
     { priority: 10 },
   )
   onCleanup(offEscape)
+
+  const onDebugOverlayToggle = (enabled: boolean) => setDebugOverlay(enabled)
+  renderer.on(CliRenderEvents.DEBUG_OVERLAY_TOGGLE, onDebugOverlayToggle)
+  onCleanup(() => renderer.off(CliRenderEvents.DEBUG_OVERLAY_TOGGLE, onDebugOverlayToggle))
 
   onMount(() => {
     const eventLoop = monitorEventLoopDelay({ resolution: 20 })
@@ -319,6 +324,9 @@ export function DevToolsBar() {
               unit=" MB"
               decimals={0}
             />
+            <Action onClick={() => renderer.toggleDebugOverlay()} hoverBackground>
+              {debugOverlay() ? "[x]" : "[ ]"} Debug overlay
+            </Action>
           </PanelBox>
         </Show>
       </BarItem>

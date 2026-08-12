@@ -993,6 +993,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         name: "app.debug",
         title: "Toggle debug panel",
         category: "System",
+        palette: undefined,
         run: () => {
           renderer.toggleDebugOverlay()
           dialog.clear()
