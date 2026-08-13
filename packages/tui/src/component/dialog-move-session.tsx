@@ -311,11 +311,11 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   return (
     <box minHeight={showError() ? 5 : fullHeight()}>
       <DialogSelect
-        title="Choose directory"
+        title="Move session"
         titleView={
           <box flexDirection="row" gap={1}>
             <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
-              Choose directory
+              Move session
             </text>
             <Show when={working() || directories.loading || loadedProject.loading}>
               <Spinner />
