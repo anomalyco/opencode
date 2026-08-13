@@ -102,6 +102,13 @@ describe("session.system", () => {
     }
   })
 
+  test("selects the Kimi prompt for official provider model IDs", () => {
+    for (const providerID of ["kimi-for-coding", "moonshotai", "moonshotai-cn"]) {
+      const prompt = SystemPrompt.provider({ providerID, api: { id: "k3" } } as Provider.Model)[0]
+      expect(prompt).toContain("# Prompt and Tool Use")
+    }
+  })
+
   it.effect("skills output is sorted by name and stable across calls", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service
