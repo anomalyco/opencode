@@ -31,6 +31,7 @@ const BASH_WRAPPERS = new Set([
   ".",
   "trap",
   "noglob",
+  "nocorrect",
   "repeat",
 ])
 const BASH_SHELLS = new Set(["bash", "sh", "dash", "zsh", "ksh"])
@@ -70,13 +71,36 @@ const POWERSHELL_DYNAMIC_COMMANDS = new Set([
   "where-object",
   "wscript",
   "wscript.exe",
-  "ii",
-  "ipmo",
-  "nal",
-  "sal",
-  "saps",
-  "start",
 ])
+const POWERSHELL_ALIASES: Record<string, string> = {
+  "%": "foreach-object",
+  "?": "where-object",
+  copy: "copy-item",
+  cp: "copy-item",
+  cpi: "copy-item",
+  del: "remove-item",
+  erase: "remove-item",
+  foreach: "foreach-object",
+  icm: "invoke-command",
+  ii: "invoke-item",
+  ipmo: "import-module",
+  mi: "move-item",
+  move: "move-item",
+  mv: "move-item",
+  nal: "new-alias",
+  ni: "new-item",
+  rd: "remove-item",
+  ren: "rename-item",
+  ri: "remove-item",
+  rm: "remove-item",
+  rmdir: "remove-item",
+  rni: "rename-item",
+  sal: "set-alias",
+  saps: "start-process",
+  si: "set-item",
+  start: "start-process",
+  where: "where-object",
+}
 const MAX_BASH_INPUT_LENGTH = 64 * 1024
 const MAX_SUBSTITUTION_DEPTH = 32
 
@@ -316,7 +340,13 @@ function scanBash(input: string, depth: number): Result {
       if (name === "git")
         return command.words.some((word, index) => index > 0 && /^alias\.[^=]+=!/.test(word))
       if (["python", "python3", "perl", "ruby", "node", "bun"].includes(name))
-        return command.words.some((word, index) => index > 0 && ["-c", "-e", "--eval", "--print"].includes(word))
+        return command.words.some(
+          (word, index) =>
+            index > 0 &&
+            (["-c", "-e", "-p", "--eval", "--print"].includes(word) ||
+              /^-(?:c|e|p).+/.test(word) ||
+              /^(?:--eval|--print)=.+/.test(word)),
+        )
       return false
     })
   )
@@ -478,7 +508,8 @@ export function scanPowerShell(input: string): Result {
   if (
     dynamic ||
     commands.some((command) => {
-      const name = shellCommandName(command.words[0])
+      const rawName = shellCommandName(command.words[0])
+      const name = POWERSHELL_ALIASES[rawName] ?? rawName
       if (name?.startsWith("$") || name?.startsWith("@")) return true
       if (POWERSHELL_DYNAMIC_COMMANDS.has(name)) return true
       if (/\.(?:ps1|psm1|cmd|bat|vbs|wsf)$/i.test(name)) return true
