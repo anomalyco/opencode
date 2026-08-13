@@ -1961,14 +1961,15 @@ const layer = Layer.effect(
         }),
         Effect.catch(() => Effect.succeed([] as { providerID: ProviderV2.ID; modelID: ModelV2.ID }[])),
       )
+      const configured = Object.keys(cfg.provider ?? {})
       for (const entry of recent) {
+        if (configured.length > 0 && !configured.includes(entry.providerID)) continue
         const provider = s.providers[entry.providerID]
         if (!provider) continue
         if (!provider.models[entry.modelID]) continue
         return { providerID: entry.providerID, modelID: entry.modelID }
       }
 
-      const configured = Object.keys(cfg.provider ?? {})
       const provider = Object.values(s.providers).find((p) => configured.length === 0 || configured.includes(p.id))
       if (!provider) return yield* new NoProvidersError()
       const [model] = sort(Object.values(provider.models))

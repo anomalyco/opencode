@@ -379,6 +379,43 @@ it.instance(
 )
 
 it.instance(
+  "defaultModel ignores recent models from providers the config excludes",
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    const recent = path.join(Global.Path.state, "model.json")
+    yield* Effect.acquireRelease(
+      Effect.promise(() =>
+        Bun.write(recent, JSON.stringify({ recent: [{ providerID: "anthropic", modelID: "claude-sonnet-4-5" }] })),
+      ),
+      () => Effect.promise(() => unlink(recent).catch(() => undefined)),
+    )
+
+    const model = yield* Provider.use.defaultModel()
+    expect(String(model.providerID)).toBe("local-provider")
+    expect(String(model.modelID)).toBe("local-model")
+  }),
+  {
+    config: {
+      provider: {
+        "local-provider": {
+          name: "Local Provider",
+          npm: "@ai-sdk/openai-compatible",
+          api: "http://localhost:11434/v1",
+          models: {
+            "local-model": {
+              name: "Local Model",
+            },
+          },
+          options: {
+            apiKey: "local-key",
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "defaultModel returns a typed error when config excludes every provider",
   Effect.gen(function* () {
     const error = yield* Provider.use.defaultModel().pipe(Effect.flip)
