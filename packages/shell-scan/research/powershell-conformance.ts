@@ -2,13 +2,20 @@ import { ShellScan } from "../src/index.js"
 
 const pwsh = process.env.PWSH ?? Bun.which("pwsh")
 if (!pwsh) {
-  console.error("Set PWSH to a PowerShell 7 executable")
+  console.error("Set PWSH to a PowerShell executable")
   process.exit(2)
 }
+const versionProcess = Bun.spawnSync(
+  [pwsh, "-NoProfile", "-NonInteractive", "-Command", "$PSVersionTable.PSVersion.Major"],
+  { stdout: "pipe", stderr: "pipe" },
+)
+const oracleMajor = Number(versionProcess.stdout.toString().trim())
+if (versionProcess.exitCode !== 0 || !Number.isInteger(oracleMajor) || oracleMajor < 5)
+  throw new Error(`PowerShell 5 or newer required: ${versionProcess.stderr.toString().trim()}`)
 
 const commands = ["Get-ChildItem", "Write-Output", "Remove-Item", "Test-Path"] as const
 const arguments_ = ["", " value", " 'single ; | # text'", ' "double ; | # text"', " foo`;bar"] as const
-const separators = [";", "|", "&&", "||", "\n", "\r", "\r\n"] as const
+const separators = [";", "|", ...(oracleMajor >= 7 ? ["&&", "||"] : []), "\n", "\r", "\r\n"] as const
 const sources = new Set<string>()
 
 for (const command of commands) {
@@ -92,8 +99,8 @@ const oracle = JSON.parse(process_.stdout.toString()) as {
   }>
 }
 const version = Number(oracle.version.split(".")[0])
-if (!Number.isInteger(version) || version < 7)
-  throw new Error(`PowerShell 7 or newer required, received ${oracle.version}`)
+if (version !== oracleMajor)
+  throw new Error(`PowerShell version changed during oracle run: ${oracleMajor} to ${oracle.version}`)
 const returned = new Set(oracle.results.map((result) => result.source))
 if (
   oracle.results.length !== sources.size ||
