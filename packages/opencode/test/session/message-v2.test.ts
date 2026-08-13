@@ -601,6 +601,131 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("moves pdf media out of OpenAI-compatible tool results", async () => {
+    const openAIModel: Provider.Model = {
+      ...model,
+      capabilities: {
+        ...model.capabilities,
+        attachment: true,
+        input: {
+          ...model.capabilities.input,
+          pdf: true,
+        },
+      },
+    }
+    const pdf = Buffer.from("%PDF-1.4\n").toString("base64")
+    const userID = "m-user-openai-pdf"
+    const assistantID = "m-assistant-openai-pdf"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1-openai-pdf"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-openai-pdf"),
+            type: "tool",
+            callID: "call-openai-pdf-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/example.pdf" },
+              output: "PDF read successfully",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-openai-pdf-1"),
+                  type: "file",
+                  mime: "application/pdf",
+                  filename: "example.pdf",
+                  url: `data:application/pdf;base64,${pdf}`,
+                },
+              ],
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, openAIModel)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-openai-pdf-1",
+            toolName: "read",
+            input: { filePath: "/tmp/example.pdf" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-openai-pdf-1",
+            toolName: "read",
+            output: { type: "text", value: "PDF read successfully" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached media from tool result:" },
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            filename: "example.pdf",
+            data: `data:application/pdf;base64,${pdf}`,
+          },
+        ],
+      },
+    ])
+
+    const unsupportedModel: Provider.Model = {
+      ...openAIModel,
+      capabilities: {
+        ...openAIModel.capabilities,
+        input: {
+          ...openAIModel.capabilities.input,
+          pdf: false,
+        },
+      },
+    }
+    const unsupported = ProviderTransform.message(
+      await MessageV2.toModelMessages(input, unsupportedModel),
+      unsupportedModel,
+      {},
+    )
+    expect(unsupported.at(-1)).toMatchObject({
+      role: "user",
+      content: [
+        { type: "text", text: "Attached media from tool result:" },
+        {
+          type: "text",
+          text: 'ERROR: Cannot read "example.pdf" (this model does not support pdf input). Inform the user.',
+        },
+      ],
+    })
+  })
+
   test("omits provider metadata when assistant model differs", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
