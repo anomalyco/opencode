@@ -3,7 +3,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { createSignal } from "solid-js"
 import { DialogMoveSession } from "../../../component/dialog-move-session"
-import { SessionLocationMissing } from "../../../routes/session/location-missing"
+import { SessionLocationUnavailable } from "../../../routes/session/location-missing"
 import type { Story } from "./index"
 import { StoryFooter } from "./footer"
 
@@ -24,6 +24,7 @@ function SessionLocationMissingStory(props: { context: Plugin.Context }) {
             strategy: "git_worktree",
           },
         ]}
+        fixture
         onSelect={(selection) => {
           if (selection.type !== "directory") return
           setMessage(`Selected ${selection.directory}`)
@@ -57,7 +58,7 @@ function SessionLocationMissingStory(props: { context: Plugin.Context }) {
         <text fg={theme.text.default}>Build · GPT-5.6 Sol (high)</text>
         <text fg={theme.text.subdued}>The deployment is verified and the worktree is clean.</text>
         <box flexGrow={1} />
-        <SessionLocationMissing directory={directory} onMove={open} />
+        <SessionLocationUnavailable directory={directory} onMove={open} />
       </box>
       <StoryFooter
         context={props.context}

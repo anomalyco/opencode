@@ -31,6 +31,7 @@ type DialogMoveSessionProps = {
   onSelect: (selection: MoveSessionSelection) => void
   onCurrentChange?: (selection: MoveSessionSelection) => void
   initialDirectories?: ReadonlyArray<ProjectDirectory>
+  fixture?: boolean
   initialRemoving?: string
 }
 
@@ -75,7 +76,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   })
 
   const [directories, { refetch }] = createResource(
-    () => (props.initialDirectories || props.initialRemoving ? undefined : props.projectID),
+    () => (props.fixture || props.initialRemoving ? undefined : props.projectID),
     async (projectID, info): Promise<ReadonlyArray<ProjectDirectory> | undefined> => {
       try {
         const requestLocation = { directory: location()?.directory || paths.cwd }
@@ -142,10 +143,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       .map((location) => ({
         location,
         root: roots
-          .filter((root) => {
-            const relative = path.relative(root.directory, location)
-            return relative && relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative)
-          })
+          .filter((root) => contains(root.directory, location))
           .toSorted((a, b) => b.directory.length - a.directory.length)[0],
       }))
       .filter((item): item is { location: string; root: ProjectDirectory } => item.root !== undefined)
@@ -356,7 +354,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         }}
         onMove={() => setToDelete(undefined)}
         actions={
-          showError()
+          showError() || props.fixture
             ? []
             : [
                 {

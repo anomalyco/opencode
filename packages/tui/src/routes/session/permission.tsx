@@ -440,66 +440,50 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
   Keymap.createLayer(() => ({
     mode: "base",
     commands: [
-      {
-        id: "app.exit",
-        title: "Reject permission",
-        group: group(),
-        bind: false,
-        run() {
-          if (!props.escapeKey) return
-          props.onSelect(props.escapeKey)
-        },
-      },
-      {
-        id: "permission.prompt.fullscreen",
-        title: "Toggle permission fullscreen",
-        group: group(),
-        bind: false,
-        run() {
-          if (!props.fullscreen) return
-          setStore("expanded", (v) => !v)
-        },
-      },
-      {
-        bind: "left",
-        title: "Previous option",
-        group: group(),
-        run: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx - 1 + keys.length) % keys.length]
-          setStore("selected", next)
-        },
-      },
-      {
-        bind: "h",
-        title: "Previous option",
-        group: group(),
-        run: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx - 1 + keys.length) % keys.length]
-          setStore("selected", next)
-        },
-      },
-      {
-        bind: "right",
-        title: "Next option",
-        group: group(),
-        run: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx + 1) % keys.length]
-          setStore("selected", next)
-        },
-      },
-      {
-        bind: "l",
-        title: "Next option",
-        group: group(),
-        run: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx + 1) % keys.length]
-          setStore("selected", next)
-        },
-      },
+      ...(props.escapeKey
+        ? [
+            {
+              id: "app.exit",
+              title: "Reject permission",
+              group: group(),
+              bind: false as const,
+              run: () => props.onSelect(props.escapeKey!),
+            },
+          ]
+        : []),
+      ...(props.fullscreen
+        ? [
+            {
+              id: "permission.prompt.fullscreen",
+              title: "Toggle permission fullscreen",
+              group: group(),
+              bind: false as const,
+              run: () => setStore("expanded", (value) => !value),
+            },
+          ]
+        : []),
+      ...(keys.length > 1
+        ? [
+            {
+              bind: "left,h",
+              title: "Previous option",
+              group: group(),
+              run: () => {
+                const index = keys.indexOf(store.selected)
+                setStore("selected", keys[(index - 1 + keys.length) % keys.length])
+              },
+            },
+            {
+              bind: "right,l",
+              title: "Next option",
+              group: group(),
+              run: () => {
+                const index = keys.indexOf(store.selected)
+                setStore("selected", keys[(index + 1) % keys.length])
+              },
+            },
+          ]
+        : []),
       {
         bind: "return",
         title: "Select option",
@@ -507,14 +491,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         run: () => props.onSelect(store.selected),
       },
       ...(props.escapeKey
-        ? [
-            {
-              bind: "escape",
-              title: "Reject permission",
-              group: group(),
-              run: () => props.onSelect(props.escapeKey!),
-            },
-          ]
+        ? [{ bind: "escape", title: "Reject permission", group: group(), run: () => props.onSelect(props.escapeKey!) }]
         : []),
     ],
     bindings: [...(props.escapeKey ? ["app.exit"] : []), ...(props.fullscreen ? ["permission.prompt.fullscreen"] : [])],

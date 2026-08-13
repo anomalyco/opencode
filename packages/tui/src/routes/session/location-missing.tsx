@@ -4,8 +4,14 @@ import { useTheme } from "../../context/theme"
 import { Locale } from "../../util/locale"
 import { abbreviateHome } from "../../util/path-format"
 import { SessionQuestion } from "./permission"
+import { usePromptMove } from "../../component/prompt/move"
 
-export function SessionLocationMissing(props: { directory: string; onMove: () => void }) {
+export function SessionLocationMissing(props: { directory: string; projectID: string; sessionID: string }) {
+  const move = usePromptMove({ projectID: () => props.projectID, sessionID: () => props.sessionID })
+  return <SessionLocationUnavailable directory={props.directory} onMove={move.open} />
+}
+
+export function SessionLocationUnavailable(props: { directory: string; onMove: () => void }) {
   const paths = useTuiPaths()
   const theme = useTheme("elevated")
   const directory = createMemo(() => Locale.truncateMiddle(abbreviateHome(props.directory, paths.home), 72))
@@ -16,7 +22,7 @@ export function SessionLocationMissing(props: { directory: string; onMove: () =>
       group="Session recovery"
       choicesLabel="Recovery actions"
       instance={props.directory}
-      title="Session directory no longer exists"
+      title="Session location unavailable"
       body={
         <box paddingLeft={1} gap={1}>
           <text fg={theme.text.subdued}>{directory()}</text>

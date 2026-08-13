@@ -7,7 +7,7 @@ const context = createContext<{
   readonly current: LocationGetOutput | undefined
   // The target location as set, available before the server-synced info in `current` arrives.
   readonly ref: LocationRef | undefined
-  readonly error: unknown
+  readonly error: { readonly location: LocationRef; readonly cause: unknown } | undefined
   set: (location?: LocationRef) => void
 }>()
 
@@ -15,18 +15,30 @@ export function LocationProvider(props: ParentProps) {
   const client = useClient()
   const data = useData()
   const [ref, setRef] = createSignal<LocationRef>()
-  const [error, setError] = createSignal<unknown>()
+  const [error, setError] = createSignal<{ readonly location: LocationRef; readonly cause: unknown }>()
+  const [generation, setGeneration] = createSignal(0)
   const current = createMemo(() => data.location.info(ref()))
 
   function sync(location?: LocationRef) {
     if (!location) return
+    const attempt = generation() + 1
+    setGeneration(attempt)
     const defaultLocation = data.location.default()
     const target =
       location.directory === defaultLocation.directory && location.workspaceID === defaultLocation.workspaceID
         ? undefined
         : location
     setError(undefined)
-    void data.location.sync(target).catch(setError)
+    void data.location.sync(target).catch((cause) => {
+      const current = ref()
+      if (
+        generation() !== attempt ||
+        current?.directory !== location.directory ||
+        current.workspaceID !== location.workspaceID
+      )
+        return
+      setError({ location, cause })
+    })
   }
 
   function set(location?: LocationRef) {

@@ -108,7 +108,6 @@ import { createSingleFlight } from "../../util/single-flight"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { generateThinkingSyntax } from "./thinking-syntax"
 import { createDelayedPresence } from "../../util/delayed-presence"
-import { usePromptMove } from "../../component/prompt/move"
 import { SessionLocationMissing } from "./location-missing"
 
 addDefaultParsers(parsers.parsers)
@@ -178,10 +177,6 @@ export function Session() {
   }
   const currentLocation = useLocation()
   const location = createMemo(() => session()?.location ?? currentLocation.ref)
-  const move = usePromptMove({
-    projectID: () => session()?.projectID,
-    sessionID: () => route.sessionID,
-  })
 
   createEffect(() => currentLocation.set(location()))
 
@@ -1121,8 +1116,18 @@ export function Session() {
                     }}
                   </Show>
                 </Match>
-                <Match when={currentLocation.error}>
-                  <SessionLocationMissing directory={session()!.location.directory} onMove={move.open} />
+                <Match
+                  when={
+                    session() &&
+                    currentLocation.error?.location.directory === session()!.location.directory &&
+                    currentLocation.error?.location.workspaceID === session()!.location.workspaceID
+                  }
+                >
+                  <SessionLocationMissing
+                    directory={session()!.location.directory}
+                    projectID={session()!.projectID}
+                    sessionID={route.sessionID}
+                  />
                 </Match>
                 <Match when={!disabled()}>
                   <Prompt
