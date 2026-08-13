@@ -104,6 +104,57 @@ interface CodexAuthPluginOptions {
   experimentalWebSockets?: boolean
 }
 
+export function resolveCodexApiEndpoint(
+  info: { options?: Record<string, unknown> } | undefined,
+  pluginOption: string | undefined,
+): string {
+  const options = info?.options
+  if (options) {
+    const endpoint = options.codexApiEndpoint
+    if (typeof endpoint === "string" && endpoint !== "") return endpoint
+    const baseURL = options.baseURL
+    if (typeof baseURL === "string" && baseURL !== "") {
+      const trimmed = baseURL.replace(/\/+$/, "")
+      if (trimmed.endsWith("/codex")) return `${trimmed}/responses`
+    }
+  }
+  if (typeof pluginOption === "string" && pluginOption !== "") return pluginOption
+  return CODEX_API_ENDPOINT
+}
+
+// The ChatGPT codex backend (chatgpt.com/backend-api/codex/responses) rejects
+// requests that do not match its hard requirements: `store` must be false,
+// `stream` must be true, and `max_output_tokens` is unsupported. This rewrites
+// a JSON request body to satisfy those constraints and leaves non-JSON bodies
+// (and anything that is not a parseable object) untouched.
+export function rewriteCodexRequestBody(body: BodyInit | null | undefined): BodyInit | undefined {
+  if (body === undefined || body === null) return body === null ? undefined : body
+  let text: string
+  if (typeof body === "string") {
+    text = body
+  } else if (body instanceof ArrayBuffer) {
+    text = Buffer.from(new Uint8Array(body)).toString()
+  } else if (ArrayBuffer.isView(body)) {
+    text = Buffer.from(body.buffer).toString()
+  } else if (Buffer.isBuffer(body)) {
+    text = body.toString()
+  } else {
+    return body
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return body
+  }
+  if (typeof parsed !== "object" || parsed === null) return body
+  const json = parsed as Record<string, unknown>
+  json.store = false
+  json.stream = true
+  delete json.max_output_tokens
+  return JSON.stringify(json)
+}
+
 async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: PkceCodes): Promise<TokenResponse> {
   const response = await fetch(`${ISSUER}/oauth/token`, {
     method: "POST",
@@ -262,7 +313,6 @@ function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResp
 
 export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPluginOptions = {}): Promise<Hooks> {
   const issuer = options.issuer ?? ISSUER
-  const codexApiEndpoint = options.codexApiEndpoint ?? CODEX_API_ENDPOINT
   let websocketFetchInstalled = false
   const websocketFetches: Array<ReturnType<typeof OpenAIWebSocketPool.createWebSocketFetch>> = []
 
@@ -319,8 +369,9 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
     },
     auth: {
       provider: "openai",
-      async loader(getAuth) {
+      async loader(getAuth, info) {
         const auth = await getAuth()
+        const codexApiEndpoint = resolveCodexApiEndpoint(info, options.codexApiEndpoint)
         const websocketFetch = options.experimentalWebSockets
           ? OpenAIWebSocketPool.createWebSocketFetch({ httpFetch: fetch })
           : undefined
@@ -411,17 +462,22 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
               requestInput instanceof URL
                 ? requestInput
                 : new URL(typeof requestInput === "string" ? requestInput : requestInput.url)
-            const url =
+            const isCodexPath =
               parsed.pathname.includes("/v1/responses") || parsed.pathname.includes("/chat/completions")
-                ? new URL(codexApiEndpoint)
-                : parsed
+            const url = isCodexPath ? new URL(codexApiEndpoint) : parsed
 
             const requestInit = {
               ...init,
-              body: init?.body,
+              body: isCodexPath ? rewriteCodexRequestBody(init?.body) : init?.body,
               headers,
             }
-            if (websocketFetch && parsed.pathname.endsWith("/responses")) return websocketFetch(url, requestInit)
+            // The ChatGPT codex backend speaks HTTP + SSE; the WebSocket upgrade is
+            // not supported by the codex gateway (Aperture rejects the upgrade with
+            // Forbidden). Route codex-path requests through plain HTTP fetch and let
+            // the AI SDK consume the SSE stream. Non-codex requests keep the
+            // websocket transport when it is enabled.
+            if (websocketFetch && !isCodexPath && parsed.pathname.endsWith("/responses"))
+              return websocketFetch(url, requestInit)
             return fetch(url, OpenAIWebSocketPool.withoutInternalHeaders(requestInit))
           },
         }
