@@ -301,9 +301,11 @@ const live: Layer.Layer<
                 toolName: lower,
               }
             }
-            const error = failed.error.message.includes("Unterminated string in JSON")
-              ? `Tool call arguments were truncated before the model finished generating them. This typically happens when the output token limit (${prepared.params.maxOutputTokens}) is reached mid-generation. Increase OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX or reduce the argument size. Original error: ${failed.error.message}`
-              : failed.error.message
+            const error =
+              failed.error.message.includes("JSON parsing failed") &&
+              failed.error.message.includes("Unterminated string")
+                ? `Tool call arguments may have been truncated before the model finished generating them. This can happen when the output token limit (${prepared.params.maxOutputTokens}) is reached mid-generation. Increase OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX or reduce the argument size. Original error: ${failed.error.message}`
+                : failed.error.message
             return {
               ...failed.toolCall,
               input: JSON.stringify({
@@ -317,7 +319,6 @@ const live: Layer.Layer<
           topP: prepared.params.topP,
           topK: prepared.params.topK,
           providerOptions: ProviderTransform.providerOptions(input.model, prepared.params.options),
-          activeTools: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
           tools: prepared.tools,
           toolChoice: input.toolChoice,
           maxOutputTokens: prepared.params.maxOutputTokens,
@@ -332,6 +333,12 @@ const live: Layer.Layer<
                 specificationVersion: "v3" as const,
                 async transformParams(args) {
                   if (args.type === "stream") {
+                    // Keep the invalid tool available to AI SDK's repair pass without exposing it to the model.
+                    args.params.tools = args.params.tools?.filter((tool) => tool.name !== "invalid")
+                    if (args.params.tools?.length === 0) {
+                      args.params.tools = undefined
+                      args.params.toolChoice = undefined
+                    }
                     // @ts-expect-error
                     args.params.prompt = ProviderTransform.message(
                       args.params.prompt,
