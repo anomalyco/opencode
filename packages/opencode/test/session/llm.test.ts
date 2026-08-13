@@ -644,6 +644,14 @@ beforeAll(() => {
       if (req.method === "GET" && incomingURL.pathname.endsWith("/models")) {
         return Response.json({ object: "list", data: [], models: [] })
       }
+      // fork: openai-compatible discovery also probes the llama-skein control
+      // plane at `/api/fit`, one level up from the `/v1` base. It must not eat a
+      // queued response — an unconsumed queue is how this server reports
+      // "unexpected request", so letting the probe through fails the next real
+      // call instead of this one.
+      if (incomingURL.pathname.endsWith("/api/fit")) {
+        return new Response("not found", { status: 404 })
+      }
       const next = state.queue.shift()
       if (!next) {
         return new Response("unexpected request", { status: 500 })
