@@ -116,6 +116,7 @@ function scanBash(input: string, depth: number): Result {
   let word = ""
   let wordStarted = false
   let assignmentWord = false
+  let assignmentHeadUnsafe = false
   let segment = 0
   let quote: "single" | "double" | undefined
   let dynamicWord = false
@@ -139,6 +140,7 @@ function scanBash(input: string, depth: number): Result {
     word = ""
     wordStarted = false
     assignmentWord = false
+    assignmentHeadUnsafe = false
   }
   const finishCommand = (end: number, boundary = false) => {
     finishWord()
@@ -191,18 +193,23 @@ function scanBash(input: string, depth: number): Result {
     if (char === "'") {
       quote = "single"
       wordStarted = true
+      if (!assignmentWord) assignmentHeadUnsafe = true
       continue
     }
     if (char === '"') {
       quote = "double"
       wordStarted = true
+      if (!assignmentWord) assignmentHeadUnsafe = true
       continue
     }
     if (char === "\\") {
       if (index + 1 >= input.length) return { kind: "opaque", reason: "unterminated-escape" }
       wordStarted = true
       if (input[index + 1] === "\n") index++
-      else word += input[++index]
+      else {
+        if (!assignmentWord) assignmentHeadUnsafe = true
+        word += input[++index]
+      }
       continue
     }
     if ((char === "$" && input[index + 1] === "(") || char === "`") {
@@ -277,7 +284,7 @@ function scanBash(input: string, depth: number): Result {
     terminalBackground = false
     wordStarted = true
     if (char === "$") dynamicWord = true
-    if (char === "=" && /^[A-Za-z_][A-Za-z0-9_]*\+?$/.test(word)) assignmentWord = true
+    if (char === "=" && !assignmentHeadUnsafe && /^[A-Za-z_][A-Za-z0-9_]*\+?$/.test(word)) assignmentWord = true
     word += char
   }
 

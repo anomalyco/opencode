@@ -19,6 +19,8 @@ describe("ShellScan adversarial corpus", () => {
     ["'rm' -rf /", ["rm"]],
     ['g""it status', ["git"]],
     ["g\\it status", ["git"]],
+    ["F\\OO=bar rm -rf /", ["FOO=bar"]],
+    ['F"O"O=bar rm -rf /', ["FOO=bar"]],
     ["PATH=/tmp/attacker:$PATH git status", ["git"]],
   ] as const)("scans visible Bash command positions: %s", (input, names) => {
     const result = ShellScan.scan(input)
