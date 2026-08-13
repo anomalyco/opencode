@@ -68,9 +68,109 @@ describe("WebFetchTool helpers", () => {
   })
 
   test("ports HTML text and markdown conversions without active content", () => {
-    const html = "<h1>Hello</h1><script>bad()</script><p>world <strong>wide</strong></p><style>.bad {}</style>"
-    expect(WebFetchTool.extractTextFromHTML(html)).toBe("Helloworld wide")
-    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe("# Hello\n\nworld **wide**")
+    const html =
+      "<h1>Hello</h1><script>bad()</script><p>world <strong>wide</strong> <product-name>today</product-name></p><style>.bad {}</style>"
+    expect(WebFetchTool.extractTextFromHTML(html)).toBe("Helloworld wide today")
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe("# Hello\n\nworld **wide** today")
+  })
+
+  test("renders headings, inline semantics, links, images, breaks, and thematic breaks", () => {
+    const html = `<h2>Read <em>this</em></h2><p><a href="https://example.com/a (b)" title="Example">docs</a><br><img src="diagram.png" alt="a ] b"></p><hr><p><del>old</del></p>`
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(
+      `## Read *this*\n\n[docs](https://example.com/a%20\\(b\\) "Example")  \n![a \\] b](diagram.png)\n\n---\n\n~~old~~`,
+    )
+  })
+
+  test("preserves inline and preformatted code verbatim with safe fences", () => {
+    const html = `<p>Use <code>say(\`hello\`)</code> now.</p><pre><code class="language-ts">const fence = \`\`\`\n&amp; stays decoded</code></pre>`
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(
+      `Use \`\`say(\`hello\`)\`\` now.\n\n\`\`\`\`ts\nconst fence = \`\`\`\n& stays decoded\n\`\`\`\``,
+    )
+  })
+
+  test("keeps nested ordered and unordered lists structurally readable", () => {
+    const html = `<ol start="3"><li>alpha<ul><li>nested <strong>item</strong></li></ul></li><li><p>beta first</p><p>beta second</p></li></ol>`
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(
+      `3. alpha\n\n  - nested **item**\n\n4. beta first\n\nbeta second`,
+    )
+  })
+
+  test("renders blockquotes and tables as readable Markdown", () => {
+    const html = `<blockquote><p>quoted <em>text</em></p><ul><li>point</li></ul></blockquote><table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody><tr><td>one</td><td><code>1</code></td></tr></tbody></table>`
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(
+      `> quoted *text*\n\n> - point\n\n| Name | Value |\n| --- | --- |\n| one | \`1\` |`,
+    )
+  })
+
+  test("decodes entities and normalizes prose whitespace without joining words", () => {
+    const html = `<p>alpha\n  <span>&amp; beta</span> <unknown>caf&eacute;</unknown>&nbsp;gamma 😀</p><p>delta</p>`
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(`alpha & beta café gamma 😀\n\ndelta`)
+  })
+
+  test("omits active and fallback content while retaining surrounding prose", () => {
+    const html = `<p>before <script><b>bad</b></script><style>bad</style><noscript>bad</noscript><iframe>bad</iframe><object>bad</object><embed src="bad"><meta content="bad"><link href="bad"><template>bad</template> after</p>`
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe("before after")
+  })
+
+  test("is deterministic and bounded for malformed maximum-size input", () => {
+    const html = `<main><p>${"visible &amp; text ".repeat(250_000)}</main></p></unknown>`
+    const first = WebFetchTool.convertHTMLToMarkdown(html)
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(first)
+    expect(first.startsWith("visible & text visible & text")).toBe(true)
+    expect(first.length).toBeLessThanOrEqual(html.length)
+  })
+
+  test("bounds deeply nested list output and fragmented code fences", () => {
+    const lists = `${"<ul><li>item".repeat(2_000)}${"</li></ul>".repeat(2_000)}`
+    const quotes = `${"<blockquote><p>item".repeat(2_000)}${"</p></blockquote>".repeat(2_000)}`
+    const code = `<pre>${"` x ".repeat(250_000)}</pre>`
+    expect(WebFetchTool.convertHTMLToMarkdown(lists).length).toBeLessThan(lists.length * 4)
+    expect(WebFetchTool.convertHTMLToMarkdown(quotes).length).toBeLessThan(quotes.length * 4)
+    expect(() => WebFetchTool.convertHTMLToMarkdown(code)).not.toThrow()
+    expect(
+      WebFetchTool.convertHTMLToMarkdown(
+        "<div>".repeat(20_000) + "safe<script><b>bad</b>&amp;</script><p>tail &amp;</p>",
+      ),
+    ).toBe("safe tail &")
+  })
+
+  test("escapes prose that would otherwise become Markdown structure", () => {
+    expect(WebFetchTool.convertHTMLToMarkdown(`<p># heading</p><p>1. item</p><p>---</p><p>a | b</p>`)).toBe(
+      `\\# heading\n\n1\\. item\n\n\\---\n\na \\| b`,
+    )
+  })
+
+  test("preserves code whitespace and quotes every line of multiline blocks", () => {
+    const html = `<blockquote><pre>line  \n\n\nnext</pre><table><tr><td>a|b</td><td>c</td></tr></table></blockquote>`
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(
+      `> \`\`\`\n> line  \n> \n> \n> next\n> \`\`\`\n\n> | a\\|b | c |\n> | --- | --- |`,
+    )
+  })
+
+  test("keeps visible whitespace around inline emphasis", () => {
+    expect(WebFetchTool.convertHTMLToMarkdown(`<p>a<strong> b</strong> c a <em>b </em>c</p>`)).toBe(
+      `a **b** c a *b* c`,
+    )
+  })
+
+  test("normalizes multiline table cells without changing their columns", () => {
+    const html = `<table><tr><td>x<br>y</td><td><code>a|b</code></td><td><p>first</p><p>second</p></td></tr></table>`
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(
+      `| x y | \`a\\|b\` | first second |\n| --- | --- | --- |`,
+    )
+  })
+
+  test("flattens nested tables without corrupting the outer table", () => {
+    const html = `<table><tr><th>Parent</th><th>Sibling</th></tr><tr><td>Before<table><tr><th>Key</th><th>Value</th></tr><tr><td>A</td><td>1</td></tr></table>After</td><td>Tail</td></tr></table>`
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(
+      `| Parent | Sibling |\n| --- | --- |\n| Before Key Value A 1 After | Tail |`,
+    )
+  })
+
+  test("escapes tilde fences and removes empty emphasis markers", () => {
+    expect(WebFetchTool.convertHTMLToMarkdown(`<p>~~~</p><p><strong></strong>content</p><p>~~~</p>`)).toBe(
+      `\\~\\~\\~\n\ncontent\n\n\\~\\~\\~`,
+    )
   })
 })
 
@@ -178,7 +278,7 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
-  it.effect("returns an error result when HTML-to-Markdown conversion throws", () =>
+  it.effect("converts deeply nested HTML without overflowing", () =>
     Effect.gen(function* () {
       reset()
       respond = () =>
@@ -191,8 +291,8 @@ describe("WebFetchTool registration", () => {
       const url = "https://1.1.1.1/deep-html"
 
       expect(yield* executeTool(registry, call({ url, format: "markdown" }))).toMatchObject({
-        status: "error",
-        error: { type: "unknown" },
+        status: "completed",
+        content: [{ type: "text", text: "content" }],
       })
     }),
   )
