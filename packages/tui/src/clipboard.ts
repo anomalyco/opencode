@@ -8,7 +8,15 @@ const exec = promisify(execFile)
 
 function command(command: string, args: string[] = [], input?: string) {
   return new Promise<Buffer>((resolve, reject) => {
-    const child = spawn(command, args, { stdio: [input === undefined ? "ignore" : "pipe", "pipe", "ignore"] })
+    // `detached: true` gives the child its own process group so clipboard helpers that
+    // fork into the background to keep serving a selection (e.g. `wl-copy`) are not
+    // suspended when the terminal sends SIGTSTP to opencode's foreground process group.
+    // Without this, Ctrl-Z stops the still-running helper along with opencode, and the
+    // next paste hangs waiting on a stopped clipboard provider.
+    const child = spawn(command, args, {
+      stdio: [input === undefined ? "ignore" : "pipe", "pipe", "ignore"],
+      detached: true,
+    })
     const output: Buffer[] = []
     child.on("error", reject)
     child.stdout?.on("data", (chunk: Buffer) => output.push(chunk))
