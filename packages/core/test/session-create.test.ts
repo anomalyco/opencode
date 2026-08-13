@@ -29,16 +29,9 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
+import { globalProjectLayer } from "./lib/project"
 import { tmpdir } from "./fixture/tmpdir"
 
-const projects = Layer.succeed(
-  Project.Service,
-  Project.Service.of({
-    list: () => Effect.succeed([]),
-    resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
-    directories: () => Effect.succeed([]),
-  }),
-)
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([
@@ -51,7 +44,7 @@ const it = testEffect(
     ]),
     [
       [Bus.node, Bus.configured({ persist: true })],
-      [Project.node, projects],
+      [Project.node, globalProjectLayer],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),
