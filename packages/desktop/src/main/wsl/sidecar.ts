@@ -3,12 +3,12 @@ import { randomUUID } from "node:crypto"
 import { createServer } from "node:net"
 import { app } from "electron"
 import { checkHealth } from "../server"
-import { type WslCommandLine, resolveWslOpencode, shellEscape, wslArgs } from "./runtime"
-import { pollWslHealth } from "./startup"
+import { type WslCommandLine, resolveWslCli, shellEscape, wslArgs } from "./runtime"
 import { nativeT } from "../native-translations"
 
 export type WslSidecar = {
-  listener: { stop: () => void; onExit: (cb: (code: number | null, signal: NodeJS.Signals | null) => void) => void }
+  stop: () => void
+  onExit: (cb: (code: number | null, signal: NodeJS.Signals | null) => void) => void
   url: string
   username: string | null
   password: string
@@ -18,7 +18,7 @@ export async function spawnWslSidecar(
   distro: string,
   opts: { onLine?: (line: WslCommandLine) => void; healthTimeoutMs?: number } = {},
 ): Promise<WslSidecar> {
-  const opencode = await resolveWslOpencode(distro)
+  const opencode = await resolveWslCli(distro)
   if (!opencode) throw new Error(nativeT("desktop.wsl.error.opencodeNotInstalled", { distro }))
 
   const port = await allocatePort()
@@ -80,13 +80,18 @@ export async function spawnWslSidecar(
       startup.abort()
     })
   return {
-    listener: {
-      stop: () => child.kill(),
-      onExit: (cb) => child.once("exit", cb),
-    },
+    stop: () => child.kill(),
+    onExit: (cb) => child.once("exit", cb),
     url,
     username,
     password,
+  }
+}
+
+async function pollWslHealth(check: () => Promise<boolean>, signal: AbortSignal) {
+  while (!signal.aborted) {
+    if (await check()) return
+    await new Promise((resolve) => setTimeout(resolve, 100))
   }
 }
 
