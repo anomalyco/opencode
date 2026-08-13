@@ -149,54 +149,49 @@ export const Plugin = {
                 (invocation) =>
                   Effect.gen(function* () {
                     const target = yield* mutation.resolve({ path: invocation.cwd, kind: "directory" })
-                    const unrestricted = yield* Effect.all([
-                      permission.allowsAll({ sessionID: context.sessionID, action: name, agent: context.agent }),
-                      permission.allowsAll({
+                    const unrestricted =
+                      (yield* permission.allowsAll({
+                        sessionID: context.sessionID,
+                        action: name,
+                        agent: context.agent,
+                      })) &&
+                      (yield* permission.allowsAll({
                         sessionID: context.sessionID,
                         action: "external_directory",
                         agent: context.agent,
-                      }),
-                    ]).pipe(Effect.map((allowed) => allowed.every(Boolean)))
+                      }))
                     invocation.cwd = target.absolute
                     finalTimeout = invocation.timeout
-                    if (unrestricted) {
-                      const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
-                        Effect.catchTag("Environment.NotFound", () =>
-                          Effect.fail(new Error(`Working directory does not exist: ${target.absolute}`)),
-                        ),
+                    if (!unrestricted) {
+                      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute)
+                      const directories = yield* Effect.forEach(parsed.directories, (directory) =>
+                        mutation.resolve({ path: path.resolve(target.absolute, directory), kind: "directory" }),
                       )
-                      if (workdir !== "directory")
-                        return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.absolute}`))
-                      return
+                      const external = [target, ...directories]
+                        .map((item) => item.externalDirectory)
+                        .filter((item) => item !== undefined)
+                        .filter(
+                          (item, index, items) => items.findIndex((other) => other.resource === item.resource) === index,
+                        )
+                      if (external.length > 0)
+                        yield* permission.assert({
+                          action: "external_directory",
+                          resources: external.map((item) => item.resource),
+                          save: external.map((item) => item.save),
+                          sessionID: context.sessionID,
+                          agent: context.agent,
+                          source,
+                        })
+                      if (parsed.commands.length > 0)
+                        yield* permission.assert({
+                          action: name,
+                          resources: parsed.commands.map((command) => command.resource),
+                          save: parsed.commands.map((command) => command.save),
+                          sessionID: context.sessionID,
+                          agent: context.agent,
+                          source,
+                        })
                     }
-                    const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute)
-                    const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-                      mutation.resolve({ path: path.resolve(target.absolute, directory), kind: "directory" }),
-                    )
-                    const external = [target, ...directories]
-                      .map((item) => item.externalDirectory)
-                      .filter((item) => item !== undefined)
-                      .filter(
-                        (item, index, items) => items.findIndex((other) => other.resource === item.resource) === index,
-                      )
-                    if (external.length > 0)
-                      yield* permission.assert({
-                        action: "external_directory",
-                        resources: external.map((item) => item.resource),
-                        save: external.map((item) => item.save),
-                        sessionID: context.sessionID,
-                        agent: context.agent,
-                        source,
-                      })
-                    if (parsed.commands.length > 0)
-                      yield* permission.assert({
-                        action: name,
-                        resources: parsed.commands.map((command) => command.resource),
-                        save: parsed.commands.map((command) => command.save),
-                        sessionID: context.sessionID,
-                        agent: context.agent,
-                        source,
-                      })
                     const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
                       Effect.catchTag("Environment.NotFound", () =>
                         Effect.fail(new Error(`Working directory does not exist: ${target.absolute}`)),
