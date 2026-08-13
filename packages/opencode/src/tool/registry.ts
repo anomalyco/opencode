@@ -67,12 +67,14 @@ type State = {
   builtin: Tool.Def[]
   task: TaskDef
   read: ReadDef
+  skipped: Array<{ file: string; error: unknown }>
 }
 
 export interface Interface {
   readonly ids: () => Effect.Effect<string[]>
   readonly all: () => Effect.Effect<Tool.Def[]>
   readonly named: () => Effect.Effect<{ task: TaskDef; read: ReadDef }>
+  readonly skipped: () => Effect.Effect<Array<{ file: string; error: unknown }>>
   readonly tools: (model: {
     providerID: ProviderV2.ID
     modelID: ModelV2.ID
@@ -116,6 +118,7 @@ const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
         const custom: Tool.Def[] = []
+        const skipped: Array<{ file: string; error: unknown }> = []
 
         function fromPlugin(id: string, def: ToolDefinition): Tool.Def {
           // Plugin tools still expose Zod args publicly; keep that compatibility
@@ -244,6 +247,7 @@ const layer = Layer.effect(
           ],
           task: tool.task,
           read: tool.read,
+          skipped,
         }
       }),
     )
@@ -251,6 +255,11 @@ const layer = Layer.effect(
     const all: Interface["all"] = Effect.fn("ToolRegistry.all")(function* () {
       const s = yield* InstanceState.get(state)
       return [...s.builtin, ...s.custom] as Tool.Def[]
+    })
+
+    const skipped: Interface["skipped"] = Effect.fn("ToolRegistry.skipped")(function* () {
+      const s = yield* InstanceState.get(state)
+      return s.skipped
     })
 
     const ids: Interface["ids"] = Effect.fn("ToolRegistry.ids")(function* () {
@@ -339,7 +348,7 @@ const layer = Layer.effect(
       return { task: s.task, read: s.read }
     })
 
-    return Service.of({ ids, all, named, tools })
+    return Service.of({ ids, all, named, skipped, tools })
   }),
 )
 

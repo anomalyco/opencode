@@ -835,6 +835,7 @@ export const RunCommand = effectCmd({
             if (args.attach) return
             const error = await completed
             if (error) process.exitCode = 1
+            return error
           }
 
           if (args.command) {
@@ -847,8 +848,11 @@ export const RunCommand = effectCmd({
               variant: args.variant,
             })
             if (result.error) {
-              if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
               process.exitCode = 1
+              const loopError = await finish()
+              if (!loopError && !emit("error", { error: result.error })) {
+                UI.error(formatRunError(result.error))
+              }
               return
             }
             await finish()
@@ -864,8 +868,11 @@ export const RunCommand = effectCmd({
             parts: [...files, { type: "text", text: message }],
           })
           if (result.error) {
-            if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
             process.exitCode = 1
+            const loopError = await finish()
+            if (!loopError && !emit("error", { error: result.error })) {
+              UI.error(formatRunError(result.error))
+            }
             return
           }
           await finish()
