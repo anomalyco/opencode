@@ -4,12 +4,14 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { showToast } from "@/utils/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { createMemo, type Accessor, type Component, For, Show } from "solid-js"
+import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { DialogConnectProvider, useProviderConnectController } from "../dialog-connect-provider"
 import { DialogCustomProvider } from "../dialog-custom-provider"
+import { SettingsServerScope } from "../settings-server-picker"
+import { InlineServerSelect } from "./parts/server-select"
 import { SettingsListV2 } from "./parts/list"
 import "./settings-v2.css"
 
@@ -30,25 +32,35 @@ const PROVIDER_NOTES = [
 const PROVIDER_ICON_SIZE = 16
 
 export const SettingsProvidersV2: Component<{
-  directory: Accessor<string | undefined>
+  directory: string | undefined
   onBack?: () => void
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
   const serverSdk = useServerSDK()
   const serverSync = useServerSync()
-  const providers = useProviders(props.directory)
+  const providers = useProviders(() => props.directory)
   const providerConnect = useProviderConnectController({ onBack: props.onBack })
 
   const connect = (provider?: string) => {
     providerConnect.select(provider)
-    void dialog.show(() => <DialogConnectProvider directory={props.directory} controller={providerConnect} />)
+    void dialog.show(() => (
+      <SettingsServerScope directory={props.directory}>
+        <DialogConnectProvider directory={props.directory} controller={providerConnect} />
+      </SettingsServerScope>
+    ))
   }
 
   const connected = createMemo(() => {
-    return providers
-      .connected()
-      .filter((p) => p.id !== "opencode" || Object.values(p.models).find((m) => m.cost?.input))
+    return providers.connected().filter(
+      (provider) =>
+        provider.id !== "opencode" ||
+        Object.values(provider.models).some((model) => {
+          if (typeof model !== "object" || model === null || !("cost" in model)) return false
+          const cost = model.cost
+          return typeof cost === "object" && cost !== null && "input" in cost
+        }),
+    )
   })
 
   const popular = createMemo(() => {
@@ -92,31 +104,8 @@ export const SettingsProvidersV2: Component<{
     return true
   }
 
-  const disableProvider = async (providerID: string, name: string) => {
-    return
-    const before = serverSync().data.config.disabled_providers ?? []
-    const next = before.includes(providerID) ? before : [...before, providerID]
-    serverSync().set("config", "disabled_providers", next)
-
-    await serverSync()
-      .updateConfig({ disabled_providers: next })
-      .then(() => {
-        showToast({
-          variant: "success",
-          icon: "circle-check",
-          title: language.t("provider.disconnect.toast.disconnected.title", { provider: name }),
-          description: language.t("provider.disconnect.toast.disconnected.description", { provider: name }),
-        })
-      })
-      .catch((err: unknown) => {
-        serverSync().set("config", "disabled_providers", before)
-        const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
-  }
-
   const disconnect = async (providerID: string, name: string) => {
-    const location = props.directory() ? { directory: props.directory() } : undefined
+    const location = props.directory ? { directory: props.directory } : undefined
     await serverSdk()
       .api.integration.get({ integrationID: providerID, location })
       .then(async (integration) => {
@@ -141,7 +130,13 @@ export const SettingsProvidersV2: Component<{
   return (
     <>
       <div class="settings-v2-tab-header">
-        <h2 class="settings-v2-tab-title">{language.t("settings.providers.title")}</h2>
+        <div class="settings-v2-tab-header-row">
+          <div class="flex flex-col gap-1">
+            <h2 class="settings-v2-tab-title">{language.t("settings.providers.title")}</h2>
+            <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.providers.description")}</span>
+          </div>
+          <InlineServerSelect />
+        </div>
       </div>
 
       <div class="settings-v2-tab-body settings-v2-providers">
@@ -244,7 +239,11 @@ export const SettingsProvidersV2: Component<{
                   variant="neutral"
                   icon="plus"
                   onClick={() => {
-                    dialog.show(() => <DialogCustomProvider onBack={dialog.close} />)
+                    dialog.show(() => (
+                      <SettingsServerScope directory={props.directory}>
+                        <DialogCustomProvider onBack={dialog.close} />
+                      </SettingsServerScope>
+                    ))
                   }}
                 >
                   {language.t("common.connect")}

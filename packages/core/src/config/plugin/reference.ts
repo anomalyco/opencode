@@ -1,15 +1,15 @@
-export * as ConfigReferencePlugin from "./reference"
+export * as ConfigReferencePlugin from "./reference.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Document } from "@opencode-ai/schema/config"
 import { ConfigReference } from "@opencode-ai/schema/config/reference"
 import path from "path"
 import { Effect, Stream } from "effect"
-import { Config } from "../../config"
-import { Reference } from "../../reference"
-import { AbsolutePath } from "../../schema"
+import { Config } from "../../config.js"
+import { Reference } from "../../reference.js"
+import { AbsolutePath } from "../../schema.js"
 import { Global } from "@opencode-ai/util/global"
-import { Location } from "../../location"
+import { Location } from "../../location.js"
 
 export const Plugin = define({
   id: "opencode.config.reference",

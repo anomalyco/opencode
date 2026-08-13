@@ -10,7 +10,6 @@ import {
   OpenRouter,
   XAI,
 } from "@opencode-ai/ai/providers"
-import * as GitHubCopilot from "@opencode-ai/ai/providers/github-copilot"
 import {
   OpenAIChat,
   OpenAICompatibleChat,
@@ -60,23 +59,6 @@ describe("public exports", () => {
     expect(XAI.provider.chat).toBe(XAI.chat)
     expect(XAI.configure({ apiKey: "fixture" }).responses("grok-4.3").route.id).toBe("openai-responses")
     expect(XAI.configure({ apiKey: "fixture" }).chat("grok-4.3").route.id).toBe("openai-compatible-chat")
-    expect(
-      GitHubCopilot.configure({ baseURL: "https://api.githubcopilot.test", apiKey: "fixture" }).model,
-    ).toBeFunction()
-    expect(
-      GitHubCopilot.configure({
-        baseURL: "https://api.githubcopilot.test",
-        apiKey: "fixture",
-        endpoint: "responses",
-      }).model("mai-code-1-flash-picker").route.id,
-    ).toBe("openai-responses")
-    expect(
-      GitHubCopilot.configure({
-        baseURL: "https://api.githubcopilot.test",
-        apiKey: "fixture",
-        endpoint: "chat",
-      }).model("gpt-5").route.id,
-    ).toBe("openai-chat")
   })
 
   test("protocol barrels expose supported low-level routes", () => {

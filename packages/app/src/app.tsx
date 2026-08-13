@@ -3,7 +3,6 @@ import * as Sentry from "@sentry/solid"
 import { I18nProvider } from "@opencode-ai/ui/context"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
-import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { File } from "@opencode-ai/session-ui/file"
 import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
@@ -55,7 +54,7 @@ import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
 import { decode64 } from "@/utils/base64"
 
-import { TargetSessionRouteContent } from "@/pages/session"
+import { SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { Home } from "@/pages/home"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
@@ -87,18 +86,23 @@ function TargetServerRoute(props: ParentProps) {
   return (
     // Owns the server-identity remount. Session changes must not remount this subtree.
     <Show when={requireServerKey(params.serverKey)} keyed>
-      <ServerSDKProvider server={conn}>
-        <ServerSyncProvider server={conn}>{props.children}</ServerSyncProvider>
+      <ServerSDKProvider server={conn()}>
+        <ServerSyncProvider server={conn()}>{props.children}</ServerSyncProvider>
       </ServerSDKProvider>
     </Show>
   )
 }
 
-const TargetSessionRoute = () => (
-  <TargetServerRoute>
-    <TargetSessionRouteContent />
-  </TargetServerRoute>
-)
+function TargetSessionRoute() {
+  const params = useParams<{ serverKey: string; id: string }>()
+  return (
+    <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
+      <TargetServerRoute>
+        <TargetSessionRouteContent />
+      </TargetServerRoute>
+    </SessionRouteErrorBoundary>
+  )
+}
 
 // Wraps the non-draft routes. They are gated on (and keyed to) the globally selected
 // server via ServerKey, then provide the server-scoped shell for that server.
@@ -131,16 +135,14 @@ function DraftRoute() {
 function ResolvedDraftRoute(props: { draft: DraftTab }) {
   const global = useGlobal()
   const conn = createMemo(() => global.servers.list().find((item) => ServerConnection.key(item) === props.draft.server))
-  const directory = () => props.draft.directory
-  const serverKey = () => props.draft.server
 
   return (
     <Show when={`${props.draft.server}\0${props.draft.directory}`} keyed>
-      <ServerSDKProvider server={conn}>
-        <ServerSyncProvider server={conn}>
-          <ModelsProvider directory={directory}>
-            <SDKProvider directory={directory}>
-              <DirectoryDataProvider directory={directory} server={serverKey}>
+      <ServerSDKProvider server={conn()}>
+        <ServerSyncProvider server={conn()}>
+          <ModelsProvider directory={props.draft.directory}>
+            <SDKProvider directory={props.draft.directory}>
+              <DirectoryDataProvider directory={props.draft.directory} server={props.draft.server}>
                 <DraftProviders>
                   <NewSession />
                 </DraftProviders>
@@ -155,7 +157,13 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
-  return <I18nProvider value={{ locale: language.intl, t: language.t }}>{props.children}</I18nProvider>
+  return (
+    <I18nProvider
+      value={{ locale: language.intl, layoutLocale: language.layoutLocale, t: language.t, plural: language.plural }}
+    >
+      {props.children}
+    </I18nProvider>
+  )
 }
 
 declare global {
@@ -218,7 +226,7 @@ function DesktopCommands() {
     if (platform.platform === "desktop" && platform.exportDebugLogs) {
       commands.push({
         id: "logs.export",
-        title: "Export logs",
+        title: language.t("command.logs.export"),
         category: language.t("command.category.settings"),
         onSelect: () => {
           void platform.exportDebugLogs?.()
@@ -232,7 +240,7 @@ function DesktopCommands() {
 }
 
 type ServerScopedShellProps = ParentProps<{
-  directory?: () => string | undefined
+  directory?: string
   serverScoped?: JSX.Element
 }>
 
@@ -267,7 +275,12 @@ function DraftProviders(props: ParentProps) {
   )
 }
 
-export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
+export function AppBaseProviders(
+  props: ParentProps<{
+    locale?: Locale
+    onNativeTranslations?: Parameters<typeof LanguageProvider>[0]["onNativeTranslations"]
+  }>,
+) {
   return (
     <MetaProvider>
       <Font />
@@ -276,7 +289,7 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
           void window.api?.setTitlebar?.({ mode, scheme })
         }}
       >
-        <LanguageProvider locale={props.locale}>
+        <LanguageProvider locale={props.locale} onNativeTranslations={props.onNativeTranslations}>
           <UiI18nBridge>
             <ErrorBoundary
               fallback={(error) => {
@@ -287,9 +300,7 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
               <QueryProvider>
                 <WslServersProvider>
                   <DialogProvider>
-                    <MarkedProvider>
-                      <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                    </MarkedProvider>
+                    <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
                   </DialogProvider>
                 </WslServersProvider>
               </QueryProvider>
@@ -442,12 +453,10 @@ export function AppInterface(props: {
   // route changes. Draft and session routes override only their server-bound data
   // providers beneath it.
   const ServerShell = (shellProps: ParentProps) => (
-    <QueryProvider>
-      <SharedProviders>
-        {props.children}
-        {shellProps.children}
-      </SharedProviders>
-    </QueryProvider>
+    <SharedProviders>
+      {props.children}
+      {shellProps.children}
+    </SharedProviders>
   )
 
   return (

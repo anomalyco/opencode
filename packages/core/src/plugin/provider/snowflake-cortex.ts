@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Provider } from "../../provider"
+import { Provider } from "../../provider.js"
 
 type FetchLike = (url: string | URL | Request, init?: RequestInit) => Promise<Response>
 

@@ -1,6 +1,7 @@
 export * as DurableEventManifest from "./durable-event-manifest.js"
 
 import { Event } from "./event.js"
+import { ProjectDirectories } from "./project-directories.js"
 import { SessionEvent } from "./session-event.js"
 
 export const SessionDurable = {
@@ -8,4 +9,4 @@ export const SessionDurable = {
   schema: SessionEvent.Durable,
 } as const
 
-export const Durable = Event.durableMap(SessionEvent.DurableDefinitions)
+export const Durable = Event.durableMap([...SessionEvent.DurableDefinitions, ProjectDirectories.Event.Resolved])

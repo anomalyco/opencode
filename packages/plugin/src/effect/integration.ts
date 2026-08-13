@@ -1,18 +1,42 @@
-import type {
-  ConnectionInfo,
-  IntegrationCommandMethod,
-  IntegrationEnvMethod,
-  IntegrationKeyMethod,
-  IntegrationMethod,
-  IntegrationOAuthMethod,
-} from "@opencode-ai/client"
+import type { ConnectionInfo } from "@opencode-ai/client"
 import type { IntegrationApi } from "@opencode-ai/client/effect/api"
 import { Credential } from "@opencode-ai/schema/credential"
+import { Form } from "@opencode-ai/schema/form"
 import type { Effect, Scope } from "effect"
 import type { Transform } from "./registration.js"
 
-type IntegrationInputs = Record<string, string>
 type IntegrationRef = { id: string; name: string }
+
+export interface IntegrationOAuthMethod {
+  readonly id: string
+  readonly type: "oauth"
+  readonly label: string
+  readonly form?: Form.Fields
+}
+
+export interface IntegrationCommandMethod {
+  readonly id: string
+  readonly type: "command"
+  readonly label: string
+  readonly command: ReadonlyArray<string>
+}
+
+export interface IntegrationKeyMethod {
+  readonly type: "key"
+  readonly label?: string
+  readonly form?: Form.Fields
+}
+
+export interface IntegrationEnvMethod {
+  readonly type: "env"
+  readonly names: ReadonlyArray<string>
+}
+
+export type IntegrationMethod =
+  | IntegrationOAuthMethod
+  | IntegrationCommandMethod
+  | IntegrationKeyMethod
+  | IntegrationEnvMethod
 
 export type IntegrationOAuthAuthorization = {
   readonly url: string
@@ -31,7 +55,7 @@ export type IntegrationOAuthAuthorization = {
 export type IntegrationOAuthMethodRegistration = {
   readonly integrationID: string
   readonly method: IntegrationOAuthMethod
-  readonly authorize: (inputs: IntegrationInputs) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
+  readonly authorize: (answer: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }

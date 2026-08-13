@@ -1,4 +1,4 @@
-export * as Config from "./config"
+export * as Config from "./config.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
@@ -16,16 +16,16 @@ import {
   Event,
 } from "@opencode-ai/schema/config"
 import { Integration } from "@opencode-ai/schema/integration"
-import { Credential } from "./credential"
-import { Bus } from "./bus"
-import { Watcher } from "./filesystem/watcher"
+import { Credential } from "./credential.js"
+import { Bus } from "./bus.js"
+import { Watcher } from "./filesystem/watcher.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
-import { Location } from "./location"
-import { AbsolutePath } from "./schema"
-import { ConfigVariable } from "./config/variable"
-import { ConfigNormalize } from "./config/normalize"
-import { WellKnown } from "./wellknown"
+import { Location } from "./location.js"
+import { AbsolutePath } from "./schema.js"
+import { ConfigVariable } from "./config/variable.js"
+import { ConfigNormalize } from "./config/normalize.js"
+import { WellKnown } from "./wellknown.js"
 
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
   return entries
@@ -151,7 +151,15 @@ export const layer = (options?: Options) =>
             )
             if (!credential || credential.value.type !== "key") return []
             const variables = { [auth.env]: credential.value.key }
-            const configs = yield* wellknown.resolve(entry, variables).pipe(Effect.orDie)
+            const configs = yield* wellknown
+              .resolve(entry, variables)
+              .pipe(
+                Effect.catch(() =>
+                  Effect.logWarning("failed to load wellknown config", { source: entry.origin }).pipe(
+                    Effect.as([] as const),
+                  ),
+                ),
+              )
             return yield* Effect.forEach(configs, (config) =>
               ConfigVariable.substitute({
                 type: "virtual",
@@ -196,13 +204,13 @@ export const layer = (options?: Options) =>
         const claude = [
           ...new Set([
             ...((yield* fs.isDir(globalClaudeDirectory)) ? [globalClaudeDirectory] : []),
-            ...discovered.filter((item) => path.basename(item) === ".claude"),
+            ...discovered.filter((item) => path.basename(item) === ".claude").toReversed(),
           ]),
         ].map((directory) => new ClaudeDirectory({ type: "claude", path: AbsolutePath.make(directory) }))
         const agents = [
           ...new Set([
             ...((yield* fs.isDir(globalAgentsDirectory)) ? [globalAgentsDirectory] : []),
-            ...discovered.filter((item) => path.basename(item) === ".agents"),
+            ...discovered.filter((item) => path.basename(item) === ".agents").toReversed(),
           ]),
         ].map((directory) => new AgentsDirectory({ type: "agents", path: AbsolutePath.make(directory) }))
 

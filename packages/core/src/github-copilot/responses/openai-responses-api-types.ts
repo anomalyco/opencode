@@ -71,7 +71,7 @@ export type OpenAIResponsesComputerCall = {
 
 export type OpenAIResponsesLocalShellCall = {
   type: "local_shell_call"
-  id: string
+  id?: string
   call_id: string
   action: {
     type: "exec"

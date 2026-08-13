@@ -1,6 +1,4 @@
 import { useServerSync } from "@/context/server-sync"
-import { decode64 } from "@/utils/base64"
-import { useParams } from "@solidjs/router"
 import { Iterable, pipe } from "effect"
 import { createEffect, createMemo, type Accessor } from "solid-js"
 import { selectProviderCatalog } from "./provider-catalog"
@@ -19,8 +17,7 @@ const popularProviderSet = new Set(popularProviders)
 
 export function useProviders(directory: Accessor<string | undefined>) {
   const serverSync = useServerSync()
-  const params = useParams()
-  const dir = () => (directory ? directory() : decode64(params.dir))
+  const dir = directory
   const providers = () => {
     const value = dir()
     const projectStore = value ? serverSync().child(value)[0] : undefined
@@ -39,6 +36,11 @@ export function useProviders(directory: Accessor<string | undefined>) {
   }
 
   return {
+    ready: () => {
+      const value = dir()
+      if (!value) return false
+      return serverSync().child(value)[0].provider_ready
+    },
     all: () => providers().all,
     default: () => providers().default,
     popular: () =>

@@ -12,8 +12,8 @@ import {
   type MediaPart,
   type TextPart,
   type ToolResultPart,
-} from "../schema"
-import { isRecord } from "../utils/record"
+} from "../schema/index.js"
+import { isRecord } from "../utils/record.js"
 export { isRecord }
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
@@ -324,4 +324,4 @@ export const jsonPost = (input: { readonly url: string; readonly body: string; r
     HttpClientRequest.bodyText(input.body, "application/json"),
   )
 
-export * as ProviderShared from "./shared"
+export * as ProviderShared from "./shared.js"

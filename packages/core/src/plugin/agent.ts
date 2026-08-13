@@ -1,9 +1,9 @@
-export * as AgentPlugin from "./agent"
+export * as AgentPlugin from "./agent.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect } from "effect"
-import { Agent } from "../agent"
-import { Permission } from "../permission"
+import { Agent } from "../agent.js"
+import { Permission } from "../permission.js"
 
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
 
@@ -99,16 +99,6 @@ export const Plugin = define({
         item.description = "The default agent. Executes tools based on configured permissions."
         item.mode = "primary"
         item.permissions.push({ action: "question", resource: "*", effect: "allow" })
-      })
-
-      draft.update(Agent.ID.make("plan"), (item) => {
-        item.name = Agent.Name.make("Plan")
-        item.description = "Plan mode. Disallows all edit tools."
-        item.mode = "primary"
-        item.permissions.push(
-          { action: "question", resource: "*", effect: "allow" },
-          { action: "edit", resource: "*", effect: "deny" },
-        )
       })
 
       draft.update(Agent.ID.make("general"), (item) => {

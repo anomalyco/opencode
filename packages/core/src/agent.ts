@@ -1,12 +1,12 @@
-export * as Agent from "./agent"
+export * as Agent from "./agent.js"
 
 import path from "path"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Array, Context, Effect, Layer, Types } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Global } from "@opencode-ai/util/global"
-import { Bus } from "./bus"
-import { State } from "./state"
+import { Bus } from "./bus.js"
+import { State } from "./state.js"
 
 const SHELL_OUTPUT_GLOB = (data: string) => path.join(data, "shell", "*", "*")
 const TOOL_OUTPUT_GLOB = (data: string) => path.join(data, "tool-output", "*")
@@ -122,7 +122,10 @@ const layer = Layer.effect(
         return { id: info?.id ?? defaultID, info }
       }),
       list: Effect.fn("Agent.list")(function* () {
-        return Array.fromIterable(state.get().agents.values())
+        const agents = Array.fromIterable(state.get().agents.values())
+        const selected = selectedDefault()
+        if (!selected) return agents
+        return [selected, ...agents.filter((agent) => agent.id !== selected.id)]
       }),
     })
   }),

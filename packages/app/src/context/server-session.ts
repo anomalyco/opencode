@@ -1,12 +1,20 @@
 import { Binary } from "@opencode-ai/core/util/binary"
+import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
 import { retry } from "@opencode-ai/core/util/retry"
-import type { OpenCodeEvent, SessionApi, SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type {
+  FormInfo,
+  OpenCodeEvent,
+  SessionApi,
+  SessionInfo,
+  SessionInboxInfo,
+  SessionMessageInfo,
+} from "@opencode-ai/client/promise"
 import type { Message, Part, Todo } from "@/types"
 import type { FileDiffInfo, PermissionRequest, QuestionRequest, SessionStatus } from "@opencode-ai/client/promise"
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { rootSession } from "@/utils/session-route"
-import { normalizeSessionMessages } from "@/utils/session-message"
+import { compareMessages, messageKey, normalizeSessionMessages } from "@/utils/session-message"
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
 import type { ServerApi } from "@/utils/server"
@@ -14,7 +22,6 @@ import type { ServerApi } from "@/utils/server"
 type MessageApi = ServerApi["message"]
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
-const cmpMessage = (a: Message, b: Message) => a.time.created - b.time.created || cmp(a.id, b.id)
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const initialMessagePageSize = 20
 const historyMessagePageSize = 200
@@ -100,17 +107,16 @@ function mergeOptimisticPage(page: MessagePage, items: OptimisticItem[]) {
   const part = new Map(page.part.map((item) => [item.id, item.part]))
   const observed: { messageID: string; parts: Part[] }[] = []
   for (const item of items) {
-    const result = Binary.search(session, item.message.id, (message) => message.id)
-    if (!result.found) session.splice(result.index, 0, item.message)
+    const result = Binary.search(session, messageKey(item.message), messageKey)
+    const found = result.found
+    if (!found) session.splice(result.index, 0, item.message)
     const current = part.get(item.message.id)
-    const confirmed = result.found
-      ? item.parts.filter((part) => Binary.search(current ?? [], part.id, (value) => value.id).found)
-      : []
-    if (result.found) observed.push({ messageID: item.message.id, parts: confirmed })
+    const confirmed = found ? item.parts.filter((part) => current?.some((value) => value.id === part.id)) : []
+    if (found) observed.push({ messageID: item.message.id, parts: confirmed })
     part.set(
       item.message.id,
       merge(
-        result.found ? (current ?? []) : merge(item.confirmedParts ?? [], current ?? []),
+        found ? (current ?? []) : merge(item.confirmedParts ?? [], current ?? []),
         item.parts.filter((part) => !confirmed.includes(part)),
       ),
     )
@@ -147,6 +153,7 @@ function reconcileFetched<T extends { id: string }>(
     retained?: ReadonlySet<string>
     removed?: ReadonlySet<string>
     preserveUnfetched?: boolean | ((item: T) => boolean)
+    compare?: (a: T, b: T) => number
   } = {},
 ) {
   const result = new Map(fetched.map((item) => [item.id, item]))
@@ -169,7 +176,8 @@ function reconcileFetched<T extends { id: string }>(
     if (!item) result.delete(id)
   }
   for (const id of options.removed ?? emptyIDs) result.delete(id)
-  return [...result.values()].sort((a, b) => cmp(a.id, b.id))
+  const items = [...result.values()]
+  return options.compare ? items.sort(options.compare) : items
 }
 
 type ServerSessionOptions = { retry?: typeof retry }
@@ -191,6 +199,9 @@ export function createServerSession(
     todo: {} as Record<string, Todo[]>,
     permission: {} as Record<string, PermissionRequest[]>,
     question: {} as Record<string, QuestionRequest[]>,
+    form: {} as Record<string, FormInfo[]>,
+    pending: {} as Record<string, SessionInboxInfo[]>,
+    input: {} as Record<string, string[]>,
     message: {} as Record<string, Message[]>,
     session_message: {} as Record<string, SessionMessageInfo[]>,
     part: {} as Record<string, Part[]>,
@@ -204,6 +215,11 @@ export function createServerSession(
   const inflightTodo = new Map<string, Promise<void>>()
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
   const v2 = createV2SessionReducer()
+  const pendingRevision = new Map<string, number>()
+  const formRevision = new Map<string, number>()
+  const messageHydrationRevision = new Map<string, number>()
+  const invalidated = new Set<string>()
+  let invalidationRevision = 0
   const messageLoads = new Map<string, MessageLoadState>()
   const pendingParts = new Map<string, Map<string, Set<string>>>()
   const orphanParts = new Map<string, Set<string>>()
@@ -260,6 +276,9 @@ export function createServerSession(
           .filter(([, items]) => items.length > 0)
           .map(([sessionID]) => sessionID),
         ...Object.entries(data.question)
+          .filter(([, items]) => items.length > 0)
+          .map(([sessionID]) => sessionID),
+        ...Object.entries(data.form)
           .filter(([, items]) => items.length > 0)
           .map(([sessionID]) => sessionID),
         ...Object.entries(data.session_status)
@@ -395,8 +414,7 @@ export function createServerSession(
     if (!load) return
     // A part event keeps an existing parent when the fetched page omits it without overriding fetched metadata.
     const messages = data.message[sessionID]
-    if (messages && Binary.search(messages, messageID, (message) => message.id).found)
-      load.retainedMessages.add(messageID)
+    if (messages?.some((message) => message.id === messageID)) load.retainedMessages.add(messageID)
     const parts = load.touchedParts.get(messageID)
     if (parts) {
       parts.add(partID)
@@ -419,16 +437,14 @@ export function createServerSession(
       load.touchedParts.set(messageID, new Set(parts))
       load.carriedDeltaParts.set(messageID, new Set(parts))
       const messages = data.message[sessionID]
-      if (messages && Binary.search(messages, messageID, (message) => message.id).found)
-        load.retainedMessages.add(messageID)
+      if (messages?.some((message) => message.id === messageID)) load.retainedMessages.add(messageID)
     }
     for (const [messageID, parts] of load.removedParts) {
       const touched = load.touchedParts.get(messageID) ?? new Set<string>()
       parts.forEach((partID) => touched.add(partID))
       load.touchedParts.set(messageID, touched)
       const messages = data.message[sessionID]
-      if (messages && Binary.search(messages, messageID, (message) => message.id).found)
-        load.retainedMessages.add(messageID)
+      if (messages?.some((message) => message.id === messageID)) load.retainedMessages.add(messageID)
     }
     for (const [messageID, parts] of load.optimisticParts) {
       load.removedMessages.delete(messageID)
@@ -466,6 +482,7 @@ export function createServerSession(
       if (evicted.has(item.sessionID)) deltaBases.delete(partID)
     }
     sessionIDs.forEach((sessionID) => {
+      messageHydrationRevision.set(sessionID, (messageHydrationRevision.get(sessionID) ?? 0) + 1)
       generations.delete(sessionID)
       clearOptimistic(sessionID)
       requests.delete(sessionID)
@@ -509,6 +526,9 @@ export function createServerSession(
       ...Object.entries(data.question)
         .filter(([, items]) => items.length > 0)
         .map(([sessionID]) => sessionID),
+      ...Object.entries(data.form)
+        .filter(([, items]) => items.length > 0)
+        .map(([sessionID]) => sessionID),
       ...Object.entries(data.session_status)
         .filter(([, status]) => status.type !== "idle")
         .map(([sessionID]) => sessionID),
@@ -536,7 +556,7 @@ export function createServerSession(
     const source = pages.flatMap((page) => page.data).toReversed()
     const normalized = normalizeSessionMessages(sessionID, source)
     return {
-      session: normalized.messages.sort((a, b) => cmp(a.id, b.id)),
+      session: normalized.messages.sort(compareMessages),
       part: [...normalized.parts.entries()]
         .map(([id, part]) => ({ id, part: part.sort((a, b) => cmp(a.id, b.id)) }))
         .sort((a, b) => cmp(a.id, b.id)),
@@ -656,7 +676,7 @@ export function createServerSession(
             const normalized = normalizeSessionMessages(sessionID, source)
             return {
               ...page,
-              session: normalized.messages.sort((a, b) => cmp(a.id, b.id)),
+              session: normalized.messages.sort(compareMessages),
               part: [...normalized.parts.entries()]
                 .map(([id, part]) => ({ id, part: part.sort((a, b) => cmp(a.id, b.id)) }))
                 .sort((a, b) => cmp(a.id, b.id)),
@@ -673,6 +693,7 @@ export function createServerSession(
       retained: load?.retainedMessages,
       removed: load?.removedMessages,
       preserveUnfetched,
+      compare: compareMessages,
     })
     batch(() => {
       if (source) setData("session_message", sessionID, reconcile(source))
@@ -714,7 +735,7 @@ export function createServerSession(
     try {
       const page = await fetchMessages(sessionID, limit, before, () => resetMessageLoad(sessionID, load))
       const first = page.session.reduce<Message | undefined>(
-        (oldest, message) => (!oldest || cmpMessage(message, oldest) < 0 ? message : oldest),
+        (oldest, message) => (!oldest || compareMessages(message, oldest) < 0 ? message : oldest),
         undefined,
       )
       if (generations.get(sessionID) !== active) return
@@ -764,14 +785,15 @@ export function createServerSession(
               session: merge(
                 page.session,
                 parents.map((parent) => parent.message),
-              ),
+              ).sort(compareMessages),
               part: merge(
                 page.part,
                 parents.map((parent) => ({ id: parent.message.id, part: parent.parts })),
               ),
             }
       const preserveUnfetched =
-        mode === "prepend" || (!result.complete && (!first || ((message: Message) => cmpMessage(message, first) < 0)))
+        mode === "prepend" ||
+        (!result.complete && (!first || ((message: Message) => compareMessages(message, first) < 0)))
       applyMessagePage(
         sessionID,
         result,
@@ -798,13 +820,16 @@ export function createServerSession(
     touch(sessionID)
     return runInflight(inflight, sessionID, async () => {
       const cached = data.message[sessionID] !== undefined && meta.limit[sessionID] !== undefined
-      if (cached && data.info[sessionID] && !options?.force) return
+      const invalid = invalidated.has(sessionID)
+      const revision = invalidationRevision
+      if (cached && data.info[sessionID] && !invalid && !options?.force) return
       await Promise.all([
-        resolve(sessionID, options),
-        cached && !options?.force
+        resolve(sessionID, invalid ? { ...options, force: true } : options),
+        cached && !invalid && !options?.force
           ? Promise.resolve()
           : loadMessages(sessionID, options?.messageLimit ?? meta.limit[sessionID] ?? initialMessagePageSize),
       ])
+      if (invalid && invalidationRevision === revision) invalidated.delete(sessionID)
     })
   }
 
@@ -844,7 +869,7 @@ export function createServerSession(
   const projectV2 = (reduction: V2SessionReduction) => {
     reduction.touched.forEach((messageID) => messageLoads.get(reduction.sessionID)?.touchedSource.add(messageID))
     setData("session_message", reduction.sessionID, reconcile(reduction.messages))
-    if (reduction.touched.length === 0) return
+    if (reduction.touched.length === 0 && !reduction.removed?.length) return
 
     const touched = new Set(reduction.touched)
     let parentID: string | undefined
@@ -861,6 +886,9 @@ export function createServerSession(
 
     const normalized = normalizeSessionMessages(reduction.sessionID, reduction.messages)
     batch(() => {
+      for (const messageID of reduction.removed ?? []) {
+        apply({ type: "message.removed", properties: { sessionID: reduction.sessionID, messageID } })
+      }
       for (const message of normalized.messages) {
         if (!touched.has(message.id)) continue
         apply({ type: "message.updated", properties: { sessionID: reduction.sessionID, info: message } })
@@ -884,32 +912,102 @@ export function createServerSession(
 
   const hydrateV2Message = (sessionID: string, messageID: string) => {
     if (!sessionApi) return
+    const active = generation(sessionID)
+    const revision = messageHydrationRevision.get(sessionID) ?? 0
     void sessionApi
       .message({ sessionID, messageID })
       .then((message) => {
+        if (generations.get(sessionID) !== active) return
+        if ((messageHydrationRevision.get(sessionID) ?? 0) !== revision) return
+        if (removedMessages.get(sessionID)?.has(message.id)) return
         const current = data.session_message[sessionID] ?? []
-        const messages = [...current.filter((item) => item.id !== message.id), message].sort((a, b) => cmp(a.id, b.id))
+        const messages = [...current.filter((item) => item.id !== message.id), message].sort(compareMessages)
         projectV2({ sessionID, messages, touched: [message.id] })
       })
       .catch(() => {})
   }
 
   const applyV2 = (event: OpenCodeEvent) => {
+    if (event.type === "form.created") {
+      formRevision.set(event.data.form.sessionID, (formRevision.get(event.data.form.sessionID) ?? 0) + 1)
+      const current = data.form[event.data.form.sessionID] ?? []
+      if (!current.some((form) => form.id === event.data.form.id))
+        setData("form", event.data.form.sessionID, [...current, event.data.form])
+      return
+    }
+    if (event.type === "form.replied" || event.type === "form.cancelled") {
+      formRevision.set(event.data.sessionID, (formRevision.get(event.data.sessionID) ?? 0) + 1)
+      setData("form", event.data.sessionID, (forms) => forms?.filter((form) => form.id !== event.data.id))
+      return
+    }
+    if (event.type === "project.directory.resolved") {
+      Object.values(data.info).forEach((info) => {
+        if (!info) return
+        const adopted = ProjectDirectories.adopt(
+          { projectID: info.projectID, directory: info.location.directory },
+          event.data,
+        )
+        if (adopted) remember({ ...info, ...adopted })
+      })
+      return
+    }
     if (!("data" in event) || !("sessionID" in event.data) || typeof event.data.sessionID !== "string") return
     const sessionID = event.data.sessionID
-    const reduction = v2.reduce(data.session_message[sessionID] ?? [], event)
+    if (
+      event.type === "session.inbox.enqueued" ||
+      event.type === "session.inbox.delivery.changed" ||
+      event.type === "session.inbox.cancelled" ||
+      event.type === "session.inbox.delivered" ||
+      event.type === "session.compaction.started" ||
+      event.type === "session.compaction.failed"
+    )
+      pendingRevision.set(sessionID, (pendingRevision.get(sessionID) ?? 0) + 1)
+    if (event.type === "session.inbox.enqueued") {
+      const current = data.pending[sessionID] ?? []
+      if (!current.some((item) => item.id === event.data.inboxID))
+        setData("pending", sessionID, [
+          ...current,
+          { id: event.data.inboxID, sessionID, timeCreated: event.created, ...event.data.item },
+        ])
+      if (event.data.item.type !== "compaction" && !data.input[sessionID]?.includes(event.data.inboxID))
+        setData("input", sessionID, [...(data.input[sessionID] ?? []), event.data.inboxID])
+    }
+    if (event.type === "session.inbox.delivery.changed")
+      setData("pending", sessionID, (items) =>
+        items?.map((item) => (item.id === event.data.inboxID ? { ...item, delivery: event.data.delivery } : item)),
+      )
+    if (event.type === "session.inbox.cancelled" || event.type === "session.inbox.delivered") {
+      setData("pending", sessionID, (items) => items?.filter((item) => item.id !== event.data.inboxID))
+      setData("input", sessionID, (items) => items?.filter((id) => id !== event.data.inboxID))
+    }
+    if (event.type === "session.compaction.started" || event.type === "session.compaction.failed") {
+      setData("pending", sessionID, (items) => items?.filter((item) => item.id !== event.data.inputID))
+      setData("input", sessionID, (items) => items?.filter((id) => id !== event.data.inputID))
+    }
+    const info = data.info[sessionID]
+    const reduction = v2.reduce(data.session_message[sessionID] ?? [], event, info)
     if (reduction) {
       projectV2(reduction)
       if (reduction.missing) hydrateV2Message(sessionID, reduction.missing)
     }
 
-    const info = data.info[sessionID]
+    if (event.type === "session.agent.selected" && info) remember({ ...info, agent: event.data.agent })
+    if (event.type === "session.model.selected") {
+      if (info) remember({ ...info, model: event.data.model })
+      if (data.session_message[sessionID]) hydrateV2Message(sessionID, event.id.replace(/^evt_/, "msg_"))
+    }
     if (event.type === "session.renamed" && info)
       remember({ ...info, title: event.data.title, time: { ...info.time, updated: event.created } })
+    if (event.type === "session.renamed" && !info)
+      void resolve(sessionID)
+        .then((current) =>
+          remember({ ...current, title: event.data.title, time: { ...current.time, updated: event.created } }),
+        )
+        .catch(() => undefined)
     if (event.type === "session.moved" && info)
       remember({
         ...info,
-        projectID: event.data.projectID ?? info.projectID,
+        projectID: event.data.projectID,
         location: event.data.location,
         subpath: event.data.subpath,
         time: { ...info.time, updated: event.created },
@@ -935,12 +1033,29 @@ export function createServerSession(
         next: event.data.at,
       })
     if (event.type === "session.forked") void resolve(sessionID, { force: true }).catch(() => {})
+    if (event.type === "session.revert.staged" && info) remember({ ...info, revert: event.data.revert })
+    if (event.type === "session.revert.cleared" && info) remember({ ...info, revert: undefined })
+    if (event.type === "session.revert.committed") {
+      messageHydrationRevision.set(sessionID, (messageHydrationRevision.get(sessionID) ?? 0) + 1)
+      if (info) remember({ ...info, revert: undefined })
+      setData("input", sessionID, (items) => items?.filter((id) => id < event.data.to))
+      const source = data.session_message[sessionID] ?? []
+      const removed = source.filter((message) => message.id >= event.data.to).map((message) => message.id)
+      removedMessages.set(sessionID, new Set([...(removedMessages.get(sessionID) ?? []), ...removed]))
+      projectV2({
+        sessionID,
+        messages: source.filter((message) => message.id < event.data.to),
+        touched: [],
+        removed,
+      })
+    }
     if (
       event.type === "session.revert.staged" ||
       event.type === "session.revert.cleared" ||
       event.type === "session.revert.committed"
     )
       void resolve(sessionID, { force: true }).catch(() => {})
+    if (event.type === "session.revert.committed") void sync(sessionID, { force: true }).catch(() => {})
   }
 
   const apply = (event: { type: string; properties?: unknown }) => {
@@ -1011,7 +1126,7 @@ export function createServerSession(
           setData("message", info.sessionID, [info])
           return
         }
-        const result = Binary.search(messages, info.id, (message) => message.id)
+        const result = Binary.search(messages, messageKey(info), messageKey)
         if (result.found) setData("message", info.sessionID, result.index, reconcile(info))
         if (!result.found)
           setData("message", info.sessionID, (value = []) => {
@@ -1044,8 +1159,8 @@ export function createServerSession(
           produce((draft) => {
             const messages = draft.message[props.sessionID]
             if (messages) {
-              const result = Binary.search(messages, props.messageID, (message) => message.id)
-              if (result.found) messages.splice(result.index, 1)
+              const index = messages.findIndex((message) => message.id === props.messageID)
+              if (index >= 0) messages.splice(index, 1)
             }
             deleteMessageParts(draft, props.messageID)
           }),
@@ -1057,7 +1172,7 @@ export function createServerSession(
         if (SKIP_PARTS.has(part.type)) return
         const messages = data.message[part.sessionID]
         const load = messageLoads.get(part.sessionID)
-        const missing = !messages || !Binary.search(messages, part.messageID, (message) => message.id).found
+        const missing = !messages?.some((message) => message.id === part.messageID)
         // Outside a page load, accepting a part without its ordered parent event would create an unbounded orphan.
         if (
           missing &&
@@ -1269,6 +1384,36 @@ export function createServerSession(
       },
     },
     sync,
+    async hydrateTransient(sessionID: string, load: () => Promise<{ pending: SessionInboxInfo[]; forms: FormInfo[] }>) {
+      while (true) {
+        const pendingAt = pendingRevision.get(sessionID) ?? 0
+        const formAt = formRevision.get(sessionID) ?? 0
+        const result = await load()
+        const pendingStable = (pendingRevision.get(sessionID) ?? 0) === pendingAt
+        const formStable = (formRevision.get(sessionID) ?? 0) === formAt
+        if (pendingStable) {
+          setData("pending", sessionID, reconcile(result.pending))
+          setData(
+            "input",
+            sessionID,
+            reconcile(result.pending.filter((item) => item.type !== "compaction").map((item) => item.id)),
+          )
+        }
+        if (formStable) setData("form", sessionID, reconcile(result.forms))
+        if (pendingStable && formStable) return
+      }
+    },
+    refreshPinned(hydrateTransient: (sessionID: string) => Promise<void>) {
+      return Promise.all(
+        [...pinned.keys()].flatMap((sessionID) => [sync(sessionID, { force: true }), hydrateTransient(sessionID)]),
+      ).then(() => undefined)
+    },
+    invalidate() {
+      invalidationRevision += 1
+      Object.keys(data.info).forEach((sessionID) => invalidated.add(sessionID))
+      Object.keys(data.message).forEach((sessionID) => invalidated.add(sessionID))
+      setMeta("at", {})
+    },
     prefetch,
     shouldPrefetch(sessionID: string, limit: number) {
       if (data.message[sessionID] === undefined) return true
@@ -1301,7 +1446,7 @@ export function createServerSession(
         if (items) items.set(input.message.id, { ...input, parts, confirmedParts: [] })
         if (!items)
           optimistic.set(input.sessionID, new Map([[input.message.id, { ...input, parts, confirmedParts: [] }]]))
-        setData("message", input.sessionID, (messages = []) => merge(messages, [input.message]))
+        setData("message", input.sessionID, (messages = []) => merge(messages, [input.message]).sort(compareMessages))
         setData(
           "part_text_accum_delta",
           produce((draft) => {

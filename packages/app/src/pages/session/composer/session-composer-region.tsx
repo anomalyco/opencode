@@ -6,6 +6,7 @@ import { SessionQuestionDock } from "@/pages/session/composer/session-question-d
 import { SessionFollowupDock } from "@/pages/session/composer/session-followup-dock"
 import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
 import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
+import { SessionBackgroundDock } from "@/pages/session/composer/session-background-dock"
 import type { SessionComposerRegionController } from "./session-composer-region-controller"
 
 export function SessionComposerRegion(props: {
@@ -15,6 +16,8 @@ export function SessionComposerRegion(props: {
   const language = useLanguage()
   const controller = props.controller
   const settings = useSettings()
+  const background = () =>
+    controller.state.background.blocking().length > 0 || controller.state.background.tasks().length > 0
   const rolled = () => {
     const revert = controller.revert()
     return revert?.items.length ? revert : undefined
@@ -123,12 +126,21 @@ export function SessionComposerRegion(props: {
                 </div>
               )}
             </Show>
+            <Show when={background()}>
+              <div style={{ "margin-top": `${-controller.lift()}px` }}>
+                <SessionBackgroundDock
+                  blocking={controller.state.background.blocking()}
+                  tasks={controller.state.background.tasks()}
+                  onBackground={() => void controller.state.background.move()}
+                />
+              </div>
+            </Show>
             <div
               classList={{
                 "relative z-[70]": true,
               }}
               style={{
-                "margin-top": `${-controller.lift()}px`,
+                "margin-top": `${background() ? -36 : -controller.lift()}px`,
               }}
             >
               <Show when={controller.followup()?.items.length}>

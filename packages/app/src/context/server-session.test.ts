@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import type { retry } from "@opencode-ai/core/util/retry"
 import type {
+  FormInfo,
   OpenCodeEvent,
   SessionApi,
+  SessionInboxInfo,
   SessionInfo,
   SessionMessageAssistant,
   SessionMessageAssistantTool,
@@ -348,6 +350,187 @@ describe("server session", () => {
     expect(ctx.store.data.part.msg_2_assistant).toMatchObject([{ type: "text", text: "world" }])
   })
 
+  test("projects V2 pending inputs and forms", () => {
+    const ctx = setup({ child: session("child") })
+    const apply = (input: object) => ctx.store.applyV2(input as OpenCodeEvent)
+
+    apply({
+      id: "evt_admitted",
+      created: 1,
+      type: "session.inbox.enqueued",
+      data: {
+        sessionID: "child",
+        inboxID: "msg_input",
+        item: { type: "user", delivery: "steer", payload: { text: "hello" } },
+      },
+    })
+    apply({
+      id: "evt_form",
+      created: 2,
+      type: "form.created",
+      data: { form: { id: "frm_1", sessionID: "child", title: "Choose", fields: [] } },
+    })
+
+    expect(ctx.store.data.pending.child).toMatchObject([{ id: "msg_input", delivery: "steer" }])
+    expect(ctx.store.data.input.child).toEqual(["msg_input"])
+    expect(ctx.store.data.form.child).toMatchObject([{ id: "frm_1", title: "Choose" }])
+    expect(ctx.store.data.message.child).toMatchObject([{ id: "msg_input" }])
+
+    apply({
+      id: "evt_cancelled",
+      created: 3,
+      type: "session.inbox.cancelled",
+      data: { sessionID: "child", inboxID: "msg_input" },
+    })
+    apply({
+      id: "evt_form_done",
+      created: 4,
+      type: "form.cancelled",
+      data: { sessionID: "child", id: "frm_1" },
+    })
+
+    expect(ctx.store.data.pending.child).toEqual([])
+    expect(ctx.store.data.input.child).toEqual([])
+    expect(ctx.store.data.form.child).toEqual([])
+    expect(ctx.store.data.message.child).toEqual([])
+  })
+
+  test("does not let transient hydration overwrite newer events", async () => {
+    const ctx = setup({ child: session("child") })
+    const response = Promise.withResolvers<{ pending: SessionInboxInfo[]; forms: FormInfo[] }>()
+    const form: FormInfo = {
+      id: "frm_1",
+      sessionID: "child",
+      title: "Choose",
+      fields: [{ key: "choice", type: "string" as const, title: "Choice" }],
+    }
+    let loads = 0
+    const hydration = ctx.store.hydrateTransient("child", () => {
+      loads += 1
+      if (loads === 1) return response.promise
+      return Promise.resolve({ pending: ctx.store.data.pending.child ?? [], forms: [form] })
+    })
+
+    ctx.store.applyV2({
+      id: "evt_admitted",
+      created: 1,
+      type: "session.inbox.enqueued",
+      data: {
+        sessionID: "child",
+        inboxID: "msg_input",
+        item: { type: "user", delivery: "queue", payload: { text: "new" } },
+      },
+    } as OpenCodeEvent)
+    response.resolve({
+      pending: [],
+      forms: [form],
+    })
+    await hydration
+
+    expect(ctx.store.data.pending.child).toMatchObject([{ id: "msg_input" }])
+    expect(ctx.store.data.form.child).toMatchObject([{ id: "frm_1" }])
+    expect(loads).toBe(2)
+  })
+
+  test("removes only the compaction input named by the start event", () => {
+    const ctx = setup({ child: session("child") })
+    const apply = (input: object) => ctx.store.applyV2(input as OpenCodeEvent)
+    apply({
+      id: "evt_compaction_inbox",
+      created: 1,
+      type: "session.inbox.enqueued",
+      data: {
+        sessionID: "child",
+        inboxID: "msg_compaction",
+        item: { type: "compaction", delivery: "queue", payload: { reason: "manual" } },
+      },
+    })
+
+    expect(ctx.store.data.input.child).toBeUndefined()
+    expect(ctx.store.data.pending.child).toHaveLength(1)
+
+    apply({
+      id: "evt_compaction_inbox_2",
+      created: 2,
+      type: "session.inbox.enqueued",
+      data: {
+        sessionID: "child",
+        inboxID: "msg_compaction_2",
+        item: { type: "compaction", delivery: "queue", payload: { reason: "manual" } },
+      },
+    })
+    apply({
+      id: "evt_compaction_ended",
+      created: 3,
+      type: "session.compaction.ended",
+      data: { sessionID: "child", reason: "manual", text: "summary", recent: "recent" },
+    })
+
+    expect(ctx.store.data.pending.child).toHaveLength(2)
+
+    apply({
+      id: "evt_compaction_started",
+      created: 4,
+      type: "session.compaction.started",
+      data: { sessionID: "child", inputID: "msg_compaction", reason: "manual" },
+    })
+
+    expect(ctx.store.data.pending.child?.map((item) => item.id)).toEqual(["msg_compaction_2"])
+  })
+
+  test("projects committed revert before server reconciliation", () => {
+    const ctx = setup({ child: session("child") })
+    ctx.store.remember({ ...session("child"), revert: { messageID: "msg_2", partID: "prt_1" } })
+    ctx.store.set("input", "child", ["msg_1", "msg_2"])
+    ctx.store.set("session_message", "child", [
+      { id: "msg_1", type: "user", text: "keep", time: { created: 1 } },
+      { id: "msg_2", type: "user", text: "remove", time: { created: 2 } },
+    ])
+
+    ctx.store.applyV2({
+      id: "evt_revert",
+      created: 3,
+      type: "session.revert.committed",
+      data: { sessionID: "child", to: "msg_2" },
+    } as OpenCodeEvent)
+
+    expect(ctx.store.data.info.child?.revert).toBeUndefined()
+    expect(ctx.store.data.input.child).toEqual(["msg_1"])
+    expect(ctx.store.data.session_message.child?.map((message) => message.id)).toEqual(["msg_1"])
+  })
+
+  test("does not restore a message hydrated before a committed revert", async () => {
+    const response = Promise.withResolvers<SessionMessageInfo>()
+    const store = createServerSession({
+      session: {
+        get: async () => session("child"),
+        message: () => response.promise,
+      } as unknown as SessionApi,
+      message: {
+        list: async () => currentPage({ data: [], response: { headers: new Headers() } }),
+      } as unknown as MessageApi,
+    })
+    store.remember(session("child"))
+
+    store.applyV2({
+      id: "evt_delivered",
+      created: 1,
+      type: "session.inbox.delivered",
+      data: { sessionID: "child", inboxID: "msg_2" },
+    } as OpenCodeEvent)
+    store.applyV2({
+      id: "evt_revert",
+      created: 2,
+      type: "session.revert.committed",
+      data: { sessionID: "child", to: "msg_2" },
+    } as OpenCodeEvent)
+    response.resolve({ id: "msg_2", type: "user", text: "stale", time: { created: 1 } })
+    await response.promise
+    await Bun.sleep(0)
+
+    expect(store.data.session_message.child ?? []).toEqual([])
+  })
+
   test("resolves lineage by session ID without directory", async () => {
     const ctx = setup({ child: session("child", "root"), root: session("root") })
 
@@ -366,6 +549,17 @@ describe("server session", () => {
     expect(ctx.get).toEqual([{ sessionID: "root" }])
     expect(ctx.messages).toEqual([{ sessionID: "root", limit: 20, order: "desc" }])
     expect(ctx.store.data.message.root).toEqual([])
+  })
+
+  test("reloads cached sessions after reconnect invalidation", async () => {
+    const ctx = setup({ root: session("root") })
+    await ctx.store.sync("root")
+
+    ctx.store.invalidate()
+    await ctx.store.sync("root")
+
+    expect(ctx.get).toHaveLength(2)
+    expect(ctx.messages).toHaveLength(2)
   })
 
   test("loads current session content through the current message API", async () => {
@@ -392,6 +586,7 @@ describe("server session", () => {
 
     expect(requests).toEqual([{ sessionID: "root", limit: 20, order: "desc" }])
     expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
+    expect(store.data.message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
   })
 
   test("extends a current page to include the user for split assistant turns", async () => {
@@ -1573,7 +1768,7 @@ describe("server session", () => {
 
     await store.sync("child", { force: true })
 
-    expect(store.data.message.child).toEqual([boundary, older])
+    expect(store.data.message.child).toEqual([older, boundary])
   })
 
   test("preserves a part update for a message being loaded from history", async () => {

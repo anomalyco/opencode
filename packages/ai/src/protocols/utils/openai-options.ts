@@ -1,5 +1,5 @@
-import { ReasoningEfforts } from "../../schema"
-import { OpenResponsesOptions } from "./open-responses-options"
+import { ReasoningEfforts } from "../../schema/index.js"
+import { OpenResponsesOptions } from "./open-responses-options.js"
 
 export const OpenAIReasoningEfforts = ReasoningEfforts
 export type OpenAIReasoningEffort = string
@@ -20,4 +20,4 @@ export const isReasoningEffort = (effort: unknown): effort is OpenAIReasoningEff
 
 export const resolve = OpenResponsesOptions.resolve
 
-export * as OpenAIOptions from "./openai-options"
+export * as OpenAIOptions from "./openai-options.js"

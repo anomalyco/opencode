@@ -1,10 +1,10 @@
 import { Effect, Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
-import { Route } from "../route/client"
-import { Auth } from "../route/auth"
-import { Endpoint } from "../route/endpoint"
-import { Framing } from "../route/framing"
-import { Protocol } from "../route/protocol"
+import { Route } from "../route/client.js"
+import { Auth } from "../route/auth.js"
+import { Endpoint } from "../route/endpoint.js"
+import { Framing } from "../route/framing.js"
+import { Protocol } from "../route/protocol.js"
 import {
   AIError,
   LLMEvent,
@@ -21,13 +21,13 @@ import {
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
-} from "../schema"
-import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
-import { classifyProviderFailure } from "../provider-error"
-import * as Cache from "./utils/cache"
-import { Lifecycle } from "./utils/lifecycle"
-import { ToolSchemaProjection } from "./utils/tool-schema"
-import { ToolStream } from "./utils/tool-stream"
+} from "../schema/index.js"
+import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { classifyProviderFailure } from "../provider-error.js"
+import * as Cache from "./utils/cache.js"
+import { Lifecycle } from "./utils/lifecycle.js"
+import { ToolSchemaProjection } from "./utils/tool-schema.js"
+import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "anthropic-messages"
 const MEDIA_MIMES = new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.PDF_MIMES])
@@ -422,14 +422,12 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: Me
 
 // Tool results may carry structured text, images, and documents. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
-const lowerToolResultContentItem = Effect.fn("AnthropicMessages.lowerToolResultContentItem")(function* (
-  item: Tool.Content,
-) {
+const lowerToolResultContentItem = Effect.fnUntraced(function* (item: Tool.Content) {
   if (item.type === "text") return { type: "text" as const, text: item.text } satisfies AnthropicTextBlock
   return yield* lowerMedia({ type: "media", mediaType: item.mime, data: item.uri, filename: item.name })
 })
 
-const lowerToolResultContent = Effect.fn("AnthropicMessages.lowerToolResultContent")(function* (part: ToolResultPart) {
+const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart) {
   // Text / json / error results stay as a string for backward compatibility
   // with existing cassettes and provider expectations.
   if (part.result.type !== "content") return ProviderShared.toolResultText(part)
@@ -575,7 +573,10 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
         cache_control: cacheControl(breakpoints, part.cache),
       })
     }
-    messages.push({ role: "user", content })
+    const previous = messages.at(-1)
+    if (previous?.role === "user" && previous.content.every((block) => block.type === "tool_result"))
+      messages[messages.length - 1] = { role: "user", content: [...previous.content, ...content] }
+    else messages.push({ role: "user", content })
   }
 
   return messages
@@ -1031,4 +1032,4 @@ export const route = Route.make({
   headers: () => ({ "anthropic-version": "2023-06-01" }),
 })
 
-export * as AnthropicMessages from "./anthropic-messages"
+export * as AnthropicMessages from "./anthropic-messages.js"

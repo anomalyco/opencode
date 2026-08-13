@@ -1,6 +1,5 @@
 import { Database } from "@opencode-ai/core/database/database"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
-import { Observability } from "@opencode-ai/util/observability"
 import { Schema } from "effect"
 
 export const ServerOptions = Schema.Struct({
@@ -22,7 +21,6 @@ export const ServerOptions = Schema.Struct({
     }),
   ),
   models: Schema.optional(ModelsDev.Options),
-  observability: Schema.optional(Observability.Options),
   config: Schema.optional(
     Schema.Struct({
       directory: Schema.optional(Schema.String),

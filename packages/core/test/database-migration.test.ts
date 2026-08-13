@@ -3,7 +3,7 @@ import { $ } from "bun"
 import { fileURLToPath } from "url"
 import path from "path"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
-import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
+import { EffectDrizzleSqlite } from "@opencode-ai/core/database/drizzle"
 import { Effect, Layer } from "effect"
 import { sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
@@ -11,11 +11,19 @@ import { migrations } from "@opencode-ai/core/database/migration.gen"
 import { Database } from "@opencode-ai/core/database/database"
 import { tmpdir } from "./fixture/tmpdir"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
-import { importLegacyCredentials } from "@opencode-ai/core/database/migration/20260805200742_import_legacy_credentials"
+import legacyCredentialsMigration from "@opencode-ai/core/database/migration/20260805200742_import_legacy_credentials"
+import { Global } from "@opencode-ai/util/global"
 
-const run = <A, E>(effect: Effect.Effect<A, E, SqlClient>) =>
+const run = <A, E>(
+  effect: Effect.Effect<A, E, SqlClient | Global.Service>,
+  global = Global.make({ data: path.join(process.cwd(), ".test-data") }),
+) =>
   Effect.runPromise(
-    effect.pipe(Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })), Effect.scoped),
+    effect.pipe(
+      Effect.provideService(Global.Service, global),
+      Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })),
+      Effect.scoped,
+    ),
   )
 
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
@@ -31,7 +39,7 @@ describe("DatabaseMigration", () => {
           Effect.scoped(Layer.build(layer)),
         ),
         { concurrency: "unbounded" },
-      ),
+      ).pipe(Effect.provideService(Global.Service, Global.make({ data: tmp.path }))),
     )
   })
 
@@ -74,6 +82,19 @@ describe("DatabaseMigration", () => {
         }),
       ),
     ).rejects.toThrow("Database is not empty and has no session table")
+  })
+
+  test("bootstraps alongside underscore-prefixed embedder tables", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE _embedder_state (id text PRIMARY KEY)`)
+        yield* DatabaseMigration.apply(db)
+        expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'`)).toEqual(
+          { name: "session_v2" },
+        )
+      }),
+    )
   })
 
   test("applies generic migrations once and records their order", async () => {
@@ -127,7 +148,8 @@ describe("DatabaseMigration", () => {
           VALUES ('existing', 'anthropic', 'Existing', ${JSON.stringify({ type: "key", key: "current-key" })}, ${now}, ${now})
         `)
 
-        yield* db.transaction((tx) => importLegacyCredentials(tx, source))
+        yield* db.run(sql`DELETE FROM migration WHERE id = ${legacyCredentialsMigration.id}`)
+        yield* DatabaseMigration.applyOnly(db, [legacyCredentialsMigration])
 
         expect(yield* db.all(sql`SELECT integration_id, label, value FROM credential ORDER BY integration_id`)).toEqual(
           [
@@ -159,9 +181,26 @@ describe("DatabaseMigration", () => {
           value: JSON.stringify(["https://example.com"]),
         })
       }),
+      Global.make({ data: tmp.path }),
     )
 
     expect(await Bun.file(source).text()).toBe(content)
+  })
+
+  test("skips legacy credential import when the source file is absent", async () => {
+    await using tmp = await tmpdir()
+
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+        yield* db.run(sql`DELETE FROM migration WHERE id = ${legacyCredentialsMigration.id}`)
+        yield* DatabaseMigration.applyOnly(db, [legacyCredentialsMigration])
+
+        expect(yield* db.all(sql`SELECT id FROM credential`)).toEqual([])
+      }),
+      Global.make({ data: tmp.path }),
+    )
   })
 
   test("rolls back a failed migration without recording it", async () => {

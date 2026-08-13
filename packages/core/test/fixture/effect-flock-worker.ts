@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import os from "os"
 import { Effect } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { EffectFlock } from "@opencode-ai/util/effect-flock"
 import { Global } from "@opencode-ai/util/global"
 
@@ -30,7 +30,7 @@ const testGlobal = Global.layerWith({
   log: os.tmpdir(),
 })
 
-const testLayer = AppNodeBuilder.build(EffectFlock.node, [[Global.node, testGlobal]])
+const testLayer = LayerNode.compile(EffectFlock.node, [[Global.node, testGlobal]])
 
 async function job() {
   if (msg.ready) await fs.writeFile(msg.ready, String(process.pid))

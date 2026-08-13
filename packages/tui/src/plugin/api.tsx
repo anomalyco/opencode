@@ -1,6 +1,7 @@
 import { PluginContextProvider } from "@opencode-ai/plugin/tui"
 import type { JSX } from "solid-js"
-import type { Context, Dialog, Page, Slot, SlotMap, Toast } from "@opencode-ai/plugin/tui/context"
+import type { Context, Dialog, Page, SlotClaim, SlotMap, SlotPath, Toast } from "@opencode-ai/plugin/tui/context"
+import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { useClient } from "../context/client"
@@ -23,13 +24,25 @@ import { abbreviateHome } from "../util/path-format"
 
 export type Dispose = () => Promise<void>
 
+// Slot inputs erased to their union: the registry stores one render shape
+// regardless of which path a claim targets.
+export type SlotRender = (input: SlotMap[SlotPath]) => JSX.Element
+
+// A registered claim as stored by the plugin provider's registry.
+export type RegisteredSlot = {
+  readonly placement: Placement
+  readonly render: SlotRender
+}
+
+const placements = ["prepend", "append", "before", "after", "replace"] as const satisfies readonly PlacementKind[]
+
 // The provider's registration store, narrowed to what a plugin context needs:
 // route/slot registration lands there, but ordering and lifecycle stay owned
 // by the provider.
 export type Registry = {
   has(kind: "routes" | "slots" | "markdown", name: string): boolean
   set(kind: "routes", name: string, page: Page): void
-  set(kind: "slots", name: string, slot: Slot): void
+  set(kind: "slots", name: string, claim: RegisteredSlot): void
   set(kind: "markdown", name: string, render: MarkdownCodeBlockRenderer): void
   remove(kind: "routes" | "slots" | "markdown", name: string): void
   active(): boolean
@@ -70,6 +83,7 @@ export function createPluginContext(input: {
 }): Context {
   const host = input.host
   let context: Context
+  let claims = 0
   // Every dialog and registered render is wrapped so plugin components can
   // reach their own context through usePlugin().
   const provide = (render: () => JSX.Element) => (
@@ -184,12 +198,20 @@ export function createPluginContext(input: {
           return true
         },
       },
-      slot(name, render) {
-        if (input.registry.has("slots", name)) throw new Error(`Slot already registered: ${name}`)
-        // The registration map erases the slot-specific input type.
-        input.registry.set("slots", name, ((slotInput: SlotMap[typeof name]) =>
-          provide(() => render(slotInput))) as Slot)
-        return registration("slots", name)
+      slot(value: SlotClaim) {
+        // Keys are counter-suffixed so one plugin may claim several places;
+        // order within the plugin is registration order.
+        const key = `slot#${claims++}`
+        // Exactly one placement kind, enforced at runtime for untyped plugins.
+        const kinds = placements.filter((item) => value[item] !== undefined)
+        if (kinds.length !== 1) throw new Error("Slot claim requires exactly one placement key")
+        const kind = kinds[0]
+        input.registry.set("slots", key, {
+          placement: { kind, target: value[kind] as string },
+          // The registration map erases the path-specific input type.
+          render: (slotInput) => provide(() => (value.render as SlotRender)(slotInput)),
+        })
+        return registration("slots", key)
       },
     },
   }

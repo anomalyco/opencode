@@ -1,5 +1,6 @@
 import { Component, For, Show, createMemo, lazy, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -424,9 +425,9 @@ function SettingsKeybindsV2() {
       filtered={controller.catalog.filtered}
       title={controller.catalog.title}
       keybind={controller.catalog.keybind}
-      active={controller.capture.active}
+      active={controller.capture.active()}
       onCapture={controller.capture.toggle}
-      hasOverrides={controller.settings.hasOverrides}
+      hasOverrides={controller.settings.hasOverrides()}
       onReset={controller.settings.reset}
     />
   )
@@ -437,9 +438,9 @@ function SettingsKeybindsV2View(props: {
   filtered: (query: string) => Map<KeybindGroup, string[]>
   title: (id: string) => string
   keybind: (id: string) => string
-  active: () => string | null
+  active: string | null
   onCapture: (id: string) => void
-  hasOverrides: () => boolean
+  hasOverrides: boolean
   onReset: () => void
 }) {
   const language = useLanguage()
@@ -451,8 +452,11 @@ function SettingsKeybindsV2View(props: {
     <>
       <div class="settings-v2-tab-header settings-v2-tab-header--stacked">
         <div class="settings-v2-tab-header-row">
-          <h2 class="settings-v2-tab-title">{language.t("settings.shortcuts.title")}</h2>
-          <ButtonV2 variant="ghost" onClick={props.onReset} disabled={!props.hasOverrides()}>
+          <div class="flex flex-col gap-1">
+            <h2 class="settings-v2-tab-title">{language.t("settings.shortcuts.title")}</h2>
+            <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.shortcuts.description")}</span>
+          </div>
+          <ButtonV2 variant="ghost" onClick={props.onReset} disabled={!props.hasOverrides}>
             {language.t("settings.shortcuts.reset.button")}
           </ButtonV2>
         </div>
@@ -498,12 +502,12 @@ function SettingsKeybindsV2View(props: {
                             data-keybind-id={id}
                             classList={{
                               "settings-v2-keybind-button": true,
-                              "settings-v2-keybind-button--active": props.active() === id,
+                              "settings-v2-keybind-button--active": props.active === id,
                             }}
                             onClick={() => props.onCapture(id)}
                           >
                             <Show
-                              when={props.active() === id}
+                              when={props.active === id}
                               fallback={props.keybind(id) || language.t("settings.shortcuts.unassigned")}
                             >
                               {language.t("settings.shortcuts.pressKeys")}
@@ -674,8 +678,6 @@ export const SettingsKeybinds: Component<{ v2?: boolean }> = (props) => {
     </Show>
   )
 
-  const List = props.v2 ? SettingsListV2 : SettingsList
-
   const groups = (
     <div
       classList={{
@@ -700,7 +702,7 @@ export const SettingsKeybinds: Component<{ v2?: boolean }> = (props) => {
               >
                 {language.t(groupKey[group])}
               </h3>
-              <List>
+              <Dynamic component={props.v2 ? SettingsListV2 : SettingsList}>
                 <For each={filtered().get(group) ?? []}>
                   {(id) => (
                     <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
@@ -735,7 +737,7 @@ export const SettingsKeybinds: Component<{ v2?: boolean }> = (props) => {
                     </div>
                   )}
                 </For>
-              </List>
+              </Dynamic>
             </div>
           </Show>
         )}

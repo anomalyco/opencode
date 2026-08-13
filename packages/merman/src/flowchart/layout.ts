@@ -27,6 +27,7 @@ import type {
 
 export const DEFAULT_MIN_NODE_GAP = 5
 export const DEFAULT_MIN_BRANCH_LABEL_GAP = 12
+const DEFAULT_MAX_UNLABELED_RANK_WIDTH = 120
 export const DEFAULT_MIN_RANK_GAP = 7
 export const DEFAULT_MIN_VERTICAL_RANK_GAP = 4
 export const COMPACT_MIN_RANK_GAP = 4
@@ -316,7 +317,7 @@ function pathBounds(points: readonly { x: number; y: number }[]): FlowchartBound
 
 function labelBounds(route: FlowchartEdgeRoute): FlowchartBounds | undefined {
   if (!route.edge.label) return undefined
-  const label = flowchartEdgeLabelLayout(route.points, route.edge.label, visualLength)
+  const label = flowchartEdgeLabelLayout(route.points, route.edge.label, visualLength, route.labelAxis)
   const { point, width, height } = label
   return {
     left: point.x,
@@ -353,14 +354,6 @@ function layoutRankedNodes(
   requestedMinRankGap: number,
 ): Map<string, FlowchartNodeBounds> {
   const horizontal = isHorizontalDirection(direction)
-  let widestPaddedEdgeLabel = 0
-  for (const edge of diagram.edges) {
-    if (edge.label)
-      widestPaddedEdgeLabel = Math.max(widestPaddedEdgeLabel, flowchartLabelWidth(edge.label, visualLength))
-  }
-  const rankNodeGap = horizontal
-    ? minNodeGap
-    : Math.max(minNodeGap, DEFAULT_MIN_BRANCH_LABEL_GAP, flowchartVerticalBranchLabelGap(widestPaddedEdgeLabel))
   const ranks = rankNodes(diagram)
   const maxRank = Math.max(0, ...ranks.values())
   const ranksByIndex = new Map<number, FlowchartNode[]>()
@@ -373,6 +366,28 @@ function layoutRankedNodes(
     const nodes = ranksByIndex.get(normalizedRank) ?? []
     nodes.push(node)
     ranksByIndex.set(normalizedRank, nodes)
+  }
+
+  const spaciousNodeGap = Math.max(minNodeGap, DEFAULT_MIN_BRANCH_LABEL_GAP)
+  const widestUnlabeledRank = Math.max(
+    0,
+    ...[...ranksByIndex.values()].map(
+      (nodes) =>
+        nodes.reduce((total, node) => total + sizes.get(node.id)!.width, 0) +
+        Math.max(0, nodes.length - 1) * spaciousNodeGap,
+    ),
+  )
+  const verticalNodeGap = (rank: number): number => {
+    const widestLabel = Math.max(
+      0,
+      ...diagram.edges
+        .filter(
+          (edge) => edge.label && (normalizedRanks.get(edge.from) === rank || normalizedRanks.get(edge.to) === rank),
+        )
+        .map((edge) => flowchartLabelWidth(edge.label, visualLength)),
+    )
+    if (widestLabel > 0) return Math.max(spaciousNodeGap, flowchartVerticalBranchLabelGap(widestLabel))
+    return widestUnlabeledRank > DEFAULT_MAX_UNLABELED_RANK_WIDTH ? minNodeGap : spaciousNodeGap
   }
 
   const rankKeys = [...ranksByIndex.keys()].sort((a, b) => a - b)
@@ -388,7 +403,7 @@ function layoutRankedNodes(
       const nodes = ranksByIndex.get(rank)!
       return (
         nodes.reduce((total, node) => total + sizes.get(node.id)!.height, 0) +
-        Math.max(0, nodes.length - 1) * rankNodeGap
+        Math.max(0, nodes.length - 1) * minNodeGap
       )
     })
     const canvasHeight = Math.max(1, ...columnHeights)
@@ -410,7 +425,7 @@ function layoutRankedNodes(
           centerX: left + Math.floor(size.width / 2),
           centerY: y + Math.floor(size.height / 2),
         })
-        y += size.height + rankNodeGap
+        y += size.height + minNodeGap
       }
       x += columnWidth + (horizontalGaps[rankIndex] ?? 0)
     }
@@ -422,7 +437,7 @@ function layoutRankedNodes(
       const nodes = ranksByIndex.get(rank)!
       return (
         nodes.reduce((total, node) => total + sizes.get(node.id)!.width, 0) +
-        Math.max(0, nodes.length - 1) * rankNodeGap
+        Math.max(0, nodes.length - 1) * verticalNodeGap(rank)
       )
     })
     const canvasWidth = Math.max(1, ...rowWidths)
@@ -431,6 +446,7 @@ function layoutRankedNodes(
       const rank = rankKeys[rankIndex]!
       const nodes = ranksByIndex.get(rank)!
       const rowHeight = rowHeights[rankIndex]!
+      const nodeGap = verticalNodeGap(rank)
       let x = Math.floor((canvasWidth - rowWidths[rankIndex]!) / 2)
       for (const node of nodes) {
         const size = sizes.get(node.id)!
@@ -443,7 +459,7 @@ function layoutRankedNodes(
           centerX: x + Math.floor(size.width / 2),
           centerY: top + Math.floor(size.height / 2),
         })
-        x += size.width + rankNodeGap
+        x += size.width + nodeGap
       }
       y += rowHeight + (verticalGaps[rankIndex] ?? 0)
     }

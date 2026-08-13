@@ -465,6 +465,7 @@ Use native v2 fields.`,
               },
             }),
           )
+          yield* Effect.yieldNow
 
           yield* Effect.promise(() => fs.writeFile(path.join(directory, "reviewer.md"), "Review once"))
           yield* configTest.emitChange({ type: "create", path: path.join(directory, "reviewer.md") })

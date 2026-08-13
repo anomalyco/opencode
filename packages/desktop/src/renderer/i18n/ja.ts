@@ -18,4 +18,7 @@ export const dict = {
     "OpenCode のバージョン {{version}} がダウンロードされました。インストールして再起動しますか？",
   "desktop.updater.installFailed.title": "アップデートに失敗しました",
   "desktop.updater.installFailed.message": "アップデートをインストールできませんでした",
+
+  "desktop.error.dev.rootNotFound":
+    "ルート要素が見つかりません。index.htmlに追加するのを忘れていませんか？またはid属性のスペルが間違っていませんか？",
 }

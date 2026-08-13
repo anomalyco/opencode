@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import type { Content } from "@opencode-ai/schema/tool"
-import { HttpTransport } from "../route/transport"
-import { Protocol } from "../route/protocol"
+import { HttpTransport } from "../route/transport/index.js"
+import { Protocol } from "../route/protocol.js"
 import {
   AIError,
   LLMEvent,
@@ -16,13 +16,13 @@ import {
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
-} from "../schema"
-import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
-import { classifyProviderFailure } from "../provider-error"
-import { OpenResponsesOptions } from "./utils/open-responses-options"
-import { Lifecycle } from "./utils/lifecycle"
-import { ToolSchemaProjection } from "./utils/tool-schema"
-import { ToolStream } from "./utils/tool-stream"
+} from "../schema/index.js"
+import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { classifyProviderFailure } from "../provider-error.js"
+import { OpenResponsesOptions } from "./utils/open-responses-options.js"
+import { Lifecycle } from "./utils/lifecycle.js"
+import { ToolSchemaProjection } from "./utils/tool-schema.js"
+import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "open-responses"
 const NAME = "Open Responses"
@@ -358,7 +358,7 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   return { type: "input_image" as const, image_url: media.dataUrl }
 })
 
-const lowerUserContent = Effect.fn("OpenResponses.lowerUserContent")(function* (
+const lowerUserContent = Effect.fnUntraced(function* (
   part: LLMRequest["messages"][number]["content"][number],
   request: LLMRequest,
   extension: Extension,
@@ -370,7 +370,7 @@ const lowerUserContent = Effect.fn("OpenResponses.lowerUserContent")(function* (
 
 // Tool results may carry structured text, images, and files. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
-const lowerToolResultContentItem = Effect.fn("OpenResponses.lowerToolResultContentItem")(function* (
+const lowerToolResultContentItem = Effect.fnUntraced(function* (
   item: Content,
   request: LLMRequest,
   extension: Extension,
@@ -383,7 +383,7 @@ const lowerToolResultContentItem = Effect.fn("OpenResponses.lowerToolResultConte
   )
 })
 
-const lowerToolResultOutput = Effect.fn("OpenResponses.lowerToolResultOutput")(function* (
+const lowerToolResultOutput = Effect.fnUntraced(function* (
   part: ToolResultPart,
   request: LLMRequest,
   extension: Extension,
@@ -1061,4 +1061,4 @@ export const protocol = Protocol.make({
 
 export const httpTransport = HttpTransport.sseJson.with<OpenResponsesBody>()
 
-export * as OpenResponses from "./open-responses"
+export * as OpenResponses from "./open-responses.js"

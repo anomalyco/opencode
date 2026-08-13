@@ -5,6 +5,7 @@ import { optional } from "./schema.js"
 import { IntegrationMethodID } from "./integration-id.js"
 import { ascending } from "./identifier.js"
 import { NonNegativeInt, statics } from "./schema.js"
+import { Form } from "./form.js"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Credential.ID"),
@@ -27,6 +28,7 @@ export const Key = Schema.Struct({
   type: Schema.Literal("key"),
   key: Schema.String,
   metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
+  configuration: optional(Form.Answer),
 }).annotate({ identifier: "Credential.Key" })
 
 export const Value = Schema.Union([OAuth, Key])

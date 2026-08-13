@@ -1,6 +1,6 @@
 export const dict = {
-  "desktop.menu.checkForUpdates": "Vérifier les mises à jour...",
-  "desktop.menu.reloadWebview": "Recharger la Webview",
+  "desktop.menu.checkForUpdates": "Rechercher des mises à jour...",
+  "desktop.menu.reloadWebview": "Recharger la vue Web",
   "desktop.menu.restart": "Redémarrer",
 
   "desktop.dialog.chooseFolder": "Choisir un dossier",
@@ -15,7 +15,10 @@ export const dict = {
   "desktop.updater.downloadFailed.message": "Impossible de télécharger la mise à jour",
   "desktop.updater.downloaded.title": "Mise à jour téléchargée",
   "desktop.updater.downloaded.prompt":
-    "La version {{version}} d'OpenCode a été téléchargée. Voulez-vous l'installer et redémarrer ?",
+    "La version {{version}} d'OpenCode a été téléchargée. Voulez-vous l'installer et relancer l'application ?",
   "desktop.updater.installFailed.title": "Échec de la mise à jour",
   "desktop.updater.installFailed.message": "Impossible d'installer la mise à jour",
+
+  "desktop.error.dev.rootNotFound":
+    "Élément racine introuvable. Avez-vous oublié de l'ajouter à votre index.html ? Ou peut-être que l'attribut id est mal orthographié ?",
 }

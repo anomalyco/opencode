@@ -19,15 +19,17 @@ import {
 
 describe("session tabs", () => {
   test("shows only non-default session branches", () => {
-    expect(sessionTabBranch("main", "main")).toBeUndefined()
-    expect(sessionTabBranch("feature/sidebar", "main")).toBe("feature/sidebar")
-    expect(sessionTabBranch("feature/sidebar", undefined)).toBe("feature/sidebar")
-    expect(sessionTabBranch(undefined, "main")).toBeUndefined()
+    expect(sessionTabBranch("main", "main", true)).toBeUndefined()
+    expect(sessionTabBranch("feature/sidebar", "main", true)).toBe("feature/sidebar")
+    expect(sessionTabBranch("feature/sidebar", undefined, true)).toBe("feature/sidebar")
+    expect(sessionTabBranch(undefined, "main", true)).toBeUndefined()
+    expect(sessionTabBranch("feature/sidebar", "main", false)).toBeUndefined()
   })
 
-  test("separates the project and branch with a colon", () => {
-    expect(sessionTabDetail("opencode", "feature/sidebar", "main")).toBe("opencode:feature/sidebar")
-    expect(sessionTabDetail("opencode", "main", "main")).toBe("opencode")
+  test("appends the branch to the project detail", () => {
+    expect(sessionTabDetail("opencode", "feature/sidebar", "main", true)).toBe("opencode ⎇ feature/sidebar")
+    expect(sessionTabDetail("opencode", "feature/sidebar", "main", false)).toBe("opencode")
+    expect(sessionTabDetail("opencode", "main", "main", true)).toBe("opencode")
   })
 
   test("labels direct shortcut tabs and marks unbound tabs with a dot", () => {

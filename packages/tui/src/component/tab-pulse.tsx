@@ -22,6 +22,8 @@ type TabPulseOptions = RenderableOptions<TabPulseRenderable> & {
   outerGlowTail?: number
   flashColor?: RGBA
   outerFlashColor?: RGBA
+  flashTail?: number
+  outerFlashTail?: number
   completionColor?: RGBA
   outerCompletionColor?: RGBA
   backgroundColor?: RGBA
@@ -72,6 +74,7 @@ export const completionPulseOpacity = (progress: number) => attackDecay(progress
 export const glowIgnitionLevel = (progress: number) =>
   attackDecay(progress, GLOW_IGNITION_ATTACK, GLOW_IGNITION_PEAK, 1)
 const glowIntensityAt = (index: number, tail: number) => smootherstep(clamp(1 - Math.max(0, index - 1) / tail))
+export const tabFlashIntensity = (index: number, tail: number) => glowIntensityAt(index, tail)
 export const unreadGlowIntensity = (index: number, width: number, maximumTail = GLOW_TAIL) => {
   const tail = Math.min(maximumTail, Math.max(1, width - 2))
   return glowIntensityAt(index, tail)
@@ -323,6 +326,8 @@ class TabPulseRenderable extends Renderable {
   private _edge: "above" | "below" | undefined
   private _flashColor: RGBA
   private _outerFlashColor: RGBA
+  private _flashTail: number | undefined
+  private _outerFlashTail: number | undefined
   private _completionColor: RGBA
   private _outerCompletionColor: RGBA
   private _backgroundColor: RGBA
@@ -373,6 +378,8 @@ class TabPulseRenderable extends Renderable {
     this._edge = edge
     this._flashColor = options.flashColor ?? this._color
     this._outerFlashColor = options.outerFlashColor ?? options.flashColor ?? this._outerColor
+    this._flashTail = options.flashTail
+    this._outerFlashTail = options.outerFlashTail ?? options.flashTail
     this._completionColor = options.completionColor ?? this._color
     this._outerCompletionColor = options.outerCompletionColor ?? options.completionColor ?? this._outerColor
     this._backgroundColor = options.backgroundColor ?? RGBA.defaultBackground()
@@ -501,6 +508,18 @@ class TabPulseRenderable extends Renderable {
     this.requestRender()
   }
 
+  set flashTail(value: number | undefined) {
+    if (value === this._flashTail) return
+    this._flashTail = value
+    this.requestRender()
+  }
+
+  set outerFlashTail(value: number | undefined) {
+    if (value === this._outerFlashTail) return
+    this._outerFlashTail = value
+    this.requestRender()
+  }
+
   set completionColor(value: RGBA) {
     if (value.equals(this._completionColor)) return
     this._completionColor = value
@@ -560,6 +579,9 @@ class TabPulseRenderable extends Renderable {
       )
     const glowTail = Math.min(this._glowTail, Math.max(1, this.width - 2))
     const outerGlowTail = Math.min(this._outerGlowTail, Math.max(1, this.width - 2))
+    const flashTail = this._flashTail === undefined ? undefined : Math.min(this._flashTail, Math.max(1, this.width - 2))
+    const outerFlashTail =
+      this._outerFlashTail === undefined ? undefined : Math.min(this._outerFlashTail, Math.max(1, this.width - 2))
     for (let index = 0; index < this.width; index++) {
       // Skip per-cell sweep and glow math when that stage is idle, e.g. a steady breathing glow.
       const sweep =
@@ -589,7 +611,7 @@ class TabPulseRenderable extends Renderable {
         this._completionColor,
         glowLevel === 0 ? 0 : glowIntensityAt(index, glowTail) * GLOW_OPACITY * glowLevel,
         sweep,
-        flash,
+        flashTail === undefined ? flash : flash * tabFlashIntensity(index, flashTail),
         completion,
       )
       if (!this._edge) {
@@ -605,7 +627,7 @@ class TabPulseRenderable extends Renderable {
         this._outerCompletionColor,
         outerGlowLevel === 0 ? 0 : glowIntensityAt(index, outerGlowTail) * GLOW_OPACITY * outerGlowLevel,
         outerSweep,
-        outerFlash,
+        outerFlashTail === undefined ? outerFlash : outerFlash * tabFlashIntensity(index, outerFlashTail),
         outerCompletion,
       )
       buffer.setCell(
@@ -650,6 +672,8 @@ export function TabPulse(props: {
   outerGlowTail?: number
   flashColor?: RGBA
   outerFlashColor?: RGBA
+  flashTail?: number
+  outerFlashTail?: number
   completionColor?: RGBA
   outerCompletionColor?: RGBA
   backgroundColor: RGBA
@@ -681,6 +705,8 @@ export function TabPulse(props: {
       outerGlowTail={props.outerGlowTail ?? props.glowTail ?? GLOW_TAIL}
       flashColor={props.flashColor ?? props.color}
       outerFlashColor={props.outerFlashColor ?? props.flashColor ?? props.outerColor ?? props.color}
+      flashTail={props.flashTail}
+      outerFlashTail={props.outerFlashTail ?? props.flashTail}
       completionColor={props.completionColor ?? props.color}
       outerCompletionColor={props.outerCompletionColor ?? props.completionColor ?? props.outerColor ?? props.color}
       backgroundColor={props.backgroundColor}

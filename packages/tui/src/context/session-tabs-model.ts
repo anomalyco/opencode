@@ -13,14 +13,19 @@ export function sessionTabShortcutLabel(index: number) {
   return "·"
 }
 
-export function sessionTabBranch(current: string | undefined, defaultBranch: string | undefined) {
-  if (!current || current === defaultBranch) return undefined
+export function sessionTabBranch(current: string | undefined, defaultBranch: string | undefined, worktree: boolean) {
+  if (!worktree || !current || current === defaultBranch) return undefined
   return current
 }
 
-export function sessionTabDetail(project: string, current: string | undefined, defaultBranch: string | undefined) {
-  const branch = sessionTabBranch(current, defaultBranch)
-  return branch && project ? `${project}:${branch}` : (branch ?? project)
+export function sessionTabDetail(
+  project: string,
+  current: string | undefined,
+  defaultBranch: string | undefined,
+  worktree: boolean,
+) {
+  const branch = sessionTabBranch(current, defaultBranch, worktree)
+  return branch && project ? `${project} ⎇ ${branch}` : (branch ?? project)
 }
 
 export type SessionTabHistory = {

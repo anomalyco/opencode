@@ -39,6 +39,13 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
       password: props.credentials?.password ?? "",
     }
   })
+  const localhost = createMemo(() => {
+    const value = info()?.urls[0]
+    if (!value) return ""
+    const url = new URL(value)
+    url.hostname = "localhost"
+    return url.toString().replace(/\/$/, "")
+  })
   const horizontal = createMemo(() => dimensions().width >= 96)
   const content = () => {
     const value = info()
@@ -46,6 +53,10 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
     return (
       <box flexDirection={horizontal() ? "row" : "column"} alignItems={horizontal() ? "flex-start" : "center"} gap={2}>
         <box width={horizontal() ? 29 : "100%"} flexShrink={0} gap={1}>
+          <box>
+            <text fg={theme.text.subdued}>This device</text>
+            <text fg={theme.text.default}>{localhost()}</text>
+          </box>
           <box>
             <text fg={theme.text.subdued}>URLs</text>
             <For each={value.urls}>{(url) => <text fg={theme.text.default}>{url}</text>}</For>

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { type Virtualizer } from "@tanstack/solid-virtual"
-import { Window } from "happy-dom"
+import { Node, Window } from "happy-dom"
 import { mutationNodesContainElement, observeElementOffsetReconnectAware } from "./observe-element-offset"
 
 test("matches only the scroll element or an ancestor containing it", () => {
@@ -18,6 +18,7 @@ test("matches only the scroll element or an ancestor containing it", () => {
 
 test("reports a divergent native offset once and ignores equal offsets and unrelated mutations", async () => {
   const targetWindow = new Window()
+  const mutations = controlledMutations(targetWindow)
   const route = targetWindow.document.createElement("section")
   const viewport = targetWindow.document.createElement("div")
   const unrelated = targetWindow.document.createElement("div")
@@ -40,24 +41,24 @@ test("reports a divergent native offset once and ignores equal offsets and unrel
     instance.scrollOffset = offset
   })
 
-  targetWindow.document.body.append(unrelated)
-  unrelated.remove()
-  await frames(2, targetWindow)
-  expect(calls).toEqual([])
+  try {
+    mutations.append(targetWindow.document.body, unrelated)
+    mutations.remove(unrelated)
+    expect(calls).toEqual([])
 
-  route.remove()
-  targetWindow.document.body.append(route)
-  await waitFor(() => calls.length === 1, targetWindow)
-  expect(calls).toEqual([[0, false]])
+    mutations.remove(route)
+    mutations.append(targetWindow.document.body, route)
+    await frames(2, targetWindow)
+    expect(calls).toEqual([[0, false]])
 
-  route.remove()
-  targetWindow.document.body.append(route)
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  await frames(3, targetWindow)
-  expect(calls).toEqual([[0, false]])
-
-  cleanup?.()
-  await targetWindow.happyDOM.close()
+    mutations.remove(route)
+    mutations.append(targetWindow.document.body, route)
+    await frames(2, targetWindow)
+    expect(calls).toEqual([[0, false]])
+  } finally {
+    cleanup?.()
+    await targetWindow.happyDOM.close()
+  }
 })
 
 test("keeps checking until stale reset-delay callbacks can no longer win", async () => {
@@ -204,7 +205,33 @@ async function frames(count: number, targetWindow: FrameWindow = window) {
   }
 }
 
-async function waitFor(condition: () => boolean, targetWindow: FrameWindow = window) {
-  const deadline = targetWindow.performance.now() + 1_000
-  while (!condition() && targetWindow.performance.now() < deadline) await frames(1, targetWindow)
+function controlledMutations(targetWindow: Window) {
+  let emit: (record: MutationRecord) => void = () => {
+    throw new Error("Mutation observer is not active")
+  }
+  class ControlledMutationObserver {
+    constructor(callback: MutationCallback) {
+      emit = (record) => callback([record], this as unknown as MutationObserver)
+    }
+    observe() {}
+    disconnect() {}
+    takeRecords() {
+      return []
+    }
+  }
+  Object.defineProperty(targetWindow, "MutationObserver", { value: ControlledMutationObserver })
+  const record = (target: Node, addedNodes: Node[], removedNodes: Node[]) =>
+    ({ type: "childList", target, addedNodes, removedNodes }) as unknown as MutationRecord
+  return {
+    append(parent: Node, node: Node) {
+      parent.appendChild(node)
+      emit(record(parent, [node], []))
+    },
+    remove(node: Node) {
+      const parent = node.parentNode
+      if (!parent) throw new Error("Mutation target has no parent")
+      parent.removeChild(node)
+      emit(record(parent, [], [node]))
+    },
+  }
 }

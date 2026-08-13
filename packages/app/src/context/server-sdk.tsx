@@ -4,6 +4,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { type Accessor, batch, createMemo, onCleanup, onMount } from "solid-js"
+import { createStore } from "solid-js/store"
 import { createApiForServer, type ServerApi } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
@@ -12,10 +13,6 @@ import { createRefCountMap } from "@/utils/refcount"
 import { useGlobal } from "./global"
 import { ServerScope } from "@/utils/server-scope"
 
-const isAbortError = (error: unknown) =>
-  error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
-
-const isStreamClosed = (error: unknown, signal?: AbortSignal) => isAbortError(error) || signal?.aborted === true
 export type ServerEvent = Event & { id?: string; current?: OpenCodeEvent }
 type QueuedServerEvent = { directory: string; payload: ServerEvent }
 type CurrentDelta = Extract<
@@ -95,15 +92,20 @@ export function resumeStreamAfterPageShow(event: PageTransitionEvent, start: () 
 }
 
 type ServerEventEmitter = ReturnType<typeof createGlobalEmitter<{ [key: string]: ServerEvent }>>
+export type ServerConnectionStatus = "connecting" | "connected" | "reconnecting"
 type ServerSDKBase = {
   server: ServerConnection.Any
   scope: ServerScope
   url: string
   api: ServerApi
+  connection: {
+    status: Accessor<ServerConnectionStatus>
+    attempt: Accessor<number>
+    error: Accessor<string | undefined>
+  }
   event: {
     on: ServerEventEmitter["on"]
     listen: ServerEventEmitter["listen"]
-    start: () => Promise<void> | undefined
   }
 }
 
@@ -130,14 +132,15 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   type Queued = QueuedServerEvent
   const FLUSH_FRAME_MS = 16
   const STREAM_YIELD_MS = 8
-  const RECONNECT_DELAY_MS = 250
+  const CONNECT_TIMEOUT_MS = 2_000
+  const RECONNECT_DELAY_MS = 1_000
 
   let queue: Queued[] = []
   let buffer: Queued[] = []
   let timer: ReturnType<typeof setTimeout> | undefined
   let last = 0
 
-  const flush = () => {
+  function flush() {
     if (timer) clearTimeout(timer)
     timer = undefined
 
@@ -157,63 +160,132 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     buffer.length = 0
   }
 
-  const schedule = () => {
+  function schedule() {
     if (timer) return
     const elapsed = Date.now() - last
     timer = setTimeout(flush, Math.max(0, FLUSH_FRAME_MS - elapsed))
   }
 
-  let streamErrorLogged = false
-  const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+  function publish(event: OpenCodeEvent) {
+    const directory = event.location?.directory ?? "global"
+    if (enqueueServerEvent(queue, { directory, payload: adaptServerEvent(event) })) schedule()
+  }
+
+  function wait(delay: number, signal: AbortSignal) {
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(done, delay)
+      signal.addEventListener("abort", done, { once: true })
+      function done() {
+        clearTimeout(timer)
+        signal.removeEventListener("abort", done)
+        resolve()
+      }
+    })
+  }
   let attempt: AbortController | undefined
   let run: Promise<void> | undefined
   let started = false
   let generation = 0
+  const [connection, setConnection] = createStore<{
+    status: ServerConnectionStatus
+    attempt: number
+    error?: string
+  }>({ status: "connecting", attempt: 0 })
 
-  const start = () => {
+  async function connect(signal: AbortSignal): Promise<{ error: unknown; connectedAt: number | undefined }> {
+    let connectedAt: number | undefined
+
+    // Bound the initial handshake and tie this request to the stream lifetime.
+    const request = new AbortController()
+    const cancel = () => request.abort(signal.reason)
+    const timeout = setTimeout(() => request.abort(new Error("Timed out connecting to server")), CONNECT_TIMEOUT_MS)
+    signal.addEventListener("abort", cancel, { once: true })
+
+    try {
+      // Open the event stream and validate its initial handshake.
+      const iterator = eventApi.event.subscribe({ signal: request.signal })[Symbol.asyncIterator]()
+      const first = await iterator.next()
+
+      if (signal.aborted) return { error: undefined, connectedAt }
+      if (first.done) {
+        const error =
+          request.signal.reason instanceof Error ? request.signal.reason : new Error("Event stream disconnected")
+        return { error, connectedAt }
+      }
+      if (first.value.type !== "server.connected")
+        return { error: new Error("Event stream did not start with server.connected"), connectedAt }
+
+      // Publish the connected state before forwarding live events.
+      clearTimeout(timeout)
+      publish(first.value)
+      connectedAt = Date.now()
+      setConnection({ status: "connected", attempt: 0, error: undefined })
+
+      // Forward events until the stream closes or this connection is cancelled.
+      let yielded = Date.now()
+      while (!signal.aborted) {
+        const event = await iterator.next()
+        if (signal.aborted) return { error: undefined, connectedAt }
+        if (event.done) return { error: new Error("Event stream disconnected"), connectedAt }
+        publish(event.value)
+        if (Date.now() - yielded < STREAM_YIELD_MS) continue
+        yielded = Date.now()
+        await wait(0, signal)
+      }
+      return { error: undefined, connectedAt }
+    } catch (error) {
+      return { error, connectedAt }
+    } finally {
+      request.abort()
+      clearTimeout(timeout)
+      signal.removeEventListener("abort", cancel)
+    }
+  }
+
+  async function runStream(active: number) {
+    let retries = 0
+    // oxlint-disable-next-line no-unmodified-loop-condition -- stop() changes the lifecycle flags and aborts the active request
+    while (!abort.signal.aborted && started && generation === active) {
+      setConnection({ status: retries === 0 ? "connecting" : "reconnecting", attempt: retries, error: undefined })
+      const controller = new AbortController()
+      attempt = controller
+      const onAbort = () => controller.abort()
+      abort.signal.addEventListener("abort", onAbort)
+      const result = await connect(controller.signal)
+      abort.signal.removeEventListener("abort", onAbort)
+
+      if (abort.signal.aborted || !started || generation !== active) {
+        if (attempt === controller) attempt = undefined
+        return
+      }
+      if (result.connectedAt !== undefined && Date.now() - result.connectedAt >= 1_000) retries = 0
+      retries += 1
+      const message =
+        result.error === undefined
+          ? undefined
+          : result.error instanceof Error
+            ? result.error.message
+            : String(result.error)
+      console.info("[global-sdk] event stream disconnected", {
+        url: server.http.url,
+        fetch: eventFetch ? "platform" : "webview",
+        attempt: retries,
+        error: message,
+      })
+      setConnection({ status: "reconnecting", attempt: retries, error: message })
+      await wait(RECONNECT_DELAY_MS, controller.signal)
+      if (attempt === controller) attempt = undefined
+    }
+  }
+
+  function start() {
     if (started) return run
     started = true
     const active = ++generation
     const previous = run
     const current = (async () => {
       if (previous) await previous
-      // oxlint-disable-next-line no-unmodified-loop-condition -- `started` is set to false by stop() which also aborts; both flags are checked to allow graceful exit
-      while (!abort.signal.aborted && started && generation === active) {
-        attempt = new AbortController()
-        const onAbort = () => {
-          attempt?.abort()
-        }
-        abort.signal.addEventListener("abort", onAbort)
-        try {
-          const events = eventApi.event.subscribe({ signal: attempt.signal })
-          let yielded = Date.now()
-          for await (const event of events) {
-            streamErrorLogged = false
-            const directory = event.location?.directory ?? "global"
-            const payload = adaptServerEvent(event)
-            if (enqueueServerEvent(queue, { directory, payload })) schedule()
-
-            if (Date.now() - yielded < STREAM_YIELD_MS) continue
-            yielded = Date.now()
-            await wait(0)
-          }
-        } catch (error) {
-          if (!isStreamClosed(error, attempt?.signal) && !streamErrorLogged) {
-            streamErrorLogged = true
-            console.error("[global-sdk] event stream failed", {
-              url: server.http.url,
-              fetch: eventFetch ? "platform" : "webview",
-              error,
-            })
-          }
-        } finally {
-          abort.signal.removeEventListener("abort", onAbort)
-          attempt = undefined
-        }
-
-        if (abort.signal.aborted || !started || generation !== active) return
-        await wait(RECONNECT_DELAY_MS)
-      }
+      await runStream(active)
     })().finally(() => {
       if (run !== current) return
       run = undefined
@@ -223,7 +295,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     return run
   }
 
-  const stop = () => {
+  function stop() {
     started = false
     generation++
     attempt?.abort()
@@ -232,12 +304,17 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   onMount(() => {
     makeEventListener(window, "pagehide", stop)
     makeEventListener(window, "pageshow", (event) => resumeStreamAfterPageShow(event, start))
+    void start()
   })
 
   onCleanup(() => {
     stop()
     abort.abort()
-    flush()
+    if (timer) clearTimeout(timer)
+    timer = undefined
+    queue = []
+    buffer = []
+    emitter.clear()
   })
 
   const api = createApiForServer({ server: server.http, fetch: platform.fetch })
@@ -247,10 +324,14 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     scope,
     url: server.http.url,
     api,
+    connection: {
+      status: () => connection.status,
+      attempt: () => connection.attempt,
+      error: () => connection.error,
+    },
     event: {
       on: emitter.on.bind(emitter),
       listen: emitter.listen.bind(emitter),
-      start,
     },
   }
 }
@@ -270,13 +351,13 @@ export const { use: useServerSDK, provider: ServerSDKProvider } = createSimpleCo
   name: "ServerSDK",
   // Returns an accessor so the resolved server can change reactively (e.g. a
   // /new-session draft retargeting its server) without re-instantiating the subtree.
-  init: (props: { server?: Accessor<ServerConnection.Any | undefined> }) => {
+  init: (props: { server?: ServerConnection.Any }) => {
     const global = useGlobal()
     const language = useLanguage()
     const server = useServer()
 
     return createMemo<ServerSDK>(() => {
-      const conn = props.server?.() ?? server.current
+      const conn = props.server ?? server.current
       if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
       return global.ensureServerCtx(conn).sdk
     })

@@ -148,7 +148,7 @@ export function ModelSelectorPopover(props: {
   const handleConnectProvider = () => {
     close("provider")
     void import("./dialog-connect-provider").then((x) => {
-      void dialog.show(() => <x.DialogConnectProvider directory={directory} />)
+      void dialog.show(() => <x.DialogConnectProvider directory={directory()} />)
     })
   }
   const language = useLanguage()
@@ -240,7 +240,7 @@ export function ModelSelectorPopoverV2(props: {
       trigger={props.trigger}
       models={controller.models}
       groups={controller.groups}
-      current={controller.current}
+      current={controller.current()}
       select={controller.select}
       onManage={() => {
         void import("./dialog-manage-models").then((module) => {
@@ -295,7 +295,7 @@ function ModelSelectorPopoverV2View(props: {
   trigger: ModelSelectorTrigger
   models: (search: string) => ModelItem[]
   groups: (models: ModelItem[]) => { category: string; items: ModelItem[] }[]
-  current: () => string | undefined
+  current: string | undefined
   select: (item: ModelItem) => void
   onManage: () => void
   onClose: () => void
@@ -310,7 +310,7 @@ function ModelSelectorPopoverV2View(props: {
   const groups = createMemo(() => props.groups(models()))
   const keys = () => [...models().map(modelKey), manageKey]
   const initialActive = () => {
-    const selected = props.current()
+    const selected = props.current
     const options = keys()
     if (selected && options.includes(selected)) return selected
     return options[0] ?? ""
@@ -453,7 +453,7 @@ function ModelSelectorPopoverV2View(props: {
                       <MenuV2.GroupLabel class="gap-2 px-3">
                         <span class="min-w-0 truncate">{group.items[0].provider.name}</span>
                       </MenuV2.GroupLabel>
-                      <MenuV2.RadioGroup value={props.current()}>
+                      <MenuV2.RadioGroup value={props.current}>
                         <For each={group.items}>
                           {(item) => (
                             <TooltipV2
@@ -473,7 +473,7 @@ function ModelSelectorPopoverV2View(props: {
                               <MenuV2.RadioItem
                                 value={modelKey(item)}
                                 data-option-key={modelKey(item)}
-                                data-selected-model={props.current() === modelKey(item) ? true : undefined}
+                                data-selected-model={props.current === modelKey(item) ? true : undefined}
                                 class="scroll-my-6 w-full"
                                 classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
                                 onMouseEnter={() => {
@@ -529,7 +529,7 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
 
   const provider = () => {
     void import("./dialog-connect-provider").then((x) => {
-      void dialog.show(() => <x.DialogConnectProvider directory={directory} />)
+      void dialog.show(() => <x.DialogConnectProvider directory={directory()} />)
     })
   }
 

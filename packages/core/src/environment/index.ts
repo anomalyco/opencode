@@ -1,6 +1,6 @@
-export * as Environment from "./index"
+export * as Environment from "./index.js"
 
-export { type Driver } from "./driver"
+export { type Driver } from "./driver.js"
 export {
   type DirEntry,
   Failed,
@@ -11,15 +11,15 @@ export {
   NotFound,
   typeFollowing,
   WrongKind,
-} from "./files"
-export { execDefaults } from "./exec-defaults"
-export { makeLocalDriver } from "./local"
-export { makeMemoryDriver, type MemoryDriver } from "./memory"
-export { type Interface, node, Service } from "./environment"
+} from "./files.js"
+export { execDefaults } from "./exec-defaults.js"
+export { makeLocalDriver } from "./local.js"
+export { makeMemoryDriver, type MemoryDriver } from "./memory.js"
+export { type Interface, node, Service } from "./environment.js"
 
-import type { Driver } from "./driver"
-import { execDefaults } from "./exec-defaults"
-import type { Files } from "./files"
+import type { Driver } from "./driver.js"
+import { execDefaults } from "./exec-defaults.js"
+import type { Files } from "./files.js"
 
 export const makeFiles = (driver: Driver): Files => ({
   ...execDefaults(driver.spawner),

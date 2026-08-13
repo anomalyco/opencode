@@ -1,5 +1,5 @@
 import { Plugin } from "@opencode-ai/plugin/effect"
-import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
+import type { IntegrationMethod, IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
@@ -15,7 +15,6 @@ import { Effect, Stream } from "effect"
 type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
   readonly session?: Partial<Plugin.Context["session"]>
 }
-
 export function host(overrides: Overrides = {}): Plugin.Context {
   return {
     app: overrides.app ?? { name: "test", version: "test", channel: "test" },
@@ -278,7 +277,7 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
           update: (id, update) => draft.update(Integration.ID.make(id), update),
           remove: (id) => draft.remove(Integration.ID.make(id)),
           method: {
-            list: (id) => draft.method.list(Integration.ID.make(id)).map(method),
+            list: (id) => draft.method.list(Integration.ID.make(id)),
             update: (input) => {
               if ("authorize" in input) {
                 const methodID = Integration.MethodID.make(input.method.id)
@@ -286,8 +285,8 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                 draft.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: { ...input.method, id: methodID },
-                  authorize: (inputs) =>
-                    input.authorize(inputs).pipe(
+                  authorize: (answer) =>
+                    input.authorize(answer).pipe(
                       Effect.map((authorization) => {
                         if (authorization.mode === "auto") {
                           return {
@@ -336,7 +335,7 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
               if (input.method.type === "env") {
                 draft.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
-                  method: { ...input.method, names: [...input.method.names] },
+                  method: input.method,
                 })
                 return
               }
@@ -346,7 +345,6 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                   method: {
                     ...input.method,
                     id: Integration.MethodID.make(input.method.id),
-                    command: [...input.method.command],
                   },
                 })
                 return
@@ -401,35 +399,11 @@ function oauthCredential(value: Credential.OAuth) {
   return Credential.OAuth.make({ ...value, methodID: Integration.MethodID.make(value.methodID) })
 }
 
-function method(value: Integration.Method) {
-  if (value.type === "env") return { type: value.type, names: [...value.names] }
-  if (value.type === "key") return { type: value.type, label: value.label }
-  if (value.type === "command") return { ...value, command: [...value.command] }
-  return {
-    type: value.type,
-    id: value.id,
-    label: value.label,
-    prompts: value.prompts?.map((prompt) => {
-      if (prompt.type === "text") return { ...prompt }
-      return { ...prompt, options: prompt.options.map((option) => ({ ...option })) }
-    }),
+function internalMethod(value: IntegrationMethod): Integration.Method {
+  if (value.type === "oauth" || value.type === "command") {
+    return { ...value, id: Integration.MethodID.make(value.id) }
   }
-}
-
-function internalMethod(value: IntegrationMethodRegistration["method"]): Integration.Method {
-  if (value.type === "env") return value
-  if (value.type === "key") return value
-  if (value.type === "command") {
-    return {
-      ...value,
-      id: Integration.MethodID.make(value.id),
-      command: [...value.command],
-    }
-  }
-  return {
-    ...value,
-    id: Integration.MethodID.make(value.id),
-  }
+  return value
 }
 
 function agentInfo(value: Agent.Info) {

@@ -1,16 +1,16 @@
 import { type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode-ai/ai"
 import { Effect } from "effect"
-import { Bus } from "../../bus"
-import { Model } from "../../model"
-import { SessionEvent } from "../event"
-import { SessionMessage } from "../message"
-import { SessionSchema } from "../schema"
+import { Bus } from "../../bus.js"
+import { Model } from "../../model.js"
+import { SessionEvent } from "../event.js"
+import { SessionMessage } from "../message.js"
+import { SessionSchema } from "../schema.js"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Money } from "@opencode-ai/schema/money"
-import { Agent } from "../../agent"
-import { Snapshot } from "../../snapshot"
-import { RelativePath } from "../../schema"
-import { SessionUsage } from "../usage"
+import { Agent } from "../../agent.js"
+import { Snapshot } from "../../snapshot.js"
+import { RelativePath } from "../../schema.js"
+import { SessionUsage } from "../usage.js"
 import { Tool } from "@opencode-ai/schema/tool"
 
 type Input = {
@@ -92,8 +92,11 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       progress?: Tool.Metadata
     }
   >()
-  const failureSnapshot = (tool: { readonly progress?: Tool.Metadata }) =>
-    tool.progress === undefined ? {} : { metadata: tool.progress }
+  const failureSnapshot = (tool: { readonly progress?: Tool.Metadata }, metadata?: Tool.Metadata) => {
+    if (tool.progress === undefined) return metadata === undefined ? {} : { metadata }
+    if (metadata === undefined) return { metadata: tool.progress }
+    return { metadata: { ...tool.progress, ...metadata } }
+  }
   const assistantMessageID = input.assistantMessageID
   let stepStarted = false
   let stepFailed = false
@@ -272,7 +275,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     yield* flushFragments()
   })
 
-  const failTool = Effect.fnUntraced(function* (id: string, error: SessionError.Error) {
+  const failTool = Effect.fnUntraced(function* (id: string, error: SessionError.Error, metadata?: Tool.Metadata) {
     const tool = tools.get(id)
     if (!tool || tool.settled) return false
     tool.settled = true
@@ -281,7 +284,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       assistantMessageID: tool.assistantMessageID,
       id,
       error,
-      ...failureSnapshot(tool),
+      ...failureSnapshot(tool, metadata),
       executed: tool.providerExecuted,
     })
     return true

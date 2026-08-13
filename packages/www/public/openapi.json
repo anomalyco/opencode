@@ -1670,7 +1670,32 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Location.Ref"
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string"
+                  },
+                  "workspaceID": {
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "pattern": "^wrk"
+                      }
+                    ]
+                  },
+                  "delivery": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["directory"],
+                "additionalProperties": false
               }
             }
           },
@@ -1707,7 +1732,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/SessionPending.User"
+                      "$ref": "#/components/schemas/Session.Inbox.User"
                     }
                   },
                   "required": ["data"],
@@ -1821,8 +1846,7 @@
                   "delivery": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "enum": ["steer", "queue"]
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
                       },
                       {
                         "type": "null"
@@ -1878,7 +1902,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/SessionPending.User"
+                      "$ref": "#/components/schemas/Session.Inbox.User"
                     }
                   },
                   "required": ["data"],
@@ -2032,8 +2056,7 @@
                   "delivery": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "enum": ["steer", "queue"]
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
                       },
                       {
                         "type": "null"
@@ -2200,7 +2223,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/SessionPending.Synthetic"
+                      "$ref": "#/components/schemas/Session.Inbox.Synthetic"
                     }
                   },
                   "required": ["data"],
@@ -2299,8 +2322,7 @@
                   "delivery": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "enum": ["steer", "queue"]
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
                       },
                       {
                         "type": "null"
@@ -2454,7 +2476,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/SessionPending.Compaction"
+                      "$ref": "#/components/schemas/Session.Inbox.Compaction"
                     }
                   },
                   "required": ["data"],
@@ -2528,6 +2550,16 @@
                             "pattern": "^msg_"
                           }
                         ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "delivery": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Inbox.Delivery"
                       },
                       {
                         "type": "null"
@@ -3000,10 +3032,10 @@
         "summary": "Get session context"
       }
     },
-    "/api/session/{sessionID}/pending": {
+    "/api/session/{sessionID}/inbox": {
       "get": {
         "tags": ["session"],
-        "operationId": "v2.session.pending.list",
+        "operationId": "v2.session.inbox.list",
         "parameters": [
           {
             "name": "sessionID",
@@ -3031,7 +3063,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/SessionPending.Info"
+                        "$ref": "#/components/schemas/Session.Inbox.Info"
                       }
                     }
                   },
@@ -3072,14 +3104,14 @@
             }
           }
         },
-        "description": "List durable admitted session work not yet visible in projected history, ordered by admission. Includes unpromoted user and synthetic inputs and unhandled compaction barriers. The runner owns consumption; items disappear once promoted or handled.",
-        "summary": "List pending session work"
+        "description": "List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items.",
+        "summary": "List session inbox"
       }
     },
-    "/api/session/{sessionID}/pending/{inputID}": {
+    "/api/session/{sessionID}/inbox/{inboxID}": {
       "delete": {
         "tags": ["session"],
-        "operationId": "v2.session.pending.cancel",
+        "operationId": "v2.session.inbox.cancel",
         "parameters": [
           {
             "name": "sessionID",
@@ -3095,7 +3127,7 @@
             "required": true
           },
           {
-            "name": "inputID",
+            "name": "inboxID",
             "in": "path",
             "schema": {
               "type": "string",
@@ -3154,14 +3186,14 @@
             }
           }
         },
-        "description": "Cancel an input that has not yet been promoted into session history.",
-        "summary": "Cancel pending input"
+        "description": "Cancel an inbox item that has not yet been delivered.",
+        "summary": "Cancel inbox input"
       }
     },
-    "/api/session/{sessionID}/pending/{inputID}/steer": {
+    "/api/session/{sessionID}/inbox/{inboxID}/steer": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.pending.steer",
+        "operationId": "v2.session.inbox.steer",
         "parameters": [
           {
             "name": "sessionID",
@@ -3177,7 +3209,7 @@
             "required": true
           },
           {
-            "name": "inputID",
+            "name": "inboxID",
             "in": "path",
             "schema": {
               "type": "string",
@@ -3236,14 +3268,14 @@
             }
           }
         },
-        "description": "Change a queued input to steer delivery and wake session execution.",
-        "summary": "Steer queued input"
+        "description": "Change a queued inbox item to steer delivery and wake session execution.",
+        "summary": "Steer queued item"
       }
     },
-    "/api/session/{sessionID}/pending/{inputID}/queue": {
+    "/api/session/{sessionID}/inbox/{inboxID}/queue": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.pending.queue",
+        "operationId": "v2.session.inbox.queue",
         "parameters": [
           {
             "name": "sessionID",
@@ -3259,7 +3291,7 @@
             "required": true
           },
           {
-            "name": "inputID",
+            "name": "inboxID",
             "in": "path",
             "schema": {
               "type": "string",
@@ -3318,8 +3350,8 @@
             }
           }
         },
-        "description": "Change a pending steer to queued delivery.",
-        "summary": "Queue pending steer"
+        "description": "Change a steered inbox item to queued delivery.",
+        "summary": "Queue steered item"
       }
     },
     "/api/session/{sessionID}/instructions/entries": {
@@ -3871,6 +3903,22 @@
               ]
             },
             "required": true
+          },
+          {
+            "name": "continue",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
           }
         ],
         "security": [],
@@ -3916,7 +3964,7 @@
             }
           }
         },
-        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op.",
+        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes if durable inbox work remains after interruption.",
         "summary": "Interrupt session execution"
       }
     },
@@ -5183,6 +5231,16 @@
                   "key": {
                     "type": "string"
                   },
+                  "answer": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Form.Answer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "label": {
                     "anyOf": [
                       {
@@ -5318,11 +5376,15 @@
                   "methodID": {
                     "type": "string"
                   },
-                  "inputs": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    }
+                  "answer": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Form.Answer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "label": {
                     "anyOf": [
@@ -5335,7 +5397,7 @@
                     ]
                   }
                 },
-                "required": ["methodID", "inputs"],
+                "required": ["methodID"],
                 "additionalProperties": false
               }
             }
@@ -10916,7 +10978,7 @@
         "summary": "List references"
       }
     },
-    "/experimental/project/{projectID}/copy": {
+    "/api/experimental/project/{projectID}/copy": {
       "post": {
         "tags": ["projectCopy"],
         "operationId": "v2.projectCopy.create",
@@ -11142,7 +11204,7 @@
         }
       }
     },
-    "/experimental/project/{projectID}/copy/refresh": {
+    "/api/experimental/project/{projectID}/copy/refresh": {
       "post": {
         "tags": ["projectCopy"],
         "operationId": "v2.projectCopy.refresh",
@@ -12116,7 +12178,7 @@
             "type": "integer",
             "allOf": [
               {
-                "exclusiveMinimum": 0
+                "minimum": 0
               }
             ]
           }
@@ -12719,6 +12781,9 @@
           },
           "agent": {
             "type": "string"
+          },
+          "previous": {
+            "type": "string"
           }
         },
         "required": ["id", "time", "type", "agent"],
@@ -12760,6 +12825,63 @@
           }
         },
         "required": ["id", "time", "type", "model"],
+        "additionalProperties": false
+      },
+      "Session.Message.LocationSwitched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^msg_"
+              }
+            ]
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "type": {
+            "type": "string",
+            "enum": ["location-switched"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "subpath": {
+            "type": "string"
+          },
+          "previous": {
+            "type": "object",
+            "properties": {
+              "location": {
+                "$ref": "#/components/schemas/Location.Ref"
+              },
+              "projectID": {
+                "type": "string"
+              },
+              "subpath": {
+                "type": "string"
+              }
+            },
+            "required": ["location"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "time", "type", "location"],
         "additionalProperties": false
       },
       "Prompt.Base64": {
@@ -12992,6 +13114,9 @@
             "enum": ["system"]
           },
           "text": {
+            "type": "string"
+          },
+          "description": {
             "type": "string"
           }
         },
@@ -13687,6 +13812,9 @@
             "$ref": "#/components/schemas/Session.Message.ModelSelected"
           },
           {
+            "$ref": "#/components/schemas/Session.Message.LocationSwitched"
+          },
+          {
             "$ref": "#/components/schemas/Session.Message.User"
           },
           {
@@ -13855,6 +13983,10 @@
         "required": ["_tag", "sessionID", "messageID", "message"],
         "additionalProperties": false
       },
+      "Session.Inbox.Delivery": {
+        "type": "string",
+        "enum": ["steer", "queue"]
+      },
       "PromptInput.FileAttachment": {
         "type": "object",
         "properties": {
@@ -13887,7 +14019,7 @@
         "required": ["id"],
         "additionalProperties": false
       },
-      "SessionPending.UserData": {
+      "Session.Inbox.UserPayload": {
         "type": "object",
         "properties": {
           "text": {
@@ -13918,7 +14050,7 @@
         "required": ["text"],
         "additionalProperties": false
       },
-      "SessionPending.User": {
+      "Session.Inbox.User": {
         "type": "object",
         "properties": {
           "id": {
@@ -13944,15 +14076,14 @@
             "type": "string",
             "enum": ["user"]
           },
-          "data": {
-            "$ref": "#/components/schemas/SessionPending.UserData"
+          "payload": {
+            "$ref": "#/components/schemas/Session.Inbox.UserPayload"
           },
           "delivery": {
-            "type": "string",
-            "enum": ["steer", "queue"]
+            "$ref": "#/components/schemas/Session.Inbox.Delivery"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type", "data", "delivery"],
+        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
         "additionalProperties": false
       },
       "CommandNotFoundError": {
@@ -14006,7 +14137,7 @@
         "required": ["_tag", "skill", "message"],
         "additionalProperties": false
       },
-      "SessionPending.SyntheticData": {
+      "Session.Inbox.SyntheticPayload": {
         "type": "object",
         "properties": {
           "text": {
@@ -14022,7 +14153,7 @@
         "required": ["text"],
         "additionalProperties": false
       },
-      "SessionPending.Synthetic": {
+      "Session.Inbox.Synthetic": {
         "type": "object",
         "properties": {
           "id": {
@@ -14048,18 +14179,27 @@
             "type": "string",
             "enum": ["synthetic"]
           },
-          "data": {
-            "$ref": "#/components/schemas/SessionPending.SyntheticData"
+          "payload": {
+            "$ref": "#/components/schemas/Session.Inbox.SyntheticPayload"
           },
           "delivery": {
-            "type": "string",
-            "enum": ["steer", "queue"]
+            "$ref": "#/components/schemas/Session.Inbox.Delivery"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type", "data", "delivery"],
+        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
         "additionalProperties": false
       },
-      "SessionPending.Compaction": {
+      "Session.Inbox.CompactionPayload": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "array"
+          }
+        ]
+      },
+      "Session.Inbox.Compaction": {
         "type": "object",
         "properties": {
           "id": {
@@ -14084,9 +14224,15 @@
           "type": {
             "type": "string",
             "enum": ["compaction"]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Session.Inbox.CompactionPayload"
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/Session.Inbox.Delivery"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type"],
+        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
         "additionalProperties": false
       },
       "ServiceUnavailableError": {
@@ -14130,16 +14276,71 @@
         "required": ["_tag", "sessionID", "message"],
         "additionalProperties": false
       },
-      "SessionPending.Info": {
+      "Session.Inbox.MovePayload": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "subpath": {
+            "type": "string"
+          }
+        },
+        "required": ["location", "projectID"],
+        "additionalProperties": false
+      },
+      "Session.Inbox.Move": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^msg_"
+              }
+            ]
+          },
+          "sessionID": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^ses"
+              }
+            ]
+          },
+          "timeCreated": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["move"]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Session.Inbox.MovePayload"
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/Session.Inbox.Delivery"
+          }
+        },
+        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
+        "additionalProperties": false
+      },
+      "Session.Inbox.Info": {
         "anyOf": [
           {
-            "$ref": "#/components/schemas/SessionPending.User"
+            "$ref": "#/components/schemas/Session.Inbox.User"
           },
           {
-            "$ref": "#/components/schemas/SessionPending.Synthetic"
+            "$ref": "#/components/schemas/Session.Inbox.Synthetic"
           },
           {
-            "$ref": "#/components/schemas/SessionPending.Compaction"
+            "$ref": "#/components/schemas/Session.Inbox.Compaction"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Inbox.Move"
           }
         ]
       },
@@ -14356,6 +14557,9 @@
               },
               "agent": {
                 "type": "string"
+              },
+              "previous": {
+                "type": "string"
               }
             },
             "required": ["sessionID", "agent"],
@@ -14423,6 +14627,9 @@
                 ]
               },
               "model": {
+                "$ref": "#/components/schemas/Model.Ref"
+              },
+              "previous": {
                 "$ref": "#/components/schemas/Model.Ref"
               }
             },
@@ -14500,7 +14707,7 @@
                 "type": "string"
               }
             },
-            "required": ["sessionID", "location"],
+            "required": ["sessionID", "location", "projectID"],
             "additionalProperties": false
           }
         },
@@ -14729,7 +14936,7 @@
         "required": ["id", "created", "type", "durable", "data"],
         "additionalProperties": false
       },
-      "session.input.promoted": {
+      "session.inbox.delivered": {
         "type": "object",
         "properties": {
           "id": {
@@ -14748,7 +14955,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["session.input.promoted"]
+            "enum": ["session.inbox.delivered"]
           },
           "durable": {
             "type": "object",
@@ -14786,7 +14993,7 @@
                   }
                 ]
               },
-              "inputID": {
+              "inboxID": {
                 "type": "string",
                 "allOf": [
                   {
@@ -14795,14 +15002,14 @@
                 ]
               }
             },
-            "required": ["sessionID", "inputID"],
+            "required": ["sessionID", "inboxID"],
             "additionalProperties": false
           }
         },
         "required": ["id", "created", "type", "durable", "data"],
         "additionalProperties": false
       },
-      "SessionPending.UserData1": {
+      "Session.Inbox.UserPayload1": {
         "type": "object",
         "properties": {
           "text": {
@@ -14833,25 +15040,7 @@
         "required": ["text"],
         "additionalProperties": false
       },
-      "SessionPending.UserMessage": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["user"]
-          },
-          "data": {
-            "$ref": "#/components/schemas/SessionPending.UserData1"
-          },
-          "delivery": {
-            "type": "string",
-            "enum": ["steer", "queue"]
-          }
-        },
-        "required": ["type", "data", "delivery"],
-        "additionalProperties": false
-      },
-      "SessionPending.SyntheticData1": {
+      "Session.Inbox.SyntheticPayload1": {
         "type": "object",
         "properties": {
           "text": {
@@ -14867,35 +15056,79 @@
         "required": ["text"],
         "additionalProperties": false
       },
-      "SessionPending.SyntheticMessage": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["synthetic"]
-          },
-          "data": {
-            "$ref": "#/components/schemas/SessionPending.SyntheticData1"
-          },
-          "delivery": {
-            "type": "string",
-            "enum": ["steer", "queue"]
-          }
-        },
-        "required": ["type", "data", "delivery"],
-        "additionalProperties": false
-      },
-      "SessionPending.Message": {
+      "Session.Inbox.Item": {
         "anyOf": [
           {
-            "$ref": "#/components/schemas/SessionPending.UserMessage"
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["user"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/Session.Inbox.UserPayload1"
+              },
+              "delivery": {
+                "$ref": "#/components/schemas/Session.Inbox.Delivery"
+              }
+            },
+            "required": ["type", "payload", "delivery"],
+            "additionalProperties": false
           },
           {
-            "$ref": "#/components/schemas/SessionPending.SyntheticMessage"
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["synthetic"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/Session.Inbox.SyntheticPayload1"
+              },
+              "delivery": {
+                "$ref": "#/components/schemas/Session.Inbox.Delivery"
+              }
+            },
+            "required": ["type", "payload", "delivery"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["compaction"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/Session.Inbox.CompactionPayload"
+              },
+              "delivery": {
+                "$ref": "#/components/schemas/Session.Inbox.Delivery"
+              }
+            },
+            "required": ["type", "payload", "delivery"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["move"]
+              },
+              "payload": {
+                "$ref": "#/components/schemas/Session.Inbox.MovePayload"
+              },
+              "delivery": {
+                "$ref": "#/components/schemas/Session.Inbox.Delivery"
+              }
+            },
+            "required": ["type", "payload", "delivery"],
+            "additionalProperties": false
           }
         ]
       },
-      "session.input.admitted": {
+      "session.inbox.enqueued": {
         "type": "object",
         "properties": {
           "id": {
@@ -14914,7 +15147,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["session.input.admitted"]
+            "enum": ["session.inbox.enqueued"]
           },
           "durable": {
             "type": "object",
@@ -14952,7 +15185,7 @@
                   }
                 ]
               },
-              "inputID": {
+              "inboxID": {
                 "type": "string",
                 "allOf": [
                   {
@@ -14960,18 +15193,18 @@
                   }
                 ]
               },
-              "input": {
-                "$ref": "#/components/schemas/SessionPending.Message"
+              "item": {
+                "$ref": "#/components/schemas/Session.Inbox.Item"
               }
             },
-            "required": ["sessionID", "inputID", "input"],
+            "required": ["sessionID", "inboxID", "item"],
             "additionalProperties": false
           }
         },
         "required": ["id", "created", "type", "durable", "data"],
         "additionalProperties": false
       },
-      "session.input.cancelled": {
+      "session.inbox.cancelled": {
         "type": "object",
         "properties": {
           "id": {
@@ -14990,7 +15223,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["session.input.cancelled"]
+            "enum": ["session.inbox.cancelled"]
           },
           "durable": {
             "type": "object",
@@ -15028,7 +15261,7 @@
                   }
                 ]
               },
-              "inputID": {
+              "inboxID": {
                 "type": "string",
                 "allOf": [
                   {
@@ -15037,14 +15270,14 @@
                 ]
               }
             },
-            "required": ["sessionID", "inputID"],
+            "required": ["sessionID", "inboxID"],
             "additionalProperties": false
           }
         },
         "required": ["id", "created", "type", "durable", "data"],
         "additionalProperties": false
       },
-      "session.input.steered": {
+      "session.inbox.delivery.changed": {
         "type": "object",
         "properties": {
           "id": {
@@ -15063,7 +15296,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["session.input.steered"]
+            "enum": ["session.inbox.delivery.changed"]
           },
           "durable": {
             "type": "object",
@@ -15101,89 +15334,19 @@
                   }
                 ]
               },
-              "inputID": {
+              "inboxID": {
                 "type": "string",
                 "allOf": [
                   {
                     "pattern": "^msg_"
                   }
                 ]
+              },
+              "delivery": {
+                "$ref": "#/components/schemas/Session.Inbox.Delivery"
               }
             },
-            "required": ["sessionID", "inputID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "created", "type", "durable", "data"],
-        "additionalProperties": false
-      },
-      "session.input.queued": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^evt_"
-              }
-            ]
-          },
-          "created": {
-            "type": "number"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.input.queued"]
-          },
-          "durable": {
-            "type": "object",
-            "properties": {
-              "aggregateID": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 0
-                  }
-                ]
-              },
-              "version": {
-                "type": "number",
-                "enum": [1]
-              }
-            },
-            "required": ["aggregateID", "seq", "version"],
-            "additionalProperties": false
-          },
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^ses"
-                  }
-                ]
-              },
-              "inputID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^msg_"
-                  }
-                ]
-              }
-            },
-            "required": ["sessionID", "inputID"],
+            "required": ["sessionID", "inboxID", "delivery"],
             "additionalProperties": false
           }
         },
@@ -17106,79 +17269,6 @@
         "required": ["id", "created", "type", "durable", "data"],
         "additionalProperties": false
       },
-      "session.compaction.admitted": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^evt_"
-              }
-            ]
-          },
-          "created": {
-            "type": "number"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.compaction.admitted"]
-          },
-          "durable": {
-            "type": "object",
-            "properties": {
-              "aggregateID": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "integer",
-                "allOf": [
-                  {
-                    "minimum": 0
-                  }
-                ]
-              },
-              "version": {
-                "type": "number",
-                "enum": [1]
-              }
-            },
-            "required": ["aggregateID", "seq", "version"],
-            "additionalProperties": false
-          },
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^ses"
-                  }
-                ]
-              },
-              "inputID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^msg_"
-                  }
-                ]
-              }
-            },
-            "required": ["sessionID", "inputID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "created", "type", "durable", "data"],
-        "additionalProperties": false
-      },
       "session.compaction.started": {
         "type": "object",
         "properties": {
@@ -17719,19 +17809,16 @@
             "$ref": "#/components/schemas/session.forked"
           },
           {
-            "$ref": "#/components/schemas/session.input.promoted"
+            "$ref": "#/components/schemas/session.inbox.delivered"
           },
           {
-            "$ref": "#/components/schemas/session.input.admitted"
+            "$ref": "#/components/schemas/session.inbox.enqueued"
           },
           {
-            "$ref": "#/components/schemas/session.input.cancelled"
+            "$ref": "#/components/schemas/session.inbox.cancelled"
           },
           {
-            "$ref": "#/components/schemas/session.input.steered"
-          },
-          {
-            "$ref": "#/components/schemas/session.input.queued"
+            "$ref": "#/components/schemas/session.inbox.delivery.changed"
           },
           {
             "$ref": "#/components/schemas/session.execution.started"
@@ -17798,9 +17885,6 @@
           },
           {
             "$ref": "#/components/schemas/session.retry.scheduled"
-          },
-          {
-            "$ref": "#/components/schemas/session.compaction.admitted"
           },
           {
             "$ref": "#/components/schemas/session.compaction.started"
@@ -18189,7 +18273,7 @@
         "required": ["_tag", "providerID", "message"],
         "additionalProperties": false
       },
-      "Integration.When": {
+      "Form.When": {
         "type": "object",
         "properties": {
           "key": {
@@ -18200,73 +18284,497 @@
             "enum": ["eq", "neq"]
           },
           "value": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              {
+                "type": "boolean"
+              }
+            ]
           }
         },
         "required": ["key", "op", "value"],
         "additionalProperties": false
       },
-      "Integration.TextPrompt": {
+      "Form.Option": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["text"]
+          "value": {
+            "type": "string"
           },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": ["value", "label"],
+        "additionalProperties": false
+      },
+      "Form.StringField": {
+        "type": "object",
+        "properties": {
           "key": {
             "type": "string"
           },
-          "message": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "when": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Form.When"
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": ["string"]
+          },
+          "format": {
+            "type": "string",
+            "enum": ["email", "uri", "date", "date-time"]
+          },
+          "minLength": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "maxLength": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "pattern": {
             "type": "string"
           },
           "placeholder": {
             "type": "string"
           },
-          "when": {
-            "$ref": "#/components/schemas/Integration.When"
-          }
-        },
-        "required": ["type", "key", "message"],
-        "additionalProperties": false
-      },
-      "Integration.SelectPrompt": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["select"]
-          },
-          "key": {
-            "type": "string"
-          },
-          "message": {
+          "default": {
             "type": "string"
           },
           "options": {
             "type": "array",
             "items": {
-              "type": "object",
-              "properties": {
-                "label": {
-                  "type": "string"
-                },
-                "value": {
-                  "type": "string"
-                },
-                "hint": {
-                  "type": "string"
-                }
-              },
-              "required": ["label", "value"],
-              "additionalProperties": false
+              "$ref": "#/components/schemas/Form.Option"
             }
           },
-          "when": {
-            "$ref": "#/components/schemas/Integration.When"
+          "custom": {
+            "type": "boolean"
           }
         },
-        "required": ["type", "key", "message", "options"],
+        "required": ["key", "type"],
         "additionalProperties": false
+      },
+      "Form.NumberField": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "when": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Form.When"
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": ["number"]
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  }
+                ]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  }
+                ]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "default": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  }
+                ]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          }
+        },
+        "required": ["key", "type"],
+        "additionalProperties": false
+      },
+      "Form.IntegerField": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "when": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Form.When"
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": ["integer"]
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  }
+                ]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  }
+                ]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "default": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  }
+                ]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          }
+        },
+        "required": ["key", "type"],
+        "additionalProperties": false
+      },
+      "Form.BooleanField": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "when": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Form.When"
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": ["boolean"]
+          },
+          "default": {
+            "type": "boolean"
+          }
+        },
+        "required": ["key", "type"],
+        "additionalProperties": false
+      },
+      "Form.MultiselectField": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "when": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Form.When"
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": ["multiselect"]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Form.Option"
+            }
+          },
+          "minItems": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "maxItems": {
+            "type": "integer",
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ]
+          },
+          "custom": {
+            "type": "boolean"
+          },
+          "default": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["key", "type", "options"],
+        "additionalProperties": false
+      },
+      "Form.ExternalField": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["external"]
+          },
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": ["key", "type", "url"],
+        "additionalProperties": false
+      },
+      "Form.Field": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Form.StringField"
+          },
+          {
+            "$ref": "#/components/schemas/Form.NumberField"
+          },
+          {
+            "$ref": "#/components/schemas/Form.IntegerField"
+          },
+          {
+            "$ref": "#/components/schemas/Form.BooleanField"
+          },
+          {
+            "$ref": "#/components/schemas/Form.MultiselectField"
+          },
+          {
+            "$ref": "#/components/schemas/Form.ExternalField"
+          }
+        ]
+      },
+      "Form.Fields": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "$ref": "#/components/schemas/Form.Field"
+          }
+        ],
+        "minItems": 1,
+        "items": {
+          "$ref": "#/components/schemas/Form.Field"
+        }
       },
       "Integration.OAuthMethod": {
         "type": "object",
@@ -18281,18 +18789,8 @@
           "label": {
             "type": "string"
           },
-          "prompts": {
-            "type": "array",
-            "items": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/Integration.TextPrompt"
-                },
-                {
-                  "$ref": "#/components/schemas/Integration.SelectPrompt"
-                }
-              ]
-            }
+          "form": {
+            "$ref": "#/components/schemas/Form.Fields"
           }
         },
         "required": ["id", "type", "label"],
@@ -18330,6 +18828,9 @@
           },
           "label": {
             "type": "string"
+          },
+          "form": {
+            "$ref": "#/components/schemas/Form.Fields"
           }
         },
         "required": ["type"],
@@ -18433,6 +18934,55 @@
         },
         "required": ["id", "name", "methods", "connections"],
         "additionalProperties": false
+      },
+      "Form.Value": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  }
+                ]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "Form.Answer": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/Form.Value"
+        }
       },
       "Integration.Attempt": {
         "type": "object",
@@ -19637,509 +20187,6 @@
       "Form.Metadata": {
         "type": "object"
       },
-      "Form.When": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string"
-          },
-          "op": {
-            "type": "string",
-            "enum": ["eq", "neq"]
-          },
-          "value": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["NaN"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity"]
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["-Infinity"]
-                      }
-                    ]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              {
-                "type": "boolean"
-              }
-            ]
-          }
-        },
-        "required": ["key", "op", "value"],
-        "additionalProperties": false
-      },
-      "Form.Option": {
-        "type": "object",
-        "properties": {
-          "value": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          }
-        },
-        "required": ["value", "label"],
-        "additionalProperties": false
-      },
-      "Form.StringField": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "required": {
-            "type": "boolean"
-          },
-          "when": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Form.When"
-            }
-          },
-          "type": {
-            "type": "string",
-            "enum": ["string"]
-          },
-          "format": {
-            "type": "string",
-            "enum": ["email", "uri", "date", "date-time"]
-          },
-          "minLength": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
-          },
-          "maxLength": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
-          },
-          "pattern": {
-            "type": "string"
-          },
-          "placeholder": {
-            "type": "string"
-          },
-          "default": {
-            "type": "string"
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Form.Option"
-            }
-          },
-          "custom": {
-            "type": "boolean"
-          }
-        },
-        "required": ["key", "type"],
-        "additionalProperties": false
-      },
-      "Form.NumberField": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "required": {
-            "type": "boolean"
-          },
-          "when": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Form.When"
-            }
-          },
-          "type": {
-            "type": "string",
-            "enum": ["number"]
-          },
-          "minimum": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "maximum": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "default": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          }
-        },
-        "required": ["key", "type"],
-        "additionalProperties": false
-      },
-      "Form.IntegerField": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "required": {
-            "type": "boolean"
-          },
-          "when": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Form.When"
-            }
-          },
-          "type": {
-            "type": "string",
-            "enum": ["integer"]
-          },
-          "minimum": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "maximum": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "default": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          }
-        },
-        "required": ["key", "type"],
-        "additionalProperties": false
-      },
-      "Form.BooleanField": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "required": {
-            "type": "boolean"
-          },
-          "when": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Form.When"
-            }
-          },
-          "type": {
-            "type": "string",
-            "enum": ["boolean"]
-          },
-          "default": {
-            "type": "boolean"
-          }
-        },
-        "required": ["key", "type"],
-        "additionalProperties": false
-      },
-      "Form.MultiselectField": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "required": {
-            "type": "boolean"
-          },
-          "when": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Form.When"
-            }
-          },
-          "type": {
-            "type": "string",
-            "enum": ["multiselect"]
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Form.Option"
-            }
-          },
-          "minItems": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
-          },
-          "maxItems": {
-            "type": "integer",
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
-          },
-          "custom": {
-            "type": "boolean"
-          },
-          "default": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": ["key", "type", "options"],
-        "additionalProperties": false
-      },
-      "Form.ExternalField": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["external"]
-          },
-          "url": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          }
-        },
-        "required": ["key", "type", "url"],
-        "additionalProperties": false
-      },
-      "Form.Field": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Form.StringField"
-          },
-          {
-            "$ref": "#/components/schemas/Form.NumberField"
-          },
-          {
-            "$ref": "#/components/schemas/Form.IntegerField"
-          },
-          {
-            "$ref": "#/components/schemas/Form.BooleanField"
-          },
-          {
-            "$ref": "#/components/schemas/Form.MultiselectField"
-          },
-          {
-            "$ref": "#/components/schemas/Form.ExternalField"
-          }
-        ]
-      },
-      "Form.Fields": {
-        "type": "array",
-        "prefixItems": [
-          {
-            "$ref": "#/components/schemas/Form.Field"
-          }
-        ],
-        "minItems": 1,
-        "items": {
-          "$ref": "#/components/schemas/Form.Field"
-        }
-      },
       "Form.Info": {
         "type": "object",
         "properties": {
@@ -20214,55 +20261,6 @@
         },
         "required": ["_tag", "id", "message"],
         "additionalProperties": false
-      },
-      "Form.Value": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["NaN"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity"]
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["-Infinity"]
-                  }
-                ]
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          {
-            "type": "boolean"
-          },
-          {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "Form.Answer": {
-        "type": "object",
-        "additionalProperties": {
-          "$ref": "#/components/schemas/Form.Value"
-        }
       },
       "Form.State": {
         "anyOf": [
@@ -21363,6 +21361,72 @@
         "required": ["id", "created", "type", "data"],
         "additionalProperties": false
       },
+      "project.directory.resolved": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^evt_"
+              }
+            ]
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["project.directory.resolved"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ]
+              },
+              "version": {
+                "type": "number",
+                "enum": [1]
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectID": {
+                "type": "string"
+              },
+              "directory": {
+                "type": "string"
+              },
+              "previous": {
+                "type": "string"
+              }
+            },
+            "required": ["projectID", "directory", "previous"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
       "command.updated": {
         "type": "object",
         "properties": {
@@ -22458,7 +22522,7 @@
           }
         ]
       },
-      "Form.Fields1": {
+      "Form.Fields3": {
         "type": "array",
         "prefixItems": [
           {
@@ -22491,7 +22555,7 @@
             "$ref": "#/components/schemas/Form.Metadata1"
           },
           "fields": {
-            "$ref": "#/components/schemas/Form.Fields1"
+            "$ref": "#/components/schemas/Form.Fields3"
           }
         },
         "required": ["id", "sessionID", "title", "fields"],
@@ -23365,19 +23429,16 @@
             "$ref": "#/components/schemas/session.forked"
           },
           {
-            "$ref": "#/components/schemas/session.input.promoted"
+            "$ref": "#/components/schemas/session.inbox.delivered"
           },
           {
-            "$ref": "#/components/schemas/session.input.admitted"
+            "$ref": "#/components/schemas/session.inbox.enqueued"
           },
           {
-            "$ref": "#/components/schemas/session.input.cancelled"
+            "$ref": "#/components/schemas/session.inbox.cancelled"
           },
           {
-            "$ref": "#/components/schemas/session.input.steered"
-          },
-          {
-            "$ref": "#/components/schemas/session.input.queued"
+            "$ref": "#/components/schemas/session.inbox.delivery.changed"
           },
           {
             "$ref": "#/components/schemas/session.execution.started"
@@ -23458,9 +23519,6 @@
             "$ref": "#/components/schemas/session.retry.scheduled"
           },
           {
-            "$ref": "#/components/schemas/session.compaction.admitted"
-          },
-          {
             "$ref": "#/components/schemas/session.compaction.started"
           },
           {
@@ -23501,6 +23559,9 @@
           },
           {
             "$ref": "#/components/schemas/project.directories.updated"
+          },
+          {
+            "$ref": "#/components/schemas/project.directory.resolved"
           },
           {
             "$ref": "#/components/schemas/command.updated"

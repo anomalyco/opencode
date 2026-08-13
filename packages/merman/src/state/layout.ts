@@ -40,14 +40,6 @@ export interface StateDiagramLayoutOptions {
   minStateGap: number
 }
 
-function visualLength(value: string): number {
-  return diagramTextWidth(value)
-}
-
-function splitStateDiagramLines(value: string): string[] {
-  return splitDiagramLines(value)
-}
-
 function computeRanks(diagram: StateDiagram): Map<string, number> {
   const ranks = new Map<string, number>()
   const outgoing = new Map<string, string[]>()
@@ -88,8 +80,11 @@ function outgoingTransitions(diagram: StateDiagram): Map<string, StateDiagramTra
   return outgoing
 }
 
-function reaches(diagram: StateDiagram, from: string, target: string): boolean {
-  const outgoing = outgoingTransitions(diagram)
+function reaches(
+  outgoing: ReadonlyMap<string, readonly StateDiagramTransition[]>,
+  from: string,
+  target: string,
+): boolean {
   const visited = new Set<string>()
   const stack = [from]
   while (stack.length > 0) {
@@ -104,6 +99,7 @@ function reaches(diagram: StateDiagram, from: string, target: string): boolean {
 
 function computeMainPath(diagram: StateDiagram): string[] {
   const outgoing = outgoingTransitions(diagram)
+  const statesById = new Map(diagram.states.map((state) => [state.id, state]))
   const start = diagram.states.find((state) => state.kind === "start")?.id ?? diagram.states[0]?.id
   if (!start) return []
 
@@ -114,9 +110,14 @@ function computeMainPath(diagram: StateDiagram): string[] {
     const candidates = (outgoing.get(current) ?? []).filter((transition) => !visited.has(transition.to))
     if (candidates.length === 0) break
     const next =
-      candidates.find((transition) => diagram.states.find((state) => state.id === transition.to)?.kind === "end") ??
-      candidates.find((transition) => !reaches(diagram, transition.to, current)) ??
-      candidates.find((transition) => !hasReverseTransition(diagram, transition))
+      candidates.find((transition) => statesById.get(transition.to)?.kind === "end") ??
+      candidates.find((transition) => !reaches(outgoing, transition.to, current)) ??
+      candidates.find((transition) => !hasReverseTransition(diagram, transition)) ??
+      candidates.find((transition) => {
+        const fromParent = statesById.get(current)?.parentId
+        const toParent = statesById.get(transition.to)?.parentId
+        return Boolean(fromParent && toParent && fromParent !== toParent)
+      })
     if (!next) break
     path.push(next.to)
     visited.add(next.to)
@@ -132,7 +133,7 @@ function stateSize(state: StateDiagramState): { width: number; height: number; l
 }
 
 function noteLines(note: StateDiagramNote): string[] {
-  const lines = note.lines.flatMap(splitStateDiagramLines).map((line) => line.trim())
+  const lines = note.lines.flatMap(splitDiagramLines).map((line) => line.trim())
   return lines.length > 0 ? lines : [""]
 }
 
@@ -202,7 +203,7 @@ function addCompositeBounds(diagram: StateDiagram, layout: StateDiagramLayout): 
     const top = Math.min(...childBounds.map((bound) => bound.top)) - 2
     const right = Math.max(...childBounds.map((bound) => bound.left + bound.width)) + 2
     const bottom = Math.max(...childBounds.map((bound) => bound.top + bound.height)) + 2
-    const width = Math.max(right - left, visualLength(composite.label) + 5)
+    const width = Math.max(right - left, diagramTextWidth(composite.label) + 5)
     const bound = {
       id: composite.id,
       left,
@@ -349,7 +350,7 @@ function expandCompositeBoundsForNotes(diagram: StateDiagram, layout: StateDiagr
 
     bound.left = left
     bound.top = top
-    bound.width = Math.max(right - left, visualLength(composite.label) + 5)
+    bound.width = Math.max(right - left, diagramTextWidth(composite.label) + 5)
     bound.height = bottom - top
     bound.centerX = bound.left + Math.floor(bound.width / 2)
     bound.centerY = bound.top + Math.floor(bound.height / 2)
@@ -461,7 +462,8 @@ export function createStateDiagramLayout(
       x += size.width + options.minStateGap + 8
     }
     const labelRows = states.reduce((rows, state) => Math.max(rows, outgoingLabelRows.get(state.id) ?? 0), 0)
-    y += rowHeight + Math.max(4, labelRows + 3)
+    const pseudoStateApproachClearance = states.some((state) => state.kind === "choice") ? 2 : 0
+    y += rowHeight + Math.max(4, labelRows + 3) + pseudoStateApproachClearance
   }
 
   return finalizeLayout(diagram, emptyLayout(bounds, sizes))
@@ -499,7 +501,10 @@ function createHorizontalLayout(diagram: StateDiagram, options: StateDiagramLayo
     const adjacentLabelWidth = diagram.transitions
       .filter((transition) => transition.from === id && transition.to === nextId)
       .reduce((width, transition) => Math.max(width, measureStateTransitionLabel(transition.label).width), 0)
-    x += size.width + Math.max(defaultGap, adjacentLabelWidth + 2)
+    const crossesCompositeBoundary = Boolean(
+      nextId && statesById.get(id)?.parentId !== statesById.get(nextId)?.parentId,
+    )
+    x += size.width + Math.max(defaultGap, adjacentLabelWidth + (crossesCompositeBoundary ? 6 : 2))
   }
 
   const branchesByParent = new Map<string, string[]>()
@@ -550,12 +555,25 @@ function createHorizontalLayout(diagram: StateDiagram, options: StateDiagramLayo
   }
 
   const ranks = computeRanks(diagram)
-  const fallbackStates = diagram.states.filter((state) => !bounds.has(state.id))
+  const fallbackStates = diagram.states
+    .filter((state) => !bounds.has(state.id))
+    .sort((left, right) => (ranks.get(left.id) ?? 0) - (ranks.get(right.id) ?? 0))
   for (const state of fallbackStates) {
     const size = sizes.get(state.id)!
-    const rank = ranks.get(state.id) ?? bounds.size
     const top = baselineY + 5
-    const left = rank * (size.width + defaultGap)
+    const rank = ranks.get(state.id) ?? bounds.size
+    let left = rank * (size.width + defaultGap)
+    while (true) {
+      const collision = [...bounds.values()].find(
+        (bound) =>
+          left < bound.left + bound.width + defaultGap &&
+          left + size.width + defaultGap > bound.left &&
+          top < bound.top + bound.height &&
+          top + size.height > bound.top,
+      )
+      if (!collision) break
+      left = collision.left + collision.width + defaultGap
+    }
     bounds.set(state.id, {
       id: state.id,
       left,

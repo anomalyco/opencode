@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
-import { expectSessionTitle } from "../utils/waits"
+import { expectSessionReady } from "../utils/waits"
 
 const directory = "C:/OpenCode/ReviewTerminalStacked"
 const projectID = "proj_review_terminal_stacked"
@@ -19,10 +19,6 @@ const branchDiffs = [
 
 test("keeps the review tree and terminal sized when both panels are open", async ({ page }) => {
   test.setTimeout(120_000)
-  const events: Array<{ directory: string; payload: Record<string, unknown> }> = []
-  const sessionStatus = { [sessionID]: { type: "idle" as "busy" | "idle" } }
-  let detailVersion = 1
-  let detailFailures = 1
   await page.setViewportSize({ width: 1400, height: 900 })
   await mockOpenCodeServer(page, {
     protocol: "v2",
@@ -57,10 +53,8 @@ test("keeps the review tree and terminal sized when both panels are open", async
         time: { created: 1700000000000, updated: 1700000000000 },
       },
     ],
-    sessionStatus: () => sessionStatus,
+    sessionStatus: { [sessionID]: { type: "idle" } },
     pageMessages: () => ({ items: [] }),
-    events: () => events.splice(0, 1),
-    eventRetry: 16,
   })
   await page.route(/\/api\/vcs(?:\?.*)?$/, (route) =>
     route.fulfill({
@@ -73,20 +67,12 @@ test("keeps the review tree and terminal sized when both panels are open", async
     }),
   )
   await page.route("**/api/vcs/diff**", (route) => {
-    const url = new URL(route.request().url())
-    const scope = url.searchParams.get("location[directory]")?.replaceAll("\\", "/")
-    const detail = scope?.endsWith("/src/branch/d00027")
-    if (detail && detailFailures-- > 0) return route.fulfill({ status: 500, body: "retry detail" })
     return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
         location: { directory, project: { id: projectID, directory, canonical: directory } },
-        data: detail
-          ? branchDiffs
-              .filter((diff) => diff.file.startsWith("src/branch/d00027/"))
-              .map((diff) => fileDiff(diff.file, diff.additions, true, detailVersion))
-          : branchDiffs,
+        data: branchDiffs,
       }),
     })
   })
@@ -146,84 +132,14 @@ test("keeps the review tree and terminal sized when both panels are open", async
   })
 
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
-  await expectSessionTitle(page, title)
+  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+  await expectSessionReady(page, { server, sessionID, title })
   await expect(page.locator("#review-panel")).toBeVisible()
   await expectTree(page, 2_773, "action.yml")
   await expect(page.locator("#session-side-panel-review-tab")).toHaveText("Files Changed 2740")
   await page.keyboard.press("Control+Backquote")
   await expect(page.locator("#terminal-panel")).toBeVisible()
   await expectTree(page, 2_773, "action.yml")
-  await expectStackGeometry(page)
-
-  const treeViewport = page.locator('#review-panel [data-slot="session-review-v2-sidebar-tree"] .scroll-view__viewport')
-  await treeViewport.hover()
-  await page.mouse.wheel(0, 100_000)
-  await expect
-    .poll(() => treeViewport.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
-    .toBeLessThanOrEqual(1)
-  const lastFile = page.getByRole("button", { name: "generated-2738.ts" })
-  await expect(lastFile).toBeVisible()
-  const bottomGap = await lastFile.evaluate((element) => {
-    const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!.getBoundingClientRect()
-    return viewport.bottom - element.getBoundingClientRect().bottom
-  })
-  expect(bottomGap).toBeGreaterThanOrEqual(0)
-  expect(bottomGap).toBeLessThanOrEqual(16)
-  const lazyDiff = page.waitForRequest((request) => {
-    const url = new URL(request.url())
-    return (
-      url.pathname === "/api/vcs/diff" &&
-      url.searchParams.get("location[directory]")?.replaceAll("\\", "/").endsWith("/src/branch/d00027") === true
-    )
-  })
-  await lastFile.click()
-  await lazyDiff
-  const preview = page.locator('[data-slot="session-review-v2-diff-scroll"]')
-  await expect(preview).toContainText("after-1")
-  detailVersion = 2
-  sessionStatus[sessionID] = { type: "busy" }
-  events.push(statusEvent("busy"))
-  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible()
-  const refreshedDiff = page.waitForRequest((request) => {
-    const url = new URL(request.url())
-    return (
-      url.pathname === "/api/vcs/diff" &&
-      url.searchParams.get("location[directory]")?.replaceAll("\\", "/").endsWith("/src/branch/d00027") === true
-    )
-  })
-  sessionStatus[sessionID] = { type: "idle" }
-  events.push(statusEvent("idle"))
-  await refreshedDiff
-  await expect(preview).toContainText("after-2")
-  const filter = page.getByRole("searchbox", { name: "Filter files" })
-  await filter.fill("generated-2738")
-  await expectTree(page, 1, "generated-2738.ts")
-  await filter.fill("")
-  await expectTree(page, 2_773, "generated-2738.ts")
-
-  await page.getByRole("button", { name: "Toggle file tree" }).click()
-  await expect(page.locator('[data-slot="session-review-v2-sidebar"]')).toHaveCount(0)
-  await expect(page.locator('#review-panel [data-component="file-tree-v2"]')).toHaveCount(0)
-  await page.getByRole("button", { name: "Toggle file tree" }).click()
-  await expectTree(page, 2_773, "generated-2738.ts")
-
-  await page.keyboard.press("Control+Backquote")
-  await expect(page.locator("#terminal-panel")).toHaveCount(0)
-  await expectTree(page, 2_773, "generated-2738.ts")
-  await page.keyboard.press("Control+Backquote")
-  await expect(page.locator("#terminal-panel")).toBeVisible()
-  await expectTree(page, 2_773, "generated-2738.ts")
-
-  await page.getByRole("button", { name: "Toggle review" }).click()
-  await expect(page.locator("#review-panel")).toHaveCount(0)
-  await page.getByRole("button", { name: "Toggle review" }).click()
-  await expectTree(page, 2_773, "generated-2738.ts")
-  await page.setViewportSize({ width: 1_000, height: 700 })
-  await expectTree(page, 2_773, "generated-2738.ts")
-  await expectStackGeometry(page)
-  await page.setViewportSize({ width: 1_000, height: 120 })
-  await page.setViewportSize({ width: 1_400, height: 900 })
-  await expectTree(page, 2_773, "generated-2738.ts")
   await expectStackGeometry(page)
 })
 
@@ -255,36 +171,32 @@ async function expectStackGeometry(page: Page) {
     const terminal = document.querySelector<HTMLElement>("#terminal-panel")!
     const reviewParent = review.parentElement!.getBoundingClientRect()
     const terminalParent = terminal.parentElement!.getBoundingClientRect()
+    const sidebar = review.querySelector<HTMLElement>('[data-slot="session-review-v2-sidebar"]')!
     return {
       review: review.getBoundingClientRect().height,
       reviewParent: reviewParent.height,
       terminal: terminal.getBoundingClientRect().height,
       terminalParent: terminalParent.height,
+      sidebar: sidebar.getBoundingClientRect().width,
     }
   })
   expect(Math.abs(geometry.review - geometry.reviewParent)).toBeLessThanOrEqual(1)
   expect(Math.abs(geometry.terminal - geometry.terminalParent)).toBeLessThanOrEqual(1)
+  expect(geometry.sidebar).toBeGreaterThanOrEqual(240)
 }
 
 function base64Encode(value: string) {
   return Buffer.from(value, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
 }
 
-function statusEvent(type: "busy" | "idle") {
-  return {
-    directory,
-    payload: { type: "session.status", properties: { sessionID, status: { type } } },
-  }
-}
-
-function fileDiff(file: string, additions: number, loaded = true, version = 1) {
+function fileDiff(file: string, additions: number, loaded = true) {
   return {
     file,
     additions,
     deletions: 0,
     status: "modified",
     patch: loaded
-      ? `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-export const value = 'before'\n+export const value = 'after-${version}'\n`
+      ? `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-export const value = 'before'\n+export const value = 'after'\n`
       : `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}`,
   }
 }

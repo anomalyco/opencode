@@ -3,7 +3,7 @@ import { Effect, Schema } from "effect"
 import { Sse } from "effect/unstable/encoding"
 import { HttpClientError } from "effect/unstable/http"
 import { HttpApiClient, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
-import { ClientError } from "./client-error"
+import { ClientError } from "./client-error.js"
 
 const Endpoint0Success = Schema.String
 

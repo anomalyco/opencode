@@ -148,6 +148,49 @@ test("experimental wellknown integration add uses the public HTTP contract", asy
   expect(await request?.json()).toEqual({ url: "https://example.com" })
 })
 
+test("integration connections optionally submit a form answer", async () => {
+  const requests: Request[] = []
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(request)
+      if (request.url.endsWith("/connect/key")) return new Response(null, { status: 204 })
+      return Response.json({
+        location: { directory: "/tmp/project", project: { id: "proj_test", directory: "/tmp/project" } },
+        data: {
+          attemptID: "con_test",
+          url: "https://example.com/authorize",
+          instructions: "Authorize",
+          mode: "auto",
+          time: { created: 1, expires: 2 },
+        },
+      })
+    },
+  })
+
+  await client.integration.connect.key({
+    integrationID: "cloudflare-workers-ai",
+    key: "secret",
+    answer: { accountId: "account" },
+  })
+  await client.integration.oauth.connect({
+    integrationID: "github-copilot",
+    methodID: "device",
+    answer: { deploymentType: "enterprise", enabled: true, scopes: ["read:user"] },
+  })
+  await client.integration.connect.key({ integrationID: "openai", key: "secret" })
+  await client.integration.oauth.connect({ integrationID: "openai", methodID: "device" })
+
+  expect(await requests[0].json()).toEqual({ key: "secret", answer: { accountId: "account" } })
+  expect(await requests[1].json()).toEqual({
+    methodID: "device",
+    answer: { deploymentType: "enterprise", enabled: true, scopes: ["read:user"] },
+  })
+  expect(await requests[2].json()).toEqual({ key: "secret" })
+  expect(await requests[3].json()).toEqual({ methodID: "device" })
+})
+
 test("health.stop sends exact replacement identity", async () => {
   let request: Request | undefined
   const client = OpenCode.make({
@@ -330,7 +373,7 @@ test("session instructions methods use the public HTTP contract", async () => {
   ])
 })
 
-test("session.pending.list uses the public HTTP contract", async () => {
+test("session.inbox.list uses the public HTTP contract", async () => {
   const requests: Array<{ method: string; url: string }> = []
   const pending = [
     {
@@ -338,7 +381,7 @@ test("session.pending.list uses the public HTTP contract", async () => {
       sessionID: "ses_test",
       timeCreated: 1_717_171_717_000,
       type: "user",
-      data: { text: "Fix the failing tests" },
+      payload: { text: "Fix the failing tests" },
       delivery: "steer",
     },
   ]
@@ -351,13 +394,13 @@ test("session.pending.list uses the public HTTP contract", async () => {
     },
   })
 
-  const result = await client.session.pending.list({ sessionID: "ses_test" })
+  const result = await client.session.inbox.list({ sessionID: "ses_test" })
 
   expect(result).toEqual(pending)
-  expect(requests).toEqual([{ method: "GET", url: "http://localhost:3000/api/session/ses_test/pending" }])
+  expect(requests).toEqual([{ method: "GET", url: "http://localhost:3000/api/session/ses_test/inbox" }])
 })
 
-test("session.pending mutations use the public HTTP contract", async () => {
+test("session.inbox mutations use the public HTTP contract", async () => {
   const requests: Array<{ method: string; url: string }> = []
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
@@ -368,14 +411,14 @@ test("session.pending mutations use the public HTTP contract", async () => {
     },
   })
 
-  await client.session.pending.cancel({ sessionID: "ses_test", inputID: "msg_cancel" })
-  await client.session.pending.steer({ sessionID: "ses_test", inputID: "msg_steer" })
-  await client.session.pending.queue({ sessionID: "ses_test", inputID: "msg_queue" })
+  await client.session.inbox.cancel({ sessionID: "ses_test", inboxID: "msg_cancel" })
+  await client.session.inbox.steer({ sessionID: "ses_test", inboxID: "msg_steer" })
+  await client.session.inbox.queue({ sessionID: "ses_test", inboxID: "msg_queue" })
 
   expect(requests).toEqual([
-    { method: "DELETE", url: "http://localhost:3000/api/session/ses_test/pending/msg_cancel" },
-    { method: "POST", url: "http://localhost:3000/api/session/ses_test/pending/msg_steer/steer" },
-    { method: "POST", url: "http://localhost:3000/api/session/ses_test/pending/msg_queue/queue" },
+    { method: "DELETE", url: "http://localhost:3000/api/session/ses_test/inbox/msg_cancel" },
+    { method: "POST", url: "http://localhost:3000/api/session/ses_test/inbox/msg_steer/steer" },
+    { method: "POST", url: "http://localhost:3000/api/session/ses_test/inbox/msg_queue/queue" },
   ])
 })
 
@@ -500,7 +543,7 @@ test("session methods use the public HTTP contract", async () => {
   const context = await client.session.context({ sessionID: "ses_test" })
   const log = []
   for await (const item of client.session.log({ sessionID: "ses_test", after: 0 })) log.push(item)
-  await client.session.interrupt({ sessionID: "ses_test" })
+  await client.session.interrupt({ sessionID: "ses_test", continue: true })
   const message = await client.session.message({ sessionID: "ses_test", messageID: "msg_model" })
 
   expect(page.cursor.next).toBe("next")
@@ -525,7 +568,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
     ["GET", "http://localhost:3000/api/experimental/session/ses_test/log?after=0"],
-    ["POST", "http://localhost:3000/api/session/ses_test/interrupt"],
+    ["POST", "http://localhost:3000/api/session/ses_test/interrupt?continue=true"],
     ["GET", "http://localhost:3000/api/session/ses_test/message/msg_model"],
   ])
   const body = requests.find((request) => request.url.endsWith("/api/session/ses_test/prompt"))?.init?.body

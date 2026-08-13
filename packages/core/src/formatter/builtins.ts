@@ -3,7 +3,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Npm } from "@opencode-ai/util/npm"
 import { AppProcess } from "@opencode-ai/util/process"
-import { which } from "../util/which"
+import { which } from "../util/which.js"
 
 export interface Info {
   readonly name: string
@@ -18,8 +18,10 @@ export function make(input: {
   readonly fs: FSUtil.Interface
   readonly npm: Npm.Interface
   readonly processes: AppProcess.Interface
+  readonly bin: string
 }) {
   const disabled = false as const
+  const findExecutable = (name: string) => which(name, undefined, input.bin)
   const findUp = (target: string) => input.fs.findUp(target, input.directory, input.worktree)
   const readText = (file: string) => input.fs.readFileString(file).pipe(Effect.orElseSucceed(() => ""))
   const commandOutput = (command: string[]) =>
@@ -37,7 +39,7 @@ export function make(input: {
     name: "gofmt",
     extensions: [".go"],
     enabled: Effect.sync(() => {
-      const match = which("gofmt")
+      const match = findExecutable("gofmt")
       return match ? [match, "-w", "$FILE"] : disabled
     }),
   }
@@ -46,7 +48,7 @@ export function make(input: {
     name: "mix",
     extensions: [".ex", ".exs", ".eex", ".heex", ".leex", ".neex", ".sface"],
     enabled: Effect.sync(() => {
-      const match = which("mix")
+      const match = findExecutable("mix")
       return match ? [match, "format", "$FILE"] : disabled
     }),
   }
@@ -149,7 +151,7 @@ export function make(input: {
     name: "zig",
     extensions: [".zig", ".zon"],
     enabled: Effect.sync(() => {
-      const match = which("zig")
+      const match = findExecutable("zig")
       return match ? [match, "fmt", "$FILE"] : disabled
     }),
   }
@@ -159,7 +161,7 @@ export function make(input: {
     extensions: [".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".h++", ".ino", ".C", ".H"],
     enabled: Effect.gen(function* () {
       if (!(yield* findUp(".clang-format")).length) return disabled
-      const match = which("clang-format")
+      const match = findExecutable("clang-format")
       return match ? [match, "-i", "$FILE"] : disabled
     }).pipe(Effect.orElseSucceed(() => disabled)),
   }
@@ -168,7 +170,7 @@ export function make(input: {
     name: "ktlint",
     extensions: [".kt", ".kts"],
     enabled: Effect.sync(() => {
-      const match = which("ktlint")
+      const match = findExecutable("ktlint")
       return match ? [match, "-F", "$FILE"] : disabled
     }),
   }
@@ -177,17 +179,18 @@ export function make(input: {
     name: "ruff",
     extensions: [".py", ".pyi"],
     enabled: Effect.gen(function* () {
-      if (!which("ruff")) return disabled
+      const bin = findExecutable("ruff")
+      if (!bin) return disabled
       for (const config of ["pyproject.toml", "ruff.toml", ".ruff.toml"]) {
         const found = yield* findUp(config)
         if (!found.length) continue
         if (config !== "pyproject.toml" || (yield* readText(found[0])).includes("[tool.ruff]")) {
-          return ["ruff", "format", "$FILE"]
+          return [bin, "format", "$FILE"]
         }
       }
       for (const dependency of ["requirements.txt", "pyproject.toml", "Pipfile"]) {
         const found = yield* findUp(dependency)
-        if (found.length && (yield* readText(found[0])).includes("ruff")) return ["ruff", "format", "$FILE"]
+        if (found.length && (yield* readText(found[0])).includes("ruff")) return [bin, "format", "$FILE"]
       }
       return disabled
     }).pipe(Effect.orElseSucceed(() => disabled)),
@@ -197,7 +200,7 @@ export function make(input: {
     name: "air",
     extensions: [".R"],
     enabled: Effect.gen(function* () {
-      const bin = which("air")
+      const bin = findExecutable("air")
       if (!bin) return disabled
       const output = yield* commandOutput([bin, "--help"])
       if (output._tag === "None" || output.value.exitCode !== 0) return disabled
@@ -210,34 +213,34 @@ export function make(input: {
     name: "uv",
     extensions: [".py", ".pyi"],
     enabled: Effect.gen(function* () {
-      const bin = which("uv")
+      const bin = findExecutable("uv")
       if (!bin) return disabled
       const output = yield* commandOutput([bin, "format", "--help"])
       return output._tag === "Some" && output.value.exitCode === 0 ? [bin, "format", "--", "$FILE"] : disabled
     }),
   }
 
-  const rubocop = executable("rubocop", [".rb", ".rake", ".gemspec", ".ru"], ["--autocorrect", "$FILE"])
-  const standardrb = executable("standardrb", [".rb", ".rake", ".gemspec", ".ru"], ["--fix", "$FILE"])
-  const htmlbeautifier = executable("htmlbeautifier", [".erb", ".html.erb"], ["$FILE"])
-  const dart = executable("dart", [".dart"], ["format", "$FILE"])
+  const rubocop = executable("rubocop", [".rb", ".rake", ".gemspec", ".ru"], ["--autocorrect", "$FILE"], findExecutable)
+  const standardrb = executable("standardrb", [".rb", ".rake", ".gemspec", ".ru"], ["--fix", "$FILE"], findExecutable)
+  const htmlbeautifier = executable("htmlbeautifier", [".erb", ".html.erb"], ["$FILE"], findExecutable)
+  const dart = executable("dart", [".dart"], ["format", "$FILE"], findExecutable)
 
   const ocamlformat: Info = {
     name: "ocamlformat",
     extensions: [".ml", ".mli"],
     enabled: Effect.gen(function* () {
       if (!(yield* findUp(".ocamlformat")).length) return disabled
-      const match = which("ocamlformat")
+      const match = findExecutable("ocamlformat")
       return match ? [match, "-i", "$FILE"] : disabled
     }).pipe(Effect.orElseSucceed(() => disabled)),
   }
 
-  const terraform = executable("terraform", [".tf", ".tfvars"], ["fmt", "$FILE"])
-  const latexindent = executable("latexindent", [".tex"], ["-w", "-s", "$FILE"])
-  const gleam = executable("gleam", [".gleam"], ["format", "$FILE"])
-  const shfmt = executable("shfmt", [".sh", ".bash"], ["-w", "$FILE"])
-  const nixfmt = executable("nixfmt", [".nix"], ["$FILE"])
-  const rustfmt = executable("rustfmt", [".rs"], ["$FILE"])
+  const terraform = executable("terraform", [".tf", ".tfvars"], ["fmt", "$FILE"], findExecutable)
+  const latexindent = executable("latexindent", [".tex"], ["-w", "-s", "$FILE"], findExecutable)
+  const gleam = executable("gleam", [".gleam"], ["format", "$FILE"], findExecutable)
+  const shfmt = executable("shfmt", [".sh", ".bash"], ["-w", "$FILE"], findExecutable)
+  const nixfmt = executable("nixfmt", [".nix"], ["$FILE"], findExecutable)
+  const rustfmt = executable("rustfmt", [".rs"], ["$FILE"], findExecutable)
 
   const pint: Info = {
     name: "pint",
@@ -253,9 +256,9 @@ export function make(input: {
     }).pipe(Effect.orElseSucceed(() => disabled)),
   }
 
-  const ormolu = executable("ormolu", [".hs"], ["-i", "$FILE"])
-  const cljfmt = executable("cljfmt", [".clj", ".cljs", ".cljc", ".edn"], ["fix", "--quiet", "$FILE"])
-  const dfmt = executable("dfmt", [".d"], ["-i", "$FILE"])
+  const ormolu = executable("ormolu", [".hs"], ["-i", "$FILE"], findExecutable)
+  const cljfmt = executable("cljfmt", [".clj", ".cljs", ".cljc", ".edn"], ["fix", "--quiet", "$FILE"], findExecutable)
+  const dfmt = executable("dfmt", [".d"], ["-i", "$FILE"], findExecutable)
 
   return [
     gofmt,
@@ -287,12 +290,17 @@ export function make(input: {
   ] satisfies Info[]
 }
 
-function executable(name: string, extensions: readonly string[], args: string[]): Info {
+function executable(
+  name: string,
+  extensions: readonly string[],
+  args: string[],
+  findExecutable: (name: string) => string | null,
+): Info {
   return {
     name,
     extensions,
     enabled: Effect.sync(() => {
-      const match = which(name)
+      const match = findExecutable(name)
       return match ? [match, ...args] : false
     }),
   }

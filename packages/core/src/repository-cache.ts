@@ -8,10 +8,10 @@
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Git } from "./git"
+import { Git } from "./git.js"
 import { Global } from "@opencode-ai/util/global"
-import { Repository } from "./repository"
-import { AbsolutePath } from "./schema"
+import { Repository } from "./repository.js"
+import { AbsolutePath } from "./schema.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { EffectFlock } from "@opencode-ai/util/effect-flock"
 
@@ -239,4 +239,4 @@ function cacheOperation<A, E, R>(effect: Effect.Effect<A, E, R>, operation: stri
   )
 }
 
-export * as RepositoryCache from "./repository-cache"
+export * as RepositoryCache from "./repository-cache.js"

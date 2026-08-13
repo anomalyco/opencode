@@ -11,7 +11,8 @@ export const HealthHandler = HttpApiBuilder.group(Api, "server.health", (handler
         return {
           healthy: true as const,
           version: info.app.version ?? "unknown",
-          pid: process.pid,
+          // Runtimes without OS process identity (workerd) report 0.
+          pid: process.pid ?? 0,
         }
       }),
     )

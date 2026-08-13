@@ -1,9 +1,9 @@
-export * as CodeModeInstructions from "./instructions"
+export * as CodeModeInstructions from "./instructions.js"
 
 import { searchSignature, toolExpression } from "@opencode-ai/codemode"
 import { Effect, Schema } from "effect"
-import { Instructions } from "../instructions/index"
-import { CodeModeCatalog } from "./catalog"
+import { Instructions } from "../instructions/index.js"
+import { CodeModeCatalog } from "./catalog.js"
 
 // prettier-ignore
 const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is ${hasMoreTools ? "partial" : "complete"}.

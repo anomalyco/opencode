@@ -1,11 +1,11 @@
-import type { ProviderPackage } from "../provider-package"
-import { OpenAICompatibleResponses } from "../protocols/openai-compatible-responses"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
-import type { RouteDefaultsInput } from "../route/client"
-import { ProviderID, type ModelID } from "../schema"
-import type { OpenResponsesProviderOptionsInput } from "./open-responses-options"
+import type { ProviderPackage } from "../provider-package.js"
+import { OpenAICompatibleResponses } from "../protocols/openai-compatible-responses.js"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { RouteDefaultsInput } from "../route/client.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
+import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
-export type { OpenResponsesOptionsInput, OpenResponsesProviderOptionsInput } from "./open-responses-options"
+export type { OpenResponsesOptionsInput, OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
 export const id = ProviderID.make("openai-compatible")
 

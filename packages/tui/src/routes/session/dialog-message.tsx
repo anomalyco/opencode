@@ -66,8 +66,12 @@ export function DialogMessage(props: {
                   : "text" in value
                     ? value.text
                     : ""
-            await clipboard.write?.(text)
-            dialog.clear()
+            try {
+              await clipboard.write(text)
+              dialog.clear()
+            } catch (error) {
+              toast.error(error)
+            }
           },
         },
         {

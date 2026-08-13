@@ -1,12 +1,14 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { Money } from "@opencode-ai/schema/money"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { Global } from "@opencode-ai/util/global"
+import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Database } from "@opencode-ai/core/database/database"
 import { Bus } from "@opencode-ai/core/bus"
+import { Config } from "@opencode-ai/core/config"
 import { Location } from "@opencode-ai/core/location"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
@@ -17,17 +19,19 @@ import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionPending } from "@opencode-ai/core/session/pending"
+import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
+import { Permission } from "@opencode-ai/core/permission"
 import { SubagentTool } from "@opencode-ai/core/tool/plugin/subagent"
 import { Tool } from "@opencode-ai/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
+import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
-import { executeTool, toolIdentity, waitForTool } from "./lib/tool"
+import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
 const childText = "child final response"
 const childModel = Model.Ref.make({ id: Model.ID.make("child"), providerID: Provider.ID.make("test") })
@@ -90,20 +94,30 @@ const executionNode = makeGlobalNode({
   deps: [Bus.node, SessionStore.node],
 })
 
-const layer = AppNodeBuilder.build(
-  LayerNode.group([
-    Database.node,
-    Bus.node,
-    Job.node,
-    Session.node,
-    SessionExecution.node,
-    PluginRuntime.providerNode,
-    LocationServiceMap.node,
-  ]),
-  [[SessionExecution.node, executionNode]],
-)
+const subagentPluginSupervisor = makeLocationNode({
+  service: PluginSupervisor.Service,
+  layer: Layer.effect(
+    PluginSupervisor.Service,
+    registerToolPlugin(SubagentTool.Plugin).pipe(Effect.as(PluginSupervisor.Service.of({ flush: Effect.void }))),
+  ),
+  deps: [Agent.node, Config.node, Permission.node, PluginRuntime.node, Tool.node],
+})
 
-const it = testEffect(layer)
+const nodes = LayerNode.group([
+  Database.node,
+  Bus.node,
+  Job.node,
+  Session.node,
+  SessionExecution.node,
+  PluginRuntime.providerNode,
+  LocationServiceMap.node,
+])
+const replacements = [
+  [SessionExecution.node, executionNode],
+  [Global.node, tempGlobalLayer],
+] satisfies LayerNode.Replacements
+const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
+const it = testEffect(AppNodeBuilder.build(nodes, [...replacements, [PluginSupervisor.node, subagentPluginSupervisor]]))
 
 const withSubagent = (location: Location.Ref) =>
   Effect.gen(function* () {
@@ -131,7 +145,7 @@ const withSubagent = (location: Location.Ref) =>
   })
 
 describe("SubagentTool", () => {
-  it.live("registers globally while resolving agents from the caller location", () =>
+  productionIt.live("registers globally while resolving agents from the caller location", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -145,7 +159,6 @@ describe("SubagentTool", () => {
 
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-          yield* waitForTool(registry, SubagentTool.name)
           expect((yield* registry.snapshot()).definitions.map((tool) => tool.name)).toContain(SubagentTool.name)
           expect(
             yield* executeTool(registry, {
@@ -181,7 +194,6 @@ describe("SubagentTool", () => {
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-          yield* waitForTool(registry, SubagentTool.name)
 
           expect(
             yield* executeTool(registry, {
@@ -224,7 +236,6 @@ describe("SubagentTool", () => {
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-          yield* waitForTool(registry, SubagentTool.name)
 
           const settled = yield* executeTool(registry, {
             sessionID: parent.id,
@@ -265,7 +276,6 @@ describe("SubagentTool", () => {
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-          yield* waitForTool(registry, SubagentTool.name)
           const progress: Tool.Metadata[] = []
 
           const settled = yield* executeTool(registry, {
@@ -294,7 +304,7 @@ describe("SubagentTool", () => {
             agent: "reviewer",
             model: childModel,
           })
-          expect((yield* sessions.pending(child.id)).find((message) => message.type === "user")?.data.text).toBe(
+          expect((yield* sessions.inbox(child.id)).find((message) => message.type === "user")?.payload.text).toBe(
             "You are a subagent spawned by another session.\nreview this",
           )
 
@@ -328,7 +338,6 @@ describe("SubagentTool", () => {
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-          yield* waitForTool(registry, SubagentTool.name)
 
           expect(
             yield* executeTool(registry, {
@@ -366,10 +375,9 @@ describe("SubagentTool", () => {
           yield* withSubagent(parent.location)
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-          yield* waitForTool(registry, SubagentTool.name)
           const bus = yield* Bus.Service
-          const admitted = yield* bus.subscribe(SessionEvent.InputAdmitted).pipe(
-            Stream.filter((event) => event.data.sessionID === parent.id && event.data.input.type === "synthetic"),
+          const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === parent.id && event.data.item.type === "synthetic"),
             Stream.take(1),
             Stream.runCollect,
             Effect.forkScoped({ startImmediately: true }),
@@ -393,8 +401,10 @@ describe("SubagentTool", () => {
           expect(settled.content).toEqual([{ type: "text", text: expect.stringContaining(`id: ${childID}`) }])
 
           const admission = Array.from(yield* Fiber.join(admitted))[0]
-          expect(admission?.data.input.data.text).toContain(`<subagent id="${childID}" state="completed"`)
-          expect(admission?.data.input.data).toMatchObject({
+          expect(admission?.data.item.type).toBe("synthetic")
+          if (admission?.data.item.type !== "synthetic") return yield* Effect.die("Expected synthetic inbox item")
+          expect(admission?.data.item.payload.text).toContain(`<subagent id="${childID}" state="completed"`)
+          expect(admission?.data.item.payload).toMatchObject({
             description: "background review",
             metadata: {
               source: "subagent",
@@ -404,7 +414,7 @@ describe("SubagentTool", () => {
             },
           })
           const database = yield* Database.Service
-          yield* SessionPending.promote(database.db, bus, parent.id, "steer")
+          yield* SessionInbox.promote(database.db, bus, parent.id, "steer")
           const synthetic = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
           expect(synthetic).toHaveLength(1)
           expect(synthetic[0]?.text).toContain(`<subagent id="${childID}" state="completed"`)

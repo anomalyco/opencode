@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createEffect, on, onMount, onCleanup } from "solid-js"
+import { createEffect, For, on, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextShimmer } from "./text-shimmer"
 import { TextReveal } from "./text-reveal"
@@ -667,22 +667,24 @@ export const Playground = {
               </span>
             </span>
           </div>
-          {VARIANTS.map((v) => (
-            <div style={cardStyle}>
-              <span style={cardLabel}>{v.label}</span>
-              <span style={thinkingRow}>
-                <TextShimmer text="Thinking" active={active()} />
-                <span style={headingSlot}>
-                  <AnimatedHeading
-                    text={heading()}
-                    variant={v.key}
-                    debug={v.key === "odometer" && debug()}
-                    odoBlur={v.key === "odometer" && odoBlur()}
-                  />
+          <For each={VARIANTS}>
+            {(v) => (
+              <div style={cardStyle}>
+                <span style={cardLabel}>{v.label}</span>
+                <span style={thinkingRow}>
+                  <TextShimmer text="Thinking" active={active()} />
+                  <span style={headingSlot}>
+                    <AnimatedHeading
+                      text={heading()}
+                      variant={v.key}
+                      debug={v.key === "odometer" && debug()}
+                      odoBlur={v.key === "odometer" && odoBlur()}
+                    />
+                  </span>
                 </span>
-              </span>
-            </div>
-          ))}
+              </div>
+            )}
+          </For>
         </div>
 
         {/* ── Sliders ──────────────────────────────────────── */}
@@ -824,17 +826,19 @@ export const Playground = {
           </div>
 
           <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap" }}>
-            {HEADINGS.map((h, i) => (
-              <button
-                onClick={() => {
-                  setState("headingIndex", i)
-                  setState("heading", h)
-                }}
-                style={smallBtn(headingIndex() === i)}
-              >
-                {h ?? "(no submessage)"}
-              </button>
-            ))}
+            <For each={HEADINGS}>
+              {(h, i) => (
+                <button
+                  onClick={() => {
+                    setState("headingIndex", i())
+                    setState("heading", h)
+                  }}
+                  style={smallBtn(headingIndex() === i())}
+                >
+                  {h ?? "(no submessage)"}
+                </button>
+              )}
+            </For>
           </div>
 
           <div

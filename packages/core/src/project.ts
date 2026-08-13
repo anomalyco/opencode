@@ -1,19 +1,21 @@
-export * as Project from "./project"
+export * as Project from "./project.js"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { asc, desc, isNotNull, isNull, ne, or } from "drizzle-orm"
+import { asc, desc } from "drizzle-orm"
 import path from "path"
-import { AbsolutePath } from "./schema"
-import { Database } from "./database/database"
+import { AbsolutePath } from "./schema.js"
+import { Bus } from "./bus.js"
+import { Database } from "./database/database.js"
+import { Event } from "@opencode-ai/schema/project-directories"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Git } from "./git"
+import { Git } from "./git.js"
 import { AppProcess } from "@opencode-ai/util/process"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Hash } from "@opencode-ai/util/hash"
-import { ProjectDirectories } from "./project/directories"
-import { ProjectSchema } from "./project/schema"
-import { ProjectTable } from "./project/sql"
+import { ProjectDirectories } from "./project/directories.js"
+import { ProjectSchema } from "./project/schema.js"
+import { ProjectTable, upsertProject } from "./project/sql.js"
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID
@@ -91,40 +93,40 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
     const proc = yield* AppProcess.Service
+    const bus = yield* Bus.Service
     const db = (yield* Database.Service).db
     const projectDirectories = yield* ProjectDirectories.Service
 
+    const announcing = new Set<string>()
     const persist = Effect.fnUntraced(function* (project: Resolved) {
-      yield* db
-        .transaction((tx) =>
-          Effect.gen(function* () {
-            const vcs = project.vcs?.type
-            yield* tx
-              .insert(ProjectTable)
-              .values({ id: project.id, worktree: project.canonical, vcs, sandboxes: [] })
-              .onConflictDoUpdate({
-                target: ProjectTable.id,
-                set: { worktree: project.canonical, vcs: vcs ?? null },
-                setWhere: or(
-                  ne(ProjectTable.worktree, project.canonical),
-                  vcs ? or(isNull(ProjectTable.vcs), ne(ProjectTable.vcs, vcs)) : isNotNull(ProjectTable.vcs),
-                ),
-              })
-              .run()
-            if (!project.vcs) return
-            yield* projectDirectories.create({ projectID: project.id, directory: project.canonical }, tx)
-            if (project.directory === project.canonical) return
-            yield* projectDirectories.create(
-              {
-                projectID: project.id,
-                directory: project.directory,
-                strategy: project.vcs.type === "git" ? "git_worktree" : undefined,
-              },
-              tx,
-            )
-          }),
-        )
-        .pipe(Effect.orDie)
+      yield* upsertProject(db, project).pipe(Effect.orDie)
+      if (!project.vcs) return project
+      const directories: ProjectDirectories.CreateInput[] = [{ projectID: project.id, directory: project.canonical }]
+      if (project.directory !== project.canonical)
+        directories.push({
+          projectID: project.id,
+          directory: project.directory,
+          strategy: project.vcs.type === "git" ? "git_worktree" : undefined,
+        })
+      // A missing directory row means this directory's resolution is a new durable
+      // fact (copy.ts registers copy directories directly; those never strand
+      // sessions and never announce). The row insert commits atomically with the
+      // event, so a crash between checks retries on the next resolve instead of
+      // stranding the announcement. The in-flight set keeps concurrent resolves
+      // from publishing the same fact twice.
+      for (const item of directories) {
+        const key = item.projectID + "\u0000" + item.directory
+        if (announcing.has(key)) continue
+        announcing.add(key)
+        yield* Effect.gen(function* () {
+          if (yield* projectDirectories.get({ projectID: item.projectID, directory: item.directory })) return
+          yield* bus.publish(
+            Event.Resolved,
+            { projectID: item.projectID, directory: item.directory, previous: project.previous ?? ID.global },
+            { commit: () => Effect.asVoid(projectDirectories.create(item)) },
+          )
+        }).pipe(Effect.ensuring(Effect.sync(() => announcing.delete(key))))
+      }
       return project
     })
 
@@ -262,5 +264,5 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [Database.node, FSUtil.node, Git.node, AppProcess.node, ProjectDirectories.node],
+  deps: [Bus.node, Database.node, FSUtil.node, Git.node, AppProcess.node, ProjectDirectories.node],
 })

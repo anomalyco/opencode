@@ -1,6 +1,8 @@
 import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
+import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
+import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { Deferred, Effect, Latch, Layer, Option, Ref, Schema, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
@@ -241,7 +243,7 @@ it.live(
           resume: false,
         })
         const context = yield* opencode.sessions.context({ sessionID: id })
-        const pendingAfterAdmit = yield* opencode.sessions.pending.list({ sessionID: id })
+        const pendingAfterAdmit = yield* opencode.sessions.inbox.list({ sessionID: id })
         yield* opencode.sessions.instructions.entry.put({ sessionID: id, key: "deploy-target", value: "production" })
         yield* opencode.sessions.instructions.entry.put({ sessionID: id, key: "flags", value: { beta: true } })
         const contextEntries = yield* opencode.sessions.instructions.entry.list({ sessionID: id })
@@ -252,13 +254,13 @@ it.live(
           text: "Promote this input",
         })
         const prompted = yield* opencode.sessions.log({ sessionID: id, follow: true }).pipe(
-          Stream.filter((event) => event.type === "session.input.promoted" && event.data.inputID === wake.id),
+          Stream.filter((event) => event.type === "session.inbox.delivered" && event.data.inboxID === wake.id),
           Stream.runHead,
           Effect.timeout("10 seconds"),
           Effect.map(Option.getOrThrow),
         )
         const wakeContext = yield* opencode.sessions.context({ sessionID: id })
-        const pendingAfterPromote = yield* opencode.sessions.pending.list({ sessionID: id })
+        const pendingAfterPromote = yield* opencode.sessions.inbox.list({ sessionID: id })
         const event = yield* opencode.sessions.log({ sessionID: id }).pipe(
           Stream.filter((item) => item.type === "session.model.selected"),
           Stream.take(1),
@@ -278,7 +280,7 @@ it.live(
             opencode.sessions.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
             opencode.sessions.message({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
             opencode.sessions.instructions.entry.list({ sessionID: missingSessionID }).pipe(Effect.flip),
-            opencode.sessions.pending.list({ sessionID: missingSessionID }).pipe(Effect.flip),
+            opencode.sessions.inbox.list({ sessionID: missingSessionID }).pipe(Effect.flip),
           ],
           { concurrency: "unbounded" },
         )
@@ -298,7 +300,7 @@ it.live(
         expect(pendingAfterAdmit).toContainEqual(
           expect.objectContaining({ id: admitted.id, type: "user", delivery: "steer" }),
         )
-        expect(prompted.type).toBe("session.input.promoted")
+        expect(prompted.type).toBe("session.inbox.delivered")
         expect(pendingAfterPromote.map((item) => item.id)).not.toContainAnyValues([admitted.id, wake.id])
         expect(wakeContext).toContainEqual(expect.objectContaining({ id: wake.id, type: "user" }))
         expect(contextEntries).toEqual([
@@ -362,13 +364,13 @@ it.live(
         const opencode = yield* fixture.sdk.OpenCode.create()
         const id = sessionID(fixture)
         const connected = yield* Latch.make(false)
-        const prompted = yield* Deferred.make<Extract<OpenCodeEvent, { type: "session.input.promoted" }>>()
+        const prompted = yield* Deferred.make<Extract<OpenCodeEvent, { type: "session.inbox.delivered" }>>()
 
         yield* opencode.events.subscribe().pipe(
           Stream.runForEach((event) =>
             event.type === "server.connected"
               ? connected.open
-              : event.type === "session.input.promoted" && event.data.sessionID === id
+              : event.type === "session.inbox.delivered" && event.data.sessionID === id
                 ? Deferred.succeed(prompted, event).pipe(Effect.asVoid)
                 : Effect.void,
           ),
@@ -429,6 +431,58 @@ it.live("embedded client is available as a Layer service", () =>
       const opencode = yield* fixture.sdk.OpenCode.Service
       const created = yield* opencode.sessions.create({ id, location: location(fixture) })
       expect(created.id).toBe(id)
-    }).pipe(Effect.provide(fixture.sdk.OpenCode.layer))
+    }).pipe(Effect.provide(fixture.sdk.OpenCode.layer()))
   }),
+)
+
+it.live("configures workspace providers through the SDK facade", () =>
+  withEmbedded("opencode-embedded-workspace-", (fixture) =>
+    Effect.gen(function* () {
+      const calls: Array<{ readonly operation: string; readonly workspaceID: string }> = []
+      const driver = WorkspaceDriver.make({
+        create: ({ workspaceID }) => {
+          calls.push({ operation: "create", workspaceID })
+          return Effect.succeed({ binding: { externalID: workspaceID } })
+        },
+        connect: ({ workspaceID }) => {
+          calls.push({ operation: "connect", workspaceID })
+          return Effect.succeed(makeMemoryDriver())
+        },
+        suspendForIdle: () => Effect.void,
+        destroy: ({ workspaceID }) => {
+          calls.push({ operation: "destroy", workspaceID })
+          return Effect.void
+        },
+      })
+      const opencode = yield* fixture.sdk.OpenCode.create({ workspaceProviders: { fake: driver } })
+      const workspace = yield* opencode.workspace.create({ provider: "fake" })
+
+      expect(workspace.provider).toBe("fake")
+      expect(workspace.binding).toEqual({ externalID: workspace.id })
+      expect(calls).toEqual([{ operation: "create", workspaceID: workspace.id }])
+
+      const workspaceLocation = fixture.sdk.Location.Ref.make({
+        directory: fixture.sdk.AbsolutePath.make("/"),
+        workspaceID: workspace.id,
+      })
+      const session = yield* opencode.sessions.create({ location: workspaceLocation })
+      expect(session.location.workspaceID).toBe(workspace.id)
+
+      yield* opencode.workspace.destroy({ workspaceID: workspace.id })
+      expect(calls.map((call) => call.operation)).toEqual(["create", "destroy"])
+      expect((yield* opencode.workspace.destroy({ workspaceID: workspace.id }).pipe(Effect.flip))._tag).toBe(
+        "Workspace.NotFound",
+      )
+    }),
+  ),
+)
+
+it.live("preserves unknown workspace provider errors", () =>
+  withEmbedded("opencode-embedded-workspace-provider-", (fixture) =>
+    Effect.gen(function* () {
+      const opencode = yield* fixture.sdk.OpenCode.create()
+      const error = yield* opencode.workspace.create({ provider: "missing" }).pipe(Effect.flip)
+      expect(error).toEqual(new WorkspaceDriver.ProviderNotFound({ provider: "missing" }))
+    }),
+  ),
 )

@@ -16,7 +16,7 @@ describe("HttpApiCodegen.write", () => {
 
       expect(writes).toEqual([
         { path: "/generated/session.ts", content: "export const session = {}\n" },
-        { path: "/generated/.httpapi-codegen.json", content: '[\n  "session.ts"\n]\n' },
+        { path: "/generated/.httpapi-codegen.json", content: '["session.ts"]\n' },
       ])
     }).pipe(
       Effect.provideService(

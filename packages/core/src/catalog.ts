@@ -1,13 +1,13 @@
-export * as Catalog from "./catalog"
+export * as Catalog from "./catalog.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Array, Context, Effect, Layer, Order, pipe } from "effect"
 import { Catalog } from "@opencode-ai/schema/catalog"
-import { Model } from "./model"
-import { Provider } from "./provider"
-import { Bus } from "./bus"
-import { State } from "./state"
-import { Integration } from "./integration"
+import { Model } from "./model.js"
+import { Provider } from "./provider.js"
+import { Bus } from "./bus.js"
+import { State } from "./state.js"
+import { Integration } from "./integration.js"
 
 export type ProviderRecord = {
   provider: Provider.MutableInfo

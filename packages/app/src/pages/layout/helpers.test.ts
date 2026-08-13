@@ -10,6 +10,7 @@ import type { SessionInfo } from "@opencode-ai/client/promise"
 import {
   childSessionOnPath,
   closeHomeProject,
+  compareSessionTime,
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
@@ -18,6 +19,7 @@ import {
   homeProjectDirectories,
   homeSessionServerStatus,
   latestRootSession,
+  sortedRootSessions,
   toggleHomeProjectSelection,
 } from "./helpers"
 import { pathKey } from "@/utils/path-key"
@@ -153,6 +155,30 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("workspace")
+  })
+
+  test("sorts recent sessions by persisted update time instead of id", () => {
+    const result = sortedRootSessions(
+      {
+        path: { directory: "/workspace" },
+        session: [
+          session({ id: "ses_z", directory: "/workspace", time: { created: 1, updated: 2, archived: undefined } }),
+          session({ id: "ses_a", directory: "/workspace", time: { created: 1, updated: 3, archived: undefined } }),
+        ],
+      },
+      3,
+    )
+
+    expect(result.map((item) => item.id)).toEqual(["ses_a", "ses_z"])
+  })
+
+  test("uses id only to break equal session timestamps", () => {
+    const sessions = [
+      session({ id: "ses_z", directory: "/workspace", time: { created: 1, updated: 2, archived: undefined } }),
+      session({ id: "ses_a", directory: "/workspace", time: { created: 1, updated: 2, archived: undefined } }),
+    ]
+
+    expect(sessions.sort(compareSessionTime).map((item) => item.id)).toEqual(["ses_a", "ses_z"])
   })
 
   test("detects project permissions with a filter", () => {

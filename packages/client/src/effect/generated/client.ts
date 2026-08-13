@@ -233,7 +233,7 @@ import type {
   Endpoint29_0Input,
   Endpoint29_0Output,
 } from "../api/api.js"
-import { ClientError } from "./client-error"
+import { ClientError } from "./client-error.js"
 
 type RawClient = HttpApiClient.ForApi<typeof ClientApi>
 
@@ -399,7 +399,7 @@ const Endpoint5_11 = (raw: RawClient["server.session"]) => (input: Endpoint5_11I
   preserveEffect<Endpoint5_11Output>()(
     raw["session.move"]({
       params: { sessionID: input["sessionID"] },
-      payload: { directory: input["directory"], workspaceID: input["workspaceID"] },
+      payload: { directory: input["directory"], workspaceID: input["workspaceID"], delivery: input["delivery"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
@@ -481,7 +481,10 @@ const Endpoint5_16 = (raw: RawClient["server.session"]) => (input: Endpoint5_16I
 
 const Endpoint5_17 = (raw: RawClient["server.session"]) => (input: Endpoint5_17Input) =>
   preserveEffect<Endpoint5_17Output>()(
-    raw["session.compact"]({ params: { sessionID: input["sessionID"] }, payload: { id: input["id"] } }).pipe(
+    raw["session.compact"]({
+      params: { sessionID: input["sessionID"] },
+      payload: { id: input["id"], delivery: input["delivery"] },
+    }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),
     ),
@@ -523,7 +526,7 @@ const Endpoint5_22 = (raw: RawClient["server.session"]) => (input: Endpoint5_22I
 
 const Endpoint5_23 = (raw: RawClient["server.session"]) => (input: Endpoint5_23Input) =>
   preserveEffect<Endpoint5_23Output>()(
-    raw["session.pending.list"]({ params: { sessionID: input["sessionID"] } }).pipe(
+    raw["session.inbox.list"]({ params: { sessionID: input["sessionID"] } }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),
     ),
@@ -531,21 +534,21 @@ const Endpoint5_23 = (raw: RawClient["server.session"]) => (input: Endpoint5_23I
 
 const Endpoint5_24 = (raw: RawClient["server.session"]) => (input: Endpoint5_24Input) =>
   preserveEffect<Endpoint5_24Output>()(
-    raw["session.pending.cancel"]({ params: { sessionID: input["sessionID"], inputID: input["inputID"] } }).pipe(
+    raw["session.inbox.cancel"]({ params: { sessionID: input["sessionID"], inboxID: input["inboxID"] } }).pipe(
       Effect.mapError(mapClientError),
     ),
   )
 
 const Endpoint5_25 = (raw: RawClient["server.session"]) => (input: Endpoint5_25Input) =>
   preserveEffect<Endpoint5_25Output>()(
-    raw["session.pending.steer"]({ params: { sessionID: input["sessionID"], inputID: input["inputID"] } }).pipe(
+    raw["session.inbox.steer"]({ params: { sessionID: input["sessionID"], inboxID: input["inboxID"] } }).pipe(
       Effect.mapError(mapClientError),
     ),
   )
 
 const Endpoint5_26 = (raw: RawClient["server.session"]) => (input: Endpoint5_26Input) =>
   preserveEffect<Endpoint5_26Output>()(
-    raw["session.pending.queue"]({ params: { sessionID: input["sessionID"], inputID: input["inputID"] } }).pipe(
+    raw["session.inbox.queue"]({ params: { sessionID: input["sessionID"], inboxID: input["inboxID"] } }).pipe(
       Effect.mapError(mapClientError),
     ),
   )
@@ -596,7 +599,10 @@ const Endpoint5_31 = (raw: RawClient["server.session"]) => (input: Endpoint5_31I
 
 const Endpoint5_32 = (raw: RawClient["server.session"]) => (input: Endpoint5_32Input) =>
   preserveEffect<Endpoint5_32Output>()(
-    raw["session.interrupt"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+    raw["session.interrupt"]({
+      params: { sessionID: input["sessionID"] },
+      query: { continue: input["continue"] },
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const Endpoint5_33 = (raw: RawClient["server.session"]) => (input: Endpoint5_33Input) =>
@@ -634,7 +640,7 @@ const adaptGroup5 = (raw: RawClient["server.session"]) => ({
   wait: Endpoint5_18(raw),
   revert: { stage: Endpoint5_19(raw), clear: Endpoint5_20(raw), commit: Endpoint5_21(raw) },
   context: Endpoint5_22(raw),
-  pending: { list: Endpoint5_23(raw), cancel: Endpoint5_24(raw), steer: Endpoint5_25(raw), queue: Endpoint5_26(raw) },
+  inbox: { list: Endpoint5_23(raw), cancel: Endpoint5_24(raw), steer: Endpoint5_25(raw), queue: Endpoint5_26(raw) },
   instructions: { entry: { list: Endpoint5_27(raw), put: Endpoint5_28(raw), remove: Endpoint5_29(raw) } },
   generate: Endpoint5_30(raw),
   log: Endpoint5_31(raw),
@@ -717,7 +723,7 @@ const Endpoint10_3 = (raw: RawClient["server.integration"]) => (input: Endpoint1
     raw["integration.connect.key"]({
       params: { integrationID: input["integrationID"] },
       query: { location: input["location"] },
-      payload: { key: input["key"], label: input["label"] },
+      payload: { key: input["key"], answer: input["answer"], label: input["label"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
@@ -726,7 +732,7 @@ const Endpoint10_4 = (raw: RawClient["server.integration"]) => (input: Endpoint1
     raw["integration.oauth.connect"]({
       params: { integrationID: input["integrationID"] },
       query: { location: input["location"] },
-      payload: { methodID: input["methodID"], inputs: input["inputs"], label: input["label"] },
+      payload: { methodID: input["methodID"], answer: input["answer"], label: input["label"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 

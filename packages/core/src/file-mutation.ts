@@ -1,12 +1,12 @@
-export * as FileMutation from "./file-mutation"
+export * as FileMutation from "./file-mutation.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer } from "effect"
-import { KeyedMutex } from "./effect/keyed-mutex"
+import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Bom } from "@opencode-ai/util/bom"
-import { Environment } from "./environment"
-import type { Files } from "./environment"
+import { Environment } from "./environment/index.js"
+import type { Files } from "./environment/index.js"
 
 export interface Target {
   readonly absolute: string

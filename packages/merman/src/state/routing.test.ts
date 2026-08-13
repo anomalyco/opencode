@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import type { StateDiagramBoxBounds } from "./layout.js"
+import { createStateDiagramLayout } from "./layout.js"
+import { parseMermaidStateDiagram } from "./parser.js"
 import {
   createStateTransitionJunctionPlans,
   createStateTransitionRenderPlans,
   createStateTransitionRoutePlans,
 } from "./routing.js"
-import { prepareVisibleStateDiagram, type StateVisibleDiagram } from "./visible-model.js"
+import type { StateVisibleDiagram } from "./visible-model.js"
+import { prepareVisibleStateDiagram } from "./visible-model.js"
 
 function bounds(id: string, centerX: number, centerY: number): StateDiagramBoxBounds {
   return { id, left: centerX - 2, top: centerY - 1, width: 5, height: 3, centerX, centerY }
@@ -206,6 +209,39 @@ describe("createStateTransitionRenderPlans", () => {
       [10, 4],
       [11, 4],
     ])
+  })
+
+  test("keeps vertical branch routes out of unrelated state bounds", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  state "Branch root" as Root
+  state "Upper branch" as Upper
+  state "Lower branch" as Lower
+  state "Merged branch" as Merge
+  Root --> Upper: branch-up
+  Root --> Lower: branch-down
+  Upper --> Merge: merge-up
+  Lower --> Merge: merge-down
+  Merge --> Root: branch-feedback`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 4 })
+    const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
+
+    for (const plan of plans) {
+      const unrelated = diagram.states
+        .filter((state) => state.id !== plan.route.transition.from && state.id !== plan.route.transition.to)
+        .map((state) => layout.bounds.get(state.id)!)
+      expect(
+        plan.path.some(([x, y]) =>
+          unrelated.some(
+            (bound) =>
+              x >= bound.left && x < bound.left + bound.width && y >= bound.top && y < bound.top + bound.height,
+          ),
+        ),
+        `${plan.route.transition.from} -> ${plan.route.transition.to}`,
+      ).toBe(false)
+    }
   })
 })
 

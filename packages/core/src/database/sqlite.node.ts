@@ -1,26 +1,18 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite"
-import { drizzle } from "drizzle-orm/node-sqlite"
-import { Context, Effect, Fiber, Layer, Scope, Semaphore, Stream } from "effect"
-import { identity } from "effect/Function"
+import { Context, Effect, Layer } from "effect"
 import { Reactivity } from "effect/unstable/reactivity"
-import { SqlClient, Statement } from "effect/unstable/sql"
-import type { Connection } from "effect/unstable/sql/SqlConnection"
+import { SqlClient } from "effect/unstable/sql"
 import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError"
-import { Sqlite } from "./sqlite"
-
-const ATTR_DB_SYSTEM_NAME = "db.system.name"
+import { Sqlite } from "./sqlite.js"
 
 const TypeId = "~@opencode-ai/core/database/SqliteNode" as const
-type TypeId = typeof TypeId
 
-interface SqliteClient extends SqlClient.SqlClient {
-  readonly [TypeId]: TypeId
-  readonly config: Config
-  readonly loadExtension: (path: string) => Effect.Effect<void, SqlError>
-  readonly updateValues: never
-}
+export const supportsTuningPragmas = true
 
-interface Config {
+// Foreign keys default OFF and can be toggled per connection.
+export const supportsForeignKeyToggle = true
+
+interface Config extends Sqlite.ClientConfig {
   readonly filename: string
   readonly readonly?: boolean
   readonly create?: boolean
@@ -28,23 +20,11 @@ interface Config {
   readonly disableWAL?: boolean
   readonly timeout?: number
   readonly allowExtension?: boolean
-  readonly spanAttributes?: Record<string, unknown>
-  readonly transformResultNames?: (str: string) => string
-  readonly transformQueryNames?: (str: string) => string
-}
-
-interface SqliteConnection extends Connection {
-  readonly loadExtension: (path: string) => Effect.Effect<void, SqlError>
 }
 
 const make = (options: Config) =>
   Effect.gen(function* () {
     const native = (yield* Sqlite.Native) as DatabaseSync
-
-    const compiler = Statement.makeCompilerSqlite(options.transformQueryNames)
-    const transformRows = options.transformResultNames
-      ? Statement.defaultTransforms(options.transformResultNames).array
-      : undefined
 
     const run = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
@@ -79,26 +59,8 @@ const make = (options: Config) =>
         }
       })
 
-    const connection = identity<SqliteConnection>({
-      execute(query, params, transformRows) {
-        return transformRows ? Effect.map(run(query, params), transformRows) : run(query, params)
-      },
-      executeRaw(query, params) {
-        return run(query, params)
-      },
-      executeValues(query, params) {
-        return runValues(query, params)
-      },
-      executeValuesUnprepared(query, params) {
-        return runValues(query, params)
-      },
-      executeUnprepared(query, params, transformRows) {
-        return this.execute(query, params, transformRows)
-      },
-      executeStream() {
-        return Stream.die("executeStream not implemented")
-      },
-      loadExtension: (path) =>
+    const connection = Sqlite.makeConnection(run, runValues, {
+      loadExtension: (path: string) =>
         Effect.try({
           try: () => native.loadExtension(path),
           catch: (cause) =>
@@ -108,36 +70,9 @@ const make = (options: Config) =>
         }),
     })
 
-    const semaphore = yield* Semaphore.make(1)
-    const acquirer = semaphore.withPermits(1)(Effect.succeed(connection))
-    const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
-      const fiber = Fiber.getCurrent()!
-      const scope = Context.getUnsafe(fiber.context, Scope.Scope)
-      return Effect.as(
-        Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
-        connection,
-      )
-    })
-
-    const client = Object.assign(
-      (yield* SqlClient.make({
-        acquirer,
-        compiler,
-        transactionAcquirer,
-        spanAttributes: [
-          ...(options.spanAttributes ? Object.entries(options.spanAttributes) : []),
-          [ATTR_DB_SYSTEM_NAME, "sqlite"],
-        ],
-        transformRows,
-      })) as SqliteClient,
-      {
-        [TypeId]: TypeId,
-        config: options,
-        loadExtension: (path: string) => Effect.flatMap(acquirer, (_) => _.loadExtension(path)),
-      },
-    )
-
-    return client
+    return yield* Sqlite.makeClient(options, connection, TypeId, (acquirer) => ({
+      loadExtension: (path: string) => Effect.flatMap(acquirer, (_) => _.loadExtension(path)),
+    }))
   })
 
 const nativeLayer = (config: Config) =>
@@ -159,16 +94,7 @@ const nativeLayer = (config: Config) =>
 
 const clientLayer = (config: Config) => Layer.effect(SqlClient.SqlClient, make(config))
 
-const drizzleLayer = Layer.effect(
-  Sqlite.Drizzle,
-  Effect.gen(function* () {
-    return drizzle({ client: (yield* Sqlite.Native) as DatabaseSync }) as unknown as Sqlite.DrizzleClient
-  }),
-)
-
 export const sqliteLayer = (config: Config) => {
   const native = nativeLayer(config)
-  return Layer.merge(native, Layer.merge(clientLayer(config), drizzleLayer).pipe(Layer.provide(native))).pipe(
-    Layer.provide(Reactivity.layer),
-  )
+  return Layer.merge(native, clientLayer(config).pipe(Layer.provide(native))).pipe(Layer.provide(Reactivity.layer))
 }

@@ -8,7 +8,11 @@ import { Skill } from "@opencode-ai/schema/skill"
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
 import { Agent } from "@opencode-ai/core/agent"
 import { Shell } from "@opencode-ai/schema/shell"
+import { Location } from "@opencode-ai/schema/location"
+import { AbsolutePath } from "@opencode-ai/schema/schema"
 import { DateTime } from "effect"
+import path from "path"
+import { pathToFileURL } from "url"
 
 const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
@@ -67,6 +71,15 @@ describe("toLLMMessages", () => {
           model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
           time: { created },
         }),
+        SessionMessage.LocationSwitched.make({
+          id: id("location"),
+          type: "location-switched",
+          location: Location.Ref.make({ directory: AbsolutePath.make("/destination") }),
+          previous: {
+            location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+          },
+          time: { created },
+        }),
         SessionMessage.System.make({
           id: id("system"),
           type: "system",
@@ -110,9 +123,16 @@ describe("toLLMMessages", () => {
       model,
     )
 
-    expect(messages.map((message) => message.role)).toEqual(["system", "user", "user", "user", "user"])
-    expect(messages[0]).toEqual(Message.system("Updated context\n\nOther context"))
-    expect(messages[1]).toEqual(
+    expect(messages.map((message) => message.role)).toEqual(["user", "system", "user", "user", "user", "user"])
+    expect(messages[0]).toEqual(
+      Message.make({
+        id: id("location"),
+        role: "user",
+        content: "The working directory has been changed to /destination.",
+      }),
+    )
+    expect(messages[1]).toEqual(Message.system("Updated context\n\nOther context"))
+    expect(messages[2]).toEqual(
       Message.make({
         id: id("user"),
         role: "user",
@@ -123,7 +143,7 @@ describe("toLLMMessages", () => {
         metadata: { agents: [{ name: "build" }] },
       }),
     )
-    expect(messages.slice(2).map((message) => message.content)).toEqual([
+    expect(messages.slice(3).map((message) => message.content)).toEqual([
       [{ type: "text", text: "Synthetic context" }],
       [
         {
@@ -249,12 +269,13 @@ Recent work
     ])
   })
 
-  test("lowers directory attachments as directory context", () => {
+  test("exposes admitted reference directory source paths in model context", () => {
+    const location = path.resolve("/references/harness-engineering")
     const directory = FileAttachment.make({
       data: Base64.make(Buffer.from("lib/\nindex.ts").toString("base64")),
       mime: "application/x-directory",
-      source: { type: "uri", uri: "file:///project/src" },
-      name: "src/",
+      source: { type: "uri", uri: pathToFileURL(location).href },
+      name: "harness-engineering",
     })
     const messages = toLLMMessages(
       [
@@ -277,14 +298,15 @@ Recent work
         { type: "text", text: "Review this directory" },
         {
           type: "text",
-          text: "\n\nAttached directory: src/\n\nlib/\nindex.ts",
-          metadata: { attachment: { source: directory.source, name: "src/" } },
+          text: `\n\nAttached directory: ${location}\n\nlib/\nindex.ts`,
+          metadata: { attachment: { source: directory.source, name: "harness-engineering" } },
         },
       ],
     })
   })
 
   test("preserves attachment order after the prompt", () => {
+    const directory = path.resolve("/project/src")
     const messages = toLLMMessages(
       [
         SessionMessage.User.make({
@@ -295,7 +317,7 @@ Recent work
             FileAttachment.make({
               data: Base64.make(Buffer.from("index.ts").toString("base64")),
               mime: "application/x-directory",
-              source: { type: "uri", uri: "file:///project/src" },
+              source: { type: "uri", uri: pathToFileURL(directory).href },
               name: "src/",
             }),
             FileAttachment.make({
@@ -314,12 +336,13 @@ Recent work
     expect(messages).toHaveLength(1)
     expect(messages[0]?.content.map((part) => (part.type === "text" ? part.text : part.type))).toEqual([
       "Review these attachments",
-      "\n\nAttached directory: src/\n\nindex.ts",
+      `\n\nAttached directory: ${directory}\n\nindex.ts`,
       "\n\nAttached file: main.ts\n\nexport const value = 1",
     ])
   })
 
   test("omits empty prompt text before an attachment", () => {
+    const directory = path.resolve("/project/src")
     const messages = toLLMMessages(
       [
         SessionMessage.User.make({
@@ -330,7 +353,7 @@ Recent work
             FileAttachment.make({
               data: Base64.make(Buffer.from("index.ts").toString("base64")),
               mime: "application/x-directory",
-              source: { type: "uri", uri: "file:///project/src" },
+              source: { type: "uri", uri: pathToFileURL(directory).href },
               name: "src/",
             }),
           ],
@@ -341,7 +364,9 @@ Recent work
     )
 
     expect(messages).toHaveLength(1)
-    expect(messages[0]?.content).toMatchObject([{ type: "text", text: "\n\nAttached directory: src/\n\nindex.ts" }])
+    expect(messages[0]?.content).toMatchObject([
+      { type: "text", text: `\n\nAttached directory: ${directory}\n\nindex.ts` },
+    ])
   })
 
   test("uses materialized image data as provider media and drops unsupported attachments", () => {
@@ -371,6 +396,205 @@ Recent work
       { type: "text", text: "Inspect this image" },
       { type: "media", mediaType: "image/png", data, filename: "image.png" },
     ])
+  })
+
+  test("exposes admitted local image source paths before provider media", () => {
+    const data = Base64.make("AAECAw==")
+    const location = path.resolve("/project/IMG_3480.JPG")
+    const image = FileAttachment.make({
+      data,
+      mime: "image/png",
+      source: { type: "uri", uri: pathToFileURL(location).href },
+      name: "IMG_3480.JPG",
+    })
+
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-local-image-path"),
+          type: "user",
+          text: "Inspect this image",
+          files: [image],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Inspect this image" },
+      { type: "text", text: `Attached file: ${location}` },
+      { type: "media", mediaType: "image/png", data, filename: "IMG_3480.JPG" },
+    ])
+  })
+
+  test("falls back to attachment names for invalid local source paths", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-invalid-local-paths"),
+          type: "user",
+          text: "Inspect these attachments",
+          files: [
+            FileAttachment.make({
+              data: Base64.make(Buffer.from("index.ts").toString("base64")),
+              mime: "application/x-directory",
+              source: { type: "uri", uri: "file:///project/src%2Flib" },
+              name: "src/",
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "uri", uri: "file:///project/image%2Fpreview.png" },
+              name: "preview.png",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Inspect these attachments" },
+      {
+        type: "text",
+        text: "\n\nAttached directory: src/\n\nindex.ts",
+        metadata: {
+          attachment: {
+            source: { type: "uri", uri: "file:///project/src%2Flib" },
+            name: "src/",
+          },
+        },
+      },
+      { type: "media", mediaType: "image/png", data, filename: "preview.png" },
+    ])
+  })
+
+  test("does not add attachment location text for non-local provider media", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-remote-image"),
+          type: "user",
+          text: "Inspect this image",
+          files: [
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "uri", uri: "https://example.com/image.png" },
+              name: "image.png",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Inspect this image" },
+      { type: "media", mediaType: "image/png", data, filename: "image.png" },
+    ])
+  })
+
+  test("deduplicates provider media while preserving durable attachment references", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-duplicate-image"),
+          type: "user",
+          text: "[Image 1] [Image 1] [Image 2]",
+          files: [
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              mention: { start: 0, end: 9, text: "[Image 1]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              mention: { start: 10, end: 19, text: "[Image 1]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              description: "alternate use",
+              mention: { start: 20, end: 29, text: "[Image 2]" },
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "[Image 1] [Image 1] [Image 2]" },
+      { type: "media", mediaType: "image/png", data, filename: "image.png" },
+      {
+        type: "media",
+        mediaType: "image/png",
+        data,
+        filename: "image.png",
+        metadata: { description: "alternate use" },
+      },
+    ])
+  })
+
+  test("preserves provider media with distinct labels or URI sources", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-distinct-images"),
+          type: "user",
+          text: "[Image 1] [Image 2]",
+          files: [
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              mention: { start: 0, end: 9, text: "[Image 1]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              mention: { start: 10, end: 19, text: "[Image 2]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "uri", uri: pathToFileURL(path.resolve("/project/image.png")).href },
+              name: "image.png",
+              mention: { start: 0, end: 9, text: "[Image 1]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content.filter((part) => part.type === "media")).toHaveLength(4)
   })
 
   test("replays durable tool media into canonical tool messages without structured base64", () => {

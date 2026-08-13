@@ -1,13 +1,12 @@
-export * as MCPOAuth from "./oauth"
+export * as MCPOAuth from "./oauth.js"
 
 import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js"
-import { createServer } from "node:http"
 import { Deferred, Effect } from "effect"
 import { Credential } from "@opencode-ai/schema/credential"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
-import { OauthCallbackPage } from "../oauth/page"
-import type { Integration } from "../integration"
+import { OauthCallbackPage } from "../oauth/page.js"
+import type { Integration } from "../integration.js"
 
 /** Persists the OAuth artifacts for one MCP server session: DCR client info, PKCE verifier, and tokens. */
 export interface Store {
@@ -152,6 +151,8 @@ export const authorize = (input: {
     const redirectPath = oauth?.redirect_uri ? new URL(oauth.redirect_uri).pathname : "/callback"
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
 
+    // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
+    const { createServer } = yield* Effect.promise(() => import("node:http"))
     const server = createServer((request, response) => {
       const url = new URL(request.url ?? "/", "http://127.0.0.1")
       if (url.pathname !== redirectPath) {

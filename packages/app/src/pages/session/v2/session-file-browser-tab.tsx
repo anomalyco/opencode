@@ -8,6 +8,7 @@ import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
+import { useServerSDK } from "@/context/server-sdk"
 import { displayName } from "@/pages/layout/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileView } from "@/pages/session/file-tabs"
@@ -38,6 +39,7 @@ export function SessionFileBrowserTab(props: {
   const language = useLanguage()
   const layout = useLayout()
   const sdk = useSDK()
+  const serverSDK = useServerSDK()
   const { workspaceKey } = useSessionLayout()
   const resultsID = `session-file-browser-results-${createUniqueId()}`
   const [filter, setFilter] = createSignal("")
@@ -47,8 +49,8 @@ export function SessionFileBrowserTab(props: {
   const search = createQuery(() => {
     const value = query()
     return {
-      queryKey: ["session-open-file", workspaceKey(), value] as const,
-      enabled: value.length > 0,
+      queryKey: [serverSDK().scope, "session-open-file", workspaceKey(), value] as const,
+      enabled: serverSDK().connection.status() === "connected" && value.length > 0,
       queryFn: ({ signal }) => file.searchFiles(value, { limit: 200, signal }),
     }
   })

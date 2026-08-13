@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import type { PermissionRequest, QuestionRequest, SessionInfo } from "@opencode-ai/client/promise"
+import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode-ai/client/promise"
 import { todoDockAtBoundary, todoState } from "./session-composer-state"
-import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
+import { sessionPermissionRequest, sessionQuestionForm } from "./session-request-tree"
 
 const session = (input: { id: string; parentID?: string }) =>
   ({
@@ -19,8 +19,10 @@ const question = (id: string, sessionID: string) =>
   ({
     id,
     sessionID,
-    questions: [],
-  }) as QuestionRequest
+    title: "Questions",
+    metadata: { kind: "question" },
+    fields: [{ key: "q0", type: "string" }],
+  }) as FormInfo
 
 describe("sessionPermissionRequest", () => {
   test("prefers the current session permission", () => {
@@ -80,7 +82,7 @@ describe("sessionPermissionRequest", () => {
   })
 })
 
-describe("sessionQuestionRequest", () => {
+describe("sessionQuestionForm", () => {
   test("prefers the current session question", () => {
     const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
     const questions = {
@@ -88,7 +90,7 @@ describe("sessionQuestionRequest", () => {
       child: [question("q-child", "child")],
     }
 
-    expect(sessionQuestionRequest(sessions, questions, "root")?.id).toBe("q-root")
+    expect(sessionQuestionForm(sessions, questions, "root")?.id).toBe("q-root")
   })
 
   test("returns a nested child question", () => {
@@ -101,7 +103,16 @@ describe("sessionQuestionRequest", () => {
       grand: [question("q-grand", "grand")],
     }
 
-    expect(sessionQuestionRequest(sessions, questions, "root")?.id).toBe("q-grand")
+    expect(sessionQuestionForm(sessions, questions, "root")?.id).toBe("q-grand")
+  })
+
+  test("skips forms that are not questions", () => {
+    const sessions = [session({ id: "root" })]
+    const forms = {
+      root: [{ ...question("form", "root"), metadata: { kind: "integration" } }],
+    }
+
+    expect(sessionQuestionForm(sessions, forms, "root")).toBeUndefined()
   })
 })
 

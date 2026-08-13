@@ -49,6 +49,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
   init: (props: {
     data: Data
     directory: string
+    sessionID?: string
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
   }) => {
@@ -58,6 +59,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
       get directory() {
         return props.directory
+      },
+      get sessionID() {
+        return props.sessionID
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,

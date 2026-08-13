@@ -1,7 +1,7 @@
 import stringWidth from "string-width"
 import { splitDiagramLines } from "./text-lines.js"
 
-export { splitDiagramLines } from "./text-lines.js"
+export { parseDiagramTextLines, splitDiagramLines } from "./text-lines.js"
 
 export interface DiagramTextBoxSize {
   width: number

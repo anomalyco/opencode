@@ -1,5 +1,5 @@
 import { Schema, type Effect } from "effect"
-import type { AIError, LLMEvent, LLMRequest, ProtocolID } from "../schema"
+import type { AIError, LLMEvent, LLMRequest, ProtocolID } from "../schema/index.js"
 
 /**
  * The semantic API contract of one model server family.
@@ -82,4 +82,4 @@ export const make = <Body, Frame, Event, State>(
 
 export const jsonEvent = <const S extends Schema.Top>(schema: S) => Schema.fromJsonString(schema)
 
-export * as Protocol from "./protocol"
+export * as Protocol from "./protocol.js"

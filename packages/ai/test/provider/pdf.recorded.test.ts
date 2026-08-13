@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMResponse, Message, ToolDefinition, type LanguageModel } from "../../src"
-import { AmazonBedrock, Anthropic, Google, OpenAI, XAI } from "../../src/providers"
-import { LLMClient } from "../../src/route"
-import { Tool } from "../../src/tool"
-import { runTools } from "../lib/tool-runtime"
-import { recordedTests } from "../recorded-test"
+import { LLM, LLMResponse, Message, ToolDefinition, type LanguageModel } from "../../src/index.js"
+import { AmazonBedrock, Anthropic, Google, OpenAI, XAI } from "../../src/providers.js"
+import { LLMClient } from "../../src/route.js"
+import { Tool } from "../../src/tool.js"
+import { runTools } from "../lib/tool-runtime.js"
+import { recordedTests } from "../recorded-test.js"
 
 const CODE = "ORCHID-7391"
 const PDF =

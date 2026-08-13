@@ -1,5 +1,5 @@
-import { LLM } from "../../src"
-import { OpenAICompatibleResponses } from "../../src/providers"
+import { LLM } from "../../src/index.js"
+import { OpenAICompatibleResponses } from "../../src/providers.js"
 
 const model = OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("model")
 

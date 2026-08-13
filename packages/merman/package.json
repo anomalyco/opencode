@@ -14,6 +14,7 @@
   "dependencies": {
     "@opencode-ai/plugin": "workspace:*",
     "@opentui/core": "catalog:",
+    "entities": "7.0.1",
     "string-width": "catalog:"
   },
   "devDependencies": {

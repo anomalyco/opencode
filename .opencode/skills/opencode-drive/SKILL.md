@@ -51,7 +51,7 @@ files. If the script is unsuccessful, automatically fix the script and run it ag
 Scripts use one typed definition object. `setup` runs before OpenCode starts,
 and `fs.writeFile` always writes inside the simulated project.
 
-You can read the full typed API here: https://raw.githubusercontent.com/jlongster/opencode-drive/refs/heads/main/src/script/types.ts
+You can read the full typed API here: https://raw.githubusercontent.com/anomalyco/opencode/v2/packages/drive/src/script/types.ts
 
 ```ts
 import { defineScript } from "opencode-drive"
@@ -83,7 +83,7 @@ itself (this is extremely rare, do not use this unless explicitly asked). In thi
 mode `ui` is typed as `null`; call `server.launch()` exactly
 once before launching clients. Each `clients.launch(name)` result provides the
 same UI methods as the automatic client. You can see an example of this API
-here: https://raw.githubusercontent.com/jlongster/opencode-drive/refs/heads/main/examples/multiple-clients.ts
+here: https://raw.githubusercontent.com/anomalyco/opencode/v2/packages/drive/examples/multiple-clients.ts
 
 Use the exported `wait(milliseconds)` utility for an unconditional delay.
 
@@ -114,8 +114,8 @@ completion are automatic.
 
 You can see some example scripts here:
 
-- https://raw.githubusercontent.com/jlongster/opencode-drive/refs/heads/main/examples/simple.ts
-- https://raw.githubusercontent.com/jlongster/opencode-drive/refs/heads/main/examples/serve.ts
+- https://raw.githubusercontent.com/anomalyco/opencode/v2/packages/drive/examples/simple.ts
+- https://raw.githubusercontent.com/anomalyco/opencode/v2/packages/drive/examples/serve.ts
 
 ## Prune
 

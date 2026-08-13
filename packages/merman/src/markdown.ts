@@ -17,6 +17,10 @@ import { detectMermaidDiagram } from "./detect.js"
 import { drawFlowchartDiagramGrid } from "./flowchart/drawing.js"
 import { parseMermaidFlowchartDiagram } from "./flowchart/parser.js"
 import { renderGridStyledText, resolveFlowchartStyleColors } from "./flowchart/style.js"
+import { drawGitGraphDiagramGrid } from "./gitgraph/drawing.js"
+import { parseMermaidGitGraphDiagram } from "./gitgraph/parser.js"
+import { renderGitGraphGridStyledText } from "./gitgraph/render-grid.js"
+import { resolveGitGraphStyleColors } from "./gitgraph/style.js"
 import { drawSequenceDiagramGrid } from "./sequence/drawing.js"
 import { parseMermaidSequenceDiagram } from "./sequence/parser.js"
 import { renderSequenceGridStyledText } from "./sequence/render-grid.js"
@@ -25,6 +29,10 @@ import { drawStateDiagramGrid } from "./state/drawing.js"
 import { parseMermaidStateDiagram } from "./state/parser.js"
 import { renderStateGridStyledText } from "./state/render-grid.js"
 import { resolveStateStyleColors } from "./state/style.js"
+import { drawTimelineDiagramGrid } from "./timeline/drawing.js"
+import { parseMermaidTimelineDiagram } from "./timeline/parser.js"
+import { renderTimelineGridStyledText } from "./timeline/render-grid.js"
+import { resolveTimelineStyleColors } from "./timeline/style.js"
 
 type DiagramKind = NonNullable<ReturnType<typeof detectMermaidDiagram>>
 
@@ -37,6 +45,8 @@ interface PreparedDiagram {
 
 export interface MermaidMarkdownRendererOptions {
   compact?: boolean
+  /** Fold horizontal flowcharts that exceed this width. Defaults to 120 columns. */
+  layoutMaxWidth?: number
   colors?: {
     text?: ColorInput
     primary?: ColorInput
@@ -44,6 +54,10 @@ export interface MermaidMarkdownRendererOptions {
     muted?: ColorInput
     warning?: ColorInput
     background?: ColorInput
+    request?: ColorInput
+    response?: ColorInput
+    note?: ColorInput
+    noteBackground?: ColorInput
   }
 }
 
@@ -97,11 +111,19 @@ class StaticDiagramRenderable extends TextRenderable {
   }
 }
 
-function prepareDiagram(kind: DiagramKind, source: string, options: MermaidMarkdownRendererOptions): PreparedDiagram {
+function prepareDiagram(
+  kind: DiagramKind,
+  source: string,
+  options: MermaidMarkdownRendererOptions,
+  layoutMaxWidth: number,
+): PreparedDiagram {
   const colors = options.colors ?? {}
   switch (kind) {
     case "flowchart": {
-      const grid = drawFlowchartDiagramGrid(parseMermaidFlowchartDiagram(source), { compact: options.compact })
+      const grid = drawFlowchartDiagramGrid(parseMermaidFlowchartDiagram(source), {
+        compact: options.compact,
+        layoutMaxWidth,
+      })
       const size = grid.getTextSize({ trimTop: true, trimBottom: true })
       return {
         kind,
@@ -119,6 +141,25 @@ function prepareDiagram(kind: DiagramKind, source: string, options: MermaidMarkd
         height: size.height,
       }
     }
+    case "gitGraph": {
+      const grid = drawGitGraphDiagramGrid(parseMermaidGitGraphDiagram(source))
+      const size = grid.getTextSize({ trimBottom: true })
+      return {
+        kind,
+        source,
+        text: renderGitGraphGridStyledText(
+          grid,
+          resolveGitGraphStyleColors({
+            primary: color(colors.primary),
+            secondary: color(colors.secondary),
+            muted: color(colors.muted),
+            warning: color(colors.warning),
+            text: color(colors.text),
+          }),
+        ),
+        height: size.height,
+      }
+    }
     case "sequence": {
       const grid = drawSequenceDiagramGrid(parseMermaidSequenceDiagram(source), { compact: options.compact })
       const size = grid.getTextSize()
@@ -131,12 +172,12 @@ function prepareDiagram(kind: DiagramKind, source: string, options: MermaidMarkd
             participant: color(colors.primary),
             lifeline: color(colors.muted),
             group: color(colors.secondary),
-            request: color(colors.primary),
-            response: color(colors.primary),
+            request: color(colors.request ?? colors.primary),
+            response: color(colors.response ?? colors.primary),
             fragment: color(colors.secondary),
             fragmentLabelBg: color(colors.background),
-            note: color(colors.warning),
-            noteBg: color(colors.background),
+            note: color(colors.note ?? colors.warning),
+            noteBg: color(colors.noteBackground ?? colors.background),
           }),
         ),
         height: size.height,
@@ -166,6 +207,25 @@ function prepareDiagram(kind: DiagramKind, source: string, options: MermaidMarkd
         height: size.height,
       }
     }
+    case "timeline": {
+      const grid = drawTimelineDiagramGrid(parseMermaidTimelineDiagram(source))
+      const size = grid.getTextSize({ trimBottom: true })
+      return {
+        kind,
+        source,
+        text: renderTimelineGridStyledText(
+          grid,
+          resolveTimelineStyleColors({
+            title: color(colors.text),
+            section: color(colors.secondary),
+            period: color(colors.warning),
+            spine: color(colors.muted),
+            event: color(colors.primary),
+          }),
+        ),
+        height: size.height,
+      }
+    }
   }
 }
 
@@ -188,9 +248,12 @@ export function createMermaidCodeBlockRenderer(
     // OpenTUI's default block ID is the stable identity available for this fence across streaming updates.
     const key = context.defaultRender()?.id
     const options = typeof input === "function" ? input() : input
+    const configuredMaxWidth =
+      options.layoutMaxWidth === undefined ? 120 : Math.max(1, Math.trunc(options.layoutMaxWidth))
+    const layoutMaxWidth = Math.min(configuredMaxWidth, Math.max(1, Math.trunc(ctx.width)))
 
     try {
-      const prepared = prepareDiagram(kind, token.text, options)
+      const prepared = prepareDiagram(kind, token.text, options, layoutMaxWidth)
       const diagram = new StaticDiagramRenderable(ctx, prepared)
       if (key) claimLastGood(key, prepared, diagram, lastGood)
       return diagram

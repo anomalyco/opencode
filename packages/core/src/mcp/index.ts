@@ -1,4 +1,4 @@
-export * as MCP from "./index"
+export * as MCP from "./index.js"
 
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
@@ -9,17 +9,18 @@ import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Config } from "../config"
-import { Credential } from "../credential"
-import { Bus } from "../bus"
-import { Form } from "../form"
-import { Integration } from "../integration"
-import { KeyedMutex } from "../effect/keyed-mutex"
-import { Location } from "../location"
+import { Config } from "../config.js"
+import { Credential } from "../credential.js"
+import { Bus } from "../bus.js"
+import { Environment } from "../environment/index.js"
+import { Form } from "../form.js"
+import { Integration } from "../integration.js"
+import { KeyedMutex } from "../effect/keyed-mutex.js"
+import { Location } from "../location.js"
 import { waitForAbort } from "@opencode-ai/util/process"
-import { State } from "../state"
-import { MCPClient } from "./client"
-import { MCPOAuth } from "./oauth"
+import { State } from "../state.js"
+import { MCPClient } from "./client.js"
+import { MCPOAuth } from "./oauth.js"
 
 export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
 export type ServerName = typeof ServerName.Type
@@ -173,13 +174,13 @@ export const layer = (options?: Options) =>
     Effect.gen(function* () {
       const config = yield* Config.Service
       const location = yield* Location.Service
+      const environment = yield* Environment.Service
       const bus = yield* Bus.Service
       const forms = yield* Form.Service
       const integration = yield* Integration.Service
       const credentials = yield* Credential.Service
-      const root = yield* Scope.make()
+      const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
-      yield* Effect.addFinalizer((exit) => Scope.close(root, exit))
 
       const loadConfig = (entries: readonly Entry[]) => {
         const documents = entries.filter((entry): entry is Document => entry.type === "document")
@@ -459,13 +460,8 @@ export const layer = (options?: Options) =>
         connection.onClose(() =>
           live(
             Effect.gen(function* () {
-              entry.client = undefined
-              entry.tools = undefined
-              entry.prompts = undefined
               entry.status = { status: "failed", error: "Connection closed" }
-              yield* bus.publish(McpEvent.ToolsChanged, { server: name }).pipe(Effect.ignore)
-              yield* bus.publish(McpEvent.ResourcesChanged, { server: name }).pipe(Effect.ignore)
-              yield* bus.publish(Command.Event.Updated, {}).pipe(Effect.ignore)
+              yield* stopServer(name, entry)
               yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
             }),
           ),
@@ -520,6 +516,8 @@ export const layer = (options?: Options) =>
             options?.clientInfo,
           ).pipe(
             Effect.flatMap((connection) => connection.tools().pipe(Effect.map((tools) => ({ connection, tools })))),
+            // A stdio server is spawned on this location's execution plane, not the host's.
+            Effect.provideService(Environment.Service, environment),
             Scope.provide(scope),
             Effect.exit,
           )
@@ -828,7 +826,7 @@ export function configured(options?: Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Config.node, Location.node, Bus.node, Form.node, Integration.node, Credential.node],
+    deps: [Config.node, Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node],
   })
 }
 

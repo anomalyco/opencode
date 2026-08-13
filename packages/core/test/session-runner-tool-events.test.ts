@@ -126,6 +126,19 @@ test("interrupted progress metadata remains in the terminal failure snapshot", a
   })
 })
 
+test("local failure metadata completes the progress snapshot", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(call))
+  await Effect.runPromise(publisher.progress(call.id, { phase: "running", provider: "old" }))
+  await Effect.runPromise(
+    publisher.failTool(call.id, { type: "tool.execution", message: "failed" }, { provider: "exa" }),
+  )
+
+  expect(published.find((event) => event.type === "session.tool.failed.2")?.data).toMatchObject({
+    metadata: { phase: "running", provider: "exa" },
+  })
+})
+
 test("failure snapshot retains canonical progress above the default byte limit", async () => {
   const { published, publisher } = capture("anthropic", { interruptProgress: true })
   await Effect.runPromise(publisher.publish(call))

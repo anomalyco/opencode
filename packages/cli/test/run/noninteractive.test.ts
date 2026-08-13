@@ -28,13 +28,13 @@ function formCreated(info: FormInfo, eventLocation = location): V2Event {
   return { id: `evt_${info.id}`, created: 0, type: "form.created", location: eventLocation, data: { form: info } }
 }
 
-function prompted(inputID: string): V2Event {
+function prompted(inboxID: string): V2Event {
   return {
     id: "evt_prompted",
     created: 0,
-    type: "session.input.promoted",
+    type: "session.inbox.delivered",
     durable: { aggregateID: "ses_1", seq: 0, version: 1 },
-    data: { sessionID: "ses_1", inputID },
+    data: { sessionID: "ses_1", inboxID },
   }
 }
 
@@ -98,9 +98,9 @@ function executionFailed(message: string): V2Event {
   }
 }
 
-function failedTool(inputID: string): V2Event[] {
+function failedTool(inboxID: string): V2Event[] {
   return [
-    prompted(inputID),
+    prompted(inboxID),
     {
       id: "evt_failed_tool_input",
       created: 1,
@@ -156,10 +156,10 @@ function failedTool(inputID: string): V2Event[] {
   ]
 }
 
-function successfulGrep(inputID: string): V2Event[] {
+function successfulGrep(inboxID: string): V2Event[] {
   const text = "Found 2 matches\n/src/a.ts:\n  Line 1: needle\n/src/b.ts:\n  Line 2: needle"
   return [
-    prompted(inputID),
+    prompted(inboxID),
     {
       id: "evt_grep_input",
       created: 1,
@@ -206,7 +206,7 @@ function successfulGrep(inputID: string): V2Event[] {
 // Runs one non-interactive prompt against a mocked SDK. `turn` produces the
 // live events the prompt admission triggers, keyed by the generated message ID.
 async function run(input: {
-  turn: (inputID: string) => V2Event[]
+  turn: (inboxID: string) => V2Event[]
   pendingForms?: FormInfo[]
   attached?: boolean
   format?: "default" | "json"
@@ -214,7 +214,7 @@ async function run(input: {
   cancel?: (input: { sessionID: string; formID: string }) => Promise<void>
   renderTool?: (part: SessionMessageAssistantTool) => Promise<void>
   renderToolError?: (part: SessionMessageAssistantTool) => Promise<void>
-  messages?: (inputID: string) => SessionMessageInfo[]
+  messages?: (inboxID: string) => SessionMessageInfo[]
   wait?: () => Promise<void>
   terminalDelay?: number
 }) {
@@ -515,7 +515,7 @@ describe("runNonInteractivePrompt", () => {
     const rendered: SessionMessageAssistantTool[] = []
     const failed: SessionMessageAssistantTool[] = []
     await capture({
-      turn: (inputID) => failedTool(inputID).filter((event) => event.type !== "session.tool.progress"),
+      turn: (inboxID) => failedTool(inboxID).filter((event) => event.type !== "session.tool.progress"),
       renderTool: (part) => {
         rendered.push(part)
         return Promise.resolve()

@@ -110,6 +110,28 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("rejects invalid tool definitions before installing any tools", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const error = yield* service
+        .transform((draft) => {
+          draft.add({ ...make(), name: "healthy", options: { codemode: false } })
+          draft.add({
+            name: "phone_type",
+            input: Schema.Struct({}),
+            execute: () => Effect.succeed({ content: "ok" }),
+            options: { codemode: false },
+          } as unknown as Info)
+        })
+        .pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(Tool.RegistrationError)
+      expect(error.name).toBe("phone_type")
+      expect(error.message).toContain('Expected string, got undefined\n  at ["description"]')
+      expect((yield* service.snapshot()).definitions.map((tool) => tool.name)).toEqual(["execute"])
+    }),
+  )
+
   it.effect("canonicalizes effective definitions and keeps Code Mode last", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect } from "bun:test"
 import { Deferred, Effect, Layer } from "effect"
+import { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Permission } from "@opencode-ai/core/permission"
@@ -7,12 +8,14 @@ import { Form } from "@opencode-ai/core/form"
 import { KV } from "@opencode-ai/core/kv"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { Session } from "@opencode-ai/core/session"
+import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { Tool } from "@opencode-ai/core/tool"
 import { WebSearchTool } from "@opencode-ai/core/tool/plugin/websearch"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
+import { permissionLayer } from "./lib/permission"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 import { webSearchHost } from "./plugin/host"
 
@@ -41,6 +44,7 @@ let formResponse: Form.TerminalState = { status: "cancelled" }
 const formResponses: Form.TerminalState[] = []
 let queryBarrier: Deferred.Deferred<void> | undefined
 let synchronizedQueries = 0
+let queryError: WebSearch.Error | undefined
 let result = new WebSearch.Response({
   providerID: WebSearch.ID.make("exa"),
   results: [{ url: "https://example.com", title: "Search results", content: "search results", time: {} }],
@@ -56,23 +60,16 @@ beforeEach(() => {
   formResponses.length = 0
   queryBarrier = undefined
   synchronizedQueries = 0
+  queryError = undefined
   result = new WebSearch.Response({
     providerID: WebSearch.ID.make("exa"),
     results: [{ url: "https://example.com", title: "Search results", content: "search results", time: {} }],
   })
 })
 
-const permission = Layer.succeed(
-  Permission.Service,
-  Permission.Service.of({
-    assert: (input) => Effect.sync(() => assertions.push(input)),
-    ask: () => Effect.die("unused"),
-    reply: () => Effect.die("unused"),
-    get: () => Effect.die("unused"),
-    forSession: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-  }),
-)
+const permission = permissionLayer({
+  assert: (input) => Effect.sync(() => assertions.push(input)),
+})
 const websearch = Layer.succeed(
   WebSearch.Service,
   WebSearch.Service.of({
@@ -94,6 +91,7 @@ const websearch = Layer.succeed(
           if (synchronizedQueries === 5) yield* Deferred.succeed(queryBarrier, undefined)
           yield* Deferred.await(queryBarrier)
         }
+        if (queryError) return yield* queryError
         if (providerRequired && typeof stored !== "string") return yield* new WebSearch.ProviderRequiredError()
         if (typeof stored === "string")
           return new WebSearch.Response({ providerID: WebSearch.ID.make(stored), results: result.results })
@@ -374,6 +372,57 @@ describe("WebSearchTool registration", () => {
       ).toMatchObject({ status: "error" })
       expect(values.get("websearch:provider")).toBe(false)
       expect(queries).toHaveLength(1)
+    }),
+  )
+
+  it.effect("reports safe HTTP failures with the attempted provider", () =>
+    Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const tools = yield* registry.snapshot()
+      values.set("websearch:provider", "exa")
+
+      yield* Effect.forEach(
+        [
+          { status: 403, message: "Web search request failed (HTTP 403)" },
+          { status: 429, message: "Web search rate limited (HTTP 429)" },
+          { status: 401, message: "Web search authentication failed (HTTP 401)" },
+        ],
+        ({ status, message }, index) =>
+          Effect.gen(function* () {
+            const request = HttpClientRequest.post("https://mcp.exa.ai/mcp?exaApiKey=secret")
+            queryError = new WebSearch.RequestError({
+              providerID: WebSearch.ID.make("exa"),
+              cause: new HttpClientError.HttpClientError({
+                reason: new HttpClientError.StatusCodeError({
+                  request,
+                  response: HttpClientResponse.fromWeb(request, new Response(null, { status })),
+                  description: "non 2xx status code",
+                }),
+              }),
+            })
+            const progress: Tool.Metadata[] = []
+            const error = yield* tools
+              .execute({
+                sessionID,
+                ...toolIdentity,
+                call: {
+                  type: "tool-call",
+                  id: `call-http-${index}`,
+                  name: "websearch",
+                  input: { query: "effect" },
+                },
+                progress: (metadata) => Effect.sync(() => progress.push(metadata)),
+              })
+              .pipe(Effect.flip)
+
+            const sessionError = toSessionError(error)
+            expect(sessionError).toEqual({ type: "tool.execution", message })
+            expect(sessionError.message).not.toContain("secret")
+            expect(error.metadata).toEqual({ provider: "exa" })
+            expect(progress).toEqual([{ provider: "exa" }])
+          }),
+        { discard: true },
+      )
     }),
   )
 })

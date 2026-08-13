@@ -1,8 +1,8 @@
 import { Cause, Context, Effect, Layer, Queue, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
-import { AIError, TransportReason } from "../../schema"
-import * as HttpTransport from "./http"
-import type { Transport } from "./index"
+import { AIError, TransportReason, type TransportOperation } from "../../schema/index.js"
+import * as HttpTransport from "./http.js"
+import type { Transport } from "./index.js"
 
 export interface WebSocketRequest {
   readonly url: string
@@ -29,12 +29,18 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/AI
 const transportError = (
   method: string,
   message: string,
-  input: { readonly url?: string; readonly kind?: string } = {},
+  input: { readonly operation: TransportOperation; readonly url?: string; readonly code?: string },
 ) =>
   new AIError({
     module: "WebSocketExecutor",
     method,
-    reason: new TransportReason({ message, url: input.url, kind: input.kind }),
+    reason: new TransportReason({
+      message,
+      transport: "websocket",
+      operation: input.operation,
+      url: input.url,
+      code: input.code,
+    }),
   })
 
 const eventMessage = (event: Event) => {
@@ -55,7 +61,8 @@ const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
     return Effect.fail(
       transportError("open", `WebSocket closed before opening (state ${ws.readyState})`, {
         url: input.url,
-        kind: "open",
+        operation: "request",
+        code: "closed",
       }),
     )
   }
@@ -79,7 +86,10 @@ const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
       cleanup()
       resume(
         Effect.fail(
-          transportError("open", `Failed to open WebSocket: ${eventMessage(event)}`, { url: input.url, kind: "open" }),
+          transportError("open", `Failed to open WebSocket: ${eventMessage(event)}`, {
+            url: input.url,
+            operation: "request",
+          }),
         ),
       )
     }
@@ -89,7 +99,8 @@ const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
         Effect.fail(
           transportError("open", `WebSocket closed before opening with code ${event.code}`, {
             url: input.url,
-            kind: "open",
+            operation: "request",
+            code: String(event.code),
           }),
         ),
       )
@@ -118,7 +129,8 @@ const webSocketUrl = (value: string) =>
     catch: (error) =>
       transportError("prepare", error instanceof Error ? error.message : "Invalid WebSocket URL", {
         url: value,
-        kind: "websocket",
+        operation: "request",
+        code: "invalid-url",
       }),
   })
 
@@ -129,7 +141,7 @@ export const open = (input: WebSocketRequest) =>
     catch: (error) =>
       transportError("open", error instanceof Error ? error.message : "Failed to construct WebSocket", {
         url: input.url,
-        kind: "open",
+        operation: "request",
       }),
   }).pipe(Effect.flatMap((ws) => fromWebSocket(ws, input)))
 
@@ -150,7 +162,10 @@ export const fromWebSocket = (
       Queue.failCauseUnsafe(
         messages,
         Cause.fail(
-          transportError("message", "Unsupported WebSocket message payload", { url: input.url, kind: "message" }),
+          transportError("message", "Unsupported WebSocket message payload", {
+            url: input.url,
+            operation: "read",
+          }),
         ),
       )
     }
@@ -158,7 +173,10 @@ export const fromWebSocket = (
       Queue.failCauseUnsafe(
         messages,
         Cause.fail(
-          transportError("message", `WebSocket error: ${eventMessage(event)}`, { url: input.url, kind: "message" }),
+          transportError("message", `WebSocket error: ${eventMessage(event)}`, {
+            url: input.url,
+            operation: "read",
+          }),
         ),
       )
     }
@@ -167,7 +185,11 @@ export const fromWebSocket = (
       Queue.failCauseUnsafe(
         messages,
         Cause.fail(
-          transportError("message", `WebSocket closed with code ${event.code}`, { url: input.url, kind: "close" }),
+          transportError("message", `WebSocket closed with code ${event.code}`, {
+            url: input.url,
+            operation: "read",
+            code: String(event.code),
+          }),
         ),
       )
     }
@@ -188,7 +210,7 @@ export const fromWebSocket = (
           catch: (error) =>
             transportError("sendText", error instanceof Error ? error.message : "Failed to send WebSocket message", {
               url: input.url,
-              kind: "write",
+              operation: "write",
             }),
         }),
       messages: Stream.fromQueue(messages),
@@ -243,7 +265,8 @@ export const json = <Body, Message>(input: JsonInput<Body, Message>): JsonTransp
       return Stream.fail(
         transportError("json", "WebSocket JSON transport requires WebSocketExecutor.Service", {
           url: prepared.url,
-          kind: "websocket",
+          operation: "request",
+          code: "unavailable",
         }),
       )
     }

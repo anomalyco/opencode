@@ -1,13 +1,13 @@
-export * as InstructionEntry from "./instruction-entry"
+export * as InstructionEntry from "./instruction-entry.js"
 
 import { and, asc, eq, isNotNull, isNull, ne, or } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
-import { Database } from "../database/database"
+import { Database } from "../database/database.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Instructions } from "../instructions/index"
-import { SessionSchema } from "./schema"
-import { InstructionEntryTable } from "./sql"
+import { Instructions } from "../instructions/index.js"
+import { SessionSchema } from "./schema.js"
+import { InstructionEntryTable } from "./sql.js"
 
 export const Key = InstructionEntry.Key
 export type Key = typeof Key.Type

@@ -67,14 +67,23 @@ function segmentLabelPoint(segment: DiagramSegment, labelWidth: number, labelHei
   return clampPoint(shiftPoint(center, "up", Math.floor((labelHeight - 1) / 2)))
 }
 
-function bestLabelSegment(points: readonly FlowchartPoint[], labelWidth: number): DiagramSegment | undefined {
+function bestLabelSegment(
+  points: readonly FlowchartPoint[],
+  labelWidth: number,
+  preferredAxis?: DiagramSegment["axis"],
+): DiagramSegment | undefined {
+  const segments = points.slice(1).flatMap((to, index) => {
+    const segment = segmentBetween(points[index]!, to)
+    return segment ? [segment] : []
+  })
+  const preferred = preferredAxis ? segments.find((segment) => segment.axis === preferredAxis) : undefined
+  if (preferred) return preferred
+
   let roomyHorizontal: DiagramSegment | undefined
   let verticalBus: DiagramSegment | undefined
   let longest: DiagramSegment | undefined
 
-  for (let index = 1; index < points.length; index++) {
-    const segment = segmentBetween(points[index - 1]!, points[index]!)
-    if (!segment) continue
+  for (const segment of segments) {
     if (!roomyHorizontal && segment.axis === "x" && inlineLabelSlot(segment, labelWidth).fits) roomyHorizontal = segment
     if (!verticalBus && segment.axis === "y") verticalBus = segment
     if (!longest || segment.length > longest.length) longest = segment
@@ -87,8 +96,9 @@ function flowchartLabelPoint(
   points: readonly FlowchartPoint[],
   labelWidth: number,
   labelHeight: number,
+  preferredAxis?: DiagramSegment["axis"],
 ): FlowchartPoint {
-  const segment = bestLabelSegment(points, labelWidth)
+  const segment = bestLabelSegment(points, labelWidth, preferredAxis)
   return segment ? segmentLabelPoint(segment, labelWidth, labelHeight) : (points[0] ?? point(0, 0))
 }
 
@@ -96,9 +106,10 @@ export function flowchartEdgeLabelLayout(
   points: readonly FlowchartPoint[],
   label: string,
   measure: (text: string) => number,
+  preferredAxis?: DiagramSegment["axis"],
 ): FlowchartEdgeLabelLayout {
   const lines = splitDiagramLines(label).map(flowchartLabelText)
   const width = flowchartLabelWidth(label, measure)
   const height = lines.length
-  return { lines, point: flowchartLabelPoint(points, width, height), width, height }
+  return { lines, point: flowchartLabelPoint(points, width, height, preferredAxis), width, height }
 }

@@ -1,15 +1,15 @@
 import { Effect, Encoding, Schema } from "effect"
-import { Route } from "../route/client"
-import { Auth } from "../route/auth"
-import { Endpoint } from "../route/endpoint"
-import { Protocol } from "../route/protocol"
-import { HttpTransport, WebSocketTransport } from "../route/transport"
-import { LLMEvent, LLMRequest, type JsonSchema, type ToolDefinition } from "../schema"
-import { OpenResponses } from "./open-responses"
-import { optionalArray, ProviderShared } from "./shared"
-import { Lifecycle } from "./utils/lifecycle"
-import { OpenAIImage } from "./utils/openai-image"
-import { ToolSchemaProjection } from "./utils/tool-schema"
+import { Route } from "../route/client.js"
+import { Auth } from "../route/auth.js"
+import { Endpoint } from "../route/endpoint.js"
+import { Protocol } from "../route/protocol.js"
+import { HttpTransport, WebSocketTransport } from "../route/transport/index.js"
+import { LLMEvent, LLMRequest, type JsonSchema, type ToolDefinition } from "../schema/index.js"
+import { OpenResponses } from "./open-responses.js"
+import { optionalArray, ProviderShared } from "./shared.js"
+import { Lifecycle } from "./utils/lifecycle.js"
+import { OpenAIImage } from "./utils/openai-image.js"
+import { ToolSchemaProjection } from "./utils/tool-schema.js"
 
 const ADAPTER = "openai-responses"
 const NAME = "OpenAI Responses"
@@ -290,4 +290,4 @@ export const webSocketRoute = Route.make({
   defaults: { providerOptions: { openai: { store: false } } },
 })
 
-export * as OpenAIResponses from "./openai-responses"
+export * as OpenAIResponses from "./openai-responses.js"

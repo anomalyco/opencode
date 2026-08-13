@@ -1,9 +1,9 @@
 import type { Effect, Stream } from "effect"
-import { Endpoint } from "../endpoint"
-import { Auth } from "../auth"
-import type { HttpMiddleware, Interface as RequestExecutorInterface } from "../executor"
-import type { Interface as WebSocketExecutorInterface } from "./websocket"
-import type { AIError, LLMRequest } from "../../schema"
+import { Endpoint } from "../endpoint.js"
+import { Auth } from "../auth.js"
+import type { HttpMiddleware, Interface as RequestExecutorInterface } from "../executor.js"
+import type { Interface as WebSocketExecutorInterface } from "./websocket.js"
+import type { AIError, LLMRequest } from "../../schema/index.js"
 
 export interface TransportRuntime {
   readonly http: RequestExecutorInterface
@@ -26,6 +26,6 @@ export interface TransportPrepareInput<Body> {
   readonly middleware?: HttpMiddleware
 }
 
-export * as HttpTransport from "./http"
-export type { HttpHandler, HttpMiddleware } from "../executor"
-export { WebSocketExecutor, WebSocketTransport } from "./websocket"
+export * as HttpTransport from "./http.js"
+export type { HttpHandler, HttpMiddleware } from "../executor.js"
+export { WebSocketExecutor, WebSocketTransport } from "./websocket.js"

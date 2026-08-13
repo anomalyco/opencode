@@ -1,11 +1,11 @@
-export * as ConfigProviderPlugin from "./provider"
+export * as ConfigProviderPlugin from "./provider.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Document, type Entry } from "@opencode-ai/schema/config"
 import { Money } from "@opencode-ai/schema/money"
 import { Effect, Stream } from "effect"
-import { Config } from "../../config"
-import { Provider } from "../../provider"
+import { Config } from "../../config.js"
+import { Provider } from "../../provider.js"
 
 export const Plugin = define({
   id: "opencode.config.provider",

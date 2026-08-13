@@ -4,6 +4,7 @@ import { testRender } from "@opentui/solid"
 import type { JSX } from "solid-js"
 import { onMount, type ParentProps } from "solid-js"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
+import { emptyThemeSource } from "../../fixture/fixture"
 import { ThemeProvider, useThemes } from "../../../src/context/theme"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { ConfigProvider } from "../../../src/config"
@@ -149,7 +150,7 @@ function withTheme(component: () => JSX.Element, onReady = () => {}) {
   return (
     <TestTuiContexts>
       <ConfigProvider config={createTuiResolvedConfig()}>
-        <ThemeProvider mode="dark">
+        <ThemeProvider mode="dark" source={emptyThemeSource}>
           <Ready onReady={onReady}>{component()}</Ready>
         </ThemeProvider>
       </ConfigProvider>

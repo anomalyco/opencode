@@ -1,25 +1,31 @@
 import { describe, expect, test } from "bun:test"
-import { createUpdaterController, type UpdaterBackend, type UpdaterReadyRecord } from "./updater-controller"
+import { createUpdaterController, type UpdaterPlatform, type UpdaterReadyRecord } from "./updater-controller"
 
 function setup(input?: { currentVersion?: string; ready?: UpdaterReadyRecord }) {
   const calls: string[] = []
-  const backend: UpdaterBackend = {
-    async checkForUpdates() {
+  const platform: UpdaterPlatform = {
+    async checkForUpdate() {
       calls.push("check")
-      return { isUpdateAvailable: true, updateInfo: { version: "2.0.0" } }
+      return "2.0.0"
     },
-    async downloadUpdate() {
+    async stageUpdate() {
       calls.push("download")
     },
-    quitAndInstall() {
+    installAndRestart() {
       calls.push("install")
+      return new Promise<never>(() => {})
     },
   }
   let ready = input?.ready
   const controller = createUpdaterController({
     enabled: true,
     currentVersion: input?.currentVersion ?? "1.0.0",
-    backend,
+    platform,
+    lifecycle: {
+      async prepareToRestart() {
+        calls.push("prepare")
+      },
+    },
     persistence: {
       get: () => ready,
       set: (value) => {
@@ -28,9 +34,6 @@ function setup(input?: { currentVersion?: string; ready?: UpdaterReadyRecord }) 
       clear: () => {
         ready = undefined
       },
-    },
-    stop: async () => {
-      calls.push("stop")
     },
   })
   return { controller, calls, getReady: () => ready }
@@ -76,36 +79,81 @@ describe("updater controller", () => {
     expect(app.calls).toEqual(["check", "download"])
   })
 
-  test("returns to ready when quitAndInstall returns without exiting", async () => {
+  test("starts installing synchronously and coalesces restart requests", async () => {
     const app = setup()
     await app.controller.start()
 
-    await app.controller.install()
+    const first = app.controller.install()
+    const second = app.controller.install()
 
-    expect(app.calls).toEqual(["check", "download", "stop", "install"])
-    expect(app.controller.getState()).toEqual({ status: "ready", version: "2.0.0" })
+    expect(first).toBe(second)
+    await Promise.resolve()
+    expect(app.calls).toEqual(["check", "download", "prepare", "install"])
+    expect(app.controller.getState()).toEqual({ status: "installing", version: "2.0.0" })
   })
 
-  test("returns to ready when installation cannot start", async () => {
+  test("does not check for updates while installation is in progress", async () => {
     const app = setup()
     await app.controller.start()
+    void app.controller.install()
 
+    await app.controller.check()
+
+    expect(app.calls).toEqual(["check", "download", "prepare", "install"])
+    expect(app.controller.getState()).toEqual({ status: "installing", version: "2.0.0" })
+  })
+
+  test("returns to ready when installation fails", async () => {
+    const app = setup()
+    await app.controller.start()
+    const error = new Error("install failed")
     const failed = createUpdaterController({
       enabled: true,
       currentVersion: "1.0.0",
-      backend: {
-        checkForUpdates: async () => ({ isUpdateAvailable: true, updateInfo: { version: "2.0.0" } }),
-        downloadUpdate: async () => {},
-        quitAndInstall() {},
+      platform: {
+        checkForUpdate: async () => "2.0.0",
+        stageUpdate: async () => {},
+        installAndRestart: () => Promise.reject(error),
       },
+      lifecycle: { prepareToRestart: async () => {} },
       persistence: { get: () => undefined, set() {}, clear() {} },
-      stop: async () => {
-        throw new Error("stop failed")
-      },
     })
     await failed.start()
 
-    await expect(failed.install()).rejects.toThrow("stop failed")
+    await expect(failed.install()).rejects.toThrow("install failed")
     expect(failed.getState()).toEqual({ status: "ready", version: "2.0.0" })
+  })
+
+  test("allows a state subscriber to retry after installation fails", async () => {
+    let attempts = 0
+    let sawInstalling = false
+    let retry: Promise<void> | undefined
+    const failed = createUpdaterController({
+      enabled: true,
+      currentVersion: "1.0.0",
+      platform: {
+        checkForUpdate: async () => "2.0.0",
+        stageUpdate: async () => {},
+        installAndRestart() {
+          attempts++
+          if (attempts === 1) return Promise.reject(new Error("install failed"))
+          return new Promise<never>(() => {})
+        },
+      },
+      lifecycle: { prepareToRestart: async () => {} },
+      persistence: { get: () => undefined, set() {}, clear() {} },
+    })
+    failed.subscribe((state) => {
+      if (state.status === "installing") sawInstalling = true
+      if (!sawInstalling || state.status !== "ready" || retry) return
+      retry = failed.install()
+    })
+    await failed.start()
+
+    await expect(failed.install()).rejects.toThrow("install failed")
+
+    expect(retry).toBeDefined()
+    expect(attempts).toBe(2)
+    expect(failed.getState()).toEqual({ status: "installing", version: "2.0.0" })
   })
 })

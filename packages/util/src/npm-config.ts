@@ -7,13 +7,13 @@ import Config from "@npmcli/config"
 import { definitions, flatten, nerfDarts, shorthands } from "@npmcli/config/lib/definitions/index.js"
 import { Effect } from "effect"
 
-const npmPath = fileURLToPath(new URL("..", import.meta.url))
-
 export const load = (dir: string) =>
   Effect.tryPromise({
     try: async () => {
       const config = new Config({
-        npmPath,
+        // Resolved per call: on workerd import.meta.url is undefined and building
+        // this URL at module scope fails startup validation; npm config never runs there.
+        npmPath: fileURLToPath(new URL("..", import.meta.url)),
         cwd: dir,
         env: { ...process.env },
         argv: [process.execPath, process.execPath, "--prefix", dir],

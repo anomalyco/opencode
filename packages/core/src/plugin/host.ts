@@ -1,32 +1,32 @@
-export * as PluginHost from "./host"
+export * as PluginHost from "./host.js"
 
 import { Plugin } from "@opencode-ai/plugin/effect"
 import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import type { CredentialOAuth } from "@opencode-ai/sdk/v2/types"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
-import { App } from "../app"
+import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
-import { Agent } from "../agent"
-import { AISDK } from "../aisdk"
-import { Catalog } from "../catalog"
-import { Command } from "../command"
-import { Credential } from "../credential"
-import { Bus } from "../bus"
-import { Integration } from "../integration"
-import { Location } from "../location"
-import { Model } from "../model"
-import { PluginRuntime } from "./runtime"
-import { Provider } from "../provider"
-import { Reference } from "../reference"
-import { AbsolutePath, type DeepMutable } from "../schema"
-import { Skill } from "../skill"
-import { Tool } from "../tool"
-import { Workspace } from "../workspace"
-import { WebSearch } from "../websearch"
-import { PluginHooks } from "./hooks"
+import { Agent } from "../agent.js"
+import { AISDK } from "../aisdk.js"
+import { Catalog } from "../catalog.js"
+import { Command } from "../command.js"
+import { Credential } from "../credential.js"
+import { Bus } from "../bus.js"
+import { Integration } from "../integration.js"
+import { Location } from "../location.js"
+import { Model } from "../model.js"
+import { PluginRuntime } from "./runtime.js"
+import { Provider } from "../provider.js"
+import { Reference } from "../reference.js"
+import { AbsolutePath, type DeepMutable } from "../schema.js"
+import { Skill } from "../skill.js"
+import { Tool } from "../tool.js"
+import { Workspace } from "../workspace.js"
+import { WebSearch } from "../websearch.js"
+import { PluginHooks } from "./hooks.js"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
-export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../plugin").Interface) {
+export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../plugin.js").Interface) {
   const app = yield* App.Metadata
   const agents = yield* Agent.Service
   const aisdk = yield* AISDK.Service
@@ -190,6 +190,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
           integration.connection.key({
             integrationID: Integration.ID.make(input.integrationID),
             key: input.key,
+            answer: input.answer,
             label: input.label,
           }),
       },
@@ -199,7 +200,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
             integration.oauth.connect({
               integrationID: Integration.ID.make(input.integrationID),
               methodID: Integration.MethodID.make(input.methodID),
-              inputs: input.inputs,
+              answer: input.answer,
               label: input.label,
             }),
           ),
@@ -260,7 +261,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
             update: (id, update) => draft.update(Integration.ID.make(id), update),
             remove: (id) => draft.remove(Integration.ID.make(id)),
             method: {
-              list: (id) => mutable(draft.method.list(Integration.ID.make(id))),
+              list: (id) => draft.method.list(Integration.ID.make(id)),
               update: (input) => draft.method.update(methodImplementation(input)),
               remove: (id, method) =>
                 draft.method.remove(Integration.ID.make(id), Schema.decodeUnknownSync(Integration.Method)(method)),
@@ -289,8 +290,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
       transform: (callback) =>
         skill.transform((draft) => {
           callback({
-            source: (source) => draft.source(Schema.decodeUnknownSync(Skill.Source)(source)),
-            list: draft.list,
+            list: () => mutable(draft.list()),
+            add: (value) => draft.add(Schema.decodeUnknownSync(Skill.Info)(value)),
+            update: draft.update,
+            remove: draft.remove,
           })
         }),
     },
@@ -363,8 +366,8 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
     return {
       integrationID: Integration.ID.make(input.integrationID),
       method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
-      authorize: (inputs) =>
-        input.authorize(inputs).pipe(
+      authorize: (answer) =>
+        input.authorize(answer).pipe(
           Effect.map((authorization) => {
             if (authorization.mode === "auto") {
               return {
@@ -385,18 +388,18 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
   if (input.method.type === "env") {
     return {
       integrationID: Integration.ID.make(input.integrationID),
-      method: { type: "env", names: input.method.names },
+      method: input.method,
     }
   }
   if (input.method.type === "command") {
     return {
       integrationID: Integration.ID.make(input.integrationID),
-      method: Schema.decodeUnknownSync(Integration.CommandMethod)(input.method),
+      method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
     }
   }
   return {
     integrationID: Integration.ID.make(input.integrationID),
-    method: { type: "key", label: input.method.label },
+    method: input.method,
   }
 }
 

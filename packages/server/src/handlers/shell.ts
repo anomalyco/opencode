@@ -21,7 +21,9 @@ export const ShellHandler = HttpApiBuilder.group(Api, "server.shell", (handlers)
         Effect.fn(function* (ctx) {
           const shell = yield* Shell.Service
           const location = yield* Location.Service
-          return yield* response(shell.create({ ...ctx.payload, cwd: ctx.payload.cwd || location.directory }))
+          return yield* response(
+            shell.create({ ...ctx.payload, cwd: ctx.payload.cwd || location.directory }).pipe(Effect.orDie),
+          )
         }),
       )
       .handle(

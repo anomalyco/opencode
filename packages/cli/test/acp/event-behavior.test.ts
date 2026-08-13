@@ -22,8 +22,8 @@ describe("acp event behavior", () => {
             delta: "before admission",
           }),
         )
-        send(durableEvent("session.input.promoted", { sessionID: "ses_b", inputID: id }))
-        send(durableEvent("session.input.promoted", { sessionID: "ses_a", inputID: "input_other" }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_b", inboxID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_a", inboxID: "input_other" }))
         send(
           ephemeralEvent("session.text.delta", {
             sessionID: "ses_a",
@@ -32,7 +32,7 @@ describe("acp event behavior", () => {
             delta: "wrong input",
           }),
         )
-        send(durableEvent("session.input.promoted", { sessionID: "ses_a", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_a", inboxID: id }))
         send(
           ephemeralEvent("session.text.delta", {
             sessionID: "ses_b",
@@ -68,7 +68,7 @@ describe("acp event behavior", () => {
         fixture,
         connection: recordingConnection(updates),
         sessionID: "ses_a",
-        inputID: "input_a",
+        inboxID: "input_a",
       })
 
       expect(fixture.requests.slice(0, 2).map((request) => request.path)).toEqual([
@@ -99,7 +99,7 @@ describe("acp event behavior", () => {
     const updates: SessionUpdateParams[] = []
     const fixture = createSseFixture({
       async onPrompt({ id, send }) {
-        send(durableEvent("session.input.promoted", { sessionID: "ses_order", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_order", inboxID: id }))
         send(
           ephemeralEvent("session.reasoning.delta", {
             sessionID: "ses_order",
@@ -148,7 +148,7 @@ describe("acp event behavior", () => {
       },
       requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
     } satisfies Connection
-    const result = turn({ fixture, connection, sessionID: "ses_order", inputID: "input_order" })
+    const result = turn({ fixture, connection, sessionID: "ses_order", inboxID: "input_order" })
 
     try {
       await withTimeout(firstUpdate.promise, "first ordered update was not delivered")
@@ -195,7 +195,7 @@ describe("acp event behavior", () => {
     const updates: SessionUpdateParams[] = []
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
-        send(durableEvent("session.input.promoted", { sessionID: "ses_parent", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_parent", inboxID: id }))
         send(
           durableEvent("session.created", {
             sessionID: "ses_child",
@@ -240,7 +240,7 @@ describe("acp event behavior", () => {
         fixture,
         connection: recordingConnection(updates),
         sessionID: "ses_parent",
-        inputID: "input_parent",
+        inboxID: "input_parent",
       })
 
       expect(updates.map((item) => [item.sessionId, item.update.sessionUpdate])).toEqual([
@@ -276,7 +276,7 @@ describe("acp event behavior", () => {
     const completed = Promise.withResolvers<void>()
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
-        send(durableEvent("session.input.promoted", { sessionID: "ses_parent", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_parent", inboxID: id }))
         send(
           durableEvent("session.created", {
             sessionID: "ses_background",
@@ -292,7 +292,7 @@ describe("acp event behavior", () => {
         fixture,
         connection: recordingConnection(updates),
         sessionID: "ses_parent",
-        inputID: "input_parent",
+        inboxID: "input_parent",
         childSessionUpdate: async (update) => {
           childUpdates.push(update)
           if (update.type === "status" && update.status === "completed") completed.resolve()
@@ -370,7 +370,7 @@ describe("acp event behavior", () => {
     const updates: SessionUpdateParams[] = []
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
-        send(durableEvent("session.input.promoted", { sessionID: "ses_tools", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_tools", inboxID: id }))
         send(
           durableEvent("session.tool.input.started", {
             sessionID: "ses_tools",
@@ -460,7 +460,7 @@ describe("acp event behavior", () => {
         fixture,
         connection: recordingConnection(updates),
         sessionID: "ses_tools",
-        inputID: "input_tools",
+        inboxID: "input_tools",
       })
 
       expect(
@@ -597,7 +597,7 @@ describe("acp event behavior", () => {
     const control: TurnControl = { cancelled: false, admission: new AbortController() }
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
-        send(durableEvent("session.input.promoted", { sessionID: "ses_cancel", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_cancel", inboxID: id }))
       },
       onInterrupt({ sessionID, send }) {
         send(durableEvent("session.execution.interrupted", { sessionID, reason: "user" }))
@@ -680,7 +680,7 @@ describe("acp event behavior", () => {
   test("cancels unsupported session forms so execution can continue", async () => {
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
-        send(durableEvent("session.input.promoted", { sessionID: "ses_form", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_form", inboxID: id }))
         send(
           ephemeralEvent("form.created", {
             form: {
@@ -704,7 +704,7 @@ describe("acp event behavior", () => {
         fixture,
         connection: recordingConnection([]),
         sessionID: "ses_form",
-        inputID: "input_form",
+        inboxID: "input_form",
       })
 
       expect(response.stopReason).toBe("end_turn")
@@ -730,7 +730,7 @@ function turn(input: {
   readonly fixture: Fixture
   readonly connection: Connection
   readonly sessionID: string
-  readonly inputID: string
+  readonly inboxID: string
   readonly childSessionUpdate?: (update: ChildSessionUpdate) => Promise<void>
 }) {
   return streamTurn({
@@ -738,12 +738,12 @@ function turn(input: {
     connection: input.connection,
     sessionID: input.sessionID,
     cwd: "/workspace",
-    start: { type: "input", id: input.inputID },
+    start: { type: "input", id: input.inboxID },
     writeTextFile: false,
     control: { cancelled: false, admission: new AbortController() },
     childSessionUpdate: input.childSessionUpdate,
     submit: (signal) =>
-      input.fixture.client.session.prompt({ sessionID: input.sessionID, id: input.inputID, text: "hello" }, { signal }),
+      input.fixture.client.session.prompt({ sessionID: input.sessionID, id: input.inboxID, text: "hello" }, { signal }),
   })
 }
 

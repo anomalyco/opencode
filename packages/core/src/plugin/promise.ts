@@ -1,4 +1,4 @@
-export * as PluginPromise from "./promise"
+export * as PluginPromise from "./promise.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import type { Context, Plugin } from "@opencode-ai/plugin/promise/plugin"
@@ -15,7 +15,7 @@ import { Skill } from "@opencode-ai/schema/skill"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { WebSearch } from "@opencode-ai/schema/websearch"
 import { DateTime, Effect, Scope, Stream } from "effect"
-import { Tool } from "../tool"
+import { Tool } from "../tool.js"
 
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
 type Registration = { readonly dispose: () => Promise<void> }
@@ -180,8 +180,8 @@ export function fromPromise(plugin: Plugin) {
                         const refresh = input.refresh
                         draft.method.update({
                           ...input,
-                          authorize: (inputs) =>
-                            Effect.promise(() => input.authorize(inputs)).pipe(
+                          authorize: (answer) =>
+                            Effect.promise(() => input.authorize(answer)).pipe(
                               Effect.map((authorization) =>
                                 authorization.mode === "auto"
                                   ? {
@@ -362,11 +362,17 @@ type Wire<Value> = unknown extends Value
     ? Value
     : Value extends DateTime.DateTime
       ? number
-      : Value extends ReadonlyArray<infer Item>
-        ? Array<Wire<Item>>
-        : Value extends object
-          ? { -readonly [Key in keyof Value]: Wire<Value[Key]> }
-          : Value
+      : Value extends readonly [infer Head, ...infer Tail]
+        ? [Wire<Head>, ...WireTuple<Tail>]
+        : Value extends ReadonlyArray<infer Item>
+          ? Array<Wire<Item>>
+          : Value extends object
+            ? { -readonly [Key in keyof Value]: Wire<Value[Key]> }
+            : Value
+
+type WireTuple<Value extends ReadonlyArray<unknown>> = {
+  -readonly [Key in keyof Value]: Wire<Value[Key]>
+}
 
 function wire<Value>(value: Value): Wire<Value>
 function wire(value: unknown): unknown {

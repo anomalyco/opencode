@@ -35,6 +35,15 @@ export const Plugin = Schema.Union([
   }),
 ])
 
+export const Cursor = Schema.Struct({
+  style: Schema.optional(Schema.Literals(["block", "underline", "line", "default"])).annotate({
+    description: "Cursor shape. Use 'default' to preserve the terminal setting",
+  }),
+  blinking: Schema.optional(Schema.Boolean).annotate({
+    description: "Whether the cursor blinks. Has no effect when style is 'default'",
+  }),
+}).annotate({ description: "Terminal cursor settings" })
+
 export const Info = Schema.Struct({
   theme: Schema.optional(
     Schema.Struct({
@@ -105,6 +114,9 @@ export const Info = Schema.Struct({
       paste: Schema.optional(Schema.Literals(["compact", "full"])).annotate({
         description: "Display large pastes as compact placeholders or full text",
       }),
+      image_preview: Schema.optional(Schema.Boolean).annotate({
+        description: "Show image attachment previews above the prompt input",
+      }),
     }),
   ).annotate({ description: "Prompt input behavior" }),
   session: Schema.optional(
@@ -119,8 +131,14 @@ export const Info = Schema.Struct({
       grouping: Schema.optional(Schema.Literals(["auto", "none"])).annotate({
         description: "Group related transcript items automatically or render each item separately",
       }),
+      image_preview: Schema.optional(Schema.Boolean).annotate({
+        description: "Show user attachment and tool-result images in the session transcript",
+      }),
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
+      }),
+      new_location: Schema.optional(Schema.Literals(["launch", "inherit"])).annotate({
+        description: "Start new sessions in the TUI launch directory or inherit the active session location",
       }),
     }),
   ).annotate({ description: "Session transcript presentation settings" }),
@@ -174,12 +192,20 @@ export const Info = Schema.Struct({
       }),
     }),
   ).annotate({ description: "Debugging settings" }),
+  experimental: Schema.optional(
+    Schema.Struct({
+      tab_drafts: Schema.optional(Schema.Boolean).annotate({
+        description: "Keep unsent prompt drafts on the tab where they were written",
+      }),
+    }),
+  ).annotate({ description: "Experimental features that may change or be removed at any time" }),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable terminal mouse capture" }),
+  cursor: Schema.optional(Cursor),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader" | "mouse" | "tabs"> & {
+export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader" | "mouse" | "session" | "tabs"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -191,6 +217,13 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader" | "mouse" 
   keybinds: TuiKeybind.BindingLookupView
   leader: { timeout: number }
   mouse: boolean
+  cursor?: {
+    style: "block" | "underline" | "line" | "default"
+    blinking: boolean
+  }
+  session: Omit<NonNullable<Info["session"]>, "new_location"> & {
+    new_location: "launch" | "inherit"
+  }
   tabs: {
     enabled: boolean
     scope: "global" | "cwd"
@@ -201,10 +234,10 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader" | "mouse" 
 export function resolve(input: Info, options: { terminalSuspend: boolean }): Resolved {
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
   if (!options.terminalSuspend) {
-    keybinds.terminal_suspend = "none"
-    if (keybinds.input_undo === undefined) {
-      const inputUndo = TuiKeybind.defaultValue("input_undo")
-      keybinds.input_undo = ["ctrl+z", ...(typeof inputUndo === "string" ? inputUndo.split(",") : [])]
+    keybinds["terminal.suspend"] = "none"
+    if (keybinds["input.undo"] === undefined) {
+      const inputUndo = TuiKeybind.defaultValue("input.undo")
+      keybinds["input.undo"] = ["ctrl+z", ...(typeof inputUndo === "string" ? inputUndo.split(",") : [])]
         .filter((value, index, values) => values.indexOf(value) === index)
         .join(",")
     }
@@ -221,11 +254,20 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
       sounds: input.attention?.sounds ?? {},
     },
     keybinds: createBindingLookup(TuiKeybind.toBindingConfig(TuiKeybind.parse(keybinds)), {
-      commandMap: TuiKeybind.CommandMap,
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
     leader: { timeout: input.leader?.timeout ?? 2000 },
     mouse: input.mouse ?? true,
+    cursor: input.cursor
+      ? {
+          style: input.cursor.style ?? "block",
+          blinking: input.cursor.blinking ?? true,
+        }
+      : undefined,
+    session: {
+      ...input.session,
+      new_location: input.session?.new_location ?? "launch",
+    },
     tabs: {
       ...input.tabs,
       enabled: input.tabs?.enabled ?? true,

@@ -4,7 +4,6 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { Command } from "@opencode-ai/core/command"
 import { Config } from "@opencode-ai/core/config"
 import { Credential } from "@opencode-ai/core/credential"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
@@ -19,9 +18,11 @@ import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { Reference } from "@opencode-ai/core/reference"
 import { Skill } from "@opencode-ai/core/skill"
+import { SkillDiscovery } from "@opencode-ai/core/skill/discovery"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Tool } from "@opencode-ai/core/tool"
 import { WebSearch } from "@opencode-ai/core/websearch"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer } from "effect"
 import { tempLocationLayer } from "../fixture/location"
 
 const npmLayer = Layer.succeed(
@@ -33,7 +34,7 @@ const npmLayer = Layer.succeed(
   }),
 )
 
-export const PluginTestLayer = AppNodeBuilder.build(
+export const PluginTestLayer = LayerNode.compile(
   LayerNode.group([
     FileSystem.node,
     FSUtil.node,
@@ -53,8 +54,10 @@ export const PluginTestLayer = AppNodeBuilder.build(
     PluginHooks.node,
     Reference.node,
     Skill.node,
+    SkillDiscovery.node,
     PluginHooks.node,
     Tool.node,
+    Watcher.node,
     WebSearch.node,
   ]),
   [

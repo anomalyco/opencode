@@ -4,7 +4,7 @@
  * absolute external paths retain mutation capability through a separate
  * external_directory approval before edit approval.
  */
-export * as EditTool from "./edit"
+export * as EditTool from "./edit.js"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
@@ -12,13 +12,13 @@ import { FileDiff } from "@opencode-ai/schema/file-diff"
 import { Bom } from "@opencode-ai/util/bom"
 import { Effect, Schema } from "effect"
 import path from "path"
-import { Environment } from "../../environment"
-import { FileMutation } from "../../file-mutation"
-import { Formatter } from "../../formatter"
-import { Location } from "../../location"
-import { LocationMutation } from "../../location-mutation"
-import { Permission } from "../../permission"
-import { fileDiff } from "./file-diff"
+import { Environment } from "../../environment/index.js"
+import { FileMutation } from "../../file-mutation.js"
+import { Formatter } from "../../formatter.js"
+import { Location } from "../../location.js"
+import { LocationMutation } from "../../location-mutation.js"
+import { Permission } from "../../permission.js"
+import { fileDiff } from "./file-diff.js"
 
 export const name = "edit"
 

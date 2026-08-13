@@ -1,9 +1,9 @@
-import type { ProviderPackage } from "../provider-package"
-import { OpenAICompatibleChat } from "../protocols/openai-compatible-chat"
-import type { RouteDefaultsInput } from "../route/client"
-import { ProviderID, type ModelID } from "../schema"
-import { GoogleVertexShared } from "./google-vertex-shared"
-import type { OpenAIProviderOptionsInput } from "./openai-options"
+import type { ProviderPackage } from "../provider-package.js"
+import { OpenAICompatibleChat } from "../protocols/openai-compatible-chat.js"
+import type { RouteDefaultsInput } from "../route/client.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
+import { GoogleVertexShared } from "./google-vertex-shared.js"
+import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("google-vertex")
 

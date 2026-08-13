@@ -9,7 +9,13 @@ import type {
 import { QueryClient } from "@tanstack/solid-query"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
 import { estimateRootSessionTotal, loadRootSessions } from "./global-sync/session-load"
-import { loadActiveSessionsQuery, loadMcpQuery, loadMcpResourcesQuery, seedActiveSessionStatuses } from "./server-sync"
+import {
+  loadActiveSessionsQuery,
+  loadMcpQuery,
+  loadMcpResourcesQuery,
+  reconcileActiveSessionStatuses,
+  seedActiveSessionStatuses,
+} from "./server-sync"
 import { ServerScope } from "@/utils/server-scope"
 import { createServerSession } from "./server-session"
 import type { ServerApi } from "@/utils/server"
@@ -98,6 +104,17 @@ describe("active session query", () => {
       message: "retrying",
       next: 10,
     })
+  })
+
+  test("replaces stale active statuses after reconnect", () => {
+    const session = createServerSession({} as ServerApi["session"], {} as ServerApi["message"])
+    session.set("session_status", "ses_stale", { type: "busy" })
+    session.set("session_status", "ses_active", { type: "idle" })
+
+    reconcileActiveSessionStatuses(session, { ses_active: { type: "running" } })
+
+    expect(session.data.session_status.ses_stale).toEqual({ type: "idle" })
+    expect(session.data.session_status.ses_active).toEqual({ type: "busy" })
   })
 })
 

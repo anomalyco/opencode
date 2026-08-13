@@ -1,9 +1,9 @@
-export * as CodeModeTool from "./tool"
+export * as CodeModeTool from "./tool.js"
 
 import { CodeMode, Tool, toolError } from "@opencode-ai/codemode"
 import type { Content, Context, Error, Info, Metadata, Result } from "@opencode-ai/schema/tool"
 import { Effect, Ref, Schema, Semaphore } from "effect"
-import { definition } from "../tool/runtime"
+import { definition } from "../tool/runtime.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -75,7 +75,9 @@ export const create = (
               const outputFileParts = outputFiles(content)
               if (outputFileParts.length > 0)
                 yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-              return executed.output
+              if (executed.output !== undefined) return executed.output
+              const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+              return text === "" ? null : text
             }),
           {
             onToolCallStart: ({ index, name, input }) => {
@@ -155,7 +157,7 @@ function runtime(
     tools[path] = Tool.make({
       description: child.description,
       input: child.inputSchema,
-      output: child.outputSchema,
+      output: child.outputSchema ?? Schema.NullOr(Schema.String),
       execute: (input) => executeTool(name, registration, input),
     })
   }

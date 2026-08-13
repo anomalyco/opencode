@@ -1,0 +1,59 @@
+import { normalizeServerUrl, ServerConnection } from "@/context/server"
+import type { ServerHealth } from "@/utils/server-health"
+
+export type ServerFormValues = {
+  url: string
+  name: string
+  username: string
+  password: string
+}
+
+export function createServerHealthPreview(
+  check: (server: ServerConnection.HttpBase) => Promise<Pick<ServerHealth, "healthy">>,
+) {
+  let generation = 0
+
+  const cancel = () => {
+    generation += 1
+  }
+
+  const preview = async (values: ServerFormValues, setStatus: (value: boolean | undefined) => void) => {
+    const current = ++generation
+    setStatus(undefined)
+    const normalized = normalizeServerUrl(values.url)
+    if (!normalized) return
+    const host = normalized.replace(/^https?:\/\//, "").split("/")[0]
+    if (!host) return
+    if (!host.includes("localhost") && !host.startsWith("127.0.0.1") && !host.includes(".") && !host.includes(":"))
+      return
+
+    const http: ServerConnection.HttpBase = { url: normalized }
+    if (values.username) http.username = values.username
+    if (values.password) http.password = values.password
+    const result = await check(http)
+    if (current !== generation) return
+    setStatus(result.healthy)
+  }
+
+  return { cancel, preview }
+}
+
+export function replaceServerConnection(
+  originalKey: ServerConnection.Key,
+  next: ServerConnection.Http,
+  operations: {
+    active: () => ServerConnection.Key | undefined
+    removeTabs: (key: ServerConnection.Key) => void
+    add: (server: ServerConnection.Http) => ServerConnection.Any | undefined
+    setActive: (key: ServerConnection.Key) => void
+    remove: (key: ServerConnection.Key) => void
+  },
+) {
+  const active = operations.active()
+  operations.removeTabs(originalKey)
+  const added = operations.add(next)
+  if (!added) return
+  const nextActive = active === originalKey ? ServerConnection.key(added) : active
+  if (nextActive) operations.setActive(nextActive)
+  operations.remove(originalKey)
+}

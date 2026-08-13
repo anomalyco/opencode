@@ -39,6 +39,14 @@
   background: linear-gradient(to bottom, var(--v2-background-bg-base) calc(100% - 24px), transparent);
 }
 
+.settings-v2-tab-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
 .settings-v2-tab-title {
   font-size: 15px;
   font-weight: 640;
@@ -174,13 +182,13 @@
   max-width: 100%;
 }
 
-[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-list"] {
+[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] > [data-slot="tabs-v2-list"] {
   background-color: var(--v2-background-bg-layer-01);
 }
 
 @media (max-width: 639px) {
   .settings-v2[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
-    [data-slot="tabs-v2-list"] {
+    > [data-slot="tabs-v2-list"] {
     width: 144px;
     min-width: 144px;
     padding-inline: 8px;
@@ -287,7 +295,7 @@
 }
 
 .settings-v2-provider-env-hint {
-  padding-right: 12px;
+  padding-inline-end: 12px;
   font-size: 13px;
   font-weight: 440;
   line-height: 1;
@@ -311,7 +319,7 @@
   line-height: 1;
   color: var(--v2-text-text-accent);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
 }
 
 .settings-v2-providers-view-all:hover {
@@ -361,13 +369,13 @@
 }
 
 .settings-v2-tab-search [data-slot="text-input-v2-input"] {
-  padding-right: 28px;
+  padding-inline-end: 28px;
 }
 
 .settings-v2-tab-search-clear {
   position: absolute;
   top: 50%;
-  right: 6px;
+  inset-inline-end: 6px;
   z-index: 1;
   transform: translateY(-50%);
 }
@@ -726,4 +734,25 @@
   font-weight: 440;
   line-height: 1;
   color: var(--v2-state-fg-danger);
+}
+
+.settings-v2-extensions-tabs[data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"] {
+  width: 280px;
+  padding-inline: 0 !important;
+}
+
+.settings-v2-extensions-tabs[data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"]::before {
+  display: none;
+}
+
+.settings-v2-extensions-tabs[data-component="tabs-v2"][data-variant="pill"]
+  > [data-slot="tabs-v2-list"]
+  [data-slot="tabs-v2-trigger-wrapper"] {
+  border-radius: 6px;
+}
+
+.settings-v2-extensions-tabs[data-component="tabs-v2"][data-variant="pill"]
+  > [data-slot="tabs-v2-list"]
+  [data-slot="tabs-v2-trigger"] {
+  padding-inline: 8px;
 }

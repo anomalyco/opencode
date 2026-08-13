@@ -11,7 +11,7 @@ export function isHiddenCompositeMarker(state: StateDiagramState | undefined): b
 }
 
 function composeTransitionLabel(incoming: StateDiagramTransition, outgoing: StateDiagramTransition): string {
-  return incoming.label || outgoing.label
+  return [incoming.label, outgoing.label].filter(Boolean).join("<br/>")
 }
 
 function collapseHiddenCompositeMarkerTransitionsOnce(
@@ -23,33 +23,28 @@ function collapseHiddenCompositeMarkerTransitionsOnce(
   )
   if (hiddenMarkers.size === 0) return { transitions: [...transitions], changed: false }
 
-  const skipped = new Set<StateVisibleTransition>()
-  const collapsed: StateVisibleTransition[] = []
-  let changed = false
-
   for (const markerId of hiddenMarkers) {
     const incoming = transitions.filter((transition) => transition.to === markerId && transition.from !== markerId)
     const outgoing = transitions.filter((transition) => transition.from === markerId && transition.to !== markerId)
     if (incoming.length === 0 || outgoing.length === 0) continue
 
-    changed = true
-    for (const incomingTransition of incoming) {
-      skipped.add(incomingTransition)
-      for (const outgoingTransition of outgoing) {
-        skipped.add(outgoingTransition)
-        collapsed.push({
-          from: incomingTransition.from,
-          to: outgoingTransition.to,
-          label: composeTransitionLabel(incomingTransition, outgoingTransition),
-        })
-      }
+    const skipped = new Set([...incoming, ...outgoing])
+    return {
+      transitions: [
+        ...transitions.filter((transition) => !skipped.has(transition)),
+        ...incoming.flatMap((incomingTransition) =>
+          outgoing.map((outgoingTransition) => ({
+            from: incomingTransition.from,
+            to: outgoingTransition.to,
+            label: composeTransitionLabel(incomingTransition, outgoingTransition),
+          })),
+        ),
+      ],
+      changed: true,
     }
   }
 
-  return {
-    transitions: [...transitions.filter((transition) => !skipped.has(transition)), ...collapsed],
-    changed,
-  }
+  return { transitions: [...transitions], changed: false }
 }
 
 function collapseHiddenCompositeMarkerTransitions(diagram: StateDiagram): StateVisibleTransition[] {

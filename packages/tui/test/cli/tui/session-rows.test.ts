@@ -1,6 +1,20 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
-import { cacheReuseDrop, messageBoundaryIDs, reduceSessionRows } from "../../../src/routes/session/rows"
+import { cacheReuseDrop, messageBoundaryIDs, reduceSessionRows, turnDuration } from "../../../src/routes/session/rows"
+
+test("measures turn duration from the user prompt across assistant steps", () => {
+  const first = assistant("assistant-1", [])
+  first.time = { created: 8_000, completed: 11_000 }
+  const final = assistant("assistant-2", [])
+  final.time = { created: 27_000, completed: 30_000 }
+  const messages: SessionMessageInfo[] = [
+    { type: "user", id: "user-1", text: "Question", time: { created: 1_000 } },
+    first,
+    final,
+  ]
+
+  expect(turnDuration(final, messages)).toBe(29_000)
+})
 
 test("filters OpenAI cache quantization from cache reuse drops", () => {
   const openai = { id: "gpt", providerID: "openai" }

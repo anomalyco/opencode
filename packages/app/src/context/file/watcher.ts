@@ -16,7 +16,7 @@ type WatcherOps = {
 }
 
 export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
-  if (event.type !== "file.watcher.updated") return
+  if (event.type !== "filesystem.changed") return
   const props =
     typeof event.properties === "object" && event.properties ? (event.properties as Record<string, unknown>) : undefined
   const rawPath = typeof props?.file === "string" ? props.file : undefined

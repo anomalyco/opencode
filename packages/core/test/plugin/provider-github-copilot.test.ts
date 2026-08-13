@@ -1,11 +1,14 @@
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { App } from "@opencode-ai/core/app"
+import { Agent } from "@opencode-ai/schema/agent"
+import { Session } from "@opencode-ai/schema/session"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { copilotBaseURL, copilotFetch, GithubCopilotPlugin } from "@opencode-ai/core/plugin/provider/github-copilot"
 import { Provider } from "@opencode-ai/core/provider"
 import { Integration } from "@opencode-ai/core/integration"
@@ -57,8 +60,34 @@ describe("GithubCopilotPlugin", () => {
         id: Integration.MethodID.make("device"),
         type: "oauth",
         label: "Login with GitHub Copilot",
-        prompts: expect.any(Array),
+        form: expect.any(Array),
       })
+    }),
+  )
+
+  it.effect("removes the generic key method", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      yield* integrations.transform((draft) => {
+        draft.method.update({
+          integrationID: Integration.ID.make("github-copilot"),
+          method: { type: "key" },
+        })
+        draft.method.update({
+          integrationID: Integration.ID.make("github-copilot"),
+          method: { type: "env", names: ["GITHUB_TOKEN"] },
+        })
+      })
+      yield* addPlugin()
+      expect((yield* integrations.get(Integration.ID.make("github-copilot")))?.methods).toEqual([
+        { type: "env", names: ["GITHUB_TOKEN"] },
+        {
+          id: Integration.MethodID.make("device"),
+          type: "oauth",
+          label: "Login with GitHub Copilot",
+          form: expect.any(Array),
+        },
+      ])
     }),
   )
 
@@ -71,7 +100,6 @@ describe("GithubCopilotPlugin", () => {
           requests.push(new Headers(init?.headers))
           return Response.json({ ok: true })
         },
-        false,
         App.make({ name: "test", version: "1.2.3", channel: "beta" }),
       )
       yield* Effect.promise(() =>
@@ -89,6 +117,53 @@ describe("GithubCopilotPlugin", () => {
       expect(requests[0]?.get("copilot-vision-request")).toBe("true")
       expect(requests[0]?.get("x-github-api-version")).toBe("2026-06-01")
       expect(requests[0]?.get("user-agent")).toBe("opencode/beta/1.2.3/test")
+    }),
+  )
+
+  it.effect("adds Copilot authentication to native Anthropic requests", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* (yield* PluginHooks.Service).trigger("session", "http.request", {
+        sessionID: Session.ID.make("ses_test"),
+        agent: Agent.ID.make("build"),
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("claude-sonnet-4.5") }),
+        request: new Request("https://api.githubcopilot.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": "token" },
+          body: JSON.stringify({ messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }] }),
+        }),
+      })
+      expect(event.request.headers.get("authorization")).toBe("Bearer token")
+      expect(event.request.headers.has("x-api-key")).toBe(false)
+      expect(event.request.headers.get("x-initiator")).toBe("user")
+      expect(event.request.headers.get("anthropic-beta")).toBe("interleaved-thinking-2025-05-14")
+      expect(event.request.headers.get("x-github-api-version")).toBe("2026-06-01")
+    }),
+  )
+
+  it.effect("classifies title generation as a background interaction", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* (yield* PluginHooks.Service).trigger("session", "http.request", {
+        sessionID: Session.ID.make("ses_title"),
+        agent: Agent.ID.make("title"),
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4-nano") }),
+        request: new Request("https://api.githubcopilot.com/chat/completions"),
+      })
+      expect(event.request.headers.get("x-interaction-type")).toBe("conversation-background")
+    }),
+  )
+
+  it.effect("classifies compaction requests", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* (yield* PluginHooks.Service).trigger("session", "http.request", {
+        sessionID: Session.ID.make("ses_compaction"),
+        agent: Agent.ID.make("compaction"),
+        model: Model.Ref.make({ providerID: Provider.ID.githubCopilot, id: Model.ID.make("gpt-5.4") }),
+        request: new Request("https://api.githubcopilot.com/responses"),
+      })
+      expect(event.request.headers.get("x-interaction-type")).toBe("conversation-compaction")
     }),
   )
 
@@ -117,6 +192,22 @@ describe("GithubCopilotPlugin", () => {
       })
       expect(ignored.sdk).toBeUndefined()
       expect(result.sdk).toBeDefined()
+    }),
+  )
+
+  it.effect("rewrites models.dev fallback models to the GitHub Copilot package", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(Provider.ID.githubCopilot, () => {})
+        catalog.model.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol"), (model) => {
+          model.package = "@ai-sdk/openai-compatible"
+        })
+      })
+      yield* addPlugin()
+      expect(required(yield* catalog.model.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol"))).package).toBe(
+        "@ai-sdk/github-copilot",
+      )
     }),
   )
 

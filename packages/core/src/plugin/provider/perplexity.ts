@@ -1,16 +1,10 @@
-import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { createProviderPlugin } from "./factory.js"
 
-export const PerplexityPlugin = define({
+export const PerplexityPlugin = createProviderPlugin({
   id: "opencode.provider.perplexity",
-  effect: Effect.fn(function* (ctx) {
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/perplexity") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/perplexity"))
-        evt.sdk = mod.createPerplexity(evt.options)
-      }),
-    )
-  }),
+  package: "@ai-sdk/perplexity",
+  load: async (options) => {
+    const { createPerplexity } = await import("@ai-sdk/perplexity")
+    return createPerplexity(options)
+  },
 })

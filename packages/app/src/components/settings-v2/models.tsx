@@ -11,6 +11,7 @@ import { useModels } from "@/context/models"
 import { useServerSDK } from "@/context/server-sdk"
 import { popularProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
+import { InlineServerSelect } from "./parts/server-select"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
 import "./settings-v2.css"
@@ -53,7 +54,13 @@ export const SettingsModelsV2: Component = () => {
   return (
     <>
       <div class="settings-v2-tab-header settings-v2-tab-header--stacked">
-        <h2 class="settings-v2-tab-title">{language.t("settings.models.title")}</h2>
+        <div class="settings-v2-tab-header-row">
+          <div class="flex flex-col gap-1">
+            <h2 class="settings-v2-tab-title">{language.t("settings.models.title")}</h2>
+            <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.models.description")}</span>
+          </div>
+          <InlineServerSelect />
+        </div>
         <div class="settings-v2-tab-search">
           <TextInputV2
             type="search"

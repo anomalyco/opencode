@@ -2,7 +2,7 @@ import { createMemo, type Accessor } from "solid-js"
 import { useGlobal } from "@/context/global"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { sessionPermissionRequest, sessionQuestionRequest } from "@/pages/session/composer/session-request-tree"
+import { sessionPermissionRequest, sessionQuestionForm } from "@/pages/session/composer/session-request-tree"
 import { ServerConnection } from "@/context/server"
 
 export function useSessionTabAvatarState(
@@ -31,7 +31,7 @@ export function useSessionTabAvatarState(
     const serverSync = sync()
     if (!serverSync) return false
     const [store] = serverSync.child(directory(), { bootstrap: false })
-    return !!sessionQuestionRequest(store.session, serverSync.session.data.question, sessionId())
+    return !!sessionQuestionForm(store.session, serverSync.session.data.form, sessionId())
   })
   const needsAttention = createMemo(() => hasPermissions() || hasQuestions())
   const notificationState = createMemo(() => {

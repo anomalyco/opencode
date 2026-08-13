@@ -15,7 +15,6 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionPending } from "@opencode-ai/core/session/pending"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -23,6 +22,7 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { DateTime, Effect, Layer, LayerMap, Stream } from "effect"
 import { testEffect } from "./lib/effect"
+import { globalProjectLayer } from "./lib/project"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const model = LanguageModel.make({
@@ -30,14 +30,6 @@ const model = LanguageModel.make({
   provider: "test",
   route: OpenAIChat.route.with({ limits: { context: 10_000, output: 1_000 } }),
 })
-const projects = Layer.succeed(
-  Project.Service,
-  Project.Service.of({
-    list: () => Effect.succeed([]),
-    resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
-    directories: () => Effect.succeed([]),
-  }),
-)
 let requests: LLMRequest[] = []
 const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
@@ -74,14 +66,14 @@ const it = testEffect(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
       [LocationServiceMap.node, locations],
-      [Project.node, projects],
+      [Project.node, globalProjectLayer],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),
 )
 
 describe("Session.compact", () => {
-  it.effect("durably admits and coalesces manual compaction", () =>
+  it.effect("durably stacks manual compaction", () =>
     Effect.gen(function* () {
       requests = []
       const session = yield* Session.Service
@@ -89,18 +81,18 @@ describe("Session.compact", () => {
       const created = yield* session.create({ location })
 
       const messageID = SessionMessage.ID.create()
-      yield* bus.publish(SessionEvent.InputAdmitted, {
+      yield* bus.publish(SessionEvent.InboxEnqueued, {
         sessionID: created.id,
-        inputID: messageID,
-        input: {
+        inboxID: messageID,
+        item: {
           type: "user",
-          data: { text: "Please compact this session history." },
+          payload: { text: "Please compact this session history." },
           delivery: "steer",
         },
       })
-      yield* bus.publish(SessionEvent.InputPromoted, {
+      yield* bus.publish(SessionEvent.InboxDelivered, {
         sessionID: created.id,
-        inputID: messageID,
+        inboxID: messageID,
       })
 
       expect(yield* session.compact({ id: messageID, sessionID: created.id }).pipe(Effect.flip)).toMatchObject({
@@ -110,12 +102,17 @@ describe("Session.compact", () => {
       const first = yield* session.compact({ sessionID: created.id })
       const second = yield* session.compact({ sessionID: created.id })
 
-      expect(second.id).toBe(first.id)
+      expect(second.id).not.toBe(first.id)
       expect(requests).toHaveLength(0)
-      expect(yield* SessionPending.compaction((yield* Database.Service).db, created.id)).toMatchObject({
-        id: first.id,
-      })
+      expect(yield* session.inbox(created.id)).toEqual([
+        expect.objectContaining({ id: first.id, type: "compaction", delivery: "queue" }),
+        expect.objectContaining({ id: second.id, type: "compaction", delivery: "queue" }),
+      ])
       expect((yield* session.context(created.id)).find((message) => message.id === first.id)).toBeUndefined()
+
+      const steered = yield* session.create({ location })
+      const steer = yield* session.compact({ sessionID: steered.id, delivery: "steer" })
+      expect(steer).toMatchObject({ type: "compaction", delivery: "steer" })
     }),
   )
 })

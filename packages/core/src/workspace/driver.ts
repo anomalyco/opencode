@@ -1,10 +1,10 @@
-export * as WorkspaceDriver from "./driver"
+export * as WorkspaceDriver from "./driver.js"
 
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import type { Scope } from "effect"
-import type { Driver as EnvironmentDriver } from "../environment/driver"
+import type { Driver as EnvironmentDriver } from "../environment/driver.js"
 
 /**
  * Smallest provider-owned JSON value required to reconnect to the same
@@ -55,7 +55,7 @@ export class RegistryService extends Context.Service<RegistryService, Registry>(
 
 export const registry = (drivers: Readonly<Record<string, Interface>>): Registry => ({
   get: (provider) => {
-    const driver = drivers[provider]
+    const driver = Object.hasOwn(drivers, provider) ? drivers[provider] : undefined
     return driver ? Effect.succeed(driver) : Effect.fail(new ProviderNotFound({ provider }))
   },
 })

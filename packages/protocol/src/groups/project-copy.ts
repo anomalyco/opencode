@@ -4,7 +4,7 @@ import { Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
-const root = "/experimental/project/:projectID/copy"
+const root = "/api/experimental/project/:projectID/copy"
 
 export class ProjectCopyError extends Schema.ErrorClass<ProjectCopyError>("ProjectCopyError")(
   {

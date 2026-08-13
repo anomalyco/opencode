@@ -1,4 +1,5 @@
 import { Binary } from "@opencode-ai/core/util/binary"
+import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { Message, Part, Project, Todo } from "@/types"
 import type {
@@ -12,6 +13,7 @@ import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
+import { messageKey } from "@/utils/session-message"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const SESSION_CONTENT_EVENTS = new Set([
@@ -36,11 +38,10 @@ export function applyGlobalEvent(input: {
   setGlobalProject: (next: Project[] | ((draft: Project[]) => Project[])) => void
   refresh: () => void
 }) {
-  if (input.event.type === "global.disposed" || input.event.type === "server.connected") {
+  if (input.event.type === "global.disposed") {
     input.refresh()
     return
   }
-
   if (input.event.type !== "project.updated") return
   const properties = input.event.properties as Project
   const result = Binary.search(input.project, properties.id, (s) => s.id)
@@ -186,6 +187,18 @@ export function applyDirectoryEvent(input: {
       input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
       break
     }
+    case "project.directory.resolved": {
+      const properties = event.properties as { projectID: string; directory: string; previous: string }
+      input.store.session.forEach((session, index) => {
+        const adopted = ProjectDirectories.adopt(
+          { projectID: session.projectID, directory: session.location.directory },
+          properties,
+        )
+        if (!adopted) return
+        input.setStore("session", index, (current) => ({ ...current, ...adopted }))
+      })
+      break
+    }
     case "session.renamed": {
       const properties = event.properties as { sessionID: string; title: string }
       const result = Binary.search(input.store.session, properties.sessionID, (session) => session.id)
@@ -271,7 +284,7 @@ export function applyDirectoryEvent(input: {
         input.setStore("message", info.sessionID, [info])
         break
       }
-      const result = Binary.search(messages, info.id, (m) => m.id)
+      const result = Binary.search(messages, messageKey(info), messageKey)
       if (result.found) {
         input.setStore("message", info.sessionID, result.index, reconcile(info))
         break
@@ -291,8 +304,8 @@ export function applyDirectoryEvent(input: {
         produce((draft) => {
           const messages = draft.message[props.sessionID]
           if (messages) {
-            const result = Binary.search(messages, props.messageID, (m) => m.id)
-            if (result.found) messages.splice(result.index, 1)
+            const index = messages.findIndex((message) => message.id === props.messageID)
+            if (index >= 0) messages.splice(index, 1)
           }
           const parts = draft.part[props.messageID]
           if (parts) {
@@ -318,7 +331,7 @@ export function applyDirectoryEvent(input: {
         input.setStore("part", part.messageID, [part])
         break
       }
-      const result = Binary.search(parts, part.id, (p) => p.id)
+      const result = Binary.search(parts, part.id, (item) => item.id)
       if (result.found) {
         input.setStore("part", part.messageID, result.index, reconcile(part))
         break
@@ -341,13 +354,13 @@ export function applyDirectoryEvent(input: {
       )
       const parts = input.store.part[props.messageID]
       if (!parts) break
-      const result = Binary.search(parts, props.partID, (p) => p.id)
+      const result = Binary.search(parts, props.partID, (part) => part.id)
       if (result.found) {
         input.setStore(
           produce((draft) => {
             const list = draft.part[props.messageID]
             if (!list) return
-            const next = Binary.search(list, props.partID, (p) => p.id)
+            const next = Binary.search(list, props.partID, (part) => part.id)
             if (!next.found) return
             list.splice(next.index, 1)
             if (list.length === 0) delete draft.part[props.messageID]
@@ -360,7 +373,7 @@ export function applyDirectoryEvent(input: {
       const props = event.properties as { messageID: string; partID: string; field: string; delta: string }
       const parts = input.store.part[props.messageID]
       if (!parts) break
-      const result = Binary.search(parts, props.partID, (p) => p.id)
+      const result = Binary.search(parts, props.partID, (part) => part.id)
       if (!result.found) break
       const field = props.field as keyof (typeof parts)[number]
       const current = parts[result.index]?.[field]

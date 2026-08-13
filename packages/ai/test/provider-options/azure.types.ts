@@ -1,5 +1,5 @@
-import { LLM } from "../../src"
-import { Azure } from "../../src/providers"
+import { LLM } from "../../src/index.js"
+import { Azure } from "../../src/providers.js"
 
 const model = Azure.configure({ resourceName: "example" }).responses("deployment")
 

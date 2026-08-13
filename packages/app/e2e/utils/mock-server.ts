@@ -32,15 +32,110 @@ export interface MockServerConfig {
   todos?: (sessionID: string) => unknown[]
   permissions?: unknown[] | (() => unknown[])
   questions?: unknown[] | (() => unknown[])
+  forms?: unknown[] | (() => unknown[])
   fileList?: (path: string) => unknown | Promise<unknown>
   fileContent?: (path: string) => unknown | Promise<unknown>
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown
   sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
 }
 
+type MockStreamWindow = Window & {
+  __testSseTransport?: unknown
+  __mockServerStream?: { push: (payloads: unknown[]) => void }
+}
+
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   const cursors = new Map<string, string>()
   let nextCursor = 0
+
+  await page.addInitScript(
+    ({ port, retry }) => {
+      const host = window as MockStreamWindow
+      if (host.__testSseTransport || host.__mockServerStream) return
+      const originalFetch = window.fetch.bind(window)
+      const encoder = new TextEncoder()
+      const state: {
+        controller?: ReadableStreamDefaultController<Uint8Array>
+        buffer: string[]
+        connections: number
+      } = { buffer: [], connections: 0 }
+      const frame = (payload: unknown) => `data: ${JSON.stringify(payload)}\n\n`
+      host.__mockServerStream = {
+        push(payloads: unknown[]) {
+          const frames = payloads.map(frame)
+          const controller = state.controller
+          if (!controller) {
+            state.buffer.push(...frames)
+            return
+          }
+          frames.forEach((item) => controller.enqueue(encoder.encode(item)))
+        },
+      }
+      const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const url = new URL(request.url)
+        if (url.port !== port || url.pathname !== "/api/event") return originalFetch(request)
+        state.connections += 1
+        const id = state.connections
+        let ended = false
+        let own: ReadableStreamDefaultController<Uint8Array> | undefined
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            own = controller
+            state.controller = controller
+            if (retry !== undefined) controller.enqueue(encoder.encode(`retry: ${retry}\n\n`))
+            controller.enqueue(
+              encoder.encode(frame({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })),
+            )
+            state.buffer.splice(0).forEach((item) => controller.enqueue(encoder.encode(item)))
+            request.signal.addEventListener(
+              "abort",
+              () => {
+                if (ended) return
+                ended = true
+                if (state.controller === controller) state.controller = undefined
+                controller.error(request.signal.reason ?? new DOMException("The operation was aborted", "AbortError"))
+              },
+              { once: true },
+            )
+          },
+          cancel() {
+            if (ended) return
+            ended = true
+            if (state.controller === own) state.controller = undefined
+          },
+        })
+        return Promise.resolve(
+          new Response(stream, {
+            status: 200,
+            headers: { "cache-control": "no-cache", "content-type": "text/event-stream" },
+          }),
+        )
+      }
+      Object.defineProperty(window, "fetch", { configurable: true, writable: true, value: fetch })
+    },
+    { port: process.env.PLAYWRIGHT_SERVER_PORT ?? "4096", retry: config.eventRetry },
+  )
+
+  if (config.events) {
+    const pump = { busy: false }
+    const timer = setInterval(() => {
+      if (pump.busy) return
+      const batch = config.events?.() ?? []
+      if (batch.length === 0) return
+      pump.busy = true
+      void page
+        .evaluate(
+          (payloads) => (window as MockStreamWindow).__mockServerStream?.push(payloads),
+          batch.map(currentEvent),
+        )
+        .catch(() => {})
+        .finally(() => {
+          pump.busy = false
+        })
+    }, 50)
+    page.on("close", () => clearInterval(timer))
+  }
   const staticRoutes: Record<string, unknown> = {
     "/path": {
       state: config.directory,
@@ -195,6 +290,11 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         location: location(config),
         data: typeof config.questions === "function" ? config.questions() : (config.questions ?? []),
       })
+    if (path === "/api/form/request")
+      return json(route, {
+        location: location(config),
+        data: typeof config.forms === "function" ? config.forms() : (config.forms ?? []),
+      })
     if (path === "/api/vcs")
       return json(route, { location: location(config), data: { branch: "main", defaultBranch: "main" } })
     if (path === "/api/vcs/status") return json(route, { location: location(config), data: [] })
@@ -280,6 +380,18 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (/^\/api\/session\/[^/]+\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
+    const sessionForm = path.match(/^\/api\/session\/([^/]+)\/form$/)?.[1]
+    if (sessionForm && route.request().method() === "GET") {
+      const forms = typeof config.forms === "function" ? config.forms() : (config.forms ?? [])
+      return json(route, { data: forms.filter((form) => (form as { sessionID?: string }).sessionID === sessionForm) })
+    }
+    if (/^\/api\/session\/[^/]+\/form\/[^/]+\/(reply|cancel)$/.test(path) && route.request().method() === "POST") {
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    }
+    if (/^\/api\/session\/[^/]+\/background$/.test(path) && route.request().method() === "POST")
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    if (/^\/api\/session\/[^/]+\/inbox$/.test(path) && route.request().method() === "GET")
+      return json(route, { data: [] })
     if (/^\/api\/session\/[^/]+\/permission\/[^/]+\/reply$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }

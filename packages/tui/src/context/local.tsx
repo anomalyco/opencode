@@ -437,7 +437,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (!m) return
             if (route.data.type === "session") {
               setSessionDraft(route.data.sessionID, { ...m, variant: normalizeModelVariant(value) })
-              return
             }
             setPreferences("variant", modelPreferenceKey(m), normalizeModelVariant(value))
             savePreferences()

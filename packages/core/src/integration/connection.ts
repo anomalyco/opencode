@@ -1,4 +1,4 @@
-export * as IntegrationConnection from "./connection"
+export * as IntegrationConnection from "./connection.js"
 
 import { Connection } from "@opencode-ai/schema/connection"
 

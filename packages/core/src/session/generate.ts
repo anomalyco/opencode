@@ -1,11 +1,11 @@
-export * as SessionGenerate from "./generate"
+export * as SessionGenerate from "./generate.js"
 
 import type { AIError } from "@opencode-ai/ai"
 import { Context, type Effect } from "effect"
-import type { Instructions } from "../instructions"
-import type { AgentNotFoundError } from "./error"
-import type { SessionRunnerModel } from "./runner/model"
-import type { SessionSchema } from "./schema"
+import type { Instructions } from "../instructions/index.js"
+import type { AgentNotFoundError } from "./error.js"
+import type { SessionRunnerModel } from "./runner/model.js"
+import type { SessionSchema } from "./schema.js"
 
 export type Error = AgentNotFoundError | Instructions.InitializationBlocked | SessionRunnerModel.Error | AIError
 

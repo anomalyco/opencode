@@ -1,9 +1,9 @@
 import { $ } from "bun"
 import * as path from "node:path"
 
-import { RUST_TARGET } from "./utils"
+import { CLI_TARGET } from "./utils"
 
-if (!RUST_TARGET) throw new Error("RUST_TARGET not defined")
+if (!CLI_TARGET) throw new Error("OPENCODE_CLI_TARGET not defined")
 
 const BUNDLE_DIR = "dist"
 const BUNDLES_OUT_DIR = path.join(process.cwd(), "dist/bundles")

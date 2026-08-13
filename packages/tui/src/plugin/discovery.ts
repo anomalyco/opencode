@@ -49,7 +49,11 @@ export function localSource(spec: string, directory: string) {
 // of hitting the ESM cache. Bun ignores query params when caching file:// URL
 // imports, so bust with a plain path there; Node keys its cache on the full
 // URL. Mirrors the core plugin supervisor's loader.
+// The mtime is truncated to whole milliseconds: a fractional mtimeMs puts a
+// dot in the query, and Bun's compiled binaries then skip runtime plugin
+// hooks for the import, breaking JSX/solid rewriting for external plugins.
 export function freshSpecifier(entrypoint: string, mtime: number) {
-  if (typeof Bun !== "undefined") return `${fileURLToPath(entrypoint).replaceAll("\\", "/")}?mtime=${mtime}`
-  return `${entrypoint}?mtime=${mtime}`
+  const version = Math.trunc(mtime)
+  if (typeof Bun !== "undefined") return `${fileURLToPath(entrypoint).replaceAll("\\", "/")}?mtime=${version}`
+  return `${entrypoint}?mtime=${version}`
 }

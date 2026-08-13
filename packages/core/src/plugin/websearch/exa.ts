@@ -1,9 +1,9 @@
-export * as WebSearchExa from "./exa"
+export * as WebSearchExa from "./exa.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Schema, Scope } from "effect"
 import { HttpClient } from "effect/unstable/http"
-import { WebSearchMcp } from "./mcp"
+import { WebSearchMcp } from "./mcp.js"
 
 export const endpoint = "https://mcp.exa.ai/mcp"
 
@@ -30,7 +30,7 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       draft.update("exa", (integration) => (integration.name = "Exa"))
       draft.method.update({
         integrationID: "exa",
-        method: { type: "key", label: "API key (optional)" },
+        method: { type: "key" },
       })
       draft.method.update({
         integrationID: "exa",

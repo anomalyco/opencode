@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Effect, Fiber, Schema, Stream } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -16,21 +16,14 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
+import { globalProjectLayer } from "./lib/project"
 
-const projects = Layer.succeed(
-  Project.Service,
-  Project.Service.of({
-    list: () => Effect.succeed([]),
-    resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
-    directories: () => Effect.succeed([]),
-  }),
-)
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
       [Bus.node, Bus.configured({ persist: true })],
-      [Project.node, projects],
+      [Project.node, globalProjectLayer],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),
