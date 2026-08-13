@@ -173,7 +173,6 @@ describe("Worktree", () => {
       const created = yield* worktree.create({
         projectID: input.projectID,
         strategy: gitWorktree,
-        from: input.sourceDirectory,
         directory: parent,
         name: "worktree",
       })

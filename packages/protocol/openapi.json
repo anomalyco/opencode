@@ -11502,7 +11502,6 @@
                 },
                 "required": [
                   "strategy",
-                  "from",
                   "directory"
                 ],
                 "additionalProperties": false

@@ -382,7 +382,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           .api.worktree.create({
             projectID: sync().data.project,
             strategy: "git",
-            from: projectDirectory,
             directory: getDirectory(projectDirectory),
           })
           .catch((err) => {

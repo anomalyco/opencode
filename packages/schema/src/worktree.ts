@@ -12,7 +12,7 @@ export type StrategyID = typeof StrategyID.Type
 export const CreateInput = Schema.Struct({
   projectID: ProjectID,
   strategy: StrategyID,
-  from: AbsolutePath,
+  from: optional(AbsolutePath),
   directory: AbsolutePath,
   name: optional(Schema.String),
 }).annotate({ identifier: "Worktree.CreateInput" })

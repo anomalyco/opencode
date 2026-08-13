@@ -17,6 +17,7 @@ import { WorktreeTable } from "./worktree/sql.js"
 import { canonical, DirectoryUnavailableError } from "./worktree/directory.js"
 import { WorktreeGit } from "./worktree/git.js"
 import type { EffectDrizzleSqlite } from "./database/drizzle.js"
+import { ProjectTable } from "./project/sql.js"
 
 export { DirectoryUnavailableError } from "./worktree/directory.js"
 
@@ -57,7 +58,7 @@ export type ListEntry = typeof ListEntry.Type
 
 export class SourceDirectoryNotFoundError extends Schema.TaggedErrorClass<SourceDirectoryNotFoundError>()(
   "Worktree.SourceDirectoryNotFoundError",
-  { directory: AbsolutePath },
+  { projectID: ProjectSchema.ID, directory: Schema.optional(AbsolutePath) },
 ) {}
 
 export class DestinationExistsError extends Schema.TaggedErrorClass<DestinationExistsError>()(
@@ -171,6 +172,14 @@ const layer = Layer.effect(
           .pipe(Effect.orDie)
         return row ? { directory: row.directory, strategy: row.strategy ?? undefined } : undefined
       }),
+      primary: Effect.fnUntraced(function* (projectID: ProjectSchema.ID) {
+        return yield* db
+          .select({ directory: ProjectTable.worktree })
+          .from(ProjectTable)
+          .where(eq(ProjectTable.id, projectID))
+          .get()
+          .pipe(Effect.orDie)
+      }),
       create: Effect.fnUntraced(function* (input: StoredInput, tx?: Transaction) {
         return (
           (yield* (tx ?? db)
@@ -213,11 +222,13 @@ const layer = Layer.effect(
 
     const strategies = () => Array.from(registry.values())
 
-    const source = Effect.fnUntraced(function* (input: AbsolutePath, projectID: ProjectSchema.ID) {
-      const sourceDirectory = yield* canonical(fs, input)
-      if ((yield* ops.find(projectID, sourceDirectory)) === undefined)
-        return yield* new SourceDirectoryNotFoundError({ directory: sourceDirectory })
-      return sourceDirectory
+    const source = Effect.fnUntraced(function* (input: AbsolutePath | undefined, projectID: ProjectSchema.ID) {
+      const sourceDirectory = input ?? (yield* ops.primary(projectID))?.directory
+      if (!sourceDirectory) return yield* new SourceDirectoryNotFoundError({ projectID })
+      const resolved = yield* canonical(fs, sourceDirectory)
+      if ((yield* ops.find(projectID, resolved)) === undefined)
+        return yield* new SourceDirectoryNotFoundError({ projectID, directory: resolved })
+      return resolved
     })
 
     const getStrategy = Effect.fnUntraced(function* (id: StrategyID) {
