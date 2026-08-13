@@ -7771,6 +7771,12 @@ body {
   }
 }
 
+@media (min-width: 48rem) and (max-width: 58rem) {
+  [data-page="stats"] [data-slot="top-models-bar"][data-active="true"] {
+    z-index: 2;
+  }
+}
+
 @media (max-width: 47.999rem) {
   [data-page="stats"] [data-section="top-models"],
   [data-page="stats"] [data-section="leaderboard"],
