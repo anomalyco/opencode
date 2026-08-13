@@ -8,6 +8,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "research:parity": "bun run research/differential/compare.ts",
     "test": "bun test --only-failures",
     "typecheck": "tsgo --noEmit"
   },

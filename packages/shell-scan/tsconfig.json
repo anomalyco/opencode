@@ -8,5 +8,5 @@
     "allowJs": false,
     "noUncheckedIndexedAccess": false
   },
-  "include": ["src", "test", "bench"]
+  "include": ["src", "test", "bench", "research"]
 }
