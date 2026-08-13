@@ -128,6 +128,7 @@ describe("Runner", () => {
       const started = yield* Deferred.make<void>()
       const cleanupStarted = yield* Deferred.make<void>()
       const releaseCleanup = yield* Deferred.make<void>()
+      const secondStarted = yield* Deferred.make<void>()
       const releaseSecond = yield* Deferred.make<void>()
       const runner = Runner.make<string>(s, { onInterrupt: Effect.succeed("interrupted") })
 
@@ -144,7 +145,10 @@ describe("Runner", () => {
       yield* Deferred.await(started)
       const observer = yield* Effect.gen(function* () {
         yield* Deferred.await(cleanupStarted)
-        return a.pollUnsafe()
+        return {
+          old: a.pollUnsafe(),
+          replacementStarted: yield* Deferred.isDone(secondStarted),
+        }
       }).pipe(
         Effect.ensuring(
           Effect.all([Deferred.succeed(releaseCleanup, undefined), Deferred.succeed(releaseSecond, undefined)], {
@@ -154,7 +158,12 @@ describe("Runner", () => {
         Effect.forkChild,
       )
       const b = yield* runner
-        .ensureRunning(Deferred.await(releaseSecond).pipe(Effect.as("second-result")))
+        .ensureRunning(
+          Deferred.succeed(secondStarted, undefined).pipe(
+            Effect.andThen(Deferred.await(releaseSecond)),
+            Effect.as("second-result"),
+          ),
+        )
         .pipe(Effect.forkChild)
 
       const early = yield* Fiber.join(observer).pipe(Effect.timeout("250 millis"))
@@ -164,7 +173,8 @@ describe("Runner", () => {
       if (Exit.isSuccess(exitA)) expect(exitA.value).toBe("interrupted")
       expect(Exit.isSuccess(exitB)).toBe(true)
       if (Exit.isSuccess(exitB)) expect(exitB.value).toBe("second-result")
-      expect(early).toBeUndefined()
+      expect(early.old).toBeUndefined()
+      expect(early.replacementStarted).toBe(false)
     }),
   )
 
@@ -205,6 +215,55 @@ describe("Runner", () => {
       yield* Deferred.succeed(releaseSecond, undefined)
       expect(yield* Fiber.join(b)).toBe("second-result")
       expect(yield* Ref.get(events)).toEqual(["idle"])
+    }),
+  )
+
+  it.live(
+    "successive replacements wait for the original run cleanup",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const started = yield* Deferred.make<void>()
+      const cleanupStarted = yield* Deferred.make<void>()
+      const releaseCleanup = yield* Deferred.make<void>()
+      const secondStarted = yield* Deferred.make<void>()
+      const thirdStarted = yield* Deferred.make<void>()
+      const releaseThird = yield* Deferred.make<void>()
+      const runner = Runner.make<string>(s, { onInterrupt: Effect.succeed("interrupted") })
+
+      const first = Effect.gen(function* () {
+        yield* Deferred.succeed(started, undefined)
+        return yield* Effect.never.pipe(
+          Effect.onInterrupt(() => Deferred.succeed(cleanupStarted, undefined)),
+          Effect.ensuring(Deferred.await(releaseCleanup)),
+          Effect.as("first"),
+        )
+      })
+
+      const a = yield* runner.ensureRunning(first).pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+      const b = yield* runner
+        .ensureRunning(Deferred.succeed(secondStarted, undefined).pipe(Effect.as("second")))
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(cleanupStarted)
+      const c = yield* runner
+        .ensureRunning(
+          Deferred.succeed(thirdStarted, undefined).pipe(
+            Effect.andThen(Deferred.await(releaseThird)),
+            Effect.as("third"),
+          ),
+        )
+        .pipe(Effect.forkChild)
+
+      yield* Effect.yieldNow
+      expect(yield* Deferred.isDone(secondStarted)).toBe(false)
+      expect(yield* Deferred.isDone(thirdStarted)).toBe(false)
+
+      yield* Deferred.succeed(releaseCleanup, undefined)
+      expect(yield* Fiber.join(a)).toBe("interrupted")
+      expect(yield* Fiber.join(b)).toBe("interrupted")
+      yield* Deferred.await(thirdStarted).pipe(Effect.timeout("250 millis"))
+      yield* Deferred.succeed(releaseThird, undefined)
+      expect(yield* Fiber.join(c)).toBe("third")
     }),
   )
 
@@ -275,7 +334,8 @@ describe("Runner", () => {
 
       yield* runner.cancel
 
-      const [exitA, exitB] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+      const exitA = yield* Fiber.await(a).pipe(Effect.timeout("250 millis"))
+      const exitB = yield* Fiber.await(b).pipe(Effect.timeout("250 millis"))
       expect(Exit.isSuccess(exitA)).toBe(true)
       expect(Exit.isSuccess(exitB)).toBe(true)
       if (Exit.isSuccess(exitA)) expect(exitA.value).toBe("fallback")
