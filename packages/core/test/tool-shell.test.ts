@@ -167,7 +167,9 @@ const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
 })
 
 const isWindows = process.platform === "win32"
-const cwdCommand = isWindows ? "(Get-Location).Path; Start-Sleep -Milliseconds 100" : "pwd"
+const cwdCommand = isWindows
+  ? "Get-Location | Select-Object -ExpandProperty Path; Start-Sleep -Milliseconds 100"
+  : "pwd"
 const helloCommand = isWindows ? "[Console]::Out.Write('hello'); Start-Sleep -Milliseconds 100" : "printf hello"
 const stderrCommand = isWindows
   ? "[Console]::Error.Write('stderr only'); Start-Sleep -Milliseconds 100"
@@ -443,7 +445,7 @@ describe("ShellTool", () => {
         ([active, outside]) => {
           reset()
           const command = isWindows
-            ? `Set-Location -LiteralPath '${outside.path}'; (Get-Location).Path`
+            ? `Set-Location -LiteralPath '${outside.path}'; Get-Location | Select-Object -ExpandProperty Path`
             : `cd '${outside.path}' && pwd`
           return withSession(active.path, (registry) =>
             executeTool(registry, call({ command }, "call-external-cd")),
@@ -471,7 +473,9 @@ describe("ShellTool", () => {
       Effect.promise(() => tmpdir()),
       (tmp) => {
         reset()
-        const command = isWindows ? "Set-Location $HOME; (Get-Location).Path" : "cd ~ && pwd"
+        const command = isWindows
+          ? "Set-Location $HOME; Get-Location | Select-Object -ExpandProperty Path"
+          : "cd ~ && pwd"
         return withSession(tmp.path, (registry) => executeTool(registry, call({ command }, "call-external-home"))).pipe(
           Effect.andThen(
             Effect.sync(() => {

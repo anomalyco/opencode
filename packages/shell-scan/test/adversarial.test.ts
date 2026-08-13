@@ -106,6 +106,19 @@ describe("ShellScan adversarial corpus", () => {
     "jobs -x rm -rf /",
     "sched +00:01 rm -rf /",
     "zpty worker rm -rf /",
+    "CDPATH+=/outside cd target",
+    "PS4='$(evilcmd)' true",
+    "export PS4='$(evilcmd)'; set -x; true",
+    "set -o xtrace; true",
+    "setopt promptsubst; print -P '$(evilcmd)'",
+    "unsetopt promptsubst",
+    "print -P '$(evilcmd)'",
+    "export PROMPT4='$(evilcmd)'; set -o PROMPT_SUBST; set -o XTRACE; true",
+    "path=/attacker/bin harmless",
+    "cdpath=/outside cd target",
+    "LD_PRELOAD=/tmp/pwn.so /tmp/allowed",
+    "DYLD_INSERT_LIBRARIES=/tmp/pwn.dylib /tmp/allowed",
+    "export FPATH=/attacker/functions; autoload evil; evil",
   ]
 
   test.each(opaque)("fails closed for dynamic or unsupported input: %s", (input) => {

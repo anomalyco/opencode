@@ -202,7 +202,9 @@ function scanBash(input: string, depth: number): Result {
       assignmentWords.some(
         (assignment, index) =>
           assignment &&
-          /^(?:PATH|CDPATH|ENV|BASH_ENV|SHELLOPTS|LD_|DYLD_|GIT_[A-Z_]*COMMAND)=/.test(words[index] ?? ""),
+          /^(?:PATH|path|CDPATH|cdpath|FPATH|fpath|ENV|BASH_ENV|SHELLOPTS|PS4|PROMPT4|LD_[A-Z0-9_]+|DYLD_[A-Z0-9_]+|GIT_[A-Z_]*COMMAND)\+?=/.test(
+            words[index] ?? "",
+          ),
       )
     )
       dynamicAssignment = true
@@ -379,6 +381,23 @@ function scanBash(input: string, depth: number): Result {
       if (name === "awk" || name === "gawk" || name === "mawk" || name === "nawk") return true
       if (name === "jobs") return command.words.some((word, index) => index > 0 && /^-[^-]*x/.test(word))
       if (name === "sched" || name === "zpty") return true
+      if (name === "autoload") return true
+      if (name === "export")
+        return command.words.some(
+          (word, index) =>
+            index > 0 &&
+            /^(?:PATH|path|CDPATH|cdpath|FPATH|fpath|ENV|BASH_ENV|SHELLOPTS|PS4|PROMPT4|LD_[A-Z0-9_]+|DYLD_[A-Z0-9_]+|GIT_[A-Z_]*COMMAND)\+?=/.test(
+              word,
+            ),
+        )
+      if (name === "set")
+        return command.words.some((word, index) => {
+          if (index === 0) return false
+          const option = word.toLowerCase().replaceAll("_", "")
+          return /^-[^-]*x/.test(word) || option === "xtrace" || option === "-o=xtrace" || option === "promptsubst"
+        })
+      if (name === "setopt" || name === "unsetopt") return true
+      if (name === "print") return command.words.some((word, index) => index > 0 && /^-[^-]*P/.test(word))
       if (name === "git") return command.words.some((word, index) => index > 0 && /^alias\.[^=]+=!/.test(word))
       if (name === "python" || name === "python3")
         return command.words.some((word, index) => index > 0 && (/^-[A-Za-z]*c/.test(word) || word === "-c"))
