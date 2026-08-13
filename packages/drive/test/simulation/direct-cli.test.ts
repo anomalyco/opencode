@@ -8,12 +8,12 @@ const state = {
   elements: [],
 }
 
-test.sequential("CLI drives an externally owned OpenCode endpoint on the default port", async () => {
+test.sequential("CLI drives an externally owned OpenCode endpoint", async () => {
   const root = await mkdtemp(join(tmpdir(), "opencode-drive-direct-test-"))
   const requests: unknown[] = []
   const server = Bun.serve({
     hostname: "127.0.0.1",
-    port: 40900,
+    port: 0,
     fetch(request, server) {
       if (server.upgrade(request)) return
       return new Response("external OpenCode simulation endpoint", {
@@ -49,6 +49,21 @@ test.sequential("CLI drives an externally owned OpenCode endpoint on the default
   })
 
   try {
+    await Bun.write(
+      join(root, "registry", "external.json"),
+      JSON.stringify({
+        version: 1,
+        name: "external",
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
+        cwd: root,
+        artifacts: join(root, "artifacts"),
+        visible: false,
+        status: "ready",
+        endpoints: { ui: `ws://127.0.0.1:${server.port}`, backend: "ws://127.0.0.1:1" },
+        control: join(root, "external.sock"),
+      }),
+    )
     const first = await sendState(root)
     expect(first.status).toBe(0)
     expect(JSON.parse(first.stdout)).toEqual(state)
@@ -109,7 +124,7 @@ async function sendState(root: string) {
 }
 
 async function send(root: string, args: string[]) {
-  const child = Bun.spawn([process.execPath, resolve("src/cli/index.ts"), "send", ...args], {
+  const child = Bun.spawn([process.execPath, resolve("src/cli/index.ts"), "send", "--name", "external", ...args], {
     cwd: resolve("."),
     env: {
       ...process.env,
