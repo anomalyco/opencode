@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
-import { useData } from "./data"
+import { locationKey, useData } from "./data"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
@@ -171,24 +171,23 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     createEffect(() => {
       if (!enabled()) return
       if (client.connection.status() !== "connected") return
-      const sessionIDs = openTabSessions()
-      if (sessionIDs === "") return
+      const signature = openTabSessions()
+      if (signature === "") return
+      const sessionIDs = signature.split("\n")
       let stale = false
       void (async () => {
-        await Promise.allSettled(sessionIDs.split("\n").map((sessionID) => data.session.sync(sessionID)))
+        await Promise.allSettled(sessionIDs.map((sessionID) => data.session.sync(sessionID)))
         if (stale) return
         const locations = new Map(
           sessionIDs
-            .split("\n")
             .map((sessionID) => data.session.get(sessionID)?.location)
             .filter((location) => location !== undefined)
-            .map((location) => [`${location.directory}\n${location.workspaceID ?? ""}`, location]),
+            .map((location) => [locationKey(location), location]),
         )
         await Promise.allSettled(
-          Array.from(locations.values(), async (location) => {
-            await data.location.sync(location)
-            await data.location.vcs.sync(location)
-          }),
+          Array.from(locations.values(), (location) =>
+            Promise.all([data.location.syncInfo(location), data.location.vcs.sync(location)]),
+          ),
         )
       })()
       const timer = setTimeout(async () => {

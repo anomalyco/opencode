@@ -94,7 +94,7 @@ type Store = {
   location: Record<string, LocationData>
 }
 
-function locationKey(location: LocationRef) {
+export function locationKey(location: LocationRef) {
   return JSON.stringify([location.directory, location.workspaceID])
 }
 
@@ -1214,9 +1214,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         default() {
           return defaultLocation()
         },
-        async sync(ref?: LocationRef) {
+        syncInfo(ref?: LocationRef) {
           const current = ref ?? defaultLocation()
-          await sync.run(`location:${locationKey(current)}`, async () => {
+          return sync.run(`location:${locationKey(current)}`, async () => {
             const location = await client.api.location.get({ location: locationQuery(current) })
             const key = locationKey(location)
             if (!store.location[key]) setStore("location", key, {})
@@ -1225,6 +1225,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               setDefaultLocation({ directory: location.directory, workspaceID: location.workspaceID })
             }
           })
+        },
+        async sync(ref?: LocationRef) {
+          await result.location.syncInfo(ref)
           const location = ref ?? defaultLocation()
           await Promise.all([
             result.location.vcs.sync(location),

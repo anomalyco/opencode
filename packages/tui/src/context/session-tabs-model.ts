@@ -13,18 +13,13 @@ export function sessionTabShortcutLabel(index: number) {
   return "·"
 }
 
-export function sessionTabBranch(current: string | undefined, defaultBranch: string | undefined, worktree: boolean) {
-  if (!worktree || !current || current === defaultBranch) return undefined
-  return current
-}
-
 export function sessionTabDetail(
   project: string,
   current: string | undefined,
   defaultBranch: string | undefined,
   worktree: boolean,
 ) {
-  const branch = sessionTabBranch(current, defaultBranch, worktree)
+  const branch = worktree && current !== defaultBranch ? current : undefined
   return branch && project ? `${project} ⎇ ${branch}` : (branch ?? project)
 }
 

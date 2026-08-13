@@ -462,11 +462,10 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const detailFlashColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.42))
               const detailGlowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.25))
               const detailColor = createMemo(() => tint(theme.text.subdued, pulseBackground(), 0.35))
-              const detailTextColor = (index: number) => {
-                if (!detailFades() || index < visibleDetailParts().length - FADE_WIDTH) return detailColor()
-                const position = index - (visibleDetailParts().length - FADE_WIDTH)
-                return tint(detailColor(), pulseBackground(), 0.2 + 0.72 * (position / Math.max(1, FADE_WIDTH - 1)))
-              }
+              const detailTextColor = (index: number) =>
+                detailFades()
+                  ? fadeTitleColor(detailColor(), pulseBackground(), index, visibleDetailParts().length, 0)
+                  : detailColor()
               const glows = () => status().glows
               const previous = createMemo(() => items()[index() - 1])
               const previousStatus = createMemo(() => {
