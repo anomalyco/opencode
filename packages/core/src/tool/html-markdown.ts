@@ -23,46 +23,104 @@ const blocks = new Set([
 ])
 
 type Frame = {
-  tag: string
   suppressed: boolean
   link?: { href: string; title?: string }
-  marker?: { index: number; block: number; value: string }
+  previousLink?: Frame["link"]
+  suspendedLink?: Frame["link"]
+  marker?: { index: number; block: number; leadingSpace?: boolean; previous?: Frame["marker"] }
   code?: { inline: boolean; text: string; language?: string }
-  list?: { ordered: boolean; next: number }
-  table?: { cells: number; header: boolean; rows: number }
+  list?: { ordered: boolean; next: number; previous?: Frame["list"] }
+  item?: { indent: string; previous?: Frame["item"] }
+  table?: {
+    start: number
+    rows: string[][]
+    row?: string[]
+    caption?: string
+    fallback: boolean
+    previous?: Frame["table"]
+  }
   cell?: { start: number }
+  caption?: { start: number }
+  details?: { open: boolean; summary: boolean; previous?: Frame["details"] }
 }
 
+type Chunk = string | { raw: string }
+
+export const MAX_MARKDOWN_BYTES = 5 * 1024 * 1024
+const CONTENT_BYTES = MAX_MARKDOWN_BYTES - 64 * 1024
+
 export function convertHTMLToMarkdown(html: string) {
-  if (hasPathologicalDepth(html)) return extractPathologicalText(html)
-  const output: string[] = []
+  const output: Chunk[] = []
   const stack: Frame[] = []
+  const encoder = new TextEncoder()
   let pendingSpace = false
+  let pendingIndent = ""
   let last = ""
   let quoteDepth = 0
   let needsQuotePrefix = false
   let blockCount = 0
-  let listDepth = 0
+  let depth = 0
+  let stopped = false
+  let outputBytes = 0
   let activeCode: NonNullable<Frame["code"]> | undefined
+  let activeLink: Frame["link"] | undefined
+  let linkOpen = false
+  let activeMarker: Frame["marker"] | undefined
+  let activeList: Frame["list"] | undefined
+  let activeItem: Frame["item"] | undefined
   let activeTable: NonNullable<Frame["table"]> | undefined
+  let activeCell: Frame["cell"] | undefined
   let tableDepth = 0
-  const raw: string[] = []
+  let fallbackSuppressedDepth = 0
+  let fallbackOmittedDepth = 0
+  let activeDetails: Frame["details"] | undefined
 
-  const append = (value: string) => {
-    if (!value) return
-    output.push(value)
-    last = value.at(-1) ?? last
+  const sliceBytes = (value: string, bytes: number) => {
+    if (encoder.encode(value).byteLength <= bytes) return value
+    const characters = Array.from(value)
+    let low = 0
+    let high = characters.length
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2)
+      if (encoder.encode(characters.slice(0, middle).join("")).byteLength <= bytes) low = middle
+      else high = middle - 1
+    }
+    return characters.slice(0, low).join("")
+  }
+  const append = (value: string, content = false) => {
+    const limit = content ? CONTENT_BYTES : MAX_MARKDOWN_BYTES
+    if (!value || outputBytes >= limit) return
+    const bytes = encoder.encode(value)
+    const remaining = limit - outputBytes
+    const next = bytes.byteLength <= remaining ? value : sliceBytes(value, remaining)
+    output.push(next)
+    outputBytes += encoder.encode(next).byteLength
+    last = next.at(-1) ?? last
+  }
+  const appendRaw = (value: string) => {
+    const before = output.length
+    append(value)
+    if (output.length > before) output[output.length - 1] = { raw: output[output.length - 1] as string }
+  }
+  const take = (start: number) => {
+    const chunks = output.splice(start)
+    const value = chunks.map((chunk) => (typeof chunk === "string" ? chunk : chunk.raw)).join("")
+    outputBytes -= encoder.encode(value).byteLength
+    return value
   }
   const prefixQuote = () => {
-    if (!needsQuotePrefix || quoteDepth === 0) return
+    if (!needsQuotePrefix || quoteDepth === 0 || activeCell) return
     append(`${"> ".repeat(Math.min(8, quoteDepth))}`)
     needsQuotePrefix = false
   }
   const flushSpace = () => {
     if (!pendingSpace) return
-    const marker = stack.at(-1)?.marker
+    const marker = activeMarker
     if (marker && output.length === marker.index + 1 && last !== " " && last !== "\n") {
-      output[marker.index] = ` ${output[marker.index]}`
+      const value = output[marker.index]
+      if (typeof value === "string") output[marker.index] = ` ${value}`
+      outputBytes++
+      marker.leadingSpace = true
       pendingSpace = false
       return
     }
@@ -72,13 +130,33 @@ export function convertHTMLToMarkdown(html: string) {
   const inline = (value: string, open = false) => {
     if (open) flushSpace()
     prefixQuote()
+    if (pendingIndent) {
+      append(pendingIndent)
+      pendingIndent = ""
+    }
+    if (activeLink && !linkOpen) {
+      append("[")
+      linkOpen = true
+    }
     append(value)
   }
   const block = () => {
+    if (activeLink && linkOpen) {
+      append(`](${destination(activeLink.href)}${title(activeLink.title)})`)
+      linkOpen = false
+    }
     pendingSpace = false
     append("\n\n")
     blockCount++
     needsQuotePrefix = quoteDepth > 0
+    pendingIndent = activeItem?.indent ?? ""
+  }
+  const suspendLink = (frame: Frame) => {
+    if (!activeLink) return
+    frame.suspendedLink = activeLink
+    block()
+    activeLink = undefined
+    linkOpen = false
   }
   const text = (value: string) => {
     if (activeCode) {
@@ -93,52 +171,120 @@ export function convertHTMLToMarkdown(html: string) {
       }
       flushSpace()
       prefixQuote()
-      append(
-        part
-          .replace(/([\\`*_[\]<>|])/g, "\\$1")
-          .replace(/~/g, "\\~")
-          .replace(/^([#+-])/, "\\$1")
-          .replace(/^(\d+)\./, "$1\\."),
-      )
+      if (pendingIndent) {
+        append(pendingIndent)
+        pendingIndent = ""
+      }
+      if (activeLink && !linkOpen) {
+        append("[")
+        linkOpen = true
+      }
+      const escaped = part
+        .replace(/([\\`*_[\]<>|])/g, "\\$1")
+        .replace(/~/g, "\\~")
+        .replace(/^([#+-])/, "\\$1")
+        .replace(/^(\d+)\./, "$1\\.")
+      append(escaped, true)
     }
   }
   const destination = (value: string) => value.replace(/([\\()])/g, "\\$1").replace(/[\t\n\r ]+/g, "%20")
-  const title = (value: string | undefined) => (value ? ` "${value.replace(/([\\"])/g, "\\$1")}"` : "")
+  const title = (value: string | undefined) =>
+    value
+      ? ` "${value
+          .replace(/[\t\n\r ]+/g, " ")
+          .trim()
+          .replace(/([\\"])/g, "\\$1")}"`
+      : ""
   const finishCode = (code: NonNullable<Frame["code"]>) => {
-    let longest = 0
-    let current = 0
+    let backticks = 0
+    let tildes = 0
+    let currentBackticks = 0
+    let currentTildes = 0
     for (const character of code.text) {
-      current = character === "`" ? current + 1 : 0
-      longest = Math.max(longest, current)
+      currentBackticks = character === "`" ? currentBackticks + 1 : 0
+      currentTildes = character === "~" ? currentTildes + 1 : 0
+      backticks = Math.max(backticks, currentBackticks)
+      tildes = Math.max(tildes, currentTildes)
     }
-    const fence = "`".repeat(Math.max(code.inline ? 1 : 3, longest + 1))
     if (code.inline) {
+      const fence = "`".repeat(Math.max(1, backticks + 1))
       const padding = /^ | $/.test(code.text) && !/^ +$/.test(code.text) ? " " : ""
       flushSpace()
-      inline(`${fence}${padding}${code.text}${padding}${fence}`)
+      const wrapper = encoder.encode(`${fence}${padding}${padding}${fence}`).byteLength
+      appendRaw(
+        `${fence}${padding}${sliceBytes(code.text, Math.max(0, CONTENT_BYTES - outputBytes - wrapper))}${padding}${fence}`,
+      )
       return
     }
+    if (activeCell) {
+      text(code.text)
+      return
+    }
+    const marker = backticks <= tildes ? "`" : "~"
+    const length = Math.max(3, (marker === "`" ? backticks : tildes) + 1)
+    const fence = marker.repeat(length)
     block()
-    const value = `${fence}${code.language ?? ""}\n${code.text}${code.text.endsWith("\n") ? "" : "\n"}${fence}`
-    const quoted = quoteDepth > 0 ? value.replace(/^/gm, `${"> ".repeat(Math.min(8, quoteDepth))}`) : value
-    const placeholder = `\u0000${raw.length}\u0000`
-    raw.push(quoted)
-    append(placeholder)
-    block()
+    const prefix = `${fence}${code.language ?? ""}\n`
+    const quote = quoteDepth > 0 ? `${"> ".repeat(Math.min(8, quoteDepth))}` : ""
+    const closing = `${code.text.endsWith("\n") ? "" : "\n"}${fence}`
+    let payload = code.text
+    for (;;) {
+      const candidate = `${prefix}${payload}${payload.endsWith("\n") ? "" : "\n"}${fence}`
+      const value = quote ? candidate.replace(/^/gm, quote) : candidate
+      const valueBytes = encoder.encode(value).byteLength
+      if (outputBytes + valueBytes <= CONTENT_BYTES) {
+        appendRaw(value)
+        block()
+        return
+      }
+      const excess = valueBytes - Math.max(0, CONTENT_BYTES - outputBytes)
+      payload = sliceBytes(payload, Math.max(0, encoder.encode(payload).byteLength - Math.ceil(excess)))
+    }
   }
 
   const parser = new Parser({
     onopentag(name, attributes) {
+      depth++
+      if (depth > 10_000) {
+        if (stack.at(-1)?.suppressed) {
+          const visibleParent = stack.findLastIndex((frame) => !frame.suppressed)
+          fallbackSuppressedDepth = visibleParent + 2
+        }
+        activeCode = undefined
+        stopped = true
+      }
+      if (stopped) {
+        if (omitted.has(name)) fallbackOmittedDepth++
+        else pendingSpace = true
+        return
+      }
       const suppressed = (stack.at(-1)?.suppressed ?? false) || omitted.has(name)
-      const frame: Frame = { tag: name, suppressed }
+      const frame: Frame = { suppressed }
+      const hidden = "hidden" in attributes || attributes["aria-hidden"]?.toLowerCase() === "true" || name === "head"
+      const details = activeDetails
+      if (hidden || (details && !details.open && !details.summary && name !== "summary")) frame.suppressed = true
       stack.push(frame)
-      if (suppressed) return
+      if (frame.suppressed) return
 
       if (activeCode && !activeCode.inline) {
-        if (name === "code" && attributes.class) activeCode.language = attributes.class.match(/(?:language-|lang-)([^\s]+)/)?.[1]
+        if (name === "br") activeCode.text += "\n"
+        if (name === "code" && attributes.class)
+          activeCode.language = attributes.class.match(/(?:language-|lang-)([^\s]+)/)?.[1]
+        return
+      }
+      if (name === "details") {
+        frame.details = { open: "open" in attributes, summary: false, previous: activeDetails }
+        activeDetails = frame.details
+        block()
+        return
+      }
+      if (name === "summary") {
+        if (details) details.summary = true
+        block()
         return
       }
       if (name === "pre") {
+        suspendLink(frame)
         frame.code = { inline: false, text: "" }
         activeCode = frame.code
         return
@@ -154,6 +300,7 @@ export function convertHTMLToMarkdown(html: string) {
         return
       }
       if (blocks.has(name)) {
+        suspendLink(frame)
         if (name === "p" && last === " ") return
         block()
         return
@@ -172,52 +319,71 @@ export function convertHTMLToMarkdown(html: string) {
       }
       if (name === "strong" || name === "b") {
         inline("**", true)
-        frame.marker = { index: output.length - 1, block: blockCount, value: "**" }
+        frame.marker = { index: output.length - 1, block: blockCount, previous: activeMarker }
+        activeMarker = frame.marker
         return
       }
       if (name === "em" || name === "i") {
         inline("*", true)
-        frame.marker = { index: output.length - 1, block: blockCount, value: "*" }
+        frame.marker = { index: output.length - 1, block: blockCount, previous: activeMarker }
+        activeMarker = frame.marker
         return
       }
       if (name === "s" || name === "strike" || name === "del") {
         inline("~~", true)
-        frame.marker = { index: output.length - 1, block: blockCount, value: "~~" }
+        frame.marker = { index: output.length - 1, block: blockCount, previous: activeMarker }
+        activeMarker = frame.marker
         return
       }
       if (name === "a") {
         frame.link = { href: attributes.href ?? "", title: attributes.title }
-        return inline(`[`, true)
+        frame.previousLink = activeLink
+        activeLink = frame.link
+        linkOpen = true
+        return inline("[", true)
       }
       if (name === "img") {
-        inline(`![${(attributes.alt ?? "").replace(/([\\\]])/g, "\\$1")}](${destination(attributes.src ?? "")}${title(attributes.title)})`, true)
+        const alt = (attributes.alt ?? "").replace(/([\\\]])/g, "\\$1")
+        const close = `](${destination(attributes.src ?? "")}${title(attributes.title)})`
+        const open = "!["
+        const available = CONTENT_BYTES - outputBytes - encoder.encode(open + close).byteLength
+        inline(`${open}${sliceBytes(alt, Math.max(0, available))}${close}`, true)
         return
       }
       if (name === "blockquote") {
+        suspendLink(frame)
         block()
         quoteDepth++
         needsQuotePrefix = true
         return
       }
       if (name === "ul" || name === "ol") {
-        frame.list = { ordered: name === "ol", next: Number.parseInt(attributes.start ?? "1") || 1 }
-        listDepth++
+        suspendLink(frame)
+        const start = Number.parseInt(attributes.start ?? "1")
+        frame.list = { ordered: name === "ol", next: Number.isNaN(start) ? 1 : start, previous: activeList }
+        activeList = frame.list
         block()
         return
       }
       if (name === "li") {
         block()
-        const list = stack.findLast((item) => item.list)?.list
-        const marker = list?.ordered ? `${list.next++}.` : "-"
-        inline(`${"  ".repeat(Math.min(8, Math.max(0, listDepth - 1)))}${marker} `)
+        const value = Number.parseInt(attributes.value ?? "")
+        if (activeList?.ordered && !Number.isNaN(value)) activeList.next = value
+        const marker = activeList?.ordered ? `${activeList.next++}.` : "-"
+        const prefix = `${(activeItem?.indent ?? "").slice(0, 24)}${marker} `
+        frame.item = { indent: " ".repeat(prefix.length), previous: activeItem }
+        activeItem = frame.item
+        pendingIndent = ""
+        inline(prefix)
         return
       }
       if (name === "table") {
+        suspendLink(frame)
         tableDepth++
         if (tableDepth === 1) {
-          frame.table = { cells: 0, header: false, rows: 0 }
-          activeTable = frame.table
           block()
+          frame.table = { start: output.length, rows: [], fallback: false, previous: activeTable }
+          activeTable = frame.table
         } else pendingSpace = true
         return
       }
@@ -226,13 +392,7 @@ export function convertHTMLToMarkdown(html: string) {
           pendingSpace = true
           return
         }
-        const table = activeTable
-        pendingSpace = false
-        if (table && table.rows > 0) {
-          append("\n")
-          needsQuotePrefix = quoteDepth > 0
-        }
-        inline("|")
+        if (activeTable) activeTable.row = []
         return
       }
       if (name === "th" || name === "td") {
@@ -240,28 +400,74 @@ export function convertHTMLToMarkdown(html: string) {
           pendingSpace = true
           return
         }
-        const table = activeTable
-        if (table) {
-          table.cells++
-          table.header ||= name === "th"
-        }
-        inline(" ")
+        if (attributes.colspan || attributes.rowspan) activeTable!.fallback = true
         frame.cell = { start: output.length }
+        activeCell = frame.cell
+        return
+      }
+      if (name === "caption") {
+        frame.caption = { start: output.length }
+        return
+      }
+      if (name === "dt") {
+        block()
+        inline("**")
+        return
+      }
+      if (name === "dd") {
+        inline("\n: ")
+        return
       }
     },
     ontext(value) {
+      if (stopped) {
+        if (fallbackSuppressedDepth === 0 && fallbackOmittedDepth === 0) text(value)
+        return
+      }
       if (stack.at(-1)?.suppressed) return
       text(value)
     },
     onclosetag(name) {
+      depth--
+      if (stopped) {
+        if (fallbackOmittedDepth > 0 && omitted.has(name)) fallbackOmittedDepth--
+        if (fallbackSuppressedDepth > 0 && depth < fallbackSuppressedDepth) fallbackSuppressedDepth = 0
+        return
+      }
       const frame = stack.pop()
       if (!frame || frame.suppressed) return
       if (frame.code) {
         activeCode = undefined
-        return finishCode(frame.code)
+        finishCode(frame.code)
+        if (frame.suspendedLink) activeLink = frame.suspendedLink
+        return
       }
-      if (name === "strong" || name === "b" || name === "em" || name === "i" || name === "s" || name === "strike" || name === "del") {
+      if (name === "summary") {
+        if (activeDetails) activeDetails.summary = false
+        return block()
+      }
+      if (name === "details") {
+        activeDetails = frame.details?.previous
+        return block()
+      }
+      if (name === "dt") {
+        inline("**")
+        return
+      }
+      if (name === "dd") return block()
+      if (
+        name === "strong" ||
+        name === "b" ||
+        name === "em" ||
+        name === "i" ||
+        name === "s" ||
+        name === "strike" ||
+        name === "del"
+      ) {
         const value = name === "strong" || name === "b" ? "**" : name === "em" || name === "i" ? "*" : "~~"
+        const trailingSpace = pendingSpace
+        pendingSpace = false
+        if (frame.marker) activeMarker = frame.marker.previous
         if (frame.marker && frame.marker.block !== blockCount) {
           output[frame.marker.index] = ""
           return
@@ -270,92 +476,117 @@ export function convertHTMLToMarkdown(html: string) {
           output[frame.marker.index] = ""
           return
         }
-        return inline(value)
+        inline(value)
+        pendingSpace = trailingSpace || frame.marker?.leadingSpace === true
+        return
       }
       if (name === "a") {
-        return inline(`](${destination(frame.link?.href ?? "")}${title(frame.link?.title)})`)
+        if (activeLink === frame.link || (!activeLink && frame.link)) {
+          activeLink = frame.link
+          if (linkOpen) append(`](${destination(frame.link?.href ?? "")}${title(frame.link?.title)})`)
+          else if (last && last !== "\n") append(`](${destination(frame.link?.href ?? "")}${title(frame.link?.title)})`)
+          linkOpen = false
+          activeLink = frame.previousLink
+        }
+        return
       }
-      if (/^h[1-6]$/.test(name) || blocks.has(name)) return block()
+      if (/^h[1-6]$/.test(name) || blocks.has(name)) {
+        block()
+        if (frame.suspendedLink) activeLink = frame.suspendedLink
+        return
+      }
       if (name === "blockquote") {
         quoteDepth--
+        block()
+        if (frame.suspendedLink) activeLink = frame.suspendedLink
+        return
+      }
+      if (name === "li") {
+        activeItem = frame.item?.previous
         return block()
       }
-      if (name === "li") return block()
       if (name === "ul" || name === "ol") {
-        listDepth--
-        return block()
+        activeList = frame.list?.previous
+        block()
+        if (frame.suspendedLink) activeLink = frame.suspendedLink
+        return
       }
       if ((name === "th" || name === "td") && tableDepth === 1) {
+        activeCell = undefined
         if (frame.cell) {
-          const value = output
-            .splice(frame.cell.start)
-            .join("")
+          const value = take(frame.cell.start)
             .replace(/[\t\r\n ]+/g, " ")
             .trim()
             .replace(/(?<!\\)\|/g, "\\|")
-          append(value)
+          activeTable?.row?.push(value)
         }
-        return inline(" |")
+        return
       }
       if (name === "tr") {
         if (tableDepth !== 1) return
-        const table = activeTable
-        if (table && table.rows === 0) {
-          inline("\n")
-          needsQuotePrefix = quoteDepth > 0
-          inline(`|${" --- |".repeat(table.cells)}`)
-        }
-        if (table) {
-          table.rows++
-          table.cells = 0
-        }
+        if (activeTable?.row) activeTable.rows.push(activeTable.row)
+        if (activeTable) activeTable.row = undefined
+        return
+      }
+      if (name === "caption" && frame.caption && activeTable) {
+        activeTable.caption = take(frame.caption.start)
+          .replace(/[\t\r\n ]+/g, " ")
+          .trim()
         return
       }
       if (name === "table") {
         tableDepth--
         if (tableDepth === 0) {
-          activeTable = undefined
-          return block()
+          const table = frame.table
+          activeTable = table?.previous
+          if (table) {
+            take(table.start)
+            const width = table.rows[0]?.length ?? 0
+            const rectangular = width > 0 && table.rows.every((row) => row.length === width)
+            if (table.caption) {
+              append(table.caption)
+              block()
+            }
+            if (!table.fallback && rectangular) {
+              const prefix = `${quoteDepth > 0 ? `${"> ".repeat(Math.min(8, quoteDepth))}` : ""}${pendingIndent}`
+              pendingIndent = ""
+              append(`${prefix}| ${table.rows[0].join(" | ")} |\n${prefix}|${" --- |".repeat(width)}`)
+              for (const row of table.rows.slice(1)) append(`\n${prefix}| ${row.join(" | ")} |`)
+            } else {
+              for (const [index, row] of table.rows.entries()) {
+                if (index > 0) block()
+                append(row.join(" | "))
+              }
+            }
+          }
+          block()
+          if (frame.suspendedLink) activeLink = frame.suspendedLink
+          return
         }
         pendingSpace = true
       }
     },
   })
-  parser.write(html)
+  for (let index = 0; index < html.length; index += 64 * 1024) parser.write(html.slice(index, index + 64 * 1024))
   parser.end()
-  return output
-    .join("")
-    .replace(/[ \t]+\n/g, (value) => (value.startsWith("  ") ? "  \n" : "\n"))
-    .replace(/\n{3,}/g, "\n\n")
-    .trim()
-    .replace(/\u0000(\d+)\u0000/g, (_, index) => raw[Number(index)] ?? "")
-}
 
-function hasPathologicalDepth(html: string) {
-  let depth = 0
-  for (const match of html.matchAll(/<\s*(\/)?\s*([a-z][\w:-]*)\b[^>]*>/gi)) {
-    if (match[1]) depth = Math.max(0, depth - 1)
-    else if (!/\/$/.test(match[0].slice(0, -1).trim()) && !["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"].includes(match[2].toLowerCase())) depth++
-    if (depth > 10_000) return true
+  const normalized: string[] = []
+  let pendingText = ""
+  const flushText = () => {
+    if (!pendingText) return
+    normalized.push(
+      pendingText.replace(/[ \t]+\n/g, (space) => (space.startsWith("  ") ? "  \n" : "\n")).replace(/\n{3,}/g, "\n\n"),
+    )
+    pendingText = ""
   }
-  return false
-}
-
-function extractPathologicalText(html: string) {
-  let output = ""
-  let suppressed = 0
-  const parser = new Parser({
-    onopentag(name) {
-      if (suppressed > 0 || omitted.has(name)) suppressed++
-    },
-    ontext(value) {
-      if (suppressed === 0) output += value
-    },
-    onclosetag() {
-      if (suppressed > 0) suppressed--
-    },
-  })
-  parser.write(html.replace(/<\/?(?:[^>]+)>/g, (tag) => (omitted.has(tag.match(/^<\/?\s*([^\s/>]+)/)?.[1]?.toLowerCase() ?? "") ? tag : " ")))
-  parser.end()
-  return output.replace(/[\t\n\f\r ]+/g, " ").trim()
+  for (const chunk of output) {
+    if (typeof chunk !== "string") {
+      flushText()
+      normalized.push(chunk.raw)
+      continue
+    }
+    pendingText += chunk
+  }
+  flushText()
+  return sliceBytes(normalized.join("").trim(), MAX_MARKDOWN_BYTES)
 }
