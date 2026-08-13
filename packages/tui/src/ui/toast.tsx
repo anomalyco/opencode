@@ -4,6 +4,7 @@ import { useTheme } from "../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "./border"
 import { TextAttributes } from "@opentui/core"
+import { tint } from "../theme/color"
 export type ToastOptions = {
   title?: string
   message: string
@@ -38,11 +39,6 @@ function ToastSurface(props: {
       maxWidth={Math.min(60, dimensions().width - 6)}
       justifyContent="center"
       alignItems="flex-start"
-      paddingLeft={2}
-      paddingRight={2}
-      paddingTop={1}
-      paddingBottom={1}
-      backgroundColor={theme.background.default}
       borderColor={theme.text.feedback[props.toast.variant].default}
       border={["left", "right"]}
       customBorderChars={SplitBorder.customBorderChars}
@@ -50,13 +46,41 @@ function ToastSurface(props: {
       onMouseOut={() => hover(false)}
       onMouseUp={props.onActivate}
     >
-      <Show
-        when={props.toast.title}
-        fallback={
-          <box flexDirection="row" width="100%">
-            <text fg={theme.text.default} wrapMode="word" flexGrow={1}>
-              {props.toast.message}
+      <box
+        width="100%"
+        paddingLeft={2}
+        paddingRight={2}
+        paddingTop={1}
+        paddingBottom={1}
+        backgroundColor={hovered() ? tint(theme.background.default, theme.text.default, 0.1) : theme.background.default}
+      >
+        <Show
+          when={props.toast.title}
+          fallback={
+            <box flexDirection="row" width="100%">
+              <text fg={theme.text.default} wrapMode="word" flexGrow={1}>
+                {props.toast.message}
+              </text>
+              <Show when={props.toast.action || hovered()}>
+                <text
+                  flexShrink={0}
+                  marginLeft={2}
+                  wrapMode="none"
+                  attributes={hovered() ? TextAttributes.BOLD : undefined}
+                  fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
+                >
+                  {hovered() && props.toast.action ? "› " : ""}
+                  {props.toast.action?.label ?? "x"}
+                </text>
+              </Show>
+            </box>
+          }
+        >
+          <box flexDirection="row" width="100%" marginBottom={1}>
+            <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
+              {props.toast.title}
             </text>
+            <box flexGrow={1} />
             <Show when={props.toast.action || hovered()}>
               <text
                 flexShrink={0}
@@ -70,35 +94,16 @@ function ToastSurface(props: {
               </text>
             </Show>
           </box>
-        }
-      >
-        <box flexDirection="row" width="100%" marginBottom={1}>
-          <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
-            {props.toast.title}
+          <text fg={theme.text.default} wrapMode="word" width="100%">
+            {props.toast.message}
           </text>
-          <box flexGrow={1} />
-          <Show when={props.toast.action || hovered()}>
-            <text
-              flexShrink={0}
-              marginLeft={2}
-              wrapMode="none"
-              attributes={hovered() ? TextAttributes.BOLD : undefined}
-              fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
-            >
-              {hovered() && props.toast.action ? "› " : ""}
-              {props.toast.action?.label ?? "x"}
-            </text>
-          </Show>
-        </box>
-        <text fg={theme.text.default} wrapMode="word" width="100%">
-          {props.toast.message}
-        </text>
-      </Show>
-      <Show when={props.pending}>
-        <text fg={theme.text.subdued} marginTop={1}>
-          +{props.pending} more
-        </text>
-      </Show>
+        </Show>
+        <Show when={props.pending}>
+          <text fg={theme.text.subdued} marginTop={1}>
+            +{props.pending} more
+          </text>
+        </Show>
+      </box>
     </box>
   )
 }
