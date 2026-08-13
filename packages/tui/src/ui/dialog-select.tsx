@@ -473,7 +473,26 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 cmd: () => moveAction(-1),
               },
             ]
-          : []),
+          : [
+              {
+                key: "tab",
+                desc: "Next item",
+                group: "Dialog",
+                cmd: () => {
+                  setStore("input", "keyboard")
+                  move(1)
+                },
+              },
+              {
+                key: "shift+tab",
+                desc: "Previous item",
+                group: "Dialog",
+                cmd: () => {
+                  setStore("input", "keyboard")
+                  move(-1)
+                },
+              },
+            ]),
         ...(props.bindings ?? []).filter((binding) => {
           if (typeof binding.cmd !== "string") return true
           return visible.some((item) => item.command === binding.cmd)
