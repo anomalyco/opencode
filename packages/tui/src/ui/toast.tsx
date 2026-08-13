@@ -66,7 +66,7 @@ function ToastSurface(props: {
                 fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
               >
                 {hovered() ? "› " : ""}
-                {props.toast.action?.label ?? "Dismiss"}
+                {props.toast.action?.label ?? "x"}
               </text>
             </Show>
           </box>
@@ -86,7 +86,7 @@ function ToastSurface(props: {
               fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
             >
               {hovered() ? "› " : ""}
-              {props.toast.action?.label ?? "Dismiss"}
+              {props.toast.action?.label ?? "x"}
             </text>
           </Show>
         </box>
