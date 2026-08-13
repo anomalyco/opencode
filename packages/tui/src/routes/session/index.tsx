@@ -1938,7 +1938,7 @@ function RevertMessage(props: {
 
 function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "shell" }> }) {
   const theme = useTheme("elevated")
-  const { currentSyntax: syntax } = useThemes()
+  const { shellSyntax } = useThemes()
   const output = createMemo(() => stripAnsi(props.message.output?.output.trim() ?? ""))
 
   return (
@@ -1959,7 +1959,7 @@ function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "she
           conceal={false}
           fg={theme.text.default}
           filetype="bash"
-          syntaxStyle={syntax()}
+          syntaxStyle={shellSyntax()}
           content={props.message.command}
         />
       </box>
@@ -2794,7 +2794,7 @@ const SHELL_DISPLAY_LIMIT = 1024 * 1024
 
 function Shell(props: ToolProps) {
   const theme = useTheme()
-  const { currentSyntax: syntax } = useThemes()
+  const { shellSyntax } = useThemes()
   const ctx = use()
   const client = useClient()
   const data = useData()
@@ -2930,7 +2930,7 @@ function Shell(props: ToolProps) {
                   conceal={false}
                   fg={theme.text.default}
                   filetype="bash"
-                  syntaxStyle={syntax()}
+                  syntaxStyle={shellSyntax()}
                   content={limitedInput()}
                 />
               </box>
@@ -2938,7 +2938,7 @@ function Shell(props: ToolProps) {
           >
             <box flexDirection="row" gap={1}>
               <Spinner color={color()} />
-              <code conceal={false} fg={color()} filetype="bash" syntaxStyle={syntax()} content={limitedInput()} />
+              <code conceal={false} fg={color()} filetype="bash" syntaxStyle={shellSyntax()} content={limitedInput()} />
             </box>
           </Show>
           <Show when={limitedOutput()}>

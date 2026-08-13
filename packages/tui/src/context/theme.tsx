@@ -108,6 +108,7 @@ type Themes = {
   all: typeof allThemes
   has: typeof hasTheme
   currentSyntax: Accessor<SyntaxStyle>
+  shellSyntax: Accessor<SyntaxStyle>
   mode: Accessor<"dark" | "light">
   modes: Accessor<readonly ("dark" | "light")[]>
   supports(mode: "dark" | "light"): boolean
@@ -324,10 +325,20 @@ const themeContext = createSimpleContext({
     createEffect(() => renderer.setBackgroundColor(valuesV2().background.default))
 
     const currentSyntax = createSyntaxStyleMemo(() => generateSyntax(valuesV2(), mode()))
+    const shellSyntax = createSyntaxStyleMemo(() =>
+      SyntaxStyle.fromStyles({
+        default: { fg: valuesV2().text.default },
+        operator: { fg: valuesV2().syntax.operator },
+        "keyword.operator": { fg: valuesV2().syntax.operator },
+        string: { fg: valuesV2().syntax.string },
+        "string.escape": { fg: valuesV2().syntax.string },
+      }),
+    )
     const service: Themes = {
       current,
       currentTokens: valuesV2,
       currentSyntax,
+      shellSyntax,
       get selected() {
         return store.active
       },

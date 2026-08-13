@@ -5,7 +5,6 @@ import {
   MouseEvent,
   PasteEvent,
   decodePasteBytes,
-  getTreeSitterClient,
   type ColorInput,
   type KeyEvent,
 } from "@opentui/core"
@@ -99,8 +98,8 @@ export type PromptRef = {
 }
 
 const DRAFT_RETENTION_MIN_CHARS = 20
-const SHELL_SYNTAX_HIGHLIGHT_REFS = [65_534, 65_535] as const
-const SHELL_SYNTAX_GROUPS = ["comment", "keyword", "string"]
+const SHELL_SYNTAX_HIGHLIGHT_REF = 65_535
+const SHELL_SYNTAX_PATTERN = /(?:"(?:\\.|[^"\\])*"|'[^']*')|&&|\|\|/g
 
 function randomIndex(count: number) {
   if (count <= 0) return 0
@@ -194,7 +193,7 @@ export function Prompt(props: PromptProps) {
   const exit = useExit()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
-  const { currentSyntax: syntax } = useThemes()
+  const { currentSyntax: syntax, shellSyntax } = useThemes()
   const animationsEnabled = createMemo(() => config.animations ?? true)
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
@@ -344,53 +343,34 @@ export function Prompt(props: PromptProps) {
   let disposed = false
   let pasteQueue = Promise.resolve()
   let syntaxHighlightVersion = 0
-  let syntaxHighlightRef: (typeof SHELL_SYNTAX_HIGHLIGHT_REFS)[number] = SHELL_SYNTAX_HIGHLIGHT_REFS[0]
 
   createEffect(() => {
     const mode = store.mode
     const content = store.prompt.text
-    const style = syntax()
+    const style = shellSyntax()
     const version = ++syntaxHighlightVersion
 
     if (!input || input.isDestroyed) return
-    if (mode !== "shell" || !content) {
-      SHELL_SYNTAX_HIGHLIGHT_REFS.forEach((ref) => input.editBuffer.removeHighlightsByRef(ref))
-      renderer.requestRender()
-      return
-    }
+    queueMicrotask(() => {
+      if (version !== syntaxHighlightVersion || !input || input.isDestroyed) return
+      input.editBuffer.removeHighlightsByRef(SHELL_SYNTAX_HIGHLIGHT_REF)
+      if (mode !== "shell" || !content) return
 
-    getTreeSitterClient()
-      .highlightOnce(content, "bash")
-      .then((result) => {
-        if (version !== syntaxHighlightVersion || !result.highlights || !input || input.isDestroyed) return
-
-        const previous = syntaxHighlightRef
-        syntaxHighlightRef =
-          previous === SHELL_SYNTAX_HIGHLIGHT_REFS[0] ? SHELL_SYNTAX_HIGHLIGHT_REFS[1] : SHELL_SYNTAX_HIGHLIGHT_REFS[0]
-        const bytes = new TextEncoder().encode(content)
-        const decoder = new TextDecoder()
-        result.highlights.forEach(([start, end, group]) => {
-          if (!SHELL_SYNTAX_GROUPS.some((scope) => group === scope || group.startsWith(`${scope}.`))) return
-          if (group.includes("builtin")) return
-          const styleId = style.getStyleId(group)
-          if (styleId === null) return
-          const before = decoder.decode(bytes.subarray(0, start))
-          const highlighted = decoder.decode(bytes.subarray(start, end))
-          input.editBuffer.addHighlightByCharRange({
-            start: promptOffsetWidth(before) - (before.match(/\n/g)?.length ?? 0),
-            end:
-              promptOffsetWidth(before) +
-              promptOffsetWidth(highlighted) -
-              ((before + highlighted).match(/\n/g)?.length ?? 0),
-            styleId,
-            priority: 0,
-            hlRef: syntaxHighlightRef,
-          })
+      content.matchAll(SHELL_SYNTAX_PATTERN).forEach((match) => {
+        const before = content.slice(0, match.index)
+        const styleId = style.getStyleId(match[0].startsWith("'") || match[0].startsWith('"') ? "string" : "operator")
+        if (styleId === null) return
+        input.editBuffer.addHighlightByCharRange({
+          start: promptOffsetWidth(before) - (before.match(/\n/g)?.length ?? 0),
+          end:
+            promptOffsetWidth(before) + promptOffsetWidth(match[0]) - ((before + match[0]).match(/\n/g)?.length ?? 0),
+          styleId,
+          priority: 0,
+          hlRef: SHELL_SYNTAX_HIGHLIGHT_REF,
         })
-        input.editBuffer.removeHighlightsByRef(previous)
-        renderer.requestRender()
       })
-      .catch(() => {})
+      renderer.requestRender()
+    })
   })
 
   function enqueuePaste(run: (changed: () => boolean) => Promise<void>) {
