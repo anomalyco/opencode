@@ -68,6 +68,26 @@ describe("Agent", () => {
     }),
   )
 
+  it.effect("lists the selected default agent first", () =>
+    Effect.gen(function* () {
+      const agent = yield* Agent.Service
+      yield* agent.transform((editor) => {
+        editor.update(Agent.ID.make("build"), (info) => {
+          info.mode = "primary"
+        })
+        editor.update(Agent.ID.make("reviewer"), (info) => {
+          info.mode = "primary"
+        })
+        editor.update(Agent.ID.make("explore"), (info) => {
+          info.mode = "subagent"
+        })
+        editor.default(Agent.ID.make("reviewer"))
+      })
+
+      expect((yield* agent.list()).map((info) => String(info.id))).toEqual(["reviewer", "build", "explore"])
+    }),
+  )
+
   it.effect("rebuilds state when a transform is replaced", () =>
     Effect.gen(function* () {
       const agent = yield* Agent.Service
