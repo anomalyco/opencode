@@ -4,9 +4,11 @@
 // `opencode.run(message, opts?)` to spawn `bun src/index.ts run ...` with
 // `OPENCODE_CONFIG_CONTENT` providing the test provider config inline.
 import { describe, expect } from "bun:test"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
+import { pollWithTimeout } from "../../lib/effect"
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -291,9 +293,7 @@ describe("opencode run (non-interactive subprocess)", () => {
             subagent_type: "general",
           }),
         )
-        yield* llm.push(
-          reply().tool("bash", { command: "echo hello", description: "Print hello" }),
-        )
+        yield* llm.push(reply().tool("bash", { command: "echo hello", description: "Print hello" }))
         yield* llm.text("subagent finished")
         yield* llm.text("parent done")
 
@@ -320,9 +320,7 @@ describe("opencode run (non-interactive subprocess)", () => {
             subagent_type: "general",
           }),
         )
-        yield* llm.push(
-          reply().tool("bash", { command: "echo hello", description: "Print hello" }),
-        )
+        yield* llm.push(reply().tool("bash", { command: "echo hello", description: "Print hello" }))
         yield* llm.text("subagent finished")
         yield* llm.text("parent done")
 
@@ -332,6 +330,57 @@ describe("opencode run (non-interactive subprocess)", () => {
 
         opencode.expectExit(result, 0)
         expect(result.stderr).toContain("auto-rejecting")
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "--auto leaves permission requests from unrelated sessions pending",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const gate = Promise.withResolvers<void>()
+        yield* llm.push(
+          reply().wait(gate.promise).tool("bash", { command: "echo root", description: "Continue the root session" }),
+        )
+        yield* llm.push(reply().tool("bash", { command: "echo unrelated", description: "Wait for unrelated approval" }))
+        yield* llm.text("root done")
+
+        const server = yield* opencode.serve()
+        const sdk = createOpencodeClient({ baseUrl: server.url, directory: home })
+        const permission = [{ permission: "bash", pattern: "*", action: "ask" as const }]
+        const root = yield* Effect.promise(() => sdk.session.create({ title: "root", permission }))
+        const unrelated = yield* Effect.promise(() => sdk.session.create({ title: "unrelated", permission }))
+        expect(root.data?.id).toBeDefined()
+        expect(unrelated.data?.id).toBeDefined()
+
+        const run = yield* opencode.startRun("run the root tool", {
+          extraArgs: ["--attach", server.url, "--session", root.data!.id, "--dangerously-skip-permissions"],
+        })
+        yield* llm.wait(1)
+
+        yield* Effect.promise(() =>
+          sdk.session.promptAsync({
+            sessionID: unrelated.data!.id,
+            model: { providerID: "test", modelID: "test-model" },
+            agent: "build",
+            parts: [{ type: "text", text: "run the unrelated tool" }],
+          }),
+        )
+
+        const pending = yield* pollWithTimeout(
+          Effect.promise(async () =>
+            (await sdk.permission.list()).data?.find((item) => item.sessionID === unrelated.data!.id),
+          ),
+          "unrelated session did not request permission",
+        )
+
+        gate.resolve()
+        yield* llm.wait(3)
+
+        const remaining = yield* Effect.promise(() => sdk.permission.list())
+        expect(remaining.data?.some((item) => item.id === pending.id)).toBe(true)
+        const result = yield* run.result
+        opencode.expectExit(result, 0)
       }),
     60_000,
   )
