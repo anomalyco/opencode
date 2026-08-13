@@ -141,6 +141,8 @@ export interface Interface {
       repository: Repository
       scopes: readonly RelativePath[]
       ignores?: Repository
+      /** Recover an invalid private index only when the repository is contained by `root`. */
+      repairIndex?: { readonly root: AbsolutePath; readonly source: Repository }
       maximumUntrackedFileBytes?: number
     }) => Effect.Effect<TreeID, OperationError>
     readonly write: (repository: Repository) => Effect.Effect<TreeID, OperationError>
@@ -531,18 +533,89 @@ const layer = Layer.effect(
       return TreeID.make((yield* repositoryOperation("write_tree", repository, ["write-tree"])).text.trim())
     })
 
+    const repairIndex = Effect.fnUntraced(function* (repository: Repository, source: Repository) {
+      if (repository.gitDirectory === source.gitDirectory)
+        return yield* new OperationError({
+          operation: "refresh",
+          directory: repository.gitDirectory,
+          message: "Refusing to repair a source repository index",
+        })
+
+      const index = path.join(repository.gitDirectory, "index")
+      const current = yield* fs.readFile(index).pipe(
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+        Effect.mapError(
+          (cause) =>
+            new OperationError({
+              operation: "refresh",
+              directory: repository.gitDirectory,
+              message: "Failed to inspect snapshot index",
+              cause,
+            }),
+        ),
+      )
+      if (!current || hasIndexSignature(current)) return false
+
+      const seed = yield* fs.readFile(path.join(source.gitDirectory, "index")).pipe(
+        Effect.mapError(
+          (cause) =>
+            new OperationError({
+              operation: "refresh",
+              directory: repository.gitDirectory,
+              message: "Failed to read source index for snapshot recovery",
+              cause,
+            }),
+        ),
+      )
+      if (!hasIndexSignature(seed))
+        return yield* new OperationError({
+          operation: "refresh",
+          directory: repository.gitDirectory,
+          message: "Cannot recover snapshot from an invalid source index",
+        })
+
+      const recovery = path.join(repository.gitDirectory, `index.recovery-${randomUUID()}`)
+      yield* fs.writeFile(recovery, seed).pipe(
+        Effect.andThen(fs.rename(recovery, index)),
+        Effect.ensuring(fs.remove(recovery).pipe(Effect.catch(() => Effect.void))),
+        Effect.mapError(
+          (cause) =>
+            new OperationError({
+              operation: "refresh",
+              directory: repository.gitDirectory,
+              message: "Failed to replace corrupt snapshot index",
+              cause,
+            }),
+        ),
+      )
+      return true
+    })
+
     const captureTree = Effect.fn("Git.tree.capture")(
       (input: {
         repository: Repository
         scopes: readonly RelativePath[]
         ignores?: Repository
+        repairIndex?: { readonly root: AbsolutePath; readonly source: Repository }
         maximumUntrackedFileBytes?: number
       }) =>
         locked(
           input.repository,
           Effect.gen(function* () {
-            yield* Effect.forEach(input.scopes, (scope) => refresh({ ...input, scope }), { discard: true })
-            return yield* writeTree(input.repository)
+            const capture = Effect.gen(function* () {
+              yield* Effect.forEach(input.scopes, (scope) => refresh({ ...input, scope }), { discard: true })
+              return yield* writeTree(input.repository)
+            })
+            return yield* capture.pipe(
+              Effect.catch((cause) =>
+                Effect.gen(function* () {
+                  if (!input.repairIndex) return yield* cause
+                  if (!FSUtil.contains(input.repairIndex.root, input.repository.gitDirectory)) return yield* cause
+                  if (!(yield* repairIndex(input.repository, input.repairIndex.source))) return yield* cause
+                  return yield* capture
+                }),
+              ),
+            )
           }),
         ),
     )
@@ -984,4 +1057,9 @@ function resolvePath(cwd: string, value: string) {
   const normalized = FSUtil.windowsPath(trimmed)
   if (path.isAbsolute(normalized)) return path.normalize(normalized)
   return path.resolve(cwd, normalized)
+}
+
+// Git index files always start with the ASCII signature "DIRC".
+function hasIndexSignature(index: Uint8Array) {
+  return index[0] === 0x44 && index[1] === 0x49 && index[2] === 0x52 && index[3] === 0x43
 }
