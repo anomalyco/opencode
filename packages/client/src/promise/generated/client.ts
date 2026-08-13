@@ -311,7 +311,16 @@ export function make(options: ClientOptions) {
 
   const sse = <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): AsyncIterable<A> => ({
     async *[Symbol.asyncIterator]() {
-      const response = await execute(descriptor, requestOptions)
+      const handshake = new AbortController()
+      const abortHandshake = () => handshake.abort(requestOptions?.signal?.reason)
+      if (requestOptions?.signal?.aborted) abortHandshake()
+      else requestOptions?.signal?.addEventListener("abort", abortHandshake, { once: true })
+      let response: Response
+      try {
+        response = await execute(descriptor, { ...requestOptions, signal: handshake.signal })
+      } finally {
+        requestOptions?.signal?.removeEventListener("abort", abortHandshake)
+      }
       if (response.status !== descriptor.successStatus) await responseError(response, descriptor)
       if (!isContentType(response, "text/event-stream")) {
         try {
@@ -321,6 +330,9 @@ export function make(options: ClientOptions) {
       }
       if (response.body === null) throw new ClientError("MalformedResponse")
       const reader = response.body.getReader()
+      const cancel = () => void reader.cancel().catch(() => {})
+      if (requestOptions?.signal?.aborted) cancel()
+      else requestOptions?.signal?.addEventListener("abort", cancel, { once: true })
       const decoder = new TextDecoder()
       let buffer = ""
       try {
@@ -358,6 +370,7 @@ export function make(options: ClientOptions) {
           if (next.done) return
         }
       } finally {
+        requestOptions?.signal?.removeEventListener("abort", cancel)
         try {
           await reader.cancel()
         } catch {}

@@ -439,6 +439,41 @@ test("event.subscribe exposes the Promise event stream wire projection", async (
   expect(events[1]?.type === "session.model.selected" && events[1].created).toBe(1_717_171_717_000)
 })
 
+test("event.subscribe cancels the response reader after the handshake without aborting fetch", async () => {
+  const controller = new AbortController()
+  let fetchSignal: AbortSignal | null | undefined
+  let cancelled = false
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (_input, init) => {
+      fetchSignal = init?.signal
+      return new Response(
+        new ReadableStream({
+          start(stream) {
+            stream.enqueue(
+              new TextEncoder().encode(
+                `data: ${JSON.stringify({ id: "evt_connected", created: 0, type: "server.connected", data: {} })}\n\n`,
+              ),
+            )
+          },
+          cancel() {
+            cancelled = true
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+  const iterator = client.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
+
+  await expect(iterator.next()).resolves.toMatchObject({ done: false })
+  controller.abort()
+  await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined })
+
+  expect(fetchSignal?.aborted).toBeFalse()
+  expect(cancelled).toBeTrue()
+})
+
 test("event.subscribe terminates on malformed Promise SSE data", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
