@@ -251,6 +251,7 @@ export function TabNavItem(props: {
           }}
           data-slot="tab-title"
           data-titlebar-tab-title
+          dir="auto"
           class="min-w-0 flex-1 outline-none leading-4"
           classList={{
             "overflow-hidden text-clip whitespace-nowrap": !editing(),

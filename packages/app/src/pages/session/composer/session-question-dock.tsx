@@ -601,7 +601,9 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                 <Mark multi={multi()} picked={on()} onClick={toggleCustomMark} />
                 <span data-slot="question-option-main">
                   <span data-slot="option-label">{customLabel()}</span>
-                  <span data-slot="option-description">{input() || customPlaceholder()}</span>
+                  <span data-slot="option-description" dir="auto">
+                    {input() || customPlaceholder()}
+                  </span>
                 </span>
               </button>
             }
@@ -632,10 +634,12 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                 <textarea
                   ref={focusCustom}
                   data-slot="question-custom-input"
+                  dir="auto"
                   placeholder={customPlaceholder()}
                   value={input()}
                   rows={1}
                   disabled={sending()}
+                  style={{ "unicode-bidi": "plaintext", "text-align": "start" }}
                   onKeyDown={(e) => {
                     if (e.key === "Escape") {
                       e.preventDefault()

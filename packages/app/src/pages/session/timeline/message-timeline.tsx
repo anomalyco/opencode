@@ -1159,6 +1159,7 @@ function MessageTimelineView(
                           titleRef = el
                         }}
                         data-slot="session-title-child"
+                        dir="auto"
                         value={title.draft}
                         disabled={props.pending.rename()}
                         classList={{
@@ -1170,6 +1171,7 @@ function MessageTimelineView(
                           "--inline-input-shadow": props.data.newLayoutDesigns()
                             ? "none"
                             : "var(--shadow-xs-border-select)",
+                          "text-align": "start",
                         }}
                         onInput={(event) => setTitle("draft", event.currentTarget.value)}
                         onKeyDown={(event) => {

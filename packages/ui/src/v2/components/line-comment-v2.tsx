@@ -212,9 +212,11 @@ export function LineCommentEditorV2(props: LineCommentEditorV2Props) {
               textareaRef = el
             }}
             data-slot="line-comment-v2-textarea"
+            dir="auto"
             rows={local.rows ?? 3}
             placeholder={local.placeholder ?? i18n.t("ui.lineComment.contextPlaceholder")}
             value={local.value}
+            style={{ "unicode-bidi": "plaintext", "text-align": "start" }}
             onInput={(e) => {
               local.onInput(e.currentTarget.value)
               syncMention()
