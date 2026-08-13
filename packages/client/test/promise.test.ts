@@ -474,6 +474,32 @@ test("event.subscribe cancels the response reader after the handshake without ab
   expect(cancelled).toBeTrue()
 })
 
+test("event.subscribe can abort while reading a declared error response", async () => {
+  const controller = new AbortController()
+  let fetchSignal: AbortSignal | null | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (_input, init) => {
+      fetchSignal = init?.signal
+      return new Response(
+        new ReadableStream({
+          start(stream) {
+            init?.signal?.addEventListener("abort", () => stream.error(init.signal?.reason), { once: true })
+          },
+        }),
+        { status: 401, headers: { "content-type": "application/json" } },
+      )
+    },
+  })
+  const next = client.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]().next()
+
+  await Bun.sleep(0)
+  controller.abort()
+
+  expect(fetchSignal?.aborted).toBeTrue()
+  await expect(next).rejects.toMatchObject({ name: "ClientError", reason: "Transport" })
+})
+
 test("event.subscribe terminates on malformed Promise SSE data", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",

@@ -318,17 +318,17 @@ export function make(options: ClientOptions) {
       let response: Response
       try {
         response = await execute(descriptor, { ...requestOptions, signal: handshake.signal })
+        if (response.status !== descriptor.successStatus) await responseError(response, descriptor)
+        if (!isContentType(response, "text/event-stream")) {
+          try {
+            await response.body?.cancel()
+          } catch {}
+          throw new ClientError("UnsupportedContentType")
+        }
+        if (response.body === null) throw new ClientError("MalformedResponse")
       } finally {
         requestOptions?.signal?.removeEventListener("abort", abortHandshake)
       }
-      if (response.status !== descriptor.successStatus) await responseError(response, descriptor)
-      if (!isContentType(response, "text/event-stream")) {
-        try {
-          await response.body?.cancel()
-        } catch {}
-        throw new ClientError("UnsupportedContentType")
-      }
-      if (response.body === null) throw new ClientError("MalformedResponse")
       const reader = response.body.getReader()
       const cancel = () => void reader.cancel().catch(() => {})
       if (requestOptions?.signal?.aborted) cancel()
