@@ -255,6 +255,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         const choice = await DialogWorkspaceFileChanges.show(dialog, status?.data ?? [], {
           title: "Delete working copy?",
           message: "This working copy has file changes. Do you want to delete it anyway?",
+          labels: { no: "cancel", yes: "delete" },
         })
         if (choice !== "yes") {
           reopen()

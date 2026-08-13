@@ -29,6 +29,7 @@ export function DialogWorkspaceFileChanges(props: {
   onSelect: (choice: WorkspaceFileChangesChoice) => void
   title?: string
   message?: string
+  labels?: Partial<Record<WorkspaceFileChangesChoice, string>>
 }) {
   const dialog = useDialog()
   const theme = useTheme("elevated")
@@ -125,7 +126,9 @@ export function DialogWorkspaceFileChanges(props: {
                 dialog.clear()
               }}
             >
-              <text fg={item === store.active ? theme.text.action.primary.focused : theme.text.subdued}>{item}</text>
+              <text fg={item === store.active ? theme.text.action.primary.focused : theme.text.subdued}>
+                {props.labels?.[item] ?? (item === "no" ? "cancel" : "move")}
+              </text>
             </box>
           )}
         </For>
@@ -137,7 +140,11 @@ export function DialogWorkspaceFileChanges(props: {
 DialogWorkspaceFileChanges.show = (
   dialog: DialogContext,
   files: VcsFileStatus[],
-  options?: { title?: string; message?: string },
+  options?: {
+    title?: string
+    message?: string
+    labels?: Partial<Record<WorkspaceFileChangesChoice, string>>
+  },
 ) => {
   return new Promise<WorkspaceFileChangesChoice | undefined>((resolve) => {
     dialog.replace(
