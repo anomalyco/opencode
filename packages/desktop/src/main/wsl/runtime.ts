@@ -281,10 +281,10 @@ export async function installWslCli(distro: string, cli: WslCliBuild, opts?: Run
   requireSuccess(result, nativeT("desktop.wsl.error.installOpencode"))
 }
 
-function wslCliInstallCommand(cli: WslCliBuild) {
+export function wslCliInstallCommand(cli: WslCliBuild) {
   const installer = "curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/v2/install | bash -s --"
   if (!cli.binary) return `${installer} --version ${shellEscape(cli.version)}`
-  return `binary=$(wslpath -a ${shellEscape(cli.binary)}) && ${installer} --binary "$binary"`
+  return `${installer} --binary "$(wslpath -a ${shellEscape(cli.binary)})"`
 }
 
 export async function probeWslDistro(name: string, opts?: RunWslOptions): Promise<WslDistroProbe> {

@@ -1,10 +1,17 @@
 import { expect, test } from "bun:test"
 import type { WslServerConfig } from "../../preload/types"
+import { wslCliInstallCommand } from "./runtime"
 import { createWslServersController } from "./servers"
 
 type ControllerOptions = Parameters<typeof createWslServersController>[0]
 
 let persistedServers: WslServerConfig[] = []
+
+test("passes a local CLI path directly to the V2 installer", () => {
+  expect(wslCliInstallCommand({ version: "local", binary: "C:\\build\\opencode2" })).toBe(
+    `curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/v2/install | bash -s -- --binary "$(wslpath -a 'C:\\build\\opencode2')"`,
+  )
+})
 
 test("installs and verifies the bundled CLI version", async () => {
   persistedServers = []
