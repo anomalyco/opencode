@@ -3,7 +3,7 @@ import { saveDraft, takeDraft } from "../../src/component/prompt/draft-stash"
 import { emptyPrompt } from "../../src/prompt/history"
 
 // The Prompt component stashes an unsent draft in onCleanup and takes it back
-// in onMount across route remounts, keyed by sessionID or "home".
+// in onMount across route remounts, keyed by sessionID or undefined for home.
 
 function draft(text: string, cursor = text.length) {
   return { prompt: { ...emptyPrompt(), text }, cursor }
@@ -27,9 +27,9 @@ describe("prompt draft stash", () => {
     const one = draft("DRAFT-ONE")
     const home = draft("draft on home")
     saveDraft("ses_one", one)
-    saveDraft("home", home)
+    saveDraft(undefined, home)
 
-    expect(takeDraft("home")).toBe(home)
+    expect(takeDraft(undefined)).toBe(home)
     expect(takeDraft("ses_one")).toBe(one)
   })
 
