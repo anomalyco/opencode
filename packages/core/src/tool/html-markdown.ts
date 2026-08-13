@@ -28,6 +28,8 @@ type Frame = {
   suspendedLink?: Frame["link"]
   marker?: { index: number; block: number; leadingSpace?: boolean; previous?: Frame["marker"] }
   code?: { inline: boolean; text: string; language?: string }
+  linkCode?: NonNullable<Frame["code"]>
+  resumedCode?: NonNullable<Frame["code"]>
   list?: { ordered: boolean; next: number; previous?: Frame["list"] }
   item?: { indent: string; previous?: Frame["item"] }
   table?: {
@@ -195,6 +197,7 @@ export function convertHTMLToMarkdown(html: string) {
           .replace(/([\\"])/g, "\\$1")}"`
       : ""
   const finishCode = (code: NonNullable<Frame["code"]>) => {
+    if (code.inline && !code.text) return
     let backticks = 0
     let tildes = 0
     let currentBackticks = 0
@@ -209,6 +212,7 @@ export function convertHTMLToMarkdown(html: string) {
       const fence = "`".repeat(Math.max(1, backticks + 1))
       const padding = /^ | $/.test(code.text) && !/^ +$/.test(code.text) ? " " : ""
       flushSpace()
+      prefixQuote()
       const wrapper = encoder.encode(`${fence}${padding}${padding}${fence}`).byteLength
       appendRaw(
         `${fence}${padding}${sliceBytes(code.text, Math.max(0, CONTENT_BYTES - outputBytes - wrapper))}${padding}${fence}`,
@@ -289,6 +293,7 @@ export function convertHTMLToMarkdown(html: string) {
         return
       }
       if (name === "code") {
+        if (activeCode?.inline) return
         frame.code = { inline: true, text: "" }
         activeCode = frame.code
         return
@@ -335,6 +340,33 @@ export function convertHTMLToMarkdown(html: string) {
         return
       }
       if (name === "a") {
+        if (activeLink && activeCode?.inline) {
+          const parent = stack.findLast(
+            (candidate) => candidate.link === activeLink && candidate.linkCode === activeCode,
+          )
+          if (parent) {
+            finishCode(activeCode)
+            if (linkOpen) append(`](${destination(activeLink.href)}${title(activeLink.title)})`)
+            activeCode = parent.resumedCode
+            parent.link = undefined
+            parent.linkCode = undefined
+            activeLink = undefined
+            linkOpen = false
+          }
+        }
+        if (activeCode?.inline) {
+          frame.resumedCode = activeCode
+          if (activeCode.text) finishCode(activeCode)
+          activeCode.text = ""
+          activeCode = undefined
+          frame.link = { href: attributes.href ?? "", title: attributes.title }
+          activeLink = frame.link
+          linkOpen = true
+          inline("[", true)
+          frame.linkCode = { inline: true, text: "" }
+          activeCode = frame.linkCode
+          return
+        }
         if (activeLink) {
           if (linkOpen) append(`](${destination(activeLink.href)}${title(activeLink.title)})`)
           const parent = stack.findLast((candidate) => candidate.link === activeLink)
@@ -441,7 +473,23 @@ export function convertHTMLToMarkdown(html: string) {
       }
       const frame = stack.pop()
       if (!frame || frame.suppressed) return
-      if (activeCode && !frame.code) return
+      if (frame.linkCode) {
+        if (activeLink !== frame.link || !linkOpen) {
+          frame.resumedCode!.text += frame.linkCode.text
+          activeCode = frame.resumedCode
+          if (activeLink === frame.link) activeLink = undefined
+          linkOpen = false
+          return
+        }
+        activeCode = undefined
+        finishCode(frame.linkCode)
+        if (frame.link && linkOpen) append(`](${destination(frame.link.href)}${title(frame.link.title)})`)
+        activeLink = undefined
+        linkOpen = false
+        activeCode = frame.resumedCode
+        return
+      }
+      if (activeCode && !activeCode.inline && !frame.code) return
       if (frame.code) {
         activeCode = undefined
         finishCode(frame.code)

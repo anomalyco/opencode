@@ -220,6 +220,30 @@ describe("WebFetchTool helpers", () => {
     )
   })
 
+  test("prefixes inline code at the start of a blockquote line", () => {
+    expect(WebFetchTool.convertHTMLToMarkdown(`<blockquote><code>x</code> y</blockquote>`)).toBe(`> \`x\` y`)
+  })
+
+  test("keeps links nested in inline code associated with their text", () => {
+    const html = `<dl><dt><code>socket = new <a href="#constructor">WebSocket</a>(url)</code><dd>Creates one.</dl>`
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(
+      `**\` socket = new  \`[\`WebSocket\`](#constructor)\`(url)\`**\n: Creates one.`,
+    )
+    expect(WebFetchTool.convertHTMLToMarkdown(`<code><a href="#x">x</a></code> after`)).toBe(`[\`x\`](#x) after`)
+    expect(
+      WebFetchTool.convertHTMLToMarkdown(
+        `<dl><dt><code><var>socket</var> = new <code><a href="#constructor">WebSocket</a></code>(<var>url</var>)</code><dd>Creates one.</dl>`,
+      ),
+    ).toBe(`**\` socket = new  \`[\`WebSocket\`](#constructor)\`(url)\`**\n: Creates one.`)
+    expect(WebFetchTool.convertHTMLToMarkdown(`<code>a<a href="/x">b<a href="/y">c</a>d</a>e</code>`)).toBe(
+      `\`a\`[\`b\`](\/x)[\`c\`](\/y)\`de\``,
+    )
+    expect(WebFetchTool.convertHTMLToMarkdown(`<code>a<a href="/x">b</code>c`)).toBe(`\`a\`[\`b\`](\/x)c`)
+    expect(WebFetchTool.convertHTMLToMarkdown(`<code>a<a href="/x"><div>b</div>c</a>d</code>`)).toBe(
+      `\`a\`[](\/x)\n\n\`bcd\``,
+    )
+  })
+
   test("indents nested list continuations and preserves ordered numbering", () => {
     const html = `<ol start="0"><li value="4"><p>first</p><p>continued</p><ul><li><p>nested</p><p>continued nested</p></li></ul></li><li>next</li></ol>`
     expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(
