@@ -235,22 +235,15 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed([])),
       )
       const end = Date.now()
-      const interrupted = messages.filter((message) => {
-        if (message.info.role !== "assistant") return false
-        return message.parts.some(
-          (part): part is SessionV1.ToolPart & { state: SessionV1.ToolStatePending | SessionV1.ToolStateRunning } =>
-            part.type === "tool" &&
-            part.tool === "task" &&
-            (part.state.status === "pending" || part.state.status === "running"),
-        )
-      })
-      for (const message of interrupted) {
+      for (const message of messages) {
+        if (message.info.role !== "assistant") continue
         const tasks = message.parts.filter(
           (part): part is SessionV1.ToolPart & { state: SessionV1.ToolStatePending | SessionV1.ToolStateRunning } =>
             part.type === "tool" &&
             part.tool === "task" &&
             (part.state.status === "pending" || part.state.status === "running"),
         )
+        if (tasks.length === 0) continue
         for (const part of tasks) {
           yield* session.updatePart({
             ...part,

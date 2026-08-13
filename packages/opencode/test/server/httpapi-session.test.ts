@@ -45,7 +45,15 @@ const noopBootstrapLayer = Layer.succeed(
   InstanceBootstrapService.Service.of({ run: Effect.void }),
 )
 const appLayer = AppNodeBuilder.build(
-  LayerNode.group([InstanceStore.node, Project.node, Session.node, Workspace.node, Database.node, Ripgrep.node]),
+  LayerNode.group([
+    InstanceStore.node,
+    Project.node,
+    Session.node,
+    SessionRunState.node,
+    Workspace.node,
+    Database.node,
+    Ripgrep.node,
+  ]),
   [[InstanceStore.bootstrapNode, noopBootstrapLayer]],
 )
 const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
@@ -929,8 +937,11 @@ describe("session HttpApi", () => {
         const restored = (yield* svc.messages({ sessionID: session.id })).find(
           (message) => message.info.id === assistant.id,
         )
+        expect(restored?.info.role).toBe("assistant")
+        if (!restored || restored.info.role !== "assistant") return
+
         const restoredTask = restored?.parts.find((part) => part.id === task.id)
-        expect(restored?.info.time.completed).toBeDefined()
+        expect(restored.info.time.completed).toBeDefined()
         expect(restoredTask?.type).toBe("tool")
         if (restoredTask?.type === "tool") expect(restoredTask.state.status).toBe("error")
         const restoredUnrelated = restored?.parts.find((part) => part.id === unrelated.id)
@@ -957,8 +968,11 @@ describe("session HttpApi", () => {
         const restored = (yield* svc.messages({ sessionID: session.id })).find(
           (message) => message.info.id === assistant.id,
         )
-        const restoredTask = restored?.parts.find((part) => part.id === task.id)
-        expect(restored?.info.time.completed).toBeDefined()
+        expect(restored?.info.role).toBe("assistant")
+        if (!restored || restored.info.role !== "assistant") return
+
+        const restoredTask = restored.parts.find((part) => part.id === task.id)
+        expect(restored.info.time.completed).toBeDefined()
         expect(restoredTask?.type).toBe("tool")
         if (restoredTask?.type === "tool") {
           expect(restoredTask.state.status).toBe("error")

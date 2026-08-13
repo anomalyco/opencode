@@ -87,7 +87,7 @@ const layer = Layer.effect(
     const cancelOr = Effect.fn("SessionRunState.cancelOr")(function* <A, E, R>(
       sessionID: SessionID,
       onStopped: Effect.Effect<A, E, R>,
-    ): Effect.Effect<CancelResult<A>, E, R> {
+    ) {
       const data = yield* InstanceState.get(state)
       yield* cancelBackgroundJobs(background, sessionID)
       return yield* data.locks.withLock(sessionID)(
