@@ -2,15 +2,11 @@ export * as ShellParse from "./parse.js"
 
 import { Effect } from "effect"
 import { ShellScan } from "@opencode-ai/shell-scan"
-import { fileURLToPath } from "url"
 import os from "os"
 import path from "path"
-import type { Node } from "web-tree-sitter"
-import { shellParserWasm } from "#shell-parser-wasm"
 import { ShellSelect } from "./select.js"
 
-type Part = { type: string; text: string }
-const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
+const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location", "sl"])
 const POWERSHELL_PATH_FLAGS = new Set(["-literalpath", "-path"])
 
 const ARITY: Record<string, number> = {
@@ -154,103 +150,68 @@ const ARITY: Record<string, number> = {
 }
 
 export const scan = Effect.fn("ShellParse.scan")(function* (command: string, shell: string, cwd: string) {
-  const powershell = ShellSelect.ps(shell)
-  if (!powershell) return scanBash(command, cwd, shell)
-  const parser = yield* Effect.promise(load)
-  const tree = parser.parse(command)
-  if (!tree) return yield* Effect.fail(new Error("Failed to parse shell command"))
-
-  return yield* Effect.acquireUseRelease(
-    Effect.succeed(tree),
-    (tree) =>
-      Effect.sync(() =>
-        tree.rootNode.descendantsOfType("command").reduce(
-          (result, node) => {
-            if (!node) return result
-            const command = parts(node)
-            const tokens = command.map((part) => part.text)
-            if (tokens.length === 0) return result
-            const name = tokens[0].toLowerCase()
-            if (CWD.has(name)) {
-              result.directories.push(...directoryArgs(command, true, cwd, shell))
-              return result
-            }
-            result.commands.push({
-              resource: (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim(),
-              save: `${prefix(tokens).join(" ")} *`,
-            })
-            return result
-          },
-          { commands: [] as Array<{ resource: string; save: string }>, directories: [] as string[], opaque: false },
-        ),
-      ),
-    (tree) => Effect.sync(() => tree.delete()),
-  )
+  return scanCommands(command, cwd, shell, ShellSelect.ps(shell))
 })
 
-function scanBash(command: string, cwd: string, shell: string) {
-  const result = ShellScan.scan(command)
-  if (result.kind === "opaque") return { commands: [{ resource: command }], directories: [], opaque: true }
+function scanCommands(command: string, cwd: string, shell: string, powershell: boolean) {
+  const result = powershell ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
+  if (result.kind === "opaque")
+    return { commands: [{ resource: command }], directories: [], opaque: true, directoryUnknown: true }
+  if (
+    result.commands.some((item) => {
+      const name = powershell ? item.words[0]?.toLowerCase() : item.words[0]
+      if (!name || !CWD.has(name) || name === "popd" || name === "pop-location") return false
+      return directoryArgs(item.words, powershell, cwd, shell).length === 0
+    })
+  )
+    return { commands: [{ resource: command }], directories: [], opaque: true, directoryUnknown: true }
   return result.commands.reduce(
     (output, item) => {
-      const name = item.words[0]
+      const name = powershell ? item.words[0]?.toLowerCase() : item.words[0]
       if (!name) return output
       if (CWD.has(name)) {
         output.directories.push(
-          ...directoryArgs(
-            item.words.map((text) => ({ type: "word", text })),
-            false,
-            cwd,
-            shell,
-          ),
+          ...directoryArgs(item.words, powershell, cwd, shell),
         )
         return output
       }
       output.commands.push({ resource: item.resource, save: `${prefix(item.words).join(" ")} *` })
       return output
     },
-    { commands: [] as Array<{ resource: string; save: string }>, directories: [] as string[], opaque: false },
+    {
+      commands: [] as Array<{ resource: string; save: string }>,
+      directories: [] as string[],
+      opaque: false,
+    },
   )
 }
 
-function parts(node: Node) {
-  return Array.from({ length: node.childCount }).flatMap((_, index): Part[] => {
-    const child = node.child(index)
-    if (!child) return []
-    if (child.type === "command_elements")
-      return Array.from({ length: child.childCount }).flatMap((_, itemIndex): Part[] => {
-        const item = child.child(itemIndex)
-        if (!item || item.type === "command_argument_sep" || item.type === "redirection") return []
-        return [{ type: item.type, text: item.text }]
-      })
-    if (!["command_name", "command_name_expr", "word", "string", "raw_string", "concatenation"].includes(child.type))
-      return []
-    return [{ type: child.type, text: child.text }]
-  })
-}
-
-function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell: string) {
-  if (!powershell)
-    return command
+function directoryArgs(command: string[], powershell: boolean, cwd: string, shell: string) {
+  if (!powershell) {
+    const values = command
       .slice(1)
-      .filter((part) => !part.text.startsWith("-"))
-      .map((part) => directoryArgument(part.text, powershell, cwd, shell))
+      .filter((part) => !part.startsWith("-"))
+      .map((part) => directoryArgument(part, powershell, cwd, shell))
       .filter((part) => part !== undefined)
+    if (command[0] === "cd" && (values.length !== 1 || (!path.isAbsolute(values[0]) && Boolean(process.env.CDPATH))))
+      return []
+    return values
+  }
 
   const directories: string[] = []
-  let path = false
+  let expectsPath = false
   for (const part of command.slice(1)) {
-    if (path) {
-      const value = directoryArgument(part.text, powershell, cwd, shell)
+    if (expectsPath) {
+      const value = directoryArgument(part, powershell, cwd, shell)
       if (value) directories.push(value)
-      path = false
+      expectsPath = false
       continue
     }
-    if (part.type === "command_parameter") {
-      path = POWERSHELL_PATH_FLAGS.has(part.text.toLowerCase())
+    if (part.startsWith("-")) {
+      expectsPath = POWERSHELL_PATH_FLAGS.has(part.toLowerCase())
       continue
     }
-    const value = directoryArgument(part.text, powershell, cwd, shell)
+    const value = directoryArgument(part, powershell, cwd, shell)
     if (value) directories.push(value)
   }
   return directories
@@ -295,26 +256,4 @@ function prefix(tokens: string[]) {
     if (arity !== undefined) return tokens.slice(0, arity)
   }
   return tokens.slice(0, 1)
-}
-
-function resolve(asset: string) {
-  if (asset.startsWith("file://")) return fileURLToPath(asset)
-  if (path.isAbsolute(asset)) return asset
-  return fileURLToPath(new URL(asset, import.meta.url))
-}
-
-const load = (() => {
-  let loading: ReturnType<typeof initialize> | undefined
-  return () => (loading ??= initialize())
-})()
-
-async function initialize() {
-  if (!shellParserWasm.runtime || !shellParserWasm.powershell)
-    throw new Error("PowerShell parser assets are unavailable")
-  const { Parser, Language } = await import("web-tree-sitter")
-  await Parser.init({ locateFile: () => resolve(shellParserWasm.runtime) })
-  const psLanguage = await Language.load(resolve(shellParserWasm.powershell))
-  const ps = new Parser()
-  ps.setLanguage(psLanguage)
-  return ps
 }

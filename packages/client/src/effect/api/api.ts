@@ -1315,6 +1315,7 @@ export type Endpoint15_3Input = {
   readonly action: string
   readonly resources: ReadonlyArray<string>
   readonly save?: ReadonlyArray<string> | undefined
+  readonly opaque?: boolean | undefined
   readonly metadata?: { readonly [x: string]: unknown } | undefined
   readonly source?: Permission.Source | undefined
   readonly agent?: Agent.ID | undefined

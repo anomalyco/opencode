@@ -1,9 +1,82 @@
 export * as ShellScan from "./index.js"
 
+export type OpaqueReason =
+  | "command-substitution"
+  | "compound-command"
+  | "command-wrapper"
+  | "dynamic-command-name"
+  | "dynamic-execution"
+  | "heredoc"
+  | "invalid-redirect"
+  | "invalid-structure"
+  | "shell-evaluation"
+  | "unterminated-escape"
+  | "unterminated-quote"
+
 export type Result =
   | { kind: "scanned"; commands: Array<{ resource: string; words: string[] }> }
-  | { kind: "opaque"; reason: string }
+  | { kind: "opaque"; reason: OpaqueReason }
 
+const BASH_WRAPPERS = new Set([
+  "time",
+  "command",
+  "builtin",
+  "exec",
+  "env",
+  "sudo",
+  "nice",
+  "nohup",
+  "xargs",
+  "source",
+  ".",
+  "trap",
+  "noglob",
+  "repeat",
+])
+const BASH_SHELLS = new Set(["bash", "sh", "dash", "zsh", "ksh"])
+const BASH_DYNAMIC_BUILTINS = new Set([
+  "alias",
+  "enable",
+  "hash",
+  "let",
+  "mapfile",
+  "read",
+  "readarray",
+  "shopt",
+  "unalias",
+  "unset",
+])
+const POWERSHELL_LOCATIONS = new Set(["set-location", "cd", "chdir", "sl", "push-location"])
+const POWERSHELL_SHELLS = new Set(["powershell", "powershell.exe", "pwsh", "pwsh.exe"])
+const POWERSHELL_DYNAMIC_COMMANDS = new Set([
+  "cmd",
+  "cmd.exe",
+  "cscript",
+  "cscript.exe",
+  "foreach-object",
+  "iex",
+  "import-alias",
+  "import-module",
+  "invoke-command",
+  "invoke-expression",
+  "invoke-item",
+  "measure-command",
+  "new-alias",
+  "register-engineevent",
+  "remove-alias",
+  "set-alias",
+  "start-job",
+  "start-process",
+  "where-object",
+  "wscript",
+  "wscript.exe",
+  "ii",
+  "ipmo",
+  "nal",
+  "sal",
+  "saps",
+  "start",
+])
 const MAX_BASH_INPUT_LENGTH = 64 * 1024
 const MAX_SUBSTITUTION_DEPTH = 32
 
@@ -33,6 +106,7 @@ function scanBash(input: string, depth: number): Result {
   let heredoc = false
   let redirectTarget = false
   let hasRedirect = false
+  let dynamicAssignment = false
 
   const finishWord = () => {
     if (!wordStarted) return
@@ -51,6 +125,13 @@ function scanBash(input: string, depth: number): Result {
     finishWord()
     const resource = input.slice(segment, end).trim()
     const name = assignmentWords.findIndex((assignment) => !assignment)
+    if (
+      assignmentWords.some(
+        (assignment, index) =>
+          assignment && /^(?:PATH|CDPATH|ENV|BASH_ENV|SHELLOPTS|LD_|DYLD_|GIT_[A-Z_]*COMMAND)=/.test(words[index] ?? ""),
+      )
+    )
+      dynamicAssignment = true
     if (name >= 0 && (unsafeWords[name] || /[*?[]/.test(words[name]))) compound = true
     if (resource && name >= 0)
       commands.push({
@@ -128,6 +209,7 @@ function scanBash(input: string, depth: number): Result {
       index = substitution.end
       continue
     }
+    if (char === "$" && input[index + 1] === "[") return { kind: "opaque", reason: "dynamic-execution" }
     if (char === "<" && input[index + 1] === "<") heredoc = true
     if (char === "#" && !wordStarted) {
       finishCommand(index)
@@ -160,10 +242,10 @@ function scanBash(input: string, depth: number): Result {
       finishWord()
       continue
     }
-    const pair = input.slice(index, index + 2)
+    const next = input[index + 1]
     const separator =
-      pair === "&&" || pair === "||" || pair === "|&"
-        ? pair
+      (char === "&" && next === "&") || (char === "|" && (next === "|" || next === "&"))
+        ? char + next
         : char === ";" || char === "|" || char === "\n"
           ? char
           : undefined
@@ -214,31 +296,28 @@ function scanBash(input: string, depth: number): Result {
     (dynamicWord && commands[0]?.words[0]?.includes("$"))
   )
     return { kind: "opaque", reason: "dynamic-command-name" }
+  if (dynamicAssignment) return { kind: "opaque", reason: "dynamic-command-name" }
   if (
-    commands.some((command) =>
-      new Set([
-        "time",
-        "command",
-        "builtin",
-        "exec",
-        "env",
-        "sudo",
-        "nice",
-        "nohup",
-        "xargs",
-        "source",
-        ".",
-        "trap",
-      ]).has(command.words[0] ?? ""),
-    )
+    commands.some((command) => BASH_WRAPPERS.has(shellCommandName(command.words[0])))
   )
     return { kind: "opaque", reason: "command-wrapper" }
   if (
     commands.some((command) => {
-      const name = command.words[0]?.split("/").at(-1)
+      const name = shellCommandName(command.words[0])
       if (name === "eval") return true
-      if (!new Set(["bash", "sh", "dash", "zsh", "ksh"]).has(name ?? "")) return false
-      return command.words.length > 1
+      if (BASH_SHELLS.has(name)) return true
+      if (BASH_DYNAMIC_BUILTINS.has(name)) return true
+      if (["declare", "local", "typeset"].includes(name))
+        return command.words.some((word, index) => index > 0 && /^-[^-]*i/.test(word))
+      if (name === "printf") return command.words.some((word, index) => index > 0 && word === "-v")
+      if (name === "test" || name === "[") return command.words.some((word) => word === "-v")
+      if (name === "find") return command.words.some((word) => word === "-exec" || word === "-execdir" || word === "-ok")
+      if (name === "awk" || name === "gawk" || name === "mawk" || name === "nawk") return true
+      if (name === "git")
+        return command.words.some((word, index) => index > 0 && /^alias\.[^=]+=!/.test(word))
+      if (["python", "python3", "perl", "ruby", "node", "bun"].includes(name))
+        return command.words.some((word, index) => index > 0 && ["-c", "-e", "--eval", "--print"].includes(word))
+      return false
     })
   )
     return { kind: "opaque", reason: "shell-evaluation" }
@@ -271,6 +350,7 @@ function bashSubstitution(input: string, start: number) {
       quote = "single"
       continue
     }
+    if (char === "#" && (index === start + 2 || /[\s;&|()]/.test(input[index - 1] ?? ""))) return
     if (char === '"') {
       quote = quote === "double" ? undefined : "double"
       continue
@@ -285,11 +365,155 @@ function bashSubstitution(input: string, start: number) {
       if (char === "$" && input[index + 1] === "(") {
         level++
         index++
-      } else if (char === ")" && level > 1) level--
+      }
+      else if (char === ")" && level > 1) level--
       continue
     }
     if (char === "(") level++
     if (char !== ")" || --level) continue
     return { source: input.slice(start + 2, index), end: index }
   }
+}
+
+export function scanPowerShell(input: string): Result {
+  const commands: Array<{ resource: string; words: string[] }> = []
+  const words: string[] = []
+  let segment = 0
+  let word = ""
+  let started = false
+  let quote: "single" | "double" | undefined
+  let dynamic = false
+  let invalid = false
+  let redirectTarget = false
+  let comment = false
+  let separated = false
+  let dangling = false
+
+  const finishWord = () => {
+    if (!started) return
+    if (!redirectTarget) words.push(word)
+    redirectTarget = false
+    word = ""
+    started = false
+  }
+  const finishCommand = (end: number, boundary = false) => {
+    finishWord()
+    const resource = input.slice(segment, end).trim()
+    if (resource) commands.push({ resource, words: [...words] })
+    else if (boundary && separated) invalid = true
+    words.length = 0
+    separated ||= Boolean(resource)
+  }
+
+  for (let index = 0; index < input.length; index++) {
+    const char = input[index]
+    if (quote) {
+      started = true
+      if (quote === "single" && char === "'" && input[index + 1] === "'") {
+        word += "'"
+        index++
+      } else if ((quote === "single" && char === "'") || (quote === "double" && char === '"')) quote = undefined
+      else if (char === "`" && index + 1 < input.length) word += input[++index]
+      else {
+        if (quote === "double" && char === "$" && input[index + 1] === "(") dynamic = true
+        word += char
+      }
+      continue
+    }
+    if (char === "'" || char === '"') {
+      quote = char === "'" ? "single" : "double"
+      started = true
+      continue
+    }
+    if (char === "`" && index + 1 < input.length) {
+      started = true
+      word += input[++index]
+      continue
+    }
+    if (char === "`") return { kind: "opaque", reason: "unterminated-escape" }
+    if (char === "#" && !started) {
+      finishCommand(index)
+      comment = true
+      const newline = input.indexOf("\n", index)
+      if (newline === -1) break
+      index = newline
+      segment = newline + 1
+      continue
+    }
+    const redirect = powerShellRedirect(input, index)
+    if (redirect) {
+      finishWord()
+      redirectTarget = !redirect.includes("&")
+      index += redirect.length - 1
+      continue
+    }
+    if ("{}@()".includes(char) || char === "&" || (char === "." && !started)) dynamic = true
+    if (/\s/.test(char) && char !== "\n") {
+      finishWord()
+      continue
+    }
+    const next = input[index + 1]
+    const separator =
+      (char === "&" && next === "&") || (char === "|" && next === "|")
+        ? char + next
+        : char === ";" || char === "|" || char === "\n"
+          ? char
+          : undefined
+    if (separator) {
+      finishCommand(index, true)
+      if (redirectTarget) invalid = true
+      dangling = separator !== ";" && separator !== "\n"
+      index += separator.length - 1
+      segment = index + 1
+      continue
+    }
+    started = true
+    dangling = false
+    word += char
+  }
+
+  if (quote) return { kind: "opaque", reason: "unterminated-quote" }
+  if (!comment || input.includes("\n")) finishCommand(input.length)
+  if (redirectTarget || invalid || dangling) return { kind: "opaque", reason: "invalid-structure" }
+  if (
+    dynamic ||
+    commands.some((command) => {
+      const name = shellCommandName(command.words[0])
+      if (name?.startsWith("$") || name?.startsWith("@")) return true
+      if (POWERSHELL_DYNAMIC_COMMANDS.has(name)) return true
+      if (/\.(?:ps1|psm1|cmd|bat|vbs|wsf)$/i.test(name)) return true
+      if (["set-item", "new-item", "remove-item", "rename-item", "copy-item"].includes(name))
+        return command.words.some((word) => /^(?:alias|function|env):/i.test(word))
+      if (POWERSHELL_LOCATIONS.has(name ?? ""))
+        return command.words.some(
+          (word, index) => index > 0 && (word.includes("(") || (word.includes("$") && !knownPowerShellDirectory(word))),
+        )
+      if (!POWERSHELL_SHELLS.has(name)) return false
+      return command.words.length > 1
+    })
+  )
+    return { kind: "opaque", reason: "dynamic-execution" }
+  return { kind: "scanned", commands }
+}
+
+function shellCommandName(word: string | undefined) {
+  return (word ?? "").toLowerCase().split(/[\\/]/).at(-1) ?? ""
+}
+
+function knownPowerShellDirectory(word: string) {
+  return /^(?:\$(?:PWD|HOME|PSHOME)|\$env:[A-Za-z_][A-Za-z0-9_]*|\$\{env:[^}]+\})(?:[\\/]|$)/i.test(word)
+}
+
+function powerShellRedirect(input: string, index: number) {
+  let cursor = index
+  if (input[cursor] === "*") cursor++
+  else while (/\d/.test(input[cursor] ?? "")) cursor++
+  if (input[cursor] !== ">" && input[cursor] !== "<") return
+  cursor++
+  if (input[cursor] === ">") cursor++
+  if (input[cursor] === "&") {
+    cursor++
+    while (/\d/.test(input[cursor] ?? "")) cursor++
+  }
+  return input.slice(index, cursor)
 }

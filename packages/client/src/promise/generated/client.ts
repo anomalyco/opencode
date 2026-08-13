@@ -1402,6 +1402,7 @@ export function make(options: ClientOptions) {
               action: input["action"],
               resources: input["resources"],
               save: input["save"],
+              opaque: input["opaque"],
               metadata: input["metadata"],
               source: input["source"],
               agent: input["agent"],

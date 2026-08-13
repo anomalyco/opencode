@@ -982,6 +982,7 @@ const Endpoint15_3 = (raw: RawClient["server.permission"]) => (input: Endpoint15
         action: input["action"],
         resources: input["resources"],
         save: input["save"],
+        opaque: input["opaque"],
         metadata: input["metadata"],
         source: input["source"],
         agent: input["agent"],
