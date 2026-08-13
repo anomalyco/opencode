@@ -117,13 +117,15 @@ describe("InstructionDiscovery", () => {
       const discovery = yield* InstructionDiscovery.Service
       yield* discovery.transform((draft) => {
         draft.add(file("/global/AGENTS.md", "global"))
-        draft.add(file("/repo/AGENTS.md", "old\nkeep"))
+        draft.add(
+          file("/repo/AGENTS.md", ["old", ...Array.from({ length: 20 }, (_, index) => `keep ${index}`)].join("\n")),
+        )
       })
       const initial = yield* readInitial(yield* discovery.load())
 
       yield* discovery.transform((draft) => {
         draft.update("/repo/AGENTS.md", (current) => {
-          current.content = "new\nkeep"
+          current.content = ["new", ...Array.from({ length: 20 }, (_, index) => `keep ${index}`)].join("\n")
         })
       })
       const modified = (yield* readUpdate(yield* discovery.load(), initial)).text
@@ -131,8 +133,20 @@ describe("InstructionDiscovery", () => {
       expect(modified).toContain("-old\n+new")
       expect(modified).not.toContain("global")
 
+      const rewritten = state({
+        "core/instructions": [{ path: "/repo/AGENTS.md", content: "old one\nold two\nold three\nold four" }],
+      })
       yield* discovery.transform((draft) => {
         draft.remove("/global/AGENTS.md")
+        draft.update("/repo/AGENTS.md", (current) => {
+          current.content = "new"
+        })
+      })
+      expect((yield* readUpdate(yield* discovery.load(), rewritten)).text).toBe(
+        "The instructions changed:\nInstructions from: /repo/AGENTS.md\nnew",
+      )
+
+      yield* discovery.transform((draft) => {
         draft.add(file("/repo/packages/AGENTS.md", "package"))
       })
       const structural = (yield* readUpdate(yield* discovery.load(), initial)).text
@@ -199,8 +213,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
           yield* Effect.promise(() => fs.writeFile(packageFile, "changed"))
           yield* emitAndWait({ type: "update", path: packageFile })
           const changed = (yield* readUpdate(yield* discovery.load(), initialized)).text
-          expect(changed).toContain(`The instructions from ${packageFile} changed. Here's the diff:`)
-          expect(changed).toContain("-package\n\\ No newline at end of file\n+changed")
+          expect(changed).toContain(`The instructions changed:\nInstructions from: ${packageFile}\nchanged`)
           expect(changed).not.toContain(`Instructions from: ${globalFile}\nglobal`)
 
           yield* Effect.promise(() => fs.rm(packageFile))
