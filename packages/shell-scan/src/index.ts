@@ -185,7 +185,8 @@ function scanBash(input: string, depth: number): Result {
     if (
       assignmentWords.some(
         (assignment, index) =>
-          assignment && /^(?:PATH|CDPATH|ENV|BASH_ENV|SHELLOPTS|LD_|DYLD_|GIT_[A-Z_]*COMMAND)=/.test(words[index] ?? ""),
+          assignment &&
+          /^(?:PATH|CDPATH|ENV|BASH_ENV|SHELLOPTS|LD_|DYLD_|GIT_[A-Z_]*COMMAND)=/.test(words[index] ?? ""),
       )
     )
       dynamicAssignment = true
@@ -219,15 +220,13 @@ function scanBash(input: string, depth: number): Result {
       else if (char === "\\" && index + 1 < input.length) word += input[++index]
       else if ((char === "$" && input[index + 1] === "(") || char === "`") {
         const substitution = bashSubstitution(input, index)
-        if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH)
-          return { kind: "opaque", reason: "command-substitution" }
+        if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH) return { kind: "opaque", reason: "command-substitution" }
         const result = scanBash(substitution.source, depth + 1)
         if (result.kind === "opaque") return result
         nestedCommands.push(...result.commands)
         word += input.slice(index, substitution.end + 1)
         index = substitution.end
-      }
-      else {
+      } else {
         if (char === "$" && /^\$\{[^}:@]+@P\}/.test(input.slice(index)))
           return { kind: "opaque", reason: "dynamic-execution" }
         if (char === "$" && /^\$\{\([^)]*e[^)]*\)/.test(input.slice(index)))
@@ -259,8 +258,7 @@ function scanBash(input: string, depth: number): Result {
     }
     if ((char === "$" && input[index + 1] === "(") || char === "`") {
       const substitution = bashSubstitution(input, index)
-      if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH)
-        return { kind: "opaque", reason: "command-substitution" }
+      if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH) return { kind: "opaque", reason: "command-substitution" }
       const result = scanBash(substitution.source, depth + 1)
       if (result.kind === "opaque") return result
       nestedCommands.push(...result.commands)
@@ -364,9 +362,7 @@ function scanBash(input: string, depth: number): Result {
   if (commands.some((command) => command.words[0]?.startsWith("=")))
     return { kind: "opaque", reason: "dynamic-command-name" }
   if (dynamicAssignment) return { kind: "opaque", reason: "dynamic-command-name" }
-  if (
-    commands.some((command) => BASH_WRAPPERS.has(shellCommandName(command.words[0])))
-  )
+  if (commands.some((command) => BASH_WRAPPERS.has(shellCommandName(command.words[0]))))
     return { kind: "opaque", reason: "command-wrapper" }
   if (
     commands.some((command) => {
@@ -385,8 +381,7 @@ function scanBash(input: string, depth: number): Result {
           (word) => word === "-exec" || word === "-execdir" || word === "-ok" || word === "-okdir",
         )
       if (name === "awk" || name === "gawk" || name === "mawk" || name === "nawk") return true
-      if (name === "git")
-        return command.words.some((word, index) => index > 0 && /^alias\.[^=]+=!/.test(word))
+      if (name === "git") return command.words.some((word, index) => index > 0 && /^alias\.[^=]+=!/.test(word))
       if (name === "python" || name === "python3")
         return command.words.some((word, index) => index > 0 && (/^-[A-Za-z]*c/.test(word) || word === "-c"))
       if (name === "perl" || name === "ruby")
@@ -395,7 +390,9 @@ function scanBash(input: string, depth: number): Result {
         return command.words.some(
           (word, index) =>
             index > 0 &&
-            (/^-[A-Za-z]*[ep]/.test(word) || ["-e", "-p", "--eval", "--print"].includes(word) || /^(?:--eval|--print)=/.test(word)),
+            (/^-[A-Za-z]*[ep]/.test(word) ||
+              ["-e", "-p", "--eval", "--print"].includes(word) ||
+              /^(?:--eval|--print)=/.test(word)),
         )
       return false
     })
@@ -408,8 +405,7 @@ function bashSubstitution(input: string, start: number) {
   if (input[start] === "`") {
     for (let index = start + 1; index < input.length; index++) {
       if (input[index] === "\\") index++
-      else if (input[index] === "`")
-        return { source: input.slice(start + 1, index).replaceAll("\\`", "`"), end: index }
+      else if (input[index] === "`") return { source: input.slice(start + 1, index).replaceAll("\\`", "`"), end: index }
     }
     return
   }
@@ -445,8 +441,7 @@ function bashSubstitution(input: string, start: number) {
       if (char === "$" && input[index + 1] === "(") {
         level++
         index++
-      }
-      else if (char === ")" && level > 1) level--
+      } else if (char === ")" && level > 1) level--
       continue
     }
     if (char === "(") level++
@@ -523,7 +518,7 @@ export function scanPowerShell(input: string): Result {
       const newline = endings.length > 0 ? Math.min(...endings) : -1
       if (newline === -1) break
       comment = false
-      index = newline
+      index = input[newline] === "\r" && input[newline + 1] === "\n" ? newline + 1 : newline
       segment = newline + 1
       continue
     }
@@ -541,15 +536,17 @@ export function scanPowerShell(input: string): Result {
     }
     const next = input[index + 1]
     const separator =
-      (char === "&" && next === "&") || (char === "|" && next === "|")
+      char === "\r" && next === "\n"
         ? char + next
-        : char === ";" || char === "|" || char === "\n" || char === "\r"
-          ? char
-          : undefined
+        : (char === "&" && next === "&") || (char === "|" && next === "|")
+          ? char + next
+          : char === ";" || char === "|" || char === "\n" || char === "\r"
+            ? char
+            : undefined
     if (separator) {
       finishCommand(index, true)
       if (redirectTarget) invalid = true
-      dangling = separator !== ";" && separator !== "\n"
+      dangling = separator !== ";" && separator !== "\n" && separator !== "\r" && separator !== "\r\n"
       index += separator.length - 1
       segment = index + 1
       continue
@@ -591,9 +588,12 @@ export function scanPowerShell(input: string): Result {
       )
         return command.words.some((word) => /^(?:alias|function|env):/i.test(word))
       if (POWERSHELL_LOCATIONS.has(name ?? ""))
-        return (dynamicDirectory = command.words.some(
-          (word, index) => index > 0 && (word.includes("(") || (word.includes("$") && !knownPowerShellDirectory(word))),
-        ) || command.words.some((word, index) => index > 0 && /^[A-Za-z]+:/.test(word) && !/^[A-Za-z]:[\\/]/.test(word)))
+        return (dynamicDirectory =
+          command.words.some(
+            (word, index) =>
+              index > 0 && (word.includes("(") || (word.includes("$") && !knownPowerShellDirectory(word))),
+          ) ||
+          command.words.some((word, index) => index > 0 && /^[A-Za-z]+:/.test(word) && !/^[A-Za-z]:[\\/]/.test(word)))
       if (!POWERSHELL_SHELLS.has(name)) return false
       return command.words.length > 1
     })

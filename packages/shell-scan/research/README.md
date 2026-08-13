@@ -16,6 +16,15 @@ Primary correctness metric: unsafe scanned results, which must remain zero in th
 
 Secondary metrics: opaque rate on representative agent commands, source size, and scans per second.
 
+## Conformance
+
+```sh
+bun run research:execution
+PWSH=/path/to/pwsh bun run research:powershell
+```
+
+The execution oracle runs generated programs against isolated fake executables under Bash and zsh, validating shell syntax and comparing actual dispatches with scanner command heads. The PowerShell oracle uses the official `System.Management.Automation.Language.Parser` through a development-only `pwsh` subprocess. Neither oracle is a runtime dependency.
+
 ## Supported subset
 
 - Static command names and arguments
@@ -49,7 +58,9 @@ Add one syntax class only when representative commands show meaningful opacity. 
 | --- | ---: | ---: | --- |
 | Replace Bash tree-sitter | 1.38 MB grammar, ~69k parity scans/sec | Pure TS, ~149k parity scans/sec | Keep |
 | Replace PowerShell tree-sitter | 0.98 MB grammar + 0.21 MB shared runtime | Pure TS; no Core parser assets | Keep |
-| Combined scanner bundle | 2.57 MB parser assets | 10.1 KB minified, 3.6 KB gzip | Keep |
-| Security hardening | Initial portable subset | 400 scanner tests, 689 assertions, zero known unsafe shell-grammar corpus cases | Keep |
+| Combined scanner bundle | 2.57 MB parser assets | 10.3 KB minified, 3.7 KB gzip | Keep |
+| Security hardening | Initial portable subset | 565 scanner tests, 855 assertions, zero known unsafe shell-grammar corpus cases | Keep |
+| Bash/zsh execution oracle | Curated scanner tests | 3,275 programs per shell, 13,870 observed dispatches across Bash 5.3, Bash 3.2, and zsh 5.9; zero omissions | Keep |
+| PowerShell parser oracle | Curated scanner tests | 2,684 inputs against PowerShell 7.3, 2,246 scanned; zero omissions | Keep |
 
 The TUI's independent tree-sitter grammar remains for syntax highlighting. Core has no tree-sitter runtime dependency.

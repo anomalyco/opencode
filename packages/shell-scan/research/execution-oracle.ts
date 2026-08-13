@@ -4,8 +4,9 @@ import { join } from "node:path"
 import { ShellScan } from "../src/index.js"
 
 const shells = [
-  { name: "bash", path: "/opt/homebrew/bin/bash", args: ["--noprofile", "--norc"] },
-  { name: "zsh", path: "/bin/zsh", args: ["-f"] },
+  { name: "bash", path: "/opt/homebrew/bin/bash", args: ["--noprofile", "--norc"], strict: true },
+  { name: "bash-system", path: "/bin/bash", args: ["--noprofile", "--norc"], strict: false },
+  { name: "zsh", path: "/bin/zsh", args: ["-f"], strict: true },
 ] as const
 
 const commands = ["oracle_alpha", "oracle_beta", "oracle_gamma", "oracle_fail"] as const
@@ -80,7 +81,47 @@ add("conditional", "oracle_alpha || oracle_fail unreachable")
 add("conditional", "oracle_alpha && oracle_beta reached")
 add("dynamic", "NAME=oracle_alpha; $NAME dynamic-head")
 add("dynamic", "oracle_alpha $(NAME=oracle_beta; $NAME nested-dynamic)")
-add("literal", "oracle_alpha '$(oracle_fail)' \"literal ` text\"")
+add("literal", "oracle_alpha '$(oracle_fail)' 'literal ` text'")
+
+let randomState = 0x5eed1234
+const random = (length: number) => {
+  randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0
+  return randomState % length
+}
+const atoms = [
+  ...commands,
+  ...successes.map((command) => `${command} plain`),
+  ...successes.map((command) => `${command} 'literal ; | #'`),
+  ...successes.map((command) => `${command} \"literal ; | #\"`),
+  ...successes.map((command) => `X=value ${command}`),
+] as const
+for (let iteration = 0; iteration < 2_500; iteration++) {
+  const left = `${atoms[random(atoms.length)]} fuzz${iteration}`
+  const right = `${atoms[random(atoms.length)]} fuzz${iteration}`
+  const nested = successes[random(successes.length)]
+  const forms = [
+    `${left}${separators[random(separators.length)]}${right}`,
+    `${left} $(${right})`,
+    `${left} \"$(${right})\"`,
+    `${left} pre$(${right})post`,
+    `X=$(${right}) ${left}`,
+    `${left} $(${right}; ${nested})`,
+    `${left} before # ignored\n${right}`,
+    `${left} before\\\nafter; ${right}`,
+  ]
+  add("deterministic-random", forms[iteration % forms.length])
+}
+
+const executionCases = [...cases].map(([source, categories], caseIndex) => {
+  let occurrence = 0
+  const names: string[] = []
+  const unique = source.replace(/\boracle_(?:alpha|beta|gamma|fail)\b/g, () => {
+    const name = `oracle_${caseIndex}_${occurrence++}`
+    names.push(name)
+    return name
+  })
+  return { source: unique, categories, names }
+})
 
 const root = mkdtempSync(join(tmpdir(), "shell-scan-execution-oracle-"))
 const bin = join(root, "bin")
@@ -95,13 +136,11 @@ await Bun.write(
 name=\${0##*/}
 printf '%s\\n' "$name" >> "$ORACLE_LOG"
 printf '%s\\n' "$name"
-case "$name" in
-  oracle_fail) exit 1 ;;
-esac
+[ "$ORACLE_MODE" = failure ] && exit 1
 `,
 )
 chmodSync(join(bin, "oracle-command"), 0o755)
-for (const command of commands) symlinkSync("oracle-command", join(bin, command))
+for (const name of executionCases.flatMap((item) => item.names)) symlinkSync("oracle-command", join(bin, name))
 
 type Finding = {
   shell: string
@@ -112,49 +151,101 @@ type Finding = {
   missing: string[]
   status: number
   stderr: string
+  reason: "dispatch" | "parse"
 }
 
 const findings: Finding[] = []
 const metrics = Object.fromEntries(
-  shells.map((shell) => [shell.name, { executed: 0, scanned: 0, opaque: 0, dispatches: 0, violations: 0 }]),
+  shells.map((shell) => [shell.name, { executed: 0, parsed: 0, scanned: 0, opaque: 0, dispatches: 0, violations: 0 }]),
+)
+const coverage = Object.fromEntries(
+  shells.flatMap((shell) =>
+    [...new Set(executionCases.flatMap((item) => [...item.categories]))].map((category) => [
+      `${shell.name}:${category}`,
+      { scanned: 0, dispatches: 0 },
+    ]),
+  ),
+)
+const versions = Object.fromEntries(
+  shells.map((shell) => {
+    const version = Bun.spawnSync([shell.path, "--version"], { stdout: "pipe", stderr: "pipe" })
+    return [shell.name, (version.stdout.toString() || version.stderr.toString()).split("\n")[0]?.trim()]
+  }),
 )
 
 try {
   for (const shell of shells) {
-    for (const [source, categories] of cases) {
-      await Bun.write(log, "")
+    for (const { source, categories } of executionCases) {
       const result = ShellScan.scan(source)
-      const execution = Bun.spawnSync([shell.path, ...shell.args, "-c", source], {
+      const metric = metrics[shell.name]
+      metric.executed++
+      const parsed = Bun.spawnSync([shell.path, ...shell.args, "-n", "-c", source], {
         cwd: work,
-        env: {
-          HOME: root,
-          PATH: bin,
-          ORACLE_LOG: log,
-          ZDOTDIR: root,
-        },
+        env: { HOME: root, PATH: bin, ZDOTDIR: root },
         stdin: "ignore",
         stdout: "ignore",
         stderr: "pipe",
       })
-      const dispatched = (await Bun.file(log).text()).split("\n").filter(Boolean)
-      const metric = metrics[shell.name]
-      metric.executed++
-      metric.dispatches += dispatched.length
+      if (parsed.exitCode === 0) metric.parsed++
+      if (result.kind === "scanned" && parsed.exitCode !== 0 && shell.strict) {
+        metric.violations++
+        findings.push({
+          shell: shell.name,
+          categories: [...categories],
+          source,
+          dispatched: [],
+          scanned: result.commands.map((command) => command.words[0] ?? ""),
+          missing: [],
+          status: parsed.exitCode,
+          stderr: parsed.stderr.toString().trim(),
+          reason: "parse",
+        })
+        continue
+      }
+      if (parsed.exitCode !== 0) continue
       if (result.kind === "opaque") {
         metric.opaque++
         continue
       }
       metric.scanned++
-      const remaining = new Map<string, number>()
-      for (const command of result.commands) {
-        const name = command.words[0] ?? ""
-        remaining.set(name, (remaining.get(name) ?? 0) + 1)
+      const dispatched = new Set<string>()
+      let status = 0
+      let stderr = ""
+      for (const mode of ["success", "failure"]) {
+        await Bun.write(log, "")
+        const execution = Bun.spawnSync([shell.path, ...shell.args, "-c", source], {
+          cwd: work,
+          env: { HOME: root, PATH: bin, ORACLE_LOG: log, ORACLE_MODE: mode, ZDOTDIR: root },
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "pipe",
+        })
+        status = execution.exitCode
+        stderr = execution.stderr.toString().trim()
+        if (execution.exitCode === 127 || /command not found|not found/i.test(execution.stderr.toString())) {
+          metric.violations++
+          findings.push({
+            shell: shell.name,
+            categories: [...categories],
+            source,
+            dispatched: [...dispatched],
+            scanned: result.commands.map((command) => command.words[0] ?? ""),
+            missing: [],
+            status: execution.exitCode,
+            stderr: execution.stderr.toString().trim(),
+            reason: "dispatch",
+          })
+        }
+        for (const name of (await Bun.file(log).text()).split("\n").filter(Boolean)) dispatched.add(name)
       }
-      const missing = dispatched.filter((name) => {
-        const count = remaining.get(name) ?? 0
-        if (!count) return true
-        remaining.set(name, count - 1)
-        return false
+      metric.dispatches += dispatched.size
+      for (const category of categories) {
+        coverage[`${shell.name}:${category}`].scanned++
+        coverage[`${shell.name}:${category}`].dispatches += dispatched.size
+      }
+      const remaining = new Set(result.commands.map((command) => command.words[0] ?? ""))
+      const missing = [...dispatched].filter((name) => {
+        return !remaining.has(name)
       })
       if (!missing.length) continue
       metric.violations++
@@ -162,11 +253,12 @@ try {
         shell: shell.name,
         categories: [...categories],
         source,
-        dispatched,
+        dispatched: [...dispatched],
         scanned: result.commands.map((command) => command.words[0] ?? ""),
         missing,
-        status: execution.exitCode,
-        stderr: execution.stderr.toString().trim(),
+        status,
+        stderr,
+        reason: "dispatch",
       })
     }
   }
@@ -174,19 +266,49 @@ try {
   rmSync(root, { recursive: true, force: true })
 }
 
+for (const shell of shells) {
+  const metric = metrics[shell.name]
+  if (metric.scanned < 2_000 || metric.dispatches < 4_000) {
+    throw new Error(
+      `${shell.name} coverage fell below floor: ${metric.scanned} scanned, ${metric.dispatches} dispatches`,
+    )
+  }
+  for (const category of [
+    "simple",
+    "separator",
+    "substitution",
+    "comment",
+    "continuation",
+    "conditional",
+    "literal",
+    "deterministic-random",
+  ]) {
+    const item = coverage[`${shell.name}:${category}`]
+    if (!item || item.scanned === 0 || item.dispatches === 0)
+      throw new Error(`${shell.name}:${category} has no scanned dispatch coverage`)
+  }
+}
+
 console.log(
   JSON.stringify(
     {
       schema: 1,
-      invariant: "For scanned results, actual fake-executable dispatch is a multiset subset of scanned command heads.",
-      generated: cases.size,
+      invariant: "For scanned results, every uniquely named fake-executable dispatch appears in scanned command heads.",
+      generated: executionCases.length,
       categories: Object.fromEntries(
         [...new Set([...cases.values()].flatMap((categories) => [...categories]))].map((category) => [
           category,
           [...cases.values()].filter((categories) => categories.has(category)).length,
         ]),
       ),
-      shells: shells.map((shell) => ({ name: shell.name, path: shell.path, metrics: metrics[shell.name] })),
+      shells: shells.map((shell) => ({
+        name: shell.name,
+        path: shell.path,
+        version: versions[shell.name],
+        strictSyntax: shell.strict,
+        metrics: metrics[shell.name],
+      })),
+      coverage,
       findings,
     },
     null,

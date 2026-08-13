@@ -9,6 +9,8 @@
   },
   "scripts": {
     "research:parity": "bun run research/differential/compare.ts",
+    "research:execution": "bun run research/execution-oracle.ts",
+    "research:powershell": "bun run research/powershell-conformance.ts",
     "test": "bun test --only-failures",
     "typecheck": "tsgo --noEmit"
   },
