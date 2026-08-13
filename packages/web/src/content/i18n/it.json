@@ -71,5 +71,7 @@
   "share.match_other": "corrispondenze",
   "share.result_one": "risultato",
   "share.result_other": "risultati",
-  "share.debug_key": "Chiave"
+  "share.debug_key": "Chiave",
+  "docs.copy_page": "Copia pagina",
+  "docs.copying": "Copia in corso…"
 }

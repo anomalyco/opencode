@@ -71,5 +71,7 @@
   "share.match_other": "符合項目",
   "share.result_one": "結果",
   "share.result_other": "結果",
-  "share.debug_key": "金鑰"
+  "share.debug_key": "金鑰",
+  "docs.copy_page": "複製頁面",
+  "docs.copying": "複製中…"
 }

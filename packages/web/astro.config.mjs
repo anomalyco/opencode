@@ -301,6 +301,7 @@ export default defineConfig({
         Footer: "./src/components/Footer.astro",
         LanguageSelect: "./src/components/LanguageSelect.astro",
         SiteTitle: "./src/components/SiteTitle.astro",
+        PageTitle: "./src/components/PageTitle.astro",
       },
       plugins: [
         theme({

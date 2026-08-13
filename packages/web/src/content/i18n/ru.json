@@ -71,5 +71,7 @@
   "share.match_other": "совпадений",
   "share.result_one": "результат",
   "share.result_other": "результатов",
-  "share.debug_key": "Ключ"
+  "share.debug_key": "Ключ",
+  "docs.copy_page": "Копировать страницу",
+  "docs.copying": "Копирование…"
 }

@@ -71,5 +71,7 @@
   "share.match_other": "일치",
   "share.result_one": "결과",
   "share.result_other": "결과",
-  "share.debug_key": "키"
+  "share.debug_key": "키",
+  "docs.copy_page": "페이지 복사",
+  "docs.copying": "복사 중…"
 }

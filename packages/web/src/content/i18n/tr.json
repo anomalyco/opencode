@@ -71,5 +71,7 @@
   "share.match_other": "eşleşme",
   "share.result_one": "sonuç",
   "share.result_other": "sonuç",
-  "share.debug_key": "Anahtar"
+  "share.debug_key": "Anahtar",
+  "docs.copy_page": "Sayfayı kopyala",
+  "docs.copying": "Kopyalanıyor…"
 }

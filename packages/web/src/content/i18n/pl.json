@@ -71,5 +71,7 @@
   "share.match_other": "dopasowania",
   "share.result_one": "wynik",
   "share.result_other": "wyniki",
-  "share.debug_key": "Klawisz"
+  "share.debug_key": "Klawisz",
+  "docs.copy_page": "Kopiuj stronę",
+  "docs.copying": "Kopiowanie…"
 }

@@ -71,5 +71,7 @@
   "share.match_other": "Treffer",
   "share.result_one": "Ergebnis",
   "share.result_other": "Ergebnisse",
-  "share.debug_key": "Schlüssel"
+  "share.debug_key": "Schlüssel",
+  "docs.copy_page": "Seite kopieren",
+  "docs.copying": "Kopieren…"
 }

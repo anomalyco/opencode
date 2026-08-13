@@ -71,5 +71,7 @@
   "share.match_other": "匹配项",
   "share.result_one": "结果",
   "share.result_other": "结果",
-  "share.debug_key": "键"
+  "share.debug_key": "键",
+  "docs.copy_page": "复制页面",
+  "docs.copying": "复制中…"
 }
