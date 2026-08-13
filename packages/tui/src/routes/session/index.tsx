@@ -2089,6 +2089,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
 
 function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOpen: () => void }) {
   const theme = useTheme("elevated")
+  const [hover, setHover] = createSignal(false)
   const next = createMemo(() => props.prompts[0]?.text.replaceAll("\n", " "))
 
   return (
@@ -2096,6 +2097,8 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
       border={["left"]}
       borderColor={theme.border.default}
       customBorderChars={SplitBorder.customBorderChars}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
       onMouseUp={props.onOpen}
     >
       <box
@@ -2104,7 +2107,7 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={1}
-        backgroundColor={theme.background.default}
+        backgroundColor={hover() ? theme.raise(theme.background.default) : theme.background.default}
         flexDirection="row"
       >
         <text fg={theme.text.subdued} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
