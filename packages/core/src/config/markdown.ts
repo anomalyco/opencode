@@ -3,9 +3,9 @@ export * as ConfigMarkdown from "./markdown"
 import matter from "gray-matter"
 export function parse(content: string) {
   try {
-    return matter(content)
+    return matter(content, {})
   } catch {
-    return matter(sanitize(content))
+    return matter(sanitize(content), {})
   }
 }
 
