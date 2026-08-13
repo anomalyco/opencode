@@ -109,7 +109,7 @@ import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { generateThinkingSyntax } from "./thinking-syntax"
 import { createDelayedPresence } from "../../util/delayed-presence"
 import { usePromptMove } from "../../component/prompt/move"
-import { abbreviateHome } from "../../util/path-format"
+import { SessionLocationMissing } from "./location-missing"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1166,52 +1166,6 @@ export function Session() {
         </Show>
       </box>
     </context.Provider>
-  )
-}
-
-function SessionLocationMissing(props: { directory: string; onMove: () => void }) {
-  const theme = useTheme()
-  const paths = useTuiPaths()
-  const clipboard = useClipboard()
-  const toast = useToast()
-  const directory = createMemo(() => Locale.truncateMiddle(abbreviateHome(props.directory, paths.home), 72))
-
-  return (
-    <box
-      border={["left"]}
-      borderColor={theme.text.feedback.warning.default}
-      paddingLeft={2}
-      paddingRight={2}
-      paddingTop={1}
-      paddingBottom={1}
-      gap={1}
-    >
-      <text fg={theme.text.feedback.warning.default} attributes={TextAttributes.BOLD}>
-        Session directory no longer exists
-      </text>
-      <text fg={theme.text.subdued}>{directory()}</text>
-      <text fg={theme.text.default}>Move this session to continue.</text>
-      <box flexDirection="row" gap={2}>
-        <box
-          backgroundColor={theme.background.action.primary.default}
-          paddingLeft={1}
-          paddingRight={1}
-          onMouseUp={props.onMove}
-        >
-          <text fg={theme.text.action.primary.default}>Move session</text>
-        </box>
-        <box
-          paddingLeft={1}
-          paddingRight={1}
-          onMouseUp={() => {
-            void clipboard.write(props.directory)
-            toast.show({ message: "Copied session directory", variant: "success" })
-          }}
-        >
-          <text fg={theme.text.subdued}>Copy path</text>
-        </box>
-      </box>
-    </box>
   )
 }
 

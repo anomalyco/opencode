@@ -141,7 +141,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
   return (
     <Switch>
       <Match when={store.stage === "always"}>
-        <Prompt
+        <SessionQuestion
           title="Always allow"
           semanticLabel={`Always allow ${props.request.action}`}
           instance={props.request.id}
@@ -235,7 +235,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           )
 
           const body = (
-            <Prompt
+            <SessionQuestion
               title="Permission required"
               semanticLabel={permissionSemanticLabel(props.request.action, current.title)}
               instance={props.request.id}
@@ -411,10 +411,13 @@ function RejectPrompt(props: {
   )
 }
 
-function Prompt<const T extends Record<string, string>>(props: {
+export function SessionQuestion<const T extends Record<string, string>>(props: {
   title: string
   semanticLabel?: string
   instance: string
+  id?: string
+  group?: string
+  choicesLabel?: string
   header?: JSX.Element
   body: JSX.Element
   options: T
@@ -431,6 +434,8 @@ function Prompt<const T extends Record<string, string>>(props: {
   })
   const narrow = createMemo(() => dimensions().width < 80)
   const shortcuts = Keymap.useShortcuts()
+  const id = () => props.id ?? "session.permission"
+  const group = () => props.group ?? "Permission"
 
   Keymap.createLayer(() => ({
     mode: "base",
@@ -438,7 +443,7 @@ function Prompt<const T extends Record<string, string>>(props: {
       {
         id: "app.exit",
         title: "Reject permission",
-        group: "Permission",
+        group: group(),
         bind: false,
         run() {
           if (!props.escapeKey) return
@@ -448,7 +453,7 @@ function Prompt<const T extends Record<string, string>>(props: {
       {
         id: "permission.prompt.fullscreen",
         title: "Toggle permission fullscreen",
-        group: "Permission",
+        group: group(),
         bind: false,
         run() {
           if (!props.fullscreen) return
@@ -457,8 +462,8 @@ function Prompt<const T extends Record<string, string>>(props: {
       },
       {
         bind: "left",
-        title: "Previous permission option",
-        group: "Permission",
+        title: "Previous option",
+        group: group(),
         run: () => {
           const idx = keys.indexOf(store.selected)
           const next = keys[(idx - 1 + keys.length) % keys.length]
@@ -467,8 +472,8 @@ function Prompt<const T extends Record<string, string>>(props: {
       },
       {
         bind: "h",
-        title: "Previous permission option",
-        group: "Permission",
+        title: "Previous option",
+        group: group(),
         run: () => {
           const idx = keys.indexOf(store.selected)
           const next = keys[(idx - 1 + keys.length) % keys.length]
@@ -477,8 +482,8 @@ function Prompt<const T extends Record<string, string>>(props: {
       },
       {
         bind: "right",
-        title: "Next permission option",
-        group: "Permission",
+        title: "Next option",
+        group: group(),
         run: () => {
           const idx = keys.indexOf(store.selected)
           const next = keys[(idx + 1) % keys.length]
@@ -487,8 +492,8 @@ function Prompt<const T extends Record<string, string>>(props: {
       },
       {
         bind: "l",
-        title: "Next permission option",
-        group: "Permission",
+        title: "Next option",
+        group: group(),
         run: () => {
           const idx = keys.indexOf(store.selected)
           const next = keys[(idx + 1) % keys.length]
@@ -497,7 +502,7 @@ function Prompt<const T extends Record<string, string>>(props: {
       },
       {
         bind: "return",
-        title: "Select permission option",
+        title: "Select option",
         group: "Permission",
         run: () => props.onSelect(store.selected),
       },
@@ -506,7 +511,7 @@ function Prompt<const T extends Record<string, string>>(props: {
             {
               bind: "escape",
               title: "Reject permission",
-              group: "Permission",
+              group: group(),
               run: () => props.onSelect(props.escapeKey!),
             },
           ]
@@ -520,7 +525,7 @@ function Prompt<const T extends Record<string, string>>(props: {
 
   const content = () => (
     <box
-      id="session.permission"
+      id={id()}
       ref={SimulationSemantics.bind(() => ({
         instance: props.instance,
         role: "dialog",
@@ -571,11 +576,11 @@ function Prompt<const T extends Record<string, string>>(props: {
         alignItems={narrow() ? "flex-start" : "center"}
       >
         <box
-          id="session.permission.actions"
+          id={`${id()}.actions`}
           ref={SimulationSemantics.bind(() => ({
             instance: props.instance,
             role: "listbox",
-            label: "Permission choices",
+            label: props.choicesLabel ?? "Permission choices",
           }))}
           flexDirection="row"
           gap={1}
@@ -584,7 +589,7 @@ function Prompt<const T extends Record<string, string>>(props: {
           <For each={keys}>
             {(option) => (
               <box
-                id={`session.permission.action.${String(option)}`}
+                id={`${id()}.action.${String(option)}`}
                 ref={SimulationSemantics.bind(() => ({
                   instance: props.instance,
                   role: "option",
