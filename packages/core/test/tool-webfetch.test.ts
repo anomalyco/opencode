@@ -147,8 +147,18 @@ describe("WebFetchTool helpers", () => {
     )
   })
 
+  test("keeps nested blockquotes inside their outer quote", () => {
+    const html = `<blockquote><p>outer</p><blockquote><p>inner</p></blockquote><p>end</p></blockquote>`
+    expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(`> outer\n>\n> > inner\n>\n> end`)
+  })
+
   test("keeps visible whitespace around inline emphasis", () => {
     expect(WebFetchTool.convertHTMLToMarkdown(`<p>a<strong> b</strong> c a <em>b </em>c</p>`)).toBe(`a **b** c a *b* c`)
+    expect(WebFetchTool.convertHTMLToMarkdown(`a<strong> </strong>b a<em> </em>b`)).toBe(`a b a b`)
+  })
+
+  test("captures formatting elements inside preformatted content as code only", () => {
+    expect(WebFetchTool.convertHTMLToMarkdown(`<pre><b>x</b><i>y</i><del>z</del></pre>`)).toBe(`\`\`\`\nxyz\n\`\`\``)
   })
 
   test("normalizes multiline table cells without changing their columns", () => {
@@ -161,6 +171,13 @@ describe("WebFetchTool helpers", () => {
     expect(WebFetchTool.convertHTMLToMarkdown(html)).toBe(
       `| Parent | Sibling |\n| --- | --- |\n| Before Key Value A 1 After | Tail |`,
     )
+  })
+
+  test("preserves loose text around malformed table rows", () => {
+    expect(WebFetchTool.convertHTMLToMarkdown(`<table>before<tr><td>cell</td></tr>after</table>`)).toBe(
+      `before after\n\n| cell |\n| --- |`,
+    )
+    expect(WebFetchTool.convertHTMLToMarkdown(`<table>alpha</table>`)).toBe(`alpha`)
   })
 
   test("escapes tilde fences and removes empty emphasis markers", () => {
@@ -214,6 +231,10 @@ describe("WebFetchTool helpers", () => {
     expect(WebFetchTool.convertHTMLToMarkdown(`<a href="/docs">before<div>block</div>after</a>`)).toBe(
       `[before](/docs)\n\nblock\n\n[after](/docs)`,
     )
+  })
+
+  test("recovers nested anchors without unmatched Markdown syntax", () => {
+    expect(WebFetchTool.convertHTMLToMarkdown(`<a href="/a">x<a href="/b">y</a>z</a>`)).toBe(`[x](/a)[y](/b)z`)
   })
 
   test("keeps emphasis whitespace through neutral wrappers", () => {

@@ -25,7 +25,6 @@ const blocks = new Set([
 type Frame = {
   suppressed: boolean
   link?: { href: string; title?: string }
-  previousLink?: Frame["link"]
   suspendedLink?: Frame["link"]
   marker?: { index: number; block: number; leadingSpace?: boolean; previous?: Frame["marker"] }
   code?: { inline: boolean; text: string; language?: string }
@@ -336,8 +335,14 @@ export function convertHTMLToMarkdown(html: string) {
         return
       }
       if (name === "a") {
+        if (activeLink) {
+          if (linkOpen) append(`](${destination(activeLink.href)}${title(activeLink.title)})`)
+          const parent = stack.findLast((candidate) => candidate.link === activeLink)
+          if (parent) parent.link = undefined
+          activeLink = undefined
+          linkOpen = false
+        }
         frame.link = { href: attributes.href ?? "", title: attributes.title }
-        frame.previousLink = activeLink
         activeLink = frame.link
         linkOpen = true
         return inline("[", true)
@@ -436,6 +441,7 @@ export function convertHTMLToMarkdown(html: string) {
       }
       const frame = stack.pop()
       if (!frame || frame.suppressed) return
+      if (activeCode && !frame.code) return
       if (frame.code) {
         activeCode = undefined
         finishCode(frame.code)
@@ -468,12 +474,9 @@ export function convertHTMLToMarkdown(html: string) {
         const trailingSpace = pendingSpace
         pendingSpace = false
         if (frame.marker) activeMarker = frame.marker.previous
-        if (frame.marker && frame.marker.block !== blockCount) {
+        if (frame.marker && (frame.marker.block !== blockCount || output.length === frame.marker.index + 1)) {
           output[frame.marker.index] = ""
-          return
-        }
-        if (frame.marker && output.length === frame.marker.index + 1) {
-          output[frame.marker.index] = ""
+          pendingSpace = trailingSpace || frame.marker.leadingSpace === true
           return
         }
         inline(value)
@@ -481,12 +484,12 @@ export function convertHTMLToMarkdown(html: string) {
         return
       }
       if (name === "a") {
-        if (activeLink === frame.link || (!activeLink && frame.link)) {
+        if (frame.link && (activeLink === frame.link || !activeLink)) {
           activeLink = frame.link
           if (linkOpen) append(`](${destination(frame.link?.href ?? "")}${title(frame.link?.title)})`)
           else if (last && last !== "\n") append(`](${destination(frame.link?.href ?? "")}${title(frame.link?.title)})`)
           linkOpen = false
-          activeLink = frame.previousLink
+          activeLink = undefined
         }
         return
       }
@@ -526,6 +529,7 @@ export function convertHTMLToMarkdown(html: string) {
         if (tableDepth !== 1) return
         if (activeTable?.row) activeTable.rows.push(activeTable.row)
         if (activeTable) activeTable.row = undefined
+        pendingSpace = true
         return
       }
       if (name === "caption" && frame.caption && activeTable) {
@@ -540,9 +544,15 @@ export function convertHTMLToMarkdown(html: string) {
           const table = frame.table
           activeTable = table?.previous
           if (table) {
-            take(table.start)
+            const loose = take(table.start)
+              .replace(/[\t\r\n ]+/g, " ")
+              .trim()
             const width = table.rows[0]?.length ?? 0
             const rectangular = width > 0 && table.rows.every((row) => row.length === width)
+            if (loose) {
+              append(loose)
+              block()
+            }
             if (table.caption) {
               append(table.caption)
               block()
@@ -574,8 +584,20 @@ export function convertHTMLToMarkdown(html: string) {
   let pendingText = ""
   const flushText = () => {
     if (!pendingText) return
+    const lines = pendingText
+      .replace(/[ \t]+\n/g, (space) => (space.startsWith("  ") ? "  \n" : "\n"))
+      .replace(/\n{3,}/g, "\n\n")
+      .split("\n")
     normalized.push(
-      pendingText.replace(/[ \t]+\n/g, (space) => (space.startsWith("  ") ? "  \n" : "\n")).replace(/\n{3,}/g, "\n\n"),
+      lines
+        .map((line, index) => {
+          if (line) return line
+          const before = lines[index - 1]?.match(/^(?:> )+/)?.[0]
+          const after = lines[index + 1]?.match(/^(?:> )+/)?.[0]
+          if (!before || !after || before.length === after.length) return line
+          return "> ".repeat(Math.min(before.length, after.length) / 2).trimEnd()
+        })
+        .join("\n"),
     )
     pendingText = ""
   }
