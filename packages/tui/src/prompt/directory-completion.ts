@@ -52,7 +52,7 @@ export function directoryAutocompleteResultValue(
   directory: string,
   search: ReturnType<typeof directoryAutocompleteSearch>,
 ) {
-  return (search.prefix || "./") + directory.replace(/^[\\/]+/, "")
+  return search.prefix + directory.replace(/^[\\/]+/, "")
 }
 
 export function directoryAutocompleteExactValue(value: string, search: ReturnType<typeof directoryAutocompleteSearch>) {
