@@ -1,7 +1,7 @@
 import { createContext, createSignal, onCleanup, useContext, type ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../context/theme"
-import { useTerminalDimensions } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "./border"
 import { TextAttributes } from "@opentui/core"
 import { tint } from "../theme/color"
@@ -25,6 +25,7 @@ function ToastSurface(props: {
 }) {
   const theme = useTheme("overlay")
   const dimensions = useTerminalDimensions()
+  const renderer = useRenderer()
   const [hovered, setHovered] = createSignal(false)
   const hover = (value: boolean) => {
     setHovered(value)
@@ -44,7 +45,10 @@ function ToastSurface(props: {
       customBorderChars={SplitBorder.customBorderChars}
       onMouseOver={() => hover(true)}
       onMouseOut={() => hover(false)}
-      onMouseUp={props.onActivate}
+      onMouseUp={() => {
+        if (renderer.getSelection()?.getSelectedText()) return
+        props.onActivate()
+      }}
     >
       <box
         width="100%"
@@ -153,11 +157,15 @@ function init() {
 
   const dismiss = () => {
     clear()
-    paused = false
     const next = store.queue[0]
     setStore("queue", (queue) => queue.slice(1))
     setStore("currentToast", next ?? null)
-    if (next) start(next.duration)
+    if (!next) {
+      paused = false
+      return
+    }
+    remaining = next.duration
+    if (!paused) start(next.duration)
   }
 
   const toast = {

@@ -12,7 +12,7 @@ function captureToast(setToast: (toast: ToastContext) => void) {
   }
 }
 
-test("clicking runs an action and advances a queued toast", async () => {
+test("activation runs an action and keeps a queued toast paused", async () => {
   let toast: ToastContext | undefined
   const Capture = captureToast((value) => (toast = value))
   const app = await testRender(() => (
@@ -30,7 +30,7 @@ test("clicking runs an action and advances a queued toast", async () => {
       action: { label: "Open plugins", run: () => (activated = true) },
     })
     toast!.pause()
-    toast!.show({ message: "Copied", variant: "success" })
+    toast!.show({ message: "Copied", variant: "success", duration: 5 })
 
     expect(toast!.currentToast?.message).toBe("Plugin failed")
     expect(toast!.pending).toBe(1)
@@ -40,12 +40,19 @@ test("clicking runs an action and advances a queued toast", async () => {
     expect(activated).toBe(true)
     expect(toast!.currentToast?.message).toBe("Copied")
     expect(toast!.pending).toBe(0)
+
+    await Bun.sleep(10)
+    expect(toast!.currentToast?.message).toBe("Copied")
+
+    toast!.resume()
+    await Bun.sleep(10)
+    expect(toast!.currentToast).toBeNull()
   } finally {
     app.renderer.destroy()
   }
 })
 
-test("clicking a toast without an action dismisses it", async () => {
+test("activation dismisses a toast without an action", async () => {
   let toast: ToastContext | undefined
   const Capture = captureToast((value) => (toast = value))
   const app = await testRender(() => (
@@ -56,7 +63,7 @@ test("clicking a toast without an action dismisses it", async () => {
 
   try {
     await app.waitFor(() => toast !== undefined)
-    toast!.show({ message: "Copied", variant: "success" })
+    toast!.show({ message: "Copied", variant: "success", duration: 5 })
     toast!.activate()
     expect(toast!.currentToast).toBeNull()
   } finally {
