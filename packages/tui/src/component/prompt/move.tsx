@@ -49,7 +49,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     }
   }
 
-  async function open(options?: { recovery?: boolean }) {
+  async function open() {
     const projectID = await resolveProjectID()
     if (!projectID) {
       toast.show({ message: "Unable to determine current project", variant: "error" })
@@ -60,12 +60,8 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     dialog.replace(() => (
       <DialogMoveSession
         projectID={projectID}
-        title={options?.recovery ? "Choose directory" : undefined}
-        unavailableDirectory={options?.recovery ? session?.location.directory : undefined}
         current={
-          options?.recovery
-            ? undefined
-            : destination() ??
+          destination() ??
           (session
             ? {
                 type: "directory",

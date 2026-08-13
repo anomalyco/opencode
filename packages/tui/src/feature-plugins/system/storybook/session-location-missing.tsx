@@ -17,8 +17,6 @@ function SessionLocationMissingStory(props: { context: Plugin.Context }) {
     props.context.ui.dialog.show(() => (
       <DialogMoveSession
         projectID="fixture-project"
-        title="Choose directory"
-        unavailableDirectory={directory}
         initialDirectories={[
           { directory: "/Users/kit/code/open-source/opencode" },
           {

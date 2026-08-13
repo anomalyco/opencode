@@ -27,8 +27,6 @@ type ProjectDirectory = ProjectDirectoriesOutput[number]
 
 type DialogMoveSessionProps = {
   projectID: string
-  title?: string
-  unavailableDirectory?: string
   current?: MoveSessionSelection
   onSelect: (selection: MoveSessionSelection) => void
   onCurrentChange?: (selection: MoveSessionSelection) => void
@@ -112,11 +110,9 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     if (showError()) return
     const directory = currentDirectory()
     if (!directory) return
-    return (
-      directoryData()
-        ?.filter((root) => contains(root.directory, directory))
-        .toSorted((a, b) => b.directory.length - a.directory.length)[0] ?? { directory }
-    )
+    return directoryData()
+      ?.filter((root) => contains(root.directory, directory))
+      .toSorted((a, b) => b.directory.length - a.directory.length)[0]
   })
 
   const options = createMemo<DialogSelectOption<MoveSessionSelection | undefined>[]>(() => {
@@ -124,8 +120,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     const data = directoryData()
     const current = currentRoot()?.directory
     if (directories.loading && !data && !current) return []
-    const roots = [...(data ?? [])].filter((item) => item.directory !== props.unavailableDirectory)
-    if (current && !roots.some((item) => item.directory === current)) roots.unshift({ directory: current })
+    const roots = [...(data ?? [])]
     roots.sort((a, b) => {
       if (a.directory === current) return -1
       if (b.directory === current) return 1
@@ -141,7 +136,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         (session) => session.projectID === props.projectID && session.subpath && ![".", "/"].includes(session.subpath),
       )
       .map((session) => session.location.directory)
-      .filter((directory) => directory !== props.unavailableDirectory)
+      .filter((directory) => currentRoot() || directory !== currentDirectory())
       .filter((directory) => !roots.some((root) => root.directory === directory))
       .filter((directory, index, directories) => directories.indexOf(directory) === index)
       .map((location) => ({
@@ -316,11 +311,11 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   return (
     <box minHeight={showError() ? 5 : fullHeight()}>
       <DialogSelect
-        title={props.title ?? "Move session"}
+        title="Choose directory"
         titleView={
           <box flexDirection="row" gap={1}>
             <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
-              {props.title ?? "Move session"}
+              Choose directory
             </text>
             <Show when={working() || directories.loading || loadedProject.loading}>
               <Spinner />
