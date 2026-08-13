@@ -70,10 +70,14 @@ const OpenResponsesReasoningItem = Schema.Struct({
   encrypted_content: optionalNull(Schema.String),
 })
 
-const OpenResponsesItemReference = Schema.Struct({
-  type: Schema.tag("item_reference"),
-  id: Schema.String,
-})
+export const ProviderItem = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+    id: Schema.String,
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
+type OpenResponsesProviderItem = Schema.Schema.Type<typeof ProviderItem>
 
 // `function_call_output.output` accepts either a plain string or an ordered
 // array of content items so tools can return images and files in addition to text.
@@ -91,29 +95,42 @@ const OpenResponsesFunctionCallOutput = Schema.Union([
 
 export const InputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
-  Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenResponsesInputContent) }),
   Schema.Struct({
+    type: Schema.optionalKey(Schema.tag("message")),
+    id: Schema.optionalKey(Schema.String),
+    role: Schema.tag("user"),
+    content: Schema.Array(OpenResponsesInputContent),
+    status: Schema.optionalKey(Schema.Literals(["in_progress", "completed", "incomplete"])),
+  }),
+  Schema.Struct({
+    type: Schema.optionalKey(Schema.tag("message")),
+    id: Schema.optionalKey(Schema.String),
     role: Schema.tag("assistant"),
     content: Schema.Array(OpenResponsesOutputText),
+    status: Schema.optionalKey(Schema.Literals(["in_progress", "completed", "incomplete"])),
     phase: Schema.optionalKey(MessagePhase),
   }),
   OpenResponsesReasoningItem,
-  OpenResponsesItemReference,
   Schema.Struct({
     type: Schema.tag("function_call"),
+    id: Schema.optionalKey(Schema.String),
     call_id: Schema.String,
     name: Schema.String,
     arguments: Schema.String,
+    status: Schema.optionalKey(Schema.Literals(["in_progress", "completed", "incomplete"])),
   }),
   Schema.Struct({
     type: Schema.tag("function_call_output"),
+    id: Schema.optionalKey(Schema.String),
     call_id: Schema.String,
     output: OpenResponsesFunctionCallOutput,
+    status: Schema.optionalKey(Schema.Literals(["in_progress", "completed", "incomplete"])),
   }),
 ])
 type OpenResponsesInputItem = Schema.Schema.Type<typeof InputItem>
 type LoweredInputItem =
   | OpenResponsesInputItem
+  | OpenResponsesProviderItem
   | {
       readonly role: "assistant"
       readonly content: ReadonlyArray<{ readonly type: "output_text"; readonly text: string }>
@@ -128,7 +145,7 @@ type OpenResponsesReasoningInput = {
   summary: Array<{ type: "summary_text"; text: string }>
   encrypted_content?: string | null
 }
-type OpenResponsesReasoningReplay = Omit<OpenResponsesReasoningInput, "id">
+type OpenResponsesReasoningReplay = OpenResponsesReasoningInput
 
 export const Tool = Schema.Struct({
   type: Schema.tag("function"),
@@ -269,10 +286,9 @@ export interface ParserState {
   readonly messagePhase: (value: unknown) => MessagePhase | null | undefined
   readonly messagePhases: Readonly<Record<string, MessagePhase | null>>
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
-  readonly store: boolean | undefined
 }
 
-type ReasoningSummaryStatus = "active" | "can-conclude" | "concluded"
+type ReasoningSummaryStatus = "active" | "can-conclude"
 
 interface ReasoningStreamItem {
   readonly encryptedContent: string | null | undefined
@@ -310,34 +326,82 @@ export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LL
     tool: (toolName) => ({ type: "function" as const, name: toolName }),
   })
 
-const lowerToolCall = (part: ToolCallPart): OpenResponsesInputItem => ({
-  type: "function_call",
-  call_id: part.id,
-  name: part.name,
-  arguments: ProviderShared.encodeJson(part.input),
-})
+const responseItemID = (prefix: string, id: string) => {
+  const value = id.startsWith("call_") ? id.slice(5) : id
+  const sanitized = value.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/^_+|_+$/g, "") || "item"
+  const direct = `${prefix}_${sanitized}`
+  if (value === sanitized && direct.length <= 64) return direct
+  const hash = Array.from(id).reduce(
+    (hash, character) => BigInt.asUintN(64, (hash ^ BigInt(character.codePointAt(0) ?? 0)) * 1099511628211n),
+    14695981039346656037n,
+  )
+  const suffix = hash.toString(36)
+  return `${prefix}_${sanitized.slice(0, 62 - prefix.length - suffix.length)}_${suffix}`
+}
+
+const validResponseItemID = (value: unknown): value is string =>
+  typeof value === "string" && value.length <= 64 && /^[a-zA-Z0-9]+_.+$/.test(value)
+
+const responseItemMetadata = (part: { readonly providerMetadata?: ProviderMetadata }, providerMetadataKey: string) => {
+  const metadata = part.providerMetadata?.[providerMetadataKey]
+  return ProviderShared.isRecord(metadata) ? metadata : undefined
+}
+
+const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenResponsesInputItem => {
+  const metadata = responseItemMetadata(part, providerMetadataKey)
+  return {
+    type: "function_call",
+    id: validResponseItemID(metadata?.itemId) ? metadata.itemId : responseItemID("fc", part.id),
+    call_id: part.id,
+    name: part.name,
+    arguments: ProviderShared.encodeJson(part.input),
+    status: "completed",
+  }
+}
 
 const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenResponsesReasoningInput | undefined => {
   const metadata = part.providerMetadata?.[providerMetadataKey]
-  if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string" || metadata.itemId.length === 0)
-    return undefined
+  if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string") return undefined
   const encryptedContent =
     typeof metadata.reasoningEncryptedContent === "string" || metadata.reasoningEncryptedContent === null
       ? metadata.reasoningEncryptedContent
       : undefined
   return {
     type: "reasoning",
-    id: metadata.itemId,
+    id: validResponseItemID(metadata.itemId) ? metadata.itemId : responseItemID("rs", metadata.itemId),
     summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
     encrypted_content: encryptedContent,
   }
 }
 
-const hostedToolItemID = (part: ToolResultPart, providerMetadataKey: string) => {
-  const metadata = part.providerMetadata?.[providerMetadataKey]
-  return ProviderShared.isRecord(metadata) && typeof metadata.itemId === "string" && metadata.itemId.length > 0
-    ? metadata.itemId
-    : undefined
+const hostedToolItem = (part: ToolResultPart, providerMetadataKey: string): OpenResponsesProviderItem | undefined => {
+  const metadata = responseItemMetadata(part, providerMetadataKey)
+  if (
+    ProviderShared.isRecord(metadata?.responseItem) &&
+    typeof metadata.responseItem.id === "string" &&
+    typeof metadata.responseItem.type === "string"
+  )
+    return {
+      ...metadata.responseItem,
+      type: metadata.responseItem.type,
+      id: validResponseItemID(metadata.responseItem.id)
+        ? metadata.responseItem.id
+        : responseItemID("item", metadata.responseItem.id),
+    }
+  if (
+    part.result.type === "json" &&
+    ProviderShared.isRecord(part.result.value) &&
+    typeof part.result.value.id === "string" &&
+    typeof part.result.value.type === "string"
+  )
+    return {
+      ...part.result.value,
+      type: part.result.value.type,
+      id: validResponseItemID(part.result.value.id)
+        ? part.result.value.id
+        : responseItemID("item", part.result.value.id),
+    }
+  return undefined
 }
 
 const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
@@ -400,14 +464,15 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
   const system: LoweredInputItem[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
   const input: LoweredInputItem[] = [...system]
-  const store = OpenResponsesOptions.resolve(request).store
   const providerMetadataKey = request.model.route.providerMetadataKey ?? "openresponses"
 
+  // `store` controls server persistence, not client-managed history. Replay the
+  // same stable item identities for stored and stateless requests.
   for (const message of request.messages) {
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate(extension.name, message)
       const previous = input.at(-1)
-      if (previous && "role" in previous && previous.role === "user")
+      if (previous && "role" in previous && previous.role === "user" && Array.isArray(previous.content))
         input[input.length - 1] = {
           role: "user",
           content: [...previous.content, { type: "input_text", text: part.text }],
@@ -427,8 +492,8 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
     if (message.role === "assistant") {
       const content: TextPart[] = []
       const reasoningItems: Record<string, OpenResponsesReasoningReplay> = {}
-      const reasoningReferences = new Set<string>()
-      const hostedToolReferences = new Set<string>()
+      const hostedToolItems = new Set<string>()
+      let textItemIndex = 0
       const flushText = () => {
         if (content.length === 0) return
         const groups = content.reduce<Array<{ phase: MessagePhase | null | undefined; parts: TextPart[] }>>(
@@ -443,11 +508,26 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
           [],
         )
         input.push(
-          ...groups.map((group) => ({
-            role: "assistant" as const,
-            content: group.parts.map((part) => ({ type: "output_text" as const, text: part.text })),
-            ...(group.phase === undefined ? {} : { phase: group.phase }),
-          })),
+          ...groups.map((group) => {
+            const index = textItemIndex++
+            const first = group.parts[0]
+            const metadata = first ? responseItemMetadata(first, providerMetadataKey) : undefined
+            const id = validResponseItemID(metadata?.itemId)
+              ? metadata.itemId
+              : message.id === undefined && typeof metadata?.itemId !== "string"
+                ? undefined
+                : index === 0 && validResponseItemID(message.id)
+                  ? message.id
+                  : responseItemID("msg", `${message.id ?? metadata?.itemId}_${index}`)
+            return {
+              type: "message" as const,
+              ...(id === undefined ? {} : { id }),
+              role: "assistant" as const,
+              content: group.parts.map((part) => ({ type: "output_text" as const, text: part.text })),
+              status: "completed" as const,
+              ...(group.phase === undefined ? {} : { phase: group.phase }),
+            }
+          }),
         )
         content.splice(0, content.length)
       }
@@ -460,11 +540,6 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
           flushText()
           const reasoning = lowerReasoning(part, providerMetadataKey)
           if (!reasoning) continue
-          if (store !== false) {
-            if (!reasoningReferences.has(reasoning.id)) input.push({ type: "item_reference", id: reasoning.id })
-            reasoningReferences.add(reasoning.id)
-            continue
-          }
           const existing = reasoningItems[reasoning.id]
           if (existing) {
             existing.summary.push(...reasoning.summary)
@@ -472,11 +547,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
               existing.encrypted_content = reasoning.encrypted_content
             continue
           }
-          const replay = {
-            type: reasoning.type,
-            summary: reasoning.summary,
-            encrypted_content: reasoning.encrypted_content,
-          }
+          const replay = { ...reasoning }
           reasoningItems[reasoning.id] = replay
           input.push(replay)
           continue
@@ -484,22 +555,21 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         if (part.type === "tool-call") {
           flushText()
           if (part.providerExecuted === true) continue
-          input.push(lowerToolCall(part))
+          input.push(lowerToolCall(part, providerMetadataKey))
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
           flushText()
-          const itemID = hostedToolItemID(part, providerMetadataKey)
-          if (store !== false && itemID && !hostedToolReferences.has(itemID))
-            input.push({ type: "item_reference", id: itemID })
-          if (store === false && part.result.type === "content") {
+          const item = hostedToolItem(part, providerMetadataKey)
+          if (item && !hostedToolItems.has(item.id)) input.push(item)
+          if (!item && part.result.type === "content") {
             const content: ReadonlyArray<Content> = part.result.value
             input.push({
               role: "user",
               content: yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, extension)),
             })
           }
-          if (itemID) hostedToolReferences.add(itemID)
+          if (item) hostedToolItems.add(item.id)
           continue
         }
         return yield* ProviderShared.unsupportedContent(extension.name, "assistant", [
@@ -518,20 +588,15 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (reques
         return yield* ProviderShared.unsupportedContent(extension.name, "tool", ["tool-result"])
       input.push({
         type: "function_call_output",
+        id: responseItemID("fco", part.id),
         call_id: part.id,
         output: yield* lowerToolResultOutput(part, request, extension),
+        status: "completed",
       })
     }
   }
 
-  // With store:false, Responses APIs only accept previous reasoning items when the
-  // complete item has encrypted state. Summary blocks for one item may carry
-  // that state only on the last block, so filter after they have been joined.
-  return store === false
-    ? input.filter(
-        (item) => !("type" in item) || item.type !== "reasoning" || typeof item.encrypted_content === "string",
-      )
-    : input
+  return input
 })
 
 const lowerOptions = (request: LLMRequest) => {
@@ -641,7 +706,7 @@ const onOutputTextDelta = (state: ParserState, event: Event, id: string): StepRe
   if (!event.delta) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
   const phase = state.messagePhases[id]
-  const metadata = phase === undefined ? undefined : providerMetadata(state, { phase })
+  const metadata = providerMetadata(state, { itemId: id, ...(phase === undefined ? {} : { phase }) })
   const lifecycle = Lifecycle.textStart(state.lifecycle, events, id, metadata)
   return [{ ...state, lifecycle: Lifecycle.textDelta(lifecycle, events, id, event.delta) }, events]
 }
@@ -652,7 +717,13 @@ const onOutputTextDone = (state: ParserState, event: Event, id: string): StepRes
     return onOutputTextDelta(state, { ...event, delta: event.text }, id)
   }
   const events: LLMEvent[] = []
-  return [{ ...state, lifecycle: Lifecycle.textEnd(state.lifecycle, events, id) }, events]
+  return [
+    {
+      ...state,
+      lifecycle: Lifecycle.textEnd(state.lifecycle, events, id, providerMetadata(state, { itemId: id })),
+    },
+    events,
+  ]
 }
 
 export const onReasoningDelta = (state: ParserState, event: Event, itemID: string): StepResult => {
@@ -761,23 +832,11 @@ const onReasoningSummaryPartAdded = (state: ParserState, event: Event): StepResu
   }
 
   const events: LLMEvent[] = []
-  const closed = Object.entries(item.summaryParts)
-    .filter((entry) => entry[1] === "can-conclude")
-    .reduce(
-      (lifecycle, entry) =>
-        Lifecycle.reasoningEnd(
-          lifecycle,
-          events,
-          `${event.item_id}:${entry[0]}`,
-          providerMetadata(state, { itemId: event.item_id }),
-        ),
-      state.lifecycle,
-    )
   return [
     {
       ...state,
       lifecycle: Lifecycle.reasoningStart(
-        closed,
+        state.lifecycle,
         events,
         `${event.item_id}:${event.summary_index}`,
         providerMetadata(state, { itemId: event.item_id, reasoningEncryptedContent: item.encryptedContent ?? null }),
@@ -787,11 +846,7 @@ const onReasoningSummaryPartAdded = (state: ParserState, event: Event): StepResu
         [event.item_id]: {
           ...item,
           summaryParts: {
-            ...Object.fromEntries(
-              Object.entries(item.summaryParts).map((entry) =>
-                entry[1] === "can-conclude" ? [entry[0], "concluded" as const] : entry,
-              ),
-            ),
+            ...item.summaryParts,
             [event.summary_index]: "active",
           },
         },
@@ -809,22 +864,13 @@ const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResul
   return [
     {
       ...state,
-      lifecycle:
-        state.store !== false
-          ? Lifecycle.reasoningEnd(
-              state.lifecycle,
-              events,
-              `${event.item_id}:${event.summary_index}`,
-              providerMetadata(state, { itemId: event.item_id }),
-            )
-          : state.lifecycle,
       reasoningItems: {
         ...state.reasoningItems,
         [event.item_id]: {
           ...item,
           summaryParts: {
             ...item.summaryParts,
-            [event.summary_index]: state.store !== false ? "concluded" : "can-conclude",
+            [event.summary_index]: "can-conclude",
           },
         },
       },
@@ -870,7 +916,10 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
           state.lifecycle,
           events,
           item.id,
-          phase === undefined ? undefined : providerMetadata(state, { phase }),
+          providerMetadata(state, {
+            itemId: item.id,
+            ...(phase === undefined ? {} : { phase }),
+          }),
         ),
         messageItems,
         messagePhases,
@@ -1037,7 +1086,6 @@ export const initial = (request: LLMRequest, extension: Extension = BASE): Parse
   messagePhase: (value) => messagePhase(value, extension),
   messagePhases: {},
   reasoningItems: {},
-  store: OpenResponsesOptions.resolve(request).store,
 })
 
 const messagePhase = (value: unknown, extension: Extension): MessagePhase | null | undefined => {

@@ -211,7 +211,12 @@ describe("OpenAI Responses route", () => {
             { type: "input_text", text: "<system-update>\nTreat &lt;/system-update&gt; literally.\n</system-update>" },
           ],
         },
-        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "After." }],
+          status: "completed",
+        },
       ])
     }),
   )
@@ -329,7 +334,7 @@ describe("OpenAI Responses route", () => {
       yield* LLMClient.generate(
         LLMRequest.update(request, {
           model: Azure.configure({
-            baseURL: "https://opencode-test.openai.azure.com/openai/v1/",
+            resourceName: "opencode-test",
             apiKey: "azure-key",
             headers: { authorization: "Bearer stale" },
           }).responses("gpt-4.1-mini"),
@@ -414,8 +419,21 @@ describe("OpenAI Responses route", () => {
         model: "gpt-4.1-mini",
         input: [
           { role: "user", content: [{ type: "input_text", text: "What is the weather?" }] },
-          { type: "function_call", call_id: "call_1", name: "lookup", arguments: '{"query":"weather"}' },
-          { type: "function_call_output", call_id: "call_1", output: '{"forecast":"sunny"}' },
+          {
+            type: "function_call",
+            id: "fc_1",
+            call_id: "call_1",
+            name: "lookup",
+            arguments: '{"query":"weather"}',
+            status: "completed",
+          },
+          {
+            type: "function_call_output",
+            id: "fco_1",
+            call_id: "call_1",
+            output: '{"forecast":"sunny"}',
+            status: "completed",
+          },
         ],
         store: false,
         stream: true,
@@ -863,10 +881,10 @@ describe("OpenAI Responses route", () => {
       expect(response.text).toBe("Hello!")
       expect(response.events).toEqual([
         { type: "step-start", index: 0 },
-        { type: "text-start", id: "msg_1" },
+        { type: "text-start", id: "msg_1", providerMetadata: { openai: { itemId: "msg_1" } } },
         { type: "text-delta", id: "msg_1", text: "Hello" },
         { type: "text-delta", id: "msg_1", text: "!" },
-        { type: "text-end", id: "msg_1" },
+        { type: "text-end", id: "msg_1", providerMetadata: { openai: { itemId: "msg_1" } } },
         {
           type: "step-finish",
           index: 0,
@@ -922,35 +940,44 @@ describe("OpenAI Responses route", () => {
         {
           type: "text",
           text: "Checking.",
-          providerMetadata: { openai: { phase: "commentary" } },
+          providerMetadata: { openai: { itemId: "msg_commentary", phase: "commentary" } },
         },
         {
           type: "text",
           text: "Finished.",
-          providerMetadata: { openai: { phase: "final_answer" } },
+          providerMetadata: { openai: { itemId: "msg_final", phase: "final_answer" } },
         },
         {
           type: "text",
           text: "Unclassified.",
-          providerMetadata: { openai: { phase: null } },
+          providerMetadata: { openai: { itemId: "msg_null", phase: null } },
         },
       ])
 
       const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(prepared.body.input).toEqual([
         {
+          type: "message",
+          id: "msg_commentary",
           role: "assistant",
           content: [{ type: "output_text", text: "Checking." }],
+          status: "completed",
           phase: "commentary",
         },
         {
+          type: "message",
+          id: "msg_final",
           role: "assistant",
           content: [{ type: "output_text", text: "Finished." }],
+          status: "completed",
           phase: "final_answer",
         },
         {
+          type: "message",
+          id: "msg_null",
           role: "assistant",
           content: [{ type: "output_text", text: "Unclassified." }],
+          status: "completed",
           phase: null,
         },
       ])
@@ -1042,12 +1069,12 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(response.events.filter((event) => event.type.startsWith("text-"))).toEqual([
-        { type: "text-start", id: "msg_1" },
+        { type: "text-start", id: "msg_1", providerMetadata: { openai: { itemId: "msg_1" } } },
         { type: "text-delta", id: "msg_1", text: "First" },
-        { type: "text-end", id: "msg_1" },
-        { type: "text-start", id: "msg_2" },
+        { type: "text-end", id: "msg_1", providerMetadata: { openai: { itemId: "msg_1" } } },
+        { type: "text-start", id: "msg_2", providerMetadata: { openai: { itemId: "msg_2" } } },
         { type: "text-delta", id: "msg_2", text: "Second" },
-        { type: "text-end", id: "msg_2" },
+        { type: "text-end", id: "msg_2", providerMetadata: { openai: { itemId: "msg_2" } } },
       ])
     }),
   )
@@ -1069,7 +1096,7 @@ describe("OpenAI Responses route", () => {
         { type: "step-start", index: 0 },
         { type: "reasoning-start", id: "rs_1" },
         { type: "reasoning-delta", id: "rs_1", text: "thinking" },
-        { type: "text-start", id: "msg_1" },
+        { type: "text-start", id: "msg_1", providerMetadata: { openai: { itemId: "msg_1" } } },
         { type: "text-delta", id: "msg_1", text: "Hello" },
         { type: "reasoning-end", id: "rs_1" },
         { type: "text-end", id: "msg_1" },
@@ -1079,7 +1106,7 @@ describe("OpenAI Responses route", () => {
       expect(response.events.filter((event) => event.type === "finish")).toHaveLength(1)
       expect(response.message.content).toEqual([
         { type: "reasoning", text: "thinking" },
-        { type: "text", text: "Hello" },
+        { type: "text", text: "Hello", providerMetadata: { openai: { itemId: "msg_1" } } },
       ])
     }),
   )
@@ -1145,33 +1172,34 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(response.reasoning).toBe("FirstSecond")
-      expect(response.events).toMatchObject([
-        { type: "step-start", index: 0 },
+      expect(response.events.filter((event) => event.type.startsWith("reasoning-"))).toEqual([
         {
           type: "reasoning-start",
           id: "rs_1:0",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
         },
-        { type: "reasoning-delta", id: "rs_1:0", text: "First" },
-        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
+        { type: "reasoning-delta", id: "rs_1:0", text: "First", providerMetadata: undefined },
         {
           type: "reasoning-start",
           id: "rs_1:1",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
         },
-        { type: "reasoning-delta", id: "rs_1:1", text: "Second" },
+        { type: "reasoning-delta", id: "rs_1:1", text: "Second", providerMetadata: undefined },
+        {
+          type: "reasoning-end",
+          id: "rs_1:0",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        },
         {
           type: "reasoning-end",
           id: "rs_1:1",
           providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
         },
-        { type: "step-finish", index: 0, reason: { normalized: "stop", raw: undefined } },
-        { type: "finish", reason: { normalized: "stop", raw: undefined } },
       ])
     }),
   )
 
-  it.effect("closes reasoning summary parts when storage is not disabled", () =>
+  it.effect("preserves complete reasoning metadata when storage is enabled", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         LLMRequest.update(request, { providerOptions: { openai: { store: true } } }),
@@ -1191,7 +1219,7 @@ describe("OpenAI Responses route", () => {
               { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 1 },
               {
                 type: "response.output_item.done",
-                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+                item: { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" },
               },
               { type: "response.completed", response: { id: "resp_1" } },
             ),
@@ -1200,8 +1228,16 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(response.events.filter((event) => event.type === "reasoning-end")).toEqual([
-        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
-        { type: "reasoning-end", id: "rs_1:1", providerMetadata: { openai: { itemId: "rs_1" } } },
+        {
+          type: "reasoning-end",
+          id: "rs_1:0",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        },
+        {
+          type: "reasoning-end",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        },
       ])
     }),
   )
@@ -1249,7 +1285,7 @@ describe("OpenAI Responses route", () => {
                   { role: "user", content: [{ type: "input_text", text: "Summarize it." }] },
                 ],
               })
-              expect(body.input[1]).not.toHaveProperty("id")
+              expect(body.input[1]).toHaveProperty("id", "rs_1")
               return input.respond(
                 sseEvents(
                   { type: "response.output_text.delta", item_id: "msg_1", delta: "Parser now round-trips reasoning." },
@@ -1266,6 +1302,98 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("keeps OpenAI and Azure response item replay independent of store", () =>
+    Effect.gen(function* () {
+      const models = [
+        model,
+        Azure.configure({ resourceName: "opencode-test", apiKey: "azure-key" }).responses("gpt-4.1-mini"),
+      ]
+      const messages = [
+        Message.assistant([
+          {
+            type: "reasoning" as const,
+            text: "Checked the previous diff.",
+            providerMetadata: {
+              openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+            },
+          },
+          ToolCallPart.make({
+            id: "call_1",
+            name: "lookup",
+            input: { query: "weather" },
+            providerMetadata: { openai: { itemId: "fc_1" } },
+          }),
+        ]),
+        Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+      ]
+
+      for (const current of models) {
+        const stored = yield* compileRequest(
+          LLM.request({ model: current, messages, providerOptions: { openai: { store: true } } }),
+        )
+        const stateless = yield* compileRequest(
+          LLM.request({ model: current, messages, providerOptions: { openai: { store: false } } }),
+        )
+
+        expect(stored.body.input).toEqual(stateless.body.input)
+        expect(stored.body.input).toEqual([
+          {
+            type: "reasoning",
+            id: "rs_1",
+            summary: [{ type: "summary_text", text: "Checked the previous diff." }],
+            encrypted_content: "encrypted-state",
+          },
+          {
+            type: "function_call",
+            id: "fc_1",
+            call_id: "call_1",
+            name: "lookup",
+            arguments: '{"query":"weather"}',
+            status: "completed",
+          },
+          {
+            type: "function_call_output",
+            id: "fco_1",
+            call_id: "call_1",
+            output: '{"forecast":"sunny"}',
+            status: "completed",
+          },
+        ])
+      }
+    }),
+  )
+
+  it.effect("replaces invalid item ids without creating collisions", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.make({
+              id: "msg_text",
+              role: "assistant",
+              content: [
+                { type: "text", text: "Ready.", providerMetadata: { openai: { itemId: "" } } },
+                {
+                  type: "reasoning",
+                  text: "Think.",
+                  providerMetadata: { openai: { itemId: "", reasoningEncryptedContent: "encrypted" } },
+                },
+                ToolCallPart.make({ id: "call_a/b", name: "one", input: {} }),
+                ToolCallPart.make({ id: "call_a?b", name: "two", input: {} }),
+              ],
+            }),
+          ],
+        }),
+      )
+      const ids = prepared.body.input.flatMap((item) => ("id" in item && typeof item.id === "string" ? [item.id] : []))
+
+      expect(ids).toHaveLength(4)
+      expect(new Set(ids).size).toBe(ids.length)
+      expect(ids.every((id) => /^[a-zA-Z0-9]+_.+$/.test(id) && id.length <= 64)).toBe(true)
+    }),
+  )
+
   it.effect("preserves assistant content order around reasoning items", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -1273,38 +1401,55 @@ describe("OpenAI Responses route", () => {
           id: "req_reasoning_order",
           model,
           messages: [
-            Message.assistant([
-              { type: "text", text: "Before." },
-              {
-                type: "reasoning",
-                text: "Checked order.",
-                providerMetadata: {
-                  openai: {
-                    itemId: "rs_1",
-                    reasoningEncryptedContent: "encrypted-state",
+            Message.make({
+              id: "msg_assistant",
+              role: "assistant",
+              content: [
+                { type: "text", text: "Before." },
+                {
+                  type: "reasoning",
+                  text: "Checked order.",
+                  providerMetadata: {
+                    openai: {
+                      itemId: "rs_1",
+                      reasoningEncryptedContent: "encrypted-state",
+                    },
                   },
                 },
-              },
-              { type: "text", text: "After." },
-            ]),
+                { type: "text", text: "After." },
+              ],
+            }),
           ],
           providerOptions: { openai: { store: false } },
         }),
       )
 
       expect(prepared.body.input).toEqual([
-        { role: "assistant", content: [{ type: "output_text", text: "Before." }] },
+        {
+          type: "message",
+          id: "msg_assistant",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Before." }],
+          status: "completed",
+        },
         {
           type: "reasoning",
+          id: "rs_1",
           encrypted_content: "encrypted-state",
           summary: [{ type: "summary_text", text: "Checked order." }],
         },
-        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+        {
+          type: "message",
+          id: "msg_msg_assistant_1",
+          role: "assistant",
+          content: [{ type: "output_text", text: "After." }],
+          status: "completed",
+        },
       ])
     }),
   )
 
-  it.effect("references stored reasoning items by id", () =>
+  it.effect("replays stored reasoning items with their id", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -1322,11 +1467,18 @@ describe("OpenAI Responses route", () => {
         }),
       )
 
-      expect(prepared.body.input).toEqual([{ type: "item_reference", id: "rs_1" }])
+      expect(prepared.body.input).toEqual([
+        {
+          type: "reasoning",
+          id: "rs_1",
+          summary: [{ type: "summary_text", text: "Checked the previous diff." }],
+          encrypted_content: undefined,
+        },
+      ])
     }),
   )
 
-  it.effect("references stored provider-executed hosted tool results by id", () =>
+  it.effect("replays stored provider-executed hosted tool results", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -1356,7 +1508,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(prepared.body.input).toEqual([
-        { type: "item_reference", id: "ws_1" },
+        { type: "web_search_call", id: "ws_1", status: "completed" },
         { role: "user", content: [{ type: "input_text", text: "Continue." }] },
       ])
     }),
@@ -1431,6 +1583,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.input).toEqual([
         {
           type: "reasoning",
+          id: "rs_1",
           encrypted_content: "encrypted-state",
           summary: [
             { type: "summary_text", text: "First" },
@@ -1441,7 +1594,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("skips non-persisted reasoning ids without encrypted state", () =>
+  it.effect("replays reasoning ids without encrypted state", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -1471,6 +1624,12 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body).toMatchObject({
         input: [
           { role: "user", content: [{ type: "input_text", text: "What changed?" }] },
+          {
+            type: "reasoning",
+            id: "rs_1",
+            summary: [{ type: "summary_text", text: "Checked the previous diff." }],
+            encrypted_content: null,
+          },
           { role: "assistant", content: [{ type: "output_text", text: "The parser changed." }] },
           { role: "user", content: [{ type: "input_text", text: "Summarize it." }] },
         ],
@@ -1662,7 +1821,8 @@ describe("OpenAI Responses route", () => {
           name: "web_search",
           result: { type: "json", value: item },
           providerExecuted: true,
-          providerMetadata: { openai: { itemId: "ws_1" } },
+          output: undefined,
+          providerMetadata: { openai: { itemId: "ws_1", responseItem: item } },
         },
       ])
     }),
@@ -1753,7 +1913,8 @@ describe("OpenAI Responses route", () => {
         name: "code_interpreter",
         result: { type: "json", value: item },
         providerExecuted: true,
-        providerMetadata: { openai: { itemId: "ci_1" } },
+        output: undefined,
+        providerMetadata: { openai: { itemId: "ci_1", responseItem: item } },
       })
     }),
   )

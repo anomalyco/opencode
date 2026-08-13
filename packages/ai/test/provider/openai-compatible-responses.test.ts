@@ -51,7 +51,13 @@ describe("Open Responses-compatible route", () => {
           { role: "system", content: "You are concise." },
           { role: "user", content: [{ type: "input_text", text: "Say hello." }] },
         ],
+        store: false,
         stream: true,
+        max_output_tokens: undefined,
+        temperature: undefined,
+        tool_choice: undefined,
+        tools: undefined,
+        top_p: undefined,
       })
     }),
   )
@@ -109,6 +115,40 @@ describe("Open Responses-compatible route", () => {
         reasoning: { effort: "low" },
         store: true,
       })
+    }),
+  )
+
+  it.effect("keeps response item replay independent of store", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      }).model("example-model")
+      const messages = [
+        Message.assistant({
+          type: "reasoning",
+          text: "Checked the previous diff.",
+          providerMetadata: {
+            openresponses: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+          },
+        }),
+      ]
+      const stored = yield* compileRequest(
+        LLM.request({ model, messages, providerOptions: { openresponses: { store: true } } }),
+      )
+      const stateless = yield* compileRequest(
+        LLM.request({ model, messages, providerOptions: { openresponses: { store: false } } }),
+      )
+
+      expect(stored.body.input).toEqual(stateless.body.input)
+      expect(stored.body.input).toEqual([
+        {
+          type: "reasoning",
+          id: "rs_1",
+          summary: [{ type: "summary_text", text: "Checked the previous diff." }],
+          encrypted_content: "encrypted-state",
+        },
+      ])
     }),
   )
 

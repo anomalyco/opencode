@@ -261,7 +261,7 @@ const assistantMessageFromResponse = (response: LLMResponse, step: AssistantStep
     content.push({ type: "reasoning", text: response.reasoning, providerMetadata: reasoning.providerMetadata })
   }
 
-  if (response.text.length > 0) content.push({ type: "text", text: response.text })
+  content.push(...response.message.content.filter((part) => part.type === "text"))
   content.push(...response.toolCalls)
   return Message.assistant(content)
 }

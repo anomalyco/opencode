@@ -37,10 +37,14 @@ const OpenAIResponsesToolChoice = Schema.Union([
 
 const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({
+    type: Schema.optionalKey(Schema.tag("message")),
+    id: Schema.optionalKey(Schema.String),
     role: Schema.tag("assistant"),
     content: Schema.Array(Schema.Struct({ type: Schema.tag("output_text"), text: Schema.String })),
+    status: Schema.optionalKey(Schema.Literals(["in_progress", "completed", "incomplete"])),
     phase: Schema.optionalKey(Schema.NullOr(OpenResponses.MessagePhase)),
   }),
+  OpenResponses.ProviderItem,
   OpenResponses.InputItem,
 ])
 
@@ -195,7 +199,8 @@ const onHostedToolDone = Effect.fn("OpenAIResponses.onHostedToolDone")(function*
   item: HostedToolItem,
 ) {
   const tool = HOSTED_TOOLS[item.type]
-  const providerMetadata = OpenResponses.providerMetadata(state, { itemId: item.id })
+  const callMetadata = OpenResponses.providerMetadata(state, { itemId: item.id })
+  const resultMetadata = OpenResponses.providerMetadata(state, { itemId: item.id, responseItem: item })
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   events.push(
@@ -204,14 +209,14 @@ const onHostedToolDone = Effect.fn("OpenAIResponses.onHostedToolDone")(function*
       name: tool.name,
       input: tool.input(item),
       providerExecuted: true,
-      providerMetadata,
+      providerMetadata: callMetadata,
     }),
     LLMEvent.toolResult({
       id: item.id,
       name: tool.name,
       result: yield* hostedToolResult(item),
       providerExecuted: true,
-      providerMetadata,
+      providerMetadata: resultMetadata,
     }),
   )
   return [{ ...state, lifecycle }, events] satisfies OpenResponses.StepResult
