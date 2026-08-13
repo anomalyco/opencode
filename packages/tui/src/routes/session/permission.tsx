@@ -626,9 +626,11 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
               {shortcuts.get("permission.prompt.fullscreen")} <span style={{ fg: theme.text.subdued }}>{hint()}</span>
             </text>
           </Show>
-          <text fg={theme.text.default}>
-            {"⇆"} <span style={{ fg: theme.text.subdued }}>select</span>
-          </text>
+          <Show when={keys.length > 1}>
+            <text fg={theme.text.default}>
+              {"⇆"} <span style={{ fg: theme.text.subdued }}>select</span>
+            </text>
+          </Show>
           <text fg={theme.text.default}>
             enter <span style={{ fg: theme.text.subdued }}>confirm</span>
           </text>

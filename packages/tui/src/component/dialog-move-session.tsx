@@ -27,6 +27,8 @@ type ProjectDirectory = ProjectDirectoriesOutput[number]
 
 type DialogMoveSessionProps = {
   projectID: string
+  title?: string
+  unavailableDirectory?: string
   current?: MoveSessionSelection
   onSelect: (selection: MoveSessionSelection) => void
   onCurrentChange?: (selection: MoveSessionSelection) => void
@@ -75,7 +77,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   })
 
   const [directories, { refetch }] = createResource(
-    () => (props.initialRemoving ? undefined : props.projectID),
+    () => (props.initialDirectories || props.initialRemoving ? undefined : props.projectID),
     async (projectID, info): Promise<ReadonlyArray<ProjectDirectory> | undefined> => {
       try {
         const requestLocation = { directory: location()?.directory || paths.cwd }
@@ -122,7 +124,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     const data = directoryData()
     const current = currentRoot()?.directory
     if (directories.loading && !data && !current) return []
-    const roots = [...(data ?? [])]
+    const roots = [...(data ?? [])].filter((item) => item.directory !== props.unavailableDirectory)
     if (current && !roots.some((item) => item.directory === current)) roots.unshift({ directory: current })
     roots.sort((a, b) => {
       if (a.directory === current) return -1
@@ -139,6 +141,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         (session) => session.projectID === props.projectID && session.subpath && ![".", "/"].includes(session.subpath),
       )
       .map((session) => session.location.directory)
+      .filter((directory) => directory !== props.unavailableDirectory)
       .filter((directory) => !roots.some((root) => root.directory === directory))
       .filter((directory, index, directories) => directories.indexOf(directory) === index)
       .map((location) => ({
@@ -313,11 +316,11 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   return (
     <box minHeight={showError() ? 5 : fullHeight()}>
       <DialogSelect
-        title="Move session"
+        title={props.title ?? "Move session"}
         titleView={
           <box flexDirection="row" gap={1}>
             <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
-              Move session
+              {props.title ?? "Move session"}
             </text>
             <Show when={working() || directories.loading || loadedProject.loading}>
               <Spinner />

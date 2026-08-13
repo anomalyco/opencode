@@ -1122,7 +1122,10 @@ export function Session() {
                   </Show>
                 </Match>
                 <Match when={currentLocation.error}>
-                  <SessionLocationMissing directory={session()!.location.directory} onMove={move.open} />
+                  <SessionLocationMissing
+                    directory={session()!.location.directory}
+                    onMove={() => move.open({ recovery: true })}
+                  />
                 </Match>
                 <Match when={!disabled()}>
                   <Prompt
