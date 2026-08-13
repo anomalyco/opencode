@@ -47,7 +47,7 @@ const allTargets: {
   { os: "win32", arch: "x64", avx2: false },
 ]
 
-const targets = requestedTarget
+const targets = requestedTarget !== undefined
   ? allTargets.filter((item) => targetName(item) === requestedTarget)
   : singleFlag
     ? allTargets.filter((item) => {
