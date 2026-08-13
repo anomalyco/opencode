@@ -1,0 +1,50 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 0000000..1111111 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -869,16 +869,10 @@
+             if (isActiveText) {
+               controller.enqueue({ type: "text-end", id: "txt-0" });
+             }
+-            for (const [index, pending] of pendingToolCalls) {
+-              throw new InvalidResponseDataError({
+-                data: {
+-                  index,
+-                  id: pending.id,
+-                  function: { arguments: pending.bufferedArguments }
+-                },
+-                message: `Expected 'function.name' to be a string.`
+-              });
+-            }
++            // Incomplete tool-call deltas (id without function.name) are dropped on
++            // flush instead of failing the whole stream. Some OpenAI-compatible
++            // providers emit a dangling index that never gets a name.
++            pendingToolCalls.clear();
+             for (const toolCall of toolCalls.filter(
+               (toolCall2) => !toolCall2.hasFinished
+             )) {
+diff --git a/dist/index.js b/dist/index.js
+index 0000000..1111111 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -883,16 +883,10 @@
+             if (isActiveText) {
+               controller.enqueue({ type: "text-end", id: "txt-0" });
+             }
+-            for (const [index, pending] of pendingToolCalls) {
+-              throw new import_provider3.InvalidResponseDataError({
+-                data: {
+-                  index,
+-                  id: pending.id,
+-                  function: { arguments: pending.bufferedArguments }
+-                },
+-                message: `Expected 'function.name' to be a string.`
+-              });
+-            }
++            // Incomplete tool-call deltas (id without function.name) are dropped on
++            // flush instead of failing the whole stream. Some OpenAI-compatible
++            // providers emit a dangling index that never gets a name.
++            pendingToolCalls.clear();
+             for (const toolCall of toolCalls.filter(
+               (toolCall2) => !toolCall2.hasFinished
+             )) {

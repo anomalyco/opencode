@@ -19,7 +19,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "3.0.82",
     "@ai-sdk/openai": "3.0.48",
-    "@ai-sdk/openai-compatible": "2.0.37",
+    "@ai-sdk/openai-compatible": "2.0.62",
     "@opencode-ai/console-core": "workspace:*",
     "@opencode-ai/console-resource": "workspace:*",
     "@openauthjs/openauth": "0.0.0-20250322224806",
