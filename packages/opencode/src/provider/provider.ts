@@ -40,10 +40,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
-// fork: legacy logger shim (upstream removed core/util/log in #31310)
-import * as Log from "@opencode-ai/core/util/log"
-
-const log = Log.create({ service: "provider" })
+import { syncLogWarn } from "@/util/sync-log"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 // fork: local/llama-skein providers (@ai-sdk/openai-compatible) got NO
@@ -1637,7 +1634,8 @@ async function discoverOpenAICompatibleModels(input: {
         if (fit?.maxSafeCtx) {
           context = fit.maxSafeCtx
         } else if (previouslyKnownContext && reportedContext > previouslyKnownContext) {
-          log.warn(
+          syncLogWarn(
+            "provider",
             "openai-compatible model discovery: fit probe unavailable and reported context_length exceeds the previously-known context — keeping the conservative value",
             { providerID: input.providerID, modelID, reportedContext, previouslyKnownContext },
           )
@@ -1717,7 +1715,7 @@ async function discoverOpenAICompatibleModels(input: {
       return discovered
     })
     .catch((e: unknown) => {
-      log.warn("openai-compatible model discovery failed", { providerID: input.providerID, url, error: e })
+      syncLogWarn("provider", "openai-compatible model discovery failed", { providerID: input.providerID, url, error: e })
       return {}
     })
     .finally(() => {

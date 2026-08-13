@@ -1,12 +1,10 @@
-import * as Log from "@opencode-ai/core/util/log"
 import type { ModelV2 } from "@opencode-ai/core/model"
 import type { ProviderV2 } from "@opencode-ai/core/provider"
 import type { Provider } from "@/provider/provider"
 import { createClient, createConfig } from "./llama-skein/gen/client"
 import { LlamaSkeinClient } from "./llama-skein/gen/sdk.gen"
 import type { FitReport, ModelFit, ResourceSnapshot } from "./llama-skein/gen/types.gen"
-
-const log = Log.create({ service: "local-placement" })
+import { syncLogInfo, syncLogError } from "@/util/sync-log"
 
 export type Placement = { providerID: ProviderV2.ID; modelID: ModelV2.ID }
 
@@ -406,7 +404,7 @@ export async function pick(input: {
       // TTL backstop fires).
       const release = reserve(best.placement.providerID)
       recentPlacements.set(best.placement.providerID, Date.now())
-      log.info("placed subagent on idle local provider", {
+      syncLogInfo("local-placement", "placed subagent on idle local provider", {
         provider: best.placement.providerID,
         model: best.placement.modelID,
         parent: input.parent.providerID,
@@ -415,14 +413,14 @@ export async function pick(input: {
       })
       return { placement: best.placement, release }
     }
-    log.info("no idle local provider, inheriting parent", {
+    syncLogInfo("local-placement", "no idle local provider, inheriting parent", {
       parent: input.parent.providerID,
       probed: candidates.length,
     })
     return null
   } catch (err) {
     // Placement is an optimization; a failure here must never break the spawn.
-    log.error("placement failed, inheriting parent", { error: String(err) })
+    syncLogError("local-placement", "placement failed, inheriting parent", { error: String(err) })
     return null
   }
 }

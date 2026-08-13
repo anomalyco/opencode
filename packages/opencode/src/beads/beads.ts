@@ -4,9 +4,6 @@ import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Stream as StreamModule } from "effect"
-import * as Log from "@opencode-ai/core/util/log"
-
-const log = Log.create({ service: "beads" })
 
 export class BeadsDownError extends Schema.TaggedErrorClass<BeadsDownError>()("BeadsDownError", {
   cause: Schema.String,
