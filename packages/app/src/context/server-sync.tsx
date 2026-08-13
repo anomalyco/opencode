@@ -627,7 +627,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       if (
         eventType === "config.updated" ||
         eventType === "agent.updated" ||
-        eventType === "project.directories.updated"
+        eventType === "worktree.updated"
       )
         bootstrap.refetch()
       if (eventType === "global.disposed") Object.keys(children.children).filter(children.active).forEach(queue.push)
@@ -667,7 +667,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       void loadCommands(directory, serverSDK.api.command)
         .then((commands) => setStore("command", commands))
         .catch(() => {})
-    if (eventType === "project.directories.updated") void bootstrap.refetch()
+    if (eventType === "worktree.updated") void bootstrap.refetch()
     const projected = toDirectoryEvent(event)
     if (projected)
       applyDirectoryEvent({

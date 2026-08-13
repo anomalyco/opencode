@@ -1,5 +1,5 @@
 import { Binary } from "@opencode-ai/core/util/binary"
-import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
+import { Worktree } from "@opencode-ai/schema/worktree"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { Message, Part, Project, Todo } from "@/types"
 import type {
@@ -187,10 +187,10 @@ export function applyDirectoryEvent(input: {
       input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
       break
     }
-    case "project.directory.resolved": {
+    case "worktree.resolved": {
       const properties = event.properties as { projectID: string; directory: string; previous: string }
       input.store.session.forEach((session, index) => {
-        const adopted = ProjectDirectories.adopt(
+        const adopted = Worktree.adopt(
           { projectID: session.projectID, directory: session.location.directory },
           properties,
         )

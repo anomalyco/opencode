@@ -1,5 +1,5 @@
 import { Binary } from "@opencode-ai/core/util/binary"
-import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
+import { Worktree } from "@opencode-ai/schema/worktree"
 import { retry } from "@opencode-ai/core/util/retry"
 import type {
   FormInfo,
@@ -940,10 +940,10 @@ export function createServerSession(
       setData("form", event.data.sessionID, (forms) => forms?.filter((form) => form.id !== event.data.id))
       return
     }
-    if (event.type === "project.directory.resolved") {
+    if (event.type === "worktree.resolved") {
       Object.values(data.info).forEach((info) => {
         if (!info) return
-        const adopted = ProjectDirectories.adopt(
+        const adopted = Worktree.adopt(
           { projectID: info.projectID, directory: info.location.directory },
           event.data,
         )
