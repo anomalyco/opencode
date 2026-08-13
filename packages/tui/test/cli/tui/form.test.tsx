@@ -15,7 +15,7 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { createApi, createEventStream, createFetch } from "../../fixture/tui-client"
 
-async function mountForm(root: string, width = 80) {
+async function mountForm(root: string, width = 80, input?: FormWithLocation) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
 
@@ -33,7 +33,7 @@ async function mountForm(root: string, width = 80) {
     events,
   )
   const config = createTuiResolvedConfig()
-  const form = {
+  const form = input ?? ({
     id: "frm_test",
     sessionID: "ses_test",
     title: "Authorization required",
@@ -45,7 +45,7 @@ async function mountForm(root: string, width = 80) {
         title: "Authorize access",
       },
     ],
-  } satisfies FormWithLocation
+  } satisfies FormWithLocation)
   const { FormPrompt } = await import("../../../src/routes/session/form")
 
   function Harness() {
@@ -87,7 +87,7 @@ async function mountForm(root: string, width = 80) {
 
   const app = await testRender(() => <Harness />, { width, height: 20, kittyKeyboard: true })
   app.renderer.start()
-  await app.waitForFrame((frame) => frame.includes("Authorization required"))
+  await app.waitForFrame((frame) => frame.includes(form.title))
   return { app, copied, replies }
 }
 
@@ -125,6 +125,35 @@ test("includes external acknowledgements in progress", async () => {
   try {
     expect(prompt.app.captureCharFrame()).toContain("0/1")
     expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("typing starts a highlighted custom answer without losing the first character", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, {
+    id: "frm_test",
+    sessionID: "ses_test",
+    title: "Choose a target",
+    fields: [
+      {
+        key: "target",
+        type: "string",
+        options: [{ value: "production", label: "Production" }],
+        custom: true,
+      },
+    ],
+  })
+  try {
+    prompt.app.mockInput.pressKey("x")
+    await prompt.app.renderOnce()
+    expect(prompt.app.renderer.currentFocusedEditor).toBeNull()
+
+    prompt.app.mockInput.pressKey("j")
+    await prompt.app.mockInput.typeText("123")
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "123")
+    expect(prompt.app.renderer.currentFocusedEditor?.plainText).toBe("123")
   } finally {
     prompt.app.renderer.destroy()
   }

@@ -69,6 +69,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   })
 
   let textarea: TextareaRenderable | undefined
+  let editingReady = false
   let review: ScrollBoxRenderable | undefined
 
   const message = createMemo(() => {
@@ -176,6 +177,23 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     if (Array.isArray(answer)) return answer.includes(value)
     return answer === value
   })
+
+  onCleanup(
+    keymap.intercept("key", ({ event, consume }) => {
+      if (keymap.mode.current() !== FORM_MODE) return
+      if (textual() || !other() || (store.editing && editingReady)) return
+      if (event.ctrl || event.meta || event.option || event.super || event.hyper) return
+      if (!/^[^\p{C}\p{Zl}\p{Zp}]$/u.test(event.sequence)) return
+      const current = answerField()
+      if (!current) return
+      setStore("custom", { ...store.custom, [current.key]: input() + event.sequence })
+      if (!store.editing) {
+        editingReady = false
+        setStore("editing", true)
+      }
+      consume()
+    }),
+  )
 
   function answer(key: string, value: FormValue | undefined) {
     setStore("answers", { ...store.answers, [key]: value })
@@ -874,8 +892,10 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                             textarea = val
                             val.traits = { status: "ANSWER" }
                             queueMicrotask(() => {
+                              val.setText(input())
                               val.focus()
                               val.gotoLineEnd()
+                              editingReady = true
                             })
                           }}
                           initialValue={input()}

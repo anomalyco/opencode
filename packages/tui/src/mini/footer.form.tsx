@@ -71,6 +71,7 @@ export function RunFormBody(props: {
     return typeof value === "string" ? value : undefined
   })
   let area: TextareaRenderable | undefined
+  let editingReady = false
 
   createEffect(() => {
     setState((previous) => formSync(previous, props.request))
@@ -93,6 +94,7 @@ export function RunFormBody(props: {
       if (!area || area.isDestroyed || !state().editing) return
       area.focus()
       area.cursorOffset = area.plainText.length
+      editingReady = true
     })
   })
 
@@ -209,6 +211,22 @@ export function RunFormBody(props: {
       return
     }
     if (unsupported()) return
+    const character =
+      !event.ctrl &&
+      !event.meta &&
+      !event.option &&
+      !event.super &&
+      !event.hyper &&
+      /^[^\p{C}\p{Zl}\p{Zp}]$/u.test(event.sequence)
+        ? event.sequence
+        : undefined
+    if (custom() && state().selected === rows().length && character && !editingReady) {
+      const next = state().editing ? state() : formPick(state(), props.request)
+      if (!state().editing) editingReady = false
+      setState(formSetDraft(next, current(), formInput(next, current()) + character))
+      event.preventDefault()
+      return
+    }
     if (state().editing) return
     if (
       event.name === "tab" ||

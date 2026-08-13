@@ -277,6 +277,37 @@ test("direct footer preserves a partial multi-field form draft across permission
   }
 })
 
+test("direct footer typing starts a highlighted custom answer without losing the first character", async () => {
+  const request: FormInfo = {
+    id: "frm_custom",
+    sessionID: "ses_child",
+    title: "Choose a target",
+    fields: [
+      {
+        key: "target",
+        type: "string",
+        options: [{ value: "production", label: "Production" }],
+        custom: true,
+      },
+    ],
+  }
+  const app = await renderFooter({ height: 12, view: { type: "form", request } })
+
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("x")
+    await app.renderOnce()
+    expect(app.renderer.currentFocusedEditor).toBeNull()
+
+    app.mockInput.pressKey("j")
+    await app.mockInput.typeText("hello")
+    await app.waitFor(() => app.renderer.currentFocusedEditor?.plainText === "hello")
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("hello")
+  } finally {
+    app.cleanup()
+  }
+})
+
 function expectPaletteList(list: BoxRenderable, selectedIndex: number) {
   expect(list.backgroundColor.toInts()).toEqual((RUN_THEME_FALLBACK.footer.shade as RGBA).toInts())
   expect((list.getChildren()[selectedIndex] as BoxRenderable).backgroundColor.toInts()).toEqual(
