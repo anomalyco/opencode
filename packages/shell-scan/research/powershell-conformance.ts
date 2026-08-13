@@ -41,15 +41,12 @@ for (const command of commands) {
 const unsupported = [
   "$Command value",
   "& $Command value",
-  ". ./script.ps1",
   'Write-Output "$(Get-ChildItem)"',
-  "Get-ChildItem | ForEach-Object { Remove-Item $_ }",
   "return Remove-Item victim",
   "throw Get-ChildItem",
   "[string]$x = Remove-Item victim",
   "Invoke-`\nExpression 'Remove-Item victim'",
   "<# comment #> Remove-Item victim",
-  "using module Evil",
   "#Requires -Modules Evil\nWrite-Output ok",
 ] as const
 for (const source of unsupported) sources.add(source)

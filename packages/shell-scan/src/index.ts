@@ -18,39 +18,6 @@ export type Result =
   | { kind: "scanned"; commands: Array<{ resource: string; words: string[] }> }
   | { kind: "opaque"; reason: OpaqueReason }
 
-const BASH_WRAPPERS = new Set([
-  "-",
-  "time",
-  "command",
-  "builtin",
-  "exec",
-  "env",
-  "sudo",
-  "nice",
-  "nohup",
-  "xargs",
-  "source",
-  ".",
-  "trap",
-  "noglob",
-  "nocorrect",
-  "repeat",
-])
-const BASH_SHELLS = new Set(["bash", "sh", "dash", "zsh", "ksh"])
-const BASH_DYNAMIC_BUILTINS = new Set([
-  "alias",
-  "emulate",
-  "enable",
-  "fc",
-  "hash",
-  "let",
-  "mapfile",
-  "read",
-  "readarray",
-  "shopt",
-  "unalias",
-  "unset",
-])
 const BASH_COMPOUND_KEYWORDS = new Set([
   "if",
   "then",
@@ -68,42 +35,6 @@ const BASH_COMPOUND_KEYWORDS = new Set([
   "coproc",
 ])
 const POWERSHELL_LOCATIONS = new Set(["set-location", "cd", "chdir", "sl", "push-location"])
-const POWERSHELL_SHELLS = new Set(["powershell", "powershell.exe", "pwsh", "pwsh.exe"])
-const POWERSHELL_DYNAMIC_COMMANDS = new Set([
-  "add-pssnapin",
-  "add-type",
-  "cmd",
-  "cmd.exe",
-  "cscript",
-  "cscript.exe",
-  "enter-pssession",
-  "foreach-object",
-  "iex",
-  "import-alias",
-  "import-module",
-  "import-pssession",
-  "invoke-history",
-  "invoke-command",
-  "invoke-expression",
-  "invoke-item",
-  "measure-command",
-  "new-alias",
-  "new-module",
-  "register-objectevent",
-  "register-engineevent",
-  "remove-alias",
-  "remove-module",
-  "remove-pssnapin",
-  "set-alias",
-  "start-job",
-  "start-process",
-  "start-threadjob",
-  "set-psbreakpoint",
-  "trace-command",
-  "where-object",
-  "wscript",
-  "wscript.exe",
-])
 const POWERSHELL_ALIASES: Record<string, string> = {
   "%": "foreach-object",
   "?": "where-object",
@@ -159,14 +90,31 @@ export function scan(input: string): Result {
 
 function scanBash(input: string, depth: number): Result {
   if (input.length > MAX_BASH_INPUT_LENGTH) return { kind: "opaque", reason: "invalid-structure" }
+  const group = bashLeadingGroup(input)
+  if (group) {
+    if (depth >= MAX_SUBSTITUTION_DEPTH) return { kind: "opaque", reason: "invalid-structure" }
+    const nested = scanBash(group.source, depth + 1)
+    if (nested.kind === "opaque") return nested
+    const suffix = input.slice(group.end + 1).trim()
+    if (!suffix) return nested
+    const separator = /^(?:&&|\|\||\|&|[;&|])/.exec(suffix)?.[0]
+    const remaining = separator ? suffix.slice(separator.length).trim() : suffix
+    if (separator && !remaining) return nested
+    const prefixed = separator ? remaining : /^[<>]/.test(remaining) ? `: ${remaining}` : undefined
+    if (!prefixed) return { kind: "opaque", reason: "compound-command" }
+    const rest = scanBash(prefixed, depth + 1)
+    if (rest.kind === "opaque") return rest
+    return {
+      kind: "scanned",
+      commands: nested.commands.concat(rest.commands.filter((command) => command.words[0] !== ":")),
+    }
+  }
   const commands: Array<{ resource: string; words: string[] }> = []
   const nestedCommands: Array<{ resource: string; words: string[] }> = []
   const words: string[] = []
-  const unsafeWords: boolean[] = []
   const assignmentWords: boolean[] = []
   let word = ""
   let wordStarted = false
-  let unsafeWord = false
   let assignmentWord = false
   let segment = 0
   let quote: "single" | "double" | undefined
@@ -179,44 +127,32 @@ function scanBash(input: string, depth: number): Result {
   let heredoc = false
   let redirectTarget = false
   let hasRedirect = false
-  let dynamicAssignment = false
+  let terminalBackground = false
 
   const finishWord = () => {
     if (!wordStarted) return
     if (!redirectTarget) {
       words.push(word)
-      unsafeWords.push(unsafeWord)
       assignmentWords.push(assignmentWord)
     }
     redirectTarget = false
     word = ""
     wordStarted = false
-    unsafeWord = false
     assignmentWord = false
   }
   const finishCommand = (end: number, boundary = false) => {
     finishWord()
     const resource = input.slice(segment, end).trim()
     const name = assignmentWords.findIndex((assignment) => !assignment)
-    if (
-      assignmentWords.some(
-        (assignment, index) =>
-          assignment &&
-          /^(?:PATH|path|CDPATH|cdpath|FPATH|fpath|ENV|BASH_ENV|SHELLOPTS|PS4|PROMPT4|LD_[A-Z0-9_]+|DYLD_[A-Z0-9_]+|GIT_[A-Z_]*COMMAND)\+?=/.test(
-            words[index] ?? "",
-          ),
-      )
-    )
-      dynamicAssignment = true
-    if (name >= 0 && (unsafeWords[name] || /[*?[]/.test(words[name]))) compound = true
+    if (name >= 0 && /[*?[]/.test(words[name])) compound = true
     if (resource && name >= 0)
       commands.push({
         resource,
         words: words.slice(name),
       })
-    else if (hasRedirect || boundary || separated) invalidStructure = true
+    else if (!(assignmentWords.length > 0 && assignmentWords.every(Boolean)) && (hasRedirect || boundary || separated))
+      invalidStructure = true
     words.length = 0
-    unsafeWords.length = 0
     assignmentWords.length = 0
     separated = true
     hasRedirect = false
@@ -226,14 +162,12 @@ function scanBash(input: string, depth: number): Result {
     const char = input[index]
     if (quote === "single") {
       wordStarted = true
-      unsafeWord = true
       if (char === "'") quote = undefined
       else word += char
       continue
     }
     if (quote === "double") {
       wordStarted = true
-      unsafeWord = true
       if (char === '"') quote = undefined
       else if (char === "\\" && index + 1 < input.length) word += input[++index]
       else if ((char === "$" && input[index + 1] === "(") || char === "`") {
@@ -257,19 +191,16 @@ function scanBash(input: string, depth: number): Result {
     if (char === "'") {
       quote = "single"
       wordStarted = true
-      unsafeWord = true
       continue
     }
     if (char === '"') {
       quote = "double"
       wordStarted = true
-      unsafeWord = true
       continue
     }
     if (char === "\\") {
       if (index + 1 >= input.length) return { kind: "opaque", reason: "unterminated-escape" }
       wordStarted = true
-      unsafeWord = true
       if (input[index + 1] === "\n") index++
       else word += input[++index]
       continue
@@ -281,7 +212,17 @@ function scanBash(input: string, depth: number): Result {
       if (result.kind === "opaque") return result
       nestedCommands.push(...result.commands)
       wordStarted = true
-      unsafeWord = true
+      word += input.slice(index, substitution.end + 1)
+      index = substitution.end
+      continue
+    }
+    if ((char === "<" || char === ">") && input[index + 1] === "(") {
+      const substitution = bashParenthesized(input, index + 1)
+      if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH) return { kind: "opaque", reason: "command-substitution" }
+      const result = scanBash(substitution.source, depth + 1)
+      if (result.kind === "opaque") return result
+      nestedCommands.push(...result.commands)
+      wordStarted = true
       word += input.slice(index, substitution.end + 1)
       index = substitution.end
       continue
@@ -313,12 +254,7 @@ function scanBash(input: string, depth: number): Result {
       index += redirect.length - 1
       continue
     }
-    if (
-      "(){}".includes(char) ||
-      (char === "&" && input[index + 1] !== "&" && input[index - 1] !== "|") ||
-      (char === "!" && !wordStarted)
-    )
-      compound = true
+    if ("()".includes(char) || (char === "!" && !wordStarted)) compound = true
     if (/\s/.test(char) && char !== "\n") {
       finishWord()
       continue
@@ -327,95 +263,164 @@ function scanBash(input: string, depth: number): Result {
     const separator =
       (char === "&" && next === "&") || (char === "|" && (next === "|" || next === "&"))
         ? char + next
-        : char === ";" || char === "|" || char === "\n"
+        : char === ";" || char === "|" || char === "&" || char === "\n"
           ? char
           : undefined
     if (separator) {
       finishCommand(index, true)
       if (redirectTarget) invalidRedirect = true
+      terminalBackground = separator === "&" || separator === ";" || separator === "\n"
       index += separator.length - 1
       segment = index + 1
       continue
     }
+    terminalBackground = false
     wordStarted = true
     if (char === "$") dynamicWord = true
-    if (char === "=" && !unsafeWord && /^[A-Za-z_][A-Za-z0-9_]*\+?$/.test(word)) assignmentWord = true
+    if (char === "=" && /^[A-Za-z_][A-Za-z0-9_]*\+?$/.test(word)) assignmentWord = true
     word += char
   }
 
   if (quote) return { kind: "opaque", reason: "unterminated-quote" }
   if (heredoc) return { kind: "opaque", reason: "heredoc" }
-  if (comment === undefined || input.includes("\n", comment)) finishCommand(input.length)
+  if (!terminalBackground && (comment === undefined || input.includes("\n", comment))) finishCommand(input.length)
   if (redirectTarget) invalidRedirect = true
-  if (separated && comment === undefined && !input.slice(segment).trim()) invalidStructure = true
+  if (separated && !terminalBackground && comment === undefined && !input.slice(segment).trim()) invalidStructure = true
   if (invalidStructure) return { kind: "opaque", reason: "invalid-structure" }
   if (invalidRedirect) return { kind: "opaque", reason: "invalid-redirect" }
+  const conditional = bashConditionalCommands(commands)
+  if (conditional) commands.splice(0, commands.length, ...conditional)
   if (compound || commands.some((command) => BASH_COMPOUND_KEYWORDS.has(command.words[0] ?? "")))
     return { kind: "opaque", reason: "compound-command" }
   if (
-    commands.some((command) => command.words[0]?.includes("$")) ||
+    commands.some((command) => /[$`]/.test(command.words[0] ?? "")) ||
     (dynamicWord && commands[0]?.words[0]?.includes("$"))
   )
     return { kind: "opaque", reason: "dynamic-command-name" }
   if (commands.some((command) => command.words[0]?.startsWith("=")))
     return { kind: "opaque", reason: "dynamic-command-name" }
-  if (dynamicAssignment) return { kind: "opaque", reason: "dynamic-command-name" }
-  if (commands.some((command) => BASH_WRAPPERS.has(shellCommandName(command.words[0]))))
-    return { kind: "opaque", reason: "command-wrapper" }
-  if (
-    commands.some((command) => {
-      const name = shellCommandName(command.words[0])
-      if (name === "eval") return true
-      if (BASH_SHELLS.has(name)) return true
-      if (BASH_DYNAMIC_BUILTINS.has(name)) return true
-      if (["declare", "local", "typeset"].includes(name))
-        return command.words.some(
-          (word, index) => index > 0 && (/^-[^-]*[aAi]/.test(word) || (/\[[^\]]*\$/.test(word) && word.includes("="))),
-        )
-      if (name === "printf") return command.words.some((word, index) => index > 0 && word === "-v")
-      if (name === "test" || name === "[") return command.words.some((word) => word === "-v")
-      if (name === "find")
-        return command.words.some(
-          (word) => word === "-exec" || word === "-execdir" || word === "-ok" || word === "-okdir",
-        )
-      if (name === "awk" || name === "gawk" || name === "mawk" || name === "nawk") return true
-      if (name === "jobs") return command.words.some((word, index) => index > 0 && /^-[^-]*x/.test(word))
-      if (name === "sched" || name === "zpty") return true
-      if (name === "autoload") return true
-      if (name === "export")
-        return command.words.some(
-          (word, index) =>
-            index > 0 &&
-            /^(?:PATH|path|CDPATH|cdpath|FPATH|fpath|ENV|BASH_ENV|SHELLOPTS|PS4|PROMPT4|LD_[A-Z0-9_]+|DYLD_[A-Z0-9_]+|GIT_[A-Z_]*COMMAND)\+?=/.test(
-              word,
-            ),
-        )
-      if (name === "set")
-        return command.words.some((word, index) => {
-          if (index === 0) return false
-          const option = word.toLowerCase().replaceAll("_", "")
-          return /^-[^-]*x/.test(word) || option === "xtrace" || option === "-o=xtrace" || option === "promptsubst"
-        })
-      if (name === "setopt" || name === "unsetopt") return true
-      if (name === "print") return command.words.some((word, index) => index > 0 && /^-[^-]*P/.test(word))
-      if (name === "git") return command.words.some((word, index) => index > 0 && /^alias\.[^=]+=!/.test(word))
-      if (name === "python" || name === "python3")
-        return command.words.some((word, index) => index > 0 && (/^-[A-Za-z]*c/.test(word) || word === "-c"))
-      if (name === "perl" || name === "ruby")
-        return command.words.some((word, index) => index > 0 && (/^-[A-Za-z]*e/.test(word) || word === "-e"))
-      if (name === "node" || name === "bun")
-        return command.words.some(
-          (word, index) =>
-            index > 0 &&
-            (/^-[A-Za-z]*[ep]/.test(word) ||
-              ["-e", "-p", "--eval", "--print"].includes(word) ||
-              /^(?:--eval|--print)=/.test(word)),
-        )
-      return false
-    })
-  )
-    return { kind: "opaque", reason: "shell-evaluation" }
   return { kind: "scanned", commands: commands.concat(nestedCommands) }
+}
+
+function bashConditionalCommands(commands: Array<{ resource: string; words: string[] }>) {
+  if (commands[0]?.words[0] !== "if" || commands.at(-1)?.words[0] !== "fi") return
+  const keywords = new Set(["if", "then", "elif", "else", "fi"])
+  if (
+    commands.some((command) => BASH_COMPOUND_KEYWORDS.has(command.words[0] ?? "") && !keywords.has(command.words[0]!))
+  )
+    return
+  const normalized: Array<{ resource: string; words: string[] }> = []
+  let phase: "condition" | "body" | "else" = "condition"
+  let hasCommand = false
+  let sawElse = false
+  for (const [index, command] of commands.entries()) {
+    const keyword = command.words[0]
+    if (!keywords.has(keyword ?? "")) {
+      normalized.push(command)
+      hasCommand = true
+      continue
+    }
+    const offset = command.resource.indexOf(keyword!) + keyword!.length
+    const inline =
+      command.words.length > 1
+        ? { resource: command.resource.slice(offset).trim(), words: command.words.slice(1) }
+        : undefined
+    if (index === 0) {
+      if (inline) normalized.push(inline)
+      hasCommand = Boolean(inline)
+      continue
+    }
+    if (keyword === "then") {
+      if (phase !== "condition" || !hasCommand) return
+      phase = "body"
+      hasCommand = Boolean(inline)
+    }
+    if (keyword === "elif") {
+      if (phase !== "body" || !hasCommand || sawElse) return
+      phase = "condition"
+      hasCommand = Boolean(inline)
+    }
+    if (keyword === "else") {
+      if (phase !== "body" || !hasCommand || sawElse) return
+      phase = "else"
+      sawElse = true
+      hasCommand = Boolean(inline)
+    }
+    if (keyword === "fi") {
+      if (index !== commands.length - 1 || phase === "condition" || !hasCommand || inline) return
+      continue
+    }
+    if (inline) normalized.push(inline)
+  }
+  return normalized
+}
+
+function bashLeadingGroup(input: string) {
+  const start = input.search(/\S/)
+  if (start < 0) return
+  if (input[start] === "{") {
+    const group = bashBraced(input, start)
+    if (!group) return
+    const source = group.source.trim()
+    if (!source.endsWith(";")) return
+    return { source: source.slice(0, -1), end: group.end }
+  }
+  if (input[start] !== "(") return
+  return bashParenthesized(input, start)
+}
+
+function bashBraced(input: string, start: number) {
+  let quote: "single" | "double" | undefined
+  let level = 1
+  for (let index = start + 1; index < input.length; index++) {
+    const char = input[index]
+    if (quote === "single") {
+      if (char === "'") quote = undefined
+      continue
+    }
+    if (char === "\\") {
+      index++
+      continue
+    }
+    if (char === "'") {
+      quote = "single"
+      continue
+    }
+    if (char === '"') {
+      quote = quote === "double" ? undefined : "double"
+      continue
+    }
+    if (char === "{" && quote !== "double") level++
+    if (char !== "}" || quote === "double" || --level) continue
+    return { source: input.slice(start + 1, index), end: index }
+  }
+}
+
+function bashParenthesized(input: string, start: number) {
+  let quote: "single" | "double" | undefined
+  let level = 1
+  for (let index = start + 1; index < input.length; index++) {
+    const char = input[index]
+    if (quote === "single") {
+      if (char === "'") quote = undefined
+      continue
+    }
+    if (char === "\\") {
+      index++
+      continue
+    }
+    if (char === "'") {
+      quote = "single"
+      continue
+    }
+    if (char === '"') {
+      quote = quote === "double" ? undefined : "double"
+      continue
+    }
+    if (char === "(" && quote !== "double") level++
+    if (char !== ")" || quote === "double" || --level) continue
+    return { source: input.slice(start + 1, index), end: index }
+  }
 }
 
 function bashSubstitution(input: string, start: number) {
@@ -443,7 +448,7 @@ function bashSubstitution(input: string, start: number) {
       quote = "single"
       continue
     }
-    if (char === "#" && (index === start + 2 || /[\s;&|()]/.test(input[index - 1] ?? ""))) return
+    if (quote !== "double" && char === "#" && (index === start + 2 || /[\s;&|()]/.test(input[index - 1] ?? ""))) return
     if (char === '"') {
       quote = quote === "double" ? undefined : "double"
       continue
@@ -468,7 +473,14 @@ function bashSubstitution(input: string, start: number) {
 }
 
 export function scanPowerShell(input: string): Result {
+  return scanPowerShellNested(input, 0)
+}
+
+function scanPowerShellNested(input: string, depth: number): Result {
+  if (input.length > MAX_BASH_INPUT_LENGTH || depth >= MAX_SUBSTITUTION_DEPTH)
+    return { kind: "opaque", reason: "invalid-structure" }
   const commands: Array<{ resource: string; words: string[] }> = []
+  const nestedCommands: Array<{ resource: string; words: string[] }> = []
   const words: string[] = []
   let segment = 0
   let word = ""
@@ -547,7 +559,26 @@ export function scanPowerShell(input: string): Result {
       index += redirect.length - 1
       continue
     }
-    if ("{}@()".includes(char) || char === "&" || (char === "." && !started)) dynamic = true
+    if (char === "{" && !started) {
+      const block = powerShellBlock(input, index)
+      if (!block) return { kind: "opaque", reason: "invalid-structure" }
+      const result = scanPowerShellNested(block.source, depth + 1)
+      if (result.kind === "opaque") return result
+      nestedCommands.push(...result.commands)
+      started = true
+      word += input.slice(index, block.end + 1)
+      index = block.end
+      continue
+    }
+    if (char === "}") return { kind: "opaque", reason: "invalid-structure" }
+    if (
+      (char === "&" || char === ".") &&
+      !started &&
+      words.length === 0 &&
+      (/\s/.test(input[index + 1] ?? "") || !input[index + 1])
+    )
+      continue
+    if ("@()".includes(char)) dynamic = true
     if (/\s/.test(char) && char !== "\n" && char !== "\r") {
       finishWord()
       continue
@@ -558,13 +589,13 @@ export function scanPowerShell(input: string): Result {
         ? char + next
         : (char === "&" && next === "&") || (char === "|" && next === "|")
           ? char + next
-          : char === ";" || char === "|" || char === "\n" || char === "\r"
+          : char === ";" || char === "|" || char === "&" || char === "\n" || char === "\r"
             ? char
             : undefined
     if (separator) {
       finishCommand(index, true)
       if (redirectTarget) invalid = true
-      dangling = separator !== ";" && separator !== "\n" && separator !== "\r" && separator !== "\r\n"
+      dangling = ![";", "&", "\n", "\r", "\r\n"].includes(separator)
       index += separator.length - 1
       segment = index + 1
       continue
@@ -584,27 +615,8 @@ export function scanPowerShell(input: string): Result {
       if (head.includes("\\") && !/^[A-Za-z]:\\/.test(head)) return true
       const rawName = shellCommandName(head)
       const name = POWERSHELL_ALIASES[rawName] ?? rawName
-      if (name === "using" && /^(?:module|assembly)$/i.test(command.words[1] ?? "")) return true
       if (head.includes("$") || head.includes("@")) return true
       if (["return", "throw", "exit", "break", "continue"].includes(name) && command.words.length > 1) return true
-      if (POWERSHELL_DYNAMIC_COMMANDS.has(name)) return true
-      if (/\.(?:ps1|psm1|cmd|bat|vbs|wsf)$/i.test(name)) return true
-      if (
-        [
-          "set-item",
-          "new-item",
-          "remove-item",
-          "rename-item",
-          "copy-item",
-          "move-item",
-          "clear-item",
-          "set-content",
-          "add-content",
-          "clear-content",
-          "out-file",
-        ].includes(name)
-      )
-        return command.words.some((word) => /^(?:alias|function|env):/i.test(word))
       if (POWERSHELL_LOCATIONS.has(name ?? ""))
         return (dynamicDirectory =
           command.words.some(
@@ -612,12 +624,51 @@ export function scanPowerShell(input: string): Result {
               index > 0 && (word.includes("(") || (word.includes("$") && !knownPowerShellDirectory(word))),
           ) ||
           command.words.some((word, index) => index > 0 && /^[A-Za-z]+:/.test(word) && !/^[A-Za-z]:[\\/]/.test(word)))
-      if (!POWERSHELL_SHELLS.has(name)) return false
-      return command.words.length > 1
+      return false
     })
   )
     return { kind: "opaque", reason: dynamicDirectory ? "dynamic-directory" : "dynamic-execution" }
-  return { kind: "scanned", commands }
+  return { kind: "scanned", commands: commands.concat(nestedCommands) }
+}
+
+function powerShellBlock(input: string, start: number) {
+  let quote: "single" | "double" | undefined
+  let level = 1
+  for (let index = start + 1; index < input.length; index++) {
+    const char = input[index]
+    if (quote === "single") {
+      if (char === "'" && input[index + 1] === "'") index++
+      else if (char === "'") quote = undefined
+      continue
+    }
+    if (char === "`") {
+      index++
+      continue
+    }
+    if (char === "#" && quote !== "double") {
+      const newline = input.indexOf("\n", index)
+      if (newline < 0) return
+      index = newline
+      continue
+    }
+    if (char === "<" && input[index + 1] === "#" && quote !== "double") {
+      const end = input.indexOf("#>", index + 2)
+      if (end < 0) return
+      index = end + 1
+      continue
+    }
+    if (char === "'") {
+      quote = "single"
+      continue
+    }
+    if (char === '"') {
+      quote = quote === "double" ? undefined : "double"
+      continue
+    }
+    if (char === "{" && quote !== "double") level++
+    if (char !== "}" || quote === "double" || --level) continue
+    return { source: input.slice(start + 1, index), end: index }
+  }
 }
 
 function shellCommandName(word: string | undefined) {

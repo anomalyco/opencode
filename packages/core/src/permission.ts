@@ -204,7 +204,15 @@ const layer = Layer.effect(
         )
       )
         return { effect: "ask" as const, rules }
-      const all = [...rules, ...(yield* savedRules())]
+      const saved = yield* savedRules()
+      if (
+        input.opaque &&
+        input.resources.every((resource) =>
+          saved.some((rule) => Wildcard.match(input.action, rule.action) && rule.resource === resource),
+        )
+      )
+        return { effect: "allow" as const, rules: [...rules, ...saved] }
+      const all = [...rules, ...saved]
       const effects = input.opaque
         ? [evaluateOpaque(input.action, all).effect]
         : input.resources.map((resource) => evaluate(input.action, resource, all).effect)
@@ -218,7 +226,7 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         action: input.action,
         resources: input.resources,
-        save: input.opaque ? undefined : input.save,
+        save: input.opaque ? input.resources : input.save,
         opaque: input.opaque,
         metadata: input.metadata,
         source: input.source,

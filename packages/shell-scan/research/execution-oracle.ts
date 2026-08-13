@@ -115,10 +115,11 @@ for (let iteration = 0; iteration < 2_500; iteration++) {
 const executionCases = [...cases].map(([source, categories], caseIndex) => {
   let occurrence = 0
   const names: string[] = []
-  const unique = source.replace(/\boracle_(?:alpha|beta|gamma|fail)\b/g, () => {
+  const unique = source.replace(/\boracle_(\\?)(?:alpha|beta|gamma|fail)\b/g, (_, escaped: string) => {
     const name = `oracle_${caseIndex}_${occurrence++}`
     names.push(name)
-    return name
+    if (!escaped) return name
+    return name.slice(0, -1) + "\\" + name.at(-1)
   })
   return { source: unique, categories, names }
 })

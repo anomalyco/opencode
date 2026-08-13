@@ -68,7 +68,7 @@ describe("ShellScan generated properties", () => {
     }
   })
 
-  test("fails closed for wrappers and shell evaluators under static prefixes", () => {
+  test("keeps wrappers and shell evaluators at their delegated boundary", () => {
     const prefixes = ["", "FOO=bar ", "FOO=bar BAR=baz "]
     const wrapped = [
       "time git status",
@@ -89,7 +89,7 @@ describe("ShellScan generated properties", () => {
     ]
 
     for (const prefix of prefixes) {
-      for (const command of wrapped) expect(ShellScan.scan(prefix + command).kind).toBe("opaque")
+      for (const command of wrapped) expect(ShellScan.scan(prefix + command).kind).toBe("scanned")
     }
   })
 })
@@ -147,10 +147,9 @@ describe("ShellScan generated PowerShell properties", () => {
     for (const command of mutations) expect(ShellScan.scanPowerShell(command).kind).toBe("opaque")
   })
 
-  test("fails closed for generated dynamic heads, evaluators, and script execution", () => {
-    const commands = [
-      "$Command status",
-      "${Command} status",
+  test("distinguishes dynamic heads from delegated execution", () => {
+    const dynamic = ["$Command status", "${Command} status", "& $Command status"]
+    const delegated = [
       "& git status",
       ". ./script.ps1",
       "Invoke-Expression 'git status'",
@@ -161,10 +160,11 @@ describe("ShellScan generated PowerShell properties", () => {
     const shells = ["powershell", "powershell.exe", "pwsh", "pwsh.exe"]
     const switches = ["-Command", "-c", "-EncodedCommand", "-e", "-File", "-f"]
 
-    for (const command of commands) expect(ShellScan.scanPowerShell(command).kind).toBe("opaque")
+    for (const command of dynamic) expect(ShellScan.scanPowerShell(command).kind).toBe("opaque")
+    for (const command of delegated) expect(ShellScan.scanPowerShell(command).kind).toBe("scanned")
     for (const shell of shells) {
       for (const flag of switches) {
-        expect(ShellScan.scanPowerShell(`${shell} ${flag} 'git status'`).kind).toBe("opaque")
+        expect(ShellScan.scanPowerShell(`${shell} ${flag} 'git status'`).kind).toBe("scanned")
       }
     }
   })

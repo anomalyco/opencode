@@ -157,7 +157,7 @@ function scanCommands(command: string, cwd: string, shell: string, powershell: b
   const result = powershell ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
   if (result.kind === "opaque")
     return {
-      commands: [{ resource: command }],
+      commands: [{ resource: command, save: command }],
       directories: [],
       opaque: true,
       directoryUnknown: true,

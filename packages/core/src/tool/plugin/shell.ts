@@ -196,9 +196,7 @@ export const Plugin = {
                         yield* permission.assert({
                           action: name,
                           resources: parsed.commands.map((command) => command.resource),
-                          save: parsed.opaque
-                            ? undefined
-                            : parsed.commands.flatMap((command) => ("save" in command ? [command.save] : [])),
+                          save: parsed.commands.flatMap((command) => ("save" in command ? [command.save] : [])),
                           opaque: parsed.opaque,
                           sessionID: context.sessionID,
                           agent: context.agent,
