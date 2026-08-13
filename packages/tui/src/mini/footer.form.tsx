@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
-import type { TextareaRenderable } from "@opentui/core"
-import { useKeyboard } from "@opentui/solid"
+import { decodePasteBytes, stripAnsiSequences, type TextareaRenderable } from "@opentui/core"
+import { useKeyboard, usePaste } from "@opentui/solid"
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import {
   createFormBodyState,
@@ -148,6 +148,14 @@ export function RunFormBody(props: {
     if (next.editing || multiple()) return
     if (formSingle(props.request)) submit(next)
   }
+
+  usePaste((event) => {
+    const field = current()
+    if (!field || textual() || !custom() || confirm()) return
+    event.preventDefault()
+    const next = formPick(formSetSelected(state(), rows().length), props.request)
+    setState(formSetDraft(next, field, formInput(next, field) + stripAnsiSequences(decodePasteBytes(event.bytes))))
+  })
 
   const moveField = (direction: -1 | 1) => {
     const next = (state().field + direction + props.request.fields.length + 1) % (props.request.fields.length + 1)

@@ -277,6 +277,41 @@ test("direct footer preserves a partial multi-field form draft across permission
   }
 })
 
+test("direct footer paste opens a custom choice editor without submitting", async () => {
+  const replies: unknown[] = []
+  const app = await renderFooter({
+    height: 12,
+    view: {
+      type: "form",
+      request: {
+        id: "frm_custom_paste",
+        sessionID: "ses_child",
+        title: "Deployment target",
+        fields: [
+          {
+            key: "target",
+            type: "string",
+            options: [{ value: "staging", label: "Staging" }],
+            custom: true,
+          },
+        ],
+      },
+    },
+    onFormReply: (reply) => replies.push(reply),
+  })
+
+  try {
+    await app.renderOnce()
+    await app.mockInput.pasteBracketedText("production\nwest")
+    await app.renderOnce()
+
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("production\nwest")
+    expect(replies).toEqual([])
+  } finally {
+    app.cleanup()
+  }
+})
+
 function expectPaletteList(list: BoxRenderable, selectedIndex: number) {
   expect(list.backgroundColor.toInts()).toEqual((RUN_THEME_FALLBACK.footer.shade as RGBA).toInts())
   expect((list.getChildren()[selectedIndex] as BoxRenderable).backgroundColor.toInts()).toEqual(

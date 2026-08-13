@@ -15,7 +15,7 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { createApi, createEventStream, createFetch } from "../../fixture/tui-client"
 
-async function mountForm(root: string, width = 80) {
+async function mountForm(root: string, width = 80, fields?: FormWithLocation["fields"]) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
 
@@ -37,7 +37,7 @@ async function mountForm(root: string, width = 80) {
     id: "frm_test",
     sessionID: "ses_test",
     title: "Authorization required",
-    fields: [
+    fields: fields ?? [
       {
         key: "authorization",
         type: "external",
@@ -124,6 +124,60 @@ test("includes external acknowledgements in progress", async () => {
   const prompt = await mountForm(tmp.path, 32)
   try {
     expect(prompt.app.captureCharFrame()).toContain("0/1")
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("pasting on a custom choice opens its editor without submitting", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "target",
+      type: "string",
+      options: [{ value: "staging", label: "Staging" }],
+      custom: true,
+    },
+  ])
+  try {
+    await prompt.app.mockInput.pasteBracketedText("production\nwest")
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "production\nwest")
+
+    expect(prompt.app.captureCharFrame()).toContain("Type your own answer")
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("text fields retain default paste behavior", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [{ key: "notes", type: "string" }])
+  try {
+    await prompt.app.mockInput.pasteBracketedText("normal paste")
+
+    expect(prompt.app.renderer.currentFocusedEditor?.plainText).toBe("normal paste")
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("pasting on a choice without custom answers does not open an editor", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "target",
+      type: "string",
+      options: [{ value: "staging", label: "Staging" }],
+    },
+  ])
+  try {
+    await prompt.app.mockInput.pasteBracketedText("production")
+
+    expect(prompt.app.renderer.currentFocusedEditor).toBeNull()
+    expect(prompt.app.captureCharFrame()).not.toContain("production")
     expect(prompt.replies).toEqual([])
   } finally {
     prompt.app.renderer.destroy()

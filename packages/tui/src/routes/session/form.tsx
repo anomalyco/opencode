@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import { useRenderer, useTerminalDimensions } from "@opentui/solid"
-import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
+import { usePaste, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { decodePasteBytes, stripAnsiSequences, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
 import open from "open"
 import { useTheme, useThemes } from "../../context/theme"
 import type { FormField, FormValue } from "@opencode-ai/client"
@@ -266,6 +266,19 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     }
     pick(row.value)
   }
+
+  usePaste((event) => {
+    if (keymap.mode.current() !== FORM_MODE) return
+    const current = answerField()
+    if (!current || textual() || !custom() || confirm()) return
+    event.preventDefault()
+    setStore("selected", rows().length)
+    setStore("custom", {
+      ...store.custom,
+      [current.key]: input() + stripAnsiSequences(decodePasteBytes(event.bytes)),
+    })
+    setStore("editing", true)
+  })
 
   function commitInput(text: string) {
     const current = answerField()
