@@ -82,6 +82,9 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
             url: Argument.string("url").pipe(Argument.withDescription("Console server URL"), Argument.optional),
           },
         }),
+        Spec.make("logout", {
+          description: "Log out of OpenCode Console",
+        }),
       ],
     }),
     Spec.make("auth", {
