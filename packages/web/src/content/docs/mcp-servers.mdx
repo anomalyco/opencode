@@ -510,3 +510,39 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### Layerz
+
+Add the [Layerz MCP server](https://layerz.cc/for-agents) to build, version, and audit
+structured financial models, and export them to Excel.
+
+```json title="opencode.json" {4-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "layerz": {
+      "type": "remote",
+      "url": "https://layerz.cc/mcp",
+      "oauth": {}
+    }
+  }
+}
+```
+
+After adding the configuration, authenticate with Layerz:
+
+```bash
+opencode mcp auth layerz
+```
+
+This will open a browser window to complete the OAuth flow and connect OpenCode to your
+Layerz account.
+
+Once authenticated, you can read and modify models, inspect the dependency graph between
+variables, and export to `.xlsx`.
+
+```txt "use layerz"
+Add a 5% monthly churn assumption to my SaaS forecast and show the impact on ARR. use layerz
+```
