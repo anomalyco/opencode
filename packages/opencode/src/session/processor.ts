@@ -442,7 +442,21 @@ const layer = Layer.effect(
             })
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
-            ctx.assistantMessage.tokens = usage.tokens
+            // Multi-step messages report usage per step. Output tokens are
+            // produced per step and accumulate, while input and cache reads
+            // measure the request sent in the final step (which already
+            // includes all prior steps), so the last step's values are kept.
+            const previous = ctx.assistantMessage.tokens
+            ctx.assistantMessage.tokens = {
+              total: usage.tokens.total,
+              input: usage.tokens.input,
+              output: (previous?.output ?? 0) + usage.tokens.output,
+              reasoning: (previous?.reasoning ?? 0) + usage.tokens.reasoning,
+              cache: {
+                read: usage.tokens.cache.read,
+                write: (previous?.cache.write ?? 0) + usage.tokens.cache.write,
+              },
+            }
             yield* session.updatePart({
               id: PartID.ascending(),
               reason: value.reason,
