@@ -67,12 +67,14 @@ type State = {
   builtin: Tool.Def[]
   task: TaskDef
   read: ReadDef
+  skipped: Array<{ file: string; error: unknown }>
 }
 
 export interface Interface {
   readonly ids: () => Effect.Effect<string[]>
   readonly all: () => Effect.Effect<Tool.Def[]>
   readonly named: () => Effect.Effect<{ task: TaskDef; read: ReadDef }>
+  readonly skipped: () => Effect.Effect<Array<{ file: string; error: unknown }>>
   readonly tools: (model: {
     providerID: ProviderV2.ID
     modelID: ModelV2.ID
@@ -116,6 +118,7 @@ const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
         const custom: Tool.Def[] = []
+        const skipped: Array<{ file: string; error: unknown }> = []
 
         function fromPlugin(id: string, def: ToolDefinition): Tool.Def {
           // Plugin tools still expose Zod args publicly; keep that compatibility
@@ -184,8 +187,24 @@ const layer = Layer.effect(
           const namespace = path.basename(match, path.extname(match))
           // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
           // Import it as `file://` so Node on Windows accepts the dynamic import.
-          const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
-          for (const [id, def] of Object.entries(mod)) {
+          //
+          // A failing tool file (e.g. its `@opencode-ai/plugin` dependency could not be
+          // installed) must not take down the whole registry — warn and skip instead.
+          const loaded = yield* Effect.promise(async () => {
+            try {
+              const mod = await import(pathToFileURL(match).href)
+              return { ok: true as const, mod }
+            } catch (error) {
+              return { ok: false as const, error }
+            }
+          })
+          if (!loaded.ok) {
+            const file = pathToFileURL(match).href
+            yield* Effect.logWarning("failed to load tool, skipping", { file, error: loaded.error })
+            skipped.push({ file, error: loaded.error })
+            continue
+          }
+          for (const [id, def] of Object.entries(loaded.mod)) {
             if (!isPluginTool(def)) continue
             custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
           }
@@ -223,6 +242,7 @@ const layer = Layer.effect(
 
         return {
           custom,
+          skipped,
           builtin: [
             tool.invalid,
             ...(questionEnabled ? [tool.question] : []),
@@ -251,6 +271,11 @@ const layer = Layer.effect(
     const all: Interface["all"] = Effect.fn("ToolRegistry.all")(function* () {
       const s = yield* InstanceState.get(state)
       return [...s.builtin, ...s.custom] as Tool.Def[]
+    })
+
+    const skipped: Interface["skipped"] = Effect.fn("ToolRegistry.skipped")(function* () {
+      const s = yield* InstanceState.get(state)
+      return s.skipped
     })
 
     const ids: Interface["ids"] = Effect.fn("ToolRegistry.ids")(function* () {
@@ -339,7 +364,7 @@ const layer = Layer.effect(
       return { task: s.task, read: s.read }
     })
 
-    return Service.of({ ids, all, named, tools })
+    return Service.of({ ids, all, named, skipped, tools })
   }),
 )
 
