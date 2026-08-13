@@ -153,6 +153,21 @@ it.instance(
 )
 
 it.instance(
+  "enabled_providers skips auth loaders for filtered providers",
+  Effect.gen(function* () {
+    yield* setProcessEnv(
+      "OPENCODE_AUTH_CONTENT",
+      JSON.stringify({
+        google: { type: "oauth", refresh: "dummy", access: "dummy", expires: 9999999999999 },
+      }),
+    )
+    const providers = yield* list
+    expect(providers[ProviderV2.ID.google]).toBeUndefined()
+  }),
+  { config: { enabled_providers: ["anthropic"] } },
+)
+
+it.instance(
   "model whitelist filters models for provider",
   Effect.gen(function* () {
     yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
