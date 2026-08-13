@@ -10,6 +10,10 @@ import { Resource } from "@opencode-ai/console-resource"
 import { LiteData } from "@opencode-ai/console-core/lite.js"
 import { BlackData } from "@opencode-ai/console-core/black.js"
 import { Referral } from "@opencode-ai/console-core/referral.js"
+import {
+  liteCheckoutSubscriptionToProvision,
+  liteSubscriptionProvisioningData,
+} from "./lite-subscription.js"
 
 export async function POST(input: APIEvent) {
   const body = await Billing.stripe().webhooks.constructEventAsync(
@@ -20,6 +24,10 @@ export async function POST(input: APIEvent) {
   console.log(body.type, JSON.stringify(body, null, 2))
 
   return (async () => {
+    if (body.type === "checkout.session.completed" || body.type === "checkout.session.async_payment_succeeded") {
+      const subscriptionID = liteCheckoutSubscriptionToProvision(body.type, body.data.object)
+      if (subscriptionID) await provisionLiteSubscription(subscriptionID)
+    }
     if (body.type === "customer.updated") {
       // check default payment method changed
       const prevInvoiceSettings = body.data.previous_attributes?.invoice_settings ?? {}
@@ -105,85 +113,6 @@ export async function POST(input: APIEvent) {
         })
       })
     }
-    if (body.type === "customer.subscription.created") {
-      const type = body.data.object.metadata?.type
-      if (type === "lite") {
-        const workspaceID = body.data.object.metadata?.workspaceID
-        const userID = body.data.object.metadata?.userID
-        const userEmail = body.data.object.metadata?.userEmail
-        const coupon = body.data.object.metadata?.coupon
-        const customerID = body.data.object.customer as string
-        const invoiceID = body.data.object.latest_invoice as string
-        const subscriptionID = body.data.object.id as string
-        const paymentMethodID = body.data.object.default_payment_method as string
-
-        if (!workspaceID) throw new Error("Workspace ID not found")
-        if (!userID) throw new Error("User ID not found")
-        if (!customerID) throw new Error("Customer ID not found")
-        if (!invoiceID) throw new Error("Invoice ID not found")
-        if (!subscriptionID) throw new Error("Subscription ID not found")
-        if (!paymentMethodID) throw new Error("Payment method ID not found")
-
-        // get payment method for the payment intent
-        const paymentMethod = await Billing.stripe().paymentMethods.retrieve(paymentMethodID)
-        await Actor.provide("system", { workspaceID }, async () => {
-          // look up current billing
-          const billing = await Billing.get()
-          if (!billing) throw new Error(`Workspace with ID ${workspaceID} not found`)
-          if (billing.customerID && billing.customerID !== customerID) throw new Error("Customer ID mismatch")
-
-          // set customer metadata
-          if (!billing?.customerID) {
-            await Billing.stripe().customers.update(customerID, {
-              metadata: {
-                workspaceID,
-              },
-            })
-          }
-
-          await Database.transaction(async (tx) => {
-            await tx
-              .update(BillingTable)
-              .set({
-                customerID,
-                liteSubscriptionID: subscriptionID,
-                lite: {},
-                paymentMethodID: paymentMethod.id,
-                paymentMethodLast4: paymentMethod.card?.last4 ?? null,
-                paymentMethodType: paymentMethod.type,
-              })
-              .where(eq(BillingTable.workspaceID, workspaceID))
-
-            await tx.insert(LiteTable).values({
-              workspaceID,
-              id: Identifier.create("lite"),
-              userID: userID,
-            })
-
-            if (userEmail) {
-              if (coupon === LiteData.firstMonth50Coupon) {
-                await Billing.redeemCoupon(userEmail, "GO1MONTH50")
-              } else if (coupon === LiteData.firstMonth100Coupon) {
-                await Billing.redeemCoupon(userEmail, "GOFREEMONTH")
-              } else if (coupon === LiteData.threeMonths100Coupon) {
-                await Billing.redeemCoupon(userEmail, "GO3MONTHS100")
-              } else if (coupon === LiteData.sixMonths100Coupon) {
-                await Billing.redeemCoupon(userEmail, "GO6MONTHS100")
-              } else if (coupon === LiteData.twelveMonths100Coupon) {
-                await Billing.redeemCoupon(userEmail, "GO12MONTHS100")
-              }
-            }
-          })
-
-          await Referral.completeFromLiteSubscription({
-            workspaceID,
-            userID,
-          }).catch((error) => {
-            console.error("Referral sync failed", error)
-          })
-        })
-      }
-    }
     if (body.type === "customer.subscription.updated" && body.data.object.status === "incomplete_expired") {
       const subscriptionID = body.data.object.id
       if (!subscriptionID) throw new Error("Subscription ID not found")
@@ -220,6 +149,10 @@ export async function POST(input: APIEvent) {
         if (!customerID) throw new Error("Customer ID not found")
         if (!invoiceID) throw new Error("Invoice ID not found")
         if (!subscriptionID) throw new Error("Subscription ID not found")
+
+        if (body.data.object.billing_reason === "subscription_create" && productID === LiteData.productID()) {
+          await provisionLiteSubscription(subscriptionID)
+        }
 
         // get coupon id from subscription
         const invoice = await Billing.stripe().invoices.retrieve(invoiceID, {
@@ -377,4 +310,93 @@ export async function POST(input: APIEvent) {
     .catch((error: any) => {
       return Response.json({ message: error.message }, { status: 500 })
     })
+}
+
+async function provisionLiteSubscription(subscriptionID: string) {
+  const stripe = Billing.stripe()
+  const subscription = liteSubscriptionProvisioningData(await stripe.subscriptions.retrieve(subscriptionID))
+  if (!subscription) return
+
+  await Actor.provide("system", { workspaceID: subscription.workspaceID }, async () => {
+    const billing = await Billing.get()
+    if (!billing) throw new Error(`Workspace with ID ${subscription.workspaceID} not found`)
+    if (billing.customerID && billing.customerID !== subscription.customerID) throw new Error("Customer ID mismatch")
+    if (billing.liteSubscriptionID === subscription.subscriptionID) return
+
+    const paymentMethod = subscription.paymentMethodID
+      ? await stripe.paymentMethods.retrieve(subscription.paymentMethodID)
+      : undefined
+
+    if (!billing.customerID) {
+      await stripe.customers.update(subscription.customerID, {
+        metadata: {
+          workspaceID: subscription.workspaceID,
+        },
+      })
+    }
+
+    const provisioned = await Database.transaction(async (tx) => {
+      const current = await tx
+        .select({
+          customerID: BillingTable.customerID,
+          liteSubscriptionID: BillingTable.liteSubscriptionID,
+        })
+        .from(BillingTable)
+        .where(eq(BillingTable.workspaceID, subscription.workspaceID))
+        .for("update")
+        .then((rows) => rows[0])
+      if (!current) throw new Error(`Workspace with ID ${subscription.workspaceID} not found`)
+      if (current.customerID && current.customerID !== subscription.customerID) throw new Error("Customer ID mismatch")
+      if (current.liteSubscriptionID === subscription.subscriptionID) return false
+      if (current.liteSubscriptionID) throw new Error("Workspace already has another Go subscription")
+
+      await tx
+        .update(BillingTable)
+        .set({
+          customerID: subscription.customerID,
+          liteSubscriptionID: subscription.subscriptionID,
+          lite: {},
+          ...(paymentMethod
+            ? {
+                paymentMethodID: paymentMethod.id,
+                paymentMethodLast4: paymentMethod.card?.last4 ?? null,
+                paymentMethodType: paymentMethod.type,
+              }
+            : {}),
+        })
+        .where(eq(BillingTable.workspaceID, subscription.workspaceID))
+
+      await tx
+        .insert(LiteTable)
+        .ignore()
+        .values({
+          workspaceID: subscription.workspaceID,
+          id: Identifier.create("lite"),
+          userID: subscription.userID,
+        })
+
+      if (subscription.userEmail) {
+        if (subscription.coupon === LiteData.firstMonth50Coupon) {
+          await Billing.redeemCoupon(subscription.userEmail, "GO1MONTH50")
+        } else if (subscription.coupon === LiteData.firstMonth100Coupon) {
+          await Billing.redeemCoupon(subscription.userEmail, "GOFREEMONTH")
+        } else if (subscription.coupon === LiteData.threeMonths100Coupon) {
+          await Billing.redeemCoupon(subscription.userEmail, "GO3MONTHS100")
+        } else if (subscription.coupon === LiteData.sixMonths100Coupon) {
+          await Billing.redeemCoupon(subscription.userEmail, "GO6MONTHS100")
+        } else if (subscription.coupon === LiteData.twelveMonths100Coupon) {
+          await Billing.redeemCoupon(subscription.userEmail, "GO12MONTHS100")
+        }
+      }
+      return true
+    })
+    if (!provisioned) return
+
+    await Referral.completeFromLiteSubscription({
+      workspaceID: subscription.workspaceID,
+      userID: subscription.userID,
+    }).catch((error) => {
+      console.error("Referral sync failed", error)
+    })
+  })
 }
