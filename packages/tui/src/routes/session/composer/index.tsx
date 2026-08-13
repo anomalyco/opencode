@@ -94,6 +94,7 @@ export function Composer(props: ComposerProps) {
   Keymap.createLayer(() => ({
     mode: "composer",
     enabled: () => props.open,
+    priority: 1,
     commands: [
       { bind: "left", title: "Previous tab", group: "Composer", run: () => switchTab(-1) },
       { bind: "right", title: "Next tab", group: "Composer", run: () => switchTab(1) },

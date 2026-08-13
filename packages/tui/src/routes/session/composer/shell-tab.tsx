@@ -23,19 +23,6 @@ export function ShellTab(props: { sessionID: string }) {
 
   const selectedEntry = createMemo(() => entries()[store.selected])
 
-  const keymap = Keymap.use()
-  createEffect(() => {
-    if (!composer.active("shell")) return
-    const cleanup = keymap.intercept("key", ({ event, consume }) => {
-      if (event.name !== "d" || !event.ctrl) return
-      if (!shortcuts.list("composer.shell.kill").includes("ctrl+d")) return
-      if (!selectedEntry()) return
-      consume()
-      keymap.dispatch("composer.shell.kill")
-    })
-    onCleanup(cleanup)
-  })
-
   createEffect(() => {
     if (store.selected >= entries().length) setStore("selected", Math.max(0, entries().length - 1))
   })
@@ -63,6 +50,7 @@ export function ShellTab(props: { sessionID: string }) {
   Keymap.createLayer(() => ({
     mode: "composer",
     enabled: () => composer.active("shell"),
+    priority: 1,
     commands: [
       {
         id: "composer.shell.up",

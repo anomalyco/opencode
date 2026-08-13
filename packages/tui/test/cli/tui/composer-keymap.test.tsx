@@ -95,7 +95,6 @@ async function renderComposer(
       <TestTuiContexts directory={directory}>
         <ConfigProvider config={createTuiResolvedConfig({ keybinds })}>
           <Keymap.Provider>
-            <AppExit />
             <ClientProvider api={createApi(calls.fetch)}>
               <DataProvider>
                 <LocationProvider>
@@ -107,6 +106,7 @@ async function renderComposer(
                 </LocationProvider>
               </DataProvider>
             </ClientProvider>
+            <AppExit />
           </Keymap.Provider>
         </ConfigProvider>
       </TestTuiContexts>
@@ -173,11 +173,13 @@ test("disabled shell bindings have no component fallbacks", async () => {
   }
 })
 
-test("shell kill binding overrides app exit", async () => {
-  const composer = await renderComposer("shell", {}, true)
+test("configured composer bindings work with a focused textarea", async () => {
+  const composer = await renderComposer("subagents", { "composer.shell.kill": "ctrl+u" }, true)
   try {
+    composer.app.mockInput.pressArrow("right")
+    await composer.app.renderOnce()
     expect(composer.app.captureCharFrame()).toContain("bun test")
-    composer.app.mockInput.pressKey("d", { ctrl: true })
+    composer.app.mockInput.pressKey("u", { ctrl: true })
     await wait(() => composer.removed.length === 1)
     expect(composer.removed).toEqual(["sh-a"])
   } finally {
