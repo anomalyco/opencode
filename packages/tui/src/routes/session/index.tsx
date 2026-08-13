@@ -534,84 +534,57 @@ export function Session() {
     }, 50)
   }
 
+  function moveTranscript(delta: number) {
+    clearMessageNavigation()
+    if (delta >= 0 || !revealOlderRows(delta)) {
+      scroll.scrollBy(delta)
+      updateAwayFromBottom()
+    }
+    dialog.clear()
+  }
+
   const globalCommands = [
     {
       id: "session.page.up",
       title: "Page up",
       group: "Session",
       palette: undefined,
-      run: () => {
-        clearMessageNavigation()
-        if (!revealOlderRows(-scroll.height / 2)) {
-          scroll.scrollBy(-scroll.height / 2)
-          updateAwayFromBottom()
-        }
-        dialog.clear()
-      },
+      run: () => moveTranscript(-scroll.height / 2),
     },
     {
       id: "session.page.down",
       title: "Page down",
       group: "Session",
       palette: undefined,
-      run: () => {
-        clearMessageNavigation()
-        scroll.scrollBy(scroll.height / 2)
-        updateAwayFromBottom()
-        dialog.clear()
-      },
+      run: () => moveTranscript(scroll.height / 2),
     },
     {
       id: "session.line.up",
       title: "Line up",
       group: "Session",
       palette: undefined,
-      run: () => {
-        clearMessageNavigation()
-        if (!revealOlderRows(-1)) {
-          scroll.scrollBy(-1)
-          updateAwayFromBottom()
-        }
-        dialog.clear()
-      },
+      run: () => moveTranscript(-1),
     },
     {
       id: "session.line.down",
       title: "Line down",
       group: "Session",
       palette: undefined,
-      run: () => {
-        clearMessageNavigation()
-        scroll.scrollBy(1)
-        updateAwayFromBottom()
-        dialog.clear()
-      },
+      run: () => moveTranscript(1),
     },
     {
       id: "session.half.page.up",
       title: "Half page up",
       group: "Session",
       palette: undefined,
-      run: () => {
-        clearMessageNavigation()
-        if (!revealOlderRows(-scroll.height / 4)) {
-          scroll.scrollBy(-scroll.height / 4)
-          updateAwayFromBottom()
-        }
-        dialog.clear()
-      },
+      run: () => moveTranscript(-scroll.height / 4),
     },
     {
       id: "session.half.page.down",
       title: "Half page down",
       group: "Session",
       palette: undefined,
-      run: () => {
-        clearMessageNavigation()
-        scroll.scrollBy(scroll.height / 4)
-        updateAwayFromBottom()
-        dialog.clear()
-      },
+      run: () => moveTranscript(scroll.height / 4),
     },
   ]
 
