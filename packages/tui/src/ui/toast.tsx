@@ -52,7 +52,7 @@ function ToastSurface(props: {
         paddingRight={2}
         paddingTop={1}
         paddingBottom={1}
-        backgroundColor={hovered() ? tint(theme.background.default, theme.text.default, 0.1) : theme.background.default}
+        backgroundColor={hovered() ? tint(theme.background.default, theme.text.default, 0.04) : theme.background.default}
       >
         <Show
           when={props.toast.title}
