@@ -5639,9 +5639,30 @@ export type WorktreeListOutput = WorktreeList
 
 export type WorktreeCreateInput = {
   readonly projectID: { readonly projectID: string }["projectID"]
-  readonly strategy: { readonly strategy: string; readonly directory: string; readonly name?: string }["strategy"]
-  readonly directory: { readonly strategy: string; readonly directory: string; readonly name?: string }["directory"]
-  readonly name?: { readonly strategy: string; readonly directory: string; readonly name?: string }["name"]
+  readonly strategy: {
+    readonly strategy: string
+    readonly sourceDirectory?: string
+    readonly directory: string
+    readonly name?: string
+  }["strategy"]
+  readonly sourceDirectory?: {
+    readonly strategy: string
+    readonly sourceDirectory?: string
+    readonly directory: string
+    readonly name?: string
+  }["sourceDirectory"]
+  readonly directory: {
+    readonly strategy: string
+    readonly sourceDirectory?: string
+    readonly directory: string
+    readonly name?: string
+  }["directory"]
+  readonly name?: {
+    readonly strategy: string
+    readonly sourceDirectory?: string
+    readonly directory: string
+    readonly name?: string
+  }["name"]
 }
 
 export type WorktreeCreateOutput = WorktreeInfo

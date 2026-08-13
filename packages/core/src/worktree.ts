@@ -213,9 +213,10 @@ const layer = Layer.effect(
 
     const strategies = () => Array.from(registry.values())
 
-    const source = Effect.fnUntraced(function* (projectID: ProjectSchema.ID) {
+    const source = Effect.fnUntraced(function* (input: CreateInput) {
+      if (input.sourceDirectory) return yield* canonical(fs, input.sourceDirectory)
       // Prefer canonical roots (no strategy) over managed worktrees so the source is deterministic
-      const candidates = (yield* ops.list(projectID)).toSorted(
+      const candidates = (yield* ops.list(input.projectID)).toSorted(
         (a, b) => Number(a.strategy !== undefined) - Number(b.strategy !== undefined),
       )
       const checked = yield* Effect.forEach(
@@ -227,7 +228,7 @@ const layer = Layer.effect(
         { concurrency: "unbounded" },
       )
       const found = checked.find((directory) => directory !== undefined)
-      if (!found) return yield* new SourceDirectoryNotFoundError({ projectID })
+      if (!found) return yield* new SourceDirectoryNotFoundError({ projectID: input.projectID })
       return found
     })
 
@@ -239,7 +240,7 @@ const layer = Layer.effect(
 
     const create = Effect.fn("Worktree.create")(function* (input: CreateInput) {
       const selected = yield* getStrategy(input.strategy)
-      const sourceDirectory = yield* source(input.projectID)
+      const sourceDirectory = yield* source(input)
       yield* fs.makeDirectory(input.directory, { recursive: true }).pipe(Effect.orDie)
       const name = input.name ?? Slug.create()
       let suffix = 1

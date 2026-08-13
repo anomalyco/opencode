@@ -11490,6 +11490,9 @@
                   "strategy": {
                     "type": "string"
                   },
+                  "sourceDirectory": {
+                    "type": "string"
+                  },
                   "directory": {
                     "type": "string"
                   },

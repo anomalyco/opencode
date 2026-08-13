@@ -13,6 +13,7 @@ import { Bus } from "@opencode-ai/core/bus"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Worktree } from "@opencode-ai/core/worktree"
+import { WorktreeDirectory } from "@opencode-ai/core/worktree/directory"
 import { WorktreeTable } from "@opencode-ai/core/worktree/sql"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -186,6 +187,46 @@ describe("Worktree", () => {
 
       expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
       expect(yield* Effect.promise(() => Bun.file(target).exists())).toBe(false)
+    }),
+  )
+
+  it.live("creates from an explicit source directory", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktree = yield* Worktree.Service
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-explicit-source"))
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
+      )
+      // An untracked source works: rows for the project are not consulted.
+      yield* input.db
+        .delete(WorktreeTable)
+        .where(eq(WorktreeTable.project_id, input.projectID))
+        .run()
+        .pipe(Effect.orDie)
+
+      const created = yield* worktree.create({
+        projectID: input.projectID,
+        strategy: gitWorktree,
+        sourceDirectory: input.sourceDirectory,
+        directory: parent,
+        name: "explicit",
+      })
+
+      expect(created.directory).toBe(abs(path.join(parent, "explicit")))
+      yield* worktree.remove({ projectID: input.projectID, directory: created.directory, force: false })
+
+      const missing = yield* worktree
+        .create({
+          projectID: input.projectID,
+          strategy: gitWorktree,
+          sourceDirectory: abs(path.join(temp, "does-not-exist")),
+          directory: parent,
+          name: "explicit",
+        })
+        .pipe(Effect.flip)
+      expect(missing).toBeInstanceOf(WorktreeDirectory.DirectoryUnavailableError)
     }),
   )
 

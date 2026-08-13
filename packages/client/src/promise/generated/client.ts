@@ -1741,7 +1741,12 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/worktree`,
-            body: { strategy: input["strategy"], directory: input["directory"], name: input["name"] },
+            body: {
+              strategy: input["strategy"],
+              sourceDirectory: input["sourceDirectory"],
+              directory: input["directory"],
+              name: input["name"],
+            },
             successStatus: 200,
             declaredStatuses: [400, 401],
             empty: false,
