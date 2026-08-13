@@ -22,8 +22,12 @@ function bigrams(text: string) {
 export function similarity(a: string, b: string): number {
   const na = normalize(a)
   const nb = normalize(b)
-  if (na === nb) return 1
+  // Empty on both sides is absence of output, not repetition of it. Returning
+  // 1 here made the loop's no-progress guard read a turn that produced nothing
+  // as "the model said the same thing again", so three empty turns in a row
+  // finalized a healthy loop as "stalled" within seconds.
   if (!na || !nb) return 0
+  if (na === nb) return 1
   const ga = bigrams(na)
   const gb = bigrams(nb)
   if (ga.size === 0 || gb.size === 0) return 0
