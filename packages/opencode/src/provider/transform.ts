@@ -84,6 +84,8 @@ function sdkKey(npm: string): string | undefined {
       return "gateway"
     case "@openrouter/ai-sdk-provider":
       return "openrouter"
+    case "merge-gateway-ai-sdk-provider":
+      return "mergeGateway"
     case "ai-gateway-provider":
       // ai-gateway-provider/unified wraps createOpenAICompatible({ name: "Unified" }),
       // and @ai-sdk/openai-compatible parses compatibleOptions from one of
@@ -1772,6 +1774,7 @@ function reasoningEffort(model: Provider.Model, effort: string) {
     case "@ai-sdk/togetherai":
     case "venice-ai-sdk-provider":
     case "ai-gateway-provider":
+    case "merge-gateway-ai-sdk-provider":
       return { reasoningEffort: effort }
     case "@ai-sdk/cohere":
     case "@ai-sdk/perplexity":
