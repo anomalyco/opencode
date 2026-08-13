@@ -120,7 +120,9 @@ describe("opencode-drive", () => {
     expect(initStatus).toBe(0)
     const artifacts = initOutput.trim()
     expect(await Bun.file(join(artifacts, "files", ".opencode", "opencode.jsonc")).exists()).toBe(true)
-    expect(await Bun.file(join(artifacts, "files", ".opencode", "opencode.jsonc")).json()).toMatchObject({
+    expect(
+      Bun.JSONC.parse(await Bun.file(join(artifacts, "files", ".opencode", "opencode.jsonc")).text()),
+    ).toMatchObject({
       model: "simulation/gpt-sim-model",
       snapshots: false,
       permissions: [{ action: "*", resource: "*", effect: "allow" }],
@@ -765,13 +767,15 @@ describe("opencode-drive", () => {
       gitWriteError: expect.stringContaining("must not modify Git metadata"),
       matches: true,
     })
-    expect(await Bun.file(join(artifacts, "files", ".opencode", "opencode.jsonc")).json()).toMatchObject({
+    expect(
+      Bun.JSONC.parse(await Bun.file(join(artifacts, "files", ".opencode", "opencode.jsonc")).text()),
+    ).toMatchObject({
       autoupdate: false,
       model: "simulation/gpt-sim-model",
       providers: { simulation: { models: { "gpt-sim-model": {} } } },
       test: { declared: true, setup: true },
     })
-    expect(await Bun.file(join(artifacts, "files", ".opencode", "tui.jsonc")).json()).toEqual({
+    expect(Bun.JSONC.parse(await Bun.file(join(artifacts, "files", ".opencode", "tui.jsonc")).text())).toEqual({
       test: { declared: true, setup: true },
     })
     const backendEvents = (await Bun.file(join(artifacts, "backend-events.jsonl")).text())
