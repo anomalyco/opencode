@@ -15,7 +15,7 @@ describe("instance configuration", () => {
     const root = await initializeInstance()
     artifacts.push(root)
 
-    expect(await Bun.file(join(root, "files", ".opencode", "opencode.jsonc")).json()).toMatchObject({
+    expect(Bun.JSONC.parse(await Bun.file(join(root, "files", ".opencode", "opencode.jsonc")).text())).toMatchObject({
       model: "simulation/gpt-sim-model",
       providers: {
         simulation: {
