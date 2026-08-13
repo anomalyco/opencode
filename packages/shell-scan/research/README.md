@@ -50,6 +50,6 @@ Add one syntax class only when representative commands show meaningful opacity. 
 | Replace Bash tree-sitter | 1.38 MB grammar, ~69k parity scans/sec | Pure TS, ~149k parity scans/sec | Keep |
 | Replace PowerShell tree-sitter | 0.98 MB grammar + 0.21 MB shared runtime | Pure TS; no Core parser assets | Keep |
 | Combined scanner bundle | 2.57 MB parser assets | 10.1 KB minified, 3.6 KB gzip | Keep |
-| Security hardening | Initial portable subset | 397 scanner tests, 685 assertions, zero known unsafe shell-grammar corpus cases | Keep |
+| Security hardening | Initial portable subset | 400 scanner tests, 689 assertions, zero known unsafe shell-grammar corpus cases | Keep |
 
 The TUI's independent tree-sitter grammar remains for syntax highlighting. Core has no tree-sitter runtime dependency.

@@ -519,8 +519,10 @@ export function scanPowerShell(input: string): Result {
       if (/^#requires\b/i.test(input.slice(index))) return { kind: "opaque", reason: "dynamic-execution" }
       finishCommand(index)
       comment = true
-      const newline = input.indexOf("\n", index)
+      const endings = [input.indexOf("\n", index), input.indexOf("\r", index)].filter((ending) => ending >= 0)
+      const newline = endings.length > 0 ? Math.min(...endings) : -1
       if (newline === -1) break
+      comment = false
       index = newline
       segment = newline + 1
       continue
@@ -558,7 +560,7 @@ export function scanPowerShell(input: string): Result {
   }
 
   if (quote) return { kind: "opaque", reason: "unterminated-quote" }
-  if (!comment || input.includes("\n")) finishCommand(input.length)
+  if (!comment) finishCommand(input.length)
   if (redirectTarget || invalid || dangling) return { kind: "opaque", reason: "invalid-structure" }
   if (
     dynamic ||
@@ -605,7 +607,8 @@ function shellCommandName(word: string | undefined) {
 }
 
 function knownPowerShellDirectory(word: string) {
-  return /^(?:\$(?:PWD|HOME|PSHOME)|\$env:[A-Za-z_][A-Za-z0-9_]*|\$\{env:[^}]+\})(?:[\\/]|$)/i.test(word)
+  const variable = /^(?:\$(?:PWD|HOME|PSHOME)|\$env:[A-Za-z_][A-Za-z0-9_]*|\$\{env:[^}]+\})(?:[\\/]|$)/i.exec(word)
+  return Boolean(variable) && !word.slice(variable?.[0].length).includes("$")
 }
 
 function powerShellRedirect(input: string, index: number) {

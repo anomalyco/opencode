@@ -149,6 +149,8 @@ describe("ShellScan adversarial corpus", () => {
     "pushd Alias:; si harmless Remove-Item; harmless victim",
     "Invoke-`\nExpression 'Remove-Item victim'",
     "<# ignored #> Remove-Item victim",
+    "Set-Location $HOME/$target; Get-ChildItem",
+    "Push-Location $env:TEMP/$target; Get-ChildItem",
   ])("fails closed for secondary PowerShell execution: %s", (input) => {
     expect(ShellScan.scanPowerShell(input).kind).toBe("opaque")
   })

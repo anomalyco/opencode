@@ -173,6 +173,13 @@ describe("ShellScan PowerShell", () => {
     expect(result.commands.map((command) => command.words[0])).toEqual(["Get-ChildItem", "Remove-Item"])
   })
 
+  test("ends comments at carriage returns", () => {
+    const result = ShellScan.scanPowerShell("# comment\rRemove-Item victim")
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") return
+    expect(result.commands.map((command) => command.words[0])).toEqual(["Remove-Item"])
+  })
+
   test("scans static commands and pipelines", () => {
     expect(ShellScan.scanPowerShell("Get-ChildItem; Write-Output 'done' | Out-File output.txt")).toEqual({
       kind: "scanned",
