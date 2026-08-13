@@ -1124,7 +1124,7 @@ export function Session() {
                 {(height) => <box id={NAVIGATION_SLACK_ID} height={height()} flexShrink={0} />}
               </Show>
             </scrollbox>
-            <box flexShrink={0} position="relative">
+            <box flexShrink={0} position="relative" overflow="visible">
               <Show when={config.experimental?.tab_scroll === true && awayFromBottom()}>
                 <box position="absolute" top={-1} right={0} height={1} zIndex={1}>
                   <text fg={theme.text.subdued} onMouseUp={toBottom}>
