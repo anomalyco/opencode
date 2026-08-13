@@ -2872,16 +2872,8 @@ function Shell(props: ToolProps) {
   })
   const maxLines = 10
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
-  const prompt = createMemo(() => (workdir() && workdir() !== "." ? `${workdir()}$` : "$"))
-  const input = createMemo(() => {
-    const cmd = command()
-    if (!cmd) return ""
-    // While running, the workdir prompt shares the spinner's text column; when
-    // settled, the prompt renders as its own column so wrapped command lines
-    // keep a stable hanging indent instead of jumping to the card inset.
-    if (isRunning() && prompt() !== "$") return `${prompt()} ${cmd}`
-    return cmd
-  })
+  const prefix = createMemo(() => (workdir() && workdir() !== "." ? `cd ${workdir()} && ` : ""))
+  const input = createMemo(() => (command() ? `${isRunning() ? "" : "$ "}${prefix()}${command()}` : ""))
   const content = createMemo(() => [input(), output()].filter(Boolean).join("\n\n"))
   const collapsed = createMemo(() => collapseToolOutput(content(), maxLines, maxChars()))
   const limited = createMemo(() => {
@@ -2910,15 +2902,7 @@ function Shell(props: ToolProps) {
             )
           }
         >
-          <Show
-            when={isRunning()}
-            fallback={
-              <box flexDirection="row" gap={1}>
-                <text fg={theme.text.default}>{prompt()}</text>
-                <text fg={theme.text.default}>{limitedInput()}</text>
-              </box>
-            }
-          >
+          <Show when={isRunning()} fallback={<text fg={theme.text.default}>{limitedInput()}</text>}>
             <Spinner color={color()}>{limitedInput()}</Spinner>
           </Show>
           <Show when={limitedOutput()}>
