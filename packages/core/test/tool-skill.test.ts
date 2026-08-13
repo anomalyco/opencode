@@ -14,6 +14,7 @@ import { tmpdir } from "./fixture/tmpdir"
 import { Image } from "@opencode-ai/core/image"
 import { it } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
+import { permissionLayer } from "./lib/permission"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
@@ -52,31 +53,22 @@ describe("SkillTool", () => {
           let current = [info]
           const assertions: Permission.AssertInput[] = []
           let deny = false
-          const permission = Layer.succeed(
-            Permission.Service,
-            Permission.Service.of({
-              allowsAll: () => Effect.succeed(false),
-              assert: (input) =>
-                Effect.sync(() => assertions.push(input)).pipe(
-                  Effect.andThen(
-                    deny
-                      ? Effect.fail(
-                          new Permission.BlockedError({
-                            rules: [],
-                            permission: input.action,
-                            resources: input.resources,
-                          }),
-                        )
-                      : Effect.void,
-                  ),
+          const permission = permissionLayer({
+            assert: (input) =>
+              Effect.sync(() => assertions.push(input)).pipe(
+                Effect.andThen(
+                  deny
+                    ? Effect.fail(
+                        new Permission.BlockedError({
+                          rules: [],
+                          permission: input.action,
+                          resources: input.resources,
+                        }),
+                      )
+                    : Effect.void,
                 ),
-              ask: () => Effect.die("unused"),
-              reply: () => Effect.die("unused"),
-              get: () => Effect.die("unused"),
-              forSession: () => Effect.die("unused"),
-              list: () => Effect.die("unused"),
-            }),
-          )
+              ),
+          })
           const skills = Layer.succeed(
             Skill.Service,
             Skill.Service.of({

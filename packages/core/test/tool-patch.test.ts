@@ -19,6 +19,7 @@ import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { testEffect } from "./lib/effect"
+import { permissionLayer } from "./lib/permission"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const patchToolNode = makeLocationNode({
@@ -38,35 +39,26 @@ let editApproved = false
 let afterEditApproval = (): Effect.Effect<void> => Effect.void
 let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
 
-const permission = Layer.succeed(
-  Permission.Service,
-  Permission.Service.of({
-    allowsAll: () => Effect.succeed(false),
-    assert: (input) =>
-      Effect.sync(() => {
-        assertions.push(input)
-        if (input.action === "edit") editApproved = true
-      }).pipe(
-        Effect.andThen(input.action === "edit" ? Effect.suspend(afterEditApproval) : Effect.void),
-        Effect.andThen(
-          input.action === denyAction
-            ? Effect.fail(
-                new Permission.BlockedError({
-                  rules: [],
-                  permission: input.action,
-                  resources: input.resources,
-                }),
-              )
-            : Effect.void,
-        ),
+const permission = permissionLayer({
+  assert: (input) =>
+    Effect.sync(() => {
+      assertions.push(input)
+      if (input.action === "edit") editApproved = true
+    }).pipe(
+      Effect.andThen(input.action === "edit" ? Effect.suspend(afterEditApproval) : Effect.void),
+      Effect.andThen(
+        input.action === denyAction
+          ? Effect.fail(
+              new Permission.BlockedError({
+                rules: [],
+                permission: input.action,
+                resources: input.resources,
+              }),
+            )
+          : Effect.void,
       ),
-    ask: () => Effect.die("unused"),
-    reply: () => Effect.die("unused"),
-    get: () => Effect.die("unused"),
-    forSession: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-  }),
-)
+    ),
+})
 
 const formatter = Layer.mock(Formatter.Service, {
   file: (target) => formatFile(target),

@@ -15,6 +15,7 @@ import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
+import { permissionLayer } from "./lib/permission"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 import { webSearchHost } from "./plugin/host"
 
@@ -66,18 +67,9 @@ beforeEach(() => {
   })
 })
 
-const permission = Layer.succeed(
-  Permission.Service,
-  Permission.Service.of({
-    allowsAll: () => Effect.succeed(false),
-    assert: (input) => Effect.sync(() => assertions.push(input)),
-    ask: () => Effect.die("unused"),
-    reply: () => Effect.die("unused"),
-    get: () => Effect.die("unused"),
-    forSession: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-  }),
-)
+const permission = permissionLayer({
+  assert: (input) => Effect.sync(() => assertions.push(input)),
+})
 const websearch = Layer.succeed(
   WebSearch.Service,
   WebSearch.Service.of({

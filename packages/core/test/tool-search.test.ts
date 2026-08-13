@@ -19,6 +19,7 @@ import { Tool } from "@opencode-ai/core/tool"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { permissionLayer } from "./lib/permission"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
 const globToolNode = makeLocationNode({
@@ -49,21 +50,12 @@ const withTools = <A, E, R>(
         ],
         [
           Permission.node,
-          Layer.succeed(
-            Permission.Service,
-            Permission.Service.of({
-              allowsAll: () => Effect.succeed(false),
-              assert: (input) =>
-                Effect.sync(() => {
-                  assertions?.push(input)
-                }),
-              ask: () => Effect.die("unused"),
-              reply: () => Effect.die("unused"),
-              get: () => Effect.die("unused"),
-              forSession: () => Effect.die("unused"),
-              list: () => Effect.die("unused"),
-            }),
-          ),
+          permissionLayer({
+            assert: (input) =>
+              Effect.sync(() => {
+                assertions?.push(input)
+              }),
+          }),
         ],
       ]),
     ),
