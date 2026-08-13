@@ -44,8 +44,7 @@ export type StreamInput = {
   small?: boolean
   tools: Record<string, Tool>
   retries?: number
-  toolChoice?: "auto" | "required" | "none"
-}
+\ \ toolChoice\?:\ "auto"\ \|\ "required"\ \|\ "none"\n\ \ fallbackModels\?:\ ReadonlyArray<\{\ providerID:\ ProviderV2\.ID;\ modelID:\ ModelV2\.ID\ }>\n}
 
 export type StreamRequest = StreamInput & {
   abort: AbortSignal
