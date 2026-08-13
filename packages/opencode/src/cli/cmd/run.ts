@@ -795,7 +795,10 @@ export const RunCommand = effectCmd({
 
             if (event.type === "permission.asked") {
               const permission = event.properties
-              if (permission.sessionID !== sessionID) continue
+              // Reply to any session, including subagent children. Filtering by
+              // sessionID here causes child sessions to hang forever on
+              // Deferred.await — their permission.asked events are tagged with
+              // the child session ID, not the top-level one.
 
               if (auto) {
                 await client.permission.reply({

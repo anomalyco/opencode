@@ -277,6 +277,65 @@ describe("opencode run (non-interactive subprocess)", () => {
     60_000,
   )
 
+  // Regression for #41730: --auto permissions must cascade to subagents.
+  // Without the fix, the child session's permission.asked event is filtered
+  // out by the session-ID check and the process hangs forever.
+  cliIt.live(
+    "--auto approves permissions requested by subagent sessions",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.push(
+          reply().tool("task", {
+            description: "Run echo command",
+            prompt: "Run the bash command: echo hello",
+            subagent_type: "general",
+          }),
+        )
+        yield* llm.push(
+          reply().tool("bash", { command: "echo hello", description: "Print hello" }),
+        )
+        yield* llm.text("subagent finished")
+        yield* llm.text("parent done")
+
+        const result = yield* opencode.run("spawn a subagent to run bash", {
+          permission: { bash: "ask" },
+          extraArgs: ["--dangerously-skip-permissions"],
+        })
+
+        opencode.expectExit(result, 0)
+        expect(result.stdout).toContain("parent done")
+      }),
+    60_000,
+  )
+
+  // Without --auto, subagent permissions should be auto-rejected (not hung).
+  cliIt.live(
+    "subagent permissions are auto-rejected without --auto",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.push(
+          reply().tool("task", {
+            description: "Run echo command",
+            prompt: "Run the bash command: echo hello",
+            subagent_type: "general",
+          }),
+        )
+        yield* llm.push(
+          reply().tool("bash", { command: "echo hello", description: "Print hello" }),
+        )
+        yield* llm.text("subagent finished")
+        yield* llm.text("parent done")
+
+        const result = yield* opencode.run("spawn a subagent to run bash", {
+          permission: { bash: "ask" },
+        })
+
+        opencode.expectExit(result, 0)
+        expect(result.stderr).toContain("auto-rejecting")
+      }),
+    60_000,
+  )
+
   cliIt.live(
     "attach mode sends client-local file contents without a shared path",
     ({ home, llm, opencode }) =>
