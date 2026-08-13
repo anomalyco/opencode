@@ -621,10 +621,38 @@ const layer = Layer.effect(
       )
     })
 
+    const projectConfigFile = Effect.fnUntraced(function* (ctx: InstanceContext) {
+      // Write the project file the loader merges last so the mutation
+      // survives the instance reload the server performs after a PATCH.
+      // The user's home `.opencode` stays out of scope, like global and
+      // managed configs.
+      const opencodeDirs = (yield* fs
+        .up({ targets: [".opencode"], start: ctx.directory, stop: ctx.worktree })
+        .pipe(Effect.orDie)).toReversed()
+      for (const dir of opencodeDirs) {
+        if (dir === path.join(Global.Path.home, ".opencode")) continue
+        for (const name of ["opencode.jsonc", "opencode.json"]) {
+          const file = path.join(dir, name)
+          if (yield* fs.existsSafe(file)) return file
+        }
+      }
+      const plainFiles = (yield* fs
+        .up({ targets: ["opencode.jsonc", "opencode.json"], start: ctx.directory, stop: ctx.worktree })
+        .pipe(Effect.orDie)).toReversed()
+      return plainFiles.at(-1) ?? path.join(ctx.directory, "opencode.json")
+    })
+
     const update = Effect.fn("Config.update")(function* (config: Info) {
-      const dir = yield* InstanceState.directory
-      const file = path.join(dir, "config.json")
-      const existing = yield* loadFile(file)
+      const ctx = yield* InstanceState.context
+      const file = yield* projectConfigFile(ctx)
+      const before = (yield* readConfigFile(file)) ?? "{}"
+      if (file.endsWith(".jsonc")) {
+        yield* fs.writeFileString(file, patchJsonc(before, writable(config))).pipe(Effect.orDie)
+        return
+      }
+      // Parse the raw file text like updateGlobal so {env:}/{file:} tokens
+      // survive the rewrite instead of being baked to resolved values.
+      const existing = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(before, file), file)
       yield* fs
         .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))
         .pipe(Effect.orDie)
