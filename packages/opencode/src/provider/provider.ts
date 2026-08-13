@@ -1152,11 +1152,17 @@ export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof 
 
 export function toPublicInfo(provider: Info): Info {
   return JSON.parse(
-    JSON.stringify(provider, (_, value) => {
-      if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
-      if (typeof value === "bigint") return value.toString()
-      return value
-    }),
+    JSON.stringify(
+      {
+        ...provider,
+        models: Object.fromEntries(Object.entries(provider.models).filter(([, model]) => Schema.is(Model)(model))),
+      },
+      (_, value) => {
+        if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
+        if (typeof value === "bigint") return value.toString()
+        return value
+      },
+    ),
   )
 }
 
@@ -2457,44 +2463,56 @@ export const layer = Layer.effect(
       const provider = s.providers[providerID]
       if (!provider) return undefined
 
-      const defaultPriority = [
-        "claude-haiku-4-5",
-        "claude-haiku-4.5",
-        "3-5-haiku",
-        "3.5-haiku",
-        "gemini-3-flash",
-        "gemini-2.5-flash",
-        "gpt-5-nano",
-      ]
+      const experimental = yield* plugin.trigger<"experimental.provider.small_model">(
+        "experimental.provider.small_model",
+        { provider: toPublicInfo(provider) },
+        { model: undefined },
+      )
+      if (experimental.model) {
+        return {
+          ...experimental.model,
+          id: ModelV2.ID.make(experimental.model.id),
+          providerID: ProviderV2.ID.make(experimental.model.providerID),
+        }
+      }
+
+      // TODO: Remove these provider-specific assumptions once model syncing reliably reports available deployments.
+      if (providerID === ProviderV2.ID.azure || providerID === ProviderV2.ID.make("azure-cognitive-services")) {
+        return undefined
+      }
+
       const priority = providerID.startsWith("opencode")
-        ? ["gpt-5-nano"]
+        ? ["gpt-nano"]
         : providerID.startsWith("github-copilot")
-          ? ["gpt-5-mini", "claude-haiku-4.5", ...defaultPriority]
-          : defaultPriority
-      for (const item of priority) {
+          ? ["gpt-mini", ...smallModelFamilyPriority]
+          : smallModelFamilyPriority
+      const models = sortBy(
+        Object.values(provider.models),
+        [(model) => model.release_date, "desc"],
+        [(model) => model.id, "desc"],
+      )
+      for (const family of priority) {
+        const candidates = models.filter((model) => model.family === family)
         if (providerID === ProviderV2.ID.amazonBedrock) {
           const crossRegionPrefixes = ["global.", "us.", "eu."]
-          const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
 
-          const globalMatch = candidates.find((m) => m.startsWith("global."))
-          if (globalMatch) return provider.models[globalMatch]
+          const globalMatch = candidates.find((model) => model.id.startsWith("global."))
+          if (globalMatch) return globalMatch
 
           const region = provider.options?.region
           if (region) {
             const regionPrefix = region.split("-")[0]
             if (regionPrefix === "us" || regionPrefix === "eu") {
-              const regionalMatch = candidates.find((m) => m.startsWith(`${regionPrefix}.`))
-              if (regionalMatch) return provider.models[regionalMatch]
+              const regionalMatch = candidates.find((model) => model.id.startsWith(`${regionPrefix}.`))
+              if (regionalMatch) return regionalMatch
             }
           }
 
-          const unprefixed = candidates.find((m) => !crossRegionPrefixes.some((p) => m.startsWith(p)))
-          if (unprefixed) return provider.models[unprefixed]
-        } else {
-          for (const model of Object.keys(provider.models)) {
-            if (model.includes(item)) return provider.models[model]
-          }
+          const unprefixed = candidates.find((model) => !crossRegionPrefixes.some((p) => model.id.startsWith(p)))
+          if (unprefixed) return unprefixed
+          continue
         }
+        if (candidates[0]) return candidates[0]
       }
 
       return undefined
@@ -2548,6 +2566,7 @@ export const layer = Layer.effect(
 )
 
 const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
+const smallModelFamilyPriority = ["gemini-flash", "gpt-nano", "claude-haiku"]
 export function sort<T extends { id: string }>(models: T[]) {
   return sortBy(
     models,
