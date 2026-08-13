@@ -33,7 +33,6 @@ export function DialogExperiments() {
   const options = createMemo(() =>
     experiments.map((experiment) => ({
       title: experiment.title,
-      category: "Experiments",
       searchText: experiment.description,
       footer: enabled(experiment) ? "on" : "off",
       value: experiment,
