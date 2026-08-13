@@ -1,7 +1,7 @@
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createMemo, createResource, onCleanup, onMount, Show } from "solid-js"
 
 const id = "internal:sidebar-context"
 
@@ -14,27 +14,18 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
   const session = createMemo(() => props.api.state.session.get(props.session_id))
-  const [sessionCost, setSessionCost] = createSignal<number>()
-  const cost = createMemo(() => sessionCost() ?? session()?.cost ?? 0)
-  const [todayCost, setTodayCost] = createSignal<number>()
-
-  const refreshCosts = async () => {
-    const [sessionResult, todayResult] = await Promise.all([
-      props.api.client.v2.session.get({ sessionID: props.session_id }).catch(() => undefined),
-      props.api.tuiConfig.show_today_cost ? props.api.client.v2.session.cost().catch(() => undefined) : undefined,
-    ])
-    const currentSessionCost = sessionResult?.data?.data.cost
-    if (currentSessionCost !== undefined) setSessionCost(currentSessionCost)
-    if (todayResult?.data?.data !== undefined) setTodayCost(todayResult.data.data)
-  }
-
-  createEffect(() => {
-    session()
-    void refreshCosts()
-  })
+  const cost = createMemo(() => session()?.cost ?? 0)
+  const enabled = () => props.api.tuiConfig.show_today_cost
+  // Today's cost spans every session, so it comes from the server rather than the local session store.
+  const [todayCost, { refetch }] = createResource(
+    () => (enabled() ? cost() : undefined),
+    () => props.api.client.v2.session.cost().then((result) => result.data?.data).catch(() => undefined),
+  )
 
   onMount(() => {
-    const interval = setInterval(refreshCosts, 30_000)
+    const interval = setInterval(() => {
+      if (enabled()) void refetch()
+    }, 30_000)
     onCleanup(() => clearInterval(interval))
   })
 
@@ -64,7 +55,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
       <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
       <text fg={theme().textMuted}>{money.format(cost())} spent</text>
-      <Show when={props.api.tuiConfig.show_today_cost && todayCost() !== undefined}>
+      <Show when={enabled() && todayCost() !== undefined}>
         <text fg={theme().textMuted}>{money.format(todayCost()!)} today</text>
       </Show>
     </box>
