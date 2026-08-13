@@ -301,11 +301,14 @@ const live: Layer.Layer<
                 toolName: lower,
               }
             }
+            const error = failed.error.message.includes("Unterminated string in JSON")
+              ? `Tool call arguments were truncated before the model finished generating them. This typically happens when the output token limit (${prepared.params.maxOutputTokens}) is reached mid-generation. Increase OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX or reduce the argument size. Original error: ${failed.error.message}`
+              : failed.error.message
             return {
               ...failed.toolCall,
               input: JSON.stringify({
                 tool: failed.toolCall.toolName,
-                error: failed.error.message,
+                error,
               }),
               toolName: "invalid",
             }

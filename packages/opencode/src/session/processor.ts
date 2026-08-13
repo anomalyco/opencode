@@ -443,6 +443,14 @@ const layer = Layer.effect(
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
+            if (value.reason === "length") {
+              yield* Effect.logWarning("output token limit reached", {
+                "session.id": ctx.sessionID,
+                messageID: ctx.assistantMessage.id,
+                "model.id": ctx.model.id,
+                "provider.id": ctx.model.providerID,
+              })
+            }
             yield* session.updatePart({
               id: PartID.ascending(),
               reason: value.reason,
