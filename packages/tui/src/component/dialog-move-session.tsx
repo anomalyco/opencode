@@ -323,6 +323,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
           </box>
         }
         renderFilter={!showError()}
+        flat={true}
         options={options()}
         emptyView={
           showError() ? (
