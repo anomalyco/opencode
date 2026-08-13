@@ -18,11 +18,13 @@ const waitForFile = (file: string) =>
   Effect.promise(async () => {
     while (true) {
       try {
-        return await fs.readFile(file, "utf8")
+        const content = await fs.readFile(file, "utf8")
+        // Retry empty reads: the path can appear before write contents are visible.
+        if (content !== "") return content
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
-        await new Promise<void>((resolve) => setTimeout(resolve, 10))
       }
+      await new Promise<void>((resolve) => setTimeout(resolve, 10))
     }
   })
 
