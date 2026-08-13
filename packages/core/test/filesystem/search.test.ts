@@ -105,7 +105,7 @@ describe("FileSystemSearch", () => {
         expect((yield* search.find({ query: "old", type: "file" }))[0]?.path).toBe(RelativePath.make("src/old.ts"))
         expect(scans).toBe(1)
 
-        yield* TestClock.adjust("2 seconds")
+        yield* TestClock.adjust("10 seconds")
         yield* search.find({ query: "old", type: "file" })
         yield* Deferred.await(started)
 

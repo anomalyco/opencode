@@ -22,7 +22,7 @@ export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem/Search") {}
 
-const REFRESH_INTERVAL = Duration.toMillis("2 seconds")
+const REFRESH_INTERVAL = Duration.toMillis("10 seconds")
 
 export const ripgrepLayer = Layer.effect(
   Service,
@@ -34,7 +34,7 @@ export const ripgrepLayer = Layer.effect(
     const home = Protected.isHome(location.directory)
     let index = { files: [] as string[], directories: new Set<string>() }
     let initialized = false
-    let refreshedAt = 0
+    let settledAt = Number.NEGATIVE_INFINITY
     let refreshing = false
     const scan = Effect.gen(function* () {
       const next = { files: [] as string[], directories: new Set<string>() }
@@ -55,13 +55,17 @@ export const ripgrepLayer = Layer.effect(
       })
       index = next
       initialized = true
-      refreshedAt = clock.currentTimeMillisUnsafe()
     }).pipe(
       Effect.orDie,
-      Effect.ensuring(Effect.sync(() => (refreshing = false))),
+      Effect.ensuring(
+        Effect.sync(() => {
+          settledAt = clock.currentTimeMillisUnsafe()
+          refreshing = false
+        }),
+      ),
     )
     const refresh = Effect.sync(() => {
-      if (refreshing || (initialized && clock.currentTimeMillisUnsafe() < refreshedAt + REFRESH_INTERVAL)) return
+      if (refreshing || clock.currentTimeMillisUnsafe() < settledAt + REFRESH_INTERVAL) return
       refreshing = true
       return scan
     }).pipe(Effect.flatMap((effect) => (effect ? effect.pipe(Effect.forkIn(scope)) : Effect.void)))
