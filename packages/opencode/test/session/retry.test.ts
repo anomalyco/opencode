@@ -488,6 +488,24 @@ describe("session.message-v2.fromError", () => {
     expect(result.data.isRetryable).toBe(true)
   })
 
+  test("classifies Bedrock throttling as retryable APIError, not context overflow", () => {
+    const error = new APICallError({
+      message: "Too many tokens, please wait before trying again.",
+      url: "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-sonnet/converse-stream",
+      requestBodyValues: {},
+      statusCode: 429,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"message":"Too many tokens, please wait before trying again."}',
+      isRetryable: true,
+    })
+    const result = MessageV2.fromError(error, { providerID: ProviderV2.ID.make("amazon-bedrock") })
+    expect(SessionV1.ContextOverflowError.isInstance(result)).toBe(false)
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
+    expect(result.data.statusCode).toBe(429)
+    expect(SessionRetry.retryable(result, retryProvider)).toBeDefined()
+  })
+
   test("converts OpenAI server_error stream chunks to retryable APIError", () => {
     const result = MessageV2.fromError(
       {

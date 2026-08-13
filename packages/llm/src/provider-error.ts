@@ -31,7 +31,16 @@ const patterns = [
   /token limit exceeded/i,
 ]
 
-const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, /too many requests/i]
+// Throttling messages can mention tokens (e.g. Bedrock's ThrottlingException
+// "Too many tokens, please wait before trying again.") without any prefix, so
+// exclude throttle vocabulary and transient retry language anywhere in the message.
+const exclusions = [
+  /^service unavailable:/i,
+  /throttl/i,
+  /rate limit/i,
+  /too many requests/i,
+  /please (wait|try again)/i,
+]
 
 export const isContextOverflow = (message: string) =>
   !exclusions.some((pattern) => pattern.test(message)) &&

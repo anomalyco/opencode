@@ -165,7 +165,12 @@ export type ParsedAPICallError =
 export function parseAPICallError(input: { providerID: ProviderV2.ID; error: APICallError }): ParsedAPICallError {
   const m = message(input.providerID, input.error)
   const body = json(input.error.responseBody)
-  if (isContextOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded") {
+  // 429 is throttling, never a context overflow, even when the message mentions
+  // tokens (e.g. Bedrock's "Too many tokens, please wait before trying again.")
+  const overflow =
+    input.error.statusCode !== 429 &&
+    (isContextOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded")
+  if (overflow) {
     return {
       type: "context_overflow",
       message: m,
