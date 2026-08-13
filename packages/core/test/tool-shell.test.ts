@@ -170,7 +170,7 @@ const isWindows = process.platform === "win32"
 const cwdCommand = isWindows
   ? "Get-Location | Select-Object -ExpandProperty Path; Start-Sleep -Milliseconds 100"
   : "pwd"
-const helloCommand = isWindows ? "[Console]::Out.Write('hello'); Start-Sleep -Milliseconds 100" : "printf hello"
+const helloCommand = isWindows ? "Write-Output hello; Start-Sleep -Milliseconds 100" : "printf hello"
 const stderrCommand = isWindows
   ? "[Console]::Error.Write('stderr only'); Start-Sleep -Milliseconds 100"
   : "printf 'stderr only' >&2"
@@ -249,10 +249,10 @@ describe("ShellTool", () => {
                 {
                   sessionID,
                   action: "shell",
-                  resources: [isWindows ? "Start-Sleep -Milliseconds 100" : helloCommand],
+                  resources: isWindows ? ["Write-Output hello", "Start-Sleep -Milliseconds 100"] : [helloCommand],
                 },
               ])
-              expect(assertions[0]?.save).toEqual([isWindows ? "Start-Sleep *" : "printf *"])
+              expect(assertions[0]?.save).toEqual(isWindows ? ["Write-Output *", "Start-Sleep *"] : ["printf *"])
             }),
           )
         },
