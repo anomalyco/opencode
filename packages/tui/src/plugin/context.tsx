@@ -34,7 +34,7 @@ export interface PackageResolver {
 type State =
   | { readonly target: string; readonly id: string; readonly status: "active" | "inactive" }
   | { readonly target: string; readonly status: "unsupported" }
-  | { readonly target: string; readonly status: "failed"; readonly error: string }
+  | { readonly target: string; readonly id?: string; readonly status: "failed"; readonly error: string }
 
 type RegisteredPlugin = {
   readonly id: string
@@ -271,6 +271,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         if (!local && !previous) npmFailures.set(target, resolved.error)
         failures.push({
           target,
+          id: previous?.plugin.id,
           status: "failed",
           error: previous?.active ? `${resolved.error} (previous version still active)` : resolved.error,
         })
@@ -376,7 +377,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         // A failed reload keeps this item running; the failure entry covers it.
         if (failedTargets.has(item.target)) return []
         const error = errors.get(item.plugin.id)
-        if (error) return [{ target: item.target, status: "failed", error }]
+        if (error) return [{ target: item.target, id: item.plugin.id, status: "failed", error }]
         const status = store.registrations[item.plugin.id]?.active ? "active" : "inactive"
         return [{ target: item.target, id: item.plugin.id, status }]
       }),
@@ -390,7 +391,11 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
           (prev) => prev.status === "failed" && prev.target === state.target && prev.error === state.error,
         )
       )
-        host.toast.show({ variant: "error", title: "Plugin", message: `${state.target}: ${state.error}` })
+        host.toast.show({
+          variant: "error",
+          title: `Plugin failed: ${state.target}`,
+          message: "Run /plugins to view details.",
+        })
     setStore("states", reconcileStore(states))
   }
   const slotItems = new WeakMap<SlotRender, Claim<SlotRender>>()

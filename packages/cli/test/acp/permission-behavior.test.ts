@@ -38,7 +38,7 @@ describe("acp permission behavior", () => {
     const permissionRequests: RequestPermissionRequest[] = []
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
-        send(durableEvent("session.input.promoted", { sessionID: "ses_allow", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_allow", inboxID: id }))
         send(
           permissionAsked("ses_allow", "perm_once", {
             action: "shell",
@@ -112,7 +112,7 @@ describe("acp permission behavior", () => {
     const permissionRequests: RequestPermissionRequest[] = []
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
-        send(durableEvent("session.input.promoted", { sessionID: "ses_external", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_external", inboxID: id }))
         send(
           permissionAsked("ses_external", "perm_external", {
             action: "external_directory",
@@ -157,7 +157,7 @@ describe("acp permission behavior", () => {
     const permissionRequests: RequestPermissionRequest[] = []
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
-        send(durableEvent("session.input.promoted", { sessionID: "ses_parent", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_parent", inboxID: id }))
         send(
           durableEvent("session.created", {
             sessionID: "ses_child",
@@ -219,7 +219,7 @@ describe("acp permission behavior", () => {
     const writes: Parameters<AgentSideConnection["writeTextFile"]>[0][] = []
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
-        send(durableEvent("session.input.promoted", { sessionID: "ses_edit", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_edit", inboxID: id }))
         send(
           durableEvent("session.tool.input.started", {
             sessionID: "ses_edit",
@@ -309,7 +309,7 @@ describe("acp permission behavior", () => {
     const writes: Parameters<AgentSideConnection["writeTextFile"]>[0][] = []
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
-        send(durableEvent("session.input.promoted", { sessionID: "ses_patch", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_patch", inboxID: id }))
         send(
           durableEvent("session.tool.input.started", {
             sessionID: "ses_patch",
@@ -389,7 +389,7 @@ describe("acp permission behavior", () => {
   test("rejects explicit rejection, cancellation, and permission UI failure", async () => {
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
-        send(durableEvent("session.input.promoted", { sessionID: "ses_reject", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_reject", inboxID: id }))
         send(permissionAsked("ses_reject", "perm_selected_reject"))
         send(permissionAsked("ses_reject", "perm_cancelled"))
         send(permissionAsked("ses_reject", "perm_failed"))
@@ -426,7 +426,7 @@ describe("acp permission behavior", () => {
     const permissionRequests: RequestPermissionRequest[] = []
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
-        send(durableEvent("session.input.promoted", { sessionID: "ses_serial", inputID: id }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_serial", inboxID: id }))
         send(permissionAsked("ses_serial", "perm_1"))
         send(permissionAsked("ses_serial", "perm_2"))
         send(durableEvent("session.execution.succeeded", { sessionID: "ses_serial" }))
@@ -477,8 +477,8 @@ describe("acp permission behavior", () => {
         const blockedID = promptIDs.get("ses_blocked")
         const freeID = promptIDs.get("ses_free")
         if (!blockedID || !freeID) throw new Error("both permission test prompts must be registered")
-        send(durableEvent("session.input.promoted", { sessionID: "ses_blocked", inputID: blockedID }))
-        send(durableEvent("session.input.promoted", { sessionID: "ses_free", inputID: freeID }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_blocked", inboxID: blockedID }))
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_free", inboxID: freeID }))
         send(permissionAsked("ses_blocked", "perm_blocked"))
         send(
           ephemeralEvent("session.text.delta", {
@@ -538,16 +538,16 @@ describe("acp permission behavior", () => {
   })
 })
 
-function startTurn(fixture: Fixture, connection: Connection, sessionID: string, inputID: string, cwd = "/workspace") {
+function startTurn(fixture: Fixture, connection: Connection, sessionID: string, inboxID: string, cwd = "/workspace") {
   return streamTurn({
     client: fixture.client,
     connection,
     sessionID,
     cwd,
-    start: { type: "input", id: inputID },
+    start: { type: "input", id: inboxID },
     writeTextFile: true,
     control: { cancelled: false, admission: new AbortController() },
-    submit: (signal) => fixture.client.session.prompt({ sessionID, id: inputID, text: "hello" }, { signal }),
+    submit: (signal) => fixture.client.session.prompt({ sessionID, id: inboxID, text: "hello" }, { signal }),
   })
 }
 

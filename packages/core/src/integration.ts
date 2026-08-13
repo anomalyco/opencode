@@ -1,4 +1,4 @@
-export * as Integration from "./integration"
+export * as Integration from "./integration.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import {
@@ -18,13 +18,13 @@ import {
   Types,
 } from "effect"
 import { Integration } from "@opencode-ai/schema/integration"
-import { Credential } from "./credential"
-import { State } from "./state"
-import { Bus } from "./bus"
-import { IntegrationConnection } from "./integration/connection"
+import { Credential } from "./credential.js"
+import { State } from "./state.js"
+import { Bus } from "./bus.js"
+import { IntegrationConnection } from "./integration/connection.js"
 import { AppProcess } from "@opencode-ai/util/process"
 import { ChildProcess } from "effect/unstable/process"
-import { Form } from "./form"
+import { Form } from "./form.js"
 
 export const ID = Integration.ID
 export type ID = Integration.ID

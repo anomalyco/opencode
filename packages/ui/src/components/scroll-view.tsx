@@ -1,14 +1,4 @@
-import {
-  createEffect,
-  createMemo,
-  mergeProps,
-  onCleanup,
-  onMount,
-  Show,
-  splitProps,
-  type Accessor,
-  type ComponentProps,
-} from "solid-js"
+import { createEffect, mergeProps, onCleanup, onMount, Show, splitProps, type ComponentProps } from "solid-js"
 import { Portal } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
@@ -27,9 +17,9 @@ export interface ScrollViewProps extends ComponentProps<"div"> {
    * */
   thumbVisibility?: ScrollViewThumbVisibility
   /** Mount the thumb into an external track. Scroll metrics still come from this ScrollView. */
-  thumbContainer?: HTMLElement | Accessor<HTMLElement | undefined>
+  thumbContainer?: HTMLElement
   /** Element whose hover reveals the thumb. Defaults to the ScrollView root when unset. */
-  thumbHoverTarget?: HTMLElement | Accessor<HTMLElement | undefined>
+  thumbHoverTarget?: HTMLElement
 }
 
 export const scrollKey = (event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey">) => {
@@ -128,13 +118,8 @@ export function ScrollView(props: ScrollViewProps) {
   let viewportRef!: HTMLDivElement
   let thumbRef!: HTMLDivElement
 
-  const resolveEl = (value: HTMLElement | Accessor<HTMLElement | undefined> | undefined) => {
-    if (typeof value === "function") return value()
-    return value
-  }
-
-  const thumbMount = createMemo(() => resolveEl(local.thumbContainer))
-  const thumbHover = createMemo(() => resolveEl(local.thumbHoverTarget))
+  const thumbMount = () => local.thumbContainer
+  const thumbHover = () => local.thumbHoverTarget
   const hoverRoot = () => !local.thumbHoverTarget && !local.thumbContainer
 
   const [state, setState] = createStore({

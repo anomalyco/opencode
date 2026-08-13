@@ -427,7 +427,6 @@ function DiffViewer(props: { context: Plugin.Context }) {
       id: "diff.down",
       title: "Move diff viewer down",
       group: "VCS",
-      bind: "j,down",
       run: focusRunner({
         files() {
           moveFileSelection(1)
@@ -442,7 +441,6 @@ function DiffViewer(props: { context: Plugin.Context }) {
       id: "diff.up",
       title: "Move diff viewer up",
       group: "VCS",
-      bind: "k,up",
       run: focusRunner({
         files() {
           moveFileSelection(-1)
@@ -457,7 +455,6 @@ function DiffViewer(props: { context: Plugin.Context }) {
       id: "diff.page.down",
       title: "Page diff viewer down",
       group: "VCS",
-      bind: "pagedown,ctrl+f",
       run: focusRunner({
         files() {
           moveFileSelection(8)
@@ -472,7 +469,6 @@ function DiffViewer(props: { context: Plugin.Context }) {
       id: "diff.page.up",
       title: "Page diff viewer up",
       group: "VCS",
-      bind: "pageup,ctrl+b",
       run: focusRunner({
         files() {
           moveFileSelection(-8)
@@ -578,7 +574,6 @@ function DiffViewer(props: { context: Plugin.Context }) {
       id: "diff.mark_reviewed",
       title: "Toggle selected diff file reviewed",
       group: "VCS",
-      bind: "m",
       run() {
         toggleSelectedFileReviewed()
       },

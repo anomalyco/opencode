@@ -1,7 +1,7 @@
 import type { Config, Path, Project, ProviderAuthResponse } from "@/types"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
-import { batch, createMemo, getOwner, onCleanup, onMount, untrack } from "solid-js"
+import { batch, getOwner, onCleanup, onMount, untrack } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"

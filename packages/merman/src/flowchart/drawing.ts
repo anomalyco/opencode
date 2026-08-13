@@ -1,7 +1,8 @@
-import { BorderChars, type BorderCharacters, type BorderStyle } from "@opentui/core"
+import { BorderChars, TextAttributes, type BorderCharacters, type BorderStyle } from "@opentui/core"
 import { walkOrthogonalSegment } from "../core/geometry.js"
 import { DiagramCanvas, type DiagramCanvasCell } from "../core/canvas.js"
-import { splitDiagramLines } from "../core/text.js"
+import { parseDiagramTextLines } from "../core/text.js"
+import type { DiagramTextRun } from "../core/text-lines.js"
 import {
   DIAGRAM_ARROW_HEADS,
   diagramArrowHeadBetween,
@@ -21,6 +22,7 @@ import {
   DATABASE_EDGE_FADE_STYLES,
   NODE_EDGE_FADE_STYLES,
   type FlowchartCellStyle,
+  type FlowchartCellMetadata,
   type FlowchartEdgeFadeStyle,
   type FlowchartGrid,
 } from "./style.js"
@@ -50,8 +52,19 @@ function mergeFlowchartCell(
   } as DiagramCanvasCell<FlowchartCellStyle>
 }
 
-function setNodeText(grid: FlowchartGrid, x: number, y: number, text: string, style: FlowchartCellStyle): void {
-  grid.setText(x, y, text, style)
+function setRichText(
+  grid: FlowchartGrid,
+  x: number,
+  y: number,
+  runs: readonly DiagramTextRun[],
+  style: FlowchartCellStyle,
+): number {
+  let offset = 0
+  for (const run of runs) {
+    grid.setText(x + offset, y, run.text, style, run.italic ? { attributes: TextAttributes.ITALIC } : undefined)
+    offset += visualLength(run.text)
+  }
+  return offset
 }
 
 function drawNode(
@@ -86,12 +99,13 @@ function drawNode(
       : node.shape === "database"
         ? bounds.top + 2
         : bounds.top + 1
+  const lines = parseDiagramTextLines(node.label)
   for (const [index, line] of bounds.lines.entries()) {
     const lineX =
       node.shape === "subroutine"
         ? bounds.left + 3
         : bounds.left + Math.max(1, Math.floor((bounds.width - visualLength(line)) / 2))
-    setNodeText(grid, lineX, textTop + index, line, style)
+    setRichText(grid, lineX, textTop + index, lines[index]!.runs, style)
   }
 }
 
@@ -139,18 +153,22 @@ function drawSubgraphFrame(grid: FlowchartGrid, bounds: FlowchartSubgraphBounds,
 
 function drawSubgraphLabel(grid: FlowchartGrid, bounds: FlowchartSubgraphBounds): void {
   if (bounds.label) {
-    const lines = splitDiagramLines(bounds.label)
+    const lines = parseDiagramTextLines(bounds.label)
     const labelY = bounds.labelSide === "top" ? bounds.top : bounds.top + bounds.height - lines.length
     for (const [index, line] of lines.entries()) {
-      grid.setText(bounds.left + 2, labelY + index, ` ${line} `, "group")
+      grid.setText(bounds.left + 2, labelY + index, " ", "group")
+      const width = setRichText(grid, bounds.left + 3, labelY + index, line.runs, "group")
+      grid.setText(bounds.left + width + 3, labelY + index, " ", "group")
     }
   }
 }
 
 function drawEdgeLabel(grid: FlowchartGrid, route: FlowchartEdgeRoute, style: FlowchartCellStyle): void {
   const label = flowchartEdgeLabelLayout(route.points, route.edge.label, visualLength, route.labelAxis)
-  for (const [index, line] of label.lines.entries()) {
-    grid.setText(label.point.x, label.point.y + index, line, style)
+  for (const [index, line] of parseDiagramTextLines(route.edge.label).entries()) {
+    grid.setText(label.point.x, label.point.y + index, " ", style)
+    const width = setRichText(grid, label.point.x + 1, label.point.y + index, line.runs, style)
+    grid.setText(label.point.x + width + 1, label.point.y + index, " ", style)
   }
 }
 
@@ -276,7 +294,7 @@ export function drawFlowchartDiagramGrid(
   const layout = layoutFlowchartDiagram(diagram, options)
   const { bounds, routes, subgraphBounds, width, height } = layout
   diagram = layout.diagram
-  const grid = new DiagramCanvas<FlowchartCellStyle>(width, height, {
+  const grid = new DiagramCanvas<FlowchartCellStyle, FlowchartCellMetadata>(width, height, {
     mergeCell: mergeFlowchartCell,
   })
   for (const subgraph of diagram.subgraphs ?? []) {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { isContextOverflow } from "../src"
-import { classifyProviderFailure } from "../src/provider-error"
+import { isContextOverflow } from "../src/index.js"
+import { classifyProviderFailure } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
   test("classifies provider token limit messages as context overflow", () => {

@@ -1,10 +1,6 @@
-import { Component, For, Show, createMemo, lazy, onCleanup, onMount } from "solid-js"
+import { For, Show, createMemo, lazy, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TextField } from "@opencode-ai/ui/text-field"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
@@ -13,7 +9,6 @@ import fuzzysort from "fuzzysort"
 import { DEFAULT_PALETTE_KEYBIND, formatKeybind, parseKeybind, useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
-import { SettingsList } from "./settings-list"
 import { SettingsListV2 } from "./settings-v2/parts/list"
 
 const IconV2 = lazy(() => import("@opencode-ai/ui/v2/icon").then((module) => ({ default: module.Icon })))
@@ -201,69 +196,6 @@ function filteredFor(
   return out
 }
 
-function useKeyCapture(input: {
-  active: () => string | null
-  stop: () => void
-  set: (id: string, keybind: string) => void
-  used: () => Map<string, { id: string; title: string }[]>
-  language: ReturnType<typeof useLanguage>
-}) {
-  onMount(() => {
-    const handle = (event: KeyboardEvent) => {
-      const id = input.active()
-      if (!id) return
-
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation()
-
-      if (event.key === "Escape") {
-        input.stop()
-        return
-      }
-
-      const clear =
-        (event.key === "Backspace" || event.key === "Delete") &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.shiftKey
-      if (clear) {
-        input.set(id, "none")
-        input.stop()
-        return
-      }
-
-      const next = recordKeybind(event)
-      if (!next) return
-
-      const conflicts = new Map<string, string>()
-      for (const sig of signatures(next)) {
-        for (const item of input.used().get(sig) ?? []) {
-          if (item.id === id) continue
-          conflicts.set(item.id, item.title)
-        }
-      }
-
-      if (conflicts.size > 0) {
-        showToast({
-          title: input.language.t("settings.shortcuts.conflict.title"),
-          description: input.language.t("settings.shortcuts.conflict.description", {
-            keybind: formatKeybind(next, input.language.t),
-            titles: [...conflicts.values()].join(", "),
-          }),
-        })
-        return
-      }
-
-      input.set(id, next)
-      input.stop()
-    }
-
-    makeEventListener(document, "keydown", handle, { capture: true })
-  })
-}
-
 export function createKeybindSettingsController(
   input: {
     command: Pick<CommandContext, "catalog" | "options" | "keybinds">
@@ -424,9 +356,9 @@ export function SettingsKeybinds() {
       filtered={controller.catalog.filtered}
       title={controller.catalog.title}
       keybind={controller.catalog.keybind}
-      active={controller.capture.active}
+      active={controller.capture.active()}
       onCapture={controller.capture.toggle}
-      hasOverrides={controller.settings.hasOverrides}
+      hasOverrides={controller.settings.hasOverrides()}
       onReset={controller.settings.reset}
     />
   )
@@ -437,9 +369,9 @@ function SettingsKeybindsV2View(props: {
   filtered: (query: string) => Map<KeybindGroup, string[]>
   title: (id: string) => string
   keybind: (id: string) => string
-  active: () => string | null
+  active: string | null
   onCapture: (id: string) => void
-  hasOverrides: () => boolean
+  hasOverrides: boolean
   onReset: () => void
 }) {
   const language = useLanguage()
@@ -452,7 +384,7 @@ function SettingsKeybindsV2View(props: {
       <div class="settings-v2-tab-header settings-v2-tab-header--stacked">
         <div class="settings-v2-tab-header-row">
           <h2 class="settings-v2-tab-title">{language.t("settings.shortcuts.title")}</h2>
-          <ButtonV2 variant="ghost" onClick={props.onReset} disabled={!props.hasOverrides()}>
+          <ButtonV2 variant="ghost" onClick={props.onReset} disabled={!props.hasOverrides}>
             {language.t("settings.shortcuts.reset.button")}
           </ButtonV2>
         </div>
@@ -498,12 +430,12 @@ function SettingsKeybindsV2View(props: {
                             data-keybind-id={id}
                             classList={{
                               "settings-v2-keybind-button": true,
-                              "settings-v2-keybind-button--active": props.active() === id,
+                              "settings-v2-keybind-button--active": props.active === id,
                             }}
                             onClick={() => props.onCapture(id)}
                           >
                             <Show
-                              when={props.active() === id}
+                              when={props.active === id}
                               fallback={props.keybind(id) || language.t("settings.shortcuts.unassigned")}
                             >
                               {language.t("settings.shortcuts.pressKeys")}

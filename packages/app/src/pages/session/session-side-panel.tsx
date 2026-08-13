@@ -65,13 +65,13 @@ function renderDiff(value: ReviewDiff): value is RenderDiff {
 }
 
 export function SessionSidePanel(props: {
-  canReview: () => boolean
-  diffs: () => ReviewDiff[]
-  diffsReady: () => boolean
-  empty: () => string
-  hasReview: () => boolean
-  reviewHasFocusableContent: () => boolean
-  reviewCount: () => number
+  canReview: boolean
+  diffs: ReviewDiff[]
+  diffsReady: boolean
+  empty: string
+  hasReview: boolean
+  reviewHasFocusableContent: boolean
+  reviewCount: number
   reviewPanel: () => JSX.Element
   reviewSidebarToggle?: (disabled: boolean) => JSX.Element
   fileBrowserState?: SessionFileBrowserState
@@ -113,7 +113,7 @@ export function SessionSidePanel(props: {
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${fileTreeWidth()}px` : "0px"))
 
-  const diffs = createMemo(() => props.diffs().filter(renderDiff))
+  const diffs = createMemo(() => props.diffs.filter(renderDiff))
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
   const kinds = createMemo(() => {
     const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {
@@ -177,7 +177,7 @@ export function SessionSidePanel(props: {
     pathFromTab: file.pathFromTab,
     normalizeTab,
     review: reviewTab,
-    hasReview: props.canReview,
+    hasReview: () => props.canReview,
     fileBrowser: () => !!props.fileBrowserState,
   })
   const contextOpen = tabState.contextOpen
@@ -348,7 +348,7 @@ export function SessionSidePanel(props: {
                                 onCleanup(stop)
                               }}
                             >
-                              <Show when={reviewTab() && props.canReview()}>
+                              <Show when={reviewTab() && props.canReview}>
                                 <Tabs.Trigger
                                   value="review"
                                   id={reviewTabID}
@@ -356,8 +356,8 @@ export function SessionSidePanel(props: {
                                 >
                                   <div class="flex items-center gap-1.5">
                                     <div>{language.t("session.tab.review")}</div>
-                                    <Show when={props.hasReview()}>
-                                      <div>{props.reviewCount()}</div>
+                                    <Show when={props.hasReview}>
+                                      <div>{props.reviewCount}</div>
                                     </Show>
                                   </div>
                                 </Tabs.Trigger>
@@ -463,12 +463,12 @@ export function SessionSidePanel(props: {
                             </Tabs.List>
                           </div>
 
-                          <Show when={reviewTab() && props.canReview() && activeTab() === "review"}>
+                          <Show when={reviewTab() && props.canReview && activeTab() === "review"}>
                             <div
                               id={reviewTabPanelID}
                               role="tabpanel"
                               aria-labelledby={reviewTabID}
-                              tabIndex={props.reviewHasFocusableContent() ? undefined : 0}
+                              tabIndex={props.reviewHasFocusableContent ? undefined : 0}
                               data-slot="tabs-content"
                               class="flex flex-col h-full overflow-hidden contain-strict"
                             >
@@ -559,14 +559,14 @@ export function SessionSidePanel(props: {
                                 </div>
                               )}
                             </Show>
-                            <Show when={reviewTab() && props.canReview()}>
+                            <Show when={reviewTab() && props.canReview}>
                               <Tabs.Trigger
                                 value="review"
                                 id={reviewTabID}
                                 aria-controls={activeTab() === "review" ? reviewTabPanelID : undefined}
                               >
-                                {props.hasReview()
-                                  ? language.t("session.review.filesChanged", { count: props.reviewCount() })
+                                {props.hasReview
+                                  ? language.t("session.review.filesChanged", { count: props.reviewCount })
                                   : language.t("session.tab.review")}
                               </Tabs.Trigger>
                             </Show>
@@ -611,7 +611,7 @@ export function SessionSidePanel(props: {
                                   fallback={
                                     <SortableTabV2
                                       tab={tab}
-                                      index={() => tabs().all().indexOf(tab)}
+                                      index={tabs().all().indexOf(tab)}
                                       temporary={temporaryTab() === tab}
                                       onTabClose={tabs().close}
                                       onTabDoubleClick={temporaryTab() === tab ? openTab : undefined}
@@ -691,12 +691,12 @@ export function SessionSidePanel(props: {
                           </div>
                         </div>
 
-                        <Show when={reviewTab() && props.canReview() && activeTab() === "review"}>
+                        <Show when={reviewTab() && props.canReview && activeTab() === "review"}>
                           <div
                             id={reviewTabPanelID}
                             role="tabpanel"
                             aria-labelledby={reviewTabID}
-                            tabIndex={props.reviewHasFocusableContent() ? undefined : 0}
+                            tabIndex={props.reviewHasFocusableContent ? undefined : 0}
                             data-slot="tabs-content"
                             class="flex flex-col h-full overflow-hidden contain-strict"
                           >
@@ -782,14 +782,14 @@ export function SessionSidePanel(props: {
                           when={settings.general.newLayoutDesigns()}
                           fallback={
                             <>
-                              {props.reviewCount()}{" "}
+                              {props.reviewCount}{" "}
                               {language.t(
-                                props.reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other",
+                                props.reviewCount === 1 ? "session.review.change.one" : "session.review.change.other",
                               )}
                             </>
                           }
                         >
-                          {language.t("session.review.filesChanged", { count: props.reviewCount() })}
+                          {language.t("session.review.filesChanged", { count: props.reviewCount })}
                         </Show>
                       </Tabs.Trigger>
                       <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
@@ -799,9 +799,9 @@ export function SessionSidePanel(props: {
                     <Show when={fileTreeTab() === "changes"}>
                       <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
                         <Switch>
-                          <Match when={props.hasReview() || !props.diffsReady()}>
+                          <Match when={props.hasReview || !props.diffsReady}>
                             <Show
-                              when={props.diffsReady()}
+                              when={props.diffsReady}
                               fallback={
                                 <div class="px-2 py-2 text-12-regular text-text-weak">
                                   {language.t("common.loading")}

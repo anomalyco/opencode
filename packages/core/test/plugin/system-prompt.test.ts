@@ -90,6 +90,36 @@ describe("SystemPromptPlugin", () => {
     }),
   )
 
+  it.effect("selects the Meta prompt for Muse family model IDs", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      const pluginHost = yield* makeHost
+      yield* SystemPromptPlugin.MetaPlugin.effect(pluginHost)
+
+      yield* Effect.forEach(
+        [
+          ["meta/muse-spark-preview", "Muse Spark"],
+          ["muse-spark-1.2", "Muse Spark"],
+          ["meta/muse-glimmer-30b", "Muse Glimmer"],
+          ["muse-glimmer-30b", "Muse Glimmer"],
+        ] as const,
+        ([id, name]) => {
+          const event = context(id)
+          return hooks.trigger("session", "context", event).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                expect(event.system[0]?.text).toContain(`powered by ${name},`)
+                expect(event.system[0]?.text).toContain(`using Meta ${name}.`)
+                expect(event.system[0]?.text).not.toContain("{{MODEL_NAME}}")
+              }),
+            ),
+          )
+        },
+        { discard: true },
+      )
+    }),
+  )
+
   it.effect("preserves an explicit agent system prompt", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service

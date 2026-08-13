@@ -1,4 +1,4 @@
-export * as VcsPatch from "./patch"
+export * as VcsPatch from "./patch.js"
 
 import { formatPatch, structuredPatch } from "diff"
 

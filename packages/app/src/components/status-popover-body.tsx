@@ -1,16 +1,7 @@
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { showToast } from "@/utils/toast"
-import {
-  type Accessor,
-  createEffect,
-  createMemo,
-  createResource,
-  For,
-  type JSXElement,
-  onCleanup,
-  Show,
-} from "solid-js"
+import { createEffect, createMemo, createResource, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -110,7 +101,7 @@ type ServerStatusItem = {
   onSelect: () => void
 }
 
-export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
+export function StatusPopoverBody(props: { shown: boolean }) {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
@@ -123,10 +114,6 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     })
   }
 
-  createEffect(() => {
-    if (!props.shown()) return
-  })
-
   let dialogRun = 0
   onCleanup(() => {
     dialogRun += 1
@@ -138,7 +125,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const lspItems = createMemo(() => sync().data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
   const [pluginList] = createResource(
-    () => (props.shown() ? sdk().directory : undefined),
+    () => (props.shown ? sdk().directory : undefined),
     (directory) =>
       sdk()
         .api.plugin.list({ location: { directory } })

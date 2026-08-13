@@ -46,8 +46,8 @@ const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px
 const macTrafficLightsBaseWidth = 84
 
 export type TitlebarUpdate = {
-  version: () => string | undefined
-  installing: () => boolean
+  version: string | undefined
+  installing: boolean
   install: () => void
 }
 
@@ -105,8 +105,8 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   })
 
   const updateState = createMemo<TitlebarUpdatePillState>(() => {
-    const installing = props.update?.installing() ?? false
-    const version = props.update?.version()
+    const installing = props.update?.installing ?? false
+    const version = props.update?.version
     return {
       visible: version !== undefined || installing,
       installing,
@@ -364,7 +364,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
 
                 <TitlebarTabStrip
                   tabs={tabsStore}
-                  currentTab={currentTab}
+                  currentTab={currentTab()}
                   forceTruncate={tabsAreOverflowing()}
                   onOverflowChange={setTabsAreOverflowing}
                   onNavigate={(tab, el) => {
@@ -477,12 +477,10 @@ function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () =
   }
 
   return (
-    <>
-      {["beta", "dev"].includes(channel) && (
-        <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
-          {channel.toUpperCase()}
-        </div>
-      )}
-    </>
+    <Show when={["local", "beta", "dev"].includes(channel)}>
+      <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
+        {channel.toUpperCase()}
+      </div>
+    </Show>
   )
 }

@@ -1,5 +1,5 @@
-import type { ResponseIncludable, ServiceTier } from "../protocols/utils/open-responses-options"
-import type { ProviderOptions, ReasoningEffort, TextVerbosity } from "../schema"
+import type { ResponseIncludable, ServiceTier } from "../protocols/utils/open-responses-options.js"
+import type { ProviderOptions, ReasoningEffort, TextVerbosity } from "../schema/index.js"
 
 export interface OpenResponsesOptionsInput {
   readonly [key: string]: unknown
@@ -16,4 +16,4 @@ export type OpenResponsesProviderOptionsInput = ProviderOptions & {
   readonly openresponses?: OpenResponsesOptionsInput
 }
 
-export * as OpenResponsesProviderOptions from "./open-responses-options"
+export * as OpenResponsesProviderOptions from "./open-responses-options.js"

@@ -49,7 +49,9 @@ const client = LLMClient.layer.pipe(
   Layer.provide(
     Layer.succeed(
       RequestExecutor.Service,
-      RequestExecutor.Service.of({ execute: () => Effect.die("Unexpected HTTP request") }),
+      RequestExecutor.Service.of({
+        execute: () => Effect.die("Unexpected HTTP request"),
+      }),
     ),
   ),
 )
@@ -542,7 +544,12 @@ it.effect("retries status-less AI SDK transport failures", () =>
         isRetryable: true,
       }),
     )
-    expect(error.reason).toMatchObject({ _tag: "Transport", kind: "AI_APICallError" })
+    expect(error.reason).toMatchObject({
+      _tag: "Transport",
+      transport: "http",
+      operation: "request",
+      code: "AI_APICallError",
+    })
     expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
     expect("http" in error.reason ? error.reason.http?.request.url : undefined).toBe("https://api.example.com/chat")
   }),

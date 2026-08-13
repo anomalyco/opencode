@@ -3,7 +3,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { WordmarkV2 } from "@opencode-ai/ui/v2/wordmark-v2"
-import { Show, createMemo, createSignal, type Accessor } from "solid-js"
+import { Show, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import createPresence from "solid-presence"
@@ -74,14 +74,14 @@ export function NewSessionView(props: {
   )
 }
 
-export function NewSessionStatus(props: { mount: Accessor<HTMLElement | null>; visible: Accessor<boolean> }) {
+export function NewSessionStatus(props: { mount: HTMLElement | null; visible: boolean }) {
   const language = useLanguage()
 
   return (
-    <Show when={props.mount()} keyed>
+    <Show when={props.mount} keyed>
       {(mount) => (
         <Portal mount={mount}>
-          <Show when={props.visible()}>
+          <Show when={props.visible}>
             <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
               <StatusPopoverV2 />
             </Tooltip>
@@ -116,7 +116,7 @@ function ProviderTip() {
   })
   const openProviders = () => {
     void import("@/components/dialog-connect-provider").then(({ DialogConnectProvider }) => {
-      void dialog.show(() => <DialogConnectProvider directory={() => sdk().directory} />)
+      void dialog.show(() => <DialogConnectProvider directory={sdk().directory} />)
     })
   }
 

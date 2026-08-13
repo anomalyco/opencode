@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer, Option, Schema } from "effect"
+import { Cause, Context, Effect, Layer, Option, Schema, Stream } from "effect"
 import {
   FetchHttpClient,
   Headers,
@@ -14,8 +14,8 @@ import {
   HttpResponseDetails,
   AIError,
   TransportReason,
-} from "../schema"
-import { classifyProviderFailure } from "../provider-error"
+} from "../schema/index.js"
+import { classifyProviderFailure } from "../provider-error.js"
 
 export interface Interface {
   readonly execute: (
@@ -297,43 +297,85 @@ export const classifyHttpFailure = (input: {
   })
 }
 
-const toHttpError = (redactedNames: ReadonlyArray<string | RegExp>) => (error: unknown) => {
-  const transportError = (input: {
-    readonly message: string
-    readonly kind?: string | undefined
-    readonly request?: HttpClientRequest.HttpClientRequest | undefined
-  }) =>
+type HttpOperation = "request" | "read"
+
+const NativeTransportFailure = Schema.Struct({
+  message: Schema.String,
+  code: Schema.optionalKey(Schema.String),
+  cause: Schema.optionalKey(Schema.Unknown),
+})
+const decodeNativeTransportFailure = Schema.decodeUnknownOption(NativeTransportFailure)
+
+const nativeTransportFailure = (error: unknown) => {
+  const failure = Option.getOrUndefined(decodeNativeTransportFailure(error))
+  if (!failure) return undefined
+  if (failure.code !== undefined) return failure
+  const cause = Option.getOrUndefined(decodeNativeTransportFailure(failure.cause))
+  if (cause?.code !== undefined) return cause
+  return failure
+}
+
+const httpError = (input: {
+  readonly error: unknown
+  readonly request: HttpClientRequest.HttpClientRequest
+  readonly operation: HttpOperation
+  readonly redactedNames: ReadonlyArray<string | RegExp>
+}) => {
+  const request = HttpClientError.isHttpClientError(input.error) ? input.error.request : input.request
+  const transportError = (failure: { readonly message: string; readonly code?: string | undefined }) =>
     new AIError({
       module: "RequestExecutor",
-      method: "execute",
+      method: input.operation,
       reason: new TransportReason({
-        message: input.message,
-        kind: input.kind,
-        url: input.request ? redactUrl(input.request.url) : undefined,
-        http: input.request ? new HttpContext({ request: requestDetails(input.request, redactedNames) }) : undefined,
+        message: failure.message,
+        transport: "http",
+        operation: input.operation,
+        code: failure.code,
+        url: redactUrl(request.url),
+        http: new HttpContext({ request: requestDetails(request, input.redactedNames) }),
       }),
     })
 
-  if (Cause.isTimeoutError(error)) {
-    return transportError({ message: error.message, kind: "Timeout" })
-  }
-  if (!HttpClientError.isHttpClientError(error)) {
-    return transportError({ message: error instanceof Error ? error.message : "HTTP transport failed" })
-  }
-  const request = "request" in error ? error.request : undefined
-  if (error.reason._tag === "TransportError") {
+  const source =
+    HttpClientError.isHttpClientError(input.error) && "cause" in input.error.reason
+      ? input.error.reason.cause
+      : input.error
+  const native = nativeTransportFailure(source)
+  const code = native?.code
+  const raw = native?.message ?? (input.error instanceof Error ? input.error.message : undefined)
+  const detail = raw ? redactBody(raw, secretValues(request)) : undefined
+  const message = code && detail && !detail.includes(code) ? `${code}: ${detail}` : detail
+
+  if (Cause.isTimeoutError(input.error) || Cause.isTimeoutError(source))
+    return transportError({ message: message ?? "HTTP transport timed out", code: code ?? "Timeout" })
+  if (!HttpClientError.isHttpClientError(input.error))
+    return transportError({ message: message ?? "HTTP transport failed", code })
+  if (input.error.reason._tag === "TransportError") {
     return transportError({
-      message: error.reason.description ?? "HTTP transport failed",
-      kind: error.reason._tag,
-      request,
+      message: message ?? input.error.reason.description ?? "HTTP transport failed",
+      code: code ?? input.error.reason._tag,
     })
   }
   return transportError({
-    message: `HTTP transport failed: ${error.reason._tag}`,
-    kind: error.reason._tag,
-    request,
+    message: message ?? `HTTP transport failed: ${input.error.reason._tag}`,
+    code: code ?? input.error.reason._tag,
   })
 }
+
+export const stream = (
+  executor: Interface,
+  request: HttpClientRequest.HttpClientRequest,
+  middleware?: HttpMiddleware,
+): Stream.Stream<Uint8Array, AIError> =>
+  Stream.unwrap(
+    Effect.gen(function* () {
+      const redactedNames = yield* Headers.CurrentRedactedNames
+      const response = yield* executor.execute(request, middleware)
+      return response.stream.pipe(
+        Stream.mapError((error) => httpError({ error, request: response.request, operation: "read", redactedNames })),
+      )
+    }),
+  )
 
 export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(
   Service,
@@ -343,15 +385,16 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
       Effect.gen(function* () {
         const redactedNames = yield* Headers.CurrentRedactedNames
         if (!middleware)
-          return yield* http
-            .execute(request)
-            .pipe(Effect.mapError(toHttpError(redactedNames)), Effect.flatMap(statusError(request, redactedNames)))
+          return yield* http.execute(request).pipe(
+            Effect.mapError((error) => httpError({ error, request, operation: "request", redactedNames })),
+            Effect.flatMap(statusError(request, redactedNames)),
+          )
 
         const response = yield* middleware(request, (input) =>
           http
             .execute(input)
             .pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause))))),
-        ).pipe(Effect.mapError(toHttpError(redactedNames)))
+        ).pipe(Effect.mapError((error) => httpError({ error, request, operation: "request", redactedNames })))
         return yield* statusError(response.request, redactedNames)(response)
       })
     return Service.of({
@@ -362,4 +405,4 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
 
 export const fetchLayer = layer.pipe(Layer.provide(FetchHttpClient.layer))
 
-export * as RequestExecutor from "./executor"
+export * as RequestExecutor from "./executor.js"

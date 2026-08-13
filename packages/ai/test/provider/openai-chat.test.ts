@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Ref, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import {
   HttpOptions,
@@ -12,19 +12,19 @@ import {
   ToolCallPart,
   ToolDefinition,
   Usage,
-} from "../../src"
-import * as Azure from "../../src/providers/azure"
-import * as OpenAI from "../../src/providers/openai"
-import * as OpenAICompatible from "../../src/providers/openai-compatible"
-import * as XAI from "../../src/providers/xai"
-import * as OpenAIChat from "../../src/protocols/openai-chat"
-import { ProviderShared } from "../../src/protocols/shared"
-import { Auth, LLMClient } from "../../src/route"
-import { compileRequest } from "../../src/route/client"
-import { it } from "../lib/effect"
-import { dynamicResponse, fixedResponse, truncatedStream } from "../lib/http"
-import { deltaChunk, usageChunk } from "../lib/openai-chunks"
-import { sseEvents } from "../lib/sse"
+} from "../../src/index.js"
+import * as Azure from "../../src/providers/azure.js"
+import * as OpenAI from "../../src/providers/openai.js"
+import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
+import * as XAI from "../../src/providers/xai.js"
+import * as OpenAIChat from "../../src/protocols/openai-chat.js"
+import { ProviderShared } from "../../src/protocols/shared.js"
+import { Auth, LLMClient } from "../../src/route.js"
+import { compileRequest } from "../../src/route/client.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse, fixedResponse, systemError, truncatedStream } from "../lib/http.js"
+import { deltaChunk, usageChunk } from "../lib/openai-chunks.js"
+import { sseEvents } from "../lib/sse.js"
 
 const TargetJson = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(TargetJson)
@@ -1221,12 +1221,44 @@ describe("OpenAI Chat route", () => {
 
   it.effect("surfaces transport errors that occur mid-stream", () =>
     Effect.gen(function* () {
-      const layer = truncatedStream([
-        `data: ${JSON.stringify(deltaChunk({ role: "assistant", content: "Hello" }))}\n\n`,
-      ])
-      const error = yield* LLMClient.generate(request).pipe(Effect.provide(layer), Effect.flip)
+      const layer = truncatedStream(
+        [`data: ${JSON.stringify(deltaChunk({ role: "assistant", content: "Hello" }))}\n\n`],
+        systemError("ECONNRESET", "socket closed unexpectedly"),
+      )
+      const events = yield* Ref.make<ReadonlyArray<LLMEvent>>([])
+      const error = yield* LLMClient.stream(request).pipe(
+        Stream.tap((event) => Ref.update(events, (current) => [...current, event])),
+        Stream.runDrain,
+        Effect.provide(layer),
+        Effect.flip,
+      )
 
-      expect(error.message).toContain("Failed to read openai/openai-chat stream")
+      expect((yield* Ref.get(events)).some((event) => event.type === "text-delta")).toBeTrue()
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        message: "ECONNRESET: socket closed unexpectedly",
+        transport: "http",
+        operation: "read",
+        code: "ECONNRESET",
+        url: "https://api.openai.test/v1/chat/completions",
+      })
+    }),
+  )
+
+  it.effect("surfaces transport errors before the first stream frame", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(truncatedStream([], systemError("ECONNRESET", "socket closed before output"))),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        message: "ECONNRESET: socket closed before output",
+        transport: "http",
+        operation: "read",
+        code: "ECONNRESET",
+      })
     }),
   )
 

@@ -1,13 +1,13 @@
-export * as Ripgrep from "./ripgrep"
+export * as Ripgrep from "./ripgrep.js"
 
 import { Context, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { Entry, Match } from "@opencode-ai/schema/filesystem"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { collectStream, waitForAbort } from "@opencode-ai/util/process"
-import { Environment } from "./environment"
-import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
-import { RipgrepBinary } from "./ripgrep/binary"
+import { Environment } from "./environment/index.js"
+import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
+import { RipgrepBinary } from "./ripgrep/binary.js"
 
 /**
  * Small core-owned ripgrep execution adapter. It deliberately exposes raw

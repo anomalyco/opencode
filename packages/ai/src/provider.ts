@@ -1,4 +1,4 @@
-import type { LanguageModel, ModelID, ProviderID } from "./schema"
+import type { LanguageModel, ModelID, ProviderID } from "./schema/index.js"
 
 export type LanguageModelOptions = Pick<LanguageModel.Input, "defaults" | "compatibility">
 
@@ -33,4 +33,4 @@ export const make = <DefinitionType extends DefinitionShape>(
   definition: NoExtraFields<DefinitionType, DefinitionShape>,
 ) => definition
 
-export * as Provider from "./provider"
+export * as Provider from "./provider.js"

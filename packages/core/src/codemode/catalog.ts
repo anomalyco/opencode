@@ -1,4 +1,4 @@
-export * as CodeModeCatalog from "./catalog"
+export * as CodeModeCatalog from "./catalog.js"
 
 import { Schema } from "effect"
 

@@ -1,12 +1,12 @@
-export * as SkillTool from "./skill"
+export * as SkillTool from "./skill.js"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import path from "path"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Skill } from "../../skill"
-import { Permission } from "../../permission"
+import { Skill } from "../../skill.js"
+import { Permission } from "../../permission.js"
 
 export const name = "skill"
 const FILE_LIMIT = 10

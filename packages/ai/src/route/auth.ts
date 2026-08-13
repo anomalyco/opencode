@@ -1,6 +1,6 @@
 import { Config, Effect, Redacted } from "effect"
 import { Headers } from "effect/unstable/http"
-import { AuthenticationReason, InvalidRequestReason, AIError, type HttpOptions } from "../schema"
+import { AuthenticationReason, InvalidRequestReason, AIError, type HttpOptions } from "../schema/index.js"
 
 export class MissingCredentialError extends Error {
   readonly _tag = "MissingCredentialError"
@@ -153,4 +153,4 @@ export const toEffect =
   (authInput: AuthInput): Effect.Effect<Headers.Headers, AIError> =>
     input.apply(authInput).pipe(Effect.mapError(toAIError))
 
-export * as Auth from "./auth"
+export * as Auth from "./auth.js"

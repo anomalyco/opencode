@@ -67,4 +67,4 @@ export const typeFollowing = (files: Files, path: string) =>
     ),
   )
 
-export * as EnvironmentFiles from "./files"
+export * as EnvironmentFiles from "./files.js"

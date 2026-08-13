@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, Message } from "../../src"
-import { OpenAI } from "../../src/providers"
-import { recordedTests } from "../recorded-test"
+import { LLM, LLMEvent, Message } from "../../src/index.js"
+import { OpenAI } from "../../src/providers.js"
+import { recordedTests } from "../recorded-test.js"
 
 const openai = OpenAI.configure({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",

@@ -1,7 +1,7 @@
 import { Effect } from "effect"
-import { AbsolutePath } from "../schema"
-import { Git } from "../git"
-import { DirectoryUnavailableError, StrategyID, type ListEntry, type Strategy } from "./copy"
+import { AbsolutePath } from "../schema.js"
+import { Git } from "../git.js"
+import { DirectoryUnavailableError, StrategyID, type ListEntry, type Strategy } from "./copy.js"
 
 export function makeGitWorktreeStrategy(input: {
   git: Git.Interface

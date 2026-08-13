@@ -33,6 +33,7 @@
     "packages": [
       "packages/*",
       "packages/console/*",
+      "packages/lab/*",
       "packages/stats/*",
       "packages/slack"
     ],
@@ -46,9 +47,9 @@
       "@octokit/rest": "22.0.0",
       "@hono/standard-validator": "0.2.0",
       "@hono/zod-validator": "0.4.2",
-      "@opentui/core": "0.0.0-20260808-9ecf7c0a",
-      "@opentui/keymap": "0.0.0-20260808-9ecf7c0a",
-      "@opentui/solid": "0.0.0-20260808-9ecf7c0a",
+      "@opentui/core": "0.5.2",
+      "@opentui/keymap": "0.5.2",
+      "@opentui/solid": "0.5.2",
       "@tanstack/solid-virtual": "3.13.32",
       "@shikijs/stream": "4.2.0",
       "@standard-schema/spec": "1.1.0",
@@ -120,7 +121,8 @@
     "prettier": "3.6.2",
     "semver": "^7.6.0",
     "sst": "catalog:",
-    "turbo": "2.10.2"
+    "turbo": "2.10.2",
+    "vitest": "4.1.10"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
@@ -150,9 +152,9 @@
     "electron"
   ],
   "overrides": {
-    "@opentui/core": "0.0.0-20260808-9ecf7c0a",
-    "@opentui/keymap": "0.0.0-20260808-9ecf7c0a",
-    "@opentui/solid": "0.0.0-20260808-9ecf7c0a",
+    "@opentui/core": "catalog:",
+    "@opentui/keymap": "catalog:",
+    "@opentui/solid": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "effect": "catalog:"
@@ -171,6 +173,8 @@
     "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
     "@modelcontextprotocol/sdk@1.29.0": "patches/@modelcontextprotocol%2Fsdk@1.29.0.patch",
     "effect@4.0.0-beta.101": "patches/effect@4.0.0-beta.101.patch",
-    "@tanstack/virtual-core@3.17.3": "patches/@tanstack%2Fvirtual-core@3.17.3.patch"
+    "@tanstack/virtual-core@3.17.3": "patches/@tanstack%2Fvirtual-core@3.17.3.patch",
+    "@cloudflare/vitest-pool-workers@0.12.6": "patches/@cloudflare%2Fvitest-pool-workers@0.12.6.patch",
+    "@ff-labs/fff-bun@0.10.1": "patches/@ff-labs%2Ffff-bun@0.10.1.patch"
   }
 }

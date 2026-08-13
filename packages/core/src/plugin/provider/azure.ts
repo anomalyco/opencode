@@ -1,9 +1,9 @@
 import { Effect } from "effect"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Form } from "@opencode-ai/schema/form"
-import { Provider } from "../../provider"
-import { iife } from "../../util/iife"
-import { configuredSettings } from "./configured"
+import { Provider } from "../../provider.js"
+import { iife } from "../../util/iife.js"
+import { configuredSettings } from "./configured.js"
 
 function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
   if (useChat && sdk.chat) return sdk.chat(modelID)

@@ -3,7 +3,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Npm } from "@opencode-ai/util/npm"
 import { AppProcess } from "@opencode-ai/util/process"
-import { which } from "../util/which"
+import { which } from "../util/which.js"
 
 export interface Info {
   readonly name: string

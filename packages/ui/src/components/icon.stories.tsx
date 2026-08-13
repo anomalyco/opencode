@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { For } from "solid-js"
 import * as mod from "./icon"
 import { create } from "../storybook/scaffold"
 
@@ -160,12 +161,14 @@ export const Gallery = {
         "grid-template-columns": "repeat(auto-fill, minmax(88px, 1fr))",
       }}
     >
-      {names.map((name) => (
-        <div style={{ display: "grid", gap: "6px", "justify-items": "center" }}>
-          <mod.Icon name={name} />
-          <div style={{ "font-size": "10px", color: "var(--text-weak)", "text-align": "center" }}>{name}</div>
-        </div>
-      ))}
+      <For each={names}>
+        {(name) => (
+          <div style={{ display: "grid", gap: "6px", "justify-items": "center" }}>
+            <mod.Icon name={name} />
+            <div style={{ "font-size": "10px", color: "var(--text-weak)", "text-align": "center" }}>{name}</div>
+          </div>
+        )}
+      </For>
     </div>
   ),
 }

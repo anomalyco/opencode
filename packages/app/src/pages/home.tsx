@@ -23,8 +23,8 @@ export function Home() {
     >
       <ScrollView
         class="h-full [container-type:size]"
-        thumbContainer={scroll.viewport.thumbTrack}
-        thumbHoverTarget={scroll.viewport.hoverTarget}
+        thumbContainer={scroll.viewport.thumbTrack()}
+        thumbHoverTarget={scroll.viewport.hoverTarget()}
         viewportRef={scroll.viewport.setViewport}
         onScroll={(event) => scroll.viewport.update(event.currentTarget.scrollTop)}
         onWheel={scroll.viewport.containOuterWheel}

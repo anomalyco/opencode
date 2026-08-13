@@ -91,7 +91,6 @@ function monoRenderable(renderable: Renderable): void {
 
 function monoCode(renderable: CodeRenderable): void {
   const onChunks = renderable.onChunks
-  const prose = renderable.filetype === "markdown" && onChunks !== undefined
   renderable.onChunks = async (chunks, context) => monoChunks((await onChunks?.(chunks, context)) ?? chunks)
   renderable.treeSitterClient = monoTreeSitter(renderable.treeSitterClient)
 
@@ -112,11 +111,11 @@ function monoCode(renderable: CodeRenderable): void {
     configurable: true,
     get: contentGetter,
     set(value: string) {
-      if (!prose || !isStyledText(Reflect.get(renderable, "_initialStyledText"))) {
+      if (renderable.filetype !== "markdown" || !isStyledText(Reflect.get(renderable, "_initialStyledText"))) {
         renderable.drawUnstyledText = true
         renderable.initialStyledText = stringToStyledText(value)
       }
-      contentSetter(value)
+      contentSetter(renderable.filetype === "markdown" ? value : monoText(value))
     },
   })
 

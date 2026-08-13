@@ -1,10 +1,21 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
+import { usePlugin } from "../../plugin/context"
+
+export function homeFooterVisibility(width: number) {
+  return {
+    mcpCommand: width >= 64,
+    pluginCommand: width >= 80,
+    version: width >= 64,
+  }
+}
 
 function Mcp(props: { context: Plugin.Context }) {
+  const dimensions = useTerminalDimensions()
+  const visibility = createMemo(() => homeFooterVisibility(dimensions().width))
   const list = createMemo(() => props.context.data.location.mcp.server.list(props.context.location) ?? [])
-  const failed = createMemo(() => list().some((item) => item.status.status === "failed"))
+  const failed = createMemo(() => list().filter((item) => item.status.status === "failed").length)
   const count = createMemo(() => list().filter((item) => item.status.status === "connected").length)
 
   return (
@@ -14,6 +25,7 @@ function Mcp(props: { context: Plugin.Context }) {
           <Switch>
             <Match when={failed()}>
               <span style={{ fg: props.context.theme.text.feedback.error.default }}>⊙ </span>
+              {failed()} MCP failed
             </Match>
             <Match when={true}>
               <span
@@ -24,11 +36,34 @@ function Mcp(props: { context: Plugin.Context }) {
               >
                 ⊙{" "}
               </span>
+              {count()} MCP
             </Match>
           </Switch>
-          {count()} MCP
         </text>
-        <text fg={props.context.theme.text.subdued}>/status</text>
+        <Show when={visibility().mcpCommand}>
+          <text fg={props.context.theme.text.subdued}>/mcps</text>
+        </Show>
+      </box>
+    </Show>
+  )
+}
+
+function Plugins(props: { context: Plugin.Context }) {
+  const dimensions = useTerminalDimensions()
+  const visibility = createMemo(() => homeFooterVisibility(dimensions().width))
+  const plugins = usePlugin()
+  const failed = createMemo(() => plugins.list().filter((item) => item.status === "failed").length)
+
+  return (
+    <Show when={failed()}>
+      <box gap={1} flexDirection="row" flexShrink={0}>
+        <text fg={props.context.theme.text.default}>
+          <span style={{ fg: props.context.theme.text.feedback.error.default }}>⊙ </span>
+          {failed()} plugin{failed() === 1 ? "" : "s"} failed
+        </text>
+        <Show when={visibility().pluginCommand}>
+          <text fg={props.context.theme.text.subdued}>/plugins</text>
+        </Show>
       </box>
     </Show>
   )
@@ -36,6 +71,7 @@ function Mcp(props: { context: Plugin.Context }) {
 
 function View(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
+  const visibility = createMemo(() => homeFooterVisibility(dimensions().width))
 
   return (
     <Show when={dimensions().height >= 12 && dimensions().width >= 44}>
@@ -50,10 +86,13 @@ function View(props: { context: Plugin.Context }) {
         gap={2}
       >
         <Mcp context={props.context} />
+        <Plugins context={props.context} />
         <box flexGrow={1} />
-        <box flexShrink={0}>
-          <text fg={props.context.theme.text.subdued}>{props.context.app.version}</text>
-        </box>
+        <Show when={visibility().version}>
+          <box flexShrink={0}>
+            <text fg={props.context.theme.text.subdued}>{props.context.app.version}</text>
+          </box>
+        </Show>
       </box>
     </Show>
   )

@@ -1,4 +1,4 @@
-import { TextAttributes, type Renderable } from "@opentui/core"
+import { CliRenderEvents, TextAttributes, type Renderable } from "@opentui/core"
 import { TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { open } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -13,6 +13,8 @@ import { useRoute } from "../context/route"
 import { Keymap } from "../context/keymap"
 import { useTheme, useThemes } from "../context/theme"
 import { DevTools } from "../devtools"
+import { useDialog } from "../ui/dialog"
+import { DialogExperiments } from "./dialog-experiments"
 import { usePlugin } from "../plugin/context"
 import { errorMessage } from "../util/error"
 
@@ -27,6 +29,7 @@ export type RuntimeStatus = "normal" | "medium" | "high"
 export function DevToolsBar() {
   const client = useClient()
   const config = useConfig()
+  const dialog = useDialog()
   const data = useData()
   const location = useLocation()
   const route = useRoute()
@@ -42,6 +45,7 @@ export function DevToolsBar() {
   const [dumpPath, setDumpPath] = createSignal<string>()
   const [dumpError, setDumpError] = createSignal<string>()
   const [frontendSamples, setFrontendSamples] = createSignal<readonly ProcessSample[]>([])
+  const [debugOverlay, setDebugOverlay] = createSignal(renderer.debugOverlay.enabled)
   let focus: Renderable | null
   const connected = createMemo(() => client.connection.status() === "connected")
   const serverIndicator = createMemo(() => connectionIndicator(client.connection.status(), client.connection.attempt()))
@@ -90,6 +94,10 @@ export function DevToolsBar() {
     { priority: 10 },
   )
   onCleanup(offEscape)
+
+  const onDebugOverlayToggle = (enabled: boolean) => setDebugOverlay(enabled)
+  renderer.on(CliRenderEvents.DEBUG_OVERLAY_TOGGLE, onDebugOverlayToggle)
+  onCleanup(() => renderer.off(CliRenderEvents.DEBUG_OVERLAY_TOGGLE, onDebugOverlayToggle))
 
   onMount(() => {
     const eventLoop = monitorEventLoopDelay({ resolution: 20 })
@@ -174,7 +182,7 @@ export function DevToolsBar() {
                 location: sessionLocation,
                 status: data.session.status(sessionID),
                 pending: data.session.pending.list(sessionID),
-                inputIDs: data.session.input.list(sessionID),
+                inboxIDs: data.session.input.list(sessionID),
                 permissions: data.session.permission.list(sessionID) ?? [],
                 forms: data.session.form.list(sessionID) ?? [],
               }
@@ -316,6 +324,9 @@ export function DevToolsBar() {
               unit=" MB"
               decimals={0}
             />
+            <Action onClick={() => renderer.toggleDebugOverlay()} hoverBackground>
+              {debugOverlay() ? "[x]" : "[ ]"} Debug overlay
+            </Action>
           </PanelBox>
         </Show>
       </BarItem>
@@ -381,16 +392,18 @@ export function DevToolsBar() {
               >
                 {turnTokens() ? "[x]" : "[ ]"} Turn token usage
               </Action>
-              <Action
-                onClick={() =>
-                  void config.update((draft) => {
-                    draft.debug = { ...draft.debug, turn_tokens: verboseTurnTokens() ? true : "verbose" }
-                  })
-                }
-                hoverBackground
-              >
-                {verboseTurnTokens() ? "[x]" : "[ ]"} Turn token usage (verbose)
-              </Action>
+              <Show when={Boolean(turnTokens())}>
+                <Action
+                  onClick={() =>
+                    void config.update((draft) => {
+                      draft.debug = { ...draft.debug, turn_tokens: verboseTurnTokens() ? true : "verbose" }
+                    })
+                  }
+                  hoverBackground
+                >
+                  {verboseTurnTokens() ? "[x]" : "[ ]"} Turn token usage (verbose)
+                </Action>
+              </Show>
             </box>
             <For each={groups()}>
               {(group) => (
@@ -405,6 +418,15 @@ export function DevToolsBar() {
           </PanelBox>
         </Show>
       </BarItem>
+      <BarItem
+        active={false}
+        onClick={() => {
+          close()
+          dialog.replace(() => <DialogExperiments />)
+        }}
+      >
+        <text fg={theme.text.subdued}>Experiments</text>
+      </BarItem>
       <box flexGrow={1} minWidth={0}>
         <TimeToFirstDraw visible={timing()} width="100%" fg={theme.text.subdued} label="Time to first draw" />
       </box>
@@ -415,6 +437,7 @@ export function DevToolsBar() {
 function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
   const theme = useTheme()
   const renderer = useRenderer()
+  const [hovered, setHovered] = createSignal(false)
   return (
     <box
       position="relative"
@@ -423,7 +446,15 @@ function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
       flexDirection="row"
       paddingLeft={1}
       paddingRight={1}
-      backgroundColor={props.active ? theme.background.action.primary.focused : undefined}
+      backgroundColor={
+        props.active
+          ? theme.background.action.primary.focused
+          : hovered()
+            ? theme.background.action.primary.hovered
+            : undefined
+      }
+      onMouseOver={() => setHovered(true)}
+      onMouseOut={() => setHovered(false)}
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
         props.onClick()

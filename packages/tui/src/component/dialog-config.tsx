@@ -94,6 +94,15 @@ export const settings: Setting[] = [
     keywords: ["attachments", "images", "tool output"],
   },
   {
+    title: "New session location",
+    category: "Session",
+    path: ["session", "new_location"],
+    default: "launch",
+    values: ["launch", "inherit"],
+    labels: ["launch directory", "active session"],
+    keywords: ["directory", "cwd", "inherit"],
+  },
+  {
     title: "Enabled",
     category: "Tabs",
     path: ["tabs", "enabled"],
@@ -274,22 +283,13 @@ export const settings: Setting[] = [
     keywords: ["selection", "clipboard"],
   },
   {
-    title: "DevTools",
+    title: "Developer tools",
     category: "Debug",
     path: ["debug", "devtools"],
     default: false,
     values: [false, true],
     labels: ["off", "on"],
     keywords: ["debug bar", "developer tools"],
-  },
-  {
-    title: "Turn token usage",
-    category: "Debug",
-    path: ["debug", "turn_tokens"],
-    default: false,
-    values: [false, true, "verbose"],
-    labels: ["off", "on", "verbose"],
-    keywords: ["tokens", "usage", "debug"],
   },
 ]
 

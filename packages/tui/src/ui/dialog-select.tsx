@@ -40,6 +40,7 @@ export interface DialogSelectProps<T> {
   bindings?: readonly KeymapCommand[]
   current?: T
   focusCurrent?: boolean
+  sectionNavigation?: boolean
 }
 
 type DialogSelectActionBase<T> = {
@@ -79,7 +80,7 @@ export interface DialogSelectOption<T = any> {
   disabled?: boolean
   bg?: RGBA
   fg?: RGBA
-  gutter?: () => JSX.Element
+  gutter?: (color: RGBA) => JSX.Element
   margin?: JSX.Element
   onSelect?: (ctx: DialogContext) => void
 }
@@ -327,6 +328,15 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     moveTo(moveSelection(store.selected, { count: flat().length, delta: direction, policy: "wrap" }), true)
   }
 
+  function moveSection(direction: 1 | -1) {
+    if (props.locked) return
+    const sections = grouped().filter(([_, options]) => options.length > 0)
+    if (sections.length === 0) return
+    const current = sections.findIndex(([category]) => category === selected()?.category)
+    const section = sections[(current + direction + sections.length) % sections.length]
+    moveTo(flat().indexOf(section[1][0]), true)
+  }
+
   function moveTo(next: number, center = false, preserve = true) {
     setFocusedAction(undefined)
     setStore("selected", next)
@@ -488,6 +498,22 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             ]
           : []),
         ...(props.bindings ?? []),
+        ...(props.sectionNavigation
+          ? [
+              {
+                bind: "alt+up",
+                title: "Previous section",
+                group: "Dialog",
+                run: () => moveSection(-1),
+              },
+              {
+                bind: "alt+down",
+                title: "Next section",
+                group: "Dialog",
+                run: () => moveSection(1),
+              },
+            ]
+          : []),
       ],
     }
   })
@@ -790,7 +816,7 @@ function Option(props: {
   footerColor?: RGBA
   titleWidth?: number
   truncateTitle?: boolean | "left"
-  gutter?: () => JSX.Element
+  gutter?: (color: RGBA) => JSX.Element
   activeColor?: RGBA
   onMouseOver?: () => void
 }) {
@@ -811,7 +837,7 @@ function Option(props: {
       </Show>
       <Show when={props.gutter}>
         <box flexShrink={0} marginRight={0}>
-          {props.gutter?.()}
+          {props.gutter?.(text())}
         </box>
       </Show>
       <text

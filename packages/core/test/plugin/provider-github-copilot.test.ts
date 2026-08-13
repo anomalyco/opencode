@@ -195,6 +195,22 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("rewrites models.dev fallback models to the GitHub Copilot package", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(Provider.ID.githubCopilot, () => {})
+        catalog.model.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol"), (model) => {
+          model.package = "@ai-sdk/openai-compatible"
+        })
+      })
+      yield* addPlugin()
+      expect(required(yield* catalog.model.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol"))).package).toBe(
+        "@ai-sdk/github-copilot",
+      )
+    }),
+  )
+
   it.effect("selects languageModel when responses and chat are absent", () =>
     Effect.gen(function* () {
       const plugin = yield* Plugin.Service

@@ -2,7 +2,7 @@ import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { Deferred, Effect } from "effect"
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
-import { OpenCode } from "@opencode-ai/client"
+import { OpenCode, type SessionInfo } from "@opencode-ai/client"
 import { Global } from "@opencode-ai/util/global"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, useLog, type LogSink } from "./context/log"
@@ -38,6 +38,7 @@ import {
   TuiStartupProvider,
   TuiTerminalEnvironmentProvider,
   useTuiApp,
+  useTuiPaths,
   useTuiStartup,
   type TuiApp,
 } from "./context/runtime"
@@ -68,7 +69,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
-import { DialogOpen } from "./component/dialog-open"
+import { DialogOpen, DialogOpenKey, loadDialogOpen } from "./component/dialog-open"
 import { SessionTabs } from "./component/session-tabs"
 import { sessionTabsFitVertically } from "./ui/layout"
 import { ThemeErrorToast } from "./component/theme-error-toast"
@@ -85,6 +86,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
+import { newSessionLocation } from "./config/new-session-location"
 import { PluginProvider, usePlugin, type PackageResolver } from "./plugin/context"
 import { tuiPluginDirectories } from "./plugin/discovery"
 import { PluginRoute, Slot } from "./plugin/render"
@@ -148,6 +150,7 @@ const appBindingCommands = [
   "variant.cycle",
   "variant.list",
   "provider.connect",
+  "opencode.settings",
   "opencode.status",
   "server.pair",
   "service.restart",
@@ -166,6 +169,7 @@ const appBindingCommands = [
   "app.toggle.file_context",
   "app.toggle.diffwrap",
   "app.toggle.paste_summary",
+  "permission.mode",
 ] as const
 
 export type TuiInput = {
@@ -453,6 +457,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   const log = useLog({ component: "app" })
   const app = useTuiApp()
   const startup = useTuiStartup()
+  const paths = useTuiPaths()
   const config = useConfig()
   const devtools = createMemo(() => config.data.debug?.devtools ?? app.channel === "local")
   const route = useRoute()
@@ -473,6 +478,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   const promptRef = usePromptRef()
   const plugins = usePlugin()
   const clipboard = useClipboard()
+  let openingOpen: Promise<SessionInfo[]> | undefined
   // Toast once when an MCP server enters a failed or needs-auth state so the user knows to act,
   // without having to open the status panel. Tracking the last alerted status avoids re-toasting
   // the same problem on every refresh while still re-alerting if the state changes.
@@ -496,7 +502,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         toast.show({
           variant: "error",
           title: `MCP server failed: ${server.name}`,
-          message: "Open MCP servers to view details.",
+          message: "Run /mcps to view details.",
         })
     }
   })
@@ -659,10 +665,13 @@ function App(props: { pair?: DialogPairCredentials }) {
         run: () => {
           route.navigate({
             type: "home",
-            location:
+            location: newSessionLocation(
+              config.data.session.new_location,
+              paths.cwd,
               route.data.type === "session"
                 ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
                 : undefined,
+            ),
           })
           dialog.clear()
         },
@@ -672,8 +681,14 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "Open session or project",
         category: "Session",
         slash: { name: "open", aliases: ["projects", "project"] },
-        run: () => {
-          dialog.replace(() => <DialogOpen />)
+        run: async () => {
+          if (dialog.key === DialogOpenKey || openingOpen) return
+          const previous = dialog.stack.at(-1)
+          openingOpen = loadDialogOpen(data, client)
+          const sessions = await openingOpen
+          openingOpen = undefined
+          if (dialog.stack.at(-1) !== previous) return
+          dialog.replace(() => <DialogOpen sessions={sessions} />, undefined, { key: DialogOpenKey, size: "large" })
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
@@ -978,6 +993,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         name: "app.debug",
         title: "Toggle debug panel",
         category: "System",
+        palette: undefined,
         run: () => {
           renderer.toggleDebugOverlay()
           dialog.clear()

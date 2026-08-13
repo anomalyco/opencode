@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-APP=opencode
+APP=opencode2
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'
@@ -15,14 +15,14 @@ Usage: install.sh [options]
 
 Options:
     -h, --help              Display this help message
-    -v, --version <version> Install a specific version (e.g., 1.0.180)
+    -v, --version <version> Install a specific version (e.g., 0.0.0-next-17236)
     -b, --binary <path>     Install from a local binary instead of downloading
         --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
 
 Examples:
-    curl -fsSL https://opencode.ai/install | bash
-    curl -fsSL https://opencode.ai/install | bash -s -- --version 1.0.180
-    ./install --binary /path/to/opencode
+    curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/v2/install | bash
+    curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/v2/install | bash -s -- --version 0.0.0-next-17236
+    ./install --binary /path/to/opencode2
 EOF
 }
 
@@ -109,11 +109,6 @@ else
         ;;
     esac
 
-    archive_ext=".zip"
-    if [ "$os" = "linux" ]; then
-      archive_ext=".tar.gz"
-    fi
-
     is_musl=false
     if [ "$os" = "linux" ]; then
       if [ -f /etc/alpine-release ]; then
@@ -165,42 +160,42 @@ else
       target="$target-musl"
     fi
 
-    filename="$APP-$target$archive_ext"
-
-
-    if [ "$os" = "linux" ]; then
-        if ! command -v tar >/dev/null 2>&1; then
-             echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
-             exit 1
-        fi
-    else
-        if ! command -v unzip >/dev/null 2>&1; then
-            echo -e "${RED}Error: 'unzip' is required but not installed.${NC}"
-            exit 1
-        fi
+    if ! command -v tar >/dev/null 2>&1; then
+        echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
+        exit 1
     fi
 
     if [ -z "$requested_version" ]; then
-        url="https://github.com/anomalyco/opencode/releases/latest/download/$filename"
-        specific_version=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+        metadata=$(curl -fsSL https://registry.npmjs.org/@opencode-ai%2fcli/next || true)
+        specific_version=$(echo "$metadata" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
 
-        if [[ $? -ne 0 || -z "$specific_version" ]]; then
+        if [ -z "$specific_version" ]; then
             echo -e "${RED}Failed to fetch version information${NC}"
             exit 1
         fi
     else
         # Strip leading 'v' if present
         requested_version="${requested_version#v}"
-        url="https://github.com/anomalyco/opencode/releases/download/v${requested_version}/$filename"
         specific_version=$requested_version
+    fi
 
-        # Verify the release exists before downloading
-        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/anomalyco/opencode/releases/tag/v${requested_version}")
-        if [ "$http_status" = "404" ]; then
-            echo -e "${RED}Error: Release v${requested_version} not found${NC}"
-            echo -e "${MUTED}Available releases: https://github.com/anomalyco/opencode/releases${NC}"
-            exit 1
-        fi
+    package_name="@opencode-ai/cli-$target"
+    http_status=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/@opencode-ai%2fcli-$target/$specific_version" || true)
+    if [ "$http_status" = "404" ]; then
+        echo -e "${RED}Error: Version ${specific_version} is not available for $target${NC}"
+        echo -e "${MUTED}Available versions: https://www.npmjs.com/package/$package_name?activeTab=versions${NC}"
+        exit 1
+    fi
+    if [ "$http_status" != "200" ]; then
+        echo -e "${RED}Failed to fetch package information${NC}"
+        exit 1
+    fi
+
+    filename="cli-$target-$specific_version.tgz"
+    url="https://registry.npmjs.org/$package_name/-/$filename"
+    binary_name="$APP"
+    if [ "$os" = "windows" ]; then
+        binary_name="$APP.exe"
     fi
 fi
 
@@ -219,11 +214,13 @@ print_message() {
 }
 
 check_version() {
-    if command -v opencode >/dev/null 2>&1; then
-        opencode_path=$(which opencode)
+    if command -v "$APP" >/dev/null 2>&1; then
+        opencode_path=$(which "$APP")
 
         ## Check the installed version
-        installed_version=$(opencode --version 2>/dev/null || echo "")
+        installed_version=$("$APP" --version 2>/dev/null || echo "")
+        installed_version="${installed_version##* }"
+        installed_version="${installed_version#v}"
 
         if [[ "$installed_version" != "$specific_version" ]]; then
             print_message info "${MUTED}Installed version: ${NC}$installed_version."
@@ -287,7 +284,7 @@ download_with_progress() {
     trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
 
     (
-        curl --trace-ascii "$tracefile" -s -L -o "$output" "$url"
+        curl --trace-ascii "$tracefile" -fsL -o "$output" "$url"
     ) &
     local curl_pid=$!
 
@@ -325,30 +322,25 @@ download_with_progress() {
 }
 
 download_and_install() {
-    print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
+    print_message info "\n${MUTED}Installing ${NC}$APP ${MUTED}version: ${NC}$specific_version"
     local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
     mkdir -p "$tmp_dir"
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
-        curl -# -L -o "$tmp_dir/$filename" "$url"
+        curl -f -# -L -o "$tmp_dir/$filename" "$url"
     fi
 
-    if [ "$os" = "linux" ]; then
-        tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
-    else
-        unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
-    fi
-
-    mv "$tmp_dir/opencode" "$INSTALL_DIR"
-    chmod 755 "${INSTALL_DIR}/opencode"
+    tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
+    mv "$tmp_dir/package/bin/$binary_name" "$INSTALL_DIR"
+    chmod 755 "${INSTALL_DIR}/$binary_name"
     rm -rf "$tmp_dir"
 }
 
 install_from_binary() {
-    print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}from: ${NC}$binary_path"
-    cp "$binary_path" "${INSTALL_DIR}/opencode"
-    chmod 755 "${INSTALL_DIR}/opencode"
+    print_message info "\n${MUTED}Installing ${NC}$APP ${MUTED}from: ${NC}$binary_path"
+    cp "$binary_path" "${INSTALL_DIR}/$APP"
+    chmod 755 "${INSTALL_DIR}/$APP"
 }
 
 if [ -n "$binary_path" ]; then
@@ -453,8 +445,8 @@ echo -e ""
 echo -e "${MUTED}OpenCode includes free models, to start:${NC}"
 echo -e ""
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
-echo -e "opencode      ${MUTED}# Run command${NC}"
+echo -e "opencode2     ${MUTED}# Run command${NC}"
 echo -e ""
-echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
+echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/v2/docs"
 echo -e ""
 echo -e ""

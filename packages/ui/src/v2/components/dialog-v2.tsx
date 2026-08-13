@@ -59,7 +59,7 @@ export function DialogHeader(props: DialogHeaderProps) {
   return (
     <div data-slot="dialog-header" data-hide-close={hideClose() ? "" : undefined}>
       {local.children}
-      {!hideClose() && (
+      <Show when={!hideClose()}>
         <Kobalte.CloseButton data-slot="dialog-close-button" aria-label={local.closeLabel ?? i18n.t("ui.common.close")}>
           <svg
             width="16"
@@ -76,7 +76,7 @@ export function DialogHeader(props: DialogHeaderProps) {
             />
           </svg>
         </Kobalte.CloseButton>
-      )}
+      </Show>
     </div>
   )
 }

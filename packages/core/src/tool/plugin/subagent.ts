@@ -1,13 +1,13 @@
-export * as SubagentTool from "./subagent"
+export * as SubagentTool from "./subagent.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Schema, Scope } from "effect"
-import { Agent } from "../../agent"
-import { Config } from "../../config"
-import { PluginRuntime } from "../../plugin/runtime"
-import { Permission } from "../../permission"
-import { SessionSchema } from "../../session/schema"
+import { Agent } from "../../agent.js"
+import { Config } from "../../config.js"
+import { PluginRuntime } from "../../plugin/runtime.js"
+import { Permission } from "../../permission.js"
+import { SessionSchema } from "../../session/schema.js"
 
 export const name = "subagent"
 

@@ -1,28 +1,28 @@
-export * as SessionCompaction from "./compaction"
+export * as SessionCompaction from "./compaction.js"
 
 import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest, type LanguageModel } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import { SessionError } from "@opencode-ai/schema/session-error"
 import { Document, type Entry } from "@opencode-ai/schema/config"
 import { Context, Effect, Layer, Stream } from "effect"
-import { Config } from "../config"
-import { Bus } from "../bus"
+import { Config } from "../config.js"
+import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { llmClient } from "../effect/app-node-platform"
-import { SessionEvent } from "./event"
-import type { SessionMessage } from "./message"
-import { SessionModelHeaders } from "./model-headers"
-import { SessionModelHttp } from "./model-http"
-import { SessionPromptCacheKey } from "./prompt-cache-key"
-import { App } from "../app"
-import { SessionRunnerModel } from "./runner/model"
-import { SessionSchema } from "./schema"
-import { toSessionError } from "./to-session-error"
-import { Token } from "../util/token"
-import type { Info, Ref } from "../model"
-import { SessionUsage } from "./usage"
-import { PluginHooks } from "../plugin/hooks"
-import { Agent } from "../agent"
+import { llmClient } from "../effect/app-node-platform.js"
+import { SessionEvent } from "./event.js"
+import type { SessionMessage } from "./message.js"
+import { SessionModelHeaders } from "./model-headers.js"
+import { SessionModelHttp } from "./model-http.js"
+import { SessionPromptCacheKey } from "./prompt-cache-key.js"
+import { App } from "../app.js"
+import { SessionRunnerModel } from "./runner/model.js"
+import { SessionSchema } from "./schema.js"
+import { toSessionError } from "./to-session-error.js"
+import { Token } from "../util/token.js"
+import type { Info, Ref } from "../model.js"
+import { SessionUsage } from "./usage.js"
+import { PluginHooks } from "../plugin/hooks.js"
+import { Agent } from "../agent.js"
 
 const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 15_000
@@ -89,6 +89,7 @@ export type ManualInput = {
   readonly session: SessionSchema.Info
   readonly messages: readonly SessionMessage.Info[]
   readonly inputID: SessionMessage.ID
+  readonly started?: boolean
 }
 
 type RequiredInput = Omit<AutoInput, "ref">
@@ -102,6 +103,7 @@ type Plan = {
   readonly prompt: string
   readonly recent: string
   readonly inputID?: SessionMessage.ID
+  readonly started?: boolean
 }
 
 export type Outcome =
@@ -136,6 +138,8 @@ const serialize = (message: SessionMessage.Info) => {
     const skills = message.skills?.map((skill) => `[Attached skill: ${skill.name}]\n${skill.text}`) ?? []
     return [`[User]: ${message.text}`, ...skills, ...files].join("\n")
   }
+  if (message.type === "location-switched")
+    return `[User]: The working directory has been changed to ${message.location.directory}.`
   if (message.type === "assistant") {
     return message.content
       .flatMap((part) => {
@@ -246,12 +250,13 @@ const make = (dependencies: Dependencies) => {
     return { status: "failed" as const, error: input.error }
   })
   const execute = Effect.fn("SessionCompaction.execute")(function* (plan: Plan) {
-    yield* dependencies.bus.publish(SessionEvent.Compaction.Started, {
-      sessionID: plan.session.id,
-      reason: plan.reason,
-      recent: plan.recent,
-      inputID: plan.inputID,
-    })
+    if (!plan.started)
+      yield* dependencies.bus.publish(SessionEvent.Compaction.Started, {
+        sessionID: plan.session.id,
+        reason: plan.reason,
+        recent: plan.recent,
+        inputID: plan.inputID,
+      })
 
     const chunks: string[] = []
     let failure: SessionError.Error | undefined
@@ -406,6 +411,7 @@ const make = (dependencies: Dependencies) => {
       cost: resolved.cost,
       reason: "manual",
       inputID: input.inputID,
+      started: input.started,
       ...content,
     })
   })

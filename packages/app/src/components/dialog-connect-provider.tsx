@@ -12,7 +12,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { DialogBody, DialogHeader, DialogTitle, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { showToast } from "@/utils/toast"
-import { type Accessor, type Component, createMemo, createUniqueId, For, Match, onMount, Show, Switch } from "solid-js"
+import { type Component, createMemo, createUniqueId, For, Match, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { ExternalLink } from "@/components/external-link"
@@ -40,7 +40,7 @@ export function useProviderConnectController(options: { onBack?: () => void } = 
 }
 
 export const DialogConnectProvider: Component<{
-  directory?: Accessor<string | undefined>
+  directory?: string
   controller?: ReturnType<typeof useProviderConnectController>
 }> = (props) => {
   const fallback = useProviderConnectController()
@@ -136,15 +136,11 @@ export const DialogConnectProvider: Component<{
   )
 }
 
-function ProviderPicker(props: {
-  directory?: Accessor<string | undefined>
-  onSelect: (provider: string) => void
-  onPrepare?: () => void
-}) {
+function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
   const settings = useSettings()
   if (settings.general.newLayoutDesigns())
     return <ProviderPickerV2 directory={props.directory} onSelect={props.onSelect} onPrepare={props.onPrepare} />
-  const providers = useProviders(() => props.directory?.())
+  const providers = useProviders(() => props.directory)
   const language = useLanguage()
   const popularGroup = () => language.t("dialog.provider.group.popular")
   const otherGroup = () => language.t("dialog.provider.group.other")
@@ -211,12 +207,8 @@ function ProviderPicker(props: {
   )
 }
 
-function ProviderPickerV2(props: {
-  directory?: Accessor<string | undefined>
-  onSelect: (provider: string) => void
-  onPrepare?: () => void
-}) {
-  const providers = useProviders(() => props.directory?.())
+function ProviderPickerV2(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
+  const providers = useProviders(() => props.directory)
   const language = useLanguage()
   const [store, setStore] = createStore({
     filter: "",
@@ -364,7 +356,7 @@ function ProviderPickerV2(props: {
 
 function ProviderConnection(props: {
   provider: string
-  directory?: Accessor<string | undefined>
+  directory?: string
   onBack: () => void
   setBack: (handler: () => void) => void
 }) {
@@ -374,8 +366,8 @@ function ProviderConnection(props: {
   const language = useLanguage()
   const settings = useSettings()
   const newLayout = settings.general.newLayoutDesigns
-  const providers = useProviders(() => props.directory?.())
-  const directory = () => props.directory?.() ?? decode64(params.dir)
+  const providers = useProviders(() => props.directory)
+  const directory = () => props.directory ?? decode64(params.dir)
 
   const provider = createMemo(
     () => providers.all().get(props.provider) ?? serverSync.data.provider.all.get(props.provider)!,

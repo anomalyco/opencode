@@ -1,3 +1,4 @@
+import { For } from "solid-js"
 import { ButtonV2 } from "./button-v2"
 
 const docs = `### Overview
@@ -123,30 +124,34 @@ export const AllStates = {
     const toTitleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1)
     return (
       <div style={{ display: "grid", gap: "12px" }}>
-        {variants.map((variant) => (
-          <div style={{ display: "grid", gap: "8px" }}>
-            <div
-              style={{
-                "font-size": "12px",
-                color: "var(--text-weak)",
-                "text-transform": "capitalize",
-              }}
-            >
-              {variant}
+        <For each={variants}>
+          {(variant) => (
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div
+                style={{
+                  "font-size": "12px",
+                  color: "var(--text-weak)",
+                  "text-transform": "capitalize",
+                }}
+              >
+                {variant}
+              </div>
+              <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
+                <For each={states}>
+                  {(state) => (
+                    <ButtonV2
+                      variant={variant}
+                      data-state={state === "default" ? undefined : state}
+                      disabled={state === "disabled"}
+                    >
+                      {toTitleCase(state)}
+                    </ButtonV2>
+                  )}
+                </For>
+              </div>
             </div>
-            <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
-              {states.map((state) => (
-                <ButtonV2
-                  variant={variant}
-                  data-state={state === "default" ? undefined : state}
-                  disabled={state === "disabled"}
-                >
-                  {toTitleCase(state)}
-                </ButtonV2>
-              ))}
-            </div>
-          </div>
-        ))}
+          )}
+        </For>
       </div>
     )
   },

@@ -1,4 +1,4 @@
-import { createProviderPlugin } from "./factory"
+import { createProviderPlugin } from "./factory.js"
 
 export const VenicePlugin = createProviderPlugin({
   id: "opencode.provider.venice",

@@ -228,7 +228,20 @@ describe("ModelsDev Service", () => {
     }),
   )
 
-  it.live("get() returns empty catalog when KV is empty, fetch disabled, and no bundled snapshot is injected", () =>
+  it.live("get() returns empty catalog when KV is empty, fetch disabled, and the bundled snapshot is disabled", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      const state = yield* Ref.make(initialState)
+      const result = yield* ModelsDev.Service.use((s) => s.get()).pipe(
+        Effect.provide(buildLayer(state, cache, { fetch: false, snapshot: false })),
+      )
+      expect(result).toEqual([])
+      const final = yield* Ref.get(state)
+      expect(final.calls).toEqual([])
+    }),
+  )
+
+  it.live("get() falls back to the bundled snapshot when KV is empty and fetch is disabled", () =>
     Effect.gen(function* () {
       const cache = makeCache()
       const state = yield* Ref.make(initialState)
@@ -237,7 +250,9 @@ describe("ModelsDev Service", () => {
         cache,
         ModelsDev.Service.use((s) => s.get()),
       )
-      expect(result).toEqual([])
+      expect(result.length).toBeGreaterThan(0)
+      const anthropic = result.find((snapshot) => snapshot.info.id === "anthropic")
+      expect(anthropic?.environment).toContain("ANTHROPIC_API_KEY")
       const final = yield* Ref.get(state)
       expect(final.calls).toEqual([])
     }),
@@ -248,7 +263,7 @@ describe("ModelsDev Service", () => {
       const cache = makeCache()
       writeCacheText(cache, "{")
       const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
-      const context = yield* Layer.build(buildLayer(state, cache, { fetch: true }))
+      const context = yield* Layer.build(buildLayer(state, cache, { fetch: true, snapshot: false }))
       const result = yield* ModelsDev.Service.use((s) => s.get()).pipe(Effect.provide(context))
       expect(result).toEqual(fixture2Snapshot)
       expect(cache.values.get(cacheKey)).toMatchObject({ body: JSON.stringify(fixture2) })
@@ -263,7 +278,7 @@ describe("ModelsDev Service", () => {
       const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
       const layer = Layer.fresh(
         AppNodeBuilder.build(ModelsDev.node, [
-          [ModelsDev.node, ModelsDev.configured({ fetch: true })],
+          [ModelsDev.node, ModelsDev.configured({ fetch: true, snapshot: false })],
           [LayerNodePlatform.httpClient, Layer.succeed(HttpClient.HttpClient, makeMockClient(state))],
           [KV.node, makeFailingWriteKV(cache)],
         ]),
@@ -281,7 +296,7 @@ describe("ModelsDev Service", () => {
       const cache = makeCache()
       const state = yield* Ref.make(initialState)
       yield* ModelsDev.Service.use((service) => service.get()).pipe(
-        Effect.provide(buildLayer(state, cache, { url: "", fetch: true })),
+        Effect.provide(buildLayer(state, cache, { url: "", fetch: true, snapshot: false })),
       )
       expect((yield* Ref.get(state)).calls[0]?.url).toBe("https://models.opencode.ai/api.json")
     }),
@@ -296,7 +311,7 @@ describe("ModelsDev Service", () => {
         return yield* Effect.all([svc.get(), svc.get(), svc.get(), svc.get(), svc.get()], {
           concurrency: "unbounded",
         })
-      }).pipe(Effect.provide(buildLayer(state, cache, { fetch: true })))
+      }).pipe(Effect.provide(buildLayer(state, cache, { fetch: true, snapshot: false })))
       for (const result of results) expect(result).toEqual(fixtureSnapshot)
       expect((yield* Ref.get(state)).calls.length).toBe(1)
     }),

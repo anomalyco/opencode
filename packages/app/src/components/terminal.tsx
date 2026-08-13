@@ -175,6 +175,7 @@ export const Terminal = (props: TerminalProps) => {
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
+  // Intentional mount-time capture: the imperative xterm/WebSocket lifecycle needs stable values, and Terminal remounts when the SDK scope changes.
   const directory = sdk().directory
   const url = sdk().url
   let container!: HTMLDivElement

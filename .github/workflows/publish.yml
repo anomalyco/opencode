@@ -6,7 +6,6 @@ on:
     branches:
       - ci
       - dev
-      - v2
       - beta
       - fix/npm-native-binary-install
       - snapshot-*

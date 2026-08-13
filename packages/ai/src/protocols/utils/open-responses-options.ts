@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { TextVerbosity, type LLMRequest } from "../../schema"
+import { TextVerbosity, type LLMRequest } from "../../schema/index.js"
 
 export const ResponseIncludables = [
   "file_search_call.results",
@@ -60,4 +60,4 @@ export const resolve = (request: LLMRequest): Resolved => {
   }
 }
 
-export * as OpenResponsesOptions from "./open-responses-options"
+export * as OpenResponsesOptions from "./open-responses-options.js"

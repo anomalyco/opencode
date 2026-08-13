@@ -1,4 +1,4 @@
-import { Show, type JSX } from "solid-js"
+import { For, Show, type JSX } from "solid-js"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -50,7 +50,20 @@ export function WindowsAppMenu(props: {
 
   return (
     <DropdownMenu gutter={4} modal={false} placement="bottom-start">
-      {props.variant === "v2" ? (
+      <Show
+        when={props.variant === "v2"}
+        fallback={
+          <DropdownMenu.Trigger
+            as={IconButton}
+            icon="menu"
+            variant="ghost"
+            class="titlebar-icon rounded-md shrink-0"
+            aria-label={language.t("desktop.menu.ariaLabel")}
+            onPointerDown={rememberFocus}
+            onKeyDown={rememberFocus}
+          />
+        }
+      >
         <div
           data-component="desktop-icon-button"
           class="flex h-7 w-9 shrink-0 items-center justify-center rounded-[6px] px-1"
@@ -65,39 +78,31 @@ export function WindowsAppMenu(props: {
             onKeyDown={rememberFocus}
           />
         </div>
-      ) : (
-        <DropdownMenu.Trigger
-          as={IconButton}
-          icon="menu"
-          variant="ghost"
-          class="titlebar-icon rounded-md shrink-0"
-          aria-label={language.t("desktop.menu.ariaLabel")}
-          onPointerDown={rememberFocus}
-          onKeyDown={rememberFocus}
-        />
-      )}
+      </Show>
       <DropdownMenu.Portal>
         <DropdownMenu.Content class="desktop-app-menu">
           <DropdownMenu.Group>
             <DropdownMenu.GroupLabel class="desktop-app-menu-heading">OpenCode</DropdownMenu.GroupLabel>
-            {DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "windows")).map((menu) => (
-              <DesktopMenuSubmenu label={language.t(menu.labelKey)}>
-                {menu.items
-                  ?.filter((entry) => desktopMenuVisible(entry, "windows"))
-                  .map((entry) =>
-                    entry.type === "separator" ? (
-                      <DropdownMenu.Separator />
-                    ) : (
-                      <DesktopMenuItem
-                        label={entry.labelKey ? language.t(entry.labelKey) : ""}
-                        keybind={entry.command ? props.command.keybind(entry.command) : entry.accelerator?.windows}
-                        disabled={entry.command ? commandDisabled(entry.command) : false}
-                        onSelect={() => runEntry(entry)}
-                      />
-                    ),
-                  )}
-              </DesktopMenuSubmenu>
-            ))}
+            <For each={DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "windows"))}>
+              {(menu) => (
+                <DesktopMenuSubmenu label={language.t(menu.labelKey)}>
+                  <For each={menu.items?.filter((entry) => desktopMenuVisible(entry, "windows"))}>
+                    {(entry) => {
+                      // Static menu data: an early return keeps the union narrowing a Show fallback would lose.
+                      if (entry.type === "separator") return <DropdownMenu.Separator />
+                      return (
+                        <DesktopMenuItem
+                          label={entry.labelKey ? language.t(entry.labelKey) : ""}
+                          keybind={entry.command ? props.command.keybind(entry.command) : entry.accelerator?.windows}
+                          disabled={entry.command ? commandDisabled(entry.command) : false}
+                          onSelect={() => runEntry(entry)}
+                        />
+                      )
+                    }}
+                  </For>
+                </DesktopMenuSubmenu>
+              )}
+            </For>
           </DropdownMenu.Group>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

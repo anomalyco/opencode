@@ -1,10 +1,10 @@
 import { Effect, Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
-import { Route } from "../route/client"
-import { Auth } from "../route/auth"
-import { Endpoint } from "../route/endpoint"
-import { HttpTransport } from "../route/transport"
-import { Protocol } from "../route/protocol"
+import { Route } from "../route/client.js"
+import { Auth } from "../route/auth.js"
+import { Endpoint } from "../route/endpoint.js"
+import { HttpTransport } from "../route/transport/index.js"
+import { Protocol } from "../route/protocol.js"
 import {
   AIError,
   LLMEvent,
@@ -19,13 +19,13 @@ import {
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
-} from "../schema"
-import { classifyProviderFailure } from "../provider-error"
-import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
-import { OpenAIOptions } from "./utils/openai-options"
-import { Lifecycle } from "./utils/lifecycle"
-import { ToolSchemaProjection } from "./utils/tool-schema"
-import { ToolStream } from "./utils/tool-stream"
+} from "../schema/index.js"
+import { classifyProviderFailure } from "../provider-error.js"
+import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { OpenAIOptions } from "./utils/openai-options.js"
+import { Lifecycle } from "./utils/lifecycle.js"
+import { ToolSchemaProjection } from "./utils/tool-schema.js"
+import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "openai-chat"
 const IMAGE_MIMES = new Set<string>(ProviderShared.IMAGE_MIMES)
@@ -884,4 +884,4 @@ export const route = Route.make({
   transport: httpTransport,
 })
 
-export * as OpenAIChat from "./openai-chat"
+export * as OpenAIChat from "./openai-chat.js"

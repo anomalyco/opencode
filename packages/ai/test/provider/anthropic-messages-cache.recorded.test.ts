@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, LLMRequest, Message, ToolCallPart, ToolDefinition } from "../../src"
-import { LLMClient } from "../../src/route"
-import * as Anthropic from "../../src/providers/anthropic"
-import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios"
-import { recordedTests } from "../recorded-test"
+import { CacheHint, LLM, LLMRequest, Message, ToolCallPart, ToolDefinition } from "../../src/index.js"
+import { LLMClient } from "../../src/route.js"
+import * as Anthropic from "../../src/providers/anthropic.js"
+import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
+import { recordedTests } from "../recorded-test.js"
 
 const model = Anthropic.configure({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",

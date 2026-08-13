@@ -39,7 +39,9 @@ describe("toSessionError", () => {
     )
     expect(toSessionError(llm(new QuotaExceededReason({ message: "quota" }))).type).toBe("provider.quota")
     expect(toSessionError(llm(new ContentPolicyReason({ message: "blocked" }))).type).toBe("provider.content-filter")
-    expect(toSessionError(llm(new TransportReason({ message: "transport" }))).type).toBe("provider.transport")
+    expect(
+      toSessionError(llm(new TransportReason({ message: "transport", transport: "http", operation: "request" }))).type,
+    ).toBe("provider.transport")
     expect(toSessionError(llm(new ProviderInternalReason({ message: "internal", status: 500 }))).type).toBe(
       "provider.internal",
     )
@@ -111,7 +113,7 @@ describe("toSessionError", () => {
     const eligible = [
       llm(new RateLimitReason({ message: "rate" })),
       llm(new ProviderInternalReason({ message: "internal", status: 500 })),
-      llm(new TransportReason({ message: "transport" })),
+      llm(new TransportReason({ message: "transport", transport: "http", operation: "request" })),
     ]
     const ineligible = [
       llm(new AuthenticationReason({ message: "auth", kind: "invalid" })),

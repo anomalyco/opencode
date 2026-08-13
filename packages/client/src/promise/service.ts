@@ -1,8 +1,15 @@
 import { readFile } from "node:fs/promises"
-import { spawn, type ChildProcess } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
+import {
+  contenderFailure,
+  contenderFinished,
+  type ServiceContender,
+  spawnServiceContender,
+} from "../service-contender.js"
+import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
+import { matchesVersion } from "../service-version.js"
 import type { ServiceHealth, ServiceStopResponse } from "./generated/types.js"
 
 export * from "../service.js"
@@ -13,11 +20,6 @@ export * from "../service.js"
 // intentionally implemented with Node APIs so Promise clients do not need
 // Effect or @effect/platform-node at runtime.
 
-type Contender = {
-  readonly child: ChildProcess
-  readonly error: () => Error | undefined
-}
-
 /** Discover a healthy, compatible local service without starting one. */
 export async function discover(options: DiscoverOptions = {}) {
   return (await discoverLocal(options))?.endpoint
@@ -26,18 +28,19 @@ export async function discover(options: DiscoverOptions = {}) {
 async function discoverLocal(options: DiscoverOptions) {
   const found = (await registered(options.file)).service
   if (found?.state !== "ready") return undefined
-  if (options.version !== undefined && found.version !== options.version) return undefined
+  if (!matchesVersion(found.version, options)) return undefined
   return found
 }
 
 /** Ensure a healthy, compatible local service is running. */
 export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
-  const deadline = Date.now() + 120_000
-  const contenders = new Set<Contender>()
+  const timing = ensureTiming(options)
+  const deadline = Date.now() + timing.promiseTimeout
+  const contenders = new Set<ServiceContender>()
   let timeouts: { readonly info: Info; readonly count: number } | undefined
   let announced = false
   let lastSpawn = 0
-  let spawnDelay = 5_000
+  let spawnDelay = timing.spawnDelay
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
     if (announced) return
@@ -48,83 +51,67 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
     const [command, ...args] = options.command ?? ["opencode", "serve", "--service"]
     if (command === undefined) throw new Error("Missing service command")
     try {
-      const child = spawn(command, args, { detached: true, stdio: "ignore" })
-      let error: Error | undefined
-      child.once("error", (cause) => {
-        error = new Error("Failed to start server", { cause })
-      })
-      child.unref()
-      return { child, error: () => error }
+      return spawnServiceContender(command, args)
     } catch (cause) {
       throw new Error("Failed to start server", { cause })
     }
   }
 
-  while (true) {
-    if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
-    const registration = await registered(options.file, true)
-    if (registration.timedOut && registration.info !== undefined) {
-      timeouts = {
-        info: registration.info,
-        count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
-      }
-      if (timeouts.count >= 3) {
-        announce("missing")
-        await evict(registration.info, options)
-        timeouts = undefined
-        lastSpawn = Date.now() - spawnDelay
-      }
-    } else timeouts = undefined
+  try {
+    while (true) {
+      if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
+      const registration = await registered(options.file, true, timing.requestTimeout)
+      if (registration.timedOut && registration.info !== undefined) {
+        timeouts = {
+          info: registration.info,
+          count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
+        }
+        if (timeouts.count >= 3) {
+          announce("missing")
+          await evict(registration.info, options, timing)
+          timeouts = undefined
+          lastSpawn = Date.now() - spawnDelay
+        }
+      } else timeouts = undefined
 
-    if (registration.service !== undefined) {
-      spawnDelay = 5_000
-      const service = registration.service
-      const compatible = !service.legacy && (options.version === undefined || service.version === options.version)
-      if (compatible && service.state === "ready") return service.endpoint
-      if (compatible && service.state === "failed") throw new Error("Background service failed to start")
-      if (!compatible) {
-        announce("version-mismatch", service.version)
-        await kill(service, options).catch(() => undefined)
-        lastSpawn = 0
+      if (registration.service !== undefined) {
+        spawnDelay = timing.spawnDelay
+        const service = registration.service
+        const compatible = !service.legacy && matchesVersion(service.version, options)
+        if (compatible && service.state === "ready") return service.endpoint
+        if (compatible && service.state === "failed") throw new Error("Background service failed to start")
+        if (!compatible) {
+          announce("version-mismatch", service.version)
+          await kill(service, options, timing).catch(() => undefined)
+          lastSpawn = 0
+        }
+      } else {
+        if (lastSpawn === 0 && registration.info !== undefined) lastSpawn = Date.now()
+        const finished = [...contenders].filter(contenderFinished)
+        const failure = finished.map(contenderFailure).find((error) => error !== undefined)
+        if (finished.some((item) => item.child.exitCode === 0)) {
+          spawnDelay = Math.min(spawnDelay * 2, timing.maxSpawnDelay)
+        }
+        finished.forEach((item) => contenders.delete(item))
+        if (failure !== undefined && contenders.size === 0) throw failure
+        // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
+        if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
+          announce("missing")
+          contenders.add(spawnContender())
+          lastSpawn = Date.now()
+        }
       }
-    } else {
-      if (lastSpawn === 0 && registration.info !== undefined) lastSpawn = Date.now()
-      const finished = [...contenders].filter(contenderFinished)
-      const failure = finished.map(contenderFailure).find((error) => error !== undefined)
-      if (finished.some((item) => item.child.exitCode === 0)) {
-        spawnDelay = Math.min(spawnDelay * 2, 30_000)
-      }
-      finished.forEach((item) => contenders.delete(item))
-      if (failure !== undefined && contenders.size === 0) throw failure
-      // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
-      if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
-        announce("missing")
-        contenders.add(spawnContender())
-        lastSpawn = Date.now()
-      }
+      await delay(timing.pollInterval)
     }
-    await delay(1_000)
+  } finally {
+    contenders.forEach((contender) => contender.release())
   }
-}
-
-function contenderFailure(contender: Contender) {
-  const error = contender.error()
-  if (error !== undefined) return error
-  if (contender.child.exitCode !== null && contender.child.exitCode !== 0)
-    return new Error(`Server process exited with code ${contender.child.exitCode}`)
-  if (contender.child.signalCode !== null)
-    return new Error(`Server process terminated by ${contender.child.signalCode}`)
-  return undefined
-}
-
-function contenderFinished(contender: Contender) {
-  return contender.error() !== undefined || contender.child.exitCode !== null || contender.child.signalCode !== null
 }
 
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
   const existing = await find(options)
-  if (existing !== undefined) await kill(existing, options)
+  if (existing !== undefined) await kill(existing, options, defaultEnsureTiming)
 }
 
 function fallback() {
@@ -161,7 +148,7 @@ async function probe(info: Info, allowLegacy = false): Promise<LocalService | un
   return (await probeResult(info, allowLegacy)).service
 }
 
-async function probeResult(info: Info, allowLegacy = false) {
+async function probeResult(info: Info, allowLegacy = false, timeout = defaultEnsureTiming.requestTimeout) {
   const endpoint = {
     url: info.url,
     auth:
@@ -169,7 +156,7 @@ async function probeResult(info: Info, allowLegacy = false) {
         ? undefined
         : { type: "basic" as const, username: "opencode", password: info.password },
   } satisfies Endpoint
-  const signal = AbortSignal.timeout(2_000)
+  const signal = AbortSignal.timeout(timeout)
   const result = await fetch(new URL("/api/health", info.url), {
     headers: headers(endpoint),
     signal,
@@ -206,10 +193,10 @@ async function probeResult(info: Info, allowLegacy = false) {
   }
 }
 
-async function registered(file?: string, allowLegacy = false) {
+async function registered(file?: string, allowLegacy = false, timeout?: number) {
   const info = await read(file)
   if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
-  return { info, ...(await probeResult(info, allowLegacy)) }
+  return { info, ...(await probeResult(info, allowLegacy, timeout)) }
 }
 
 async function find(options: { readonly file?: string }) {
@@ -231,10 +218,10 @@ function stopped(pid: number) {
   }
 }
 
-async function waitUntilStopped(pid: number) {
-  for (let attempt = 0; attempt <= 100; attempt++) {
+async function waitUntilStopped(pid: number, timing: EnsureTiming) {
+  for (let attempt = 0; attempt <= timing.stopPollAttempts; attempt++) {
     if (stopped(pid)) return true
-    if (attempt < 100) await delay(50)
+    if (attempt < timing.stopPollAttempts) await delay(timing.stopPollInterval)
   }
   return false
 }
@@ -243,42 +230,42 @@ function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
-async function evict(info: Info, options: { readonly file?: string }) {
+async function evict(info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = await read(options.file)
   if (current === undefined || !same(current, info)) return
   signal(info.pid, "SIGTERM")
-  if (await waitUntilStopped(info.pid)) return
+  if (await waitUntilStopped(info.pid, timing)) return
 
   const latest = await read(options.file)
   if (latest === undefined || !same(latest, info)) return
   signal(info.pid, "SIGKILL")
-  if (!(await waitUntilStopped(info.pid))) throw new Error(`Server process ${info.pid} is still running`)
+  if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
 }
 
-async function kill(service: LocalService, options: { readonly file?: string }) {
-  const requested = await requestStop(service)
+async function kill(service: LocalService, options: { readonly file?: string }, timing: EnsureTiming) {
+  const requested = await requestStop(service, timing.requestTimeout)
   if (requested === "rejected") return
   if (requested === "unsupported") {
     const current = await find(options)
     if (current === undefined || !same(current.info, service.info)) return
     signal(service.info.pid, "SIGTERM")
   }
-  if (await waitUntilStopped(service.info.pid)) return
+  if (await waitUntilStopped(service.info.pid, timing)) return
 
   const latest = await find(options)
   if (latest === undefined || !same(latest.info, service.info)) return
   signal(service.info.pid, "SIGKILL")
-  if (!(await waitUntilStopped(service.info.pid)))
+  if (!(await waitUntilStopped(service.info.pid, timing)))
     throw new Error(`Server process ${service.info.pid} is still running`)
 }
 
-async function requestStop(service: LocalService) {
+async function requestStop(service: LocalService, timeout = defaultEnsureTiming.requestTimeout) {
   if (service.info.id === undefined || service.legacy) return "unsupported" as const
   const response = await fetch(new URL("/api/service/stop", service.info.url), {
     method: "POST",
     headers: { ...headers(service.endpoint), "content-type": "application/json" },
     body: JSON.stringify({ instanceID: service.info.id }),
-    signal: AbortSignal.timeout(2_000),
+    signal: AbortSignal.timeout(timeout),
   }).catch(() => undefined)
   if (response === undefined || response.status === 404 || response.status === 405) return "unsupported" as const
   const body = (await response.json().catch(() => undefined)) as ServiceStopResponse | undefined

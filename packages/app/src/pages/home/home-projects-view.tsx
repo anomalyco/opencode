@@ -1,4 +1,4 @@
-import { type Accessor, createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js"
+import { createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
@@ -29,16 +29,16 @@ const projectContextMenuID = (server: ServerConnection.Any, directory: string) =
 
 export type HomeProjectsViewProps = {
   language: ReturnType<typeof useLanguage>
-  servers: Accessor<ServerConnection.Any[]>
-  projects: Accessor<LocalProject[]>
-  recentlyClosed: Accessor<LocalProject[]>
-  selection: Accessor<HomeProjectSelection>
-  homedir: Accessor<string>
+  servers: ServerConnection.Any[]
+  projects: LocalProject[]
+  recentlyClosed: LocalProject[]
+  selection: HomeProjectSelection
+  homedir: string
   serverHealth: (server: ServerConnection.Any) => ServerHealth | undefined
   projectsForServer: (server: ServerConnection.Any) => LocalProject[]
   collapsed: (server: ServerConnection.Any) => boolean
-  canDefaultServer: Accessor<boolean>
-  defaultServerKey: Accessor<ServerConnection.Key | null | undefined>
+  canDefaultServer: boolean
+  defaultServerKey: ServerConnection.Key | null | undefined
   canRevealProject: (server: ServerConnection.Any) => boolean
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
   onWheel: (event: WheelEvent) => void
@@ -81,9 +81,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
     >
       <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
         <div class="text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
-        <Show
-          when={props.servers().length === 1 && !(props.projects().length === 0 && props.recentlyClosed().length > 0)}
-        >
+        <Show when={props.servers.length === 1 && !(props.projects.length === 0 && props.recentlyClosed.length > 0)}>
           <TooltipV2 placement="bottom" value={props.language.t("home.project.add")}>
             <IconButtonV2
               data-action="home-add-project"
@@ -91,8 +89,8 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
               size="large"
               class="titlebar-icon [&_[data-slot=icon-svg]]:text-v2-icon-icon-muted"
               icon={<IconV2 name="folder-add-left" />}
-              disabled={props.serverHealth(props.servers()[0])?.healthy === false}
-              onClick={() => props.onChooseProject(props.servers()[0])}
+              disabled={props.serverHealth(props.servers[0])?.healthy === false}
+              onClick={() => props.onChooseProject(props.servers[0])}
               aria-label={props.language.t("home.project.add")}
             />
           </TooltipV2>
@@ -100,25 +98,20 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
       </div>
       <ScrollView data-slot="home-projects-scroll" class="min-h-0 min-w-0 shrink">
         <Show
-          when={props.servers().length > 1}
+          when={props.servers.length > 1}
           fallback={
             <div class="pr-3">
               <Show
-                when={props.projects().length > 0}
-                fallback={<HomeProjectEmpty {...props} server={props.servers()[0]} items={props.recentlyClosed()} />}
+                when={props.projects.length > 0}
+                fallback={<HomeProjectEmpty {...props} server={props.servers[0]} items={props.recentlyClosed} />}
               >
-                <HomeProjectList
-                  {...props}
-                  {...contextMenuProps}
-                  server={props.servers()[0]}
-                  items={props.projects()}
-                />
+                <HomeProjectList {...props} {...contextMenuProps} server={props.servers[0]} items={props.projects} />
               </Show>
             </div>
           }
         >
           <div class="flex min-w-0 flex-col gap-4 pr-3">
-            <For each={props.servers()}>
+            <For each={props.servers}>
               {(item) => {
                 const projects = () => props.projectsForServer(item)
                 const healthy = () => !!props.serverHealth(item)?.healthy
@@ -130,7 +123,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
                       server={item}
                       {...props}
                       {...contextMenuProps}
-                      selected={props.selection().server === ServerConnection.key(item) && !props.selection().directory}
+                      selected={props.selection.server === ServerConnection.key(item) && !props.selection.directory}
                       collapsed={collapsed()}
                       health={props.serverHealth(item)}
                     />
@@ -277,8 +270,8 @@ function HomeServerRow(props: {
         <ServerRowMenuView
           server={props.server}
           labels={serverMenuLabels(props.language)}
-          canDefault={props.canDefaultServer()}
-          isDefault={props.defaultServerKey() === ServerConnection.key(props.server)}
+          canDefault={props.canDefaultServer}
+          isDefault={props.defaultServerKey === ServerConnection.key(props.server)}
           canRemove={props.canRemoveServer(props.server)}
           onEdit={props.onEditServer}
           onSetDefault={() => props.onSetDefaultServer(props.server)}
@@ -339,7 +332,7 @@ function HomeProjectList(props: HomeProjectListProps) {
         const source = event.operation.source
         if (event.canceled || !isSortable(source)) return
         if (source.initialIndex !== source.index) props.onMoveProject(props.server, source.id.toString(), source.index)
-        if (props.selection().server !== ServerConnection.key(props.server))
+        if (props.selection.server !== ServerConnection.key(props.server))
           props.onSelectProject(props.server, source.id.toString())
       }}
     >
@@ -350,7 +343,7 @@ function HomeProjectList(props: HomeProjectListProps) {
             row's sortable unregisters on unmount) and discarding animations.
             String keys keep row elements alive and move them on reorder. */}
         <For each={props.items.map((project) => project.worktree)}>
-          {(worktree, index) => <HomeProjectSlot {...props} worktree={worktree} index={index} />}
+          {(worktree, index) => <HomeProjectSlot {...props} worktree={worktree} index={index()} />}
         </For>
       </div>
     </DragDropProvider>
@@ -360,7 +353,7 @@ function HomeProjectList(props: HomeProjectListProps) {
 function HomeProjectSlot(
   props: HomeProjectListProps & {
     worktree: string
-    index: () => number
+    index: number
   },
 ) {
   const initial = props.items.find((item) => item.worktree === props.worktree)
@@ -376,10 +369,9 @@ function HomeProjectSlot(
       project={project()}
       server={props.server}
       index={props.index}
-      serverSelected={props.selection().server === ServerConnection.key(props.server)}
+      serverSelected={props.selection.server === ServerConnection.key(props.server)}
       selected={
-        props.selection().server === ServerConnection.key(props.server) &&
-        props.selection().directory === props.worktree
+        props.selection.server === ServerConnection.key(props.server) && props.selection.directory === props.worktree
       }
       unseen={props.unseenCount(props.server, project())}
     />
@@ -425,7 +417,7 @@ function HomeRecentlyClosedRow(
 ) {
   const unreachable = () => props.serverHealth(props.server)?.healthy === false
   const path = () => {
-    const home = props.homedir()
+    const home = props.homedir
     const worktree = props.project.worktree
     if (home && (worktree === home || worktree.startsWith(`${home}/`))) return `~${worktree.slice(home.length)}`
     return worktree
@@ -451,7 +443,7 @@ function HomeProjectRow(
     HomeProjectsContextMenuProps & {
       project: LocalProject
       server: ServerConnection.Any
-      index: () => number
+      index: number
       serverSelected: boolean
       selected: boolean
       unseen: number
@@ -464,7 +456,7 @@ function HomeProjectRow(
       return props.project.worktree
     },
     get index() {
-      return props.index()
+      return props.index
     },
   })
   let pointerDownSelected: boolean | undefined

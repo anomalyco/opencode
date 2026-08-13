@@ -1,15 +1,15 @@
-export * as SessionStore from "./store"
+export * as SessionStore from "./store.js"
 
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Database } from "../database/database"
+import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { SessionHistory } from "./history"
-import { MessageDecodeError } from "./error"
-import { SessionMessage } from "./message"
+import { SessionHistory } from "./history.js"
+import { MessageDecodeError } from "./error.js"
+import { SessionMessage } from "./message.js"
 import { Session } from "@opencode-ai/schema/session"
-import { SessionMessageTable, SessionTable } from "./sql"
-import { fromRow } from "./info"
+import { SessionMessageTable, SessionTable } from "./sql.js"
+import { fromRow } from "./info.js"
 
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>

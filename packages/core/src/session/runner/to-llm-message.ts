@@ -1,7 +1,8 @@
 import { Message, ToolCallPart, ToolResultPart, type ContentPart, type ProviderMetadata } from "@opencode-ai/ai"
 import { Option, Schema } from "effect"
-import type { Model } from "../../model"
-import { SessionMessage } from "../message"
+import { fileURLToPath } from "url"
+import type { Model } from "../../model.js"
+import { SessionMessage } from "../message.js"
 import type { FileAttachment } from "@opencode-ai/schema/prompt"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
@@ -13,6 +14,17 @@ const media = (file: FileAttachment): ContentPart => ({
   filename: file.name,
   metadata: file.description === undefined ? undefined : { description: file.description },
 })
+
+const attachmentLocation = (file: FileAttachment) => {
+  if (file.source.type !== "uri") return undefined
+  const url = URL.parse(file.source.uri)
+  if (url?.protocol !== "file:") return undefined
+  try {
+    return fileURLToPath(url)
+  } catch {
+    return undefined
+  }
+}
 
 const textAttachment = (file: FileAttachment): ContentPart => ({
   type: "text",
@@ -36,7 +48,7 @@ const textAttachment = (file: FileAttachment): ContentPart => ({
 const directoryAttachment = (file: FileAttachment): ContentPart => ({
   type: "text",
   text: `\n\n${[
-    `Attached directory: ${file.name ?? (file.source.type === "uri" ? file.source.uri : "directory")}`,
+    `Attached directory: ${attachmentLocation(file) ?? file.name ?? (file.source.type === "uri" ? file.source.uri : "directory")}`,
     file.description === undefined ? undefined : `Description: ${file.description}`,
     file.data.length === 0 ? undefined : "",
     file.data.length === 0 ? undefined : Buffer.from(file.data, "base64").toString("utf8"),
@@ -55,7 +67,10 @@ const directoryAttachment = (file: FileAttachment): ContentPart => ({
 const attachmentContent = (file: FileAttachment): ContentPart[] => {
   if (file.mime === "text/plain") return [textAttachment(file)]
   if (file.mime === "application/x-directory") return [directoryAttachment(file)]
-  if (imageMimes.has(file.mime)) return [media(file)]
+  if (imageMimes.has(file.mime)) {
+    const location = attachmentLocation(file)
+    return [...(location === undefined ? [] : [Message.text(`Attached file: ${location}`)]), media(file)]
+  }
   return []
 }
 
@@ -201,6 +216,15 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
     case "agent-switched":
     case "model-switched":
       return []
+    case "location-switched":
+      return [
+        Message.make({
+          id: message.id,
+          role: "user",
+          content: `The working directory has been changed to ${message.location.directory}.`,
+          metadata: message.metadata,
+        }),
+      ]
     case "user":
       const content = [
         ...(message.skills ?? []).map((skill) => Message.text(skill.text)),

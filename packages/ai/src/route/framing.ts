@@ -1,6 +1,6 @@
 import type { Stream } from "effect"
-import * as ProviderShared from "../protocols/shared"
-import type { AIError } from "../schema"
+import * as ProviderShared from "../protocols/shared.js"
+import type { AIError } from "../schema/index.js"
 
 /**
  * Decode a streaming HTTP response body into provider-protocol frames.
@@ -24,4 +24,4 @@ export interface Definition<Frame> {
 /** Server-Sent Events framing. Used by every JSON-streaming HTTP provider. */
 export const sse: Definition<string> = { id: "sse", frame: ProviderShared.sseFraming }
 
-export * as Framing from "./framing"
+export * as Framing from "./framing.js"

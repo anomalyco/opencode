@@ -25,7 +25,7 @@ import type {
   SessionMessageAssistantText,
   SessionMessageAssistantTool,
   SessionInfo,
-  SessionPendingInfo,
+  SessionInboxInfo,
   ShellInfo,
   SkillInfo,
   VcsInfo,
@@ -38,7 +38,8 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 import { nonEmptyToolContent } from "../util/tool-display"
-import type { SessionPending } from "@opencode-ai/schema/session-pending"
+import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
+import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
 import { createEffect, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
@@ -80,7 +81,7 @@ type Store = {
     family: Record<string, string[]>
     active: Record<string, DataSessionStatus>
     message: Record<string, SessionMessageInfo[]>
-    pending: Record<string, SessionPendingInfo[]>
+    pending: Record<string, SessionInboxInfo[]>
     input: Record<string, string[]>
     permission: Record<string, PermissionRequest[]>
     // Pending forms keyed by owner: a session ID or the temporary "global" elicitation sentinel.
@@ -164,26 +165,26 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       setStore("session", "active", sessionID, status)
     }
 
-    function addPending(item: SessionPendingInfo) {
+    function addPending(item: SessionInboxInfo) {
       if (store.session.pending[item.sessionID]?.some((pending) => pending.id === item.id)) return
       setStore("session", "pending", item.sessionID, [...(store.session.pending[item.sessionID] ?? []), item])
     }
 
-    function removePending(sessionID: string, inputID?: string) {
-      if (!inputID) return
-      if (store.session.pending[sessionID]?.some((item) => item.id === inputID))
+    function removePending(sessionID: string, inboxID?: string) {
+      if (!inboxID) return
+      if (store.session.pending[sessionID]?.some((item) => item.id === inboxID))
         setStore(
           "session",
           "pending",
           sessionID,
-          (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inputID),
+          (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inboxID),
         )
-      if (store.session.input[sessionID]?.includes(inputID))
+      if (store.session.input[sessionID]?.includes(inboxID))
         setStore(
           "session",
           "input",
           sessionID,
-          (store.session.input[sessionID] ?? []).filter((id) => id !== inputID),
+          (store.session.input[sessionID] ?? []).filter((id) => id !== inboxID),
         )
     }
 
@@ -198,10 +199,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       )
     }
 
-    function updatePending(sessionID: string, inputID: string, delivery: SessionPending.Delivery) {
-      const index = store.session.pending[sessionID]?.findIndex((item) => item.id === inputID) ?? -1
+    function updatePending(sessionID: string, inboxID: string, delivery: SessionInbox.Delivery) {
+      const index = store.session.pending[sessionID]?.findIndex((item) => item.id === inboxID) ?? -1
       const item = store.session.pending[sessionID]?.[index]
-      if (index < 0 || !item || item.type === "compaction" || item.delivery === delivery) return
+      if (index < 0 || !item || item.delivery === delivery) return
       setStore("session", "pending", sessionID, index, { ...item, delivery })
     }
 
@@ -431,19 +432,49 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               setStore("session", "info", event.data.sessionID, "title", event.data.title)
           })
           break
-        case "session.moved":
-          if (store.session.info[event.data.sessionID]) {
+        case "session.moved": {
+          const current = store.session.info[event.data.sessionID]
+          if (current) {
+            const previous = {
+              location: { ...current.location },
+              projectID: current.projectID,
+              subpath: current.subpath,
+            }
             setStore("session", "info", event.data.sessionID, "location", event.data.location)
             if (event.data.projectID)
               setStore("session", "info", event.data.sessionID, "projectID", event.data.projectID)
             setStore("session", "info", event.data.sessionID, "subpath", event.data.subpath)
+            message.update(event.data.sessionID, (draft, index) => {
+              message.append(draft, index, {
+                id: messageIDFromEvent(event.id),
+                type: "location-switched",
+                location: event.data.location,
+                projectID: event.data.projectID,
+                subpath: event.data.subpath,
+                previous,
+                time: { created: event.created },
+              })
+            })
           }
           break
-        case "session.input.promoted": {
-          const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inputID) ?? false
-          removePending(event.data.sessionID, event.data.inputID)
+        }
+        case "project.directory.resolved": {
+          for (const [sessionID, info] of Object.entries(store.session.info)) {
+            const adopted = ProjectDirectories.adopt(
+              { projectID: info.projectID, directory: info.location.directory },
+              event.data,
+            )
+            if (!adopted) continue
+            setStore("session", "info", sessionID, "projectID", adopted.projectID)
+            setStore("session", "info", sessionID, "subpath", adopted.subpath)
+          }
+          break
+        }
+        case "session.inbox.delivered": {
+          const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inboxID) ?? false
+          removePending(event.data.sessionID, event.data.inboxID)
           message.update(event.data.sessionID, (draft, index) => {
-            const position = index.get(event.data.inputID)
+            const position = index.get(event.data.inboxID)
             if (position === undefined) return
             const existing = draft[position]
             if (!existing || !admitted) return
@@ -454,70 +485,67 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         }
-        case "session.input.steered":
-          updatePending(event.data.sessionID, event.data.inputID, "steer")
+        case "session.inbox.delivery.changed":
+          updatePending(event.data.sessionID, event.data.inboxID, event.data.delivery)
           break
-        case "session.input.queued":
-          updatePending(event.data.sessionID, event.data.inputID, "queue")
-          break
-        case "session.input.cancelled": {
-          removePending(event.data.sessionID, event.data.inputID)
-          if (messageIndex.get(event.data.sessionID)?.has(event.data.inputID))
+        case "session.inbox.cancelled": {
+          removePending(event.data.sessionID, event.data.inboxID)
+          if (messageIndex.get(event.data.sessionID)?.has(event.data.inboxID))
             message.update(event.data.sessionID, (draft, index) => {
-              const position = index.get(event.data.inputID)
+              const position = index.get(event.data.inboxID)
               if (position === undefined) return
               draft.splice(position, 1)
-              index.delete(event.data.inputID)
+              index.delete(event.data.inboxID)
               message.reindex(draft, index, position)
             })
           break
         }
-        case "session.input.admitted":
+        case "session.inbox.enqueued": {
+          const item = event.data.item
           addPending({
-            id: event.data.inputID,
+            id: event.data.inboxID,
             sessionID: event.data.sessionID,
             timeCreated: event.created,
-            ...event.data.input,
+            ...item,
           })
-          if (!store.session.input[event.data.sessionID]?.includes(event.data.inputID))
+          if (!store.session.input[event.data.sessionID]?.includes(event.data.inboxID))
             setStore("session", "input", event.data.sessionID, [
               ...(store.session.input[event.data.sessionID] ?? []),
-              event.data.inputID,
+              event.data.inboxID,
             ])
+          if (item.type !== "user" && item.type !== "synthetic") break
           message.update(event.data.sessionID, (draft, index) => {
             message.append(
               draft,
               index,
-              event.data.input.type === "user"
+              item.type === "user"
                 ? {
-                    id: event.data.inputID,
+                    id: event.data.inboxID,
                     type: "user",
-                    ...event.data.input.data,
+                    ...item.payload,
                     time: { created: event.created },
                   }
                 : {
-                    id: event.data.inputID,
+                    id: event.data.inboxID,
                     type: "synthetic",
-                    ...event.data.input.data,
+                    ...item.payload,
                     time: { created: event.created },
                   },
             )
           })
           break
+        }
         case "session.instructions.updated":
-          const instructions = event.metadata?.instructions
-          if (
-            typeof instructions === "object" &&
-            instructions !== null &&
-            "initial" in instructions &&
-            instructions.initial === true
-          )
-            break
+          // Mirror the projector: the initial baseline and empty-rendering deltas carry no text
+          // and produce no transcript message.
+          const updateText = event.data.text
+          if (updateText === undefined) break
           message.update(event.data.sessionID, (draft, index) => {
             message.append(draft, index, {
               id: messageIDFromEvent(event.id),
               type: "system",
-              text: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
+              text: updateText,
+              description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
               metadata: event.metadata,
               time: { created: event.created },
             })
@@ -766,16 +794,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "session.execution.started":
           setSessionActive(event.data.sessionID, "running")
           break
-        case "session.compaction.admitted":
-          addPending({
-            id: event.data.inputID,
-            sessionID: event.data.sessionID,
-            timeCreated: event.created,
-            type: "compaction",
-          })
-          break
         case "session.compaction.started":
-          removePending(event.data.sessionID, event.data.inputID)
+          if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
           message.update(event.data.sessionID, (draft, index) => {
             message.append(draft, index, {
               id: event.data.inputID ?? messageIDFromEvent(event.id),
@@ -828,12 +848,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.compaction.ended":
-          setStore(
-            "session",
-            "pending",
-            event.data.sessionID,
-            (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.type !== "compaction"),
-          )
           message.update(event.data.sessionID, (draft, index) => {
             const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
             const current = draft[position]
@@ -858,7 +872,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.compaction.failed":
-          removePending(event.data.sessionID, event.data.inputID)
+          if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
           message.update(event.data.sessionID, (draft, index) => {
             const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
             const current = draft[position]
@@ -995,8 +1009,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           list(sessionID: string) {
             return store.session.input[sessionID] ?? []
           },
-          has(sessionID: string, inputID: string) {
-            return store.session.input[sessionID]?.includes(inputID) ?? false
+          has(sessionID: string, inboxID: string) {
+            return store.session.input[sessionID]?.includes(inboxID) ?? false
           },
         },
         pending: {
@@ -1005,7 +1019,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           sync(sessionID: string) {
             return sync.run(`session.pending:${sessionID}`, async () => {
-              const pending = await client.api.session.pending.list({ sessionID })
+              const pending = await client.api.session.inbox.list({ sessionID })
               setStore("session", "pending", sessionID, reconcile(pending))
               setStore(
                 "session",

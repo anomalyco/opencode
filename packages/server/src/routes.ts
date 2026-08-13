@@ -27,7 +27,7 @@ import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { PluginRuntime } from "@opencode-ai/core/plugin/runtime"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { WellKnown } from "@opencode-ai/core/wellknown"
-import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
+import { Workspace } from "@opencode-ai/core/workspace"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -43,9 +43,8 @@ import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
-import { modalWorkspaceDriver, provider as modalProvider } from "./workspace/modal-workspace"
 
-const applicationServices = LayerNode.group([
+const applicationServiceNodes = [
   Global.node,
   Database.node,
   Bus.node,
@@ -64,29 +63,40 @@ const applicationServices = LayerNode.group([
   PtyEnvironment.node,
   LocationServiceMap.node,
   SessionRestart.node,
-])
+] as const
+const applicationServices = LayerNode.group(applicationServiceNodes)
+const embeddedApplicationServices = LayerNode.group([...applicationServiceNodes, Workspace.node])
 
-export function createRoutes(options: ServerOptions = {}, serviceURLs: () => ReadonlyArray<string> = () => []) {
+export function createRoutes(
+  options: ServerOptions = {},
+  serviceURLs: () => ReadonlyArray<string> = () => [],
+  overrides: LayerNode.Replacements = [],
+) {
   return makeRoutes(
     options.password
       ? ServerAuth.Config.configLayer({ password: Option.some(options.password) })
       : ServerAuth.Config.layer,
     options,
     serviceURLs,
+    overrides,
+    false,
   )
 }
 
-export function createEmbeddedRoutes(options: ServerOptions = {}) {
-  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [])
+export function createEmbeddedRoutes(options: ServerOptions = {}, overrides: LayerNode.Replacements = []) {
+  return makeRoutes(ServerAuth.Config.configLayer({ password: Option.none() }), options, () => [], overrides, true)
 }
 
 function makeRoutes<AuthError, AuthServices>(
   auth: Layer.Layer<ServerAuth.Config, AuthError, AuthServices>,
   options: ServerOptions,
   serviceURLs: () => ReadonlyArray<string>,
+  // Runtime-profile replacements (e.g. workerd) applied after the standard set, so later entries win.
+  overrides: LayerNode.Replacements,
+  embedded: boolean,
 ) {
   const pluginRuntimeCell = PluginRuntime.makeCell()
-  const replacements: LayerNode.Replacements = [
+  const standard: LayerNode.Replacements = [
     [Database.node, Database.configured(options.database)],
     [Bus.node, Bus.configured({ persist: options.events?.persist })],
     [App.node, App.configured(options.app)],
@@ -117,20 +127,20 @@ function makeRoutes<AuthError, AuthServices>(
     ],
     [PluginRuntime.node, PluginRuntime.layerWithCell(pluginRuntimeCell)],
     [PluginRuntime.providerNode, PluginRuntime.providerNodeWithCell(pluginRuntimeCell)],
-    [
-      WorkspaceDriver.node,
-      WorkspaceDriver.registryNode({ [modalProvider]: modalWorkspaceDriver({ app: "opencode-workspaces" }) }),
-    ],
   ]
+  const replacements: LayerNode.Replacements = [...standard, ...overrides]
   const serviceLayer = options.simulation
     ? Layer.unwrap(
         Effect.gen(function* () {
           const { simulationReplacements } = yield* Effect.promise(() => import("@opencode-ai/simulation/backend"))
           const simulation = yield* simulationReplacements({ version: App.make(options.app).version })
-          return AppNodeBuilder.build(applicationServices, [...replacements, ...simulation])
+          return AppNodeBuilder.build(embedded ? embeddedApplicationServices : applicationServices, [
+            ...replacements,
+            ...simulation,
+          ])
         }),
       )
-    : AppNodeBuilder.build(applicationServices, replacements)
+    : AppNodeBuilder.build(embedded ? embeddedApplicationServices : applicationServices, replacements)
   return serviceLayer.pipe(
     Layer.flatMap((context) => {
       const services = Layer.succeedContext(context)

@@ -1,14 +1,14 @@
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
-import { Route, type RouteDefaultsInput } from "../route/client"
-import { Endpoint } from "../route/endpoint"
-import { HttpOptions, ProviderID, type ModelID, type ProviderOptions } from "../schema"
-import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
-import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat"
-import * as OpenAIChat from "../protocols/openai-chat"
-import * as OpenAIResponses from "../protocols/openai-responses"
-import { XAIImages } from "../protocols/xai-images"
-import type { OpenAIOptionsInput } from "./openai-options"
-import type { ProviderPackage } from "../provider-package"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
+import { HttpOptions, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import * as OpenAICompatibleProfiles from "./openai-compatible-profile.js"
+import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat.js"
+import * as OpenAIChat from "../protocols/openai-chat.js"
+import * as OpenAIResponses from "../protocols/openai-responses.js"
+import { XAIImages } from "../protocols/xai-images.js"
+import type { OpenAIOptionsInput } from "./openai-options.js"
+import type { ProviderPackage } from "../provider-package.js"
 
 export const id = ProviderID.make("xai")
 
@@ -28,7 +28,7 @@ export interface Settings extends ProviderPackage.Settings {
   readonly providerOptions?: XAIProviderOptionsInput
 }
 
-export type { XAIImageOptions } from "../protocols/xai-images"
+export type { XAIImageOptions } from "../protocols/xai-images.js"
 
 const responsesRoute = Route.make({
   id: "openai-responses",

@@ -7,6 +7,7 @@ import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallbac
 import { useEvent } from "./event"
 import { useRoute } from "./route"
 import { useConfig } from "../config"
+import { useLocation } from "./location"
 import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
 import {
@@ -48,6 +49,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const data = useData()
     const event = useEvent()
     const config = useConfig().data
+    const location = useLocation()
     const paths = useTuiPaths()
     const enabled = () => config.tabs.enabled
     // Keyed reconcile keeps tab object identity across reorders, so strip rows move instead of
@@ -197,8 +199,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     onCleanup(event.on("session.execution.interrupted", (evt) => markUnread(evt.data.sessionID, "activity")))
     onCleanup(event.on("session.execution.failed", (evt) => markUnread(evt.data.sessionID, "error")))
     onCleanup(
-      event.on("session.input.admitted", (evt) => {
-        if (!enabled() || evt.data.input.type !== "user") return
+      event.on("session.inbox.enqueued", (evt) => {
+        if (!enabled() || evt.data.item.type !== "user") return
         const sessionID = root(evt.data.sessionID)
         if (current() === sessionID || !state().tabs.some((tab) => tab.sessionID === sessionID)) return
         setPromptPulses((pulses) => ({ ...pulses, [sessionID]: (pulses[sessionID] ?? 0) + 1 }))
@@ -248,6 +250,14 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       select(sessionID: string) {
         if (!enabled()) return
         route.navigate({ type: "session", sessionID: root(sessionID) })
+      },
+      add() {
+        if (!enabled()) return
+        const sessionID = current()
+        route.navigate({
+          type: "home",
+          location: (sessionID ? data.session.get(sessionID)?.location : undefined) ?? location.ref,
+        })
       },
       close(sessionID?: string) {
         if (!enabled()) return

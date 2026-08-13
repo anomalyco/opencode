@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parseColor } from "@opentui/core"
+import { parseColor, TextAttributes } from "@opentui/core"
 import stringWidth from "string-width"
 import { expectDiagram } from "../test/diagram.js"
 import { drawFlowchartDiagramGrid as drawParsedFlowchartDiagramGrid } from "./drawing.js"
@@ -545,6 +545,19 @@ flowchart TD
     expect(diagram.edges[0]?.label).toBe("result ≥ 1")
   })
 
+  test("preserves quoted multiline edge labels", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart TD
+  A -->|"fs: watcher/fff off<br/>events.persist: true<br/>mcp.stdio: false<br/>A --> B"| B`)
+
+    expect(diagram.edges).toEqual([
+      {
+        from: "A",
+        to: "B",
+        label: "fs: watcher/fff off<br/>events.persist: true<br/>mcp.stdio: false<br/>A --> B",
+      },
+    ])
+  })
+
   test("parses and renders each edge in a chained flowchart statement", () => {
     const content = `flowchart LR
   API --> Worker --> DB[(Database)]`
@@ -911,6 +924,61 @@ flowchart LR
     expect(output).toContain("second line")
     expect(output.indexOf("first")).toBeLessThan(output.indexOf("second line"))
     expect(output).not.toContain("<br")
+  })
+
+  test("keeps quoted multiline labels compact and renders italic node text", () => {
+    const source = `flowchart TB
+  DO["ServerWorkerd.create({ storage, config })"]
+  DO --> SO["serverOptions()<br/><i>option flags</i>"]
+  DO --> RP["replacements()<br/><i>layer overrides</i>"]
+  SO -->|"fs: watcher/fff off<br/>events.persist: true<br/>mcp.stdio: false<br/>config as string"| SF["ServerFetch.make(options, { overrides })"]
+  RP -->|"Database → DO-SQLite<br/>Shell/FS/Pty → typed-unavailable<br/>Snapshot/Vcs → no-op<br/>plugins → precompiled only"| SF
+  SF --> GRAPH["LayerNode graph<br/>(core builds normally,<br/>swapped nodes substituted)"]`
+    const grid = drawFlowchartDiagramGrid(source)
+    const output = grid.toString({ trimTop: true, trimBottom: true })
+    const styled = renderGridStyledText(grid, resolveFlowchartStyleColors())
+
+    expect(Math.max(...output.split("\n").map((line) => stringWidth(line)))).toBeLessThan(140)
+    expect(output).not.toMatch(/<\/?i>|<br|events persist|mcp stdio|^[^\n]*"fs:/)
+    expect(
+      styled.chunks.some((chunk) => chunk.text.includes("option flags") && chunk.attributes === TextAttributes.ITALIC),
+    ).toBe(true)
+  })
+
+  test("keeps quoted architecture labels from distorting subgraph routes", () => {
+    const source = `flowchart TB
+    subgraph consumer["Durable Object"]
+        DO["ServerWorkerd.create({ storage, config })"]
+    end
+
+    DO --> SO["serverOptions()<br/><i>option flags</i>"]
+    DO --> RP["replacements()<br/><i>layer overrides</i>"]
+
+    SO -->|"fs: watcher/fff off<br/>events.persist: true<br/>mcp.stdio: false<br/>config as string"| SF["ServerFetch.make(options, { overrides })"]
+    RP -->|"Database → DO-SQLite<br/>Shell/FS/Pty → typed-unavailable<br/>Snapshot/Vcs → no-op<br/>plugins → precompiled only"| SF
+
+    SF --> GRAPH["LayerNode graph<br/>(core builds normally,<br/>swapped nodes substituted)"]
+
+    subgraph bundle["3rd mechanism: bundle conditions (build time)"]
+        COND["--conditions=workerd<br/>pty / fff / photon / shell-parser<br/>native modules → inert stubs<br/>#global-roots → workerd path rooting"]
+    end
+    COND -.->|import resolution| GRAPH`
+    const output = renderFlowchartDiagram(source)
+
+    expect(Math.max(...output.split("\n").map((line) => stringWidth(line)))).toBeLessThan(130)
+    expect(output).not.toMatch(/<\/?i>|<br|^[^\n]*"(?:fs:|Database)/)
+    for (const label of [
+      "fs: watcher/fff off",
+      "events.persist: true",
+      "mcp.stdio: false",
+      "config as string",
+      "Database → DO-SQLite",
+      "Shell/FS/Pty → typed-unavailable",
+      "Snapshot/Vcs → no-op",
+      "plugins → precompiled only",
+    ]) {
+      expect(output).toContain(label)
+    }
   })
 
   test("keeps tall multiline branch labels out of sibling nodes", () => {

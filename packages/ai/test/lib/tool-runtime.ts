@@ -1,5 +1,5 @@
 import { Effect, Stream } from "effect"
-import { LLMClient } from "../../src/route"
+import { LLMClient } from "../../src/route.js"
 import {
   LLMEvent,
   LLMRequest,
@@ -10,9 +10,9 @@ import {
   ToolResultPart,
   type ToolResultValue,
   type Usage,
-} from "../../src/schema"
-import { type Tools, toDefinitions } from "../../src/tool"
-import { ToolRuntime } from "../../src/tool-runtime"
+} from "../../src/schema/index.js"
+import { type Tools, toDefinitions } from "../../src/tool.js"
+import { ToolRuntime } from "../../src/tool-runtime.js"
 
 interface RunOptions<T extends Tools> {
   readonly request: LLMRequest

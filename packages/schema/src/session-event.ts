@@ -20,7 +20,7 @@ import { Skill as SkillSchema } from "./skill.js"
 import { Money } from "./money.js"
 import { Snapshot } from "./snapshot.js"
 import { TokenUsage } from "./token-usage.js"
-import { SessionPending } from "./session-pending.js"
+import { SessionInbox } from "./session-inbox.js"
 import { Project } from "./project.js"
 import { SessionFork } from "./session-fork.js"
 
@@ -90,9 +90,7 @@ export const Moved = Event.durable({
   ...options,
   schema: {
     ...Base,
-    location: Location.Ref,
-    projectID: Project.ID.pipe(optional),
-    subpath: RelativePath.pipe(optional),
+    ...SessionInbox.MovePayload.fields,
   },
 })
 export type Moved = typeof Moved.Type
@@ -154,48 +152,41 @@ export const Forked = Event.durable({
 })
 export type Forked = typeof Forked.Type
 
-const InputRef = {
+const InboxRef = {
   ...Base,
-  inputID: SessionMessage.ID,
+  inboxID: SessionMessage.ID,
 }
 
-export const InputPromoted = Event.durable({
-  type: "session.input.promoted",
+export const InboxDelivered = Event.durable({
+  type: "session.inbox.delivered",
   ...options,
-  schema: InputRef,
+  schema: InboxRef,
 })
-export type InputPromoted = typeof InputPromoted.Type
+export type InboxDelivered = typeof InboxDelivered.Type
 
-export const InputAdmitted = Event.durable({
-  type: "session.input.admitted",
+export const InboxEnqueued = Event.durable({
+  type: "session.inbox.enqueued",
   ...options,
   schema: {
-    ...InputRef,
-    input: SessionPending.Message,
+    ...InboxRef,
+    item: SessionInbox.Item,
   },
 })
-export type InputAdmitted = typeof InputAdmitted.Type
+export type InboxEnqueued = typeof InboxEnqueued.Type
 
-export const InputCancelled = Event.durable({
-  type: "session.input.cancelled",
+export const InboxCancelled = Event.durable({
+  type: "session.inbox.cancelled",
   ...options,
-  schema: InputRef,
+  schema: InboxRef,
 })
-export type InputCancelled = typeof InputCancelled.Type
+export type InboxCancelled = typeof InboxCancelled.Type
 
-export const InputSteered = Event.durable({
-  type: "session.input.steered",
+export const InboxDeliveryChanged = Event.durable({
+  type: "session.inbox.delivery.changed",
   ...options,
-  schema: InputRef,
+  schema: { ...InboxRef, delivery: SessionInbox.Delivery },
 })
-export type InputSteered = typeof InputSteered.Type
-
-export const InputQueued = Event.durable({
-  type: "session.input.queued",
-  ...options,
-  schema: InputRef,
-})
-export type InputQueued = typeof InputQueued.Type
+export type InboxDeliveryChanged = typeof InboxDeliveryChanged.Type
 
 export namespace Execution {
   export const Started = Event.durable({ type: "session.execution.started", ...options, schema: Base })
@@ -523,16 +514,6 @@ export const RetryScheduled = Event.durable({
 export type RetryScheduled = typeof RetryScheduled.Type
 
 export namespace Compaction {
-  export const Admitted = Event.durable({
-    type: "session.compaction.admitted",
-    ...options,
-    schema: {
-      ...Base,
-      inputID: SessionMessage.ID,
-    },
-  })
-  export type Admitted = typeof Admitted.Type
-
   export const Started = Event.durable({
     type: "session.compaction.started",
     ...options,
@@ -602,11 +583,10 @@ export const Definitions = Event.inventory(
   UsageUpdated,
   Deleted,
   Forked,
-  InputPromoted,
-  InputAdmitted,
-  InputCancelled,
-  InputSteered,
-  InputQueued,
+  InboxDelivered,
+  InboxEnqueued,
+  InboxCancelled,
+  InboxDeliveryChanged,
   Execution.Started,
   Execution.Succeeded,
   Execution.Failed,
@@ -633,7 +613,6 @@ export const Definitions = Event.inventory(
   Tool.Success,
   Tool.Failed,
   RetryScheduled,
-  Compaction.Admitted,
   Compaction.Started,
   Compaction.Delta,
   Compaction.Ended,

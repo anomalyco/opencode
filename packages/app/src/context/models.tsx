@@ -177,7 +177,7 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
 export const { use: useModels, provider: ModelsProvider } = createSimpleContext({
   name: "Models",
   gate: false,
-  init: (props: { directory?: Accessor<string | undefined> } = {}) => {
-    return createModelsController(() => props.directory?.())
+  init: (props: { directory?: string | Accessor<string | undefined> } = {}) => {
+    return createModelsController(() => (typeof props.directory === "function" ? props.directory() : props.directory))
   },
 })

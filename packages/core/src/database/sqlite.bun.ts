@@ -1,10 +1,9 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite"
-import { drizzle } from "drizzle-orm/bun-sqlite"
 import { Context, Effect, Layer } from "effect"
 import { Reactivity } from "effect/unstable/reactivity"
 import { SqlClient } from "effect/unstable/sql"
 import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError"
-import { Sqlite } from "./sqlite"
+import { Sqlite } from "./sqlite.js"
 
 const TypeId = "~@opencode-ai/core/database/SqliteBun" as const
 
@@ -98,16 +97,7 @@ const nativeLayer = (config: Config) =>
 
 const clientLayer = (config: Config) => Layer.effect(SqlClient.SqlClient, make(config))
 
-const drizzleLayer = Layer.effect(
-  Sqlite.Drizzle,
-  Effect.gen(function* () {
-    return drizzle({ client: (yield* Sqlite.Native) as Database })
-  }),
-)
-
 export const sqliteLayer = (config: Config) => {
   const native = nativeLayer(config)
-  return Layer.merge(native, Layer.merge(clientLayer(config), drizzleLayer).pipe(Layer.provide(native))).pipe(
-    Layer.provide(Reactivity.layer),
-  )
+  return Layer.merge(native, clientLayer(config).pipe(Layer.provide(native))).pipe(Layer.provide(Reactivity.layer))
 }

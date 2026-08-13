@@ -1,4 +1,4 @@
-export * as PermissionV1 from "./permission"
+export * as PermissionV1 from "./permission.js"
 
 import { Schema } from "effect"
 export * from "@opencode-ai/schema/permission-v1"

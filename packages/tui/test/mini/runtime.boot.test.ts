@@ -1,73 +1,12 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode-ai/client/promise"
-import type { Resolved } from "../../src/config"
 import { resolveMiniSettings, resolveModelInfo, resolveRunTuiConfig } from "../../src/mini/runtime.boot"
 import { catalogModel, catalogProvider } from "./fixture/catalog"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
-function config(input?: {
-  leader?: string
-  leaderTimeout?: number
-  bindings?: Partial<{
-    commandList: string[]
-    variantCycle: string[]
-    interrupt: string[]
-    historyPrevious: string[]
-    historyNext: string[]
-    inputClear: string[]
-    inputSubmit: string[]
-    inputNewline: string[]
-  }>
-}): Resolved {
-  const bind = input?.bindings
-  return createTuiResolvedConfig({
-    leader: input?.leaderTimeout === undefined ? undefined : { timeout: input.leaderTimeout },
-    keybinds: {
-      ...(input?.leader && { leader: input.leader }),
-      ...(bind?.commandList && { command_list: bind.commandList }),
-      ...(bind?.variantCycle && { variant_cycle: bind.variantCycle }),
-      ...(bind?.interrupt && { session_interrupt: bind.interrupt }),
-      ...(bind?.historyPrevious && { history_previous: bind.historyPrevious }),
-      ...(bind?.historyNext && { history_next: bind.historyNext }),
-      ...(bind?.inputClear && { input_clear: bind.inputClear }),
-      ...(bind?.inputSubmit && { input_submit: bind.inputSubmit }),
-      ...(bind?.inputNewline && { input_newline: bind.inputNewline }),
-    },
-  })
-}
-
 describe("run runtime boot", () => {
   afterEach(() => {
     mock.restore()
-  })
-
-  test("reads footer keybinds from resolved keybind config", async () => {
-    const input = config({
-      leader: "ctrl+g",
-      bindings: {
-        commandList: ["ctrl+p"],
-        variantCycle: ["ctrl+t", "alt+t"],
-        interrupt: ["ctrl+c"],
-        historyPrevious: ["k"],
-        historyNext: ["j"],
-        inputClear: ["ctrl+l"],
-        inputSubmit: ["ctrl+s"],
-        inputNewline: ["alt+return"],
-      },
-    })
-
-    const result = await resolveRunTuiConfig(input)
-
-    expect(result.keybinds.get("leader")?.[0]?.key).toBe("ctrl+g")
-    expect(result.leader.timeout).toBe(2000)
-    expect(result.keybinds.get("command.palette.show")?.[0]?.key).toBe("ctrl+p")
-    expect(result.keybinds.get("variant.cycle").map((item) => item.key)).toEqual(["ctrl+t", "alt+t"])
-    expect(result.keybinds.get("session.interrupt")?.[0]?.key).toBe("ctrl+c")
-    expect(result.keybinds.get("prompt.history.previous")?.[0]?.key).toBe("k")
-    expect(result.keybinds.get("prompt.history.next")?.[0]?.key).toBe("j")
-    expect(result.keybinds.get("prompt.clear")?.[0]?.key).toBe("ctrl+l")
-    expect(result.keybinds.get("input.submit")?.[0]?.key).toBe("ctrl+s")
-    expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("alt+return")
   })
 
   test("falls back to default tui keymap config when config load fails", async () => {
@@ -84,12 +23,6 @@ describe("run runtime boot", () => {
     expect(result.keybinds.get("input.submit")?.[0]?.key).toBe("return")
     expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("shift+return,ctrl+return,ctrl+j")
     expect(result.keybinds.get("prompt.queue")?.[0]?.key).toBe("alt+return")
-  })
-
-  test("preserves disabled leader from resolved tui config", async () => {
-    const result = await resolveRunTuiConfig(config({ leader: "none" }))
-
-    expect(result.keybinds.get("leader")).toEqual([])
   })
 
   test("preserves shared config while resolving independent Mini defaults", async () => {

@@ -1,2 +1,2 @@
-export { model } from "../openai"
-export type { Settings } from "../openai"
+export { model } from "../openai.js"
+export type { Settings } from "../openai.js"

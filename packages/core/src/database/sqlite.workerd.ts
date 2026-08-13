@@ -1,11 +1,11 @@
-import { drizzle } from "drizzle-orm/durable-sqlite"
 import { Context, Effect, Exit, Fiber, Layer, Scope, Semaphore, Stream } from "effect"
 import { identity } from "effect/Function"
 import { Reactivity } from "effect/unstable/reactivity"
 import { SqlClient, Statement } from "effect/unstable/sql"
 import type { Connection } from "effect/unstable/sql/SqlConnection"
 import { classifySqliteError, SqlError, UnknownError } from "effect/unstable/sql/SqlError"
-import { Sqlite } from "./sqlite"
+import type { NativeTransactionSqlClient } from "./drizzle/effect-sqlite/session.js"
+import { Sqlite } from "./sqlite.js"
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name"
 
@@ -216,10 +216,10 @@ const make = (options: Config) =>
         config: options,
         withTransaction: makeWithTransaction(native, connection, semaphore),
         // Durable Object SQLite rejects BEGIN/COMMIT/SAVEPOINT; consumers such
-        // as the drizzle session must route through withTransaction instead.
+        // as the drizzle session detect this and route through withTransaction.
         transactionStatements: false,
-      },
-    )
+      } as const,
+    ) satisfies NativeTransactionSqlClient
 
     return client
   })
@@ -238,17 +238,7 @@ const nativeLayer = (config: Config) =>
 
 const clientLayer = (config: Config) => Layer.effect(SqlClient.SqlClient, make(config))
 
-const drizzleLayer = Layer.effect(
-  Sqlite.Drizzle,
-  Effect.gen(function* () {
-    const native = (yield* Sqlite.Native) as DurableObjectStorage
-    return drizzle(native) as unknown as Sqlite.DrizzleClient
-  }),
-)
-
 export const sqliteLayer = (config: Config) => {
   const native = nativeLayer(config)
-  return Layer.merge(native, Layer.merge(clientLayer(config), drizzleLayer).pipe(Layer.provide(native))).pipe(
-    Layer.provide(Reactivity.layer),
-  )
+  return Layer.merge(native, clientLayer(config).pipe(Layer.provide(native))).pipe(Layer.provide(Reactivity.layer))
 }

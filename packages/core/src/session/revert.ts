@@ -1,15 +1,15 @@
-export * as SessionRevert from "./revert"
+export * as SessionRevert from "./revert.js"
 
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Effect, Schema } from "effect"
-import { Database } from "../database/database"
-import { Bus } from "../bus"
-import { RelativePath } from "../schema"
-import { Snapshot } from "../snapshot"
-import { SessionEvent } from "./event"
-import { SessionMessage } from "./message"
-import { SessionSchema } from "./schema"
-import { SessionMessageTable } from "./sql"
+import { Database } from "../database/database.js"
+import { Bus } from "../bus.js"
+import { RelativePath } from "../schema.js"
+import { Snapshot } from "../snapshot.js"
+import { SessionEvent } from "./event.js"
+import { SessionMessage } from "./message.js"
+import { SessionSchema } from "./schema.js"
+import { SessionMessageTable } from "./sql.js"
 
 export class MessageNotFoundError extends Schema.TaggedErrorClass<MessageNotFoundError>()(
   "Session.MessageNotFoundError",

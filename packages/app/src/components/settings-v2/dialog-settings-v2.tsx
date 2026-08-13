@@ -127,7 +127,7 @@ export const DialogSettings: Component<{
           {(server) => (
             <ServerProvider conn={server}>
               <TabsV2.Content value="providers" class="settings-v2-panel">
-                <SettingsProvidersV2 directory={directory} onBack={showProviders} />
+                <SettingsProvidersV2 directory={directory()} onBack={showProviders} />
               </TabsV2.Content>
               <TabsV2.Content value="models" class="settings-v2-panel">
                 <ModelsProvider directory={directory}>

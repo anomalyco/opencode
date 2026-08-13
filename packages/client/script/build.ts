@@ -30,7 +30,7 @@ import { Reference } from "@opencode-ai/schema/reference"
 import { AbsolutePath, PositiveInt, RelativePath } from "@opencode-ai/schema/schema"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { SessionPending } from "@opencode-ai/schema/session-pending"
+import { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { Shell } from "@opencode-ai/schema/shell"
 import { Skill } from "@opencode-ai/schema/skill"
 import { Vcs } from "@opencode-ai/schema/vcs"
@@ -69,7 +69,7 @@ const effectTypeReferences = [
   ...namespaceTypes("Reference", "@opencode-ai/schema/reference", Reference),
   ...namespaceTypes("Session", "@opencode-ai/schema/session", Session),
   ...namespaceTypes("SessionMessage", "@opencode-ai/schema/session-message", SessionMessage),
-  ...namespaceTypes("SessionPending", "@opencode-ai/schema/session-pending", SessionPending),
+  ...namespaceTypes("SessionInbox", "@opencode-ai/schema/session-inbox", SessionInbox),
   ...namespaceTypes("Shell", "@opencode-ai/schema/shell", Shell),
   ...namespaceTypes("Skill", "@opencode-ai/schema/skill", Skill),
   ...namespaceTypes("Vcs", "@opencode-ai/schema/vcs", Vcs),

@@ -8,7 +8,7 @@ import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
-import { which } from "../util/which"
+import { which } from "../util/which.js"
 
 export namespace RipgrepBinary {
   const VERSION = "15.1.0"

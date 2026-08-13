@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { DatabaseMigration } from "../migration"
+import type { DatabaseMigration } from "../migration.js"
 
 const migration: DatabaseMigration.Migration = {
   id: "20260504145000_add_sync_owner",

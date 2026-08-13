@@ -1,7 +1,6 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Failed, NotFound, WrongKind, type Files } from "../../src/environment/index"
-import { it } from "./effect"
+import { Failed, NotFound, WrongKind, type Files } from "@opencode-ai/core/environment/index"
 
 export interface EnvironmentHarness {
   readonly files: Files
@@ -16,17 +15,21 @@ export const environmentConformance = <E>(
   skip = false,
 ) => {
   const check = <A, E2>(title: string, body: (harness: EnvironmentHarness) => Effect.Effect<A, E2>) =>
-    it.live(title, () =>
-      Effect.gen(function* () {
-        const harness = yield* Effect.acquireRelease(makeHarness(), (harness) =>
+    test(title, () =>
+      Effect.runPromise(
+        Effect.scoped(
           Effect.gen(function* () {
-            yield* Effect.ignore(harness.files.remove(harness.root))
-            if (harness.dispose) yield* harness.dispose
+            const harness = yield* Effect.acquireRelease(makeHarness(), (harness) =>
+              Effect.gen(function* () {
+                yield* Effect.ignore(harness.files.remove(harness.root))
+                if (harness.dispose) yield* harness.dispose
+              }),
+            )
+            yield* harness.files.mkdir(harness.root)
+            return yield* body(harness)
           }),
-        )
-        yield* harness.files.mkdir(harness.root)
-        return yield* body(harness)
-      }),
+        ),
+      ),
     )
 
   const bytes = (value: string) => new TextEncoder().encode(value)

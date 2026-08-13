@@ -1,4 +1,4 @@
-import { createProviderPlugin } from "./factory"
+import { createProviderPlugin } from "./factory.js"
 
 export const PerplexityPlugin = createProviderPlugin({
   id: "opencode.provider.perplexity",

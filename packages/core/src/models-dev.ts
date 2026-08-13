@@ -2,15 +2,16 @@ import { Cause, Context, Duration, Effect, Layer, Option, Schedule, Schema, Sema
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ModelsDev } from "@opencode-ai/schema/models-dev"
 import { Money } from "@opencode-ai/schema/money"
-import { App } from "./app"
+import { App } from "./app.js"
 import { Hash } from "@opencode-ai/util/hash"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Bus } from "./bus"
+import { Bus } from "./bus.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
-import { Model } from "./model"
-import { Provider } from "./provider"
-import { KV } from "./kv"
+import { Model } from "./model.js"
+import { Provider } from "./provider.js"
+import { KV } from "./kv.js"
+import snapshotText from "./models-dev/snapshot.txt" with { type: "text" }
 
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
 export type CatalogModelStatus = typeof CatalogModelStatus.Type
@@ -519,8 +520,6 @@ function modelInfo(
 
 export { Event } from "@opencode-ai/schema/models-dev"
 
-declare const OPENCODE_MODELS_DEV: Record<string, SourceProvider> | undefined
-
 export interface Interface {
   readonly get: () => Effect.Effect<readonly Snapshot[]>
   readonly refresh: (force?: boolean) => Effect.Effect<void>
@@ -530,17 +529,38 @@ export const Options = Schema.Struct({
   url: Schema.optional(Schema.String),
   file: Schema.optional(Schema.String),
   fetch: Schema.optional(Schema.Boolean),
+  snapshot: Schema.optional(Schema.Boolean),
 })
 export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
 const CatalogJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
+const decodeCatalog = (text: string) =>
+  Schema.decodeUnknownEffect(CatalogJson)(text).pipe(Effect.map((catalog) => catalog as Record<string, SourceProvider>))
 const Cache = Schema.Struct({
   updatedAt: Schema.Number,
   body: CatalogJson,
 })
 const defaultSource = "https://models.opencode.ai"
+
+// Bundled snapshot of https://models.opencode.ai/api.json, committed at
+// packages/core/src/models-dev/snapshot.txt and refreshed via
+// `bun run script/update-models-snapshot.ts`. Decoded and normalized once per
+// isolate: the snapshot is a multi-MB module-level constant and one isolate can
+// host many runtimes (Cloudflare colocates Durable Object instances), so
+// per-runtime decoding would multiply the cost.
+let bundledCache: readonly Snapshot[] | undefined
+const bundledSnapshot = Effect.suspend(() =>
+  bundledCache
+    ? Effect.succeed(bundledCache)
+    : decodeCatalog(snapshotText).pipe(
+        Effect.map((catalog) => {
+          bundledCache = normalize(catalog)
+          return bundledCache
+        }),
+      ),
+)
 
 function cacheKey(source: string) {
   if (source === defaultSource) return "models-dev:catalog"
@@ -605,13 +625,13 @@ export const layer = (options?: Options) =>
           )
         : Effect.succeed(undefined)
 
-      const loadSnapshot = Effect.sync(() =>
-        typeof OPENCODE_MODELS_DEV === "undefined" ? undefined : OPENCODE_MODELS_DEV,
-      )
+      // The bundled snapshot is the boot-time floor for the catalog; the
+      // periodic fetch below still refreshes on top.
+      const loadSnapshot = options?.snapshot === false ? Effect.succeed(undefined) : bundledSnapshot
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const text = yield* fetchApi()
-        const catalog = (yield* Schema.decodeUnknownEffect(CatalogJson)(text)) as Record<string, SourceProvider>
+        const catalog = yield* decodeCatalog(text)
         // Best-effort: a cache-write failure must never kill catalog
         // population. The payload has outgrown some KV backends' per-value
         // limits (Durable Object SQLite caps values at 2 MB and api.json
@@ -631,7 +651,7 @@ export const layer = (options?: Options) =>
         const cached = options?.file ? undefined : yield* loadFromCache()
         if (cached) return normalize(cached.catalog)
         const bundled = yield* loadSnapshot
-        if (bundled) return normalize(bundled)
+        if (bundled) return bundled
         if (!fetch) return []
         const catalog = yield* lock.withPermit(
           Effect.gen(function* () {
@@ -682,4 +702,4 @@ export function configured(options?: Options) {
 
 export const node = configured()
 
-export * as ModelsDev from "./models-dev"
+export * as ModelsDev from "./models-dev.js"

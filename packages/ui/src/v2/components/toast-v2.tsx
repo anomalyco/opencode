@@ -239,6 +239,8 @@ function createToastV2Actions(entry: ActiveToastV2) {
   if (!entry.options.actions?.length) return undefined
   return (
     <ToastV2.Actions>
+      {/* Static map, not <For>: this JSX is created imperatively outside any Solid
+          root, where a <For> computation would never be disposed. */}
       {entry.options.actions.map((action, index) => (
         <button
           type="button"

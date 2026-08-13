@@ -1,15 +1,15 @@
-export * as FileSystemSearch from "./search"
+export * as FileSystemSearch from "./search.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
-import { FileSystem } from "../filesystem"
-import { Location } from "../location"
-import { Ripgrep } from "../ripgrep"
-import { RelativePath } from "../schema"
-import { Protected } from "./protected"
+import { FileSystem } from "../filesystem.js"
+import { Location } from "../location.js"
+import { Ripgrep } from "../ripgrep.js"
+import { RelativePath } from "../schema.js"
+import { Protected } from "./protected.js"
 
 export interface Interface {
   readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>

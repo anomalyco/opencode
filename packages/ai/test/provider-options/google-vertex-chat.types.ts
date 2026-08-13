@@ -1,5 +1,5 @@
-import { LLM } from "../../src"
-import { GoogleVertexChat } from "../../src/providers"
+import { LLM } from "../../src/index.js"
+import { GoogleVertexChat } from "../../src/providers.js"
 
 const model = GoogleVertexChat.configure({ accessToken: "test", project: "project" }).model("gemini")
 

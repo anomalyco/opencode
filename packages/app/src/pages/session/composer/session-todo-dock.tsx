@@ -7,7 +7,7 @@ import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Index, createEffect, createMemo } from "solid-js"
+import { Index, Match, Switch, createEffect, createMemo } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -142,15 +142,16 @@ export function SessionTodoDock(props: {
             }}
           >
             <Index each={progress()}>
-              {(item) =>
-                item() === doneToken ? (
-                  <AnimatedNumber value={done()} />
-                ) : item() === totalToken ? (
-                  <AnimatedNumber value={total()} />
-                ) : (
-                  <span>{item()}</span>
-                )
-              }
+              {(item) => (
+                <Switch fallback={<span>{item()}</span>}>
+                  <Match when={item() === doneToken}>
+                    <AnimatedNumber value={done()} />
+                  </Match>
+                  <Match when={item() === totalToken}>
+                    <AnimatedNumber value={total()} />
+                  </Match>
+                </Switch>
+              )}
             </Index>
           </span>
           <div

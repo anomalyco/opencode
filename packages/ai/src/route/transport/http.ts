@@ -1,11 +1,12 @@
-import { Effect, Stream } from "effect"
+import { Effect } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { Auth } from "../auth"
-import { render as renderEndpoint } from "../endpoint"
-import { Framing } from "../framing"
-import type { HttpMiddleware, Transport, TransportPrepareInput } from "./index"
-import * as ProviderShared from "../../protocols/shared"
-import { mergeJsonRecords, type LLMRequest } from "../../schema"
+import { Auth } from "../auth.js"
+import { render as renderEndpoint } from "../endpoint.js"
+import { Framing } from "../framing.js"
+import type { HttpMiddleware, Transport, TransportPrepareInput } from "./index.js"
+import * as ProviderShared from "../../protocols/shared.js"
+import { mergeJsonRecords, type LLMRequest } from "../../schema/index.js"
+import { RequestExecutor } from "../executor.js"
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
 
@@ -86,26 +87,8 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
         middleware: prepareInput.middleware,
       }
     }),
-  frames: (prepared, request, runtime) =>
-    Stream.unwrap(
-      runtime.http
-        .execute(prepared.request, prepared.middleware)
-        .pipe(
-          Effect.map((response) =>
-            prepared.framing.frame(
-              response.stream.pipe(
-                Stream.mapError((error) =>
-                  ProviderShared.eventError(
-                    `${request.model.provider}/${request.model.route.id}`,
-                    `Failed to read ${request.model.provider}/${request.model.route.id} stream`,
-                    ProviderShared.errorText(error),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-    ),
+  frames: (prepared, _request, runtime) =>
+    prepared.framing.frame(RequestExecutor.stream(runtime.http, prepared.request, prepared.middleware)),
 })
 
 export const sseJson = {

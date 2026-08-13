@@ -22,7 +22,7 @@ import { SessionTitle } from "@opencode-ai/core/session/title"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
-import { SessionRunner } from "@opencode-ai/core/session/runner"
+import { SessionRunner } from "@opencode-ai/core/session/runner/index"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { Tool } from "@opencode-ai/core/tool"
@@ -31,7 +31,7 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { Location } from "@opencode-ai/core/location"
 import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
-import { Instructions } from "@opencode-ai/core/instructions"
+import { Instructions } from "@opencode-ai/core/instructions/index"
 import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
 import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
@@ -44,6 +44,7 @@ import { Effect, Layer, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import path from "node:path"
 import { testEffect } from "./lib/effect"
+import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
 
 const cassetteName = "session-runner/openai-chat-streams-text"
@@ -55,17 +56,7 @@ if (process.env.RECORD === "true") {
 const cassette = HttpRecorder.layerFetch(cassetteName, { directory: cassetteDirectory })
 const executor = RequestExecutor.layer.pipe(Layer.provide(cassette))
 const client = LLMClient.layer.pipe(Layer.provide(executor))
-const permission = Layer.succeed(
-  Permission.Service,
-  Permission.Service.of({
-    assert: () => Effect.die("unused"),
-    ask: () => Effect.die("unused"),
-    reply: () => Effect.die("unused"),
-    get: () => Effect.die("unused"),
-    forSession: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-  }),
-)
+const permission = permissionLayer()
 const model = OpenAIChat.route
   .with({
     endpoint: { baseURL: "https://api.openai.com/v1" },
@@ -129,7 +120,7 @@ const execution = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
     Effect.gen(function* () {
       const sessionRunner = yield* SessionRunner.Service
       const coordinator = yield* SessionRunCoordinator.make<Session.ID, SessionRunner.RunError>({
-        drain: (sessionID, force) => sessionRunner.drain({ sessionID, force }),
+        drain: (sessionID, force) => sessionRunner.drain({ sessionID, force }).pipe(Effect.asVoid),
       })
       return SessionExecution.Service.of({
         active: coordinator.active,
@@ -243,9 +234,9 @@ describe("SessionRunnerLLM recorded", () => {
           .orderBy(EventTable.seq)
           .all()).map((event) => event.type),
       ).toEqual([
-        "session.input.admitted.1",
+        "session.inbox.enqueued.1",
         "session.instructions.updated.2",
-        "session.input.promoted.1",
+        "session.inbox.delivered.1",
         "session.step.started.1",
         "session.text.started.1",
         "session.text.ended.1",

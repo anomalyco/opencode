@@ -714,10 +714,10 @@ function ViewerShell(props: {
     >
       <Show when={props.viewer.find.open()}>
         <FileSearchBar
-          pos={props.viewer.find.pos}
-          query={props.viewer.find.query}
-          count={props.viewer.find.count}
-          index={props.viewer.find.index}
+          pos={props.viewer.find.pos()}
+          query={props.viewer.find.query()}
+          count={props.viewer.find.count()}
+          index={props.viewer.find.index()}
           setInput={props.viewer.find.setInput}
           onInput={props.viewer.find.setQuery}
           onKeyDown={props.viewer.find.onInputKeyDown}

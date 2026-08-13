@@ -22,14 +22,14 @@ export function TabNavItem(props: {
   ref?: Ref<HTMLDivElement>
   href: string
   server: ServerConnection.Key
-  session: () => SessionInfo | undefined
+  session: SessionInfo | undefined
   fallbackTitle?: string
   onRename: (title: string) => Promise<void>
   onClose: () => void
   onNavigate: () => void
   active?: boolean
   forceTruncate?: boolean
-  suppressNavigation?: () => boolean
+  suppressNavigation?: boolean
   dragging?: boolean
   pressed?: boolean
   hidden?: boolean
@@ -49,22 +49,22 @@ export function TabNavItem(props: {
   const servers = useServers()
   const serverCtx = useServerCtx(() => servers.list.find((item) => ServerConnection.key(item) === props.server))
   const project = createMemo(() => {
-    const session = props.session()
+    const session = props.session
     if (!session) return
     return projectForSession(session, serverCtx()?.projects.list() ?? [])
   })
   const title = createMemo(() => {
-    const session = props.session()
+    const session = props.session
     return session ? sessionLabel(session) : props.fallbackTitle
   })
 
   const projectName = createMemo(() => {
-    const session = props.session()
+    const session = props.session
     if (!session) return
     return displayName(project() ?? { worktree: session.location.directory })
   })
   const previewPath = createMemo(() => {
-    const session = props.session()
+    const session = props.session
     if (!session) return
     const home = serverCtx()?.sync.data.path.home
     return home ? session.location.directory.replace(home, "~") : session.location.directory
@@ -77,7 +77,7 @@ export function TabNavItem(props: {
   })
 
   const [popoverOpen, setPopoverOpen] = createSignal(false)
-  const previewBlocked = () => !!props.dragging || editing() || !!props.pressed || !props.session()
+  const previewBlocked = () => !!props.dragging || editing() || !!props.pressed || !props.session
 
   const measureTitleOverflow = () => {
     if (!titleEl || editing()) {
@@ -118,7 +118,7 @@ export function TabNavItem(props: {
   const closeRename = async (save: boolean) => {
     if (rename.isPending || !editing()) return
 
-    const original = props.session()?.title ?? ""
+    const original = props.session?.title ?? ""
     const next = (titleEl.textContent ?? "").trim()
 
     titleEl.scrollLeft = 0
@@ -143,7 +143,7 @@ export function TabNavItem(props: {
     event.preventDefault()
     event.stopPropagation()
     if (!canOpenTabRename(props.dragging, editing(), rename.isPending)) return
-    const session = props.session()
+    const session = props.session
     if (!session) return
     titleEl.textContent = session.title ?? ""
     setEditing(true)
@@ -210,7 +210,7 @@ export function TabNavItem(props: {
           // Navigate on mousedown to shave the press-release delay off tab switches.
           if (event.button !== 0) return
           if (editing()) return
-          if (props.suppressNavigation?.()) return
+          if (props.suppressNavigation) return
           props.onNavigate()
         }}
         onClick={(event) => {
@@ -218,14 +218,14 @@ export function TabNavItem(props: {
           // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
           if (event.detail > 0) return
           if (editing()) return
-          if (props.suppressNavigation?.()) return
+          if (props.suppressNavigation) return
           props.onNavigate()
         }}
         class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base group-data-[editing='true']:text-v2-text-text-base [-webkit-user-drag:none]"
       >
         <span data-slot="project-avatar-slot" class="flex size-4 shrink-0 items-center justify-center">
           <Show
-            when={props.session()}
+            when={props.session}
             keyed
             fallback={
               <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
@@ -264,7 +264,7 @@ export function TabNavItem(props: {
             }
             if (event.key !== "Escape") return
             event.preventDefault()
-            titleEl.textContent = props.session()?.title ?? ""
+            titleEl.textContent = props.session?.title ?? ""
             void closeRename(false)
           }}
           onBlur={() => void closeRename(true)}
@@ -305,7 +305,7 @@ export function TabNavItem(props: {
       }}
       data={{
         projectName: projectName(),
-        title: props.session()?.title,
+        title: props.session?.title,
         path: previewPath(),
         serverName: serverLabel(),
       }}
@@ -320,7 +320,7 @@ export function DraftTabItem(props: {
   active?: boolean
   onNavigate: () => void
   onClose: () => void
-  suppressNavigation?: () => boolean
+  suppressNavigation?: boolean
   dragging?: boolean
   pressed?: boolean
   hidden?: boolean
@@ -363,14 +363,14 @@ export function DraftTabItem(props: {
         onMouseDown={(event) => {
           // Navigate on mousedown to shave the press-release delay off tab switches.
           if (event.button !== 0) return
-          if (props.suppressNavigation?.()) return
+          if (props.suppressNavigation) return
           props.onNavigate()
         }}
         onClick={(event) => {
           event.preventDefault()
           // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
           if (event.detail > 0) return
-          if (props.suppressNavigation?.()) return
+          if (props.suppressNavigation) return
           props.onNavigate()
         }}
         class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"

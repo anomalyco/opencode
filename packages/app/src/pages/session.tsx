@@ -244,7 +244,6 @@ function ResolvedTargetSessionRoute() {
     () => sync.session.lineage,
   )
   const directory = createMemo(() => current()?.session.location.directory)
-  const targetDirectory = () => directory()!
 
   createEffect(() => {
     const session = current()
@@ -261,11 +260,13 @@ function ResolvedTargetSessionRoute() {
     // the terminal. Same-workspace tab switches keep it open because warm
     // targets resolve synchronously from the sync cache.
     <Show when={directory()}>
-      <SDKProvider directory={targetDirectory}>
-        <DirectoryDataProvider directory={targetDirectory} server={serverKey}>
-          <TargetSessionPage />
-        </DirectoryDataProvider>
-      </SDKProvider>
+      {(dir) => (
+        <SDKProvider directory={dir()}>
+          <DirectoryDataProvider directory={dir()} server={serverKey()}>
+            <TargetSessionPage />
+          </DirectoryDataProvider>
+        </SDKProvider>
+      )}
     </Show>
   )
 }
@@ -1176,8 +1177,8 @@ export default function Page() {
       <SessionReviewTab
         title={changesTitle()}
         empty={reviewEmpty(input)}
-        diffs={reviewDiffs}
-        view={controller.layout.view}
+        diffs={reviewDiffs()}
+        view={controller.layout.view()}
         diffStyle={input.diffStyle}
         onDiffStyleChange={input.onDiffStyleChange}
         onScrollRef={(el) => setTree("reviewScroll", el)}
@@ -1210,8 +1211,12 @@ export default function Page() {
     get empty() {
       return reviewEmptyV2()
     },
-    diffs: reviewDiffs,
-    diffsReady: reviewReady,
+    get diffs() {
+      return reviewDiffs()
+    },
+    get diffsReady() {
+      return reviewReady()
+    },
     get diffVersion() {
       return vcsQuery.dataUpdatedAt
     },
@@ -2010,11 +2015,11 @@ export default function Page() {
                   onScheduleScrollState={scheduleScrollState}
                   onAutoScrollHandleScroll={autoScroll.handleScroll}
                   onMarkScrollGesture={markScrollGesture}
-                  hasScrollGesture={hasScrollGesture}
+                  hasScrollGesture={hasScrollGesture()}
                   onUserScroll={markUserScroll}
                   onHistoryScroll={onHistoryScroll}
                   onAutoScrollInteraction={autoScroll.handleInteraction}
-                  shouldAnchorBottom={() =>
+                  shouldAnchorBottom={
                     !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
                   }
                   centered={centered()}
@@ -2189,7 +2194,14 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          {settings.general.newLayoutDesigns() ? (
+          <Show
+            when={settings.general.newLayoutDesigns()}
+            fallback={
+              <SessionPanelFrame newLayout={false} raised={!!controller.identity.params.id}>
+                {sessionPanelContent()}
+              </SessionPanelFrame>
+            }
+          >
             <Show when={sessionPanelKey()} keyed>
               {(_) => (
                 <SessionPanelFrame newLayout raised={!!controller.identity.params.id}>
@@ -2197,11 +2209,7 @@ export default function Page() {
                 </SessionPanelFrame>
               )}
             </Show>
-          ) : (
-            <SessionPanelFrame newLayout={false} raised={!!controller.identity.params.id}>
-              {sessionPanelContent()}
-            </SessionPanelFrame>
-          )}
+          </Show>
 
           <Show when={desktopSessionResizeOpen()}>
             <div onPointerDown={() => size.start()}>
@@ -2225,13 +2233,13 @@ export default function Page() {
         <Show when={!newSessionDesign() && desktopSidePanelOpen()}>
           <Suspense>
             <SessionSidePanel
-              canReview={canReview}
-              diffs={reviewDiffs}
-              diffsReady={reviewReady}
-              empty={reviewEmptyText}
-              hasReview={hasReview}
-              reviewHasFocusableContent={hasReview}
-              reviewCount={reviewCount}
+              canReview={canReview()}
+              diffs={reviewDiffs()}
+              diffsReady={reviewReady()}
+              empty={reviewEmptyText()}
+              hasReview={hasReview()}
+              reviewHasFocusableContent={hasReview()}
+              reviewCount={reviewCount()}
               reviewPanel={reviewPanel}
               activeDiff={activeReviewFile()}
               focusReviewDiff={focusReviewDiff}
@@ -2247,13 +2255,13 @@ export default function Page() {
                 <div class="min-h-0 flex-1">
                   <Suspense>
                     <SessionSidePanel
-                      canReview={canReview}
-                      diffs={reviewDiffs}
-                      diffsReady={reviewReady}
-                      empty={reviewEmptyText}
-                      hasReview={hasReview}
-                      reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
-                      reviewCount={reviewCount}
+                      canReview={canReview()}
+                      diffs={reviewDiffs()}
+                      diffsReady={reviewReady()}
+                      empty={reviewEmptyText()}
+                      hasReview={hasReview()}
+                      reviewHasFocusableContent={hasReview() || reviewV2State.sidebarOpened()}
+                      reviewCount={reviewCount()}
                       reviewPanel={reviewPanelV2}
                       reviewSidebarToggle={(disabled) => (
                         <SessionReviewV2SidebarToggle

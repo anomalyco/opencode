@@ -1,16 +1,16 @@
-export * as SessionExecution from "./execution"
+export * as SessionExecution from "./execution.js"
 
-import { Cause, Context, Effect, Exit, Layer } from "effect"
-import { Bus } from "../bus"
-import { LocationServiceMap } from "../location-service-map"
+import { Cause, Context, Effect, Exit, Layer, Stream } from "effect"
+import { Bus } from "../bus.js"
+import { LocationServiceMap } from "../location-service-map.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { SessionEvent } from "./event"
-import { SessionRunCoordinator } from "./run-coordinator"
-import { SessionRunner } from "./runner/index"
-import { SessionSchema } from "./schema"
-import { SessionStore } from "./store"
-import { toSessionError } from "./to-session-error"
-import { UserInterruptedError } from "./error"
+import { SessionEvent } from "./event.js"
+import { SessionRunCoordinator } from "./run-coordinator.js"
+import { SessionRunner } from "./runner/index.js"
+import { SessionSchema } from "./schema.js"
+import { SessionStore } from "./store.js"
+import { toSessionError } from "./to-session-error.js"
+import { UserInterruptedError } from "./error.js"
 
 export interface Interface {
   /** Snapshots active execution owned by this process. */
@@ -67,16 +67,17 @@ export const layer = Layer.effect(
     const releaseOnCommit = (sessionID: SessionSchema.ID) => ({
       commit: () => store.release(sessionID),
     })
-    const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
-      started: (sessionID) =>
-        reportLifecycle(
-          sessionID,
-          bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
-        ),
-      drain: Effect.fnUntraced(function* (sessionID: SessionSchema.ID, force) {
+    function drain(
+      sessionID: SessionSchema.ID,
+      force: boolean,
+      continuation?: SessionRunner.Continuation,
+    ): Effect.Effect<void, SessionRunner.RunError> {
+      return Effect.gen(function* () {
         const session = yield* store.get(sessionID)
         if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
-        return yield* SessionRunner.Service.use((runner) => runner.drain({ sessionID, force })).pipe(
+        const result = yield* SessionRunner.Service.use((runner) =>
+          runner.drain({ sessionID, force, continuation }),
+        ).pipe(
           Effect.provide(locations.get(session.location)),
           Effect.tapCause((cause) =>
             Cause.hasInterruptsOnly(cause)
@@ -84,7 +85,17 @@ export const layer = Layer.effect(
               : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
           ),
         )
-      }),
+        if (result.type === "complete") return
+        return yield* drain(sessionID, false, result.continuation)
+      })
+    }
+    const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
+      started: (sessionID) =>
+        reportLifecycle(
+          sessionID,
+          bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
+        ),
+      drain: (sessionID, force) => drain(sessionID, force),
       // One terminal observation per busy period, covering every coalesced drain.
       settled: (sessionID, exit, reason) =>
         reportLifecycle(
@@ -116,6 +127,10 @@ export const layer = Layer.effect(
           }),
         ),
     })
+    yield* bus.subscribe(SessionEvent.Moved).pipe(
+      Stream.runForEach((event) => coordinator.wake(event.data.sessionID)),
+      Effect.forkScoped,
+    )
 
     return Service.of({
       active: coordinator.active,

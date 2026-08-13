@@ -4,7 +4,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { showToast } from "@/utils/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { createMemo, type Accessor, type Component, For, Show } from "solid-js"
+import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
@@ -30,14 +30,14 @@ const PROVIDER_NOTES = [
 const PROVIDER_ICON_SIZE = 16
 
 export const SettingsProvidersV2: Component<{
-  directory: Accessor<string | undefined>
+  directory: string | undefined
   onBack?: () => void
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
   const serverSdk = useServerSDK()
   const serverSync = useServerSync()
-  const providers = useProviders(props.directory)
+  const providers = useProviders(() => props.directory)
   const providerConnect = useProviderConnectController({ onBack: props.onBack })
 
   const connect = (provider?: string) => {
@@ -116,7 +116,7 @@ export const SettingsProvidersV2: Component<{
   }
 
   const disconnect = async (providerID: string, name: string) => {
-    const location = props.directory() ? { directory: props.directory() } : undefined
+    const location = props.directory ? { directory: props.directory } : undefined
     await serverSdk.api.integration
       .get({ integrationID: providerID, location })
       .then(async (integration) => {

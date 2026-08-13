@@ -1,15 +1,12 @@
-export * as Sqlite from "./sqlite"
+export * as Sqlite from "./sqlite.js"
 
 import { Context, Effect, Fiber, Scope, Semaphore, Stream } from "effect"
 import { identity } from "effect/Function"
 import { SqlClient, Statement } from "effect/unstable/sql"
 import type { Connection } from "effect/unstable/sql/SqlConnection"
 import type { SqlError } from "effect/unstable/sql/SqlError"
-import type { drizzle } from "drizzle-orm/bun-sqlite"
 
-export type DrizzleClient = ReturnType<typeof drizzle>
 export class Native extends Context.Service<Native, unknown>()("@opencode-ai/core/database/SqliteNative") {}
-export class Drizzle extends Context.Service<Drizzle, DrizzleClient>()("@opencode-ai/core/database/SqliteDrizzle") {}
 
 export interface ClientConfig {
   readonly spanAttributes?: Record<string, unknown>

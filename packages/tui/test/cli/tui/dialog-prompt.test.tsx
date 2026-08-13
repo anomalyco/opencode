@@ -87,8 +87,8 @@ test("dialog prompt submit wins when return is also input newline", async () => 
   const prompt = await mountPrompt({
     root: tmp.path,
     keybinds: {
-      input_submit: "super+return",
-      input_newline: "return,shift+return,alt+return,ctrl+j",
+      "input.submit": "super+return",
+      "input.newline": "return,shift+return,alt+return,ctrl+j",
     },
     onConfirm: (value) => confirmed.push(value),
   })
@@ -113,7 +113,7 @@ test("dialog prompt submit can be rebound separately from input submit", async (
   const prompt = await mountPrompt({
     root: tmp.path,
     keybinds: {
-      input_submit: "return",
+      "input.submit": "return",
       "dialog.prompt.submit": "ctrl+y",
     },
     onConfirm: (value) => confirmed.push(value),
@@ -131,6 +131,32 @@ test("dialog prompt submit can be rebound separately from input submit", async (
     prompt.app.mockInput.pressKey("y", { ctrl: true })
 
     expect(confirmed).toEqual(["draft"])
+  } finally {
+    await prompt.cleanup()
+  }
+})
+
+test("dialog prompt submit can be disabled", async () => {
+  await using tmp = await tmpdir()
+  const confirmed: string[] = []
+  const prompt = await mountPrompt({
+    root: tmp.path,
+    keybinds: {
+      "input.submit": "return",
+      "dialog.prompt.submit": "none",
+    },
+    onConfirm: (value) => confirmed.push(value),
+  })
+
+  try {
+    await wait(() => prompt.app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+    const textarea = prompt.app.renderer.currentFocusedEditor
+    if (!(textarea instanceof TextareaRenderable)) throw new Error("expected focused dialog textarea")
+
+    prompt.app.mockInput.pressEnter()
+
+    expect(confirmed).toEqual([])
+    expect(textarea.plainText).toBe("draft")
   } finally {
     await prompt.cleanup()
   }

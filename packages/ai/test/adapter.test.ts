@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMRequest, LLMResponse } from "../src"
-import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route"
-import { compileRequest } from "../src/route/client"
-import { LanguageModel } from "../src/schema"
-import { testEffect } from "./lib/effect"
-import { dynamicResponse } from "./lib/http"
+import { LLM, LLMRequest, LLMResponse } from "../src/index.js"
+import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route.js"
+import { compileRequest } from "../src/route/client.js"
+import { LanguageModel } from "../src/schema/index.js"
+import { testEffect } from "./lib/effect.js"
+import { dynamicResponse } from "./lib/http.js"
 
 const updateModel = (model: LanguageModel, patch: Partial<LanguageModel.Input>) => LanguageModel.update(model, patch)
 

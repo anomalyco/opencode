@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
-import { Route } from "../route/client"
-import { Endpoint } from "../route/endpoint"
-import { Protocol } from "../route/protocol"
+import { Route } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
+import { Protocol } from "../route/protocol.js"
 import {
   AIError,
   LLMEvent,
@@ -17,20 +17,20 @@ import {
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
-} from "../schema"
-import { BedrockEventStream } from "./bedrock-event-stream"
-import { classifyProviderFailure } from "../provider-error"
-import { JsonObject, optionalArray, ProviderShared } from "./shared"
-import { BedrockAuth } from "./utils/bedrock-auth"
-import { BedrockCache } from "./utils/bedrock-cache"
-import { BedrockMedia } from "./utils/bedrock-media"
-import { Lifecycle } from "./utils/lifecycle"
-import { ToolSchemaProjection } from "./utils/tool-schema"
-import { ToolStream } from "./utils/tool-stream"
+} from "../schema/index.js"
+import { BedrockEventStream } from "./bedrock-event-stream.js"
+import { classifyProviderFailure } from "../provider-error.js"
+import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
+import { BedrockAuth } from "./utils/bedrock-auth.js"
+import { BedrockCache } from "./utils/bedrock-cache.js"
+import { BedrockMedia } from "./utils/bedrock-media.js"
+import { Lifecycle } from "./utils/lifecycle.js"
+import { ToolSchemaProjection } from "./utils/tool-schema.js"
+import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "bedrock-converse"
 
-export type { Credentials as BedrockCredentials } from "./utils/bedrock-auth"
+export type { Credentials as BedrockCredentials } from "./utils/bedrock-auth.js"
 
 // =============================================================================
 // Request Body Schema
@@ -737,4 +737,4 @@ export const route = Route.make({
 
 export const sigV4Auth = BedrockAuth.sigV4
 
-export * as BedrockConverse from "./bedrock-converse"
+export * as BedrockConverse from "./bedrock-converse.js"

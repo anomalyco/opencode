@@ -1,4 +1,5 @@
 import { Binary } from "@opencode-ai/core/util/binary"
+import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { Message, Part, Project, Todo } from "@/types"
 import type {
@@ -185,6 +186,18 @@ export function applyDirectoryEvent(input: {
       cleanupSessionCaches(input.setStore, sessionID, input.setSessionTodo)
       if (info?.parentID) break
       input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
+      break
+    }
+    case "project.directory.resolved": {
+      const properties = event.properties as { projectID: string; directory: string; previous: string }
+      input.store.session.forEach((session, index) => {
+        const adopted = ProjectDirectories.adopt(
+          { projectID: session.projectID, directory: session.location.directory },
+          properties,
+        )
+        if (!adopted) return
+        input.setStore("session", index, (current) => ({ ...current, ...adopted }))
+      })
       break
     }
     case "session.renamed": {

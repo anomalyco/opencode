@@ -30,8 +30,9 @@ const BOX_NODE_RE = new RegExp(`^(${ID_RE})\\[(.+)\\]$`)
 const ID_ONLY_RE = new RegExp(`^${ID_RE}$`)
 const EXPLICIT_NODE_SHAPE_RE = new RegExp(`^${ID_RE}(?:\\[|\\(|\\{)`)
 const CIRCLE_NODE_RE = new RegExp(`^${ID_RE}\\(\\(.+\\)\\)$`)
+const MAX_FLOWCHART_LINE_LENGTH = 10_000
 const EDGE_OPERATOR_RE =
-  /(-\.(?!->)(.+?)\.(?:->|-))|(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->|\.-)|(<-->|-->|==>|-\.->|---|~~~)\s*(?:\|([^|]*)\|\s*)?/g
+  /(-\.(?!->)(.+?)\.(?:->|-))|(--|==|-\.)\s+(.+?)\s+(-->|==>|\.->|-\.->|\.-)|(<-->|-->|==>|-\.->|---|~~~)\s*(?:\|([^|]*)\|\s*)?/dg
 
 function normalizeDirection(value?: string): FlowchartDirection {
   const upper = value?.toUpperCase()
@@ -161,10 +162,12 @@ function parseEdgeOperators(line: string): ParsedEdgeOperator[] {
     const inlineDashedArrow = match[1]
     const startArrow = inlineDashedArrow ?? match[3] ?? match[6]!
     const endArrow = inlineDashedArrow ?? match[5] ?? match[6]!
+    const labelGroup = match[2] ? 2 : match[4] ? 4 : match[7] ? 7 : undefined
+    const labelRange = labelGroup === undefined ? undefined : match.indices?.[labelGroup]
     return {
       index: match.index,
       end: match.index + match[0].length,
-      label: decodeMermaidText((match[2] ?? match[4] ?? match[7] ?? "").trim()),
+      label: stripQuotes(labelRange ? line.slice(labelRange[0], labelRange[1]) : ""),
       style: edgeStyleFromArrow(startArrow, endArrow),
       arrowhead: endArrow === "~~~" || endArrow.endsWith(">"),
       sourceArrowhead: startArrow.startsWith("<"),
@@ -250,6 +253,9 @@ export function parseMermaidFlowchartDiagram(content: string): FlowchartDiagram 
 
   for (const source of meaningfulNumberedMermaidLines(content)) {
     const line = source.text
+    if (line.length > MAX_FLOWCHART_LINE_LENGTH) {
+      throw new MermaidSyntaxError("flowchart", source.lineNumber, line, "Flowchart statement is too long")
+    }
     if (hasInternalStatementSeparator(line)) throw new MermaidSyntaxError("flowchart", source.lineNumber, line)
     const header = line.match(FLOWCHART_HEADER_RE)
     if (header) {

@@ -1,12 +1,12 @@
-export * as Database from "./database"
+export * as Database from "./database.js"
 
-import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
+import { EffectDrizzleSqlite } from "./drizzle.js"
 import { sqliteLayer, supportsForeignKeyToggle, supportsTuningPragmas } from "#sqlite"
 import { Context, Effect, Layer, Schema } from "effect"
 import type { SqlClient } from "effect/unstable/sql"
 import { Global } from "@opencode-ai/util/global"
 import { isAbsolute, join } from "path"
-import { DatabaseMigration } from "./migration"
+import { DatabaseMigration } from "./migration.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
@@ -63,6 +63,15 @@ export const layerFromClient: Layer.Layer<Service, never, SqlClient.SqlClient | 
 
 export function configured(options?: Options) {
   return makeGlobalNode({ service: Service, layer: layer(options), deps: [Global.node] })
+}
+
+/** `configured`, but over an injected SqlClient layer instead of a filesystem path. */
+export function configuredClient(client: Layer.Layer<SqlClient.SqlClient>) {
+  return makeGlobalNode({
+    service: Service,
+    layer: layerFromClient.pipe(Layer.provide(client)),
+    deps: [Global.node],
+  })
 }
 
 export const node = configured({ path: ":memory:" })

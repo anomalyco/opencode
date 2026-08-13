@@ -41,7 +41,7 @@ export default function NewSessionPage(props: { draftId: string }) {
   return (
     <div class="relative size-full overflow-hidden flex flex-col">
       {suspendUntilPromptReady()}
-      <NewSessionStatus mount={rightMount} visible={settings.visibility.status} />
+      <NewSessionStatus mount={rightMount()} visible={settings.visibility.status()} />
       <div class="flex-1 min-h-0 flex flex-col gap-2 p-2">
         <NewSessionView input={draft.input} project={project} workspace={workspace} />
       </div>
