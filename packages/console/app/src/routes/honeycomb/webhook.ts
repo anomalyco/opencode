@@ -37,31 +37,29 @@ const honeycombWebhookPayload = z.discriminatedUnion("type", [
   }),
 ])
 
-const postDiscordMessage = async (payload: z.infer<typeof honeycombWebhookPayload>) => {
-  const names =
-    payload.type === "custom"
-      ? []
-      : payload.groups.flatMap((item) =>
-          item.group.map((g) => {
-            const result = item.result == null ? undefined : Number(item.result)
-            return `- ${g.value}${
-              result !== undefined && Number.isFinite(result)
-                ? payload.type === "model_low_tps"
-                  ? ` (${Math.round(result)} TPS)`
-                  : ` (${Math.round(result * 100)}% errors)`
-                : ""
-            }`
-          }),
-        )
+const alertDetails = (payload: z.infer<typeof honeycombWebhookPayload>) =>
+  payload.type === "custom"
+    ? []
+    : payload.groups.flatMap((item) =>
+        item.group.map((group) => {
+          const result = item.result == null ? undefined : Number(item.result)
+          return `- ${group.value}${
+            result !== undefined && Number.isFinite(result)
+              ? payload.type === "model_low_tps"
+                ? ` (${Math.round(result)} TPS)`
+                : ` (${Math.round(result * 100)}% errors)`
+              : ""
+          }`
+        }),
+      )
 
+const postDiscordMessage = async (payload: z.infer<typeof honeycombWebhookPayload>) => {
   const content = [
     `[**${payload.isTest ? "[TEST] " : ""}${payload.name ?? "Honeycomb alert"}**](${payload.url})`,
-    ...names,
+    ...alertDetails(payload),
     "",
     `<@&${DISCORD_ALERT_ROLE_ID}>`,
-  ]
-    .filter((line) => line !== undefined)
-    .join("\n")
+  ].join("\n")
 
   return fetch(Resource.DISCORD_INCIDENT_WEBHOOK_URL.value, {
     method: "POST",
@@ -71,6 +69,21 @@ const postDiscordMessage = async (payload: z.infer<typeof honeycombWebhookPayloa
       allowed_mentions: { roles: [DISCORD_ALERT_ROLE_ID] },
       flags: 4,
     }),
+  })
+}
+
+const postSlackMessage = async (payload: z.infer<typeof honeycombWebhookPayload>) => {
+  const text = [
+    `<${payload.url}|*${payload.isTest ? "[TEST] " : ""}${payload.name ?? "Honeycomb alert"}*>`,
+    ...alertDetails(payload),
+    "",
+    "<!channel>",
+  ].join("\n")
+
+  return fetch(Resource.SLACK_INCIDENT_WEBHOOK_URL.value, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, unfurl_links: false }),
   })
 }
 
@@ -96,9 +109,10 @@ export async function POST(input: APIEvent) {
     return Response.json({ message: "ignored" }, { status: 200 })
   }
 
-  const response = await postDiscordMessage(parsed.data)
-  if (!response.ok) {
-    return Response.json({ message: "discord webhook failed" }, { status: 502 })
+  const [discord, slack] = await Promise.all([postDiscordMessage(parsed.data), postSlackMessage(parsed.data)])
+  if (!discord.ok || !slack.ok) {
+    console.error("Honeycomb alert delivery failed", { discord: discord.status, slack: slack.status })
+    return Response.json({ message: "alert webhook failed" }, { status: 502 })
   }
 
   return Response.json({ message: "sent" }, { status: 200 })
