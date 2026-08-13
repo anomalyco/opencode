@@ -376,6 +376,17 @@ describe("cross-spawn spawner", () => {
     )
   })
 
+  describe("exit reaping", () => {
+    fx.effect(
+      "exit code resolves before stream ends",
+      Effect.gen(function* () {
+        const handle = yield* js('process.stdout.write("ok"); process.exit(0)')
+        const code = yield* handle.exitCode
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+      }),
+    )
+  })
+
   describe("Windows-specific", () => {
     fx.effect(
       "uses shell routing on Windows",
