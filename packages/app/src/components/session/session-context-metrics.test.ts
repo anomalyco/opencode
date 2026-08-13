@@ -96,4 +96,29 @@ describe("getSessionContext", () => {
 
     expect(ctx).toBeUndefined()
   })
+
+  test("computes tps from output tokens and turn duration", () => {
+    const messages = [
+      assistant("a1", { input: 100, output: 120, reasoning: 0, read: 0, write: 0 }, 0.1),
+    ] as unknown as Message[]
+    messages[0].time = { created: 1_000, completed: 4_000 }
+    const ctx = getSessionContext(messages, [])
+
+    expect(ctx?.tps).toBe(40)
+  })
+
+  test("leaves tps undefined without completed time or output tokens", () => {
+    const noCompleted = getSessionContext(
+      [assistant("a1", { input: 100, output: 120, reasoning: 0, read: 0, write: 0 }, 0.1)] as unknown as Message[],
+      [],
+    )
+    expect(noCompleted?.tps).toBeUndefined()
+
+    const zeroOutput = [
+      assistant("a2", { input: 100, output: 0, reasoning: 0, read: 0, write: 0 }, 0.1),
+    ] as unknown as Message[]
+    zeroOutput[0].time = { created: 1_000, completed: 4_000 }
+    const ctx = getSessionContext(zeroOutput, [])
+    expect(ctx?.tps).toBeUndefined()
+  })
 })
