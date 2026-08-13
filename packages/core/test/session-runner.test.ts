@@ -1204,12 +1204,17 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("interrupts a source Location runner after a Session moves", () =>
+  it.effect("preserves instruction state and interrupts the source Location runner after a Session moves", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const bus = yield* Bus.Service
       const { db } = yield* Database.Service
       yield* runPrompt(session, "First")
+      const instructionState = yield* db
+        .select()
+        .from(InstructionStateTable)
+        .where(eq(InstructionStateTable.session_id, sessionID))
+        .get()
 
       yield* bus.publish(SessionEvent.Moved, {
         sessionID,
@@ -1218,7 +1223,7 @@ describe("SessionRunnerLLM", () => {
       })
       expect(
         yield* db.select().from(InstructionStateTable).where(eq(InstructionStateTable.session_id, sessionID)).get(),
-      ).toBeUndefined()
+      ).toEqual(instructionState)
 
       yield* admit(session, "Second")
       const exit = yield* session.resume(sessionID).pipe(Effect.exit)

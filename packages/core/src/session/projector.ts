@@ -436,7 +436,6 @@ const layer = Layer.effectDiscard(
           .where(eq(SessionTable.id, event.data.sessionID))
           .run()
           .pipe(Effect.orDie)
-        yield* InstructionState.reset(db, event.data.sessionID)
       }),
     )
     // Sessions whose ownership came from the directory's previous resolution
