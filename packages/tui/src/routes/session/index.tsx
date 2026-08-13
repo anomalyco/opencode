@@ -1085,53 +1085,55 @@ export function Session() {
           gap={1}
         >
           <Show when={session()}>
-            <scrollbox
-              ref={(r) => (scroll = r)}
-              viewportOptions={{
-                paddingRight: showScrollbar() ? 1 : 0,
-              }}
-              verticalScrollbarOptions={{
-                paddingLeft: 1,
-                visible: showScrollbar(),
-                trackOptions: {
-                  backgroundColor: theme.raise(theme.background.surface.offset),
-                  foregroundColor: theme.border.default,
-                },
-              }}
-              stickyScroll={!navigationMessage()}
-              stickyStart="bottom"
-              flexGrow={1}
-              scrollAcceleration={scrollAcceleration()}
-              onMouseScroll={updateAwayFromBottom}
-            >
-              <For each={visibleRows()}>
-                {(row, index) => (
-                  <SessionRowView
-                    row={row}
-                    message={(messageID) => data.session.message.get(route.sessionID, messageID)}
-                    boundaryID={boundaries()[index() + hidden()]}
+            <box flexGrow={1} minHeight={0} position="relative">
+              <scrollbox
+                ref={(r) => (scroll = r)}
+                viewportOptions={{
+                  paddingRight: showScrollbar() ? 1 : 0,
+                }}
+                verticalScrollbarOptions={{
+                  paddingLeft: 1,
+                  visible: showScrollbar(),
+                  trackOptions: {
+                    backgroundColor: theme.raise(theme.background.surface.offset),
+                    foregroundColor: theme.border.default,
+                  },
+                }}
+                stickyScroll={!navigationMessage()}
+                stickyStart="bottom"
+                flexGrow={1}
+                scrollAcceleration={scrollAcceleration()}
+                onMouseScroll={updateAwayFromBottom}
+              >
+                <For each={visibleRows()}>
+                  {(row, index) => (
+                    <SessionRowView
+                      row={row}
+                      message={(messageID) => data.session.message.get(route.sessionID, messageID)}
+                      boundaryID={boundaries()[index() + hidden()]}
+                    />
+                  )}
+                </For>
+                <BackgroundToolHint messages={messages()} />
+                <Show when={session()?.revert?.messageID}>
+                  <RevertMessage
+                    count={messagesFromRevert().filter((message) => message.type === "user").length}
+                    files={session()!.revert!.files ?? []}
                   />
-                )}
-              </For>
-              <BackgroundToolHint messages={messages()} />
-              <Show when={session()?.revert?.messageID}>
-                <RevertMessage
-                  count={messagesFromRevert().filter((message) => message.type === "user").length}
-                  files={session()!.revert!.files ?? []}
-                />
-              </Show>
-              <Show when={navigationSlack()}>
-                {(height) => <box id={NAVIGATION_SLACK_ID} height={height()} flexShrink={0} />}
-              </Show>
-            </scrollbox>
-            <box flexShrink={0} position="relative" overflow="visible">
+                </Show>
+                <Show when={navigationSlack()}>
+                  {(height) => <box id={NAVIGATION_SLACK_ID} height={height()} flexShrink={0} />}
+                </Show>
+              </scrollbox>
               <Show when={config.experimental?.tab_scroll === true && awayFromBottom()}>
-                <box position="absolute" top={-1} right={0} height={1} zIndex={1}>
+                <box position="absolute" bottom={0} right={0} height={1} zIndex={1}>
                   <text fg={theme.text.subdued} onMouseUp={toBottom}>
                     Latest ↓
                   </text>
                 </box>
               </Show>
+            </box>
+            <box flexShrink={0}>
               <Show when={!composer.open && !disabled() && queuedPrompts().length > 0}>
                 <QueuedPromptDock prompts={queuedPrompts()} onOpen={openQueuedPrompts} />
               </Show>
