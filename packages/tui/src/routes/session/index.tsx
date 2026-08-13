@@ -1128,7 +1128,7 @@ export function Session() {
               <Show when={config.experimental?.tab_scroll === true && awayFromBottom()}>
                 <box height={1} flexDirection="row" justifyContent="flex-end" paddingRight={1}>
                   <text fg={theme.text.subdued} onMouseUp={toBottom}>
-                    ↓ Bottom
+                    ↓ Latest
                   </text>
                 </box>
               </Show>
