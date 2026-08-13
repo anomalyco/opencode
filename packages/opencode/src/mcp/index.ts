@@ -1,4 +1,4 @@
-import path from "node:path"
+﻿import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
@@ -375,34 +375,55 @@ const layer = Layer.effect(
           return DISABLED_RESULT
         }
 
-        const { client: mcpClient, status } =
-          mcp.type === "remote"
-            ? yield* connectRemote(key, mcp as ConfigMCPV1.Info & { type: "remote" })
-            : yield* connectLocal(key, mcp as ConfigMCPV1.Info & { type: "local" })
-
-        if (!mcpClient) {
-          if (status.status !== "connected" && status.status !== "disabled") {
-            yield* Effect.logWarning("server unavailable", { key, type: mcp.type, status: status.status })
+        const RETRY_DELAYS_MS = [500, 1500, 3000] as const
+        let lastStatus: Status = { status: "failed", error: "Unknown error" }
+        for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+          const { client: mcpClient, status } =
+            mcp.type === "remote"
+              ? yield* connectRemote(key, mcp as ConfigMCPV1.Info & { type: "remote" })
+              : yield* connectLocal(key, mcp as ConfigMCPV1.Info & { type: "local" })
+          lastStatus = status
+          if (mcpClient) {
+            return yield* Effect.gen(function* () {
+              const listed = mcpClient.getServerCapabilities()?.tools
+                ? yield* McpCatalog.defs(mcpClient, mcp.timeout)
+                : []
+              if (!listed) {
+                return yield* Effect.fail(new Error("Failed to get tools"))
+              }
+              return {
+                mcpClient,
+                status,
+                defs: listed,
+                instructions: mcpClient.getInstructions()?.trim(),
+              } satisfies CreateResult
+            }).pipe(
+              Effect.catchCause((cause) =>
+                Effect.tryPromise(() => mcpClient.close())
+                  .pipe(Effect.ignore, Effect.andThen(Effect.failCause(cause))),
+              ),
+            )
           }
-          return { status } satisfies CreateResult
+          if (attempt < RETRY_DELAYS_MS.length) {
+            yield* Effect.logDebug("MCP connection failed, retrying", {
+              key,
+              attempt: attempt + 1,
+              maxAttempts: RETRY_DELAYS_MS.length + 1,
+              status: status.status,
+              error: status.status === "failed" ? status.error : undefined,
+            })
+            yield* Effect.sleep(Duration.millis(RETRY_DELAYS_MS[attempt]))
+          }
         }
 
-        return yield* Effect.gen(function* () {
-          const listed = mcpClient.getServerCapabilities()?.tools ? yield* McpCatalog.defs(mcpClient, mcp.timeout) : []
-          if (!listed) {
-            return yield* Effect.fail(new Error("Failed to get tools"))
-          }
-          return {
-            mcpClient,
-            status,
-            defs: listed,
-            instructions: mcpClient.getInstructions()?.trim(),
-          } satisfies CreateResult
-        }).pipe(
-          Effect.catchCause((cause) =>
-            Effect.tryPromise(() => mcpClient.close()).pipe(Effect.ignore, Effect.andThen(Effect.failCause(cause))),
-          ),
-        )
+        if (lastStatus.status !== "connected" && lastStatus.status !== "disabled") {
+          yield* Effect.logWarning("server unavailable after retries", {
+            key,
+            type: mcp.type,
+            status: lastStatus.status,
+          })
+        }
+        return { status: lastStatus } satisfies CreateResult
       },
       Effect.map((result): CreateResult => result),
       Effect.catchCause((cause) => {
