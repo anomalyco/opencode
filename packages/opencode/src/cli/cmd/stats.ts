@@ -6,7 +6,6 @@ import { Database } from "@opencode-ai/core/database/database"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Project } from "@/project/project"
 import { InstanceRef } from "@/effect/instance-ref"
-import { sumSessionCosts } from "@opencode-ai/core/session"
 
 interface SessionStats {
   totalSessions: number
@@ -125,7 +124,7 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
   const stats: SessionStats = {
     totalSessions: filteredSessions.length,
     totalMessages: 0,
-    totalCost: sumSessionCosts(filteredSessions),
+    totalCost: 0,
     totalTokens: {
       input: 0,
       output: 0,
@@ -169,6 +168,7 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
           .messages({ sessionID: session.id })
           .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed([])))
 
+        const sessionCost = session.cost ?? 0
         const sessionTokens = session.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
         let sessionToolUsage: Record<string, number> = {}
         let sessionModelUsage: Record<
@@ -211,6 +211,7 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
 
         return {
           messageCount: messages.length,
+          sessionCost,
           sessionTokens,
           sessionTotalTokens:
             sessionTokens.input +
@@ -233,6 +234,7 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
     sessionTotalTokens.push(result.sessionTotalTokens)
 
     stats.totalMessages += result.messageCount
+    stats.totalCost += result.sessionCost
     stats.totalTokens.input += result.sessionTokens.input
     stats.totalTokens.output += result.sessionTokens.output
     stats.totalTokens.reasoning += result.sessionTokens.reasoning
