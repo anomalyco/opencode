@@ -223,7 +223,7 @@ const layer = Layer.effect(
             : { text, type: "virtual", ...options, env },
         ),
       )
-      const parsed = ConfigParse.jsonc(expanded, source)
+      const parsed = ConfigParse.jsonc(expanded, source, text)
       const data = ConfigParse.schema(ConfigV1.Info, normalizeLoadedConfig(parsed), source)
       if (!("path" in options)) return data
 
