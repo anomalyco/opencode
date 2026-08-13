@@ -1082,7 +1082,6 @@ export function Session() {
           paddingBottom={1}
           paddingLeft={dimensions().width < 44 ? 1 : 2}
           paddingRight={dimensions().width < 44 ? 1 : 2}
-          gap={1}
         >
           <Show when={session()}>
             <box flexGrow={1} minHeight={0} position="relative">
@@ -1125,21 +1124,12 @@ export function Session() {
                   {(height) => <box id={NAVIGATION_SLACK_ID} height={height()} flexShrink={0} />}
                 </Show>
               </scrollbox>
+            </box>
+            <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
               <Show when={config.experimental?.tab_scroll === true && awayFromBottom()}>
-                <box
-                  position="absolute"
-                  bottom={0}
-                  left={0}
-                  width="100%"
-                  height={1}
-                  zIndex={2000}
-                  flexDirection="row"
-                  justifyContent="flex-end"
-                >
-                  <text fg={theme.text.subdued} onMouseUp={toBottom}>
-                    Latest ↓
-                  </text>
-                </box>
+                <text fg={theme.text.subdued} onMouseUp={toBottom}>
+                  Latest ↓
+                </text>
               </Show>
             </box>
             <box flexShrink={0}>
