@@ -209,6 +209,33 @@ describe("tool.shell", () => {
     ),
   )
 
+  if (process.platform === "win32") {
+    it.live("captures multi-line output through a PowerShell cmd wrapper", () =>
+      Effect.gen(function* () {
+        const shell = Bun.which("pwsh") || Bun.which("powershell")
+        if (!shell) return
+        const tmp = yield* tmpdirScoped()
+        const wrapper = path.join(tmp, "pwsh.cmd")
+        yield* Effect.promise(() => Bun.write(wrapper, `@"${shell}" %*\r\n`))
+        yield* withShell(
+          { label: "pwsh", shell: wrapper },
+          runIn(
+            projectRoot,
+            Effect.gen(function* () {
+              const result = yield* run({
+                command: 'echo "first"\necho "second"\necho "third"',
+              })
+              expect(result.metadata.exit).toBe(0)
+              expect(result.output).toContain("first")
+              expect(result.output).toContain("second")
+              expect(result.output).toContain("third")
+            }),
+          ),
+        )
+      }),
+    )
+  }
+
   it.live("falls back from terminal-only configured shell", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped({ config: { shell: "fish" } })

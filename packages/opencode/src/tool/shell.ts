@@ -292,13 +292,16 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
 
 function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
   if (process.platform === "win32" && Shell.ps(shell)) {
-    const encoded = Buffer.from(command, "utf-16le").toString("base64")
-    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], {
-      cwd,
-      env,
-      stdin: "ignore",
-      detached: false,
-    })
+    return ChildProcess.make(
+      shell,
+      ["-NoLogo", "-NoProfile", "-NonInteractive", ...Shell.powershellCommand(shell, command)],
+      {
+        cwd,
+        env,
+        stdin: "ignore",
+        detached: false,
+      },
+    )
   }
 
   return ChildProcess.make(command, [], {
