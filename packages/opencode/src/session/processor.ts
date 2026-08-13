@@ -72,6 +72,10 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  baseCost: number
+  budget: number | undefined
+  turnCost: number
+  budgetExceeded: boolean
 }
 
 type StreamEvent = LLMEvent
@@ -100,6 +104,7 @@ const layer = Layer.effect(
       // may execute tools internally before emitting start-step events,
       // so capturing inside the event handler can be too late.
       const initialSnapshot = yield* snapshot.track()
+      const current = yield* session.get(input.sessionID).pipe(Effect.orDie)
       const ctx: ProcessorContext = {
         assistantMessage: input.assistantMessage,
         sessionID: input.sessionID,
@@ -111,6 +116,10 @@ const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        baseCost: current.cost ?? 0,
+        budget: current.budget,
+        turnCost: 0,
+        budgetExceeded: false,
       }
       let aborted = false
 
@@ -454,6 +463,18 @@ const layer = Layer.effect(
               cost: usage.cost,
             })
             yield* session.updateMessage(ctx.assistantMessage)
+            ctx.turnCost += usage.cost
+            if (ctx.budget !== undefined && ctx.baseCost + ctx.turnCost >= ctx.budget && !ctx.budgetExceeded) {
+              ctx.budgetExceeded = true
+              yield* session.updatePart({
+                id: PartID.ascending(),
+                messageID: ctx.assistantMessage.id,
+                sessionID: ctx.sessionID,
+                type: "text",
+                text: "Session budget reached. Increase the budget to continue.",
+                time: { start: Date.now(), end: Date.now() },
+              })
+            }
             if (ctx.snapshot) {
               const patch = yield* snapshot.patch(ctx.snapshot)
               if (patch.files.length) {
@@ -677,7 +698,7 @@ const layer = Layer.effect(
           )
 
           if (ctx.needsCompaction) return "compact"
-          if (ctx.blocked || ctx.assistantMessage.error) return "stop"
+          if (ctx.budgetExceeded || ctx.blocked || ctx.assistantMessage.error) return "stop"
           return "continue"
         })
       })

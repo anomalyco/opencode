@@ -65,6 +65,7 @@ describe("Session.Info", () => {
       title: "Full session",
       version: "1.0.0",
       metadata: { source: "test" },
+      budget: 2.5,
       time: { created: 100, updated: 200, compacting: 150, archived: 300 },
       permission: [{ action: "allow" as const, pattern: "*", permission: "read" }],
       revert: {
