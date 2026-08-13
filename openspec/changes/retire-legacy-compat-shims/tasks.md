@@ -44,24 +44,38 @@ patched) and a build smoke test. Do not start a phase until the previous one is 
 
 ## Phase 3: Retire the legacy `defaultLayer` DI pattern
 
-- [ ] 3.1 Revert the 10 upstream-existing files that use `defaultLayer` to upstream,
+- [x] 3.1 Revert the 10 upstream-existing files that use `defaultLayer` to upstream,
       re-applying fork features per the Phase 1 classification
-- [ ] 3.2 Migrate the 11 fork-only files to `LayerNode` — delete `export const defaultLayer`,
+- [x] 3.2 Migrate the 11 fork-only files to `LayerNode` — delete `export const defaultLayer`,
       keep `export const node`
-- [ ] 3.3 Migrate remaining call sites: `Effect.provide(X.defaultLayer)` →
+- [x] 3.3 Migrate remaining call sites: `Effect.provide(X.defaultLayer)` →
       `Effect.provide(AppNodeBuilder.build(X.node))`
-- [ ] 3.4 Migrate the test block (~90 refs, largest single group), incl. fork-only
+- [x] 3.4 Migrate the test block (~90 refs, largest single group), incl. fork-only
       `test/loop/loop.test.ts` and `test/loop/queue-mode.test.ts`
+  - The merge had kept the fork's test files while taking upstream's source, so
+    suites referenced `defaultLayer` on services that no longer export it, and
+    `provider.test.ts` imported `@/project/instance-layer`, a module that does not
+    exist (whole file failed to import).
+  - A mechanical `X.defaultLayer` -> `AppNodeBuilder.build(X.node)` swap is WRONG:
+    build() returns a *closed* layer, so each call constructs its own Database and
+    a session written through one is invisible to the others. The working shape is
+    upstream's: one module-level `LayerNode.group` root, compiled once with
+    `LayerNode.compile(root, replacements)`, mocks injected as node replacements.
+  - `prompt.test.ts` restored from upstream (only 2 fork-only tests, re-added).
+    Loop suites are fork-only, so they were ported to the upstream harness shape.
 - [ ] 3.5 Run the suite — not just typecheck — and confirm no test silently weakened
 
 ## Phase 4: Regenerate the SDK
 
-- [ ] 4.1 Establish why `sdk.gen.ts` references symbols absent from `types.gen.ts`
+- [x] 4.1 Establish why `sdk.gen.ts` references symbols absent from `types.gen.ts`
       (both generated, both fork-modified — determine which is stale)
-- [ ] 4.2 Regenerate via `script/generate.ts`; confirm the fork's llama-skein client
+- [x] 4.2 Regenerate via `script/generate.ts`; confirm the fork's llama-skein client
       additions survive regeneration
-- [ ] 4.3 Confirm downstream consumers typecheck (`packages/plugin`, `packages/tui`)
-- [ ] 4.4 Coordinate with the in-flight llama-skein client work before landing
+- [x] 4.3 Confirm downstream consumers typecheck (`packages/plugin`, `packages/tui`)
+- [x] 4.4 Coordinate with the in-flight llama-skein client work before landing
+  - Regenerating exposed that the fork's `loop.updated` and `side-question.response`
+    events had been dropped from the event manifest by the merge, so no client could
+    subscribe. Re-registered in packages/opencode's manifest.
 
 ## Phase 5: Make the gate real
 

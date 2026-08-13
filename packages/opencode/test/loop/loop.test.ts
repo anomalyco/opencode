@@ -1,3 +1,6 @@
+import { MessageV2 } from "../../src/session/message-v2"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { NodeFileSystem } from "@effect/platform-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
@@ -98,82 +101,74 @@ const lsp = Layer.succeed(
   }),
 )
 
-const status = AppNodeBuilder.build(SessionStatus.node).pipe(Layer.provideMerge(AppNodeBuilder.build(EventV2Bridge.node)))
-const run = AppNodeBuilder.build(SessionRunState.node).pipe(Layer.provide(status))
-const infra = Layer.mergeAll(NodeFileSystem.layer, AppNodeBuilder.build(CrossSpawnSpawner.node))
+
+// Mirrors upstream's session/prompt.test.ts harness: ONE node graph compiled
+// once, with mocks injected as node replacements. Building each service
+// separately and merging does not work — AppNodeBuilder.build() returns a
+// closed layer, so every call constructs its own Database and a session
+// written through one is invisible to the others.
+const runtimeFlags = RuntimeFlags.layer({ experimentalEventSystem: true })
+const testLLMServerNode = LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] })
+
+const loopRoot = LayerNode.group([
+  Loop.node,
+  SessionPrompt.node,
+  Session.node,
+  SessionProjector.node,
+  MessageV2.node,
+  Snapshot.node,
+  LLM.node,
+  Env.node,
+  AgentSvc.node,
+  Command.node,
+  Permission.node,
+  Plugin.node,
+  Config.node,
+  ProviderSvc.node,
+  LSP.node,
+  MCP.node,
+  FSUtil.node,
+  BackgroundJob.node,
+  SessionStatus.node,
+  SessionRunState.node,
+  Database.node,
+  EventV2Bridge.node,
+  Question.node,
+  Todo.node,
+  ToolRegistry.node,
+  Skill.node,
+  Git.node,
+  Ripgrep.node,
+  Format.node,
+  Truncate.node,
+  SessionProcessor.node,
+  Image.node,
+  SessionCompaction.node,
+  SessionRevert.node,
+  Instruction.node,
+  SystemPrompt.node,
+  CrossSpawnSpawner.node,
+  AutoMode.node,
+  RuntimeFlags.node,
+  SessionSummary.node,
+])
 
 function makeLoop() {
-  const deps = Layer.mergeAll(
-    AppNodeBuilder.build(Session.node),
-    AppNodeBuilder.build(Snapshot.node),
-    AppNodeBuilder.build(LLM.node),
-    AppNodeBuilder.build(Env.node),
-    AppNodeBuilder.build(AgentSvc.node),
-    AppNodeBuilder.build(Command.node),
-    AppNodeBuilder.build(Permission.node),
-    AppNodeBuilder.build(Plugin.node),
-    AppNodeBuilder.build(Config.node),
-    AppNodeBuilder.build(ProviderSvc.node),
-    lsp,
-    mcp,
-    AppNodeBuilder.build(FSUtil.node),
-    AppNodeBuilder.build(BackgroundJob.node),
-    status,
-    AppNodeBuilder.build(Database.node),
-    AppNodeBuilder.build(EventV2Bridge.node),
-    AppNodeBuilder.build(AutoMode.node),
-  ).pipe(Layer.provideMerge(infra))
-  const question = AppNodeBuilder.build(Question.node).pipe(Layer.provideMerge(deps))
-  const todo = AppNodeBuilder.build(Todo.node).pipe(Layer.provideMerge(deps))
-  const registry = AppNodeBuilder.build(ToolRegistry.node).pipe(
-    Layer.provide(AppNodeBuilder.build(Skill.node)),
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)),
-    Layer.provide(AppNodeBuilder.build(Git.node)),
-    Layer.provide(AppNodeBuilder.build(Ripgrep.node)),
-    Layer.provide(AppNodeBuilder.build(Format.node)),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-    Layer.provideMerge(todo),
-    Layer.provideMerge(question),
-    Layer.provideMerge(deps),
-  )
-  const trunc = AppNodeBuilder.build(Truncate.node).pipe(Layer.provideMerge(deps))
-  const proc = AppNodeBuilder.build(SessionProcessor.node).pipe(
-    Layer.provide(summary),
-    Layer.provide(AppNodeBuilder.build(Image.node)),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-    Layer.provideMerge(deps),
-  )
-  const compact = AppNodeBuilder.build(SessionCompaction.node).pipe(
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-    Layer.provideMerge(proc),
-    Layer.provideMerge(deps),
-  )
-  const promptLayer = SessionPrompt.layer.pipe(
-    Layer.provide(AppNodeBuilder.build(SessionRevert.node)),
-    Layer.provide(AppNodeBuilder.build(Image.node)),
-    Layer.provide(summary),
-    Layer.provideMerge(run),
-    Layer.provideMerge(compact),
-    Layer.provideMerge(proc),
-    Layer.provideMerge(registry),
-    Layer.provideMerge(trunc),
-    Layer.provide(AppNodeBuilder.build(Instruction.node)),
-    Layer.provide(AppNodeBuilder.build(SystemPrompt.node)),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-    Layer.provideMerge(deps),
-    Layer.provide(summary),
-  )
-  // Loop.layer directly requires Session.Service and EventV2Bridge.Service
-  // (not just SessionPrompt.Service, which promptLayer alone satisfies), and
-  // test bodies yield* FSUtil.Service directly too — provideMerge (not
-  // provide) so deps' own outputs stay visible downstream instead of being
-  // consumed-and-hidden behind Loop.layer's output.
-  return Loop.layer.pipe(Layer.provide(promptLayer), Layer.provideMerge(deps))
+  return LayerNode.compile(loopRoot, [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, mcp],
+    [RuntimeFlags.node, runtimeFlags],
+  ])
 }
 
 function makeHttp() {
-  return Layer.mergeAll(TestLLMServer.layer, makeLoop())
+  return LayerNode.compile(LayerNode.group([loopRoot, testLLMServerNode]), [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, mcp],
+    [RuntimeFlags.node, runtimeFlags],
+  ])
 }
 
 const it = testEffect(makeHttp())
