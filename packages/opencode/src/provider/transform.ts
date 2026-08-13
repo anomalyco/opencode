@@ -1535,6 +1535,18 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
     // Codex also applies lossy compaction above 4 KB; defer that until OpenCode needs the same schema budget.
   }
 
+  if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic") {
+    // Anthropic's input_schema does not support oneOf, allOf, or anyOf at the top
+    // level (nested composition inside properties is fine). MCP servers can still
+    // emit these, e.g. `anyOf: [{ required: ["route"] }, { required: ["file"] }]`.
+    if (isPlainObject(schema)) {
+      const dropped = ["oneOf", "allOf", "anyOf"]
+      schema = Object.fromEntries(
+        Object.entries(schema as JsonRecord).filter(([key]) => !dropped.includes(key)),
+      ) as JSONSchema7
+    }
+  }
+
   if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
     const sanitizeMoonshot = (obj: unknown): unknown => {
       if (obj === null || typeof obj !== "object") return obj

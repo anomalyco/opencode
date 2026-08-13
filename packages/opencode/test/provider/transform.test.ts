@@ -1649,6 +1649,94 @@ describe("ProviderTransform.schema - openai supported schema subset", () => {
   })
 })
 
+describe("ProviderTransform.schema - anthropic top-level composition removal", () => {
+  const anthropicModel = {
+    providerID: "anthropic",
+    api: {
+      id: "claude-sonnet-4",
+      npm: "@ai-sdk/anthropic",
+    },
+  } as any
+
+  const vertexAnthropicModel = {
+    providerID: "google-vertex",
+    api: {
+      id: "claude-sonnet-4",
+      npm: "@ai-sdk/google-vertex/anthropic",
+    },
+  } as any
+
+  test("drops anyOf at the schema root", () => {
+    const result = ProviderTransform.schema(anthropicModel, {
+      type: "object",
+      properties: {
+        route: { type: "string" },
+        file: { type: "string" },
+      },
+      anyOf: [{ required: ["route"] }, { required: ["file"] }],
+    } as any) as any
+
+    expect(result).toEqual({
+      type: "object",
+      properties: {
+        route: { type: "string" },
+        file: { type: "string" },
+      },
+    })
+  })
+
+  test("drops oneOf and allOf at the schema root", () => {
+    const result = ProviderTransform.schema(anthropicModel, {
+      type: "object",
+      properties: { query: { type: "string" } },
+      oneOf: [{ required: ["query"] }],
+      allOf: [{ required: ["query"] }],
+    } as any) as any
+
+    expect(result).toEqual({
+      type: "object",
+      properties: { query: { type: "string" } },
+    })
+  })
+
+  test("keeps nested anyOf inside properties", () => {
+    const result = ProviderTransform.schema(anthropicModel, {
+      type: "object",
+      properties: {
+        value: {
+          anyOf: [{ type: "string" }, { type: "number" }],
+        },
+      },
+    } as any) as any
+
+    expect(result.properties.value.anyOf).toEqual([{ type: "string" }, { type: "number" }])
+  })
+
+  test("sanitizes Claude models served through Vertex AI", () => {
+    const result = ProviderTransform.schema(vertexAnthropicModel, {
+      type: "object",
+      anyOf: [{ required: ["route"] }, { required: ["file"] }],
+    } as any) as any
+
+    expect(result).toEqual({ type: "object" })
+  })
+
+  test("does not affect providers without anthropic-specific sanitization", () => {
+    const result = ProviderTransform.schema(
+      {
+        providerID: "mistral",
+        api: { id: "mistral-large", npm: "@ai-sdk/mistral" },
+      } as any,
+      {
+        type: "object",
+        anyOf: [{ required: ["route"] }, { required: ["file"] }],
+      } as any,
+    ) as any
+
+    expect(result.anyOf).toEqual([{ required: ["route"] }, { required: ["file"] }])
+  })
+})
+
 describe("ProviderTransform.schema - moonshot $ref siblings", () => {
   const moonshotModel = {
     providerID: "moonshotai",
