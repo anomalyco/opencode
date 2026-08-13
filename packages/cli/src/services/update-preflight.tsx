@@ -447,7 +447,7 @@ function UpdateFooter(props: {
   })
 
   return (
-    <box width="100%" height={4} flexDirection="row" gap={1} live={props.animating()}>
+    <box width="100%" height={4} flexDirection="row" gap={1} paddingLeft={1} live={props.animating()}>
       <Monogram ink={monogramInk} />
       <box flexDirection="column" flexGrow={1} overflow="hidden">
         <CellLine cells={header()} />
