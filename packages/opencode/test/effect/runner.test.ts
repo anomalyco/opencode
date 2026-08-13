@@ -121,6 +121,93 @@ describe("Runner", () => {
     }),
   )
 
+  it.live(
+    "interrupted caller waits for cleanup before resolving through onInterrupt",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const started = yield* Deferred.make<void>()
+      const cleanupStarted = yield* Deferred.make<void>()
+      const releaseCleanup = yield* Deferred.make<void>()
+      const releaseSecond = yield* Deferred.make<void>()
+      const runner = Runner.make<string>(s, { onInterrupt: Effect.succeed("interrupted") })
+
+      const first = Effect.gen(function* () {
+        yield* Deferred.succeed(started, undefined)
+        return yield* Effect.never.pipe(
+          Effect.onInterrupt(() => Deferred.succeed(cleanupStarted, undefined)),
+          Effect.ensuring(Deferred.await(releaseCleanup)),
+          Effect.as("first-result"),
+        )
+      })
+
+      const a = yield* runner.ensureRunning(first).pipe(Effect.forkChild)
+      yield* Deferred.await(started)
+      const observer = yield* Effect.gen(function* () {
+        yield* Deferred.await(cleanupStarted)
+        return a.pollUnsafe()
+      }).pipe(
+        Effect.ensuring(
+          Effect.all([Deferred.succeed(releaseCleanup, undefined), Deferred.succeed(releaseSecond, undefined)], {
+            discard: true,
+          }),
+        ),
+        Effect.forkChild,
+      )
+      const b = yield* runner
+        .ensureRunning(Deferred.await(releaseSecond).pipe(Effect.as("second-result")))
+        .pipe(Effect.forkChild)
+
+      const early = yield* Fiber.join(observer).pipe(Effect.timeout("250 millis"))
+      const exitA = yield* Fiber.await(a).pipe(Effect.timeout("250 millis"))
+      const exitB = yield* Fiber.await(b).pipe(Effect.timeout("250 millis"))
+      expect(Exit.isSuccess(exitA)).toBe(true)
+      if (Exit.isSuccess(exitA)) expect(exitA.value).toBe("interrupted")
+      expect(Exit.isSuccess(exitB)).toBe(true)
+      if (Exit.isSuccess(exitB)) expect(exitB.value).toBe("second-result")
+      expect(early).toBeUndefined()
+    }),
+  )
+
+  it.live(
+    "replaced run does not publish idle while replacement is active",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const started = yield* Deferred.make<void>()
+      const cleanupStarted = yield* Deferred.make<void>()
+      const releaseCleanup = yield* Deferred.make<void>()
+      const releaseSecond = yield* Deferred.make<void>()
+      const events = yield* Ref.make<string[]>([])
+      const runner = Runner.make<string>(s, {
+        onIdle: Ref.update(events, (items) => [...items, "idle"]),
+      })
+
+      const first = Effect.gen(function* () {
+        yield* Deferred.succeed(started, undefined)
+        return yield* Effect.never.pipe(
+          Effect.onInterrupt(() => Deferred.succeed(cleanupStarted, undefined)),
+          Effect.ensuring(Deferred.await(releaseCleanup)),
+          Effect.as("first-result"),
+        )
+      })
+
+      const a = yield* runner.ensureRunning(first).pipe(Effect.exit, Effect.forkChild)
+      yield* Deferred.await(started)
+      const b = yield* runner
+        .ensureRunning(Deferred.await(releaseSecond).pipe(Effect.as("second-result")))
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(cleanupStarted)
+      yield* Deferred.succeed(releaseCleanup, undefined)
+      yield* Fiber.join(a)
+
+      expect(runner.busy).toBe(true)
+      expect(yield* Ref.get(events)).toEqual([])
+
+      yield* Deferred.succeed(releaseSecond, undefined)
+      expect(yield* Fiber.join(b)).toBe("second-result")
+      expect(yield* Ref.get(events)).toEqual(["idle"])
+    }),
+  )
+
   // --- cancel semantics ---
 
   it.live(

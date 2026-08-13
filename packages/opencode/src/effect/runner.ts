@@ -125,9 +125,9 @@ export const make = <A, E = never>(
             // to finish. The interrupted caller resolves through `onInterrupt`.
             // The fiber interrupt runs on a separate fiber: the interrupted run's
             // `finishRun` acquires this same ref, so interrupting it while holding
-            // the lock would deadlock.
+            // the lock would deadlock. `finishRun` also completes the old deferred
+            // after interruption cleanup, so the old caller cannot return early.
             const old = st.run
-            yield* Deferred.fail(old.done, new Cancelled()).pipe(Effect.asVoid)
             const done = yield* Deferred.make<A, E | Cancelled>()
             const run = yield* startRun(work, done)
             yield* Effect.suspend(() => Fiber.interrupt(old.fiber)).pipe(Effect.forkIn(scope))
