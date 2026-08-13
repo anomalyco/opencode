@@ -247,6 +247,16 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         removeDraftPersisted(draftID)
       },
       removeTab,
+      // Child routes share their root session's tab, so the route ID cannot
+      // identify the tab once a deleted child falls back to an error page.
+      removeActiveTab(key: ServerConnection.Key) {
+        const index = store.findIndex((tab) => tab.server === key && tabKey(tab) === recentKey())
+        if (index === -1) {
+          navigate("/")
+          return
+        }
+        removeTab(index)
+      },
       // User-initiated close: records the tab so it can be reopened.
       // Cleanup paths (missing sessions, archive, server removal) go through
       // removeTab and friends directly and are not recorded.

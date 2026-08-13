@@ -39,7 +39,9 @@ test("shows the not found fallback when the viewed session is deleted", async ({
   })
 
   await expect(page.getByText("This session cannot be found")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Close Tab" })).toBeVisible()
+  await page.getByRole("button", { name: "Close Tab" }).click()
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByText("This session cannot be found")).toHaveCount(0)
   await expect(page.getByRole("heading", { name: taskDescription })).toHaveCount(0)
 })
 

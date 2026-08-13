@@ -209,7 +209,7 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
   })
   const closeTab = () => {
     if (!props.sessionID) return
-    tabs.removeSessionTab({ server: props.serverKey ?? server.key, sessionId: props.sessionID })
+    tabs.removeActiveTab(props.serverKey ?? server.key)
   }
   if (isCurrentSessionNotFoundError(props.error, props.sessionID)) {
     return (
