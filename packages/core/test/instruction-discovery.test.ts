@@ -127,7 +127,7 @@ describe("InstructionDiscovery", () => {
         })
       })
       const modified = (yield* readUpdate(yield* discovery.load(), initial)).text
-      expect(modified).toContain("The instructions from /repo/AGENTS.md changed")
+      expect(modified).toContain("The instructions from /repo/AGENTS.md changed. Here's the diff:")
       expect(modified).toContain("-old\n+new")
       expect(modified).not.toContain("global")
 
@@ -199,7 +199,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
           yield* Effect.promise(() => fs.writeFile(packageFile, "changed"))
           yield* emitAndWait({ type: "update", path: packageFile })
           const changed = (yield* readUpdate(yield* discovery.load(), initialized)).text
-          expect(changed).toContain(`The instructions from ${packageFile} changed`)
+          expect(changed).toContain(`The instructions from ${packageFile} changed. Here's the diff:`)
           expect(changed).toContain("-package\n\\ No newline at end of file\n+changed")
           expect(changed).not.toContain(`Instructions from: ${globalFile}\nglobal`)
 

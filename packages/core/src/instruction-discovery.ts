@@ -134,7 +134,7 @@ function renderUpdate(previous: ReadonlyArray<File>, current: ReadonlyArray<File
     ...changes.changed.map(({ previous: before, current: after }) => {
       const patch = createPatch(after.path, before.content, after.content, "", "", { context: 3 })
       return [
-        `The instructions from ${after.path} changed. Apply this patch to the previously loaded version:`,
+        `The instructions from ${after.path} changed. Here's the diff:`,
         "```diff",
         patch.slice(patch.indexOf("@@")).trimEnd(),
         "```",
