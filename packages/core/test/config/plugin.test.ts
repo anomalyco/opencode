@@ -10,6 +10,7 @@ import { Npm } from "@opencode-ai/core/npm"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { State } from "@opencode-ai/core/state"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
@@ -99,6 +100,51 @@ describe("ConfigExternalPlugin", () => {
 
       expect(yield* waitForAgent(agents, "effect-configured")).toMatchObject({
         description: "Effect plugin from config",
+        mode: "subagent",
+      })
+    }),
+  )
+
+  it.live("applies plugin changes that land after the startup batch commits", () =>
+    Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      const agents = yield* AgentV2.Service
+      const fs = yield* FSUtil.Service
+      const location = yield* Location.Service
+      const npm = yield* Npm.Service
+      const host = yield* PluginHost.make(plugins)
+
+      yield* State.batch(
+        ConfigExternalPlugin.Plugin.effect(host).pipe(
+          Effect.provideService(PluginV2.Service, plugins),
+          Effect.provideService(FSUtil.Service, fs),
+          Effect.provideService(Location.Service, location),
+          Effect.provideService(Npm.Service, npm),
+          Effect.provideService(
+            Config.Service,
+            Config.Service.of({
+              entries: () =>
+                Effect.succeed([
+                  new Config.Document({
+                    type: "document",
+                    path: path.join(import.meta.dir, "opencode.json"),
+                    info: decode({
+                      plugins: [
+                        {
+                          package: "../plugin/fixtures/config-effect-plugin.ts",
+                          options: { description: "Loaded after batch commit" },
+                        },
+                      ],
+                    }),
+                  }),
+                ]),
+            }),
+          ),
+        ),
+      )
+
+      expect(yield* waitForAgent(agents, "effect-configured")).toMatchObject({
+        description: "Loaded after batch commit",
         mode: "subagent",
       })
     }),
