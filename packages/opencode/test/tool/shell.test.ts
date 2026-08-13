@@ -194,6 +194,21 @@ describe("tool.shell", () => {
     ),
   )
 
+  each("multi-line commands capture all output", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const result = yield* run({
+          command: 'echo "first"\necho "second"\necho "third"',
+        })
+        expect(result.metadata.exit).toBe(0)
+        expect(result.output).toContain("first")
+        expect(result.output).toContain("second")
+        expect(result.output).toContain("third")
+      }),
+    ),
+  )
+
   it.live("falls back from terminal-only configured shell", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped({ config: { shell: "fish" } })

@@ -195,7 +195,7 @@ export function args(file: string, command: string, cwd: string) {
     ]
   }
   if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoProfile", "-Command", command]
+  if (ps(file)) return ["-NoProfile", "-EncodedCommand", Buffer.from(command, "utf-16le").toString("base64")]
   return ["-c", command]
 }
 
