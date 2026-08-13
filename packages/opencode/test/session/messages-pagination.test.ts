@@ -751,6 +751,58 @@ describe("MessageV2.filterCompacted", () => {
     ),
   )
 
+  it.instance("keeps history before tail_start_id when the summary failed", () =>
+    withSession(({ session, sessionID }) =>
+      Effect.gen(function* () {
+        const u1 = yield* addUser(sessionID, "first")
+        const a1 = yield* addAssistant(sessionID, u1, { finish: "end_turn" })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID,
+          messageID: a1,
+          type: "text",
+          text: "first reply",
+        })
+
+        const u2 = yield* addUser(sessionID, "second")
+        const a2 = yield* addAssistant(sessionID, u2, { finish: "end_turn" })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID,
+          messageID: a2,
+          type: "text",
+          text: "second reply",
+        })
+
+        // tail_start_id is persisted even when the summary turn fails, so the
+        // reorder must not treat the errored summary as a usable boundary.
+        const c1 = yield* addUser(sessionID)
+        yield* addCompactionPart(sessionID, c1, u2)
+        const s1 = yield* addAssistant(sessionID, c1, {
+          summary: true,
+          error: new SessionV1.APIError({
+            message: "boom",
+            isRetryable: false,
+          }).toObject() as SessionV1.Assistant["error"],
+        })
+
+        const u3 = yield* addUser(sessionID, "third")
+        const a3 = yield* addAssistant(sessionID, u3, { finish: "end_turn" })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID,
+          messageID: a3,
+          type: "text",
+          text: "third reply",
+        })
+
+        const result = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+
+        expect(result.map((item) => item.info.id)).toEqual([u1, a1, u2, a2, c1, s1, u3, a3])
+      }),
+    ),
+  )
+
   it.instance("fork remaps compaction tail_start_id for filterCompacted", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service
