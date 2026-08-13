@@ -99,7 +99,8 @@ export type PromptRef = {
 }
 
 const DRAFT_RETENTION_MIN_CHARS = 20
-const SHELL_SYNTAX_HIGHLIGHT_REF = 65_535
+const SHELL_SYNTAX_HIGHLIGHT_REFS = [65_534, 65_535] as const
+const SHELL_SYNTAX_GROUPS = ["comment", "keyword", "string"]
 
 function randomIndex(count: number) {
   if (count <= 0) return 0
@@ -343,6 +344,7 @@ export function Prompt(props: PromptProps) {
   let disposed = false
   let pasteQueue = Promise.resolve()
   let syntaxHighlightVersion = 0
+  let syntaxHighlightRef: (typeof SHELL_SYNTAX_HIGHLIGHT_REFS)[number] = SHELL_SYNTAX_HIGHLIGHT_REFS[0]
 
   createEffect(() => {
     const mode = store.mode
@@ -350,38 +352,45 @@ export function Prompt(props: PromptProps) {
     const style = syntax()
     const version = ++syntaxHighlightVersion
 
-    if (input && !input.isDestroyed) input.editBuffer.removeHighlightsByRef(SHELL_SYNTAX_HIGHLIGHT_REF)
-    if (mode !== "shell" || !content || !input || input.isDestroyed) return
+    if (!input || input.isDestroyed) return
+    if (mode !== "shell" || !content) {
+      SHELL_SYNTAX_HIGHLIGHT_REFS.forEach((ref) => input.editBuffer.removeHighlightsByRef(ref))
+      renderer.requestRender()
+      return
+    }
 
-    const timeout = setTimeout(() => {
-      getTreeSitterClient()
-        .highlightOnce(content, "bash")
-        .then((result) => {
-          if (version !== syntaxHighlightVersion || !result.highlights || !input || input.isDestroyed) return
+    getTreeSitterClient()
+      .highlightOnce(content, "bash")
+      .then((result) => {
+        if (version !== syntaxHighlightVersion || !result.highlights || !input || input.isDestroyed) return
 
-          const bytes = new TextEncoder().encode(content)
-          const decoder = new TextDecoder()
-          result.highlights.forEach(([start, end, group]) => {
-            const styleId = style.getStyleId(group)
-            if (styleId === null) return
-            const before = decoder.decode(bytes.subarray(0, start))
-            const highlighted = decoder.decode(bytes.subarray(start, end))
-            input.editBuffer.addHighlightByCharRange({
-              start: promptOffsetWidth(before) - (before.match(/\n/g)?.length ?? 0),
-              end:
-                promptOffsetWidth(before) +
-                promptOffsetWidth(highlighted) -
-                ((before + highlighted).match(/\n/g)?.length ?? 0),
-              styleId,
-              priority: 0,
-              hlRef: SHELL_SYNTAX_HIGHLIGHT_REF,
-            })
+        const previous = syntaxHighlightRef
+        syntaxHighlightRef =
+          previous === SHELL_SYNTAX_HIGHLIGHT_REFS[0] ? SHELL_SYNTAX_HIGHLIGHT_REFS[1] : SHELL_SYNTAX_HIGHLIGHT_REFS[0]
+        const bytes = new TextEncoder().encode(content)
+        const decoder = new TextDecoder()
+        result.highlights.forEach(([start, end, group]) => {
+          if (!SHELL_SYNTAX_GROUPS.some((scope) => group === scope || group.startsWith(`${scope}.`))) return
+          if (group.includes("builtin")) return
+          const styleId = style.getStyleId(group)
+          if (styleId === null) return
+          const before = decoder.decode(bytes.subarray(0, start))
+          const highlighted = decoder.decode(bytes.subarray(start, end))
+          input.editBuffer.addHighlightByCharRange({
+            start: promptOffsetWidth(before) - (before.match(/\n/g)?.length ?? 0),
+            end:
+              promptOffsetWidth(before) +
+              promptOffsetWidth(highlighted) -
+              ((before + highlighted).match(/\n/g)?.length ?? 0),
+            styleId,
+            priority: 0,
+            hlRef: syntaxHighlightRef,
           })
-          renderer.requestRender()
         })
-        .catch(() => {})
-    }, 50)
-    onCleanup(() => clearTimeout(timeout))
+        input.editBuffer.removeHighlightsByRef(previous)
+        renderer.requestRender()
+      })
+      .catch(() => {})
   })
 
   function enqueuePaste(run: (changed: () => boolean) => Promise<void>) {
