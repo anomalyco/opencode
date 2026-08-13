@@ -54,14 +54,14 @@ class ListenerServerService extends Context.Service<ListenerServerService, Liste
 ) {}
 
 export const Default = lazy(() => {
-  const handler = HttpApiApp.webHandler().handler
+  const web = HttpApiApp.webHandler()
   const app: ServerApp = {
-    fetch: (request: Request) => handler(request, HttpApiApp.context),
+    fetch: (request: Request) => web.handler(request, HttpApiApp.context),
     request(input, init) {
       return app.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
     },
   }
-  return { app }
+  return { app, dispose: web.dispose }
 })
 
 export async function openapi() {

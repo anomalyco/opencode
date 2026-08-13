@@ -24,6 +24,35 @@ describe("opencode run (non-interactive subprocess)", () => {
   )
 
   cliIt.concurrent(
+    "flushes server telemetry before exiting",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        const requests: string[] = []
+        const collector = yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            Bun.serve({
+              port: 0,
+              fetch(request) {
+                requests.push(new URL(request.url).pathname)
+                return new Response(null, { status: 200 })
+              },
+            }),
+          ),
+          (server) => Effect.sync(() => server.stop(true)),
+        )
+        yield* llm.text("telemetry response")
+
+        const result = yield* opencode.run("say hi", {
+          env: { OTEL_EXPORTER_OTLP_ENDPOINT: collector.url.toString().replace(/\/$/, "") },
+        })
+
+        opencode.expectExit(result, 0)
+        expect(requests).toContain("/v1/traces")
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
     "prints each completed text part in order around a tool continuation",
     ({ llm, opencode }) =>
       Effect.gen(function* () {

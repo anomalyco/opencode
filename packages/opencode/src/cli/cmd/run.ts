@@ -123,6 +123,18 @@ async function toolError(part: ToolPart) {
   }
 }
 
+async function embeddedServer(auth?: string) {
+  const { Server } = await import("@/server/server")
+  const server = Server.Default()
+  const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init)
+    const headers = new Headers(request.headers)
+    if (auth) headers.set("Authorization", auth)
+    return server.app.fetch(new Request(request, { headers }))
+  }) as typeof globalThis.fetch
+  return { fetch, dispose: server.dispose }
+}
+
 export const RunCommand = effectCmd({
   command: "run [message..]",
   describe: "run opencode with a message",
@@ -902,19 +914,12 @@ export const RunCommand = effectCmd({
       if (interactive && !args.attach && !args.session && !args.continue) {
         const model = pick(args.model)
         const { runInteractiveLocalMode } = await import("./run/runtime")
-        const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-          const { Server } = await import("@/server/server")
-          const request = new Request(input, init)
-          const headers = new Headers(request.headers)
-          const auth = ServerAuth.header()
-          if (auth) headers.set("Authorization", auth)
-          return Server.Default().app.fetch(new Request(request, { headers }))
-        }) as typeof globalThis.fetch
+        const server = await embeddedServer(ServerAuth.header())
 
         try {
           return await runInteractiveLocalMode({
             directory: directory ?? root,
-            fetch: fetchFn,
+            fetch: server.fetch,
             resolveAgent: localAgent,
             session,
             share,
@@ -932,6 +937,8 @@ export const RunCommand = effectCmd({
           })
         } catch (error) {
           dieInteractive(error)
+        } finally {
+          await server.dispose()
         }
       }
 
@@ -940,20 +947,17 @@ export const RunCommand = effectCmd({
         return await execute(sdk)
       }
 
-      const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const { Server } = await import("@/server/server")
-        const request = new Request(input, init)
-        const headers = new Headers(request.headers)
-        const auth = ServerAuth.header()
-        if (auth) headers.set("Authorization", auth)
-        return Server.Default().app.fetch(new Request(request, { headers }))
-      }) as typeof globalThis.fetch
-      const sdk = createOpencodeClient({
-        baseUrl: "http://opencode.internal",
-        fetch: fetchFn,
-        directory,
-      })
-      await execute(sdk)
+      const server = await embeddedServer(ServerAuth.header())
+      try {
+        const sdk = createOpencodeClient({
+          baseUrl: "http://opencode.internal",
+          fetch: server.fetch,
+          directory,
+        })
+        await execute(sdk)
+      } finally {
+        await server.dispose()
+      }
     })
   }),
 })
