@@ -1,7 +1,6 @@
 import { $ } from "bun"
-import { homedir } from "node:os"
 import { join } from "node:path"
-import { buildCliToResources, downloadCliToResources, windowsify } from "./utils"
+import { downloadCliToResources, windowsify } from "./utils"
 
 type ServerSource = { type: "build" } | { type: "download"; version: string }
 type DevOptions = { server: ServerSource; electron: string[] }
@@ -38,18 +37,9 @@ function selectOptions(): DevOptions {
 }
 
 async function prepareServer(source: ServerSource) {
-  const destination = windowsify("resources/opencode-cli-dev")
-  if (source.type === "download") return downloadCliToResources(source.version, destination)
-  return buildCliToResources(destination, developmentStateHome())
-}
-
-function developmentStateHome() {
-  const appData = (() => {
-    if (process.platform === "darwin") return join(homedir(), "Library", "Application Support")
-    if (process.platform === "win32") return process.env.APPDATA ?? join(homedir(), "AppData", "Roaming")
-    return process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config")
-  })()
-  return join(appData, "ai.opencode.desktop.dev")
+  if (source.type === "download")
+    return downloadCliToResources(source.version, windowsify("resources/opencode-cli-dev"))
+  process.env.OPENCODE_DESKTOP_CLI_DEV = join(import.meta.dirname, "../../cli")
 }
 
 async function startDesktop(args: string[]) {

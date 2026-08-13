@@ -17,34 +17,46 @@ type Logger = {
 
 export async function startBackgroundCli(logger: Logger) {
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
-  const bundled = app.isPackaged
-    ? join(process.resourcesPath, executableName())
-    : join(root, "../../resources", isolated ? developmentExecutableName() : executableName())
-  logger.log("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
-  const version = parseVersion(await run(bundled, ["--version"], logger))
-  const binary = app.isPackaged || isolated ? await installCli(bundled, version, logger) : bundled
+  const development = !app.isPackaged && process.env.OPENCODE_DESKTOP_CLI_DEV
+  const cli = development
+    ? {
+        version: "local",
+        command: ["bun", "run", "--cwd", development, "dev", "--"],
+        binary: undefined,
+      }
+    : await resolveBundledCli(isolated, logger)
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const service = await Service.ensure({
     file:
       isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
         ? join(app.getPath("userData"), "opencode", "service-local.json")
         : undefined,
-    version,
-    command: [binary, "serve", "--service"],
+    version: cli.version,
+    command: [...cli.command, "serve", "--service"],
     onStart: (reason, previousVersion) => logger.log("v2 CLI background service starting", { reason, previousVersion }),
   })
   if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
   logger.log("v2 CLI background service ready", {
     username: service.auth.username,
-    version,
+    version: cli.version,
     ...endpoint(service.url),
   })
-  if (isolated) await cleanCliStages(binary, logger)
+  if (isolated && cli.binary) await cleanCliStages(cli.binary, logger)
   return {
     url: service.url,
     username: service.auth.username,
     password: service.auth.password,
   }
+}
+
+async function resolveBundledCli(isolated: boolean, logger: Logger) {
+  const bundled = app.isPackaged
+    ? join(process.resourcesPath, executableName())
+    : join(root, "../../resources", isolated ? developmentExecutableName() : executableName())
+  logger.log("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
+  const version = parseVersion(await run(bundled, ["--version"], logger))
+  const binary = app.isPackaged || isolated ? await installCli(bundled, version, logger) : bundled
+  return { version, binary, command: [binary] }
 }
 
 async function cleanCliStages(binary: string, logger: Logger) {
