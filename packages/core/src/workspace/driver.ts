@@ -55,7 +55,7 @@ export class RegistryService extends Context.Service<RegistryService, Registry>(
 
 export const registry = (drivers: Readonly<Record<string, Interface>>): Registry => ({
   get: (provider) => {
-    const driver = drivers[provider]
+    const driver = Object.hasOwn(drivers, provider) ? drivers[provider] : undefined
     return driver ? Effect.succeed(driver) : Effect.fail(new ProviderNotFound({ provider }))
   },
 })
