@@ -240,7 +240,7 @@ describe("ShellTool", () => {
               const settled = yield* executeTool(registry, call({ command: helloCommand }))
               expect(settled.status).toBe("completed")
               expect(settled.metadata).toMatchObject({ exit: 0, truncated: false })
-              expect(settled.content?.[0]).toEqual({ type: "text", text: "hello" })
+              expect(settled.content?.[0]).toEqual({ type: "text", text: isWindows ? "hello\n" : "hello" })
               expect(settled.content?.[1]).toMatchObject({
                 type: "text",
                 text: expect.stringContaining("Command exited with code 0."),
