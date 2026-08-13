@@ -115,12 +115,9 @@ addDefaultParsers(parsers.parsers)
 const NAVIGATION_SLACK_ID = "session-navigation-slack"
 const BACKGROUND_TOOL_HINT_DELAY = 1_000
 
-// Tail-first transcript mounting: rows mounted with the session, then backfill cadence.
-// The tail comfortably overfills a tall viewport; backfill drains a 200-message transcript
-// in a few hundred milliseconds without a perceptible pause.
+// The tail comfortably overfills a tall viewport; older rows mount as the reader approaches them.
 const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
-const TRANSCRIPT_BACKFILL_DELAY = 120
 type PendingAction = "steer" | "queue" | "cancel"
 
 const context = createContext<{
@@ -362,32 +359,33 @@ export function Session() {
     })
   }
 
-  // Tail-first transcript mounting: only the newest rows mount when the session opens, and the
-  // rest backfill in chunks shortly after, so switching to a long session costs the visible tail
-  // instead of the whole transcript. Until backfill pins the count, the hidden span derives from
-  // the row count, so it needs no effect ordering; the clamp keeps at least a tail visible when a
-  // re-reduce shrinks the transcript. Streaming appends land at the end of the visible slice.
+  // Tail-first transcript mounting: only the newest rows mount when the session opens. Older rows
+  // mount on demand near the top, keeping inactive tabs cheap to tear down. Until the first chunk
+  // pins the count, the hidden span derives from the row count, so streaming appends remain visible.
   const [hiddenRows, setHiddenRows] = createSignal<number>()
   const hidden = createMemo(() => Math.max(0, Math.min(hiddenRows() ?? Infinity, rows.length - TRANSCRIPT_TAIL_ROWS)))
   const visibleRows = createMemo(() => (hidden() === 0 ? rows : rows.slice(hidden())))
-  createEffect(() => {
+  let revealingOlderRows = false
+  const revealOlderRows = (scrollBy = 0) => {
     const current = hidden()
-    if (current === 0) return
-    // Until the first chunk pins hiddenRows, appends change hidden() and reset this timer, so
-    // backfill waits for a pause in streaming before starting. Once pinned, it drains on a fixed
-    // cadence undisturbed by appends.
-    const timer = setTimeout(() => {
-      const before = scroll && !scroll.isDestroyed ? scroll.scrollHeight : undefined
-      const viewportBottom = before === undefined ? 0 : scroll.scrollTop + scroll.viewport.height
-      setHiddenRows(Math.max(0, current - TRANSCRIPT_BACKFILL_CHUNK))
-      if (before === undefined) return
-      // Sticky scroll holds bottom-anchored readers through the mount; compensation is only for
-      // readers who have scrolled up.
-      if (viewportBottom >= before - 1) return
-      afterLayout(() => scroll.scrollBy(scroll.scrollHeight - before))
-    }, TRANSCRIPT_BACKFILL_DELAY)
-    onCleanup(() => clearTimeout(timer))
-  })
+    if (
+      revealingOlderRows ||
+      current === 0 ||
+      !scroll ||
+      scroll.isDestroyed ||
+      scroll.scrollTop > scroll.viewport.height
+    )
+      return false
+    revealingOlderRows = true
+    const before = scroll.scrollHeight
+    setHiddenRows(Math.max(0, current - TRANSCRIPT_BACKFILL_CHUNK))
+    afterLayout(() => {
+      revealingOlderRows = false
+      scroll.scrollBy(scroll.scrollHeight - before + scrollBy)
+      updateAwayFromBottom()
+    })
+    return true
+  }
   /** Message navigation needs the full transcript mounted before walking or jumping. */
   const ensureAllRows = (continuation: () => void) => {
     if (hidden() === 0) return continuation()
@@ -544,8 +542,10 @@ export function Session() {
       palette: undefined,
       run: () => {
         clearMessageNavigation()
-        scroll.scrollBy(-scroll.height / 2)
-        updateAwayFromBottom()
+        if (!revealOlderRows(-scroll.height / 2)) {
+          scroll.scrollBy(-scroll.height / 2)
+          updateAwayFromBottom()
+        }
         dialog.clear()
       },
     },
@@ -568,8 +568,10 @@ export function Session() {
       palette: undefined,
       run: () => {
         clearMessageNavigation()
-        scroll.scrollBy(-1)
-        updateAwayFromBottom()
+        if (!revealOlderRows(-1)) {
+          scroll.scrollBy(-1)
+          updateAwayFromBottom()
+        }
         dialog.clear()
       },
     },
@@ -592,8 +594,10 @@ export function Session() {
       palette: undefined,
       run: () => {
         clearMessageNavigation()
-        scroll.scrollBy(-scroll.height / 4)
-        updateAwayFromBottom()
+        if (!revealOlderRows(-scroll.height / 4)) {
+          scroll.scrollBy(-scroll.height / 4)
+          updateAwayFromBottom()
+        }
         dialog.clear()
       },
     },
@@ -619,8 +623,10 @@ export function Session() {
       palette: undefined,
       run: () => {
         clearMessageNavigation()
-        scroll.scrollTo(0)
-        updateAwayFromBottom()
+        ensureAllRows(() => {
+          scroll.scrollTo(0)
+          updateAwayFromBottom()
+        })
         dialog.clear()
       },
     },
@@ -1102,7 +1108,10 @@ export function Session() {
                 stickyStart="bottom"
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
-                onMouseScroll={updateAwayFromBottom}
+                onMouseScroll={(event) => {
+                  if (event.scroll?.direction === "up" && revealOlderRows()) return
+                  updateAwayFromBottom()
+                }}
               >
                 <For each={visibleRows()}>
                   {(row, index) => (
