@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
 import { Global } from "@opencode-ai/core/global"
+import { CandidateCard } from "../../src/product/candidate-card"
 import { tmpdir } from "../fixture/fixture"
 import { cliIt } from "../lib/cli-process"
+
+const SHA = /^[0-9a-f]{7,64}$/
 
 const entry = path.join(import.meta.dir, "../../src/index.ts")
 
@@ -63,14 +65,24 @@ describe("headless surface", () => {
   })
 
   test("commit / status / push --json exit codes", async () => {
-    await using tmp = await tmpdir()
-    await fs.mkdir(path.join(tmp.path, ".moks"))
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "HIRING.md"), "# Role\n")
+        await CandidateCard.write(dir, {
+          id: "cand_ada",
+          stage: "sourced",
+          extra: { name: "Ada" },
+          body: "# Ada\n",
+        })
+      },
+    })
 
     const committed = await moks(["commit", "--action", "note", "--reason", "headless"], tmp.path)
     expect(committed.code).toBe(0)
     expect(committed.json).toBeDefined()
     const commitId = (committed.json as { receipt: { id: string } }).receipt.id
-    expect(commitId.startsWith("dec_")).toBe(true)
+    expect(commitId).toMatch(SHA)
 
     const status = await moks(["status", "--limit", "5"], tmp.path)
     expect(status.code).toBe(0)
@@ -82,12 +94,23 @@ describe("headless surface", () => {
   })
 
   test("push --json adverse needs_confirm exits 2", async () => {
-    await using tmp = await tmpdir()
-    await fs.mkdir(path.join(tmp.path, ".moks"))
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "HIRING.md"), "# Role\n")
+        await CandidateCard.write(dir, {
+          id: "cand_ada",
+          stage: "sourced",
+          extra: { name: "Ada" },
+          body: "# Ada\n",
+        })
+      },
+    })
 
     const committed = await moks(["commit", "--action", "reject", "--reason", "fit"], tmp.path)
     expect(committed.code).toBe(0)
     const commitId = (committed.json as { receipt: { id: string } }).receipt.id
+    expect(commitId).toMatch(SHA)
 
     const blocked = await moks(["push", "--commit-id", commitId], tmp.path)
     expect(blocked.code).toBe(2)

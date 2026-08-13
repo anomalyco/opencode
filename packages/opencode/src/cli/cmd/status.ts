@@ -5,7 +5,7 @@ import { UI } from "../ui"
 
 export const StatusCommand = effectCmd({
   command: "status",
-  describe: "list decision receipts and open decisions",
+  describe: "list unpushed hiring commits",
   instance: false,
   builder: (yargs) =>
     yargs
@@ -44,7 +44,7 @@ export const StatusCommand = effectCmd({
       console.log(JSON.stringify(result, null, 2))
       return
     }
-    UI.println(`${UI.Style.TEXT_NORMAL_BOLD}open decisions${UI.Style.TEXT_NORMAL} (${result.open.length})`)
+    UI.println(`${UI.Style.TEXT_NORMAL_BOLD}unpushed commits${UI.Style.TEXT_NORMAL} (${result.open.length})`)
     for (const r of result.open) {
       UI.println(`  ${r.id}  ${r.action}${r.adverse ? " [adverse]" : ""}  dry_run=${r.dry_run}`)
     }

@@ -5,7 +5,7 @@ import { UI } from "../ui"
 
 export const ActivityCommand = effectCmd({
   command: "activity",
-  describe: "summarize recent hiring decision activity (local receipts)",
+  describe: "summarize recent hiring activity from the git audit log",
   instance: false,
   builder: (yargs) =>
     yargs
@@ -52,14 +52,14 @@ export const ActivityCommand = effectCmd({
     }
     if (summary.signal === "quiet") {
       UI.println(
-        `${UI.Style.TEXT_DIM}Last ${summary.days} days (receipts): no decision activity${UI.Style.TEXT_NORMAL}`,
+        `${UI.Style.TEXT_DIM}Last ${summary.days} days (git): no decision activity${UI.Style.TEXT_NORMAL}`,
       )
       UI.println(`${UI.Style.TEXT_NORMAL_BOLD}Signal: quiet${UI.Style.TEXT_NORMAL} — no eng-TA commit in window`)
       UI.println(`${UI.Style.TEXT_DIM}Path: ${summary.path}${UI.Style.TEXT_NORMAL}`)
       return
     }
     UI.println(
-      `Last ${summary.days} days (receipts): ${summary.commits} commits, ${summary.pushes} push`,
+      `Last ${summary.days} days (git): ${summary.commits} commits, ${summary.pushes} push`,
     )
     UI.println(`Active days: ${summary.active_days}`)
     UI.println(

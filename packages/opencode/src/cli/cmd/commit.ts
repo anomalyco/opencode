@@ -5,7 +5,7 @@ import { UI } from "../ui"
 
 export const CommitCommand = effectCmd({
   command: "commit",
-  describe: "record a decision receipt (dry-run by default)",
+  describe: "commit candidate/HIRING.md changes as the audit log",
   instance: false,
   builder: (yargs) =>
     yargs
@@ -33,7 +33,7 @@ export const CommitCommand = effectCmd({
       .option("execute", {
         type: "boolean",
         default: false,
-        describe: "set dry_run false (default is dry-run)",
+        describe: "ignored; commit always writes a git commit",
       })
       .option("json", {
         type: "boolean",

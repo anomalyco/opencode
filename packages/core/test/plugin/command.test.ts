@@ -34,10 +34,10 @@ describe("CommandPlugin.Plugin", () => {
 
       expect(yield* command.get("init")).toMatchObject({
         name: "init",
-        description: "scaffold a requisition under .moks/reqs/<slug>",
+        description: "scaffold this directory as a requisition (HIRING.md + candidates/)",
       })
-      expect((yield* command.get("init"))?.template).toContain("`/repo`")
-      expect((yield* command.get("init"))?.template).toContain(".moks/")
+      expect((yield* command.get("init"))?.template).toContain("`/repo/packages/app`")
+      expect((yield* command.get("init"))?.template).toContain("HIRING.md")
       expect(yield* command.get("init-code")).toMatchObject({
         name: "init-code",
         description: "guided AGENTS.md setup for coding agents",

@@ -1,19 +1,19 @@
 # Hiring fixtures (local loop)
 
-Fake eng-TA sample materials so moks can run req → score → outreach → disposition without ATS.
+Fake eng-TA sample so moks can run req → score → outreach → disposition without a live ATS. Remote/ATS later.
+
+cwd is the requisition. `HIRING.md` is the constitution. `candidates/*.md` are working copies (frontmatter: `stage` / `score` / `source` / `ats_id`). **git commit** is the audit. **`moks push`** is the ATS write (local/mock).
 
 | File | Contents |
 |------|----------|
-| `jd.md` | Senior Backend Engineer req (Northline Analytics) |
-| `resume.md` | Candidate Jordan Lee |
-| `scorecard.md` | Simple 1–5 dimension card |
+| `HIRING.md` | Senior Backend Engineer req + scorecard (Northline Analytics) |
+| `candidates/jordan-lee.md` | Candidate card |
 
 ## Discovery order (skills + recruit agent)
 
 1. Paths you pass (`moks run -f …` or @ attachments)
-2. Cwd: `jd.md`, `resume.md`, `scorecard.md`
-3. Workspace: `.moks/reqs/<slug>/jd.md`, `.moks/reqs/<slug>/resume.md`, `.moks/reqs/<slug>/scorecard.md`
-4. These samples (reference / copy)
+2. Cwd requisition: `HIRING.md`, `candidates/*.md`
+3. These fixtures (reference / copy into a req dir)
 
 ## Quick start
 
@@ -26,19 +26,19 @@ cd packages/opencode
 FIXTURES=src/product/fixtures/hiring
 
 bun run --conditions=browser src/index.ts run --agent recruit \
-  -f "$FIXTURES/jd.md" -f "$FIXTURES/resume.md" -f "$FIXTURES/scorecard.md" \
+  -f "$FIXTURES/HIRING.md" -f "$FIXTURES/candidates/jordan-lee.md" \
   "Score this candidate using the score-candidate skill"
 ```
 
-Or copy fixtures into a scratch dir / moks workspace:
+Or copy fixtures into a scratch requisition:
 
 ```bash
-cp packages/opencode/src/product/fixtures/hiring/*.md .
-# or
-mkdir -p .moks/reqs/senior-backend && cp packages/opencode/src/product/fixtures/hiring/{jd,resume,scorecard}.md .moks/reqs/senior-backend/
+cp packages/opencode/src/product/fixtures/hiring/HIRING.md .
+mkdir -p candidates
+cp packages/opencode/src/product/fixtures/hiring/candidates/jordan-lee.md candidates/
 
 moks run --agent recruit \
-  -f jd.md -f resume.md -f scorecard.md \
+  -f HIRING.md -f candidates/jordan-lee.md \
   "Score this candidate using the score-candidate skill"
 ```
 
@@ -47,22 +47,19 @@ Path constant for tests/tools: `HiringFixtures` in `packages/opencode/src/produc
 Mock-LLM E2E (no paid API): from `packages/opencode`,  
 `bun test test/product/hiring-e2e.test.ts`.
 
-Disposition (receipts only, no ATS write):
+Disposition: edit the candidate card, then `moks commit` (git audit) and `moks push` (ATS write, local/mock):
 
 ```bash
-moks commit --action advance --target-kind candidate --target-id jordan-lee --reason "strong event + postgres signal"
-moks status
-moks push --commit-id <id>          # non-adverse
-moks push --commit-id <id> --confirm  # reject | offer | hire
+moks commit --action advance --target-id jordan-lee --reason "strong event + postgres"
+moks push --commit-id <sha>
+moks push --commit-id <sha> --confirm --execute   # reject | offer | hire
 ```
 
 Scriptable (`--json`, exit codes): see [`../../headless.md`](../../headless.md).
 
 ```bash
-moks commit --action advance --target-kind candidate --target-id jordan-lee --json
-moks status --json
-moks push --commit-id dec_… --json              # exit 2 if needs_confirm
-moks run --json --agent recruit -f jd.md -f resume.md -- "Score this candidate"
+moks push --json                    # exit 2 if needs_confirm
+moks run --json --agent recruit -f HIRING.md -f candidates/jordan-lee.md -- "Score this candidate"
 ```
 
 All names and companies are fictional.

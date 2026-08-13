@@ -1,6 +1,8 @@
-# Ashby MCP mock (read-first edge)
+# Ashby MCP mock
 
-Local stdio MCP server that serves fixture jobs/candidates so moks can exercise Ashby **read** tools without a live Ashby sandbox. Write tools exist so permission allowlists can deny them; calls return an error pointing at `moks commit` / `moks push`.
+Local stdio MCP server that serves fixture jobs/candidates so moks can exercise Ashby **read** tools without a live sandbox.
+
+**`moks push` applies writes** (mock ATS). Agent MCP writes stay **denied** — do not call `change_stage` / `create_note` from the agent. Those tools exist so the allowlist can deny them; calls return an error pointing at `moks push`.
 
 | File | Role |
 |------|------|
@@ -19,7 +21,7 @@ Local stdio MCP server that serves fixture jobs/candidates so moks can exercise 
 | `list_candidates` | `ashby_list_candidates` |
 | `get_candidate` | `ashby_get_candidate` |
 
-**Writes** (always error in mock; default deny):
+**Writes** (agent denied; apply via `moks push`):
 
 | MCP tool | Permission key |
 |----------|----------------|

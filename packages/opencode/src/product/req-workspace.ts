@@ -1,9 +1,12 @@
-import { readdir } from "fs/promises"
 import path from "path"
+import { CANDIDATES_DIR } from "./candidate-card"
 
-export const JD_STUB = `# <role title>
+export const HIRING_FILE = "HIRING.md"
 
-- Team: <team or TBD>
+export const HIRING_STUB = `# <role title>
+
+## Role
+- Team: TBD
 - Level: TBD
 - Location: TBD
 
@@ -12,32 +15,16 @@ export const JD_STUB = `# <role title>
 
 ## Nice-to-haves
 - TBD
-`
 
-export const SCORECARD_STUB = `# Scorecard — <role title>
-
+## Scorecard
 | Dimension | Bar | Notes |
 |-----------|-----|-------|
 | TBD | 1–5 | |
-`
 
-export const NOTES_STUB = `# Process notes
-
+## Process
+- Stages: sourced → screen → phone → onsite → offer → hire
 - Owners: TBD
-- Open questions:
-  - TBD
 `
-
-export const MATERIAL_NAMES = ["jd.md", "scorecard.md", "notes.md"] as const
-export const BOOK = path.join(".moks", "reqs")
-export const LEGACY = path.join(".moks", "req")
-
-export type Listed = {
-  slug: string
-  path: string
-  relative: string
-  legacy?: true
-}
 
 export function slugify(input: string) {
   return input
@@ -49,157 +36,97 @@ export function slugify(input: string) {
     .replace(/-+$/g, "")
 }
 
-export function dir(slug: string) {
-  return path.join(BOOK, slug)
+export function hiringPath(dirpath: string) {
+  return path.join(dirpath, HIRING_FILE)
 }
 
-export function isBookReq(dirpath: string) {
-  return path.basename(path.dirname(dirpath)) === "reqs" && path.basename(path.dirname(path.dirname(dirpath))) === ".moks"
+export async function isReqDir(dirpath: string) {
+  return Bun.file(hiringPath(dirpath)).exists()
 }
 
-export function isLegacyReq(dirpath: string) {
-  return path.basename(dirpath) === "req" && path.basename(path.dirname(dirpath)) === ".moks"
-}
-
-export function isReqDir(dirpath: string) {
-  return isBookReq(dirpath) || isLegacyReq(dirpath)
+export function isHiringFile(filepath: string) {
+  return path.basename(filepath) === HIRING_FILE
 }
 
 export function isReqMaterial(filepath: string) {
-  if (!(MATERIAL_NAMES as readonly string[]).includes(path.basename(filepath))) return false
-  return isReqDir(path.dirname(filepath))
+  return isHiringFile(filepath)
 }
 
-export function reqDirOf(filepath: string) {
-  let current = path.resolve(filepath)
-  while (true) {
-    if (isReqDir(current)) return current
-    const parent = path.dirname(current)
-    if (parent === current) return
-    current = parent
-  }
-}
-
-export function reqDirFromHint(hint: string, worktree: string) {
-  const trimmed = hint.trim()
-  if (!trimmed || worktree === "/") return
-  const abs = path.isAbsolute(trimmed) ? trimmed : path.join(worktree, trimmed)
-  const nested = reqDirOf(abs)
-  if (nested) return nested
-  if (trimmed.includes(path.sep) || trimmed.includes("/") || trimmed.includes(".")) return
-  const slug = slugify(trimmed)
-  if (!slug) return
-  return path.join(worktree, dir(slug))
-}
-
-export function focusFromPaths(paths: Iterable<string>, worktree: string) {
-  for (const hint of paths) {
-    const focused = reqDirFromHint(hint, worktree)
-    if (focused) return focused
-  }
-}
-
-export function slugOf(dirpath: string) {
-  if (isBookReq(dirpath)) return path.basename(dirpath)
-  if (isLegacyReq(dirpath)) return "req"
-}
-
-export async function list(worktree: string) {
-  const out: Listed[] = []
-  const book = path.join(worktree, BOOK)
-  const entries = await readdir(book, { withFileTypes: true }).catch(() => [])
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const slug = slugify(entry.name)
-    if (!slug) continue
-    out.push({
-      slug,
-      path: path.join(book, entry.name),
-      relative: path.join(BOOK, entry.name),
-    })
-  }
-
-  const legacy = path.join(worktree, LEGACY)
-  const legacyStat = await readdir(legacy).then(
-    () => true,
-    () => false,
-  )
-  if (legacyStat && !out.some((item) => item.slug === "req")) {
-    out.push({
-      slug: "req",
-      path: legacy,
-      relative: LEGACY,
-      legacy: true,
-    })
-  }
-
-  return out.toSorted((a, b) => a.slug.localeCompare(b.slug))
-}
-
-export async function resolve(directory: string, worktree?: string) {
+export async function resolve(directory: string, stop?: string) {
   const start = path.resolve(directory)
-  const stop = worktree && worktree !== "/" ? path.resolve(worktree) : undefined
+  const limit = stop && stop !== "/" ? path.resolve(stop) : undefined
   let current = start
   while (true) {
-    if (isReqDir(current)) return current
-    const listed = await list(current)
-    if (listed.length === 1) return listed[0].path
-    if (listed.length > 1) return
-    if (stop && current === stop) return
+    if (await isReqDir(current)) return current
+    if (limit && current === limit) return
     const parent = path.dirname(current)
     if (parent === current) return
     current = parent
   }
 }
 
-export async function scaffold(worktree: string, slug: string) {
-  const created: string[] = []
-  const skipped: string[] = []
-  const rels = [
-    [path.join(dir(slug), "jd.md"), JD_STUB],
-    [path.join(dir(slug), "scorecard.md"), SCORECARD_STUB],
-    [path.join(dir(slug), "notes.md"), NOTES_STUB],
-  ] as const
-  const gitkeep = path.join(dir(slug), "scores", ".gitkeep")
-
-  for (const [rel, content] of rels) {
-    const file = Bun.file(path.join(worktree, rel))
-    if ((await file.exists()) && (await file.text()).trim().length > 0) {
-      skipped.push(rel)
-      continue
-    }
-    await Bun.write(path.join(worktree, rel), content)
-    created.push(rel)
-  }
-
-  if (await Bun.file(path.join(worktree, gitkeep)).exists()) {
-    skipped.push(gitkeep)
-  } else {
-    await Bun.write(path.join(worktree, gitkeep), "")
-    created.push(gitkeep)
-  }
-
-  const gitignore = path.join(worktree, ".gitignore")
-  const ignore = Bun.file(gitignore)
-  if (await ignore.exists()) {
-    const text = await ignore.text()
-    if (hasMoksIgnore(text)) {
-      skipped.push(".gitignore")
-    } else {
-      const prefix = text.length === 0 || text.endsWith("\n") ? text : `${text}\n`
-      await Bun.write(gitignore, `${prefix}.moks/\n`)
-      created.push(".gitignore")
-    }
-  }
-
-  return { created, skipped, slug, relative: dir(slug) }
+export function titleFromSlug(slug: string) {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ")
 }
 
-function hasMoksIgnore(text: string) {
-  return text.split(/\r?\n/).some((line) => {
-    const trimmed = line.trim()
-    return trimmed === ".moks" || trimmed === ".moks/" || trimmed === "/.moks" || trimmed === "/.moks/"
+export function stubFor(title?: string) {
+  if (!title) return HIRING_STUB
+  return HIRING_STUB.replaceAll("<role title>", title)
+}
+
+export async function scaffold(cwd: string, title?: string) {
+  const created: string[] = []
+  const skipped: string[] = []
+  const hiring = hiringPath(cwd)
+  const existing = Bun.file(hiring)
+  if ((await existing.exists()) && (await existing.text()).trim().length > 0) {
+    skipped.push(HIRING_FILE)
+  } else {
+    await Bun.write(hiring, stubFor(title))
+    created.push(HIRING_FILE)
+  }
+
+  const gitkeep = path.join(cwd, CANDIDATES_DIR, ".gitkeep")
+  if (await Bun.file(gitkeep).exists()) {
+    skipped.push(path.join(CANDIDATES_DIR, ".gitkeep"))
+  } else {
+    await Bun.write(gitkeep, "")
+    created.push(path.join(CANDIDATES_DIR, ".gitkeep"))
+  }
+
+  const inited = await gitInitIfNeeded(cwd)
+  return { created, skipped, title, relative: ".", git: inited }
+}
+
+async function gitInitIfNeeded(cwd: string) {
+  const top = Bun.spawn(["git", "rev-parse", "--show-toplevel"], {
+    cwd,
+    stdout: "pipe",
+    stderr: "pipe",
   })
+  const root = (await new Response(top.stdout).text()).trim()
+  await top.exited
+  if (top.exitCode === 0 && path.resolve(root) === path.resolve(cwd)) return "existing"
+
+  const init = Bun.spawn(["git", "init"], { cwd, stdout: "pipe", stderr: "pipe" })
+  await init.exited
+  if (init.exitCode !== 0) return "failed"
+
+  const add = Bun.spawn(["git", "add", HIRING_FILE, CANDIDATES_DIR], { cwd, stdout: "pipe", stderr: "pipe" })
+  await add.exited
+  if (add.exitCode !== 0) return "failed"
+
+  const commit = Bun.spawn(
+    ["git", "-c", "user.name=moks", "-c", "user.email=moks@local", "commit", "-m", "moks: init"],
+    { cwd, stdout: "pipe", stderr: "pipe" },
+  )
+  await commit.exited
+  if (commit.exitCode !== 0) return "failed"
+  return "created"
 }
 
 export * as ReqWorkspace from "./req-workspace"

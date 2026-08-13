@@ -5,7 +5,6 @@ export const HiringFixturesDir = path.join(import.meta.dir, "fixtures", "hiring"
 
 export const HiringFixtures = {
   dir: HiringFixturesDir,
-  jd: path.join(HiringFixturesDir, "jd.md"),
-  resume: path.join(HiringFixturesDir, "resume.md"),
-  scorecard: path.join(HiringFixturesDir, "scorecard.md"),
+  hiring: path.join(HiringFixturesDir, "HIRING.md"),
+  card: path.join(HiringFixturesDir, "candidates", "jordan-lee.md"),
 } as const

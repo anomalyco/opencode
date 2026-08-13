@@ -29,7 +29,7 @@ it.effect("HiringSkills exports four named packs with non-empty content", () =>
 it.effect("HiringFixtures paths resolve to on-disk samples", () =>
   Effect.promise(async () => {
     expect(path.basename(HiringFixtures.dir)).toBe("hiring")
-    for (const file of [HiringFixtures.jd, HiringFixtures.resume, HiringFixtures.scorecard]) {
+    for (const file of [HiringFixtures.hiring, HiringFixtures.card]) {
       expect(await Bun.file(file).exists()).toBe(true)
       expect((await Bun.file(file).text()).length).toBeGreaterThan(0)
     }
@@ -40,17 +40,19 @@ it.effect("score-candidate writes a score file path; commit-disposition cites it
   Effect.sync(() => {
     const score = HiringSkills.find((s) => s.name === "score-candidate")
     const commit = HiringSkills.find((s) => s.name === "commit-disposition")
-    expect(score?.content).toContain(".moks/reqs/<req-slug>/scores/<candidate-slug>.md")
+    expect(score?.content).toContain("candidates/<id>.md")
     expect(score?.content).toContain("You are not done until the file is written")
     expect(commit?.content).toContain("--target-id")
     expect(commit?.content).toContain("--meta")
-    expect(commit?.content).toContain('{"score":".moks/reqs/<req-slug>/scores/<candidate-slug>.md"}')
-    expect(PROMPT_RECRUIT).toContain(".moks/reqs/<req-slug>/scores/<candidate-slug>.md")
+    expect(commit?.content).toContain('{"card":"candidates/<id>.md"}')
+    expect(PROMPT_RECRUIT).toContain("candidates/<id>.md")
+    expect(PROMPT_RECRUIT).toContain("HIRING.md")
     expect(PROMPT_RECRUIT).toContain("--meta")
     expect(PROMPT_RECRUIT).toContain("Keep asking")
     expect(PROMPT_RECRUIT).toContain("question tool")
     expect(PROMPT_RECRUIT).not.toContain("packages/opencode/src/product/fixtures/hiring/")
-    expect(PROMPT_INITIALIZE).toContain(".moks/reqs/<slug>")
+    expect(PROMPT_INITIALIZE).toContain("HIRING.md")
+    expect(PROMPT_INITIALIZE).toContain("candidates/<id>.md")
     expect(PROMPT_INITIALIZE).toContain("Do not overwrite non-empty user content")
     expect(PROMPT_INITIALIZE).toContain("Keep going until title, level, team/HM, location, and must-haves are real")
     expect(PROMPT_INITIALIZE).not.toContain("ask once")

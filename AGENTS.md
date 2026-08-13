@@ -24,7 +24,7 @@ This repo is **moks** — a product fork of the OpenCode *source* (`anomalyco/op
 - Do not ship under OpenCode package/install names. Do not imply official OpenCode affiliation.
 - Keep MIT license and upstream copyright notices; add moks copyright only for new work.
 - Their CI, releases, and cloud infra are not ours — don’t assume secrets, npm publishes, or SST stages work here.
-- When tracking upstream: fetch/merge `upstream/dev` deliberately. After deep product divergence, prefer a hard fork over painful half-merges.
+- Hard fork: do not merge `upstream/dev`. Cherry-pick a provider/kernel fix only if needed.
 - Product strategy / GTM: `docs/gtm.html`. v0 backlog: `docs/ROADMAP.md`.
 
 ## Monorepo (inherited from upstream)

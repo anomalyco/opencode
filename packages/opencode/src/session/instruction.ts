@@ -10,9 +10,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@opencode-ai/core/global"
-import { fileURLToPath } from "url"
 import type { MessageID } from "./schema"
-import { ReqWorkspace } from "@/product/req-workspace"
 
 const MAX_INSTRUCTION_CHARS = 32_000
 
@@ -33,18 +31,13 @@ function extract(messages: SessionV1.WithParts[]) {
   return paths
 }
 
-function isReqMaterial(filepath: string) {
-  return ReqWorkspace.isReqMaterial(filepath)
-}
-
 function truncateInstruction(content: string) {
   if (content.length <= MAX_INSTRUCTION_CHARS) return content
   return `${content.slice(0, MAX_INSTRUCTION_CHARS)}\n\n[truncated: file exceeds ${MAX_INSTRUCTION_CHARS} characters; use the read tool for full content]`
 }
 
 function formatInstruction(filepath: string, content: string) {
-  const label = isReqMaterial(filepath) ? "Req materials from" : "Instructions from"
-  return `${label}: ${filepath}\n${truncateInstruction(content)}`
+  return `Instructions from: ${filepath}\n${truncateInstruction(content)}`
 }
 
 export interface Interface {
@@ -72,8 +65,8 @@ const layer: Layer.Layer<
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
-    const globalFiles = [path.join(global.config, "HIRING-AGENTS.md")]
-    const instructionFiles = ["HIRING-AGENTS.md"]
+    const globalFiles = [path.join(global.config, "HIRING.md")]
+    const instructionFiles = ["HIRING.md"]
 
     const state = yield* InstanceState.make(
       Effect.fn("Instruction.state")(() =>
@@ -127,7 +120,6 @@ const layer: Layer.Layer<
         }
       }
 
-      // The first project-level match wins so we don't stack HIRING-AGENTS.md from every ancestor.
       if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
         for (const file of instructionFiles) {
           const matches = yield* fs
@@ -154,19 +146,6 @@ const layer: Layer.Layer<
               : relative(instruction)
           ).pipe(Effect.catch(() => Effect.succeed([] as string[])))
           matches.forEach((item) => paths.add(path.resolve(item)))
-        }
-      }
-
-      // Attach one req: last @slug / file mention, else cwd inside a req, else the only req. Never dump every JD.
-      if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-        const root = ctx.worktree !== "/" ? ctx.worktree : ctx.directory
-        const focused = messages ? ReqWorkspace.focusFromPaths(filePartHints(messages), root) : undefined
-        const reqDir = focused ?? (yield* Effect.promise(() => ReqWorkspace.resolve(ctx.directory, ctx.worktree)))
-        if (reqDir) {
-          for (const name of ReqWorkspace.MATERIAL_NAMES) {
-            const file = path.resolve(path.join(reqDir, name))
-            if (yield* fs.existsSafe(file)) paths.add(file)
-          }
         }
       }
 
@@ -247,29 +226,6 @@ const layer: Layer.Layer<
 
 export function loaded(messages: SessionV1.WithParts[]) {
   return extract(messages)
-}
-
-function filePartHints(messages: SessionV1.WithParts[]) {
-  const hints: string[] = []
-  for (const msg of messages.toReversed()) {
-    for (const part of msg.parts.toReversed()) {
-      if (part.type !== "file") continue
-      if (part.source && "path" in part.source && typeof part.source.path === "string") {
-        hints.push(part.source.path)
-        continue
-      }
-      if (part.url.startsWith("file://")) {
-        try {
-          hints.push(fileURLToPath(part.url))
-          continue
-        } catch {
-          // ignore malformed file URLs
-        }
-      }
-      if (part.filename) hints.push(part.filename)
-    }
-  }
-  return hints
 }
 
 export const node = LayerNode.make({

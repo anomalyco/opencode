@@ -1,5 +1,7 @@
 # Backlog review: OpenCode coding surface → moks TA surface
 
+> **Superseded 2026-08-13.** Live story: cwd = requisition, `HIRING.md` = constitution, `candidates/<id>.md` = working copies, git commit = audit. Do not follow book = `.moks/reqs`.
+
 **Purpose:** decide *what* to port, hide, or drop — grounded in **current moks/OpenCode implementation**, not abstract product wishes.  
 **Companion HTML:** `docs/backlog-coding-to-ta.html` (non-technical decision overview; this file is the review source of truth).  
 **Related:** `docs/ROADMAP.md`, `docs/FORK.md`, `docs/gtm.html`.

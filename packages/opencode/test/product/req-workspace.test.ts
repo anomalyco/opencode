@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { $ } from "bun"
 import path from "path"
 import { ReqWorkspace } from "../../src/product/req-workspace"
 import { tmpdir } from "../fixture/fixture"
@@ -9,81 +10,68 @@ test("slugify lowercases and hyphenates", () => {
   expect(ReqWorkspace.slugify("!!!")).toBe("")
 })
 
-test("empty dir creates the three files and scores/.gitkeep under the slug", async () => {
+test("scaffold creates HIRING.md and candidates/.gitkeep in cwd", async () => {
   await using tmp = await tmpdir()
-  const result = await ReqWorkspace.scaffold(tmp.path, "senior-backend")
-  expect(result.created).toEqual([
-    ".moks/reqs/senior-backend/jd.md",
-    ".moks/reqs/senior-backend/scorecard.md",
-    ".moks/reqs/senior-backend/notes.md",
-    ".moks/reqs/senior-backend/scores/.gitkeep",
-  ])
-  expect(await Bun.file(path.join(tmp.path, ".moks/reqs/senior-backend/jd.md")).text()).toBe(ReqWorkspace.JD_STUB)
-  expect(await Bun.file(path.join(tmp.path, ".moks/reqs/senior-backend/scorecard.md")).text()).toBe(
-    ReqWorkspace.SCORECARD_STUB,
-  )
-  expect(await Bun.file(path.join(tmp.path, ".moks/reqs/senior-backend/notes.md")).text()).toBe(ReqWorkspace.NOTES_STUB)
-  expect(await Bun.file(path.join(tmp.path, ".moks/reqs/senior-backend/scores/.gitkeep")).exists()).toBe(true)
+  const result = await ReqWorkspace.scaffold(tmp.path, "Senior Backend")
+  expect(result.created).toEqual(["HIRING.md", "candidates/.gitkeep"])
+  expect(result.relative).toBe(".")
+  expect(result.title).toBe("Senior Backend")
+  expect(await Bun.file(path.join(tmp.path, "HIRING.md")).text()).toBe(ReqWorkspace.stubFor("Senior Backend"))
+  expect(await Bun.file(path.join(tmp.path, "candidates/.gitkeep")).exists()).toBe(true)
+  expect(await Bun.file(path.join(tmp.path, ".moks/reqs")).exists()).toBe(false)
 })
 
-test("second call does not overwrite non-empty jd.md", async () => {
+test("second call does not overwrite non-empty HIRING.md", async () => {
   await using tmp = await tmpdir()
-  await ReqWorkspace.scaffold(tmp.path, "senior-backend")
-  const jd = path.join(tmp.path, ".moks/reqs/senior-backend/jd.md")
-  await Bun.write(jd, "# Staff Engineer\n")
-  const result = await ReqWorkspace.scaffold(tmp.path, "senior-backend")
-  expect(result.skipped).toContain(".moks/reqs/senior-backend/jd.md")
-  expect(await Bun.file(jd).text()).toBe("# Staff Engineer\n")
+  await ReqWorkspace.scaffold(tmp.path, "Senior Backend")
+  const hiring = path.join(tmp.path, "HIRING.md")
+  await Bun.write(hiring, "# Staff Engineer\n")
+  const result = await ReqWorkspace.scaffold(tmp.path, "Other Title")
+  expect(result.skipped).toContain("HIRING.md")
+  expect(await Bun.file(hiring).text()).toBe("# Staff Engineer\n")
 })
 
-test("existing .gitignore without .moks/ gets the entry", async () => {
+test("does not add .moks/ to .gitignore", async () => {
   await using tmp = await tmpdir()
   const gi = path.join(tmp.path, ".gitignore")
   await Bun.write(gi, "node_modules/\n")
-  await ReqWorkspace.scaffold(tmp.path, "senior-backend")
-  expect(await Bun.file(gi).text()).toContain(".moks/")
+  await ReqWorkspace.scaffold(tmp.path, "Senior Backend")
+  expect(await Bun.file(gi).text()).toBe("node_modules/\n")
+  expect(await Bun.file(path.join(tmp.path, ".gitignore")).text()).not.toContain(".moks/")
 })
 
 test("does not create a gitignore when none exists", async () => {
   await using tmp = await tmpdir()
-  await ReqWorkspace.scaffold(tmp.path, "senior-backend")
+  await ReqWorkspace.scaffold(tmp.path, "Senior Backend")
   expect(await Bun.file(path.join(tmp.path, ".gitignore")).exists()).toBe(false)
 })
 
-test("list returns book slugs and a lone legacy req", async () => {
+test("resolve walks up to HIRING.md", async () => {
   await using tmp = await tmpdir()
-  await ReqWorkspace.scaffold(tmp.path, "staff-ml")
-  await ReqWorkspace.scaffold(tmp.path, "em-platform")
-  await Bun.write(path.join(tmp.path, ".moks/req/jd.md"), "# legacy")
-  const listed = await ReqWorkspace.list(tmp.path)
-  expect(listed.map((item) => item.slug)).toEqual(["em-platform", "req", "staff-ml"])
+  await ReqWorkspace.scaffold(tmp.path, "Staff ML")
+  const nested = path.join(tmp.path, "candidates", "nested")
+  await Bun.write(path.join(nested, "keep.txt"), "x")
+  expect(await ReqWorkspace.resolve(nested, tmp.path)).toBe(tmp.path)
+  expect(await ReqWorkspace.resolve(tmp.path, tmp.path)).toBe(tmp.path)
 })
 
-test("resolve prefers the req containing cwd", async () => {
+test("resolve returns undefined when no HIRING.md is found", async () => {
   await using tmp = await tmpdir()
-  await ReqWorkspace.scaffold(tmp.path, "staff-ml")
-  await ReqWorkspace.scaffold(tmp.path, "em-platform")
-  const inside = path.join(tmp.path, ".moks/reqs/staff-ml/scores")
-  expect(await ReqWorkspace.resolve(inside, tmp.path)).toBe(path.join(tmp.path, ".moks/reqs/staff-ml"))
   expect(await ReqWorkspace.resolve(tmp.path, tmp.path)).toBeUndefined()
 })
 
-test("resolve falls back to the only req", async () => {
+test("git init happens when cwd is not a repo", async () => {
   await using tmp = await tmpdir()
-  await ReqWorkspace.scaffold(tmp.path, "staff-ml")
-  expect(await ReqWorkspace.resolve(tmp.path, tmp.path)).toBe(path.join(tmp.path, ".moks/reqs/staff-ml"))
+  const result = await ReqWorkspace.scaffold(tmp.path, "Senior Backend")
+  expect(result.git).toBe("created")
+  expect((await $`git rev-parse --is-inside-work-tree`.cwd(tmp.path).text()).trim()).toBe("true")
+  expect((await $`git log -1 --pretty=%s`.cwd(tmp.path).text()).trim()).toBe("moks: init")
 })
 
-test("reqDirFromHint prefers @slug over a multi-req book", async () => {
-  await using tmp = await tmpdir()
-  await ReqWorkspace.scaffold(tmp.path, "staff-ml")
-  await ReqWorkspace.scaffold(tmp.path, "senior-backend")
-  expect(ReqWorkspace.reqDirFromHint("senior-backend", tmp.path)).toBe(
-    path.join(tmp.path, ".moks/reqs/senior-backend"),
-  )
-  expect(ReqWorkspace.reqDirFromHint(".moks/reqs/staff-ml", tmp.path)).toBe(path.join(tmp.path, ".moks/reqs/staff-ml"))
-  expect(ReqWorkspace.focusFromPaths(["resume.md", "senior-backend"], tmp.path)).toBe(
-    path.join(tmp.path, ".moks/reqs/senior-backend"),
-  )
-  expect(ReqWorkspace.reqDirFromHint("senior-backend", "/")).toBeUndefined()
+test("git init is skipped when already a repo", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const before = (await $`git rev-list --count HEAD`.cwd(tmp.path).text()).trim()
+  const result = await ReqWorkspace.scaffold(tmp.path, "Senior Backend")
+  expect(result.git).toBe("existing")
+  expect((await $`git rev-list --count HEAD`.cwd(tmp.path).text()).trim()).toBe(before)
 })

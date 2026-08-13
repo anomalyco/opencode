@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises"
+import { readdir } from "node:fs/promises"
 import path from "node:path"
 import type { DialogContext } from "./dialog"
 import { DialogAlert } from "./dialog-alert"
@@ -9,6 +9,7 @@ import {
   confirmMessage,
   formatDecisionResult,
   formatReceiptLine,
+  isDryRun,
   needsConfirm,
   receiptId,
   runDecision,
@@ -39,13 +40,13 @@ export async function runCommitFlow(input: { dialog: DialogContext; toast: Toast
   })
   if (reasonRaw === null) return
 
-  const inferred = input.cwd ? await newestScoreInSingleReq(input.cwd) : undefined
+  const inferred = input.cwd ? await singleCandidate(input.cwd) : undefined
   const args = ["commit", "--json", "--action", trimmedAction]
   const reason = reasonRaw.trim()
   if (reason) args.push("--reason", reason)
   if (inferred) {
-    args.push("--target-kind", "candidate", "--target-id", inferred.slug)
-    args.push("--meta", JSON.stringify({ score: inferred.score }))
+    args.push("--target-kind", "candidate", "--target-id", inferred.id)
+    args.push("--meta", JSON.stringify({ card: inferred.card }))
   }
 
   const result = await call(args, input)
@@ -55,10 +56,10 @@ export async function runCommitFlow(input: { dialog: DialogContext; toast: Toast
     message: ok
       ? id
         ? inferred
-          ? `Committed ${id} (${inferred.slug})`
+          ? `Committed ${id} (${inferred.id})`
           : `Committed ${id}`
         : inferred
-          ? `Committed ${inferred.slug}`
+          ? `Committed ${inferred.id}`
           : "Commit complete"
       : "Commit failed",
     variant: ok ? "success" : "error",
@@ -95,7 +96,7 @@ export async function runPushFlow(input: { dialog: DialogContext; toast: Toast; 
   }
 
   input.toast.show({
-    message: result.code === 0 ? "Recorded local push receipt (no ATS write)" : "Push failed",
+    message: result.code === 0 ? (isDryRun(result.json) ? "Pushed — dry-run (no ATS write)" : "Pushed") : "Push failed",
     variant: result.code === 0 ? "success" : "error",
   })
   await showResult(input.dialog, "Push result", result)
@@ -106,7 +107,7 @@ export async function runDecisionsFlow(input: { dialog: DialogContext; toast: To
   if (result.code !== 0) {
     input.toast.show({ message: "Failed to list decisions", variant: "error" })
   }
-  await showResult(input.dialog, "Decision receipts", result)
+  await showResult(input.dialog, "Decision commits", result)
 }
 
 async function call(args: string[], input: { toast: Toast; cwd?: string }) {
@@ -147,46 +148,18 @@ async function pickOpenCommit(dialog: DialogContext, open: ReceiptRow[]) {
   )
 }
 
-async function newestScoreInSingleReq(cwd: string) {
-  const book = path.join(cwd, ".moks", "reqs")
-  const slugs = await readdir(book, { withFileTypes: true })
-    .then((entries) => entries.flatMap((entry) => (entry.isDirectory() ? [entry.name] : [])))
-    .catch(() => [] as string[])
-  const dirs =
-    slugs.length === 1
-      ? [{ abs: path.join(book, slugs[0], "scores"), rel: `.moks/reqs/${slugs[0]}/scores` }]
-      : slugs.length === 0
-        ? [{ abs: path.join(cwd, ".moks", "req", "scores"), rel: ".moks/req/scores" }]
-        : []
-  const rows = await Promise.all(
-    dirs.map(async ({ abs, rel }) => {
-      const entries = await readdir(abs, { withFileTypes: true }).catch(() => [])
-      return Promise.all(
-        entries.flatMap((entry) => {
-          if (!entry.isFile() || !entry.name.endsWith(".md") || entry.name === ".gitkeep") return []
-          return [
-            stat(path.join(abs, entry.name))
-              .then((info) => ({
-                name: entry.name,
-                score: `${rel}/${entry.name}`,
-                mtime: info.mtimeMs,
-              }))
-              .catch(() => undefined),
-          ]
-        }),
-      )
-    }),
-  )
-  const newest = rows
-    .flat()
-    .filter((row) => row !== undefined)
-    .reduce<(typeof rows)[number][number] | undefined>(
-      (best, row) => (!best || row.mtime > best.mtime ? row : best),
-      undefined,
+async function singleCandidate(cwd: string) {
+  const names = await readdir(path.join(cwd, "candidates"), { withFileTypes: true })
+    .then((entries) =>
+      entries.flatMap((entry) =>
+        entry.isFile() && entry.name.endsWith(".md") && entry.name !== ".gitkeep" ? [entry.name] : [],
+      ),
     )
-  if (!newest) return
+    .catch(() => [] as string[])
+  if (names.length !== 1) return
+  const name = names[0]
   return {
-    slug: path.basename(newest.name, ".md"),
-    score: newest.score,
+    id: path.basename(name, ".md"),
+    card: `candidates/${name}`,
   }
 }

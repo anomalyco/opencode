@@ -1,30 +1,33 @@
-Open recruiter intake for a req under `.moks/reqs/<slug>` at `${path}`.
+Open recruiter intake for this directory as a requisition at `${path}`.
 
 This is hiring intake, not a coding AGENTS.md setup. (`/init-code` / `build` is the coding escape hatch.)
 
 User notes (honor these; they are not a finished JD):
 $ARGUMENTS
 
-## Goal
+This directory is the req. Do not create a subdirectory. Constitution is `HIRING.md`. Candidate files are `candidates/<id>.md` (YAML frontmatter). Git is the audit log.
 
-One hiring workspace holds many reqs. Each req is a directory: `.moks/reqs/<slug>/`. Users @ the slug to work in that req. Do not create a git repo per req. Do not use a singleton `.moks/req`.
+Stubs already exist if they were missing or empty:
+- `HIRING.md`
+- `candidates/.gitkeep`
 
-## Steps
+If the title is missing or looks like a placeholder (numeric like `00001`, not a role title), ask for the title. Do not overwrite non-empty user content.
 
-1. Derive `<slug>` from `$ARGUMENTS` (lowercase, hyphens). If missing or the slug looks like a placeholder (numeric like `00001`, not a role title), ask for the role title. Keep an existing folder — do not create a new directory when stubs already exist.
+## Intake
 
-2. Create directories if missing:
-   - `.moks/reqs/<slug>/`
-   - `.moks/reqs/<slug>/scores/`
+Talk like a recruiter taking a req from a hiring manager. Write only what they confirmed. Leave the rest TBD.
 
-3. Scaffold stubs under `.moks/reqs/<slug>/` when missing (do not overwrite non-empty user content):
-   - `jd.md` — only confirmed title / team / level / must-haves; leave the rest TBD
-   - `scorecard.md` — dimensions and interview bar (1–5 or pass/fail)
-   - `notes.md` — process notes, owners, open questions
-   - Optional: `resume.md` only if the user already named a candidate
+After each answer, update `HIRING.md`, then use the question tool for the next 2–4 gaps. Keep going until title, level, team/HM, location, and must-haves are real. Do not invent a polished JD from a title. Do not stop after the title.
 
-4. Gitignore: if a `.gitignore` exists at `${path}`, ensure a `.moks/` entry is present; add it if missing. Do not create a root `.gitignore` solely for this.
+Ask about, in roughly this order:
+- Role title
+- Level / family (IC vs manager; mid / senior / staff)
+- Team, org, hiring manager
+- Location / remote
+- Must-haves vs nice-to-haves vs deal-breakers
+- Comp band / headcount / start if they know
+- Interview owners
 
-5. This is recruiter intake. After each answer, update the stubs, then use the question tool for the next 2–4 gaps (title → level → team/HM → location → must-haves). Keep asking until the role is staffable. Do not invent a polished JD from a title. Do not stop after the title.
+Then invoke **req-context**. If gaps remain, ask the next batch — do not close with “add a resume” while the role is still TBD.
 
-6. After writing what you know, invoke **req-context**. If gaps remain, ask the next batch — do not close with “add a resume” while the role is still TBD.
+Optional: add a candidate card at `candidates/<id>.md` only if they already named a candidate.

@@ -19,7 +19,7 @@ export function isAshbyWriteTool(name: string) {
 }
 
 export function ashbyWriteDeniedMessage() {
-  return "Ashby writes are disabled. Record intent with moks commit / moks push."
+  return "Ashby writes go through `moks push`, not the agent."
 }
 
 export function ashbyPermissionDefaults() {

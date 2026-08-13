@@ -112,10 +112,21 @@ export function formatDecisionResult(result: DecisionCliResult) {
   return `moks exited with code ${result.code}`
 }
 
+export function isDryRun(json: unknown) {
+  if (!json || typeof json !== "object") return true
+  const row = json as Record<string, unknown>
+  if (row.dry_run === false) return false
+  if (row.receipt && typeof row.receipt === "object") {
+    const receipt = row.receipt as Record<string, unknown>
+    if (receipt.dry_run === false) return false
+  }
+  return true
+}
+
 export function formatDecisionJson(json: unknown) {
   if (json == null || typeof json !== "object") return
   const row = json as Record<string, unknown>
-  if (Array.isArray(row.open) || Array.isArray(row.receipts)) return formatStatus(row)
+  if (Array.isArray(row.open) || Array.isArray(row.receipts) || Array.isArray(row.commits)) return formatStatus(row)
   const receipt = (row.receipt && typeof row.receipt === "object" ? row.receipt : row) as ReceiptRow
   if (!receipt.id && !receipt.action && !receipt.verb) return
   return formatReceipt(receipt, typeof row.message === "string" ? row.message : undefined)
@@ -123,13 +134,17 @@ export function formatDecisionJson(json: unknown) {
 
 function formatStatus(row: Record<string, unknown>) {
   const open = Array.isArray(row.open) ? row.open.filter((item) => item && typeof item === "object") : []
-  const receipts = Array.isArray(row.receipts) ? row.receipts.filter((item) => item && typeof item === "object") : []
+  const recent = Array.isArray(row.commits)
+    ? row.commits.filter((item) => item && typeof item === "object")
+    : Array.isArray(row.receipts)
+      ? row.receipts.filter((item) => item && typeof item === "object")
+      : []
   const lines = ["Open commits"]
   if (open.length === 0) lines.push("  (none)")
   for (const item of open) lines.push(`  ${formatReceiptLine(item as ReceiptRow)}`)
-  lines.push("", "Recent receipts")
-  if (receipts.length === 0) lines.push("  (none)")
-  for (const item of receipts) lines.push(`  ${formatReceiptLine(item as ReceiptRow)}`)
+  lines.push("", "Recent commits")
+  if (recent.length === 0) lines.push("  (none)")
+  for (const item of recent) lines.push(`  ${formatReceiptLine(item as ReceiptRow)}`)
   return lines.join("\n")
 }
 

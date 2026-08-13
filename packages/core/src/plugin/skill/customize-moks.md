@@ -16,11 +16,11 @@ authority. Prefer the shapes and paths here over guessing.
 | Concept | moks meaning |
 | ------- | ------------ |
 | Primary doer | **`recruit`** agent (not a coding agent) |
-| Local working tree | **`.moks/`** — req materials, plans, notes, receipts |
-| Commit intent | **`moks commit`** — decision receipt (dry-run by default) |
-| Inspect | **`moks status`** |
-| Push authority | **`moks push`** — remote write path; adverse needs `--confirm` |
-| ATS edge | MCP **read** tools (e.g. Ashby); writes denied — use decision verbs |
+| Local working tree | **cwd** — `HIRING.md` + `candidates/<id>.md` |
+| Commit intent | **`moks commit`** — git commit of hiring files |
+| Inspect | **`moks status`** — unpushed hiring commits |
+| Push authority | **`moks push`** — local/mock write (`.moks/ats.json`); `--execute` writes; adverse `--confirm`. Remote later. |
+| ATS edge | MCP **read** tools (e.g. Ashby); agent writes denied — only `moks push` |
 | Coding escape hatch | Hidden **`build`** agent (`--agent build` / `default_agent: build`) |
 
 Never teach silent ATS stage moves. Dispositions go through commit → status → push.
@@ -34,7 +34,7 @@ Document and prefer these when scaffolding new workspaces:
 | Scope | Intended path |
 | ----- | ------------- |
 | Project config | `./moks.json` or `./moks.jsonc`, or `.moks/moks.json` |
-| Project workspace | `.moks/` (reqs, plans, notes, receipts) |
+| Project workspace | cwd (`HIRING.md`, `candidates/`); `.moks/` is cache only |
 | Project agents | `.moks/agent/<name>.md` or `.moks/agents/<name>.md` |
 | Project commands | `.moks/command/<name>.md` or `.moks/commands/<name>.md` |
 | Project skills | `.moks/skill(s)/<name>/SKILL.md` |
@@ -42,7 +42,7 @@ Document and prefer these when scaffolding new workspaces:
 | Global config | `~/.config/moks/moks.json` (NOT `~/.moks/` for global config) |
 | Global agents / skills / commands | under `~/.config/moks/` |
 
-Always gitignore `.moks/` in user repos (receipts and local req drafts stay local).
+Gitignore `.moks/` (ATS cache, plans). Do **not** gitignore `HIRING.md` or `candidates/`.
 
 ### What loads
 
@@ -60,9 +60,9 @@ moks is a separate product. It does **not** read OpenCode files or `OPENCODE_*` 
 
 | Surface | Path / behavior |
 | ------- | --------------- |
-| Req materials | `.moks/reqs/<slug>/{jd,resume,scorecard,notes}.md` (`@<slug>`); legacy `.moks/req/` |
+| Req materials | `HIRING.md` + `candidates/<id>.md` in cwd |
 | Hiring plans | `.moks/plans/*.md` |
-| Decision receipts | `.moks/receipts/` when `.moks/` exists; else user data dir `…/receipts/` |
+| Audit | git log (`moks: …` commits); ATS cache `.moks/ats.json` |
 | Built-in hiring skills | registered in-process (see below); disk skills can override by name |
 
 Do not read or write `opencode.json` / `.opencode/` / `~/.config/opencode` — those belong to installed OpenCode.
@@ -88,7 +88,7 @@ Every field is optional. File name is **`moks.json` / `moks.jsonc`**.
   "username": "string",
   "shell": "/bin/zsh",
   "logLevel": "DEBUG" | "INFO" | "WARN" | "ERROR",
-   "instructions": ["HIRING-AGENTS.md", "docs/style.md"],
+   "instructions": ["HIRING.md", "docs/style.md"],
 
   "skills": {
     "paths": [".moks/skills", "/abs/path/to/skills"],
@@ -170,24 +170,19 @@ this skill and the moks codebase.
 Scaffold with `/init` (product command) or create by hand:
 
 ```
-.moks/
-  reqs/
-    <slug>/
-      jd.md
-      scorecard.md
-      notes.md
-      scores/          # score-candidate writes <candidate>.md here
-      outreach/        # draft-outreach writes <candidate>.md here
+HIRING.md
+candidates/
+  <id>.md
+.moks/                 # cache only — gitignore this
+  ats.json             # mock ATS after moks push --execute
   plans/
-    {timestamp}-{slug}.md
-  receipts/            # decision log when workspace is moks-local
   agent/
   skill/
   command/
 ```
 
-`recruit` may edit freely under `.moks/*`. Edits outside that tree ask first
-(path-scoped permissions). Always ensure root `.gitignore` includes `.moks/`.
+`recruit` may edit `HIRING.md`, `candidates/*`, and `.moks/*` except `ats.json`.
+Do not gitignore the hiring files.
 
 ## Built-in agents
 
@@ -234,8 +229,8 @@ Registered before disk so a same-named disk skill overrides:
 
 | Skill | When |
 | ----- | ---- |
-| **req-context** | Synthesize req brief from JD/notes/scorecard; list gaps |
-| **score-candidate** | Score resume vs JD/scorecard with path citations |
+| **req-context** | Synthesize req brief from HIRING.md + candidate cards; list gaps |
+| **score-candidate** | Score candidate card vs HIRING.md with path citations |
 | **draft-outreach** | Draft email/LinkedIn; never send |
 | **commit-disposition** | Recommend advance/reject/offer/hire; end with `moks commit` instructions |
 | **customize-moks** | This skill — moks config / agents / permissions / edge |
@@ -272,17 +267,17 @@ Register non-default locations via `skills.paths` (recursive `**/SKILL.md`) and
 These are CLI authority, not silent tool side-effects:
 
 ```bash
-# Record intent (dry-run default)
+# Git commit of hiring files (audit)
 moks commit --action <action> --target-kind candidate --target-id <id> --reason "..."
 moks commit --action note --json
 
-# Inspect open commits + receipts
+# Unpushed commits
 moks status
 moks status --json
 
-# Push committed decision (adverse: reject | offer | hire need --confirm)
-moks push --commit-id <id>
-moks push --commit-id <id> --confirm --json
+# Write mock ATS (.moks/ats.json); adverse needs --confirm
+moks push --commit-id <id> --execute
+moks push --commit-id <id> --confirm --execute --json
 ```
 
 Exit codes: `0` success, `1` error, `2` push needs `--confirm` (`needs_confirm`).
@@ -372,7 +367,7 @@ agent: recruit
 (prompt body; $ARGUMENTS for user input; $1, $2, … positional)
 ```
 
-Product built-in: **`init`** scaffolds a requisition under `.moks/reqs/<slug>`. `@<slug>` attaches that req.
+Product built-in: **`init`** scaffolds this directory (`HIRING.md` + `candidates/`). `@` attaches a candidate card.
 
 ## Plugins
 
@@ -434,7 +429,7 @@ When config is broken and moks won't start:
 
 ## When proposing edits
 
-- Prefer **moks product semantics**: `recruit`, `.moks/` workspace, hiring skills, commit/status/push, Ashby read-only edge.
+- Prefer **moks product semantics**: `recruit`, cwd (`HIRING.md` + `candidates/`), hiring skills, commit/status/push, Ashby read-only edge.
 - Write **`moks.json` / `.moks/`** and global **`~/.config/moks`**. Never OpenCode paths.
 - Do not send users to opencode.ai as the primary config authority for moks.
 - Preserve fields the user did not ask to change.

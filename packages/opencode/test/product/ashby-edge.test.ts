@@ -4,6 +4,8 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect } from "effect"
 import path from "path"
+import { DecisionAts } from "../../src/decision/ats"
+import { DecisionVerbs } from "../../src/decision/verbs"
 import {
   ASHBY_READ_TOOLS,
   ASHBY_WRITE_TOOLS,
@@ -15,9 +17,17 @@ import {
   ashbyWriteDeniedMessage,
   isAshbyWriteTool,
 } from "../../src/product/ashby-edge"
-import { AshbyMockTools, createAshbyMockServer, handleAshbyTool } from "../../src/product/fixtures/mcp/ashby-mock"
+import { CandidateCard } from "../../src/product/candidate-card"
+import {
+  AshbyMockTools,
+  applyAshbyWrite,
+  createAshbyMockServer,
+  handleAshbyTool,
+  type AshbyState,
+} from "../../src/product/fixtures/mcp/ashby-mock"
 import { McpCatalog } from "../../src/mcp/catalog"
 import { MCP } from "../../src/mcp/index"
+import { tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 describe("ashby tool permission keys", () => {
@@ -37,7 +47,7 @@ describe("ashby tool permission keys", () => {
     expect(isAshbyWriteTool("ashby_change_stage")).toBe(true)
     expect(isAshbyWriteTool("ashby_create_note")).toBe(true)
     expect(isAshbyWriteTool("ashby_list_jobs")).toBe(false)
-    expect(ashbyWriteDeniedMessage()).toContain("moks commit")
+    expect(ashbyWriteDeniedMessage()).toContain("moks push")
   })
 
   test("ashbyPermissionDefaults allows reads and denies writes", () => {
@@ -99,15 +109,69 @@ describe("ashby mock handlers", () => {
     }
   })
 
-  test("change_stage and create_note return error content", () => {
-    const stage = handleAshbyTool("change_stage", { candidate_id: "cand_jordan_lee", stage: "offer" })
+  test("change_stage and create_note return error content", async () => {
+    const stage = await handleAshbyTool("change_stage", { candidate_id: "cand_jordan_lee", stage: "offer" })
     expect(stage.isError).toBe(true)
     expect(stage.content[0].text).toContain("writes disabled in mock")
     expect(stage.content[0].text).toContain("moks commit/push")
 
-    const note = handleAshbyTool("create_note", { candidate_id: "cand_jordan_lee", body: "hi" })
+    const note = await handleAshbyTool("create_note", { candidate_id: "cand_jordan_lee", body: "hi" })
     expect(note.isError).toBe(true)
     expect(note.content[0].text).toContain("writes disabled in mock")
+  })
+
+  test("applyAshbyWrite mutates mock state", () => {
+    const state: AshbyState = {
+      jobs: [],
+      candidates: [
+        {
+          id: "cand_jordan_lee",
+          name: "Jordan Lee",
+          email: "",
+          job_id: "job_senior_backend",
+          stage: "technical_screen",
+          location: "",
+        },
+      ],
+      notes: [],
+    }
+    applyAshbyWrite(state, { tool: "change_stage", candidate_id: "cand_jordan_lee", stage: "offer" })
+    applyAshbyWrite(state, { tool: "create_note", candidate_id: "cand_jordan_lee", body: "strong" })
+    expect(state.candidates[0].stage).toBe("offer")
+    expect(state.notes).toEqual([{ candidate_id: "cand_jordan_lee", body: "strong" }])
+  })
+
+  test("push --execute writes .moks/ats.json", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "HIRING.md"), "# Role\n")
+        await CandidateCard.write(dir, {
+          id: "cand_jordan_lee",
+          stage: "offer",
+          ats_id: "cand_jordan_lee",
+          extra: { name: "Jordan Lee" },
+          body: "# Jordan Lee\n",
+        })
+      },
+    })
+    const committed = await DecisionVerbs.commit({
+      action: "offer",
+      target: { kind: "candidate", id: "cand_jordan_lee" },
+      reason: "strong",
+      cwd: tmp.path,
+    })
+    const result = await DecisionVerbs.push({
+      commit_id: committed.receipt.id,
+      cwd: tmp.path,
+      confirm: true,
+      dry_run: false,
+    })
+    expect(result.ok).toBe(true)
+    const cache = await DecisionAts.loadCache(tmp.path)
+    expect(cache.candidates.find((item) => item.id === "cand_jordan_lee")?.stage).toBe("offer")
+    expect(cache.notes.some((item) => item.body === "strong")).toBe(true)
+    expect(await Bun.file(path.join(tmp.path, ".moks/ats.json")).exists()).toBe(true)
   })
 })
 

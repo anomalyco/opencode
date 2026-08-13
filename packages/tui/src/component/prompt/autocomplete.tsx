@@ -370,27 +370,19 @@ export function Autocomplete(props: {
         directory: loc?.directory,
         workspace: loc?.workspaceID ?? project.workspace.current(),
       }
-      const book = await sdk.client.v2.fs.list({ path: ".moks/reqs", location: query })
+      const cards = await sdk.client.v2.fs.list({ path: "candidates", location: query })
       const listed: { slug: string; relative: string; absolute: string }[] = []
-      if (!book.error && book.data) {
-        for (const item of book.data.data) {
-          if (item.type !== "directory") continue
-          const slug = path.basename(item.path.replace(/[/\\]+$/, ""))
+      if (!cards.error && cards.data) {
+        for (const item of cards.data.data) {
+          if (item.type === "directory") continue
+          const name = path.basename(item.path.replace(/[/\\]+$/, ""))
+          if (!name.endsWith(".md") || name === ".gitkeep") continue
+          const slug = name.replace(/\.md$/, "")
           if (!slug) continue
           listed.push({
             slug,
             relative: item.path.replace(/[/\\]+$/, ""),
-            absolute: path.join(book.data.location.directory, item.path),
-          })
-        }
-      }
-      if (!listed.some((item) => item.slug === "req")) {
-        const legacy = await sdk.client.v2.fs.list({ path: ".moks/req", location: query })
-        if (!legacy.error && legacy.data) {
-          listed.push({
-            slug: "req",
-            relative: ".moks/req",
-            absolute: path.join(legacy.data.location.directory, ".moks", "req"),
+            absolute: path.join(cards.data.location.directory, item.path),
           })
         }
       }
@@ -484,12 +476,12 @@ export function Autocomplete(props: {
     (reqs() ?? []).map(
       (req): AutocompleteOption => ({
         display: "@" + req.slug,
-        description: " req",
+        description: " candidate",
         path: req.relative,
         onSelect: () => {
           insertPart(req.slug, {
             type: "file",
-            mime: "application/x-directory",
+            mime: "text/markdown",
             filename: req.slug,
             url: pathToFileURL(req.absolute).href,
             source: {

@@ -583,17 +583,18 @@ const accountTokenIt = configIt({
     config: () =>
       Effect.succeed(
         Option.some({
-          provider: { opencode: { options: { apiKey: "{env:OPENCODE_CONSOLE_TOKEN}" } } },
+          provider: { opencode: { options: { apiKey: "from-account" } } },
         }),
       ),
     token: () => Effect.succeed(Option.some(AccessToken.make("st_test_token"))),
   }),
 })
 
-accountTokenIt.instance("resolves env templates in account config with account token", () =>
+accountTokenIt.instance("loads account config without writing OPENCODE_CONSOLE_TOKEN", () =>
   Effect.gen(function* () {
     const config = yield* Config.use.get()
-    expect(config.provider?.["opencode"]?.options?.apiKey).toBe("st_test_token")
+    expect(config.provider?.["opencode"]?.options?.apiKey).toBe("from-account")
+    expect(process.env.OPENCODE_CONSOLE_TOKEN).toBe(originalConsoleToken)
   }),
 )
 

@@ -71,10 +71,10 @@ const layer = Layer.effect(
 
       commands[Default.INIT] = {
         name: Default.INIT,
-        description: "scaffold a requisition under .moks/reqs/<slug>",
+        description: "scaffold this directory as a requisition (HIRING.md + candidates/)",
         source: "command",
         get template() {
-          return PROMPT_INITIALIZE.replace("${path}", ctx.worktree)
+          return PROMPT_INITIALIZE.replace("${path}", ctx.directory)
         },
         hints: hints(PROMPT_INITIALIZE),
       }

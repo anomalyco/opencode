@@ -15,10 +15,10 @@ Goal: Understand the hiring request and gather req materials. Critical: In this 
 1. Focus on the user's hiring goal (e.g. open a req, score a slate, outreach sequence, disposition recommendations).
 
 2. **Launch up to 3 explore agents IN PARALLEL** (single message, multiple tool calls) when materials are spread out.
-  - Use 1 agent when paths are known (attached JD/resume/scorecard, @slug / `.moks/reqs/<slug>/` tree).
-  - Use multiple agents when: scope is uncertain, multiple candidates/req folders, or you need public company/candidate context plus local files.
+  - Use 1 agent when paths are known (attached JD/resume, HIRING.md, candidates/<id>.md).
+  - Use multiple agents when: scope is uncertain, multiple candidate cards, or you need public company/candidate context plus local files.
   - Quality over quantity - 3 agents maximum; prefer the minimum (usually 1).
-  - Example focuses: JD + scorecard; candidate resumes/notes; company/role public context (webfetch) when relevant.
+  - Example focuses: HIRING.md; candidate cards; company/role public context (webfetch) when relevant.
 
 3. After exploring materials, use the question tool to clarify ambiguities (level, must-haves, timeline, process constraints, tone for outreach).
 
@@ -28,15 +28,15 @@ Goal: Design a hiring approach for this req — not an implementation plan for s
 Prefer direct reasoning over spawning coding-oriented workers. Do **not** launch the general subagent for software design. If you need more research, use explore again.
 
 Cover as relevant:
-- Req brief gaps (missing JD criteria, scorecard dimensions, process notes)
-- Candidate evaluation approach and evidence standards
-- Outreach angle and sequencing (draft only — never send)
+- Req brief gaps (missing HIRING.md criteria, scorecard dimensions, process notes)
+- Candidate evaluation approach and evidence standards (score on the card)
+- Outreach angle and sequencing (draft on the card only — never send)
 - Disposition recommendations and what should go through `moks commit` / `moks push`
 - Risks (bias, thin evidence, adverse-action confirm needs)
 
 ### Phase 3: Review
 Goal: Align the strategy with the user's intent.
-1. Re-read critical materials (JD, scorecard, resumes, notes) cited in the plan
+1. Re-read critical materials (HIRING.md, candidate cards) cited in the plan
 2. Ensure the plan matches the original hiring request
 3. Use the question tool for remaining product/process questions
 
@@ -45,9 +45,9 @@ Goal: Write your final plan to the plan file (the only file you can edit).
 - Include only your recommended approach, not every alternative
 - Keep it scannable but executable by the recruit agent
 - Prefer **artifacts to produce** over "files to modify":
-  - score tables / evidence citations
-  - outreach drafts (email/LinkedIn)
-  - disposition commits (action, target, rationale)
+  - score on `candidates/<id>.md` (frontmatter `score` + body)
+  - outreach drafts on the card (email/LinkedIn)
+  - disposition commits (action, target, rationale) via `moks commit` / `moks push`
   - note paths under `.moks/` if notes should be saved
 - Include a **verification** section: fixtures or real paths used, skill outputs to expect, user confirms, `moks status` / commit-push when decisions are recorded
 - Do not center the plan on repo code changes, PR review, or test suites unless the user asked for that

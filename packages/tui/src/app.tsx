@@ -798,9 +798,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "decision.list",
-        title: "Decision receipts",
+        title: "Decision commits",
         slashName: "decisions",
-        slashAliases: ["receipts"],
+        slashAliases: ["commits", "receipts"],
         category: "Decision",
         run: () => {
           void runDecisionsFlow({

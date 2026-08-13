@@ -287,6 +287,11 @@
     }
     .card.go { border-color: #6b5420; }
     .card.high { border-color: #6b3034; }
+    .card.done {
+      border-color: var(--green-dim);
+      opacity: 0.72;
+    }
+    .card.done h3 { text-decoration: line-through; text-decoration-color: var(--green-dim); }
     .card-head {
       padding: 14px 16px 12px;
       display: grid;
@@ -329,6 +334,7 @@
     .badge.defer { color: var(--blue); border-color: #2a4060; background: var(--blue-bg); }
     .badge.drop { color: var(--dim); }
     .badge.keep { color: var(--green); border-color: var(--green-dim); background: var(--green-bg); }
+    .badge.done { color: var(--green); border-color: var(--green-dim); background: var(--green-bg); }
     .card-foot {
       border-top: 1px solid var(--line);
       padding: 11px 16px;
@@ -374,6 +380,9 @@
       gap: 10px;
     }
     ol.next li { padding-left: 4px; }
+    ol.next li.done { color: var(--dim); text-decoration: line-through; text-decoration-color: var(--green-dim); }
+    ol.next li.done strong { color: var(--dim); }
+    ol.next li.done .why { text-decoration: none; }
     ol.next .why { display: block; color: var(--muted); font-size: 14px; margin-top: 2px; }
 
     footer.note {
@@ -388,8 +397,8 @@
   <div class="page">
     <header>
       <div class="kicker">
-        <span class="pill">Code review · 2026-08-12</span>
-        <span>Six agents · settings · commands · agents · TUI · CLI · hiring loop</span>
+        <span class="pill">Updated · 2026-08-12 after quick-win wave</span>
+        <span>Six agents · then implemented · then re-reviewed</span>
       </div>
       <h1>Is the fork still a <em>coding agent</em> wearing a hiring badge?</h1>
       <p class="lede">
@@ -402,6 +411,7 @@
         <a href="#thesis">Thesis</a>
         <a href="#done">Already ported</a>
         <a href="#gaps">Felt gaps</a>
+        <a href="#chrome">Session chrome</a>
         <a href="#leaks">Identity leaks</a>
         <a href="#later">Defer / drop</a>
         <a href="#next">What to do next</a>
@@ -418,14 +428,16 @@
         <code>moks commit</code> / <code>push</code> record hiring decisions — they do not move ATS stages.
       </p>
       <p class="verdict">
-        <strong class="warn">The product still <em>feels</em> like a coding IDE with hiring tips taped on.</strong>
-        The persistent TUI is files, tokens, MCP, and “Modified Files.”
-        There is no open-req chip, no hiring-book navigator, and decision dialogs dump JSON.
-        <code>@slug</code> is advertised as focus but does not attach the JD.
+        <strong class="ok">Quick-win glue shipped.</strong>
+        Last <code>@slug</code> now injects JD / scorecard / notes.
+        TUI decisions are a human list with pick-to-push.
+        Outreach drafts persist under the req. Tips are hiring-first.
       </p>
       <p class="verdict">
-        Branding and identity isolation mostly landed (<code>moks.json</code>, <code>.moks/</code>, <code>~/.config/moks</code>, <code>MOKS_*</code>).
-        Remaining work is <strong>glue</strong>, not another rename sweep.
+        <strong class="warn">The session still looks like an IDE.</strong>
+        No open-req chip, no book navigator, no packet pane.
+        “Modified Files” is still the persistent chrome.
+        That is the remaining wrong-port — not another string sweep.
       </p>
 
       <div class="status-grid" style="margin-top: 20px;">
@@ -437,13 +449,13 @@
           <div class="n">Verbs</div>
           <div class="l">commit → receipt → push · dry-run · confirm-adverse</div>
         </div>
-        <div class="stat glue">
+        <div class="stat done">
           <div class="n">Glue</div>
-          <div class="l">focus, drafts, TUI receipts, tips still IDE-shaped</div>
+          <div class="l">@slug focus · outreach files · human receipts · tips</div>
         </div>
         <div class="stat open">
-          <div class="n">Leaks</div>
-          <div class="l">OpenCode env / theme / help leftovers</div>
+          <div class="n">Chrome</div>
+          <div class="l">still no req-focus strip in the session</div>
         </div>
       </div>
     </section>
@@ -497,7 +509,7 @@
           <tr>
             <td class="sw">Diff</td>
             <td>Local candidate &amp; req changes</td>
-            <td class="state"><strong class="warn">Kept, still “files”</strong></td>
+            <td class="state"><strong class="ok">Kept · titled hiring diff</strong></td>
           </tr>
           <tr>
             <td class="sw"><code>git commit</code></td>
@@ -542,7 +554,7 @@
           <tr>
             <td class="sw">@file focus</td>
             <td><code>@slug</code> focuses a req</td>
-            <td class="state"><strong class="bad">Mention only</strong></td>
+            <td class="state"><strong class="ok">Yes</strong></td>
           </tr>
         </tbody>
       </table>
@@ -578,7 +590,12 @@
         <li><strong><code>/review</code> is packet review.</strong> <span class="why">Explicitly not <code>gh pr</code>. Orchestrates score / outreach / disposition.</span></li>
         <li><strong>Four hiring skills exist.</strong> <span class="why"><code>req-context</code>, <code>score-candidate</code>, <code>draft-outreach</code>, <code>commit-disposition</code>. Plus <code>customize-moks</code>.</span></li>
         <li><strong>Decision verbs match the thesis.</strong> <span class="why">Dry-run default. Reject / offer / hire need <code>--confirm</code> on push. No ATS write. <code>activity --days 7</code> exists.</span></li>
-        <li><strong>Ashby writes denied on recruit.</strong> <span class="why">Read tools allowed; stage-change / note-create denied. Mock errors point at commit/push.</span></li>
+        <li><strong>Ashby writes denied on recruit <em>and</em> at the MCP host.</strong> <span class="why">Build also denied. Host adapter returns “use commit/push” even if config tries to allow.</span></li>
+        <li><strong>Last <code>@slug</code> focuses that req.</strong> <span class="why">Injects JD / scorecard / notes. Last mention wins. Legacy <code>.moks/req</code> still works.</span></li>
+        <li><strong>TUI decisions are operable.</strong> <span class="why">Human receipt list. Push picks an open commit. Score inference only if one req exists. <code>MOKS_ENTRY</code> set for <code>bun dev</code>.</span></li>
+        <li><strong>Outreach drafts persist.</strong> <span class="why"><code>draft-outreach</code> writes <code>.moks/reqs/&lt;slug&gt;/outreach/&lt;cand&gt;.md</code>. <code>/review</code> looks there.</span></li>
+        <li><strong>Tips are hiring-first.</strong> <span class="why">No more random coding-harness dump. No <code>/share</code> or <code>moks serve</code> tip.</span></li>
+        <li><strong>Cheap identity leaks closed.</strong> <span class="why"><code>serve</code> hidden from help. Username / mDNS default <code>moks</code>. Theme picker labels default theme <code>moks</code>. <code>PATCH /config</code> writes <code>moks.json</code>. Share and websearch honor <code>MOKS_*</code> only.</span></li>
         <li><strong>LSP and formatters off unless configured.</strong> <span class="why">Sidebar and footer hide empty IDE chrome. Diff is kept on purpose.</span></li>
         <li><strong>Subagents are remolded.</strong> <span class="why">Explore searches req materials. General is domain-neutral. Titles/summaries are mostly hiring-native.</span></li>
         <li><strong>GitHub / PR / generate / console hidden from help.</strong> <span class="why">Still in the binary if you type them. Not on first-run help.</span></li>
@@ -587,35 +604,33 @@
 
     <section id="gaps">
       <div class="eyebrow">Where a recruiter still feels a coding agent</div>
-      <h2>Felt gaps — GO</h2>
-      <p class="section-sub">These are the items that break the metaphor in use, not in a string search.</p>
+      <h2>Felt gaps</h2>
+      <p class="section-sub">Struck items shipped in the quick-win wave. The open card is the remaining wrong-port.</p>
 
-      <div class="card high">
+      <div class="card done">
         <div class="card-head">
           <div>
             <h3><code>@slug</code> does not actually focus a req</h3>
-            <p class="plain">The thesis says mentioning a req loads that JD and scorecard. Today it only attaches a folder listing. Auto-attach of materials happens only if you are <em>inside</em> the req folder, or the book has exactly one req. Two reqs at the workspace root → empty hiring context.</p>
+            <p class="plain">Last <code>@slug</code> now injects that req’s JD / scorecard / notes. Last mention wins. Path hints beat filename so legacy <code>@req</code> stays valid.</p>
           </div>
           <div class="badges">
-            <span class="badge high">High</span>
-            <span class="badge go">GO</span>
+            <span class="badge done">Done</span>
           </div>
         </div>
-        <div class="card-foot"><b>Fix:</b> last <code>@slug</code> (or an explicit focus) should inject that req’s JD / scorecard / notes. Stop claiming “@slug focuses” until it does.</div>
+        <div class="card-foot"><b>Shipped:</b> <code>instruction.system(msgs)</code> + <code>ReqWorkspace.focusFromPaths</code>.</div>
       </div>
 
-      <div class="card high">
+      <div class="card done">
         <div class="card-head">
           <div>
             <h3>TUI decisions look like a debugger</h3>
-            <p class="plain"><code>/commit</code>, <code>/push</code>, and <code>/decisions</code> exist — good. They show raw JSON. Push asks you to type a <code>dec_…</code> id. Commit silently picks the newest score file across <em>every</em> req. Under <code>bun dev</code>, the TUI may fail to find the <code>moks</code> binary at all.</p>
+            <p class="plain">Human receipt list. Push picks from open commits. Score inference only when the book has one req. <code>MOKS_ENTRY</code> set so <code>bun dev</code> can spawn the CLI.</p>
           </div>
           <div class="badges">
-            <span class="badge high">High</span>
-            <span class="badge go">GO</span>
+            <span class="badge done">Done</span>
           </div>
         </div>
-        <div class="card-foot"><b>Fix:</b> human list of open decisions, pick-to-push, bind score to the focused req, call verbs in-process instead of spawning a binary.</div>
+        <div class="card-foot"><b>Shipped:</b> still shells the CLI (not in-process verbs). Good enough for the felt loop.</div>
       </div>
 
       <div class="card go">
@@ -631,69 +646,69 @@
         <div class="card-foot"><b>Fix:</b> one sidebar or home slot — open reqs from <code>.moks/reqs</code>, current focus, last score, pending decision. Keep Diff; rename “Modified Files” to local hiring deltas. Do not build a full ATS UI.</div>
       </div>
 
-      <div class="card go">
+      <div class="card done">
         <div class="card-head">
           <div>
             <h3>Outreach drafts die with the chat</h3>
-            <p class="plain"><code>draft-outreach</code> prints email in the conversation and never writes a file. <code>/review</code> then looks for “outreach drafts” that do not exist. Score is the only skill that leaves a durable artifact.</p>
+            <p class="plain">Skill now writes <code>.moks/reqs/&lt;slug&gt;/outreach/&lt;candidate&gt;.md</code>. <code>/review</code> looks in that folder.</p>
           </div>
           <div class="badges">
-            <span class="badge go">GO</span>
+            <span class="badge done">Done</span>
           </div>
         </div>
-        <div class="card-foot"><b>Fix:</b> write <code>.moks/reqs/&lt;slug&gt;/outreach/&lt;candidate&gt;.md</code>. Review can then see it the way a PR sees a diff.</div>
+        <div class="card-foot"><b>Shipped:</b> prompt-pack only. The model must still follow the skill.</div>
       </div>
 
-      <div class="card go">
+      <div class="card done">
         <div class="card-head">
           <div>
             <h3>Tips still mostly teach a coding harness</h3>
-            <p class="plain">The first six tips are hiring-correct. Then ~70 generic tips rotate at random — shell <code>!ls</code>, writing <code>.ts</code> plugins, <code>AGENTS.md</code>, share links. A new TA is more likely to see a coding-agent tip than <code>/init</code>.</p>
+            <p class="plain">Rotation is hiring-first plus a handful of harness tips (connect, models, sidebar, help). No <code>/share</code>, no <code>moks serve</code>.</p>
           </div>
           <div class="badges">
-            <span class="badge go">GO</span>
+            <span class="badge done">Done</span>
           </div>
         </div>
-        <div class="card-foot"><b>Fix:</b> hiring-first rotation. Keep a handful of harness tips (connect, models, sidebar). Hide <code>/share</code> — share-to-OpenCode is already disabled.</div>
+        <div class="card-foot"><b>Shipped:</b> <code>tips-view.tsx</code> cut from ~70 generic tips to a short TA set.</div>
       </div>
 
-      <div class="card go">
+      <div class="card done">
         <div class="card-head">
           <div>
             <h3><code>/diff</code> opens git mode · <code>/status</code> means two things</h3>
-            <p class="plain">Diff should show last-turn / <code>.moks/</code> working-tree changes, not “vs main branch.” TUI <code>/status</code> is system status (MCP, LSP). CLI <code>moks status</code> is decision receipts. Users will type the wrong one.</p>
+            <p class="plain">TUI <code>/status</code> is now “View system status.” <code>/diff</code> is “Open local hiring diff” in Workspace. Default stays working-tree (last-turn needs a message id we do not have).</p>
           </div>
           <div class="badges">
-            <span class="badge go">GO</span>
+            <span class="badge done">Done</span>
           </div>
         </div>
-        <div class="card-foot"><b>Fix:</b> default Diff to session / <code>.moks</code>. Rename TUI status to “system status.” Teach <code>/decisions</code> as the inspect verb.</div>
+        <div class="card-foot"><b>Shipped:</b> copy collision fixed. Working-tree is the correct TA analog of uncommitted local deltas.</div>
       </div>
 
-      <div class="card go">
+      <div class="card done">
         <div class="card-head">
           <div>
             <h3>Help still presents a coding product with extra verbs</h3>
-            <p class="plain"><code>moks --help</code> leads with TUI + <code>run</code> (good) then <code>serve</code>, <code>stats</code>, export/import. Headless is supposed to be a <em>mode</em>, not a pillar. Hidden but fully wired: <code>github</code>, <code>pr</code>, <code>generate</code>, <code>console</code>.</p>
+            <p class="plain"><code>serve</code> is hidden from root help (<code>describe: false</code>). GitHub / PR / generate / console stay hidden and unpolished.</p>
           </div>
           <div class="badges">
-            <span class="badge go">GO</span>
+            <span class="badge done">Done</span>
           </div>
         </div>
-        <div class="card-foot"><b>Fix:</b> hide <code>serve</code> (and maybe <code>stats</code>) from help. Do not polish GitHub/PR. First help should read: TUI, run, commit, status, push, activity, mcp, providers.</div>
+        <div class="card-foot"><b>Left:</b> <code>stats</code> / export / import still visible. Fine — not first-run identity.</div>
       </div>
 
-      <div class="card go">
+      <div class="card done">
         <div class="card-head">
           <div>
             <h3>Agents can still be taught the old singleton tree</h3>
-            <p class="plain">Runtime scaffolds <code>.moks/reqs/&lt;slug&gt;/</code>. The <code>customize-moks</code> skill still draws <code>.moks/req/</code> as the canonical layout. Ask it to set up a workspace and it will build the leftover path.</p>
+            <p class="plain"><code>customize-moks</code> now draws <code>.moks/reqs/&lt;slug&gt;/</code> with <code>scores/</code> and <code>outreach/</code>.</p>
           </div>
           <div class="badges">
-            <span class="badge go">GO</span>
+            <span class="badge done">Done</span>
           </div>
         </div>
-        <div class="card-foot"><b>Fix:</b> one diagram, one path. Keep reading legacy <code>.moks/req</code> as fallback; stop teaching it.</div>
+        <div class="card-foot"><b>Shipped:</b> legacy <code>.moks/req</code> still readable, no longer taught.</div>
       </div>
 
       <div class="callout dont">
@@ -702,35 +717,152 @@
       </div>
     </section>
 
+    <section id="chrome">
+      <div class="eyebrow">Deep dive · remaining wrong-port</div>
+      <h2>Session chrome is still an IDE</h2>
+      <p class="section-sub">
+        Home already teaches the hiring loop. After the first submit, the recruiter lands in a blank transcript,
+        an unlabeled prompt, and a sidebar that leads with <code>0 tokens / $0.00</code>.
+        The layout shape is right. The slots are empty or coding-labeled.
+      </p>
+
+      <p class="muted" style="margin-bottom: 14px;">What they actually see (wide terminal, LSP off, empty diff, no todos):</p>
+      <pre style="font-family: var(--mono); font-size: 12px; line-height: 1.45; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; color: var(--muted); margin-bottom: 18px;">┌ transcript (blank)                          ┬ New session - 2026-08-12T…Z
+│                                             │ ses_xxxxxxxx
+│  (no empty-state, no /init CTA)             │
+│                                             │ Context
+│                                             │ 0 tokens
+│                                             │ 0% used
+│                                             │ $0.00 spent
+│                                             │
+│                                             │ Getting started
+│                                             │ 75+ providers…
+│                                             │ /connect
+├─────────────────────────────────────────────┤
+│ Recruit · claude-sonnet-4-5 anthropic       │ ~/work/repo
+│ ~/work/repo              agents   commands  │ • moks
+└─────────────────────────────────────────────┴─────────────────────────────</pre>
+
+      <table class="map">
+        <thead>
+          <tr>
+            <th>Surface</th>
+            <th>Today</th>
+            <th>Call</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="sw">Empty transcript</td>
+            <td>One spacer line. No copy.</td>
+            <td class="state"><strong class="warn">GO · one line</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">Prompt placeholder</td>
+            <td>Home has hiring examples. Session is blank. “Ask anything” exists in code but never fires here.</td>
+            <td class="state"><strong class="warn">GO · one line</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">Prompt chip</td>
+            <td><code>Recruit · model provider</code>. Correct agent. No req.</td>
+            <td class="state"><strong class="ok">Keep</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">Hint line</td>
+            <td>Raw cwd + “agents / commands”. After a turn: tokens and dollars.</td>
+            <td class="state"><strong class="warn">GO · chip</strong></td>
+          </tr>
+          <tr>
+            <td class="sw"><code>@slug</code> after send</td>
+            <td>Bubble chip says <code>Directory senior-backend</code>. Same as a folder attach.</td>
+            <td class="state"><strong class="warn">GO · copy</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">Sidebar title</td>
+            <td><code>New session - ISO timestamp</code> + session id.</td>
+            <td class="state"><strong class="warn">GO · copy</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">Context block</td>
+            <td>Always on, even at zero. Loudest IDE tell.</td>
+            <td class="state"><strong class="warn">GO · hide at 0</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">Modified Files</td>
+            <td>Hidden when empty (good). Label is still git.</td>
+            <td class="state"><strong class="warn">GO · rename</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">Getting started</td>
+            <td>Sells “75+ providers / Claude, GPT, Gemini”.</td>
+            <td class="state"><strong class="warn">GO · retarget</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">LSP / Todo / MCP</td>
+            <td>LSP off. Todo hidden if empty. MCP hidden if none.</td>
+            <td class="state"><strong class="ok">Keep gated</strong></td>
+          </tr>
+          <tr>
+            <td class="sw">Dead <code>session/footer.tsx</code></td>
+            <td>Not mounted. Would add LSP/MCP meters if resurrected.</td>
+            <td class="state"><strong class="ok">Leave dead</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 style="margin-top: 22px;">Thin cut — reuse slots, do not build an ATS</h2>
+      <p class="section-sub">The harness is already transcript + composer + 42ch plugin sidebar. Fill those slots.</p>
+
+      <ul class="done-list">
+        <li><strong>Session placeholders = home set.</strong> <span class="why">Pass “Score this resume / Draft outreach / Open a req with /init” into the session Prompt. Prefix can say “Work this req…” instead of “Ask anything…”.</span></li>
+        <li><strong>One empty-state line</strong> where the spacer is. <span class="why"><code>No req open · /init · @slug to focus</code> plus <code>/commit /push /decisions</code>. Not a tips carousel.</span></li>
+        <li><strong>Hide Context until tokens &gt; 0.</strong> <span class="why">Cost already appears on the prompt hint after a turn. Two copies of “$0.00” is the bug.</span></li>
+        <li><strong>Rename Modified Files → Local hiring changes.</strong> <span class="why">Keep the list and Diff. Do not delete <code>session.diff</code>.</span></li>
+        <li><strong>Treat <code>@slug</code> as a Req chip.</strong> <span class="why">Transcript: <code>Req @senior-backend</code>, not <code>Directory senior-backend</code>.</span></li>
+        <li><strong>Optional Desk block</strong> at sidebar order 50. <span class="why">Current focus, last score, pending decision count. Hide empty rows. Do not preview the JD.</span></li>
+      </ul>
+
+      <div class="callout do">
+        <p><b>After the thin cut the empty session should read:</b></p>
+        <p>No req open · /init · @slug to focus<br />
+        Work this req… “Score this resume against the req”<br />
+        Recruit · model &nbsp;·&nbsp; @senior-backend &nbsp; /commit /push</p>
+      </div>
+
+      <div class="callout dont" style="margin-top: 12px;">
+        <p><b>Do not</b> delete Diff, invent a TA-LSP, add a packet/kanban pane, resurrect the dead session footer, or replace the prompt with an ATS form. Packet stays <code>/review</code>. Verbs stay slash/palette.</p>
+      </div>
+    </section>
+
     <section id="leaks">
       <div class="eyebrow">OpenCode still leaking into the product</div>
-      <h2>Identity leaks — GO if cheap</h2>
-      <p class="section-sub">Isolation is real for config files. A few env vars and chrome names still say OpenCode.</p>
+      <h2>Identity leaks</h2>
+      <p class="section-sub">Cheap leaks from the wave are closed. Residual items below were never in that cut.</p>
 
-      <div class="card go">
+      <div class="card done">
         <div class="card-head">
           <div>
             <h3>Personal OpenCode env can still change moks</h3>
-            <p class="plain">The Flag module only reads <code>MOKS_*</code>. Some code bypasses it: <code>OPENCODE_DISABLE_SHARE</code> is dual-read, websearch flags are OpenCode-only, console token is written into the process as <code>OPENCODE_CONSOLE_TOKEN</code>.</p>
+            <p class="plain">Share disable and websearch provider are <code>MOKS_*</code> only. Personal <code>OPENCODE_DISABLE_SHARE</code> / <code>OPENCODE_WEBSEARCH_PROVIDER</code> no longer affect the product.</p>
           </div>
           <div class="badges">
-            <span class="badge go">GO</span>
+            <span class="badge done">Done</span>
           </div>
         </div>
-        <div class="card-foot"><b>Fix:</b> route leftover gates through <code>MOKS_*</code>. Do not honor personal OpenCode env.</div>
+        <div class="card-foot"><b>Left:</b> hidden console still writes <code>OPENCODE_CONSOLE_TOKEN</code>. Out of v0.</div>
       </div>
 
-      <div class="card go">
+      <div class="card done">
         <div class="card-head">
           <div>
             <h3>Visible leftovers: username, mDNS, theme, OAuth</h3>
-            <p class="plain">Basic-auth default user is <code>opencode</code>. Help says <code>moks.local</code> but default is <code>opencode.local</code>. Default TUI theme id is <code>opencode</code>. MCP OAuth consent shows <code>opencode.ai</code>. <code>PATCH /config</code> writes unread <code>config.json</code>. Launcher cache dir is still <code>.opencode</code>.</p>
+            <p class="plain">Default username and mDNS are <code>moks</code> / <code>moks.local</code>. Theme picker labels the default id <code>moks</code>. <code>PATCH /config</code> writes <code>moks.json</code>.</p>
           </div>
           <div class="badges">
-            <span class="badge go">GO</span>
+            <span class="badge done">Done</span>
           </div>
         </div>
-        <div class="card-foot"><b>Fix:</b> <code>moks</code> username, <code>moks.local</code>, display-name the default theme, write <code>moks.json</code>, cache under <code>.moks</code>.</div>
+        <div class="card-foot"><b>Left:</b> MCP OAuth consent still shows <code>opencode.ai</code>. Launcher cache dir still <code>.opencode</code>.</div>
       </div>
 
       <div class="card go">
@@ -746,17 +878,17 @@
         <div class="card-foot"><b>Fix:</b> hiring title examples; neutralize <code>generate.txt</code> / task copy; stop auto-injecting <code>AGENTS.md</code> on the recruit path (keep for <code>build</code> / <code>/init-code</code>).</div>
       </div>
 
-      <div class="card go">
+      <div class="card done">
         <div class="card-head">
           <div>
             <h3>Ashby write-deny is recruit policy, not a host rule</h3>
-            <p class="plain">On <code>recruit</code>, write tools are hidden and denied. User config can re-allow them. Hidden <code>build</code> has no Ashby denies. Mock is not on by default. No session test that recruit cannot call <code>ashby_change_stage</code>.</p>
+            <p class="plain">Host adapter now rejects write tools before permission ask. <code>build</code> also gets the deny defaults. Permission tests cover recruit and build.</p>
           </div>
           <div class="badges">
-            <span class="badge go">GO · safety</span>
+            <span class="badge done">Done</span>
           </div>
         </div>
-        <div class="card-foot"><b>Fix:</b> deny writes at the MCP adapter regardless of agent. One permission test. Document that <code>moks.json</code> must not flip this.</div>
+        <div class="card-foot"><b>Left:</b> experimental code-mode can still skip the wrap. Needs an explicit flag plus a permission allow.</div>
       </div>
     </section>
 
@@ -836,33 +968,33 @@
     <section id="next">
       <div class="eyebrow">If we do one more wave</div>
       <h2>Recommended next cut</h2>
-      <p class="section-sub">Make the loop <em>felt</em>. Then stop and measure WAU. Do not start Cloud, V2 parity, or a rename.</p>
+      <p class="section-sub">The felt-loop glue from this wave is done. What remains is session chrome. Then stop and measure WAU.</p>
 
       <ol class="next">
-        <li>
+        <li class="done">
           <strong>Focus is real.</strong> <code>@slug</code> injects that req’s materials.
-          <span class="why">Without this, a hiring book with two reqs is a coding workspace that happens to contain markdown.</span>
+          <span class="why">Shipped. Last mention wins.</span>
         </li>
-        <li>
-          <strong>Decisions are operable.</strong> Human receipt list, pick-to-push, in-process verbs, score bound to the focused req.
-          <span class="why">Commit / push are the authority layer. If they feel like JSON debug, the metaphor fails.</span>
+        <li class="done">
+          <strong>Decisions are operable.</strong> Human receipt list, pick-to-push, score only if one req.
+          <span class="why">Shipped. Still shells the CLI — fine.</span>
         </li>
-        <li>
+        <li class="done">
           <strong>Outreach is a file.</strong> Drafts land under the req so <code>/review</code> can see them.
-          <span class="why">Score already does this. Outreach should match.</span>
+          <span class="why">Shipped as a skill write path.</span>
         </li>
         <li>
-          <strong>Thin req chrome.</strong> Open reqs + current focus + pending decision. Reframe Diff. Reweight tips.
-          <span class="why">Enough to stop feeling like VS Code. Not a new product surface.</span>
+          <strong>Thin req chrome.</strong> Open reqs + current focus + pending decision. Rename “Modified Files.”
+          <span class="why">The session still looks like VS Code. This is the last wrong-port that a recruiter feels every turn.</span>
         </li>
-        <li>
-          <strong>Close cheap leaks.</strong> Theme display name, auth username, mDNS, <code>customize-moks</code> tree, hide <code>serve</code>, Ashby host-level write deny, one test.
-          <span class="why">Identity hygiene. Half a day, not a pillar.</span>
+        <li class="done">
+          <strong>Close cheap leaks.</strong> Theme label, username, mDNS, <code>customize-moks</code> tree, hide <code>serve</code>, Ashby host deny.
+          <span class="why">Shipped. Residual: OAuth consent URL, launcher cache dir, title/generate SE examples, <code>AGENTS.md</code> inject.</span>
         </li>
       </ol>
 
       <div class="callout do">
-        <p><b>Success test for this wave:</b> an eng-TA opens a book with two reqs, types <code>@senior-backend</code>, scores a resume, drafts outreach, <code>/review</code>s the packet, <code>/commit</code>s reject, and <code>/push</code>es with confirm — without ever seeing “Modified Files,” JSON, or a coding tip.</p>
+        <p><b>Success test still open:</b> an eng-TA opens a book with two reqs, types <code>@senior-backend</code>, scores, drafts, <code>/review</code>s, <code>/commit</code>s, <code>/push</code>es — without living in a “Modified Files” IDE chrome.</p>
       </div>
 
       <div class="callout alert" style="margin-top: 12px;">
@@ -873,7 +1005,7 @@
 
     <p class="note">
       Companion: <code>docs/BACKLOG-coding-to-ta.md</code> (historical cards) · <code>docs/ROADMAP.md</code> · <code>docs/gtm.html</code><br />
-      Agents reviewed current code in <code>packages/opencode</code>, <code>packages/core</code>, and <code>packages/tui</code> on 2026-08-12.
+      Agents reviewed current code on 2026-08-12. Quick-win wave shipped in <code>88c3d22fe6</code>.
     </p>
   </div>
 </body>

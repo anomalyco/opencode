@@ -24,6 +24,21 @@ type Candidate = {
   location: string
 }
 
+export type AshbyNote = {
+  candidate_id: string
+  body: string
+}
+
+export type AshbyState = {
+  jobs: Job[]
+  candidates: Candidate[]
+  notes: AshbyNote[]
+}
+
+export type AshbyWrite =
+  | { tool: "change_stage"; candidate_id: string; stage: string }
+  | { tool: "create_note"; candidate_id: string; body: string }
+
 type FixtureData = {
   jobs: Job[]
   candidates: Candidate[]
@@ -97,29 +112,69 @@ function text(payload: unknown, isError = false) {
   }
 }
 
-export function handleAshbyTool(name: string, args: Record<string, unknown>) {
+export function applyAshbyWrite(state: AshbyState, write: AshbyWrite) {
+  if (!state.notes) state.notes = []
+  if (write.tool === "change_stage") {
+    const candidate = state.candidates.find((item) => item.id === write.candidate_id)
+    if (candidate) {
+      candidate.stage = write.stage
+      return state
+    }
+    state.candidates.push({
+      id: write.candidate_id,
+      name: write.candidate_id,
+      email: "",
+      job_id: "",
+      stage: write.stage,
+      location: "",
+    })
+    return state
+  }
+  if (write.tool === "create_note") {
+    state.notes.push({ candidate_id: write.candidate_id, body: write.body })
+  }
+  return state
+}
+
+async function liveState(cwd = process.cwd()): Promise<AshbyState> {
+  const overlay = Bun.file(path.join(cwd, ".moks", "ats.json"))
+  if (await overlay.exists()) {
+    const loaded = (await overlay.json()) as Partial<AshbyState>
+    if (Array.isArray(loaded.jobs) && Array.isArray(loaded.candidates)) {
+      return {
+        jobs: loaded.jobs,
+        candidates: loaded.candidates,
+        notes: Array.isArray(loaded.notes) ? loaded.notes : [],
+      }
+    }
+  }
+  return { jobs: data.jobs, candidates: data.candidates, notes: [] }
+}
+
+export async function handleAshbyTool(name: string, args: Record<string, unknown>, cwd = process.cwd()) {
+  if (name === "change_stage" || name === "create_note") {
+    return text(WRITE_DISABLED, true)
+  }
+  const state = await liveState(cwd)
   if (name === "list_jobs") {
-    return text(data.jobs.filter((job) => job.status === "open"))
+    return text(state.jobs.filter((job) => job.status === "open"))
   }
   if (name === "get_job") {
     const id = String(args.id ?? "")
-    const job = data.jobs.find((item) => item.id === id)
+    const job = state.jobs.find((item) => item.id === id)
     if (!job) return text({ error: `job not found: ${id}` }, true)
     return text(job)
   }
   if (name === "list_candidates") {
     const jobId = args.job_id === undefined ? undefined : String(args.job_id)
-    const list = jobId ? data.candidates.filter((c) => c.job_id === jobId) : data.candidates
+    const list = jobId ? state.candidates.filter((c) => c.job_id === jobId) : state.candidates
     return text(list)
   }
   if (name === "get_candidate") {
     const id = String(args.id ?? "")
-    const candidate = data.candidates.find((item) => item.id === id)
+    const candidate = state.candidates.find((item) => item.id === id)
     if (!candidate) return text({ error: `candidate not found: ${id}` }, true)
     return text(candidate)
-  }
-  if (name === "change_stage" || name === "create_note") {
-    return text(WRITE_DISABLED, true)
   }
   return text(`unknown tool: ${name}`, true)
 }
@@ -128,7 +183,7 @@ export function createAshbyMockServer() {
   const server = new Server({ name: "ashby-mock", version: "1.0.0" }, { capabilities: { tools: {} } })
   server.setRequestHandler(ListToolsRequestSchema, () => Promise.resolve({ tools: [...tools] }))
   server.setRequestHandler(CallToolRequestSchema, ({ params }) =>
-    Promise.resolve(handleAshbyTool(params.name, (params.arguments ?? {}) as Record<string, unknown>)),
+    handleAshbyTool(params.name, (params.arguments ?? {}) as Record<string, unknown>),
   )
   return server
 }

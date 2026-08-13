@@ -1,46 +1,36 @@
 # Fork Facts
 
-moks is a product fork of [OpenCode](https://github.com/anomalyco/opencode).
+moks is a specialized hard fork of the OpenCode source (`anomalyco/opencode` → `artemysone/moks`). The hard fork is operational.
 
 ## Three different “OpenCodes”
 
 | | |
 |--|--|
 | **moks** | This repo / product (TA harness). What we ship. |
-| **OpenCode upstream** | `anomalyco/opencode` — source we forked and may pull from. |
-| **OpenCode (installed)** | The coding agent on the machine used to *build* moks. Not the product. |
+| **OpenCode upstream** | `anomalyco/opencode` — source lineage only. |
+| **OpenCode (installed)** | The coding agent used to *build* moks. Not the product. |
 
 `packages/opencode` is a folder name inside **moks**, not the installed agent.
 
 | Remote | Points at | Role |
 |--------|-----------|------|
 | `origin` | `artemysone/moks` | where we push |
-| `upstream` | `anomalyco/opencode` | where we pull their commits |
+| `upstream` | `anomalyco/opencode` | reference only — do not merge |
 
 ## Keep in mind
 
-1. **Not their CI/releases** — Actions, packages, and install scripts still say OpenCode until we change them. Don’t ship moks under their npm/brew names.
+1. **Hard fork.** Do not merge `upstream/dev`. Cherry-pick a provider/kernel fix only if needed.
 
-2. **Sync early, diverge carefully** — pull `upstream` often at first. Big renames/restructures make later merges painful; batch branding after we know what we’re keeping.
+2. **Company packages are pruned.** desktop, console, web, app, enterprise, stats, slack, storybook, session-ui, ui, SST, and infra are gone. Do not bring them back.
 
-3. **License stays MIT** — keep their copyright notices; add ours for new work. Don’t strip `LICENSE`.
+3. **Product path** is `packages/opencode` + `packages/core` + `packages/tui`, plus their real dependencies. That is the TA harness.
 
-4. **Their secrets/infra aren’t ours** — SST, AWS, console, zen, etc. need our own accounts. Disable or ignore cloud packages until we need them.
+4. **Keep `@opencode-ai/*` package names** until a later deliberate rename.
 
-5. **Bun, not pnpm** — day-to-day is `bun install` / `bun dev`. Default branch is `dev`, not `main`.
+5. **License stays MIT** — keep upstream copyright notices; add ours for new work. Don’t strip `LICENSE`.
 
-6. **Affiliation** — fine to say “based on OpenCode”; don’t brand as OpenCode or imply official affiliation.
+6. **Do not ship as OpenCode** — not their npm, brew, or docker names. No official affiliation.
 
-7. **Start small** — huge monorepo. TA harness work starts from `packages/opencode` (CLI/TUI/server). Skip `desktop` / `console` / `web` until needed.
+7. **Their secrets/infra aren’t ours** — SST, AWS, console, zen need our own accounts. Ignore cloud packages.
 
-8. **Fork badge** — GitHub shows “Forked from anomalyco/opencode” while this stays a fork. Detach later only if the badge hurts product positioning; `upstream` as a remote still works either way.
-
-9. **Tracking fork, not a prune.** Stay a tracking fork: unused packages (desktop, console, web, enterprise, stats, slack, SST) stay on disk and are not invested in. Do not hard-fork or delete them until we decide we will only cherry-pick. Slim **hooks and CI** so they are not run — that is the cost, not the trees.
-
-## Sync
-
-```bash
-git fetch upstream
-git merge upstream/dev   # or rebase, if you prefer
-git push origin dev
-```
+8. **Bun, not pnpm** — `bun install` / `bun dev`. Default branch is `dev`.

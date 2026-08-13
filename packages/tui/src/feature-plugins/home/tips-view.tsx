@@ -162,15 +162,15 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
 
 const TIPS: Tip[] = [
   // Hero hiring loop
-  "Run {highlight}/init senior-backend{/highlight} to add a req; {highlight}@senior-backend{/highlight} to work in it",
+  "This cwd is the req — {highlight}/init{/highlight} writes {highlight}HIRING.md{/highlight}",
   "Use {highlight}/review{/highlight} for packet review before {highlight}moks commit{/highlight} / {highlight}push{/highlight}",
-  "Ask for the {highlight}req-context{/highlight} skill to load JD, scorecard, and notes for the open req",
-  "Score a resume with the {highlight}score-candidate{/highlight} skill against the req scorecard",
+  "Ask for the {highlight}req-context{/highlight} skill to load {highlight}HIRING.md{/highlight}",
+  "Score a resume onto a {highlight}candidates/{/highlight} card with {highlight}score-candidate{/highlight}",
   "Record decisions with {highlight}moks commit{/highlight}, inspect with {highlight}moks status{/highlight}, apply with {highlight}moks push{/highlight}",
   "Switch to {highlight}Plan{/highlight} agent to draft a hiring strategy before recruit executes",
   (shortcuts) => press(shortcuts.agentCycle(), "to cycle between Recruit and Plan agents"),
-  "Watch the Diff panel for local candidate and req changes under {highlight}.moks/{/highlight}",
-  "Type {highlight}@{/highlight} followed by a filename to attach a JD, resume, or notes",
+  "Watch the Diff panel for {highlight}HIRING.md{/highlight} and {highlight}candidates/{/highlight} changes",
+  "Type {highlight}@{/highlight} to attach {highlight}HIRING.md{/highlight} or a candidate card",
   "Drag and drop resumes, JDs, or PDFs into the terminal as context",
   "Use {highlight}/commit{/highlight} and {highlight}/push{/highlight} in the TUI; inspect with {highlight}/decisions{/highlight}",
   "Use {highlight}/skills{/highlight} to run req-context, score-candidate, draft-outreach, or commit-disposition",
@@ -179,7 +179,7 @@ const TIPS: Tip[] = [
   "Run {highlight}/connect{/highlight} to add API keys for LLM providers",
   (shortcuts) => press(shortcuts.sessionSidebarToggle(), "in a session to show or hide the sidebar panel"),
   (shortcuts) => press(shortcuts.commandList(), "to see all available actions and commands"),
-  (shortcuts) => `Use ${commandText("/status", shortcuts.statusView())} to see system status (MCP, not decision receipts)`,
+  (shortcuts) => `Use ${commandText("/status", shortcuts.statusView())} to see system status (MCP, not decision commits)`,
   (shortcuts) => `Use ${commandText("/help", shortcuts.helpShow())} to show the help dialog`,
 ]
 

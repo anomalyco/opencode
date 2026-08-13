@@ -1,1 +1,0 @@
-ALTER TABLE `workspace` DROP COLUMN `data_share`;

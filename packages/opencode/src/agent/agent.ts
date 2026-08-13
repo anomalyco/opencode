@@ -98,6 +98,9 @@ const recruitBashPermission = {
   // Light read-only / identity
   "pwd *": "allow",
   "ls *": "allow",
+  "git status *": "allow",
+  "git diff *": "allow",
+  "git log *": "allow",
   "which *": "allow",
   "true *": "allow",
   "false *": "allow",
@@ -199,7 +202,9 @@ const layer = Layer.effect(
                 edit: {
                   "*": "ask",
                   [path.join(".moks", "*")]: "allow",
-                  // /init needs to add `.moks/` to root gitignore outside the req tree.
+                  [path.join(".moks", "ats.json")]: "deny",
+                  "HIRING.md": "allow",
+                  [path.join("candidates", "*")]: "allow",
                   ".gitignore": "allow",
                   [path.join(HiringFixturesDir, "*")]: "allow",
                   // Suffix match so ../-style relatives from arbitrary tmp worktrees still allow.
@@ -295,7 +300,7 @@ const layer = Layer.effect(
               }),
               user,
             ),
-            description: `Fast agent specialized for exploring hiring materials and local files. Use this when you need to quickly find files by patterns (eg. "**/jd.md", "**/scorecard*"), search notes for keywords (eg. "must-have", "comp range"), or answer questions about req trees, fixtures, ATS dumps, and public company/candidate pages. When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
+            description: `Fast agent specialized for exploring hiring materials and local files. Use this when you need to quickly find files by patterns (eg. "HIRING.md", "candidates/*.md"), search for keywords (eg. "must-have", "comp range"), or answer questions about the req, fixtures, ATS dumps, and public company/candidate pages. When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
             prompt: PROMPT_EXPLORE,
             options: {},
             mode: "subagent",

@@ -568,10 +568,10 @@ root_type Monster;`
 })
 
 describe("tool.read loaded instructions", () => {
-  it.live("loads HIRING-AGENTS.md from parent directory and includes in metadata", () =>
+  it.live("loads HIRING.md from parent directory and includes in metadata", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()
-      yield* put(path.join(dir, "subdir", "HIRING-AGENTS.md"), "# Test Instructions\nDo something special.")
+      yield* put(path.join(dir, "subdir", "HIRING.md"), "# Test Instructions\nDo something special.")
       yield* put(path.join(dir, "subdir", "nested", "test.txt"), "test content")
 
       const result = yield* exec(dir, { filePath: path.join(dir, "subdir", "nested", "test.txt") })
@@ -579,7 +579,7 @@ describe("tool.read loaded instructions", () => {
       expect(result.output).toContain("system-reminder")
       expect(result.output).toContain("Test Instructions")
       expect(result.metadata.loaded).toBeDefined()
-      expect(result.metadata.loaded).toContain(path.join(dir, "subdir", "HIRING-AGENTS.md"))
+      expect(result.metadata.loaded).toContain(path.join(dir, "subdir", "HIRING.md"))
     }),
   )
 })

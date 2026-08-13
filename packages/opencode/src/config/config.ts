@@ -7,7 +7,7 @@ import { mergeDeep } from "remeda"
 import { Global } from "@opencode-ai/core/global"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Auth } from "../auth"
-import { Env } from "../env"
+
 import { applyEdits, modify } from "jsonc-parser"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { existsSync } from "fs"
@@ -174,7 +174,6 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const authSvc = yield* Auth.Service
     const accountSvc = yield* Account.Service
-    const env = yield* Env.Service
     const npmSvc = yield* Npm.Service
     const http = yield* HttpClient.HttpClient
 
@@ -456,14 +455,7 @@ const layer = Layer.effect(
           const orgID = activeAccount.active_org_id
           const url = activeAccount.url
           yield* Effect.gen(function* () {
-            const [configOpt, tokenOpt] = yield* Effect.all(
-              [accountSvc.config(accountID, orgID), accountSvc.token(accountID)],
-              { concurrency: 2 },
-            )
-            if (Option.isSome(tokenOpt)) {
-              process.env["OPENCODE_CONSOLE_TOKEN"] = tokenOpt.value
-              yield* env.set("OPENCODE_CONSOLE_TOKEN", tokenOpt.value)
-            }
+            const configOpt = yield* accountSvc.config(accountID, orgID)
 
             if (Option.isSome(configOpt)) {
               const source = `${url}/api/config`
@@ -648,7 +640,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient],
+  deps: [FSUtil.node, Auth.node, Account.node, Npm.node, httpClient],
 })
 
 export * as Config from "./config"

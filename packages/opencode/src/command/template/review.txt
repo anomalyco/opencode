@@ -1,6 +1,6 @@
 Review the local hiring packet before commit/push.
 
-You are reviewing a candidate/req packet — not a git PR. Do not lead with `git diff`, `git show`, or `gh pr`. Default path is packet review under `.moks/` and related local artifacts.
+You are reviewing a candidate/req packet — not a git PR. Do not lead with `git diff`, `git show`, or `gh pr`. Default path is packet review of HIRING.md and candidates/.
 
 Input: $ARGUMENTS
 
@@ -11,22 +11,21 @@ Worktree: `${path}`
 Resolve packet materials in order:
 
 1. Paths or focus from `$ARGUMENTS` / attachments
-2. Workspace: `@<slug>` / `.moks/reqs/<slug>/` — `jd.md`, `scorecard.md`, `resume.md`, `notes.md`, `outreach/<candidate>.md`, `scores/` (legacy `.moks/req/` if that is the only req)
-3. Session-visible local hiring file changes (Modified Files / session diffs of candidate & req artifacts)
-4. Pending decision receipts via `moks status` when disposition readiness matters
-5. Cwd fixtures only if no `.moks/` packet exists
+2. Cwd is the req: `HIRING.md`, `candidates/<id>.md`
+3. Session-visible local hiring file changes (Modified Files / session diffs of HIRING.md and candidate cards)
+4. Pending commits via `moks status` when disposition readiness matters
 
 Read the full files you will cite. Use skills to deepen analysis when needed:
 
-- **score-candidate** — fit vs scorecard with evidence and path citations
+- **score-candidate** — fit vs HIRING.md with evidence; score lives on the card
 - **commit-disposition** — disposition consistency and readiness to commit
-- **req-context** / **draft-outreach** when JD gaps or outreach quality is in scope
+- **req-context** / **draft-outreach** when HIRING.md gaps or outreach quality is in scope
 
 ## Structure the review
 
-1. **Fit vs scorecard** — dimension scores, must-haves, deal-breakers; cite resume/JD paths
+1. **Fit vs scorecard** — dimension scores, must-haves, deal-breakers; cite card / HIRING.md
 2. **Evidence gaps** — missing materials, weak claims, unverified bar items
-3. **Outreach quality** — if drafts exist: accuracy, tone, overclaims; never send
+3. **Outreach quality** — if drafts exist on the card: accuracy, tone, overclaims; never send
 4. **Disposition consistency** — recommendation matches evidence; ready for `moks commit` / risks before `moks push`
 5. **Risks before push** — adverse actions need confirm; incomplete packet; conflicting notes
 
@@ -36,7 +35,7 @@ Read the full files you will cite. Use skills to deepen analysis when needed:
 - Record intent: `moks commit`
 - Push: `moks push` (adverse reject/offer/hire need confirm)
 
-Do not claim ATS writes. Prefer bash for these CLIs when checking readiness.
+`moks push` is the ATS write (mock). Prefer bash for these CLIs when checking readiness. Do not use raw `git commit`.
 
 ## Escape hatch
 

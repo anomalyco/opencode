@@ -42,26 +42,25 @@ Headless fixture run:
 ```bash
 cd packages/opencode
 
-# sample JD / resume / scorecard (no ATS required)
+# sample HIRING.md + candidate card (no ATS required)
 FIXTURES=src/product/fixtures/hiring
 
 bun run --conditions=browser src/index.ts run --agent recruit \
-  -f "$FIXTURES/jd.md" -f "$FIXTURES/resume.md" -f "$FIXTURES/scorecard.md" \
+  -f "$FIXTURES/HIRING.md" -f "$FIXTURES/candidates/jordan-lee.md" \
   "Score this candidate using the score-candidate skill"
 ```
 
 Built-in skills: `req-context`, `score-candidate`, `draft-outreach`, `commit-disposition`.  
 Fixtures + copy-paste commands: [`packages/opencode/src/product/fixtures/hiring/README.md`](packages/opencode/src/product/fixtures/hiring/README.md).
 
-Record a disposition (receipts only — no ATS write):
+Record a disposition (git commit is the audit; `push --execute` writes the mock ATS):
 
 ```bash
 bun run --conditions=browser src/index.ts commit --action advance \
   --target-kind candidate --target-id jordan-lee \
-  --reason "strong event + postgres signal" \
-   --meta '{"score":".moks/reqs/senior-backend/scores/jordan-lee.md"}'
+  --reason "strong event + postgres signal"
 
-# weekly decision signal (local receipts; "real req" is still a human judgment)
+# weekly decision signal (git log; "real req" is still a human judgment)
 bun run --conditions=browser src/index.ts activity --days 7
 ```
 
@@ -70,14 +69,14 @@ bun run --conditions=browser src/index.ts activity --days 7
 Same verbs; add `--json` for machine-readable stdout. Full contract: [`packages/opencode/src/product/headless.md`](packages/opencode/src/product/headless.md).
 
 ```bash
-# Decision receipts (push exit 2 = needs_confirm)
-moks commit --action note --json
+# Git audit + ATS push (push exit 2 = needs_confirm)
+moks commit --action note --target-id jordan-lee --json
 moks status --json
-moks push --commit-id dec_… --json
-moks push --commit-id dec_… --confirm --json
+moks push --commit-id <sha> --json
+moks push --commit-id <sha> --confirm --execute --json
 
 # Agent NDJSON events (--json ≡ --format json); --auto for CI permissions
-moks run --json --agent recruit -f jd.md -f resume.md -- "Score this candidate"
+moks run --json --agent recruit -f HIRING.md -f candidates/jordan-lee.md -- "Score this candidate"
 ```
 
 ### Optional: install script

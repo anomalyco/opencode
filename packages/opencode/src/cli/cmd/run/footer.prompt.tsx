@@ -28,7 +28,7 @@ import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.edit
 import { FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import type { RunFooterTheme } from "./theme"
 import type { FooterState, RunAgent, RunCommand, RunPrompt, RunPromptPart, RunResource, RunTuiConfig } from "./types"
-import { ReqWorkspace } from "@/product/req-workspace"
+import { CandidateCard } from "@/product/candidate-card"
 
 const AUTOCOMPLETE_ROWS = FOOTER_MENU_ROWS
 const AUTOCOMPLETE_BOTTOM_ROWS = 1
@@ -337,22 +337,22 @@ export function createPromptState(input: PromptInput): PromptState {
   const [reqs] = createResource(
     () => input.directory,
     async (directory) => {
-      const listed = await ReqWorkspace.list(directory)
-      return listed.map(
-        (item): Auto => ({
+      const listed = await CandidateCard.list(directory)
+      return listed.map((card): Auto => {
+        const file = CandidateCard.filePath(directory, card.id)
+        return {
           kind: "mention",
-          display: "@" + item.slug,
-          value: item.slug,
-          description: "req",
-          directory: true,
+          display: "@" + card.id,
+          value: card.id,
+          description: "candidate",
           part: {
             type: "file",
-            mime: "application/x-directory",
-            filename: item.slug,
-            url: pathToFileURL(item.path).href,
+            mime: "text/markdown",
+            filename: card.id,
+            url: pathToFileURL(file).href,
             source: {
               type: "file",
-              path: item.relative,
+              path: CandidateCard.fileName(card.id),
               text: {
                 start: 0,
                 end: 0,
@@ -360,8 +360,8 @@ export function createPromptState(input: PromptInput): PromptState {
               },
             },
           },
-        }),
-      )
+        }
+      })
     },
     { initialValue: [] as Auto[] },
   )

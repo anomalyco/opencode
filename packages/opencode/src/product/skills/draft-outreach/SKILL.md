@@ -1,17 +1,19 @@
 ---
 name: draft-outreach
-description: Draft recruiter outreach (email or LinkedIn) from req and candidate notes. Never send. Use when the user wants first-touch or follow-up copy.
+description: Draft recruiter outreach (email or LinkedIn) from HIRING.md and the candidate card. Never send. Use when the user wants first-touch or follow-up copy.
 ---
 
 # draft-outreach
 
 Draft outreach only. Do not send email, LinkedIn, or ATS messages.
 
+Write the draft onto the candidate card (`candidates/<id>.md` body, Outreach section).
+
 ## Discover inputs
 
 1. User-attached paths / pasted notes
-2. Cwd, `@<slug>`, or `.moks/reqs/<slug>/`: `jd.md`, optional `resume.md`, notes (legacy `.moks/req/` if that is the only req)
-3. Prior score brief in the conversation if present
+2. Cwd: `HIRING.md`, `candidates/<id>.md`
+3. Prior score on the card or in the conversation if present
 
 ## Clarify channel
 
@@ -19,9 +21,9 @@ Default to a short email + optional LinkedIn DM variant unless the user specifie
 
 ## Write the draft (required)
 
-After the chat preview, write the full markdown to `.moks/reqs/<req-slug>/outreach/<candidate-slug>.md` (slugs: lowercase, hyphens). Create the `outreach/` directory if needed. Use the @-mentioned or active req; do not write into another req.
+After the chat preview, write the full markdown into an Outreach section on `candidates/<id>.md`. Create the card if it does not exist.
 
-Chat may show the same draft; the file is the source of truth. You are not done until the file is written (unless the workspace is read-only or the user forbade writes).
+Chat may show the same draft; the card is the source of truth. You are not done until the file is written (unless the workspace is read-only or the user forbade writes).
 
 ## Output format
 
@@ -38,7 +40,7 @@ Body:
 ...
 
 ## Personalization hooks
-- Facts from resume/notes used (with paths)
+- Facts from the card / HIRING.md used (with paths)
 
 ## Open questions
 - Missing sender/company details still needed

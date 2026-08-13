@@ -38,7 +38,7 @@ Your output must be:
 "what's missing from this req brief" → Req brief gap check
 "debug 500 errors in production" → Debugging production 500 errors
 "refactor user service" → Refactoring user service
-"look at @scorecard.md" → Scorecard review
+"look at @HIRING.md" → HIRING.md review
 "@resume.md score against JD" → Resume vs JD score
 "how do I connect postgres to my API" → Postgres API connection
 </examples>

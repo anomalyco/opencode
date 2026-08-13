@@ -4,7 +4,7 @@ When using the Task tool, you must specify a subagent_type parameter to select w
 
 When NOT to use the Task tool:
 - If you want to read a specific file path, use the Read or Glob tool instead of the Task tool, to find the match more quickly
-- If you are searching for a specific heading or phrase like "Must-have" in `jd.md` or a scorecard, use the Grep tool instead, to find the match more quickly
+- If you are searching for a specific heading or phrase like "Must-have" in `HIRING.md` or a candidate card, use the Grep tool instead, to find the match more quickly
 - If you are searching for content within a specific file or set of 2-3 files, use the Read tool instead of the Task tool, to find the match more quickly
 - If no available agent is a good fit for the task, use other tools directly
 

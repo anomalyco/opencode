@@ -68,21 +68,23 @@ it.instance("recruit agent has correct default properties", () =>
     expect(recruit?.native).toBe(true)
     expect(recruit?.hidden).not.toBe(true)
     expect(recruit?.prompt).toBeTruthy()
-    // Path-scoped edit: wildcard asks; .moks/** and hiring fixtures allow
     expect(evalPerm(recruit, "edit")).toBe("ask")
-    expect(Permission.evaluate("edit", ".moks/reqs/senior-backend/notes.md", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("edit", "HIRING.md", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("edit", "candidates/abc.md", recruit!.permission).action).toBe("allow")
     expect(Permission.evaluate("edit", ".moks/plans/hiring.md", recruit!.permission).action).toBe("allow")
     expect(Permission.evaluate("edit", "src/index.ts", recruit!.permission).action).toBe("ask")
     expect(Permission.evaluate("edit", "jd.md", recruit!.permission).action).toBe("ask")
-    // /init may add `.moks/` to root gitignore outside the req tree
     expect(Permission.evaluate("edit", ".gitignore", recruit!.permission).action).toBe("allow")
-    // Bash residual closed: default ask; verbs + light reads allow; destructive deny
     expect(evalPerm(recruit, "bash")).toBe("ask")
     expect(Permission.evaluate("bash", "moks commit --action advance", recruit!.permission).action).toBe("allow")
     expect(Permission.evaluate("bash", "moks status --json", recruit!.permission).action).toBe("allow")
     expect(Permission.evaluate("bash", "moks push --commit-id abc", recruit!.permission).action).toBe("allow")
     expect(Permission.evaluate("bash", "ls -la .moks", recruit!.permission).action).toBe("allow")
     expect(Permission.evaluate("bash", "pwd", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("bash", "git status", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("bash", "git diff", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("bash", "git log", recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("bash", "git commit -m foo", recruit!.permission).action).toBe("ask")
     expect(Permission.evaluate("bash", "npm install", recruit!.permission).action).toBe("ask")
     expect(Permission.evaluate("bash", "rm -rf /tmp/foo", recruit!.permission).action).toBe("deny")
     expect(Permission.evaluate("bash", "sudo reboot", recruit!.permission).action).toBe("deny")
@@ -100,11 +102,13 @@ it.instance("recruit agent allows edit under product hiring fixtures", () =>
     const recruit = yield* load((svc) => svc.get("recruit"))
     expect(recruit).toBeDefined()
     // edit/write pass worktree-relative paths; fixtures live outside tmp test dirs
-    const fixtureRel = path.join(path.relative(test.directory, HiringFixturesDir), "jd.md")
-    const monorepoRel = "packages/opencode/src/product/fixtures/hiring/jd.md"
+    const fixtureRel = path.join(path.relative(test.directory, HiringFixturesDir), "HIRING.md")
+    const monorepoRel = "packages/opencode/src/product/fixtures/hiring/HIRING.md"
+    const cardRel = path.join(path.relative(test.directory, HiringFixturesDir), "candidates", "jordan-lee.md")
     expect(Permission.evaluate("edit", fixtureRel, recruit!.permission).action).toBe("allow")
     expect(Permission.evaluate("edit", monorepoRel, recruit!.permission).action).toBe("allow")
-    expect(Permission.evaluate("edit", path.join(HiringFixturesDir, "jd.md"), recruit!.permission).action).toBe(
+    expect(Permission.evaluate("edit", cardRel, recruit!.permission).action).toBe("allow")
+    expect(Permission.evaluate("edit", path.join(HiringFixturesDir, "HIRING.md"), recruit!.permission).action).toBe(
       "allow",
     )
     expect(

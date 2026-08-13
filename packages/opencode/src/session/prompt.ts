@@ -1370,8 +1370,8 @@ const layer = Layer.effect(
       }
       if (input.command === Command.Default.INIT) {
         const ctx = yield* InstanceState.context
-        const slug = ReqWorkspace.slugify(input.arguments.split("\n")[0] ?? "")
-        if (slug) yield* Effect.promise(() => ReqWorkspace.scaffold(ctx.worktree, slug))
+        const title = (input.arguments.split("\n")[0] ?? "").trim()
+        yield* Effect.promise(() => ReqWorkspace.scaffold(ctx.directory, title || undefined))
       }
       const agentName = cmd.agent ?? input.agent
 
@@ -1401,14 +1401,11 @@ const layer = Layer.effect(
       }
 
       if (input.command === Command.Default.INIT) {
-        const ctx = yield* InstanceState.context
-        const slug = ReqWorkspace.slugify(input.arguments.split("\n")[0] ?? "")
-        const listed = yield* Effect.promise(() => ReqWorkspace.list(ctx.worktree))
-        const existing = listed.map((item) => `@${item.slug}`).join(", ") || "(none)"
+        const title = (input.arguments.split("\n")[0] ?? "").trim()
+        const slug = ReqWorkspace.slugify(title)
         template = template
+          .replaceAll("${title}", title || "<title>")
           .replaceAll("${slug}", slug || "<slug>")
-          .replaceAll("${req}", slug ? ReqWorkspace.dir(slug) : ".moks/reqs/<slug>")
-          .replaceAll("${existing}", existing)
       }
 
       const shellMatches = ConfigMarkdown.shell(template)

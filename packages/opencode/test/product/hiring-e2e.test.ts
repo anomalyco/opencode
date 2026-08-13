@@ -12,13 +12,11 @@ cliIt.concurrent(
   "moks run --agent recruit with hiring fixtures exits 0 against mock LLM",
   ({ home, llm, opencode }) =>
     Effect.gen(function* () {
-      const jd = path.join(home, "jd.md")
-      const resume = path.join(home, "resume.md")
-      const scorecard = path.join(home, "scorecard.md")
+      const hiring = path.join(home, "HIRING.md")
+      const card = path.join(home, "candidates", "jordan-lee.md")
       yield* Effect.promise(async () => {
-        await Bun.write(jd, await Bun.file(HiringFixtures.jd).text())
-        await Bun.write(resume, await Bun.file(HiringFixtures.resume).text())
-        await Bun.write(scorecard, await Bun.file(HiringFixtures.scorecard).text())
+        await Bun.write(hiring, await Bun.file(HiringFixtures.hiring).text())
+        await Bun.write(card, await Bun.file(HiringFixtures.card).text())
       })
 
       yield* llm.text("score: yes — strong postgres and event-driven signal")
@@ -26,7 +24,7 @@ cliIt.concurrent(
       // `--` stops yargs from treating the prompt as another `--file` value.
       const result = yield* opencode.run("Score this candidate using the score-candidate skill", {
         agent: "recruit",
-        extraArgs: ["--file", jd, "--file", resume, "--file", scorecard, "--"],
+        extraArgs: ["--file", hiring, "--file", card, "--"],
         timeoutMs: 60_000,
       })
 

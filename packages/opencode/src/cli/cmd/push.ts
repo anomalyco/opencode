@@ -5,14 +5,14 @@ import { UI } from "../ui"
 
 export const PushCommand = effectCmd({
   command: "push",
-  describe: "record a local push receipt for a committed decision (no ATS write yet; dry-run by default)",
+  describe: "push a git commit to the ATS (mock write; dry-run by default)",
   instance: false,
   builder: (yargs) =>
     yargs
       .option("commit-id", {
         type: "string",
         demandOption: true,
-        describe: "commit receipt id to push",
+        describe: "git commit SHA to push",
       })
       .option("execute", {
         type: "boolean",

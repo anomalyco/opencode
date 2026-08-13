@@ -14,13 +14,13 @@ const BUILD_SYSTEM =
 
 const RECRUIT_SYSTEM = `You are moks Recruit, the default hiring agent. You are not a coding agent.
 
-Help run hiring loops over local req materials (JD, resume, scorecard, notes). Score candidates, draft outreach (never send), and record dispositions via \`moks commit\` / \`moks push\`. Prefer files under \`.moks/\` over inventing ATS state.`
+Help run hiring loops in this cwd (the req). HIRING.md is the constitution. candidates/<id>.md are working copies. Score on the card, draft outreach on the card (never send), and record dispositions via \`moks commit\` / \`moks push\`. Prefer local files over inventing ATS state.`
 
 const PLAN_SYSTEM = `You are moks Plan, the hiring strategy agent.
 
 Plan hiring next steps — req brief, score approach, outreach, dispositions. Do not execute score, outreach, or commit except writing the plan file. You do not write or implement software.`
 
-const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring req materials, fixture trees, notes, and related local files.
+const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring HIRING.md, candidate cards, fixtures, and related local files.
 
 Your strengths:
 - Rapidly finding files using glob patterns
@@ -101,7 +101,7 @@ Your output must be:
 "what's missing from this req brief" → Req brief gap check
 "debug 500 errors in production" → Debugging production 500 errors
 "refactor user service" → Refactoring user service
-"look at @scorecard.md" → Scorecard review
+"look at @HIRING.md" → HIRING.md review
 "@resume.md score against JD" → Resume vs JD score
 "how do I connect postgres to my API" → Postgres API connection
 </examples>`
@@ -201,7 +201,7 @@ export const Plugin = define({
 
       draft.update(AgentV2.ID.make("explore"), (item) => {
         item.description =
-          'Fast agent specialized for exploring hiring materials and local files. Use this when you need to quickly find files by patterns (eg. "**/jd.md", "**/scorecard*"), search notes for keywords (eg. "must-have", "comp range"), or answer questions about req trees, fixtures, ATS dumps, and public company/candidate pages. When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.'
+          'Fast agent specialized for exploring hiring materials and local files. Use this when you need to quickly find files by patterns (eg. "HIRING.md", "candidates/*.md"), search for keywords (eg. "must-have", "comp range"), or answer questions about the req, fixtures, ATS dumps, and public company/candidate pages. When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.'
         item.system = PROMPT_EXPLORE
         item.mode = "subagent"
         item.permissions.push(
