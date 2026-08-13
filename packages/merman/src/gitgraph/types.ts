@@ -1,5 +1,5 @@
 export type GitGraphDirection = "LR" | "TB" | "BT"
-export type GitGraphCommitType = "NORMAL" | "REVERSE" | "HIGHLIGHT"
+export type GitGraphCommitType = "NORMAL" | "REVERSE" | "HIGHLIGHT" | "CHERRY"
 
 export interface GitGraphBranch {
   name: string
@@ -14,6 +14,8 @@ export interface GitGraphCommit {
   type: GitGraphCommitType
   branch: string
   parents: string[]
+  /** Source commit id for cherry-picked commits. */
+  cherryPicked?: string
 }
 
 export interface GitGraphDiagram {
@@ -33,4 +35,5 @@ export type GitGraphCellStyle =
   | "merge"
   | "highlight"
   | "reverse"
+  | "cherry"
   | "label"
