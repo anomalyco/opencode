@@ -41,7 +41,7 @@ import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
 
-const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
+const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 // fork: local/llama-skein providers (@ai-sdk/openai-compatible) got NO
 // default header timeout at all, so a backend that accepted a request and
 // then silently died (e.g. a model load crash) left the fetch waiting for
