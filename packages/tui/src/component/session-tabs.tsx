@@ -562,8 +562,6 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                     outerComplete={previousStatus().complete && !previousStatus().attention}
                     glow={glows()}
                     outerGlow={previousGlows()}
-                    breathe={status().attention}
-                    outerBreathe={previousStatus().attention}
                     color={separatorLowerPulseColor()}
                     width={indicatorWidth}
                     outerColor={separatorUpperPulseColor()}
@@ -591,8 +589,6 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       outerComplete={false}
                       glow={glows()}
                       outerGlow={false}
-                      breathe={status().attention}
-                      outerBreathe={false}
                       color={tint(theme.background.default, theme.text.default, 0.04)}
                       width={indicatorWidth}
                       outerColor={tint(theme.background.default, theme.text.default, 0.006)}
@@ -614,7 +610,6 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       promptPulse={status().promptPulse}
                       complete={complete() && !status().attention}
                       glow={glows()}
-                      breathe={status().attention}
                       color={pulseColor()}
                       width={indicatorWidth}
                       glowColor={glowColor()}
@@ -673,7 +668,6 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       promptPulse={status().promptPulse}
                       complete={complete() && !status().attention}
                       glow={glows()}
-                      breathe={status().attention}
                       color={detailPulseColor()}
                       width={indicatorWidth}
                       glowColor={detailGlowColor()}
@@ -1073,7 +1067,6 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                 promptPulse={status().promptPulse}
                 complete={status().complete && !status().attention}
                 glow={glows()}
-                breathe={status().attention}
                 color={pulseColor()}
                 glowColor={glowColor()}
                 flashColor={flashColor()}

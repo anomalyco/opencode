@@ -33,6 +33,24 @@ test("a disabled pulse stays idle when it becomes active", async () => {
   }
 })
 
+test("an attention glow becomes idle after ignition", async () => {
+  const background = RGBA.fromHex("#101010")
+  const app = await testRender(
+    () => <TabPulse active={false} glow color={RGBA.fromHex("#ffcc00")} backgroundColor={background} />,
+    { width: 8, height: 1 },
+  )
+
+  try {
+    await app.renderOnce()
+    expect(app.renderer.root.liveCount).toBe(1)
+    await Bun.sleep(650)
+    await app.renderOnce()
+    expect(app.renderer.root.liveCount).toBe(0)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("completion pulse rises quickly and fades over the remaining duration", () => {
   expect(completionPulseOpacity(0)).toBe(0)
   expect(completionPulseOpacity(0.06)).toBeCloseTo(0.5)
