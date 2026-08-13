@@ -182,6 +182,31 @@ import type {
   PtyUpdateOutput,
   PtyRemoveInput,
   PtyRemoveOutput,
+  ServerPersistentPtyGroupListOutput,
+  ServerPersistentPtyGroupCreateInput,
+  ServerPersistentPtyGroupCreateOutput,
+  ServerPersistentPtyGroupGetInput,
+  ServerPersistentPtyGroupGetOutput,
+  ServerPersistentPtyGroupSetInput,
+  ServerPersistentPtyGroupSetOutput,
+  ServerPersistentPtyGroupRemoveInput,
+  ServerPersistentPtyGroupRemoveOutput,
+  ServerPersistentPtyListInput,
+  ServerPersistentPtyListOutput,
+  ServerPersistentPtyCreateInput,
+  ServerPersistentPtyCreateOutput,
+  ServerPersistentPtyGetInput,
+  ServerPersistentPtyGetOutput,
+  ServerPersistentPtyUpdateInput,
+  ServerPersistentPtyUpdateOutput,
+  ServerPersistentPtySnapshotInput,
+  ServerPersistentPtySnapshotOutput,
+  ServerPersistentPtyRemoveInput,
+  ServerPersistentPtyRemoveOutput,
+  ServerPersistentPtyConnectTokenInput,
+  ServerPersistentPtyConnectTokenOutput,
+  ServerPersistentPtyConnectInput,
+  ServerPersistentPtyConnectOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1567,6 +1592,164 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [404, 401, 400],
             empty: true,
+          },
+          requestOptions,
+        ),
+    },
+    "server.persistentPty": {
+      group: {
+        list: (requestOptions?: RequestOptions) =>
+          request<{ readonly data: ServerPersistentPtyGroupListOutput }>(
+            {
+              method: "GET",
+              path: `/api/pty-group`,
+              successStatus: 200,
+              declaredStatuses: [400, 503, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        create: (input?: ServerPersistentPtyGroupCreateInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ServerPersistentPtyGroupCreateOutput }>(
+            {
+              method: "POST",
+              path: `/api/pty-group`,
+              body: { items: input?.["items"] },
+              successStatus: 200,
+              declaredStatuses: [400, 503, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        get: (input: ServerPersistentPtyGroupGetInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ServerPersistentPtyGroupGetOutput }>(
+            {
+              method: "GET",
+              path: `/api/pty-group/${encodeURIComponent(input.groupID)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 503, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        set: (input: ServerPersistentPtyGroupSetInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ServerPersistentPtyGroupSetOutput }>(
+            {
+              method: "PUT",
+              path: `/api/pty-group/${encodeURIComponent(input.groupID)}`,
+              body: { items: input["items"] },
+              successStatus: 200,
+              declaredStatuses: [400, 503, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        remove: (input: ServerPersistentPtyGroupRemoveInput, requestOptions?: RequestOptions) =>
+          request<ServerPersistentPtyGroupRemoveOutput>(
+            {
+              method: "DELETE",
+              path: `/api/pty-group/${encodeURIComponent(input.groupID)}`,
+              successStatus: 204,
+              declaredStatuses: [400, 503, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      list: (input: ServerPersistentPtyListInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ServerPersistentPtyListOutput }>(
+          {
+            method: "GET",
+            path: `/api/pty-group/${encodeURIComponent(input.groupID)}/terminal`,
+            successStatus: 200,
+            declaredStatuses: [400, 503, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      create: (input: ServerPersistentPtyCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ServerPersistentPtyCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/pty-group/${encodeURIComponent(input.groupID)}/terminal`,
+            body: {
+              command: input["command"],
+              args: input["args"],
+              cwd: input["cwd"],
+              title: input["title"],
+              env: input["env"],
+              size: input["size"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 503, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      get: (input: ServerPersistentPtyGetInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ServerPersistentPtyGetOutput }>(
+          {
+            method: "GET",
+            path: `/api/persistent-pty/${encodeURIComponent(input.ptyID)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 503, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      update: (input: ServerPersistentPtyUpdateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ServerPersistentPtyUpdateOutput }>(
+          {
+            method: "PUT",
+            path: `/api/persistent-pty/${encodeURIComponent(input.ptyID)}`,
+            body: { attachmentID: input["attachmentID"], size: input["size"] },
+            successStatus: 200,
+            declaredStatuses: [404, 503, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      snapshot: (input: ServerPersistentPtySnapshotInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ServerPersistentPtySnapshotOutput }>(
+          {
+            method: "GET",
+            path: `/api/persistent-pty/${encodeURIComponent(input.ptyID)}/snapshot`,
+            successStatus: 200,
+            declaredStatuses: [404, 503, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      remove: (input: ServerPersistentPtyRemoveInput, requestOptions?: RequestOptions) =>
+        request<ServerPersistentPtyRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/persistent-pty/${encodeURIComponent(input.ptyID)}`,
+            successStatus: 204,
+            declaredStatuses: [404, 503, 401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      connectToken: (input: ServerPersistentPtyConnectTokenInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ServerPersistentPtyConnectTokenOutput }>(
+          {
+            method: "POST",
+            path: `/api/persistent-pty/${encodeURIComponent(input.ptyID)}/connect-token`,
+            successStatus: 200,
+            declaredStatuses: [403, 404, 503, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      connect: (input: ServerPersistentPtyConnectInput, requestOptions?: RequestOptions) =>
+        request<ServerPersistentPtyConnectOutput>(
+          {
+            method: "GET",
+            path: `/api/persistent-pty/${encodeURIComponent(input.ptyID)}/connect`,
+            successStatus: 200,
+            declaredStatuses: [403, 404, 503, 401, 400],
+            empty: false,
           },
           requestOptions,
         ),
