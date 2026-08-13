@@ -47,6 +47,7 @@ import { registerWslIpcHandlers } from "./wsl/ipc"
 import { spawnWslSidecar } from "./wsl/sidecar"
 import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
+import { flushAllStores } from "./store"
 import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
 
@@ -223,11 +224,13 @@ const main = Effect.gen(function* () {
 
   app.on("before-quit", () => {
     setAppQuitting()
+    flushAllStores()
     void stopSidecars()
   })
 
   app.on("will-quit", () => {
     setAppQuitting()
+    flushAllStores()
     void stopSidecars()
   })
 
