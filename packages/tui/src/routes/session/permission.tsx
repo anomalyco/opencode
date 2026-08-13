@@ -503,7 +503,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
       {
         bind: "return",
         title: "Select option",
-        group: "Permission",
+        group: group(),
         run: () => props.onSelect(store.selected),
       },
       ...(props.escapeKey
