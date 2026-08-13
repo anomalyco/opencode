@@ -160,7 +160,7 @@ function scanCommands(command: string, cwd: string, shell: string, powershell: b
       commands: [{ resource: command }],
       directories: [],
       opaque: true,
-      ...(result.reason === "dynamic-directory" ? { directoryUnknown: true as const } : {}),
+      directoryUnknown: true,
     }
   if (
     result.commands.some((item) => {
@@ -175,9 +175,7 @@ function scanCommands(command: string, cwd: string, shell: string, powershell: b
       const name = powershell ? item.words[0]?.toLowerCase() : item.words[0]
       if (!name) return output
       if (CWD.has(name)) {
-        output.directories.push(
-          ...directoryArgs(item.words, powershell, cwd, shell),
-        )
+        output.directories.push(...directoryArgs(item.words, powershell, cwd, shell))
         return output
       }
       output.commands.push({ resource: item.resource, save: `${prefix(item.words).join(" ")} *` })
