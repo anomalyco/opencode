@@ -96,6 +96,7 @@ import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
+import { sessionTouchedFiles } from "@/utils/session-files"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
@@ -650,6 +651,10 @@ export default function Page() {
   }, desktopReviewOpen())
 
   const turnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
+  // Files changed by this session across all its turns. The working tree is
+  // shared by every session in the same directory, so the review panel must
+  // be scoped to these files to avoid leaking other sessions' changes.
+  const sessionFiles = createMemo(() => sessionTouchedFiles(messages()))
   const nogit = createMemo(() => {
     const project = sync().project
     return !!project && project.vcs !== "git"
@@ -678,7 +683,13 @@ export default function Page() {
   })
   const vcsKey = createMemo(
     () =>
-      ["session-vcs", sdk().directory, sync().data.vcs?.branch ?? "", sync().data.vcs?.default_branch ?? ""] as const,
+      [
+        "session-vcs",
+        params.id,
+        sdk().directory,
+        sync().data.vcs?.branch ?? "",
+        sync().data.vcs?.default_branch ?? "",
+      ] as const,
   )
   const vcsQuery = createQuery(() => {
     const mode = vcsMode()
@@ -701,9 +712,15 @@ export default function Page() {
   })
   const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
   const reviewDiffs = () => {
-    if (reviewMode() === "git" || reviewMode() === "branch")
+    if (reviewMode() === "git" || reviewMode() === "branch") {
       // avoids suspense
-      return vcsQuery.isFetched ? (vcsQuery.data ?? []) : []
+      const diffs = vcsQuery.isFetched ? (vcsQuery.data ?? []) : []
+      // The working-tree diff is shared by all sessions in this directory;
+      // only surface changes this session actually made.
+      const files = sessionFiles()
+      if (files.size === 0) return []
+      return diffs.filter((diff) => diff.file !== undefined && files.has(diff.file))
+    }
     return turnDiffs()
   }
   const activeReviewFile = () => {
