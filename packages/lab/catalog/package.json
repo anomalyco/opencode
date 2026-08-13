@@ -10,7 +10,7 @@
     "dev": "bun ./server.ts",
     "lint": "cd ../../.. && bun run lint -- packages/lab/catalog/src packages/lab/catalog/catalog packages/lab/catalog/scripts packages/lab/catalog/scenarios packages/lab/catalog/server.ts packages/lab/catalog/worker.ts",
     "typecheck": "tsc --noEmit",
-    "build": "rm -rf dist && bun build ./src/index.html --outdir dist --public-path=/lab/catalog/ --minify && cp -R public/captures public/catalog.json public/drive-captures.json dist/",
+    "build": "rm -rf dist && bun build ./src/index.html --outdir dist --public-path=/lab/catalog/ --minify && cp -R public/captures public/catalog.json public/drive-captures.json dist/ && bun ./scripts/generate-og.ts",
     "deploy": "bun run generate && bun run build && bunx wrangler deploy",
     "doctor": "bunx -y react-doctor@latest .",
     "bench:capture-flow": "bun ./scripts/bench-capture-flow.ts",
@@ -28,6 +28,7 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "1.0.2",
     "@types/bun": "catalog:",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

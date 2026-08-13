@@ -591,6 +591,7 @@
         "react-dom": "^19.2.7",
       },
       "devDependencies": {
+        "@napi-rs/canvas": "1.0.2",
         "@types/bun": "catalog:",
         "@types/react": "^19.2.17",
         "@types/react-dom": "^19.2.3",
