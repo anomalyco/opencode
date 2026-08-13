@@ -678,10 +678,9 @@ export function Prompt(props: PromptProps) {
   // instance belongs to exactly one tab. Reading props.sessionID lazily would
   // observe the *next* route during onCleanup and stash under the wrong tab.
   const stashSessionID = props.sessionID
-  const stashKey = () => (config.experimental?.tab_drafts === true ? (stashSessionID ?? "home") : undefined)
 
   onMount(() => {
-    const saved = takeDraft(stashKey())
+    const saved = takeDraft(stashSessionID)
     if (store.prompt.text) return
     if (saved && saved.prompt.text) {
       input.setText(saved.prompt.text)
@@ -694,7 +693,7 @@ export function Prompt(props: PromptProps) {
   onCleanup(() => {
     disposed = true
     if (store.prompt.text) {
-      saveDraft(stashKey(), { prompt: unwrap(store.prompt), cursor: input.cursorOffset })
+      saveDraft(stashSessionID, { prompt: unwrap(store.prompt), cursor: input.cursorOffset })
     }
     setInputTarget(undefined)
     props.ref?.(undefined)

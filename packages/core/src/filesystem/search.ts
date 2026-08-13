@@ -2,7 +2,7 @@ export * as FileSystemSearch from "./search.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
-import { Context, Effect, Layer, Schema, Scope } from "effect"
+import { Clock, Context, Duration, Effect, Layer, Schema, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "../filesystem.js"
@@ -22,38 +22,64 @@ export type Options = typeof Options.Type
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem/Search") {}
 
+const REFRESH_INTERVAL = Duration.toMillis("10 seconds")
+
 export const ripgrepLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const location = yield* Location.Service
     const ripgrep = yield* Ripgrep.Service
     const scope = yield* Scope.Scope
-    const files: string[] = []
-    const directories = new Set<string>()
+    const clock = yield* Clock.Clock
     const home = Protected.isHome(location.directory)
-    yield* ripgrep
-      .find({
+    let index = { files: [] as string[], directories: new Set<string>() }
+    let initialized = false
+    let settledAt = Number.NEGATIVE_INFINITY
+    let refreshing = false
+    const scan = Effect.gen(function* () {
+      const next = { files: [] as string[], directories: new Set<string>() }
+      if (!initialized) index = next
+      yield* ripgrep.find({
         cwd: location.directory,
         pattern: "*",
         limit: location.vcs && !home ? Number.MAX_SAFE_INTEGER : 100_000,
         exclude: home ? [...Protected.names()].map((name) => `${name}/**`) : undefined,
         onEntry: (entry) =>
           Effect.sync(() => {
-            files.push(entry.path)
+            next.files.push(entry.path)
             const parts = entry.path.split("/")
-            parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
+            parts
+              .slice(0, -1)
+              .forEach((_, offset) => next.directories.add(parts.slice(0, offset + 1).join("/") + path.sep))
           }),
       })
-      .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope))
+      index = next
+      initialized = true
+    }).pipe(
+      Effect.orDie,
+      Effect.ensuring(
+        Effect.sync(() => {
+          settledAt = clock.currentTimeMillisUnsafe()
+          refreshing = false
+        }),
+      ),
+    )
+    const refresh = Effect.sync(() => {
+      if (refreshing || clock.currentTimeMillisUnsafe() < settledAt + REFRESH_INTERVAL) return
+      refreshing = true
+      return scan
+    }).pipe(Effect.flatMap((effect) => (effect ? effect.pipe(Effect.forkIn(scope)) : Effect.void)))
+    yield* refresh
     return Service.of({
       find: (input) =>
         Effect.gen(function* () {
+          yield* refresh
           const items =
             input.type === "file"
-              ? files
+              ? index.files
               : input.type === "directory"
-                ? Array.from(directories)
-                : [...files, ...directories]
+                ? Array.from(index.directories)
+                : [...index.files, ...index.directories]
           return fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => {
             const relative = item.target
             const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)

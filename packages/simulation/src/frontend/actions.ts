@@ -115,9 +115,10 @@ export function elements(renderer: CliRenderer): Element[] {
 }
 
 export function state(harness: Harness) {
+  const renderable = harness.renderer.currentFocusedRenderable?.num
   return {
     focused: {
-      renderable: harness.renderer.currentFocusedRenderable?.num,
+      ...(renderable === undefined ? {} : { renderable }),
       editor: Boolean(harness.renderer.currentFocusedEditor),
     },
     elements: elements(harness.renderer),
