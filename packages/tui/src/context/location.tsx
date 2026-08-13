@@ -16,13 +16,12 @@ export function LocationProvider(props: ParentProps) {
   const data = useData()
   const [ref, setRef] = createSignal<LocationRef>()
   const [error, setError] = createSignal<{ readonly location: LocationRef; readonly cause: unknown }>()
-  const [generation, setGeneration] = createSignal(0)
+  let generation = 0
   const current = createMemo(() => data.location.info(ref()))
 
   function sync(location?: LocationRef) {
     if (!location) return
-    const attempt = generation() + 1
-    setGeneration(attempt)
+    const attempt = ++generation
     const defaultLocation = data.location.default()
     const target =
       location.directory === defaultLocation.directory && location.workspaceID === defaultLocation.workspaceID
@@ -32,7 +31,7 @@ export function LocationProvider(props: ParentProps) {
     void data.location.sync(target).catch((cause) => {
       const current = ref()
       if (
-        generation() !== attempt ||
+        generation !== attempt ||
         current?.directory !== location.directory ||
         current.workspaceID !== location.workspaceID
       )
