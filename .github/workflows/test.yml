@@ -77,12 +77,12 @@ jobs:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
       - name: Verify PowerShell 7 scanner conformance
-        if: runner.os == 'Windows'
+        if: always() && runner.os == 'Windows'
         working-directory: packages/shell-scan
         run: PWSH=pwsh bun run research:powershell
 
       - name: Verify Windows PowerShell scanner conformance
-        if: runner.os == 'Windows'
+        if: always() && runner.os == 'Windows'
         working-directory: packages/shell-scan
         run: PWSH=powershell.exe bun run research:powershell
 

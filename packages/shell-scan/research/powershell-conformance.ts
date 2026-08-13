@@ -134,7 +134,7 @@ const findings = evaluated.flatMap(({ item, scanned }) => {
   return missing.length > 0 ? [{ source: item.source, reason: "missing-command", expected, actual, missing }] : []
 })
 const scannedCount = evaluated.filter(({ scanned }) => scanned.kind === "scanned").length
-if (scannedCount < 2_000) throw new Error(`PowerShell scanned coverage fell below floor: ${scannedCount}`)
+if (scannedCount < 1_900) throw new Error(`PowerShell scanned coverage fell below floor: ${scannedCount}`)
 
 console.log(
   JSON.stringify(

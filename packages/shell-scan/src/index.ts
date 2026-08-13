@@ -377,6 +377,8 @@ function scanBash(input: string, depth: number): Result {
           (word) => word === "-exec" || word === "-execdir" || word === "-ok" || word === "-okdir",
         )
       if (name === "awk" || name === "gawk" || name === "mawk" || name === "nawk") return true
+      if (name === "jobs") return command.words.some((word, index) => index > 0 && /^-[^-]*x/.test(word))
+      if (name === "sched" || name === "zpty") return true
       if (name === "git") return command.words.some((word, index) => index > 0 && /^alias\.[^=]+=!/.test(word))
       if (name === "python" || name === "python3")
         return command.words.some((word, index) => index > 0 && (/^-[A-Za-z]*c/.test(word) || word === "-c"))
@@ -498,6 +500,7 @@ export function scanPowerShell(input: string): Result {
       continue
     }
     if (char === "`" && index + 1 < input.length) {
+      if (words.length === 0) dynamic = true
       started = true
       if (input[index + 1] === "\r" && input[index + 2] === "\n") index += 2
       else if (input[index + 1] === "\r" || input[index + 1] === "\n") index++

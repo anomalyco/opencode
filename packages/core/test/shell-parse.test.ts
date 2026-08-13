@@ -46,18 +46,21 @@ describe("ShellParse", () => {
     })
   })
 
-  test.each(["cd /tmp/$USER && git status", "cd $(printf /tmp) && git status"])(
-    "marks dynamic directory changes opaque: %s",
-    async (command) => {
-      const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
-      expect(result).toEqual({
-        commands: [{ resource: command }],
-        directories: [],
-        opaque: true,
-        directoryUnknown: true,
-      })
-    },
-  )
+  test.each([
+    "cd /tmp/$USER && git status",
+    "cd $(printf /tmp) && git status",
+    "cd ~root && git status",
+    "cd ~+ && git status",
+    "cd ~- && git status",
+  ])("marks dynamic directory changes opaque: %s", async (command) => {
+    const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
+    expect(result).toEqual({
+      commands: [{ resource: command }],
+      directories: [],
+      opaque: true,
+      directoryUnknown: true,
+    })
+  })
 
   test("splits PowerShell commands case-insensitively", async () => {
     const result = await Effect.runPromise(

@@ -244,6 +244,7 @@ function expandKnownDirectory(value: string) {
   if (value.includes("$") || value.includes("`") || value.startsWith("(")) return
   if (value === "~") return os.homedir()
   if (value.startsWith("~/") || value.startsWith("~\\")) return path.join(os.homedir(), value.slice(2))
+  if (value.startsWith("~")) return
   return value
 }
 
