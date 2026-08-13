@@ -14,6 +14,7 @@ const lock = Semaphore.makeUnsafe(1)
 
 export type Migration = {
   id: string
+  aliases?: string[]
   foreignKeys?: boolean
   up: (tx: Transaction) => Effect.Effect<void, unknown, Global.Service>
 }
@@ -80,6 +81,14 @@ export function applyOnly(db: Database, input: Migration[]) {
 
     for (const migration of input) {
       if (completed.has(migration.id)) continue
+      const alias = migration.aliases?.find((id) => completed.has(id))
+      if (alias) {
+        yield* db.run(
+          sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
+        )
+        yield* Effect.logInfo("database migration adopted", { migration: migration.id, alias })
+        continue
+      }
       const started = Date.now()
       yield* Effect.logInfo("database migration started", { migration: migration.id })
       const apply = db.transaction((tx) =>

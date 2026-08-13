@@ -12,6 +12,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { tmpdir } from "./fixture/tmpdir"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 import legacyCredentialsMigration from "@opencode-ai/core/database/migration/20260805200742_import_legacy_credentials"
+import consolidatedV2Migration from "@opencode-ai/core/database/migration/20260804233008_loose_psylocke"
 import { Global } from "@opencode-ai/util/global"
 
 const run = <A, E>(
@@ -123,6 +124,28 @@ describe("DatabaseMigration", () => {
           { id: "first" },
           { id: "second" },
         ])
+      }),
+    )
+  })
+
+  test("adopts the consolidated V2 migration after the superseded chain", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE event (id text PRIMARY KEY, created integer DEFAULT 0 NOT NULL)`)
+        yield* db.run(sql`CREATE TABLE migration (id text PRIMARY KEY, time_completed integer NOT NULL)`)
+        yield* db.run(sql`
+          INSERT INTO migration (id, time_completed)
+          VALUES ('20260730195856_optional_session_title', 1)
+        `)
+
+        yield* DatabaseMigration.applyOnly(db, [consolidatedV2Migration])
+
+        expect(yield* db.get(sql`SELECT id FROM migration WHERE id = ${consolidatedV2Migration.id}`)).toEqual({
+          id: consolidatedV2Migration.id,
+        })
+        expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'kv'`)).toBeUndefined()
       }),
     )
   })
