@@ -154,6 +154,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             role="textbox"
             aria-multiline="true"
             aria-label={i18n.t("ui.promptInput.label")}
+            dir={state.mode === "normal" ? "auto" : "ltr"}
             contenteditable={!props.disabled && !props.readOnly}
             autocapitalize={state.mode === "normal" ? "sentences" : "off"}
             autocorrect={state.mode === "normal" ? "on" : "off"}
@@ -162,6 +163,10 @@ export function PromptInputV2(props: PromptInputV2Props) {
             autocomplete="off"
             class="relative z-10 block min-h-[60px] max-h-[180px] w-full overflow-y-auto whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none empty:before:content-['\200B'] [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
             classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
+            style={{
+              "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined,
+              "text-align": "start",
+            }}
             onInput={(event) => {
               const cursor = promptInputV2Cursor(event.currentTarget)
               const prompt = parsePromptInputV2Editor(event.currentTarget)

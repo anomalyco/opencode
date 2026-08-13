@@ -1518,6 +1518,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               role="textbox"
               aria-multiline="true"
               aria-label={placeholder()}
+              dir={store.mode === "normal" ? "auto" : "ltr"}
               contenteditable="true"
               autocapitalize={store.mode === "normal" ? "sentences" : "off"}
               autocorrect={store.mode === "normal" ? "on" : "off"}
@@ -1539,7 +1540,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 "[&_[data-type=agent]]:text-syntax-type": true,
                 "font-mono!": store.mode === "shell",
               }}
-              style={{ "padding-bottom": space }}
+              style={{
+                "padding-bottom": space,
+                "unicode-bidi": store.mode === "normal" ? "plaintext" : undefined,
+                "text-align": "start",
+              }}
             />
             <div
               class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
