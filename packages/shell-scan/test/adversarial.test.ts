@@ -16,6 +16,10 @@ describe("ShellScan adversarial corpus", () => {
     ["X=only", []],
     ["echo *", ["echo"]],
     ["printf '%s' '$() `cmd` && |'", ["printf"]],
+    [`printf '%s\\n' "$(rm -rf /)"`, ["printf", "rm"]],
+    [`printf '%s\\n' "\${x:-$(rm -rf /)}"`, ["printf", "rm"]],
+    ['cat >"$(touch /tmp/pwned)"', ["cat", "touch"]],
+    ["X=$(rm -rf /) printf ok", ["printf", "rm"]],
   ] as const
 
   test.each(scanned)("scans static input: %s", (input, names) => {
@@ -32,11 +36,7 @@ describe("ShellScan adversarial corpus", () => {
     "${cmd:-git} status",
     "$(printf rm) -rf /",
     "`printf rm` -rf /",
-    `printf '%s\\n' "$(rm -rf /)"`,
-    `printf '%s\\n' "\${x:-$(rm -rf /)}"`,
     "cat <(rm -rf /)",
-    'cat >"$(touch /tmp/pwned)"',
-    "X=$(rm -rf /) printf ok",
     "eval 'rm -rf /'",
     "e\\val 'rm -rf /'",
     "ev\"\"al 'rm -rf /'",

@@ -4,8 +4,17 @@ export type Result =
   | { kind: "scanned"; commands: Array<{ resource: string; words: string[] }> }
   | { kind: "opaque"; reason: string }
 
+const MAX_BASH_INPUT_LENGTH = 64 * 1024
+const MAX_SUBSTITUTION_DEPTH = 32
+
 export function scan(input: string): Result {
+  return scanBash(input, 0)
+}
+
+function scanBash(input: string, depth: number): Result {
+  if (input.length > MAX_BASH_INPUT_LENGTH) return { kind: "opaque", reason: "invalid-structure" }
   const commands: Array<{ resource: string; words: string[] }> = []
+  const nestedCommands: Array<{ resource: string; words: string[] }> = []
   const words: string[] = []
   const unsafeWords: boolean[] = []
   const assignmentWords: boolean[] = []
@@ -70,8 +79,16 @@ export function scan(input: string): Result {
       unsafeWord = true
       if (char === '"') quote = undefined
       else if (char === "\\" && index + 1 < input.length) word += input[++index]
-      else if (char === "$" && input[index + 1] === "(") return { kind: "opaque", reason: "command-substitution" }
-      else if (char === "`") return { kind: "opaque", reason: "command-substitution" }
+      else if ((char === "$" && input[index + 1] === "(") || char === "`") {
+        const substitution = bashSubstitution(input, index)
+        if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH)
+          return { kind: "opaque", reason: "command-substitution" }
+        const result = scanBash(substitution.source, depth + 1)
+        if (result.kind === "opaque") return result
+        nestedCommands.push(...result.commands)
+        word += input.slice(index, substitution.end + 1)
+        index = substitution.end
+      }
       else {
         if (char === "$") dynamicWord = true
         word += char
@@ -98,8 +115,19 @@ export function scan(input: string): Result {
       else word += input[++index]
       continue
     }
-    if ((char === "$" && input[index + 1] === "(") || char === "`")
-      return { kind: "opaque", reason: "command-substitution" }
+    if ((char === "$" && input[index + 1] === "(") || char === "`") {
+      const substitution = bashSubstitution(input, index)
+      if (!substitution || depth >= MAX_SUBSTITUTION_DEPTH)
+        return { kind: "opaque", reason: "command-substitution" }
+      const result = scanBash(substitution.source, depth + 1)
+      if (result.kind === "opaque") return result
+      nestedCommands.push(...result.commands)
+      wordStarted = true
+      unsafeWord = true
+      word += input.slice(index, substitution.end + 1)
+      index = substitution.end
+      continue
+    }
     if (char === "<" && input[index + 1] === "<") heredoc = true
     if (char === "#" && !wordStarted) {
       finishCommand(index)
@@ -214,5 +242,54 @@ export function scan(input: string): Result {
     })
   )
     return { kind: "opaque", reason: "shell-evaluation" }
-  return { kind: "scanned", commands }
+  return { kind: "scanned", commands: commands.concat(nestedCommands) }
+}
+
+function bashSubstitution(input: string, start: number) {
+  if (input[start] === "`") {
+    for (let index = start + 1; index < input.length; index++) {
+      if (input[index] === "\\") index++
+      else if (input[index] === "`")
+        return { source: input.slice(start + 1, index).replaceAll("\\`", "`"), end: index }
+    }
+    return
+  }
+  if (input.slice(start, start + 3) === "$((") return
+  let quote: "single" | "double" | undefined
+  let level = 1
+  for (let index = start + 2; index < input.length; index++) {
+    const char = input[index]
+    if (quote === "single") {
+      if (char === "'") quote = undefined
+      continue
+    }
+    if (char === "\\") {
+      index++
+      continue
+    }
+    if (char === "'") {
+      quote = "single"
+      continue
+    }
+    if (char === '"') {
+      quote = quote === "double" ? undefined : "double"
+      continue
+    }
+    if (char === "`" && quote !== "double") {
+      const nested = bashSubstitution(input, index)
+      if (!nested) return
+      index = nested.end
+      continue
+    }
+    if (quote === "double") {
+      if (char === "$" && input[index + 1] === "(") {
+        level++
+        index++
+      } else if (char === ")" && level > 1) level--
+      continue
+    }
+    if (char === "(") level++
+    if (char !== ")" || --level) continue
+    return { source: input.slice(start + 2, index), end: index }
+  }
 }

