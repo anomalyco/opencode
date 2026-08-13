@@ -1548,7 +1548,7 @@ export type WorktreeListOperation<E = never> = (input: Endpoint24_0Input) => Eff
 export type Endpoint24_1Input = {
   readonly projectID: Project.ID
   readonly strategy: Worktree.StrategyID
-  readonly sourceDirectory: AbsolutePath
+  readonly from: AbsolutePath
   readonly directory: AbsolutePath
   readonly name?: string | undefined
 }

@@ -1743,7 +1743,7 @@ export function make(options: ClientOptions) {
             path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/worktree`,
             body: {
               strategy: input["strategy"],
-              sourceDirectory: input["sourceDirectory"],
+              from: input["from"],
               directory: input["directory"],
               name: input["name"],
             },

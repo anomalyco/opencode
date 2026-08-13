@@ -1209,12 +1209,7 @@ const Endpoint24_1 = (raw: RawClient["server.worktree"]) => (input: Endpoint24_1
   preserveEffect<Endpoint24_1Output>()(
     raw["worktree.create"]({
       params: { projectID: input["projectID"] },
-      payload: {
-        strategy: input["strategy"],
-        sourceDirectory: input["sourceDirectory"],
-        directory: input["directory"],
-        name: input["name"],
-      },
+      payload: { strategy: input["strategy"], from: input["from"], directory: input["directory"], name: input["name"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 

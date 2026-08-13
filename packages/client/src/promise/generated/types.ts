@@ -5641,25 +5641,25 @@ export type WorktreeCreateInput = {
   readonly projectID: { readonly projectID: string }["projectID"]
   readonly strategy: {
     readonly strategy: string
-    readonly sourceDirectory: string
+    readonly from: string
     readonly directory: string
     readonly name?: string
   }["strategy"]
-  readonly sourceDirectory: {
+  readonly from: {
     readonly strategy: string
-    readonly sourceDirectory: string
+    readonly from: string
     readonly directory: string
     readonly name?: string
-  }["sourceDirectory"]
+  }["from"]
   readonly directory: {
     readonly strategy: string
-    readonly sourceDirectory: string
+    readonly from: string
     readonly directory: string
     readonly name?: string
   }["directory"]
   readonly name?: {
     readonly strategy: string
-    readonly sourceDirectory: string
+    readonly from: string
     readonly directory: string
     readonly name?: string
   }["name"]

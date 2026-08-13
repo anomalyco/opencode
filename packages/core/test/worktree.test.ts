@@ -119,7 +119,7 @@ describe("Worktree", () => {
         .create({
           projectID: input.projectID,
           strategy: unavailable,
-          sourceDirectory: input.sourceDirectory,
+          from: input.sourceDirectory,
           directory: abs(`${input.root.path}-missing-strategy`),
           name: "worktree",
         })
@@ -143,7 +143,7 @@ describe("Worktree", () => {
         .create({
           projectID: input.projectID,
           strategy: gitWorktree,
-          sourceDirectory: input.sourceDirectory,
+          from: input.sourceDirectory,
           directory: abs(`${input.root.path}-missing-source`),
           name: "worktree",
         })
@@ -173,7 +173,7 @@ describe("Worktree", () => {
       const created = yield* worktree.create({
         projectID: input.projectID,
         strategy: gitWorktree,
-        sourceDirectory: input.sourceDirectory,
+        from: input.sourceDirectory,
         directory: parent,
         name: "worktree",
       })
@@ -203,7 +203,7 @@ describe("Worktree", () => {
         .create({
           projectID: input.projectID,
           strategy: gitWorktree,
-          sourceDirectory: abs(path.join(temp, "does-not-exist")),
+          from: abs(path.join(temp, "does-not-exist")),
           directory: abs(`${input.root.path}-missing-directory`),
           name: "worktree",
         })
@@ -229,7 +229,7 @@ describe("Worktree", () => {
       const source = yield* worktree.create({
         projectID: input.projectID,
         strategy: gitWorktree,
-        sourceDirectory: input.sourceDirectory,
+        from: input.sourceDirectory,
         directory: sourceParent,
         name: "source",
       })
@@ -242,7 +242,7 @@ describe("Worktree", () => {
       const created = yield* worktree.create({
         projectID: input.projectID,
         strategy: gitWorktree,
-        sourceDirectory: source.directory,
+        from: source.directory,
         directory: targetParent,
         name: "target",
       })
@@ -265,7 +265,7 @@ describe("Worktree", () => {
       const created = yield* worktree.create({
         projectID: input.projectID,
         strategy: gitWorktree,
-        sourceDirectory: input.sourceDirectory,
+        from: input.sourceDirectory,
         directory: parent,
         name: "worktree",
       })
@@ -326,7 +326,7 @@ describe("Worktree", () => {
       const created = yield* worktree.create({
         projectID: input.projectID,
         strategy: gitWorktree,
-        sourceDirectory: input.sourceDirectory,
+        from: input.sourceDirectory,
         directory: parent,
         name: "worktree",
       })
@@ -364,7 +364,7 @@ describe("Worktree", () => {
         .create({
           projectID: input.projectID,
           strategy: gitWorktree,
-          sourceDirectory: input.sourceDirectory,
+          from: input.sourceDirectory,
           directory: parent,
           name: "worktree",
         })

@@ -45,7 +45,7 @@ it.live("lists, creates, and removes worktrees by project ID", () =>
           fetch(url, {
             method: "POST",
             headers: { ...headers, "content-type": "application/json" },
-            body: JSON.stringify({ strategy: "git", sourceDirectory: project, directory: destination, name: "api" }),
+            body: JSON.stringify({ strategy: "git", from: project, directory: destination, name: "api" }),
           }).then((response) => response.json()),
         )
         expect(created).toEqual({ directory: path.join(destination, "api") })

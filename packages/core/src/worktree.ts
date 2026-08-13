@@ -228,7 +228,7 @@ const layer = Layer.effect(
 
     const create = Effect.fn("Worktree.create")(function* (input: CreateInput) {
       const selected = yield* getStrategy(input.strategy)
-      const sourceDirectory = yield* source(input.sourceDirectory, input.projectID)
+      const sourceDirectory = yield* source(input.from, input.projectID)
       yield* fs.makeDirectory(input.directory, { recursive: true }).pipe(Effect.orDie)
       const name = input.name ?? Slug.create()
       let suffix = 1

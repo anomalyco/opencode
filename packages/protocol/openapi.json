@@ -11490,7 +11490,7 @@
                   "strategy": {
                     "type": "string"
                   },
-                  "sourceDirectory": {
+                  "from": {
                     "type": "string"
                   },
                   "directory": {
@@ -11502,7 +11502,7 @@
                 },
                 "required": [
                   "strategy",
-                  "sourceDirectory",
+                  "from",
                   "directory"
                 ],
                 "additionalProperties": false

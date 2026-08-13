@@ -28,7 +28,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       const result = await client.api.worktree.create({
         projectID,
         strategy: "git",
-        sourceDirectory: data.location.info()?.directory || paths.cwd,
+        from: data.location.info()?.directory || paths.cwd,
         directory: path.join(paths.worktree, projectID.slice(0, 6)),
         name,
       })
