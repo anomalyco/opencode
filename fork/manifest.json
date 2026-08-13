@@ -65,6 +65,16 @@
       "file": "packages/opencode/src/event-manifest.ts",
       "marker": "SideQuestion.Event.Response",
       "note": "Appends fork-owned event definitions (loop.updated, side-question.response) to the shared schema manifest. Their schemas live in packages/opencode and cannot be declared in packages/schema, and without this they are absent from the generated Event union so no client can subscribe."
+    },
+    {
+      "file": "packages/opencode/src/session/compaction.ts",
+      "marker": "self-healing compaction",
+      "note": "Compaction that itself overflows retries with only the most recent user turn, then falls back to a minimal summary, instead of returning \"stop\" and stranding the session. Silently lost in the 0d927ba03f merge and only noticed because a fork-only test still asserted it."
+    },
+    {
+      "file": "packages/core/src/git.ts",
+      "marker": "LC_ALL",
+      "note": "Pins LC_ALL=C on git spawns. This code matches git's human-readable output by text (forceRequired), and git localises it \u2014 on a non-English machine those checks silently read false."
     }
   ]
 }

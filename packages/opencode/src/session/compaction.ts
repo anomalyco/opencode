@@ -418,7 +418,7 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         model,
       })
-      const result = yield* processor.process({
+      let result = yield* processor.process({
         user: userMessage,
         agent,
         sessionID: input.sessionID,
@@ -440,15 +440,68 @@ const layer = Layer.effect(
         model,
       })
 
+      // fork: self-healing compaction. Compaction itself overflowing used to end
+      // the session — returning "stop" strands it, because the only way out was
+      // a compaction that cannot fit. Retry with just the most recent user turn,
+      // and if even that overflows write a minimal summary, so the auto-continue
+      // path below always has something to continue from.
+      let activeMessage = processor.message
       if (result === "compact") {
-        processor.message.error = new SessionV1.ContextOverflowError({
-          message: replay
-            ? "Conversation history too large to compact - exceeds model context limit"
-            : "Session too large to compact - context exceeds model limit even after stripping media",
-        }).toObject()
-        processor.message.finish = "error"
-        yield* session.updateMessage(processor.message)
-        return "stop"
+        yield* Effect.logWarning("compaction overflow, retrying with aggressive truncation", {
+          sessionID: input.sessionID,
+        })
+        const lastUser = msgs.findLast(
+          (item) => item.info.role === "user" && !item.parts.some((part) => part.type === "compaction"),
+        )
+        const minimal = (lastUser ? [lastUser] : []).map(serialize).filter(Boolean).join("\n\n")
+        const retryMsg: SessionV1.Assistant = { ...msg, id: MessageID.ascending() }
+        yield* session.updateMessage(retryMsg)
+        const retryProcessor = yield* processors.create({
+          assistantMessage: retryMsg,
+          sessionID: input.sessionID,
+          model,
+        })
+        const retryResult = yield* retryProcessor.process({
+          user: userMessage,
+          agent,
+          sessionID: input.sessionID,
+          tools: {},
+          system: [],
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: [nextPrompt, "The following is the conversation history:", minimal]
+                    .filter(Boolean)
+                    .join("\n\n"),
+                },
+              ],
+            },
+          ],
+          model,
+        })
+        activeMessage = retryProcessor.message
+        if (retryResult === "compact") {
+          yield* Effect.logWarning("compaction retry also overflowed, using minimal summary", {
+            sessionID: input.sessionID,
+          })
+          activeMessage.error = undefined
+          activeMessage.finish = "stop"
+          yield* session.updateMessage(activeMessage)
+          yield* session.updatePart({
+            id: PartID.ascending(),
+            messageID: retryMsg.id,
+            sessionID: input.sessionID,
+            type: "text",
+            text: "Context exceeded. The conversation was too large to summarize automatically.",
+            time: { start: Date.now(), end: Date.now() },
+          })
+          result = "continue"
+        } else {
+          result = retryResult
+        }
       }
 
       if (compactionPart && selected.tail_start_id && compactionPart.tail_start_id !== selected.tail_start_id) {
