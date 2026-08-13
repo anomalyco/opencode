@@ -49,8 +49,8 @@ export type SessionTabsController = Pick<ContextController, "tabs" | "current" |
 }
 
 const NEW_SESSION_TAB: SessionTab = { sessionID: "new", title: NEW_SESSION_TAB_TITLE }
-const glowTextColor = (base: RGBA, glow: RGBA, index: number, width: number) =>
-  tint(base, glow, 0.12 * unreadGlowIntensity(index, width))
+const glowTextColor = (base: RGBA, glow: RGBA, index: number, width: number, level = 1) =>
+  tint(base, glow, 0.12 * level * unreadGlowIntensity(index, width))
 
 function fadeTitleColor(color: RGBA, background: RGBA, index: number, length: number, leading: number) {
   const fade = (position: number) => (position <= 0 ? 0 : 0.2 + 0.72 * ((position - 1) / Math.max(1, FADE_WIDTH - 1)))
@@ -275,39 +275,6 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                 const value = session()
                 return Locale.takeWidth(projectName(project(), value?.location.directory) ?? "", titleWidth())
               })
-              const background = createMemo(() => {
-                if (selected()) return theme.background.action.primary.selected
-                if (hovered() === tab.sessionID || dragging() === tab.sessionID)
-                  return theme.background.action.primary.hovered
-                return theme.background.default
-              })
-              const pulseBackground = createMemo(() => tint(theme.background.default, background(), background().a))
-              const numberColor = () => {
-                if (status().attention) return theme.text.feedback.warning.default
-                if (status().unread === "error") return theme.text.feedback.error.default
-                const base =
-                  hovered() === tab.sessionID && !selected()
-                    ? foreground()
-                    : tint(idleNumber(), activeNumber(), Number(selected()))
-                const color = tint(base, accent(), Number(complete()))
-                return sweepLevel() === 0 ? color : tint(color, theme.text.default, 0.15 * sweepLevel())
-              }
-              const foreground = () => {
-                if (hovered() === tab.sessionID) return theme.text.default
-                return selected() ? theme.text.default : theme.text.subdued
-              }
-              const complete = () => status().complete
-              const glowHue = () => {
-                if (status().attention) return theme.text.feedback.warning.default
-                if (status().unread === "error") return theme.text.feedback.error.default
-                return accent()
-              }
-              const pulseColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.25))
-              const glowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.45))
-              const detailPulseColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.13))
-              const detailGlowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.25))
-              const detailColor = createMemo(() => tint(theme.text.subdued, pulseBackground(), 0.35))
-              const glows = () => status().glows
               const previous = createMemo(() => items()[index() - 1])
               const previousStatus = createMemo(() => {
                 const tab = previous()
@@ -315,20 +282,79 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   ? itemStatus(tab)
                   : { ...EMPTY_SESSION_TAB_STATUS, complete: false, runs: false, glows: false }
               })
+              const visualTarget = createMemo(() => ({
+                selection: Number(selected()),
+                hover: Number(hovered() === tab.sessionID || dragging() === tab.sessionID),
+                activity: Number(status().complete),
+                glow: Number(status().glows),
+                attention: Number(status().attention),
+                error: Number(status().unread === "error"),
+                previousAttention: Number(previousStatus().attention),
+                previousError: Number(previousStatus().unread === "error"),
+              }))
+              const motion = createAnimatable(visualTarget(), {
+                enabled: animations,
+                transition: tween({ duration: 0.14 }),
+              })
+              createComputed(() => motion.animate(visualTarget()))
+              const visual = motion.value
+              const background = createMemo(() =>
+                tint(
+                  tint(theme.background.default, theme.background.action.primary.hovered, visual().hover),
+                  theme.background.action.primary.selected,
+                  visual().selection,
+                ),
+              )
+              const pulseBackground = createMemo(() => tint(theme.background.default, background(), background().a))
+              const numberColor = () => {
+                const base = tint(
+                  tint(idleNumber(), activeNumber(), visual().selection),
+                  foreground(),
+                  visual().hover * (1 - visual().selection),
+                )
+                const active = tint(base, accent(), visual().activity)
+                const error = tint(active, theme.text.feedback.error.default, visual().error)
+                const color = tint(error, theme.text.feedback.warning.default, visual().attention)
+                return sweepLevel() === 0 ? color : tint(color, theme.text.default, 0.15 * sweepLevel())
+              }
+              const foreground = () =>
+                tint(
+                  tint(theme.text.subdued, theme.text.default, visual().hover),
+                  theme.text.default,
+                  visual().selection,
+                )
+              const complete = () => status().complete
+              const glowHue = () =>
+                tint(
+                  tint(accent(), theme.text.feedback.error.default, visual().error),
+                  theme.text.feedback.warning.default,
+                  visual().attention,
+                )
+              const pulseColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.25))
+              const glowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.45))
+              const detailPulseColor = createMemo(() => tint(pulseBackground(), theme.text.default, 0.13))
+              const detailGlowColor = createMemo(() => tint(pulseBackground(), glowHue(), 0.25))
+              const detailColor = createMemo(() => tint(theme.text.subdued, pulseBackground(), 0.35))
+              const glows = () => status().glows
               const previousGlows = () => previousStatus().glows
               const runs = () => status().runs
               const previousRuns = () => previousStatus().runs
-              const previousGlowHue = () => {
-                if (previousStatus().attention) return theme.text.feedback.warning.default
-                if (previousStatus().unread === "error") return theme.text.feedback.error.default
-                return accent()
-              }
+              const previousGlowHue = () =>
+                tint(
+                  tint(accent(), theme.text.feedback.error.default, visual().previousError),
+                  theme.text.feedback.warning.default,
+                  visual().previousAttention,
+                )
               const separatorUpperColor = createMemo(() => tint(theme.background.default, previousGlowHue(), 0.1))
               const separatorLowerColor = createMemo(() => tint(theme.background.default, glowHue(), 0.12))
               const titleColor = (index: number) => {
-                const color = glows()
-                  ? glowTextColor(foreground(), glowColor(), 1 + numberWidth() + index, width())
-                  : foreground()
+                const color = glowTextColor(
+                  foreground(),
+                  glowColor(),
+                  1 + numberWidth() + index,
+                  width(),
+                  visual().glow,
+                )
                 return titleFades()
                   ? fadeTitleColor(
                       color,
@@ -453,7 +479,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                         selectable={false}
                         attributes={selected() ? TextAttributes.BOLD : undefined}
                       >
-                        <Show when={glows() || titleFades()} fallback={visibleTitle()}>
+                        <Show when={visual().glow > 0 || titleFades()} fallback={visibleTitle()}>
                           <For each={visibleTitleParts()}>
                             {(character, index) => <span style={{ fg: titleColor(index()) }}>{character}</span>}
                           </For>
