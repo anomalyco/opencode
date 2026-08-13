@@ -31,8 +31,20 @@ export function formatServerError(error: unknown, translate?: Translator, fallba
   if (isProviderModelNotFoundErrorLike(unwrapped)) return parseReadableProviderModelNotFoundError(unwrapped, translate)
   if (error instanceof Error && error.message) return error.message
   if (typeof error === "string" && error) return error
+  const detail = structuredMessage(unwrapped)
+  if (detail) return detail
   if (fallback) return fallback
   return tr(translate, "error.chain.unknown", "Unknown error")
+}
+
+// Declared error responses arrive as raw NamedError payloads (`{ name, data }`) rather than Error
+// instances, so error names without a dedicated branch above still carry a usable message.
+function structuredMessage(error: unknown) {
+  if (typeof error !== "object" || error === null) return
+  const o = error as { data?: { message?: unknown }; message?: unknown }
+  return [o.data?.message, o.message]
+    .find((value): value is string => typeof value === "string" && !!value.trim())
+    ?.trim()
 }
 
 function unwrapNamedError(error: unknown): unknown {
