@@ -47,11 +47,14 @@ const ADD_TAB_WIDTH = 3
 const MARQUEE_DELAY = 600
 const MARQUEE_INTERVAL = 100
 const CONTEXT_MENU_WIDTH = 16
+const MIDDLE_MOUSE_BUTTON = 1
 const RIGHT_MOUSE_BUTTON = 2
 
 type TabContextMenuState = {
   x: number
   y: number
+  originX?: number
+  originY?: number
   sessionID?: string
   title?: string
 }
@@ -185,7 +188,11 @@ export function createTabMarquee(animations: () => boolean) {
   return { ...marquee, hovered, enter, leave, leaveHovered, reset }
 }
 
-function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsController; onClose: () => void }) {
+export function TabContextMenu(props: {
+  state: TabContextMenuState
+  tabs: SessionTabsController
+  onClose: () => void
+}) {
   const dimensions = useTerminalDimensions()
   const theme = useTheme("elevated")
   const dialog = useDialog()
@@ -237,41 +244,60 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
     ],
   }))
   return (
-    <box
-      position="absolute"
-      left={left()}
-      top={top()}
-      height={actions().length}
-      width={CONTEXT_MENU_WIDTH}
-      zIndex={2500}
-      flexDirection="column"
-      backgroundColor={theme.background.default}
-      onMouseDown={(event) => {
-        event.preventDefault()
-        event.stopPropagation()
-      }}
-    >
-      <For each={actions()}>
-        {(action, index) => (
-          <box
-            width="100%"
-            paddingLeft={1}
-            paddingRight={1}
-            backgroundColor={selected() === index() ? theme.background.action.primary.hovered : undefined}
-            onMouseOver={() => setSelected(index())}
-            onMouseUp={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              run(index())
-            }}
-          >
-            <text fg={theme.text.default} selectable={false}>
-              {action.title}
-            </text>
-          </box>
-        )}
-      </For>
-    </box>
+    <>
+      <box
+        position="absolute"
+        left={-(props.state.originX ?? 0)}
+        top={-(props.state.originY ?? 0)}
+        width={dimensions().width}
+        height={dimensions().height}
+        zIndex={2499}
+        onMouseDown={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onMouseUp={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          props.onClose()
+        }}
+      />
+      <box
+        position="absolute"
+        left={left()}
+        top={top()}
+        height={actions().length}
+        width={CONTEXT_MENU_WIDTH}
+        zIndex={2500}
+        flexDirection="column"
+        backgroundColor={theme.background.default}
+        onMouseDown={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+      >
+        <For each={actions()}>
+          {(action, index) => (
+            <box
+              width="100%"
+              paddingLeft={1}
+              paddingRight={1}
+              backgroundColor={selected() === index() ? theme.background.action.primary.hovered : undefined}
+              onMouseOver={() => setSelected(index())}
+              onMouseUp={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                run(index())
+              }}
+            >
+              <text fg={theme.text.default} selectable={false}>
+                {action.title}
+              </text>
+            </box>
+          )}
+        </For>
+      </box>
+    </>
   )
 }
 
@@ -516,12 +542,20 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   onMouseOver={() => marquee.enter(tab.sessionID, title(), hoveredTitleWidth())}
                   onMouseOut={() => marquee.leave(tab.sessionID)}
                   onMouseDown={(event) => {
+                    if (event.button === MIDDLE_MOUSE_BUTTON) {
+                      setDragging(undefined)
+                      event.preventDefault()
+                      event.stopPropagation()
+                      return
+                    }
                     if (event.button === RIGHT_MOUSE_BUTTON) {
                       setDragging(undefined)
                       if (!rail) return
                       setContextMenu({
                         x: event.x - rail.screenX,
                         y: event.y - rail.screenY,
+                        originX: rail.screenX,
+                        originY: rail.screenY,
                         sessionID: tab.sessionID,
                         title: tab.title,
                       })
@@ -534,9 +568,16 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   }}
                   onMouseUp={(event) => {
                     if (event.button === RIGHT_MOUSE_BUTTON) return
+                    if (event.button === MIDDLE_MOUSE_BUTTON) {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      tabs.close(tab.sessionID)
+                      return
+                    }
                     release()
                   }}
                   onMouseDrag={(event) => {
+                    if (event.button === MIDDLE_MOUSE_BUTTON) return
                     if (!rail) return
                     const target = Math.max(
                       0,
@@ -548,7 +589,10 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                     if (target !== index() && preview()?.index !== target)
                       setPreview({ sessionID: tab.sessionID, index: target })
                   }}
-                  onMouseDragEnd={release}
+                  onMouseDragEnd={(event) => {
+                    if (event.button === MIDDLE_MOUSE_BUTTON) return
+                    release()
+                  }}
                 >
                   <TabPulse
                     top={-1}
@@ -712,7 +756,12 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               onMouseDown={(event: MouseEvent) => {
                 if (event.button !== RIGHT_MOUSE_BUTTON) return
                 if (!rail) return
-                setContextMenu({ x: event.x - rail.screenX, y: event.y - rail.screenY })
+                setContextMenu({
+                  x: event.x - rail.screenX,
+                  y: event.y - rail.screenY,
+                  originX: rail.screenX,
+                  originY: rail.screenY,
+                })
                 event.preventDefault()
                 event.stopPropagation()
               }}
@@ -1034,11 +1083,19 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
               onMouseOver={() => marquee.enter(tab.sessionID, title(), hoveredTitleWidth())}
               onMouseOut={() => marquee.leave(tab.sessionID)}
               onMouseDown={(event) => {
+                if (event.button === MIDDLE_MOUSE_BUTTON) {
+                  setDragging(undefined)
+                  event.preventDefault()
+                  event.stopPropagation()
+                  return
+                }
                 if (event.button === RIGHT_MOUSE_BUTTON) {
                   setDragging(undefined)
                   setContextMenu({
                     x: event.x - (strip?.screenX ?? 0),
                     y: event.y - (strip?.screenY ?? 0),
+                    originX: strip?.screenX,
+                    originY: strip?.screenY,
                     sessionID: tab === NEW_SESSION_TAB ? undefined : tab.sessionID,
                     title: tab === NEW_SESSION_TAB ? undefined : tab.title,
                   })
@@ -1051,15 +1108,25 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
               }}
               onMouseUp={(event) => {
                 if (event.button === RIGHT_MOUSE_BUTTON) return
+                if (event.button === MIDDLE_MOUSE_BUTTON) {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
+                  return
+                }
                 release()
               }}
               onMouseDrag={(event) => {
+                if (event.button === MIDDLE_MOUSE_BUTTON) return
                 if (tab === NEW_SESSION_TAB) return
                 const slot = slotAt(event.x)
                 if (slot !== undefined && slot !== tabNumber() - 1)
                   setPreview({ sessionID: tab.sessionID, index: slot })
               }}
-              onMouseDragEnd={release}
+              onMouseDragEnd={(event) => {
+                if (event.button === MIDDLE_MOUSE_BUTTON) return
+                release()
+              }}
             >
               <TabPulse
                 enabled={animations()}
@@ -1134,7 +1201,12 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           onMouseOut={() => setAddHovered(false)}
           onMouseDown={(event) => {
             if (event.button !== RIGHT_MOUSE_BUTTON) return
-            setContextMenu({ x: event.x - (strip?.screenX ?? 0), y: event.y - (strip?.screenY ?? 0) })
+            setContextMenu({
+              x: event.x - (strip?.screenX ?? 0),
+              y: event.y - (strip?.screenY ?? 0),
+              originX: strip?.screenX,
+              originY: strip?.screenY,
+            })
             event.preventDefault()
             event.stopPropagation()
           }}
