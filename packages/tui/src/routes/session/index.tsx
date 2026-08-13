@@ -1126,7 +1126,16 @@ export function Session() {
                 </Show>
               </scrollbox>
               <Show when={config.experimental?.tab_scroll === true && awayFromBottom()}>
-                <box position="absolute" bottom={0} right={0} height={1} zIndex={1}>
+                <box
+                  position="absolute"
+                  bottom={0}
+                  left={0}
+                  right={0}
+                  height={1}
+                  zIndex={1}
+                  flexDirection="row"
+                  justifyContent="flex-end"
+                >
                   <text fg={theme.text.subdued} onMouseUp={toBottom}>
                     Latest ↓
                   </text>
