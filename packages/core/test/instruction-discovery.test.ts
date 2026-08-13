@@ -112,7 +112,7 @@ describe("InstructionDiscovery", () => {
     }).pipe(Effect.provide(AppNodeBuilder.build(LayerNode.group([InstructionDiscovery.node, Bus.node])))),
   )
 
-  it.effect("renders granular updates for ambient instruction files", () =>
+  it.effect("renders granular instruction updates", () =>
     Effect.gen(function* () {
       const discovery = yield* InstructionDiscovery.Service
       yield* discovery.transform((draft) => {
@@ -127,7 +127,7 @@ describe("InstructionDiscovery", () => {
         })
       })
       const modified = (yield* readUpdate(yield* discovery.load(), initial)).text
-      expect(modified).toContain("The ambient instructions in /repo/AGENTS.md changed")
+      expect(modified).toContain("The instructions from /repo/AGENTS.md changed")
       expect(modified).toContain("-old\n+new")
       expect(modified).not.toContain("global")
 
@@ -136,13 +136,8 @@ describe("InstructionDiscovery", () => {
         draft.add(file("/repo/packages/AGENTS.md", "package"))
       })
       const structural = (yield* readUpdate(yield* discovery.load(), initial)).text
-      expect(structural).toContain("The ambient instruction file at /global/AGENTS.md no longer applies.")
-      expect(structural).toContain(
-        "A new ambient instruction file now applies:\nInstructions from: /repo/packages/AGENTS.md\npackage",
-      )
-      expect(structural).toContain(
-        "Ambient instruction files now apply in this order:\n/repo/AGENTS.md\n/repo/packages/AGENTS.md",
-      )
+      expect(structural).toContain("The instructions from /global/AGENTS.md no longer apply.")
+      expect(structural).toContain("New instructions apply from:\nInstructions from: /repo/packages/AGENTS.md\npackage")
       expect(structural).not.toContain("Instructions from: /global/AGENTS.md\nglobal")
     }).pipe(Effect.provide(AppNodeBuilder.build(LayerNode.group([InstructionDiscovery.node, Bus.node])))),
   )
@@ -204,17 +199,14 @@ describe("ConfigInstructionPlugin.Plugin", () => {
           yield* Effect.promise(() => fs.writeFile(packageFile, "changed"))
           yield* emitAndWait({ type: "update", path: packageFile })
           const changed = (yield* readUpdate(yield* discovery.load(), initialized)).text
-          expect(changed).toContain(`The ambient instructions in ${packageFile} changed`)
+          expect(changed).toContain(`The instructions from ${packageFile} changed`)
           expect(changed).toContain("-package\n\\ No newline at end of file\n+changed")
           expect(changed).not.toContain(`Instructions from: ${globalFile}\nglobal`)
 
           yield* Effect.promise(() => fs.rm(packageFile))
           yield* emitAndWait({ type: "delete", path: packageFile })
           const removed = (yield* readUpdate(yield* discovery.load(), initialized)).text
-          expect(removed).toContain(`The ambient instruction file at ${packageFile} no longer applies.`)
-          expect(removed).toContain(
-            `Ambient instruction files now apply in this order:\n${globalFile}\n${projectFile}\n${sharedFile}`,
-          )
+          expect(removed).toContain(`The instructions from ${packageFile} no longer apply.`)
           expect(removed).not.toContain(`Instructions from: ${globalFile}\nglobal`)
 
           yield* Effect.promise(() => fs.rm(globalFile))

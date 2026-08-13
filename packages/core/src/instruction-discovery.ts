@@ -128,16 +128,13 @@ function renderUpdate(previous: ReadonlyArray<File>, current: ReadonlyArray<File
     (file) => file.path,
     (before, after) => before.content !== after.content,
   )
-  const order = current.map((file) => file.path)
-  const reordered = previous.length !== current.length || previous.some((file, index) => file.path !== order[index])
   return [
-    ...changes.removed.map((file) => `The ambient instruction file at ${file.path} no longer applies.`),
-    ...changes.added.map((file) => `A new ambient instruction file now applies:\n${render([file])}`),
-    ...(reordered ? [`Ambient instruction files now apply in this order:\n${order.join("\n")}`] : []),
+    ...changes.removed.map((file) => `The instructions from ${file.path} no longer apply.`),
+    ...changes.added.map((file) => `New instructions apply from:\n${render([file])}`),
     ...changes.changed.map(({ previous: before, current: after }) => {
       const patch = createPatch(after.path, before.content, after.content, "", "", { context: 3 })
       return [
-        `The ambient instructions in ${after.path} changed. Apply this patch to the previously loaded version:`,
+        `The instructions from ${after.path} changed. Apply this patch to the previously loaded version:`,
         "```diff",
         patch.slice(patch.indexOf("@@")).trimEnd(),
         "```",
