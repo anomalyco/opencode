@@ -1,24 +1,31 @@
-import { type HexColor, resolveThemeVariant, useTheme, withAlpha } from "@opencode-ai/ui/theme"
-import { showToast } from "@opencode-ai/ui/toast"
+import { withAlpha } from "@opencode-ai/ui/theme/color"
+import { useTheme } from "@opencode-ai/ui/theme/context"
+import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
+import { resolveThemeVariantV2 } from "@opencode-ai/ui/theme/v2/resolve"
+import type { HexColor, ResolvedV2Theme } from "@opencode-ai/ui/theme/types"
+import { showToast } from "@/utils/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
-import { type ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
+import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
 import { SerializeAddon } from "@/addons/serialize"
 import { matchKeybind, parseKeybind } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
-import { useServer } from "@/context/server"
-import { monoFontFamily, useSettings } from "@/context/settings"
+import { useServerSDK } from "@/context/server-sdk"
+import { terminalFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
+import { terminalWebSocketURL } from "@/utils/terminal-websocket-url"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
+  autoFocus?: boolean
+  onAutoFocus?: () => void
   onSubmit?: () => void
-  onCleanup?: (pty: LocalPTY) => void
+  onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
   onConnect?: () => void
   onConnectError?: (error: unknown) => void
 }
@@ -61,6 +68,19 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
 const debugTerminal = (...values: unknown[]) => {
   if (!import.meta.env.DEV) return
   console.debug("[terminal]", ...values)
+}
+
+const resolveV2Token = (tokens: ResolvedV2Theme, key: string) => {
+  let current = tokens[key]
+  for (let i = 0; i < 8 && current; i++) {
+    const match = /^var\(--([^)]+)\)$/.exec(current.trim())
+    if (!match) {
+      const hex = current.trim()
+      if (/^#[0-9a-fA-F]{8}$/.test(hex)) return hex.slice(0, 7)
+      return hex
+    }
+    current = tokens[match[1]]
+  }
 }
 
 const useTerminalUiBindings = (input: {
@@ -126,8 +146,8 @@ const persistTerminal = (input: {
   term: Term | undefined
   addon: SerializeAddon | undefined
   cursor: number
-  pty: LocalPTY
-  onCleanup?: (pty: LocalPTY) => void
+  id: string
+  onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
 }) => {
   if (!input.addon || !input.onCleanup || !input.term) return
   const buffer = (() => {
@@ -140,7 +160,7 @@ const persistTerminal = (input: {
   })()
 
   input.onCleanup({
-    ...input.pty,
+    id: input.id,
     buffer,
     cursor: input.cursor,
     rows: input.term.rows,
@@ -155,12 +175,41 @@ export const Terminal = (props: TerminalProps) => {
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
-  const server = useServer()
+  // Terminal captures its connection for the PTY lifetime, so callers must key it per server/session.
+  const connection = useServerSDK()().server
+  const directory = sdk().directory
+  const url = sdk().url
+  const auth = connection.http
+  const username = auth?.username ?? "opencode"
+  const password = auth?.password ?? ""
+  const authToken = connection.type === "http" ? connection.authToken : false
+  const sameOrigin = new URL(url, location.href).origin === location.origin
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnect", "onConnectError"])
+  const [local, others] = splitProps(props, [
+    "pty",
+    "class",
+    "classList",
+    "autoFocus",
+    "onAutoFocus",
+    "onConnect",
+    "onConnectError",
+  ])
+  const id = local.pty.id
+  const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
+  const restoreSize =
+    restore &&
+    typeof local.pty.cols === "number" &&
+    Number.isSafeInteger(local.pty.cols) &&
+    local.pty.cols > 0 &&
+    typeof local.pty.rows === "number" &&
+    Number.isSafeInteger(local.pty.rows) &&
+    local.pty.rows > 0
+      ? { cols: local.pty.cols, rows: local.pty.rows }
+      : undefined
+  const scrollY = typeof local.pty.scrollY === "number" ? local.pty.scrollY : undefined
   let ws: WebSocket | undefined
   let term: Term | undefined
-  let ghostty: Ghostty
+  let _ghostty: Ghostty
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
   let handleResize: () => void
@@ -173,7 +222,11 @@ export const Terminal = (props: TerminalProps) => {
   const start =
     typeof local.pty.cursor === "number" && Number.isSafeInteger(local.pty.cursor) ? local.pty.cursor : undefined
   let cursor = start ?? 0
+  let seek = start !== undefined ? start : restore ? -1 : 0
   let output: ReturnType<typeof terminalWriter> | undefined
+  let drop: VoidFunction | undefined
+  let reconn: ReturnType<typeof setTimeout> | undefined
+  let tries = 0
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -187,10 +240,21 @@ export const Terminal = (props: TerminalProps) => {
     }
   }
 
-  const pushSize = (cols: number, rows: number) => {
-    return sdk.client.pty
-      .update({
-        ptyID: local.pty.id,
+  const pushSize = async (cols: number, rows: number) => {
+    if ((await sdk().protocol) === "v1") {
+      return sdk()
+        .client.pty.update({
+          ptyID: id,
+          size: { cols, rows },
+        })
+        .catch((err) => {
+          debugTerminal("failed to sync terminal size", err)
+        })
+    }
+    return sdk()
+      .api.pty.update({
+        ptyID: id,
+        location: { directory },
         size: { cols, rows },
       })
       .catch((err) => {
@@ -204,10 +268,13 @@ export const Terminal = (props: TerminalProps) => {
     const currentTheme = theme.themes()[theme.themeId()]
     if (!currentTheme) return fallback
     const variant = mode === "dark" ? currentTheme.dark : currentTheme.light
-    if (!variant?.seeds) return fallback
+    if (!variant?.seeds && !variant?.palette) return fallback
     const resolved = resolveThemeVariant(variant, mode === "dark")
     const text = resolved["text-stronger"] ?? fallback.foreground
-    const background = resolved["background-stronger"] ?? fallback.background
+    const background = settings.general.newLayoutDesigns()
+      ? (resolveV2Token(resolveThemeVariantV2(variant, mode === "dark"), "v2-background-bg-base") ??
+        fallback.background)
+      : (resolved["background-stronger"] ?? fallback.background)
     const alpha = mode === "dark" ? 0.25 : 0.2
     const base = text.startsWith("#") ? (text as HexColor) : (fallback.foreground as HexColor)
     const selectionBackground = withAlpha(base, alpha)
@@ -219,7 +286,7 @@ export const Terminal = (props: TerminalProps) => {
     }
   }
 
-  const [terminalColors, setTerminalColors] = createSignal<TerminalColors>(getTerminalColors())
+  const terminalColors = createMemo(getTerminalColors)
 
   const scheduleFit = () => {
     if (disposed) return
@@ -235,7 +302,12 @@ export const Terminal = (props: TerminalProps) => {
 
   const scheduleSize = (cols: number, rows: number) => {
     if (disposed) return
-    if (lastSize?.cols === cols && lastSize?.rows === rows) return
+    if (lastSize?.cols === cols && lastSize?.rows === rows) {
+      pendingSize = undefined
+      if (sizeTimer !== undefined) clearTimeout(sizeTimer)
+      sizeTimer = undefined
+      return
+    }
 
     pendingSize = { cols, rows }
 
@@ -259,14 +331,15 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   createEffect(() => {
-    const colors = getTerminalColors()
-    setTerminalColors(colors)
+    const colors = terminalColors()
+    const mode = theme.mode() === "dark" ? "dark" : "light"
     if (!term) return
     setOptionIfSupported(term, "theme", colors)
+    setOptionIfSupported(term, "colorScheme", mode)
   })
 
   createEffect(() => {
-    const font = monoFontFamily(settings.appearance.font())
+    const font = terminalFontFamily(settings.appearance.terminalFont())
     if (!term) return
     setOptionIfSupported(term, "fontFamily", font)
     scheduleFit()
@@ -309,7 +382,11 @@ export const Terminal = (props: TerminalProps) => {
 
     event.preventDefault()
     event.stopImmediatePropagation()
-    platform.openLink(text)
+    if (URL.canParse(text) && new URL(text).protocol === "file:" && platform.openLocalFile) {
+      platform.openLocalFile(text)
+      return
+    }
+    platform.openExternal(text)
   }
 
   onMount(() => {
@@ -320,25 +397,13 @@ export const Terminal = (props: TerminalProps) => {
       const mod = loaded.mod
       const g = loaded.ghostty
 
-      const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
-      const restoreSize =
-        restore &&
-        typeof local.pty.cols === "number" &&
-        Number.isSafeInteger(local.pty.cols) &&
-        local.pty.cols > 0 &&
-        typeof local.pty.rows === "number" &&
-        Number.isSafeInteger(local.pty.rows) &&
-        local.pty.rows > 0
-          ? { cols: local.pty.cols, rows: local.pty.rows }
-          : undefined
-
       const t = new mod.Terminal({
         cursorBlink: true,
         cursorStyle: "bar",
         cols: restoreSize?.cols,
         rows: restoreSize?.rows,
         fontSize: 14,
-        fontFamily: monoFontFamily(settings.appearance.font()),
+        fontFamily: terminalFontFamily(settings.appearance.terminalFont()),
         allowTransparency: false,
         convertEol: false,
         theme: terminalColors(),
@@ -350,9 +415,14 @@ export const Terminal = (props: TerminalProps) => {
         cleanup()
         return
       }
-      ghostty = g
+      _ghostty = g
       term = t
-      output = terminalWriter((data, done) => t.write(data, done))
+      setOptionIfSupported(t, "colorScheme", theme.mode() === "dark" ? "dark" : "light")
+      output = terminalWriter((data, done) =>
+        t.write(data, () => {
+          done?.()
+        }),
+      )
 
       t.attachCustomKeyEventHandler((event) => {
         const key = event.key.toLowerCase()
@@ -377,6 +447,7 @@ export const Terminal = (props: TerminalProps) => {
       fitAddon = fit
       serializeAddon = serializer
 
+      const active = document.activeElement
       t.open(container)
       useTerminalUiBindings({
         container,
@@ -386,10 +457,25 @@ export const Terminal = (props: TerminalProps) => {
         handleLinkClick,
       })
 
-      focusTerminal()
+      if (local.autoFocus === true) {
+        focusTerminal()
+        local.onAutoFocus?.()
+      }
+      if (local.autoFocus !== true) {
+        const restoreFocus = () => {
+          const current = document.activeElement
+          if (current !== container && !container.contains(current)) return
+          t.blur()
+          t.textarea?.blur()
+          if (active instanceof HTMLElement && active.isConnected) active.focus()
+        }
+        restoreFocus()
+        const timer = setTimeout(restoreFocus, 0)
+        cleanups.push(() => clearTimeout(timer))
+      }
 
       if (typeof document !== "undefined" && document.fonts) {
-        document.fonts.ready.then(scheduleFit)
+        void document.fonts.ready.then(scheduleFit)
       }
 
       const onResize = t.onResize((size) => {
@@ -428,101 +514,195 @@ export const Terminal = (props: TerminalProps) => {
         await write(restore)
         fit.fit()
         scheduleSize(t.cols, t.rows)
-        if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+        if (scrollY !== undefined) t.scrollToLine(scrollY)
         startResize()
       } else {
         fit.fit()
         scheduleSize(t.cols, t.rows)
         if (restore) {
           await write(restore)
-          if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+          if (scrollY !== undefined) t.scrollToLine(scrollY)
         }
         startResize()
       }
 
-      // t.onScroll((ydisp) => {
-      // console.log("Scroll position:", ydisp)
-      // })
-
       const once = { value: false }
-      let closing = false
-
-      const url = new URL(sdk.url + `/pty/${local.pty.id}/connect`)
-      url.searchParams.set("directory", sdk.directory)
-      url.searchParams.set("cursor", String(start !== undefined ? start : local.pty.buffer ? -1 : 0))
-      url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-      url.username = server.current?.http.username ?? ""
-      url.password = server.current?.http.password ?? ""
-
-      const socket = new WebSocket(url)
-      socket.binaryType = "arraybuffer"
-      ws = socket
-
-      const handleOpen = () => {
-        local.onConnect?.()
-        scheduleSize(t.cols, t.rows)
-      }
-      socket.addEventListener("open", handleOpen)
-      if (socket.readyState === WebSocket.OPEN) handleOpen()
-
       const decoder = new TextDecoder()
-      const handleMessage = (event: MessageEvent) => {
-        if (disposed) return
-        if (closing) return
-        if (event.data instanceof ArrayBuffer) {
-          const bytes = new Uint8Array(event.data)
-          if (bytes[0] !== 0) return
-          const json = decoder.decode(bytes.subarray(1))
-          try {
-            const meta = JSON.parse(json) as { cursor?: unknown }
-            const next = meta?.cursor
-            if (typeof next === "number" && Number.isSafeInteger(next) && next >= 0) {
-              cursor = next
-            }
-          } catch (err) {
-            debugTerminal("invalid websocket control frame", err)
-          }
-          return
-        }
 
-        const data = typeof event.data === "string" ? event.data : ""
-        if (!data) return
-        output?.push(data)
-        cursor += data.length
-      }
-      socket.addEventListener("message", handleMessage)
-
-      const handleError = (error: Event) => {
+      const fail = (err: unknown) => {
         if (disposed) return
-        if (closing) return
         if (once.value) return
         once.value = true
-        console.error("WebSocket error:", error)
-        local.onConnectError?.(error)
+        local.onConnectError?.(err)
       }
-      socket.addEventListener("error", handleError)
 
-      const handleClose = (event: CloseEvent) => {
-        if (disposed) return
-        if (closing) return
-        // Normal closure (code 1000) means PTY process exited - server event handles cleanup
-        // For other codes (network issues, server restart), trigger error handler
-        if (event.code !== 1000) {
-          if (once.value) return
-          once.value = true
-          local.onConnectError?.(new Error(`WebSocket closed abnormally: ${event.code}`))
+      const gone = async () => {
+        if ((await sdk().protocol) === "v1") {
+          return sdk()
+            .client.pty.get({ ptyID: id }, { throwOnError: false })
+            .then((result) => result.response.status === 404)
+            .catch((err) => {
+              debugTerminal("failed to inspect terminal session", err)
+              return false
+            })
         }
+        return sdk()
+          .api.pty.get({ ptyID: id, location: { directory } })
+          .then((result) => result.data.status === "exited")
+          .catch((err) => {
+            if (err && typeof err === "object" && "_tag" in err && err._tag === "PtyNotFoundError") return true
+            debugTerminal("failed to inspect terminal session", err)
+            return false
+          })
       }
-      socket.addEventListener("close", handleClose)
 
-      cleanups.push(() => {
-        closing = true
-        socket.removeEventListener("open", handleOpen)
-        socket.removeEventListener("message", handleMessage)
-        socket.removeEventListener("error", handleError)
-        socket.removeEventListener("close", handleClose)
-        if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close(1000)
-      })
+      const connectToken = async () => {
+        if ((await sdk().protocol) === "v1") {
+          const result = await sdk()
+            .client.pty.connectToken(
+              { ptyID: id, directory },
+              {
+                throwOnError: false,
+                headers: { "x-opencode-ticket": "1" },
+              },
+            )
+            .catch((err: unknown) => {
+              if (err instanceof Error && err.message.includes("Request is not supported")) return
+              throw err
+            })
+          if (!result) return
+          if (result.response.status === 200 && result.data?.ticket) return result.data.ticket
+          if (result.response.status === 404 || result.response.status === 405) return
+          if (result.response.status === 403) throw new Error(language.t("terminal.connectTicket.csrfError"))
+          throw new Error(language.t("terminal.connectTicket.statusError", { status: result.response.status }))
+        }
+        // return sdk()
+        //   .api.pty.connectToken({
+        //     ptyID: id,
+        //     location: { directory },
+        //     "x-opencode-ticket": "1",
+        //   })
+        //   .then((result) => result.data.ticket)
+      }
+
+      const retry = (err: unknown) => {
+        if (disposed) return
+        if (reconn !== undefined) return
+
+        const ms = Math.min(250 * 2 ** Math.min(tries, 4), 4_000)
+        reconn = setTimeout(async () => {
+          reconn = undefined
+          if (disposed) return
+          if (await gone()) {
+            if (disposed) return
+            fail(err)
+            return
+          }
+          if (disposed) return
+          tries += 1
+          open()
+        }, ms)
+      }
+
+      const open = async () => {
+        if (disposed) return
+        drop?.()
+
+        const ticket = await connectToken().catch((err) => {
+          fail(err)
+          return undefined
+        })
+        const protocol = await sdk().protocol
+        // if (protocol === "v2" && !ticket) return
+        if (once.value) return
+        if (disposed) return
+
+        const socket = new WebSocket(
+          terminalWebSocketURL({
+            protocol,
+            url,
+            id,
+            directory,
+            cursor: seek,
+            ticket,
+            sameOrigin,
+            username,
+            password,
+            authToken,
+          }),
+        )
+        socket.binaryType = "arraybuffer"
+        ws = socket
+
+        const handleOpen = () => {
+          if (disposed) return
+          tries = 0
+          local.onConnect?.()
+          scheduleSize(t.cols, t.rows)
+          if (t.getMode(2031)) t.write("\x1b[?996n")
+        }
+
+        const handleMessage = (event: MessageEvent) => {
+          if (disposed) return
+          if (event.data instanceof ArrayBuffer) {
+            const bytes = new Uint8Array(event.data)
+            if (bytes[0] !== 0) return
+            const json = decoder.decode(bytes.subarray(1))
+            try {
+              const meta = JSON.parse(json) as { cursor?: unknown }
+              const next = meta?.cursor
+              if (typeof next === "number" && Number.isSafeInteger(next) && next >= 0) {
+                cursor = next
+                seek = next
+              }
+            } catch (err) {
+              debugTerminal("invalid websocket control frame", err)
+            }
+            return
+          }
+
+          const data = typeof event.data === "string" ? event.data : ""
+          if (!data) return
+          output?.push(data)
+          cursor += data.length
+          seek = cursor
+        }
+
+        const handleError = (error: Event) => {
+          if (disposed) return
+          debugTerminal("websocket error", error)
+        }
+
+        const stop = () => {
+          socket.removeEventListener("open", handleOpen)
+          socket.removeEventListener("message", handleMessage)
+          socket.removeEventListener("error", handleError)
+          socket.removeEventListener("close", handleClose)
+          if (ws === socket) ws = undefined
+          if (drop === stop) drop = undefined
+          if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close(1000)
+        }
+
+        const handleClose = (event: CloseEvent) => {
+          if (ws === socket) ws = undefined
+          if (drop === stop) drop = undefined
+          socket.removeEventListener("open", handleOpen)
+          socket.removeEventListener("message", handleMessage)
+          socket.removeEventListener("error", handleError)
+          socket.removeEventListener("close", handleClose)
+          if (disposed) return
+          if (event.code === 1000) return
+          retry(new Error(language.t("terminal.connectionLost.abnormalClose", { code: event.code })))
+        }
+
+        drop = stop
+        socket.addEventListener("open", handleOpen)
+        socket.addEventListener("message", handleMessage)
+        socket.addEventListener("error", handleError)
+        socket.addEventListener("close", handleClose)
+      }
+
+      open()
     }
 
     void run().catch((err) => {
@@ -540,10 +720,12 @@ export const Terminal = (props: TerminalProps) => {
     disposed = true
     if (fitFrame !== undefined) cancelAnimationFrame(fitFrame)
     if (sizeTimer !== undefined) clearTimeout(sizeTimer)
+    if (reconn !== undefined) clearTimeout(reconn)
+    drop?.()
     if (ws && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) ws.close(1000)
 
     const finalize = () => {
-      persistTerminal({ term, addon: serializeAddon, cursor, pty: local.pty, onCleanup: props.onCleanup })
+      persistTerminal({ term, addon: serializeAddon, cursor, id, onCleanup: props.onCleanup })
       cleanup()
     }
 
@@ -559,11 +741,12 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
+      dir="ltr"
       data-prevent-autofocus
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         "select-text": true,
         "size-full px-6 py-3 font-mono relative overflow-hidden": true,
         [local.class ?? ""]: !!local.class,

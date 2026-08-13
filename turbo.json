@@ -1,20 +1,31 @@
 {
-  "$schema": "https://turborepo.com/schema.json",
+  "$schema": "https://v2-8-13.turborepo.dev/schema.json",
   "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "tasks": {
-    "typecheck": {
-      "dependsOn": ["^build"]
-    },
+    "typecheck": {},
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": [],
       "outputs": ["dist/**"]
     },
     "opencode#test": {
       "dependsOn": ["^build"],
+      "outputs": [],
+      "passThroughEnv": ["*"]
+    },
+    "@opencode-ai/core#test": {
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "@opencode-ai/app#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@opencode-ai/ui#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@opencode-ai/session-ui#test": {
       "dependsOn": ["^build"],
       "outputs": []
     }

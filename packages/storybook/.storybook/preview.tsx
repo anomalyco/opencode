@@ -1,4 +1,6 @@
-import "@opencode-ai/ui/styles"
+import "@opencode-ai/ui/styles/tailwind"
+import "@opencode-ai/session-ui/styles"
+import "@opencode-ai/ui/v2/styles/tailwind.css"
 
 import { createEffect, onCleanup, onMount } from "solid-js"
 import addonA11y from "@storybook/addon-a11y"
@@ -7,12 +9,8 @@ import { MetaProvider } from "@solidjs/meta"
 import { addons } from "storybook/preview-api"
 import { GLOBALS_UPDATED } from "storybook/internal/core-events"
 import { createJSXDecorator, definePreview } from "storybook-solidjs-vite"
-import { Code } from "@opencode-ai/ui/code"
-import { CodeComponentProvider } from "@opencode-ai/ui/context/code"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
-import { DiffComponentProvider } from "@opencode-ai/ui/context/diff"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
-import { Diff } from "@opencode-ai/ui/diff"
 import { ThemeProvider, useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { Font } from "@opencode-ai/ui/font"
 
@@ -46,6 +44,17 @@ const Scheme = (props: { value?: unknown }) => {
   return null
 }
 
+const NewLayout = () => {
+  // Mirror app.tsx BodyDesignClass so stories render with v2 (new-layout) styles
+  // instead of the legacy `body:not([data-new-layout])` branch.
+  onMount(() => {
+    document.body.toggleAttribute("data-new-layout", true)
+    document.body.classList.add("font-(family-name:--font-family-text)", "text-[13px]", "font-[440]")
+    document.body.classList.remove("text-12-regular")
+  })
+  return null
+}
+
 const frame = createJSXDecorator((Story, context) => {
   const override = context.parameters?.themes?.themeOverride
   const selected = context.globals?.theme
@@ -56,22 +65,19 @@ const frame = createJSXDecorator((Story, context) => {
       <Font />
       <ThemeProvider>
         <Scheme value={scheme} />
+        <NewLayout />
         <DialogProvider>
           <MarkedProvider>
-            <DiffComponentProvider component={Diff}>
-              <CodeComponentProvider component={Code}>
-                <div
-                  style={{
-                    "min-height": "100vh",
-                    padding: "24px",
-                    "background-color": "var(--background-base)",
-                    color: "var(--text-base)",
-                  }}
-                >
-                  <Story />
-                </div>
-              </CodeComponentProvider>
-            </DiffComponentProvider>
+            <div
+              style={{
+                "min-height": "100vh",
+                padding: "24px",
+                "background-color": "var(--background-base)",
+                color: "var(--text-base)",
+              }}
+            >
+              <Story />
+            </div>
           </MarkedProvider>
         </DialogProvider>
       </ThemeProvider>

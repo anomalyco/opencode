@@ -1,15 +1,9 @@
 import { $ } from "bun"
+import { downloadCliToResources } from "./utils"
 
-import { copyBinaryToSidecarFolder, getCurrentSidecar, windowsify } from "./utils"
+await $`bun run install-electron`
 
-const RUST_TARGET = Bun.env.TAURI_ENV_TARGET_TRIPLE
+await $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`
 
-const sidecarConfig = getCurrentSidecar(RUST_TARGET)
-
-const binaryPath = windowsify(`../opencode/dist/${sidecarConfig.ocBinary}/bin/opencode`)
-
-await (sidecarConfig.ocBinary.includes("-baseline")
-  ? $`cd ../opencode && bun run build --single --baseline`
-  : $`cd ../opencode && bun run build --single`)
-
-await copyBinaryToSidecarFolder(binaryPath, RUST_TARGET)
+await $`cd ../opencode && bun script/build-node.ts`
+await downloadCliToResources()

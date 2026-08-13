@@ -14,10 +14,11 @@ OpenCode는 **JSON**과 **JSONC**(주석이 포함된 JSON) 형식을 모두 지
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  // Theme configuration
-  "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
+  "server": {
+    "port": 4096,
+  },
 }
 ```
 
@@ -33,7 +34,7 @@ config 파일은 **교체되지 않고 병합**됩니다.
 
 config 파일은 서로 대체되는 방식이 아니라 병합됩니다. 아래 config 위치의 설정이 결합되며, 충돌하는 key에 대해서만 나중에 로드된 config가 앞선 값을 override합니다. 충돌하지 않는 설정은 모두 유지됩니다.
 
-예를 들어, 전역 config에 `theme: "opencode"`와 `autoupdate: true`가 있고 프로젝트 config에 `model: "anthropic/claude-sonnet-4-5"`가 있으면 최종 config에는 이 세 설정이 모두 포함됩니다.
+예를 들어, 전역 config에 `autoupdate: true`가 있고 프로젝트 config에 `model: "anthropic/claude-sonnet-4-5"`가 있으면 최종 config에는 이 설정이 모두 포함됩니다.
 
 ---
 
@@ -94,7 +95,9 @@ Remote config는 가장 먼저 로드되어 기본 레이어 역할을 합니다
 
 ### Global
 
-전역 OpenCode config는 `~/.config/opencode/opencode.json`에 두세요. theme, provider, keybind 같은 사용자 전체 기본 설정은 전역 config로 관리하세요.
+전역 OpenCode config는 `~/.config/opencode/opencode.json`에 두세요. provider, model, permissions 같은 사용자 전체 기본 설정은 전역 config로 관리하세요.
+
+TUI 관련 설정은 `~/.config/opencode/tui.json`을 사용하세요.
 
 전역 config는 조직의 Remote 기본값을 override합니다.
 
@@ -103,6 +106,8 @@ Remote config는 가장 먼저 로드되어 기본 레이어 역할을 합니다
 ### Per project
 
 프로젝트 루트에 `opencode.json`을 추가하세요. 프로젝트 config는 표준 config 파일 중 우선순위가 가장 높아 전역 및 Remote config를 모두 override합니다.
+
+프로젝트별 TUI 설정은 `tui.json`을 함께 추가하세요.
 
 :::tip
 프로젝트별 config는 프로젝트 루트에 두세요.
@@ -142,7 +147,9 @@ custom 디렉토리는 전역 config와 `.opencode` 디렉토리 뒤에 로드�
 
 ## Schema
 
-config 파일의 schema는 [**`opencode.ai/config.json`**](https://opencode.ai/config.json)에 정의되어 있습니다.
+server/runtime config schema는 [**`opencode.ai/config.json`**](https://opencode.ai/config.json)에 정의되어 있습니다.
+
+TUI config는 [**`opencode.ai/tui.json`**](https://opencode.ai/tui.json)을 사용합니다.
 
 편집기에서 이 schema를 기반으로 validation과 autocomplete를 사용할 수 있습니다.
 
@@ -150,28 +157,24 @@ config 파일의 schema는 [**`opencode.ai/config.json`**](https://opencode.ai/c
 
 ### TUI
 
-`tui` 옵션으로 TUI 관련 설정을 구성할 수 있습니다.
+TUI 관련 설정에는 전용 `tui.json` (또는 `tui.jsonc`) 파일을 사용하세요.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    },
-    "diff_style": "auto"
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
-사용 가능한 옵션:
+`OPENCODE_TUI_CONFIG`를 사용하여 사용자 지정 TUI 설정 파일을 가리킬 수 있습니다.
 
-- `scroll_acceleration.enabled` - macOS 스타일 스크롤 가속을 활성화합니다. **`scroll_speed`보다 우선합니다.**
-- `scroll_speed` - 사용자 정의 스크롤 속도 배수(기본: `3`, 최소: `1`). `scroll_acceleration.enabled`가 `true`이면 무시됩니다.
-- `diff_style` - diff 렌더링 방식을 제어합니다. `"auto"`는 터미널 너비에 맞춰 조정되고, `"stacked"`는 항상 단일 컬럼으로 표시합니다.
+`opencode.json`의 기존 `theme`, `keybinds`, `tui` 키는 더 이상 사용되지 않으며(deprecated) 가능한 경우 자동으로 마이그레이션됩니다.
 
-[TUI에 대해 더 알아보기](/docs/tui).
+[TUI 구성에 대해 더 알아보기](/docs/tui#configure).
 
 ---
 
@@ -297,12 +300,12 @@ Bearer token(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 profile 기반 인
 
 ### Themes
 
-`theme` 옵션으로 OpenCode config에서 사용할 theme를 설정할 수 있습니다.
+`tui.json`에서 UI 테마를 설정하세요.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "theme": ""
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "tokyonight"
 }
 ```
 
@@ -402,11 +405,11 @@ Bearer token(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 profile 기반 인
 
 ### Keybinds
 
-`keybinds` 옵션으로 keybind를 커스터마이즈할 수 있습니다.
+`tui.json`에서 단축키를 사용자 지정하세요.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {}
 }
 ```
@@ -486,14 +489,14 @@ OpenCode는 시작 시 새 업데이트를 자동으로 다운로드합니다. `
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true,
+    "prune": false,
     "reserved": 10000
   }
 }
 ```
 
 - `auto` - context가 가득 찼을 때 세션을 자동 compact합니다(기본값: `true`).
-- `prune` - token 절약을 위해 오래된 tool 출력을 제거합니다(기본값: `true`).
+- `prune` - token 절약을 위해 오래된 tool 출력을 제거합니다(기본값: `false`).
 - `reserved` - compaction용 token buffer입니다. compaction 중 overflow가 나지 않도록 충분한 window를 남깁니다.
 
 ---

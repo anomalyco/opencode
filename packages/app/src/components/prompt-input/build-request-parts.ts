@@ -1,4 +1,4 @@
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@opencode-ai/sdk/v2/client"
 import type { FileSelection } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
@@ -22,7 +22,7 @@ type ContextFile = {
 type BuildRequestPartsInput = {
   prompt: Prompt
   context: ContextFile[]
-  images: ImageAttachmentPart[]
+  images: (Omit<ImageAttachmentPart, "blob"> & { dataUrl: string })[]
   text: string
   messageID: string
   sessionID: string
@@ -38,6 +38,16 @@ const absolute = (directory: string, path: string) => {
 
 const fileQuery = (selection: FileSelection | undefined) =>
   selection ? `?start=${selection.startLine}&end=${selection.endLine}` : ""
+
+const mention = /(^|[\s([{"'])@(\S+)/g
+
+const parseCommentMentions = (comment: string) => {
+  return Array.from(comment.matchAll(mention)).flatMap((match) => {
+    const path = (match[2] ?? "").replace(/[.,!?;:)}\]"']+$/, "")
+    if (!path) return []
+    return [path]
+  })
+}
 
 const isFileAttachment = (part: Prompt[number]): part is FileAttachmentPart => part.type === "file"
 const isAgentAttachment = (part: Prompt[number]): part is AgentPart => part.type === "agent"
@@ -79,31 +89,43 @@ const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID:
 }
 
 export function buildRequestParts(input: BuildRequestPartsInput) {
-  const requestParts: PromptRequestPart[] = [
-    {
-      id: Identifier.ascending("part"),
-      type: "text",
-      text: input.text,
-    },
-  ]
+  const requestParts: PromptRequestPart[] = input.text.trim()
+    ? [
+        {
+          id: Identifier.ascending("part"),
+          type: "text",
+          text: input.text,
+        },
+      ]
+    : []
 
   const files = input.prompt.filter(isFileAttachment).map((attachment) => {
     const path = absolute(input.sessionDirectory, attachment.path)
+    const source = attachment.source
+      ? {
+          ...attachment.source,
+          text: {
+            value: attachment.content,
+            start: attachment.start,
+            end: attachment.end,
+          },
+        }
+      : {
+          type: "file" as const,
+          text: {
+            value: attachment.content,
+            start: attachment.start,
+            end: attachment.end,
+          },
+          path,
+        }
     return {
       id: Identifier.ascending("part"),
       type: "file",
-      mime: "text/plain",
-      url: `file://${encodeFilePath(path)}${fileQuery(attachment.selection)}`,
-      filename: getFilename(attachment.path),
-      source: {
-        type: "file",
-        text: {
-          value: attachment.content,
-          start: attachment.start,
-          end: attachment.end,
-        },
-        path,
-      },
+      mime: attachment.mime ?? "text/plain",
+      url: attachment.url ?? `file://${encodeFilePath(path)}${fileQuery(attachment.selection)}`,
+      filename: attachment.filename ?? getFilename(attachment.path),
+      source,
     } satisfies PromptRequestPart
   })
 
@@ -138,6 +160,21 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
 
     if (!comment) return [filePart]
 
+    const mentions = parseCommentMentions(comment).flatMap((path) => {
+      const url = `file://${encodeFilePath(absolute(input.sessionDirectory, path))}`
+      if (used.has(url)) return []
+      used.add(url)
+      return [
+        {
+          id: Identifier.ascending("part"),
+          type: "file",
+          mime: "text/plain",
+          url,
+          filename: getFilename(path),
+        } satisfies PromptRequestPart,
+      ]
+    })
+
     return [
       {
         id: Identifier.ascending("part"),
@@ -153,6 +190,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
         }),
       } satisfies PromptRequestPart,
       filePart,
+      ...mentions,
     ]
   })
 
@@ -162,7 +200,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       type: "file",
       mime: attachment.mime,
       url: attachment.dataUrl,
-      filename: attachment.filename,
+      filename: attachment.sourcePath ?? attachment.filename,
     } satisfies PromptRequestPart
   })
 

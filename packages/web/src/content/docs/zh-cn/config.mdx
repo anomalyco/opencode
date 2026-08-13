@@ -14,10 +14,11 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  // Theme configuration
-  "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
+  "server": {
+    "port": 4096,
+  },
 }
 ```
 
@@ -33,7 +34,7 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 配置文件是合并在一起的，而不是被替换。来自以下配置位置的设置会被合并。后面的配置仅在键冲突时覆盖前面的配置。所有配置中的非冲突设置都会被保留。
 
-例如，如果您的全局配置设置了 `theme: "opencode"` 和 `autoupdate: true`，而您的项目配置设置了 `model: "anthropic/claude-sonnet-4-5"`，则最终配置将包含所有三个设置。
+例如，如果您的全局配置设置了 `autoupdate: true`，而您的项目配置设置了 `model: "anthropic/claude-sonnet-4-5"`，则最终配置将包含这两个设置。
 
 ---
 
@@ -486,14 +487,14 @@ OpenCode 启动时会自动下载新版本。您可以使用 `autoupdate` 选项
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true,
+    "prune": false,
     "reserved": 10000
   }
 }
 ```
 
 - `auto` - 当上下文已满时自动压缩会话（默认值：`true`）。
-- `prune` - 删除旧的工具输出以节省 Token（默认值：`true`）。
+- `prune` - 删除旧的工具输出以节省 Token（默认值：`false`）。
 - `reserved` - 压缩时的 Token 缓冲区。保留足够的窗口以避免压缩过程中溢出。
 
 ---

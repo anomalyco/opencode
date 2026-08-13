@@ -9,13 +9,14 @@ on:
 
 jobs:
   sync-locales:
-    if: github.actor != 'opencode-agent[bot]'
+    if: false
+    #if: github.actor != 'opencode-agent[bot]'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -34,7 +35,7 @@ jobs:
       - name: Compute changed English docs
         id: changes
         run: |
-          FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- 'packages/web/src/content/docs/*.mdx' || true)
+          FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- ':(glob)packages/web/src/content/docs/*.mdx' || true)
           if [ -z "$FILES" ]; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
             echo "No English docs changed in push range"
@@ -59,43 +60,10 @@ jobs:
             {
               "permission": {
                 "*": "deny",
-                "read": {
-                  "*": "deny",
-                  "packages/web/src/content/docs": "allow",
-                  "packages/web/src/content/docs/*": "allow",
-                  "packages/web/src/content/docs/*.mdx": "allow",
-                  "packages/web/src/content/docs/*/*.mdx": "allow",
-                  ".opencode": "allow",
-                  ".opencode/agent": "allow",
-                  ".opencode/glossary": "allow",
-                  ".opencode/agent/translator.md": "allow",
-                  ".opencode/glossary/*.md": "allow"
-                },
-                "edit": {
-                  "*": "deny",
-                  "packages/web/src/content/docs/*/*.mdx": "allow"
-                },
-                "glob": {
-                  "*": "deny",
-                  "packages/web/src/content/docs*": "allow",
-                  ".opencode/glossary*": "allow"
-                },
-                "task": {
-                  "*": "deny",
-                  "translator": "allow"
-                }
-              },
-              "agent": {
-                "translator": {
-                  "permission": {
-                    "*": "deny",
-                    "read": {
-                      "*": "deny",
-                      ".opencode/agent/translator.md": "allow",
-                      ".opencode/glossary/*.md": "allow"
-                    }
-                  }
-                }
+                "read": "allow",
+                "edit": "allow",
+                "glob": "allow",
+                "task": "allow"
               }
             }
         run: |

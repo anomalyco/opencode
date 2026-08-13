@@ -84,6 +84,38 @@ Il fonctionne comme n’importe quel autre fournisseur dans OpenCode et son util
 
 ---
 
+## OpenCode Go
+
+OpenCode Go est un plan d'abonnement à faible coût qui offre un accès fiable aux modèles de codage ouverts populaires fournis par l'équipe OpenCode qui ont été
+testé et vérifié pour fonctionner correctement avec OpenCode.
+
+1. Exécutez la commande `/connect` dans le TUI, sélectionnez `OpenCode Go` et rendez-vous sur [opencode.ai/auth](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. Connectez-vous, ajoutez vos informations de facturation et copiez votre clé API.
+
+3. Collez votre clé API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Exécutez `/models` dans le TUI pour voir la liste des modèles que nous recommandons.
+
+   ```txt
+   /models
+   ```
+
+Il fonctionne comme n’importe quel autre fournisseur dans OpenCode et son utilisation est totalement facultative.
+
+---
+
 ## Annuaire
 
 Examinons certains fournisseurs en détail. Si vous souhaitez ajouter un fournisseur au
@@ -290,6 +322,44 @@ L'utilisation de votre abonnement Claude Pro/Max dans OpenCode n'est pas officie
 Vous pouvez également sélectionner **Créer une clé API** si vous n'avez pas d'abonnement Pro/Max. Il ouvrira également votre navigateur et vous demandera de vous connecter à Anthropic et vous donnera un code que vous pourrez coller dans votre terminal.
 
 Ou si vous disposez déjà d'une clé API, vous pouvez sélectionner **Entrer manuellement la clé API** et la coller dans votre terminal.
+
+---
+
+### Atomic Chat
+
+Vous pouvez configurer opencode pour utiliser des modèles locaux via [Atomic Chat](https://atomic.chat), une application de bureau qui exécute des LLM locaux derrière un serveur API compatible OpenAI (point de terminaison par défaut `http://127.0.0.1:1337/v1`).
+
+```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "atomic-chat": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Atomic Chat (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1337/v1"
+      },
+      "models": {
+        "<your-model-id>": {
+          "name": "<your-model-name>"
+        }
+      }
+    }
+  }
+}
+```
+
+Dans cet exemple :
+
+- `atomic-chat` est l'identifiant personnalisé du fournisseur. Il peut s'agir de n'importe quelle chaîne.
+- `npm` spécifie le paquet à utiliser pour ce fournisseur. Ici, `@ai-sdk/openai-compatible` est utilisé pour toute API compatible OpenAI.
+- `name` est le nom du fournisseur affiché dans l'interface.
+- `options.baseURL` est le point de terminaison du serveur local. Modifiez l'hôte et le port selon votre configuration Atomic Chat.
+- `models` est une carte d'ID de modèles vers leurs noms d'affichage. Chaque ID doit correspondre à l'`id` renvoyé par `GET /v1/models` — exécutez `curl http://127.0.0.1:1337/v1/models` pour lister les ID actuellement chargés dans Atomic Chat.
+
+:::tip
+Si les appels d'outils ne fonctionnent pas bien, choisissez un modèle chargé avec un bon support du tool calling (par exemple, une variante Qwen-Coder ou DeepSeek-Coder).
+:::
 
 ---
 
@@ -549,7 +619,7 @@ Vous pouvez également ajouter des modèles via votre configuration opencode.
    └ enter
    ```
 
-4. Exécutez la commande `/models` pour sélectionner un modèle DeepSeek tel que _DeepSeek Reasoner_.
+4. Exécutez la commande `/models` pour sélectionner un modèle DeepSeek tel que _DeepSeek V4 Pro_.
 
    ```txt
    /models
@@ -584,11 +654,11 @@ Vous pouvez également ajouter des modèles via votre configuration opencode.
 
 ---
 
-### Firmware
+### FrogBot
 
-1. Rendez-vous sur le [Tableau de bord du micrologiciel](https://app.firmware.ai/signup), créez un compte et générez une clé API.
+1. Rendez-vous sur le [Tableau de bord du micrologiciel](https://app.frogbot.ai/signup), créez un compte et générez une clé API.
 
-2. Exécutez la commande `/connect` et recherchez **Firmware**.
+2. Exécutez la commande `/connect` et recherchez **FrogBot**.
 
    ```txt
    /connect
@@ -731,7 +801,7 @@ export GITLAB_TOKEN=glpat-...
 :::note
 Votre administrateur GitLab doit activer les éléments suivants :
 
-1. [Duo Agent Platform](https://docs.gitlab.com/user/gitlab_duo/turn_on_off/) pour l'utilisateur, le groupe ou l'instance
+1. [Duo Agent Platform](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/) pour l'utilisateur, le groupe ou l'instance
 2. Indicateurs de fonctionnalités (via la console Rails) :
    - `agent_platform_claude_code`
    - `third_party_agents_enabled`
@@ -753,7 +823,7 @@ Exposez ensuite l'ID de l'application en tant que variable d'environnement :
 export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 ```
 
-Plus de documentation sur la page d'accueil [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth).
+Plus de documentation sur la page d'accueil [opencode-gitlab-auth](https://www.npmjs.com/package/opencode-gitlab-auth).
 
 ##### Configuration
 
@@ -765,11 +835,7 @@ Personnalisez via `opencode.json` :
   "provider": {
     "gitlab": {
       "options": {
-        "instanceUrl": "https://gitlab.com",
-        "featureFlags": {
-          "duo_agent_platform_agentic_chat": true,
-          "duo_agent_platform": true
-        }
+        "instanceUrl": "https://gitlab.com"
       }
     }
   }
@@ -783,7 +849,7 @@ Pour accéder aux outils GitLab (demandes de fusion, tickets, pipelines, CI/CD, 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@gitlab/opencode-gitlab-plugin"]
+  "plugin": ["opencode-gitlab-plugin"]
 }
 ```
 
@@ -1480,6 +1546,39 @@ Ou ajoutez-le à votre profil bash :
    :::
 
 5. Exécutez la commande `/models` pour sélectionner parmi plus de 40 modèles disponibles.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving fournit un environnement d'hébergement souverain entièrement géré pour les modèles d'IA, se concentrant sur les LLM comme Llama, Mistral et Qwen, avec une souveraineté maximale des données sur l'infrastructure européenne.
+
+1. Rendez-vous sur le [portail STACKIT](https://portal.stackit.cloud), accédez à **AI Model Serving** et créez un jeton d'authentification pour votre projet.
+
+   :::tip
+   Vous avez besoin d'un compte client STACKIT, d'un compte utilisateur et d'un projet avant de créer des jetons d'authentification.
+   :::
+
+2. Exécutez la commande `/connect` et recherchez **STACKIT**.
+
+   ```txt
+   /connect
+   ```
+
+3. Entrez votre jeton d'authentification STACKIT AI Model Serving.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Exécutez la commande `/models` pour sélectionner parmi les modèles disponibles tels que _Qwen3-VL 235B_ ou _Llama 3.3 70B_.
 
    ```txt
    /models

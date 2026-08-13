@@ -1,23 +1,23 @@
 ---
 title: Introducción
-description: Comience con OpenCode.
+description: Comience a usar OpenCode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/) es un agente de codificación de IA de código abierto. Está disponible como interfaz basada en terminal, aplicación de escritorio o extensión IDE.
+[**OpenCode**](/) es un agente de codigo de IA de código abierto. Está disponible como interfaz basada en terminal, aplicación de escritorio o extensión IDE.
 
 ![OpenCode TUI con el tema opencode](../../../assets/lander/screenshot.png)
 
-Empecemos.
+Comencemos.
 
 ---
 
 #### Requisitos previos
 
-Para usar OpenCode en su terminal, necesitará:
+Para usar OpenCode en la terminal, necesitará:
 
 1. Un emulador de terminal moderno como:
    - [WezTerm](https://wezterm.org), multiplataforma
@@ -25,7 +25,7 @@ Para usar OpenCode en su terminal, necesitará:
    - [Ghostty](https://ghostty.org), Linux y macOS
    - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux y macOS
 
-2. Claves API para los LLM proveedores que desea utilizar.
+2. Claves de API de los proveedores de LLM que quiera usar.
 
 ---
 
@@ -37,7 +37,7 @@ La forma más sencilla de instalar OpenCode es mediante el script de instalació
 curl -fsSL https://opencode.ai/install | bash
 ```
 
-También puedes instalarlo con los siguientes comandos:
+También puedes instalarlo con alguno de los siguientes métodos:
 
 - **Usando Node.js**
 
@@ -91,7 +91,7 @@ También puedes instalarlo con los siguientes comandos:
 #### Windows
 
 :::tip[Recomendado: Usar WSL]
-Para obtener la mejor experiencia en Windows, recomendamos utilizar [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Proporciona un mejor rendimiento y compatibilidad total con las funciones de OpenCode.
+Para obtener la mejor experiencia en Windows, recomendamos utilizar [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Ofrece mejor rendimiento y compatibilidad total con las funciones de OpenCode.
 :::
 
 - **Usando Chocolatey**
@@ -124,28 +124,28 @@ Para obtener la mejor experiencia en Windows, recomendamos utilizar [Windows Sub
   docker run -it --rm ghcr.io/anomalyco/opencode
   ```
 
-Actualmente se encuentra en progreso el soporte para instalar OpenCode en Windows usando Bun.
+El soporte para instalar OpenCode en Windows usando Bun todavía está en desarrollo.
 
-También puede obtener el binario de [Versiones](https://github.com/anomalyco/opencode/releases).
+También puede obtener el binario desde [Versiones](https://github.com/anomalyco/opencode/releases).
 
 ---
 
 ## Configuración
 
-Con OpenCode puedes usar cualquier proveedor LLM configurando sus claves API.
+Con OpenCode, puede usar cualquier proveedor de LLM configurando sus claves de API.
 
-Si es nuevo en el uso de proveedores LLM, le recomendamos usar [OpenCode Zen](/docs/zen).
-Es una lista seleccionada de modelos que han sido probados y verificados por el equipo de OpenCode.
+Si es nuevo en el uso de proveedores de LLM, le recomendamos usar [OpenCode Zen](/docs/zen).
+Es una selección de modelos probados y verificados por el equipo de OpenCode.
 
-1. Ejecute el comando `/connect` en TUI, seleccione opencode y diríjase a [opencode.ai/auth](https://opencode.ai/auth).
+1. Ejecute el comando `/connect` en la TUI, seleccione opencode y diríjase a [opencode.ai/auth](https://opencode.ai/auth).
 
    ```txt
    /connect
    ```
 
-2. Inicie sesión, agregue sus datos de facturación y copie su clave API.
+2. Inicie sesión, agregue sus datos de facturación y copie su clave de API.
 
-3. Pega tu clave API.
+3. Pega tu clave de API.
 
    ```txt
    ┌ API key
@@ -154,50 +154,45 @@ Es una lista seleccionada de modelos que han sido probados y verificados por el 
    └ enter
    ```
 
-Alternativamente, puede seleccionar uno de los otros proveedores. [Más información](/docs/providers#directory).
+También puede seleccionar otro proveedor. [Más información](/docs/providers#directory).
 
 ---
 
 ## Inicializar
 
-Ahora que ha configurado un proveedor, puede navegar a un proyecto que
-quieres trabajar.
+Ahora que ya configuró un proveedor, vaya al proyecto en el que quiera trabajar.
 
 ```bash
 cd /path/to/project
 ```
 
-Y ejecute OpenCode.
+Luego, ejecute OpenCode.
 
 ```bash
 opencode
 ```
 
-A continuación, inicialice OpenCode para el proyecto ejecutando el siguiente comando.
+A continuación, inicialice OpenCode para el proyecto con el siguiente comando:
 
 ```bash frame="none"
 /init
 ```
 
-Esto hará que OpenCode analice su proyecto y cree un archivo `AGENTS.md` en
-la raíz del proyecto.
+OpenCode analizará su proyecto y creará un archivo AGENTS.md en la raíz.
 
 :::tip
-Debes enviar el archivo `AGENTS.md` de tu proyecto a Git.
+Asegúrese de versionar en Git el archivo AGENTS.md de su proyecto.
 :::
 
-Esto ayuda a OpenCode a comprender la estructura del proyecto y los patrones de codificación.
-usado.
+Esto ayuda a OpenCode a comprender la estructura del proyecto y los patrones de código que se usan en él.
 
 ---
 
 ## Usar
 
-Ahora está listo para usar OpenCode para trabajar en su proyecto. No dudes en preguntarle
-¡cualquier cosa!
+Ahora ya está listo para usar OpenCode en su proyecto. Puede pedirle desde explicaciones del código hasta cambios concretos.
 
-Si es nuevo en el uso de un agente de codificación de IA, aquí hay algunos ejemplos que podrían
-ayuda.
+Si es la primera vez que usa un agente de codigo con IA, estos ejemplos pueden servirle como punto de partida.
 
 ---
 
@@ -206,126 +201,117 @@ ayuda.
 Puede pedirle a OpenCode que le explique el código base.
 
 :::tip
-Utilice la tecla `@` para realizar una búsqueda aproximada de archivos en el proyecto.
+Utilice la tecla `@` para realizar una búsqueda aproximada de archivos dentro del proyecto.
 :::
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
-How is authentication handled in @packages/functions/src/api/index.ts
+¿Cómo se maneja la autenticación en @packages/functions/src/api/index.ts
 ```
 
-Esto es útil si hay una parte del código base en la que no trabajaste.
+Esto resulta útil cuando hay una parte del código base en la que usted no ha trabajado.
 
 ---
 
-### Agregar funciones
+### Agregar funcionalidades
 
-Puede pedirle a OpenCode que agregue nuevas funciones a su proyecto. Aunque primero recomendamos pedirle que cree un plan.
+Puede pedirle a OpenCode que agregue nuevas funcionalidades a su proyecto. Aun así, primero recomendamos pedirle que cree un plan.
 
-1. **Crea un plan**
+1. **Crear un plan**
 
-   OpenCode tiene un _Modo Plan_ que desactiva su capacidad para realizar cambios y
-   en su lugar, sugiera _cómo_ implementará la función.
+   OpenCode tiene un modo Plan que desactiva temporalmente su capacidad de hacer cambios y, en su lugar, propone _cómo_ implementará la funcionalidad.
 
-   Cambie a él usando la tecla **Tab**. Verás un indicador para esto en la esquina inferior derecha.
+   Cambie a este modo con la tecla **Tab.** Verá un indicador en la esquina inferior derecha.
 
    ```bash frame="none" title="Switch to Plan mode"
    <TAB>
    ```
 
-   Ahora describamos lo que queremos que haga.
+   Ahora describa lo que quiere que haga.
 
    ```txt frame="none"
-   When a user deletes a note, we'd like to flag it as deleted in the database.
-   Then create a screen that shows all the recently deleted notes.
-   From this screen, the user can undelete a note or permanently delete it.
+   Cuando un usuario elimine una nota, queremos marcarla como eliminada en la base de datos.
+   Luego, cree una pantalla que muestre todas las notas eliminadas recientemente.
+   Desde esa pantalla, el usuario podrá restaurar una nota o eliminarla de forma permanente.
    ```
 
-   Quiere darle a OpenCode suficientes detalles para entender lo que quiere. ayuda
-   hablar con él como si estuviera hablando con un desarrollador junior de su equipo.
+   Procure darle a OpenCode suficiente contexto para que entienda exactamente lo que necesita. Ayuda hablarle como si estuviera hablando con un desarrollador junior de su equipo.
 
    :::tip
-   Dale a OpenCode mucho contexto y ejemplos para ayudarlo a comprender lo que
-   desear.
+   Déle a OpenCode todo el contexto y los ejemplos que pueda para ayudarle a comprender lo que desea.
    :::
 
-2. **Repetir el plan**
+2. **Iterar sobre el plan**
 
-   Una vez que le proporcione un plan, puede enviarle comentarios o agregar más detalles.
+   Una vez que OpenCode le proponga un plan, puede darle comentarios o agregar más detalles.
 
    ```txt frame="none"
-   We'd like to design this new screen using a design I've used before.
-   [Image #1] Take a look at this image and use it as a reference.
+   Queremos diseñar esta nueva pantalla usando un diseño que ya hemos usado antes.
+   [Imagen #1] Revise esta imagen y úsela como referencia.
    ```
 
    :::tip
    Arrastre y suelte imágenes en la terminal para agregarlas al mensaje.
    :::
 
-   OpenCode puede escanear cualquier imagen que le proporcione y agregarla al mensaje. Puede
-   Haga esto arrastrando y soltando una imagen en la terminal.
+   OpenCode puede analizar cualquier imagen que usted le proporcione y añadirla al contexto del mensaje. Puede hacerlo arrastrando y soltando una imagen en la terminal.
 
-3. **Crea la función**
+3. **Implementar la funcionalidad**
 
-   Una vez que se sienta cómodo con el plan, vuelva al _Modo Build_
-   presionando la tecla **Tab** nuevamente.
+   Cuando esté conforme con el plan, vuelva al modo _Build_ presionando de nuevo la tecla Tab.
 
    ```bash frame="none"
    <TAB>
    ```
 
-   Y pidiéndole que haga los cambios.
+   Luego, pídale que haga los cambios.
 
    ```bash frame="none"
-   Sounds good! Go ahead and make the changes.
+   Perfecto. Continúe y realice los cambios.
    ```
 
 ---
 
 ### Realizar cambios
 
-Para cambios más sencillos, puede pedirle a OpenCode que lo construya directamente.
-sin tener que revisar el plan primero.
+Para cambios más sencillos, puede pedirle a OpenCode que los implemente directamente, sin revisar antes un plan.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
-We need to add authentication to the /settings route. Take a look at how this is
-handled in the /notes route in @packages/functions/src/notes.ts and implement
-the same logic in @packages/functions/src/settings.ts
+Necesitamos agregar autenticación a la ruta /settings. Revise cómo se maneja esto
+en la ruta /notes en @packages/functions/src/notes.ts e implemente
+la misma lógica en @packages/functions/src/settings.ts.
 ```
 
-Desea asegurarse de proporcionar una buena cantidad de detalles para que OpenCode tome la decisión correcta.
-cambios.
+Procure dar suficientes detalles para que OpenCode pueda tomar las decisiones correctas al hacer los cambios
 
 ---
 
 ### Deshacer cambios
 
-Digamos que le pides a OpenCode que haga algunos cambios.
+Supongamos que le pide a OpenCode que haga algunos cambios.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
-Can you refactor the function in @packages/functions/src/api/index.ts?
+¿Puede refactorizar la función en @packages/functions/src/api/index.ts?
 ```
 
-Pero te das cuenta de que no es lo que querías. Puedes **deshacer** los cambios
-usando el comando `/undo`.
+Pero luego se da cuenta de que no era lo que quería. Puede **deshacer** los cambios usando el comando `/undo`.
 
 ```bash frame="none"
 /undo
 ```
 
-OpenCode ahora revertirá los cambios que realizó y mostrará su mensaje original
-de nuevo.
+OpenCode revertirá los cambios que hizo y volverá a mostrar su mensaje original.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
-Can you refactor the function in @packages/functions/src/api/index.ts?
+¿Puede refactorizar la función en @packages/functions/src/api/index.ts?
 ```
 
-Desde aquí puedes modificar el mensaje y pedirle a OpenCode que vuelva a intentarlo.
+Desde ahí, puede modificar el mensaje y pedirle a OpenCode que lo intente de nuevo.
 
 :::tip
 Puede ejecutar `/undo` varias veces para deshacer varios cambios.
 :::
 
-O **puedes rehacer** los cambios usando el comando `/redo`.
+También puede rehacer los cambios usando el comando `/redo.`
 
 ```bash frame="none"
 /redo
@@ -335,7 +321,7 @@ O **puedes rehacer** los cambios usando el comando `/redo`.
 
 ## Compartir
 
-Las conversaciones que tengas con OpenCode pueden ser [compartidas con tu
+Las conversaciones que tenga con OpenCode pueden [compartirse con su
 equipo](/docs/share).
 
 ```bash frame="none"
@@ -348,12 +334,12 @@ Esto creará un enlace a la conversación actual y lo copiará en su portapapele
 Las conversaciones no se comparten de forma predeterminada.
 :::
 
-Aquí hay una [conversación de ejemplo](https://opencode.ai/s/4XP1fce5) con OpenCode.
+Aquí tiene una [conversación de ejemplo](https://opencode.ai/s/4XP1fce5) con OpenCode.
 
 ---
 
 ## Personalizar
 
-¡Y eso es todo! Ahora eres un profesional en el uso de OpenCode.
+Y eso es todo. Ya conoce lo básico para empezar a usar OpenCode.
 
-Para personalizarlo, recomendamos [elegir un tema](/docs/themes), [personalizar las combinaciones de teclas](/docs/keybinds), [configurar formateadores de código](/docs/formatters), [crear comandos personalizados](/docs/commands) o jugar con la [configuración OpenCode](/docs/config).
+Para personalizarlo, recomendamos [elegir un tema](/docs/themes), [personalizar las combinaciones de teclas](/docs/keybinds), [configurar formateadores de código](/docs/formatters), [crear comandos personalizados](/docs/commands) o explorar la [configuración OpenCode](/docs/config).

@@ -6,10 +6,14 @@ import { Identifier } from "./identifier"
 import { UserTable } from "./schema/user.sql"
 import { BillingTable } from "./schema/billing.sql"
 import { WorkspaceTable } from "./schema/workspace.sql"
+import { AccountTable } from "./schema/account.sql"
 import { Key } from "./key"
-import { eq, sql } from "drizzle-orm"
+import { and, eq, isNull, sql } from "drizzle-orm"
 
 export namespace Workspace {
+  export const Region = z.enum(["us", "eu", "sg", "cn"])
+  export type Region = z.infer<typeof Region>
+
   export const create = fn(
     z.object({
       name: z.string().min(1),
@@ -19,6 +23,13 @@ export namespace Workspace {
       const workspaceID = Identifier.create("workspace")
       const userID = Identifier.create("user")
       await Database.transaction(async (tx) => {
+        const active = await tx
+          .select({ id: AccountTable.id })
+          .from(AccountTable)
+          .where(and(eq(AccountTable.id, account.properties.accountID), isNull(AccountTable.timeDeleted)))
+          .then((rows) => rows[0])
+        if (!active) throw new Error("Account is not active")
+
         await tx.insert(WorkspaceTable).values({
           id: workspaceID,
           name,
@@ -49,19 +60,38 @@ export namespace Workspace {
 
   export const update = fn(
     z.object({
-      name: z.string().min(1).max(255),
+      name: z.string().min(1).max(255).optional(),
+      region: z.array(Region).min(1).optional(),
     }),
-    async ({ name }) => {
+    async (input) => {
       Actor.assertAdmin()
       const workspaceID = Actor.workspace()
       return await Database.use((tx) =>
         tx
           .update(WorkspaceTable)
           .set({
-            name,
+            ...("name" in input ? { name: input.name } : {}),
+            ...("region" in input ? { region: input.region } : {}),
           })
           .where(eq(WorkspaceTable.id, workspaceID)),
       )
+    },
+  )
+
+  export const setDefaultRegion = fn(
+    z.object({
+      country: z.string().optional(),
+    }),
+    async (input) => {
+      const region: Workspace.Region[] =
+        input.country?.toUpperCase() === "CN" ? ["us", "eu", "sg", "cn"] : ["us", "eu", "sg"]
+      await Database.use((tx) =>
+        tx
+          .update(WorkspaceTable)
+          .set({ region })
+          .where(and(eq(WorkspaceTable.id, Actor.workspace()), isNull(WorkspaceTable.region))),
+      )
+      return region
     },
   )
 

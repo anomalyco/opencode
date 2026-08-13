@@ -11,6 +11,7 @@ export const LOCALES = [
   "ja",
   "pl",
   "ru",
+  "uk",
   "ar",
   "no",
   "br",
@@ -41,6 +42,7 @@ const LABEL = {
   ja: "日本語",
   pl: "Polski",
   ru: "Русский",
+  uk: "Українська",
   ar: "العربية",
   no: "Norsk",
   br: "Português (Brasil)",
@@ -61,6 +63,7 @@ const TAG = {
   ja: "ja",
   pl: "pl",
   ru: "ru",
+  uk: "uk",
   ar: "ar",
   no: "no",
   br: "pt-BR",
@@ -81,6 +84,7 @@ const DOCS = {
   ja: "ja",
   pl: "pl",
   ru: "ru",
+  uk: "uk",
   ar: "ar",
   no: "nb",
   br: "pt-br",
@@ -104,9 +108,31 @@ const DOCS_SEGMENT = new Set([
   "ru",
   "th",
   "tr",
+  "uk",
   "zh-cn",
   "zh-tw",
 ])
+
+const DOCS_LOCALE = {
+  ar: "ar",
+  da: "da",
+  de: "de",
+  en: "en",
+  es: "es",
+  fr: "fr",
+  it: "it",
+  ja: "ja",
+  ko: "ko",
+  nb: "no",
+  "pt-br": "br",
+  root: "en",
+  ru: "ru",
+  th: "th",
+  tr: "tr",
+  uk: "uk",
+  "zh-cn": "zh",
+  "zh-tw": "zht",
+} as const satisfies Record<string, Locale>
 
 function suffix(pathname: string) {
   const index = pathname.search(/[?#]/)
@@ -130,7 +156,12 @@ export function docs(locale: Locale, pathname: string) {
     return `${next.path}${next.suffix}`
   }
 
-  if (value === "root") return `${next.path}${next.suffix}`
+  if (value === "root") {
+    if (next.path === "/docs/en") return `/docs${next.suffix}`
+    if (next.path === "/docs/en/") return `/docs/${next.suffix}`
+    if (next.path.startsWith("/docs/en/")) return `/docs/${next.path.slice("/docs/en/".length)}${next.suffix}`
+    return `${next.path}${next.suffix}`
+  }
 
   if (next.path === "/docs") return `/docs/${value}${next.suffix}`
   if (next.path === "/docs/") return `/docs/${value}/${next.suffix}`
@@ -152,6 +183,15 @@ export function parseLocale(value: unknown): Locale | null {
 
 export function fromPathname(pathname: string) {
   return parseLocale(fix(pathname).split("/")[1])
+}
+
+export function fromDocsPathname(pathname: string) {
+  const next = fix(pathname)
+  const value = next.split("/")[2]?.toLowerCase()
+  if (!value) return null
+  if (!next.startsWith("/docs/")) return null
+  if (!(value in DOCS_LOCALE)) return null
+  return DOCS_LOCALE[value as keyof typeof DOCS_LOCALE]
 }
 
 export function strip(pathname: string) {
@@ -205,6 +245,7 @@ function match(input: string): Locale | null {
   if (value.startsWith("ja")) return "ja"
   if (value.startsWith("pl")) return "pl"
   if (value.startsWith("ru")) return "ru"
+  if (value.startsWith("uk")) return "uk"
   if (value.startsWith("ar")) return "ar"
   if (value.startsWith("tr")) return "tr"
   if (value.startsWith("th")) return "th"
@@ -271,6 +312,9 @@ export function localeFromRequest(request: Request) {
 
   const fromPath = fromPathname(new URL(request.url).pathname)
   if (fromPath) return fromPath
+
+  const fromDocsPath = fromDocsPathname(new URL(request.url).pathname)
+  if (fromDocsPath) return fromDocsPath
 
   return (
     localeFromCookieHeader(request.headers.get("cookie")) ??

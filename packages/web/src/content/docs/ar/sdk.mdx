@@ -117,6 +117,78 @@ try {
 
 ---
 
+## المخرجات المنظمة
+
+يمكنك طلب مخرجات JSON منظمة من النموذج عن طريق تحديد `format` مع مخطط JSON. سيستخدم النموذج أداة `StructuredOutput` لإرجاع JSON تم التحقق من صحته ومطابق للمخطط الخاص بك.
+
+### الاستخدام الأساسي
+
+```typescript
+const result = await client.session.prompt({
+  path: { id: sessionId },
+  body: {
+    parts: [{ type: "text", text: "Research Anthropic and provide company info" }],
+    format: {
+      type: "json_schema",
+      schema: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "Company name" },
+          founded: { type: "number", description: "Year founded" },
+          products: {
+            type: "array",
+            items: { type: "string" },
+            description: "Main products",
+          },
+        },
+        required: ["company", "founded"],
+      },
+    },
+  },
+})
+
+// Access the structured output
+console.log(result.data.info.structured_output)
+// { company: "Anthropic", founded: 2021, products: ["Claude", "Claude API"] }
+```
+
+### أنواع صيغ الإخراج
+
+| النوع         | الوصف                                              |
+| ------------- | -------------------------------------------------- |
+| `text`        | الافتراضي. استجابة نصية قياسية (بدون مخرجات منظمة) |
+| `json_schema` | يرجع JSON تم التحقق من صحته ومطابق للمخطط المقدم   |
+
+### صيغة مخطط JSON
+
+عند استخدام `type: 'json_schema'`، يجب تقديم:
+
+| الحقل        | النوع           | الوصف                                            |
+| ------------ | --------------- | ------------------------------------------------ |
+| `type`       | `'json_schema'` | مطلوب. يحدد وضع مخطط JSON                        |
+| `schema`     | `object`        | مطلوب. كائن مخطط JSON الذي يحدد بنية الإخراج     |
+| `retryCount` | `number`        | اختياري. عدد محاولات إعادة التحقق (الافتراضي: 2) |
+
+### معالجة الأخطاء
+
+إذا فشل النموذج في إنتاج مخرجات منظمة صالحة بعد جميع المحاولات، ستتضمن الاستجابة `StructuredOutputError`:
+
+```typescript
+if (result.data.info.error?.name === "StructuredOutputError") {
+  console.error("Failed to produce structured output:", result.data.info.error.message)
+  console.error("Attempts:", result.data.info.error.retries)
+}
+```
+
+### أفضل الممارسات
+
+1. **قدّم أوصافا واضحة** في خصائص المخطط لمساعدة النموذج على فهم البيانات التي يجب استخراجها
+2. **استخدم `required`** لتحديد الحقول التي يجب أن تكون موجودة
+3. **حافظ على تركيز المخططات** - المخططات المتداخلة المعقدة قد تكون أصعب على النموذج لملئها بشكل صحيح
+4. **عيّن `retryCount` مناسبا** - قم بزيادته للمخططات المعقدة، وتقليله للمخططات البسيطة
+
+---
+
 ## APIs
 
 توفر SDK جميع واجهات الخادم عبر عميل آمن للأنواع.
@@ -226,27 +298,27 @@ const { providers, default: defaults } = await client.config.providers()
 
 ### الجلسات (`session`)
 
-| الطريقة                                                    | الوصف                            | ملاحظات                                                                                                                               |
-| ---------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `session.list()`                                           | سرد الجلسات                      | يعيد <a href={typesUrl}><code>Session[]</code></a>                                                                                    |
-| `session.get({ path })`                                    | جلب جلسة                         | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                      |
-| `session.children({ path })`                               | سرد الجلسات الفرعية              | يعيد <a href={typesUrl}><code>Session[]</code></a>                                                                                    |
-| `session.create({ body })`                                 | إنشاء جلسة                       | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                      |
-| `session.delete({ path })`                                 | حذف جلسة                         | يعيد `boolean`                                                                                                                        |
-| `session.update({ path, body })`                           | تحديث خصائص الجلسة               | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                      |
-| `session.init({ path, body })`                             | تحليل التطبيق وإنشاء `AGENTS.md` | يعيد `boolean`                                                                                                                        |
-| `session.abort({ path })`                                  | إيقاف جلسة قيد التشغيل           | يعيد `boolean`                                                                                                                        |
-| `session.share({ path })`                                  | مشاركة جلسة                      | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                      |
-| `session.unshare({ path })`                                | إلغاء مشاركة جلسة                | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                      |
-| `session.summarize({ path, body })`                        | تلخيص جلسة                       | يعيد `boolean`                                                                                                                        |
-| `session.messages({ path })`                               | سرد الرسائل في جلسة              | يعيد `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                  |
-| `session.message({ path })`                                | جلب تفاصيل الرسالة               | يعيد `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                    |
-| `session.prompt({ path, body })`                           | إرسال رسالة مطالبة               | `body.noReply: true` يعيد UserMessage (للسياق فقط). الافتراضي يعيد <a href={typesUrl}><code>AssistantMessage</code></a> مع استجابة AI |
-| `session.command({ path, body })`                          | إرسال أمر إلى الجلسة             | يعيد `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`           |
-| `session.shell({ path, body })`                            | تشغيل أمر shell                  | يعيد <a href={typesUrl}><code>AssistantMessage</code></a>                                                                             |
-| `session.revert({ path, body })`                           | التراجع عن رسالة                 | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                      |
-| `session.unrevert({ path })`                               | استعادة الرسائل المتراجع عنها    | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                      |
-| `postSessionByIdPermissionsByPermissionId({ path, body })` | الاستجابة لطلب إذن               | يعيد `boolean`                                                                                                                        |
+| الطريقة                                                    | الوصف                            | ملاحظات                                                                                                                                                                                                      |
+| ---------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `session.list()`                                           | سرد الجلسات                      | يعيد <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                           |
+| `session.get({ path })`                                    | جلب جلسة                         | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                                                                                             |
+| `session.children({ path })`                               | سرد الجلسات الفرعية              | يعيد <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                           |
+| `session.create({ body })`                                 | إنشاء جلسة                       | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                                                                                             |
+| `session.delete({ path })`                                 | حذف جلسة                         | يعيد `boolean`                                                                                                                                                                                               |
+| `session.update({ path, body })`                           | تحديث خصائص الجلسة               | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                                                                                             |
+| `session.init({ path, body })`                             | تحليل التطبيق وإنشاء `AGENTS.md` | يعيد `boolean`                                                                                                                                                                                               |
+| `session.abort({ path })`                                  | إيقاف جلسة قيد التشغيل           | يعيد `boolean`                                                                                                                                                                                               |
+| `session.share({ path })`                                  | مشاركة جلسة                      | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                                                                                             |
+| `session.unshare({ path })`                                | إلغاء مشاركة جلسة                | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                                                                                             |
+| `session.summarize({ path, body })`                        | تلخيص جلسة                       | يعيد `boolean`                                                                                                                                                                                               |
+| `session.messages({ path })`                               | سرد الرسائل في جلسة              | يعيد `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                                                                         |
+| `session.message({ path })`                                | جلب تفاصيل الرسالة               | يعيد `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                           |
+| `session.prompt({ path, body })`                           | إرسال رسالة مطالبة               | `body.noReply: true` يعيد UserMessage (للسياق فقط). الافتراضي يعيد <a href={typesUrl}><code>AssistantMessage</code></a> مع استجابة AI. يدعم `body.outputFormat` من أجل [المخرجات المنظمة](#المخرجات-المنظمة) |
+| `session.command({ path, body })`                          | إرسال أمر إلى الجلسة             | يعيد `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                  |
+| `session.shell({ path, body })`                            | تشغيل أمر shell                  | يعيد <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                                                                    |
+| `session.revert({ path, body })`                           | التراجع عن رسالة                 | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                                                                                             |
+| `session.unrevert({ path })`                               | استعادة الرسائل المتراجع عنها    | يعيد <a href={typesUrl}><code>Session</code></a>                                                                                                                                                             |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | الاستجابة لطلب إذن               | يعيد `boolean`                                                                                                                                                                                               |
 
 ---
 

@@ -27,6 +27,7 @@
   <a href="README.ja.md">日本語</a> |
   <a href="README.pl.md">Polski</a> |
   <a href="README.ru.md">Русский</a> |
+  <a href="README.bs.md">Bosanski</a> |
   <a href="README.ar.md">العربية</a> |
   <a href="README.no.md">Norsk</a> |
   <a href="README.br.md">Português (Brasil)</a> |
@@ -34,7 +35,8 @@
   <a href="README.tr.md">Türkçe</a> |
   <a href="README.uk.md">Українська</a> |
   <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a>
+  <a href="README.gr.md">Ελληνικά</a> |
+  <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
@@ -66,12 +68,12 @@ nix run nixpkgs#opencode           # eller github:anomalyco/opencode for nyeste 
 
 OpenCode er også tilgjengelig som en desktop-app. Last ned direkte fra [releases-siden](https://github.com/anomalyco/opencode/releases) eller [opencode.ai/download](https://opencode.ai/download).
 
-| Plattform             | Nedlasting                            |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm` eller AppImage         |
+| Plattform             | Nedlasting                         |
+| --------------------- | ---------------------------------- |
+| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
+| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
+| Windows               | `opencode-desktop-windows-x64.exe` |
+| Linux                 | `.deb`, `.rpm` eller AppImage      |
 
 ```bash
 # macOS (Homebrew)
@@ -121,18 +123,6 @@ Hvis du vil bidra til OpenCode, les [contributing docs](./CONTRIBUTING.md) før 
 ### Bygge på OpenCode
 
 Hvis du jobber med et prosjekt som er relatert til OpenCode og bruker "opencode" som en del av navnet; for eksempel "opencode-dashboard" eller "opencode-mobile", legg inn en merknad i README som presiserer at det ikke er bygget av OpenCode-teamet og ikke er tilknyttet oss på noen måte.
-
-### FAQ
-
-#### Hvordan er dette forskjellig fra Claude Code?
-
-Det er veldig likt Claude Code når det gjelder funksjonalitet. Her er de viktigste forskjellene:
-
-- 100% open source
-- Ikke knyttet til en bestemt leverandør. Selv om vi anbefaler modellene vi tilbyr gjennom [OpenCode Zen](https://opencode.ai/zen); kan OpenCode brukes med Claude, OpenAI, Google eller til og med lokale modeller. Etter hvert som modellene utvikler seg vil gapene lukkes og prisene gå ned, så det er viktig å være provider-agnostic.
-- LSP-støtte rett ut av boksen
-- Fokus på TUI. OpenCode er bygget av neovim-brukere og skaperne av [terminal.shop](https://terminal.shop); vi kommer til å presse grensene for hva som er mulig i terminalen.
-- Klient/server-arkitektur. Dette kan for eksempel la OpenCode kjøre på maskinen din, mens du styrer den eksternt fra en mobilapp. Det betyr at TUI-frontend'en bare er en av de mulige klientene.
 
 ---
 

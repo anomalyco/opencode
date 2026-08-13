@@ -12,7 +12,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Check PR standards
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             const pr = context.payload.pull_request;
@@ -159,7 +159,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Check PR template compliance
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             const pr = context.payload.pull_request;

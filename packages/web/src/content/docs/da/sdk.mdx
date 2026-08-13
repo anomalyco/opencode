@@ -117,6 +117,78 @@ try {
 
 ---
 
+## Struktureret output
+
+Du kan anmode om struktureret JSON-output fra modellen ved at angive et `format` med et JSON-skema. Modellen vil bruge et `StructuredOutput`-værktøj til at returnere valideret JSON, der matcher dit skema.
+
+### Grundlæggende brug
+
+```typescript
+const result = await client.session.prompt({
+  path: { id: sessionId },
+  body: {
+    parts: [{ type: "text", text: "Research Anthropic and provide company info" }],
+    format: {
+      type: "json_schema",
+      schema: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "Company name" },
+          founded: { type: "number", description: "Year founded" },
+          products: {
+            type: "array",
+            items: { type: "string" },
+            description: "Main products",
+          },
+        },
+        required: ["company", "founded"],
+      },
+    },
+  },
+})
+
+// Access the structured output
+console.log(result.data.info.structured_output)
+// { company: "Anthropic", founded: 2021, products: ["Claude", "Claude API"] }
+```
+
+### Outputformat-typer
+
+| Type          | Beskrivelse                                              |
+| ------------- | -------------------------------------------------------- |
+| `text`        | Standard. Standard tekstsvar (intet struktureret output) |
+| `json_schema` | Returnerer valideret JSON, der matcher det angivne skema |
+
+### JSON-skemaformat
+
+Når du bruger `type: 'json_schema'`, skal du angive:
+
+| Felt         | Type            | Beskrivelse                                                |
+| ------------ | --------------- | ---------------------------------------------------------- |
+| `type`       | `'json_schema'` | Påkrævet. Angiver JSON-skematilstand                       |
+| `schema`     | `object`        | Påkrævet. JSON-skemaobjekt, der definerer outputstrukturen |
+| `retryCount` | `number`        | Valgfri. Antal valideringsforsøg (standard: 2)             |
+
+### Fejlhåndtering
+
+Hvis modellen ikke formår at producere gyldigt struktureret output efter alle forsøg, vil svaret inkludere en `StructuredOutputError`:
+
+```typescript
+if (result.data.info.error?.name === "StructuredOutputError") {
+  console.error("Failed to produce structured output:", result.data.info.error.message)
+  console.error("Attempts:", result.data.info.error.retries)
+}
+```
+
+### Bedste praksis
+
+1. **Giv klare beskrivelser** i dine skemaegenskaber for at hjælpe modellen med at forstå, hvilke data der skal udtrækkes
+2. **Brug `required`** til at angive, hvilke felter der skal være til stede
+3. **Hold skemaer fokuserede** - komplekse indlejrede skemaer kan være sværere for modellen at udfylde korrekt
+4. **Indstil passende `retryCount`** - øg for komplekse skemaer, sænk for enkle
+
+---
+
 ## API'er
 
 SDK avslører alle server-APIer gjennom en typesikker klient.
@@ -226,27 +298,27 @@ const { providers, default: defaults } = await client.config.providers()
 
 ### Sessioner
 
-| Metode                                                     | Beskrivelse                       | Noter                                                                                                                                            |
-| ---------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `session.list()`                                           | Liste sessioner                   | Returnerer <a href={typesUrl}><code>Session[]</code></a>                                                                                         |
-| `session.get({ path })`                                    | Få session                        | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
-| `session.children({ path })`                               | Liste over barnesessioner         | Returnerer <a href={typesUrl}><code>Session[]</code></a>                                                                                         |
-| `session.create({ body })`                                 | Opret session                     | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
-| `session.delete({ path })`                                 | Slett session                     | Returnerer `boolean`                                                                                                                             |
-| `session.update({ path, body })`                           | Opdater sessionegenskaper         | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
-| `session.init({ path, body })`                             | Analyser appen og lag `AGENTS.md` | Returnerer `boolean`                                                                                                                             |
-| `session.abort({ path })`                                  | Avbryt en løpesession             | Returnerer `boolean`                                                                                                                             |
-| `session.share({ path })`                                  | Del sessionen                     | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
-| `session.unshare({ path })`                                | Slutt at dele sessionen           | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
-| `session.summarize({ path, body })`                        | Oppsummer sessionen               | Returnerer `boolean`                                                                                                                             |
-| `session.messages({ path })`                               | Liste meldinger i en session      | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                       |
-| `session.message({ path })`                                | Få meldingsdetaljer               | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                         |
-| `session.prompt({ path, body })`                           | Send melding                      | `body.noReply: true` returnerer UserMessage (kun kontekst). Standard returnerer <a href={typesUrl}><code>AssistantMessage</code></a> med AI svar |
-| `session.command({ path, body })`                          | Send kommando til session         | Returnerer `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                |
-| `session.shell({ path, body })`                            | Kjør en shell-kommando            | Returnerer <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                  |
-| `session.revert({ path, body })`                           | Tilbakestill en melding           | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
-| `session.unrevert({ path })`                               | Gjenopret nulstillete meldinger   | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
-| `postSessionByIdPermissionsByPermissionId({ path, body })` | Svar på en tillatelsesforespørsel | Returnerer `boolean`                                                                                                                             |
+| Metode                                                     | Beskrivelse                       | Noter                                                                                                                                                                                                                              |
+| ---------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | Liste sessioner                   | Returnerer <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                                           |
+| `session.get({ path })`                                    | Få session                        | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
+| `session.children({ path })`                               | Liste over barnesessioner         | Returnerer <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                                           |
+| `session.create({ body })`                                 | Opret session                     | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
+| `session.delete({ path })`                                 | Slett session                     | Returnerer `boolean`                                                                                                                                                                                                               |
+| `session.update({ path, body })`                           | Opdater sessionegenskaper         | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
+| `session.init({ path, body })`                             | Analyser appen og lag `AGENTS.md` | Returnerer `boolean`                                                                                                                                                                                                               |
+| `session.abort({ path })`                                  | Avbryt en løpesession             | Returnerer `boolean`                                                                                                                                                                                                               |
+| `session.share({ path })`                                  | Del sessionen                     | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
+| `session.unshare({ path })`                                | Slutt at dele sessionen           | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
+| `session.summarize({ path, body })`                        | Oppsummer sessionen               | Returnerer `boolean`                                                                                                                                                                                                               |
+| `session.messages({ path })`                               | Liste meldinger i en session      | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                                                                                         |
+| `session.message({ path })`                                | Få meldingsdetaljer               | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                                           |
+| `session.prompt({ path, body })`                           | Send melding                      | `body.noReply: true` returnerer UserMessage (kun kontekst). Standard returnerer <a href={typesUrl}><code>AssistantMessage</code></a> med AI svar. Understøtter `body.outputFormat` for [struktureret output](#struktureret-output) |
+| `session.command({ path, body })`                          | Send kommando til session         | Returnerer `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                                  |
+| `session.shell({ path, body })`                            | Kjør en shell-kommando            | Returnerer <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                                                                                    |
+| `session.revert({ path, body })`                           | Tilbakestill en melding           | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
+| `session.unrevert({ path })`                               | Gjenopret nulstillete meldinger   | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Svar på en tillatelsesforespørsel | Returnerer `boolean`                                                                                                                                                                                                               |
 
 ---
 

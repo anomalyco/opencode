@@ -1,13 +1,22 @@
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 
 export function acceptKey(sessionID: string, directory?: string) {
   if (!directory) return sessionID
   return `${base64Encode(directory)}/${sessionID}`
 }
 
+export function directoryAcceptKey(directory: string) {
+  return `${base64Encode(directory)}/*`
+}
+
 function accepted(autoAccept: Record<string, boolean>, sessionID: string, directory?: string) {
   const key = acceptKey(sessionID, directory)
   return autoAccept[key] ?? autoAccept[sessionID]
+}
+
+export function isDirectoryAutoAccepting(autoAccept: Record<string, boolean>, directory: string) {
+  const key = directoryAcceptKey(directory)
+  return autoAccept[key] ?? false
 }
 
 function sessionLineage(session: { id: string; parentID?: string }[], sessionID: string) {
@@ -34,8 +43,18 @@ export function autoRespondsPermission(
   permission: { sessionID: string },
   directory?: string,
 ) {
-  const value = sessionLineage(session, permission.sessionID)
+  const value = sessionAutoAccept(autoAccept, session, permission, directory)
+  if (value !== undefined) return value
+  return directory ? isDirectoryAutoAccepting(autoAccept, directory) : false
+}
+
+export function sessionAutoAccept(
+  autoAccept: Record<string, boolean>,
+  session: { id: string; parentID?: string }[],
+  permission: { sessionID: string },
+  directory?: string,
+) {
+  return sessionLineage(session, permission.sessionID)
     .map((id) => accepted(autoAccept, id, directory))
     .find((item): item is boolean => item !== undefined)
-  return value ?? true
 }

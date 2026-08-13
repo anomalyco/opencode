@@ -1,6 +1,14 @@
 import { Stripe } from "stripe"
-import { Database, eq, sql } from "./drizzle"
-import { BillingTable, LiteTable, PaymentTable, SubscriptionTable, UsageTable } from "./schema/billing.sql"
+import { and, Database, eq, isNull, sql } from "./drizzle"
+import {
+  BillingTable,
+  CouponTable,
+  CouponType,
+  LiteTable,
+  PaymentTable,
+  SubscriptionTable,
+  UsageTable,
+} from "./schema/billing.sql"
 import { Actor } from "./actor"
 import { fn } from "./util/fn"
 import { z } from "zod"
@@ -147,6 +155,56 @@ export namespace Billing {
     return amountInMicroCents
   }
 
+  export const subtractLiteUsage = async (workspaceID: string, amountInMicroCents: number) => {
+    await Database.transaction(async (tx) => {
+      const lite = await tx
+        .select({ id: LiteTable.id })
+        .from(LiteTable)
+        .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
+        .then((rows) => rows[0])
+      if (!lite) throw new Error("Subscribe to Go before applying referral rewards")
+
+      await tx
+        .update(LiteTable)
+        .set({
+          monthlyUsage: sql`GREATEST(0, COALESCE(${LiteTable.monthlyUsage}, 0) - ${amountInMicroCents})`,
+          weeklyUsage: sql`GREATEST(0, COALESCE(${LiteTable.weeklyUsage}, 0) - ${amountInMicroCents})`,
+          rollingUsage: sql`GREATEST(0, COALESCE(${LiteTable.rollingUsage}, 0) - ${amountInMicroCents})`,
+        })
+        .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
+    })
+  }
+
+  export const redeemCoupon = async (email: string, type: (typeof CouponType)[number]) => {
+    // validate coupon type
+    await (async () => {
+      if (type === "GO1MONTH50") return
+      const coupon = await Database.use((tx) =>
+        tx
+          .select()
+          .from(CouponTable)
+          .where(and(eq(CouponTable.email, email), eq(CouponTable.type, type)))
+          .then((rows) => rows[0]),
+      )
+      if (!coupon) throw new Error("Invalid coupon code")
+      if (coupon.timeRedeemed) throw new Error("Coupon already redeemed")
+    })()
+
+    // handle coupon type
+    if (type === "BUILDATHON") await grantCredit(Actor.workspace(), 500)
+
+    await Database.use((tx) =>
+      tx
+        .insert(CouponTable)
+        .values({ email, type, timeRedeemed: sql`now()` })
+        .onDuplicateKeyUpdate({
+          set: {
+            timeRedeemed: sql`now()`,
+          },
+        }),
+    )
+  }
+
   export const setMonthlyLimit = fn(z.number(), async (input) => {
     return await Database.use((tx) =>
       tx
@@ -212,13 +270,17 @@ export namespace Billing {
         invoice_creation: {
           enabled: true,
         },
-        payment_intent_data: {
-          setup_future_usage: "on_session",
+        payment_method_options: {
+          card: {
+            setup_future_usage: "off_session",
+          },
+          link: {
+            setup_future_usage: "off_session",
+          },
         },
-        payment_method_types: ["card"],
-        payment_method_data: {
-          allow_redisplay: "always",
-        },
+        //payment_method_data: {
+        //  allow_redisplay: "always",
+        //},
         tax_id_collection: {
           enabled: true,
         },
@@ -238,49 +300,135 @@ export namespace Billing {
     z.object({
       successUrl: z.string(),
       cancelUrl: z.string(),
+      method: z.enum(["alipay", "upi"]).optional(),
     }),
     async (input) => {
       const user = Actor.assert("user")
-      const { successUrl, cancelUrl } = input
+      const { successUrl, cancelUrl, method } = input
 
-      const email = await User.getAuthEmail(user.properties.userID)
+      const email = (await User.getAuthEmail(user.properties.userID))!
       const billing = await Billing.get()
 
       if (billing.subscriptionID) throw new Error("Already subscribed to Black")
       if (billing.liteSubscriptionID) throw new Error("Already subscribed to Lite")
 
-      const session = await Billing.stripe().checkout.sessions.create({
-        mode: "subscription",
-        billing_address_collection: "required",
-        line_items: [{ price: LiteData.priceID(), quantity: 1 }],
-        ...(billing.customerID
-          ? {
-              customer: billing.customerID,
-              customer_update: {
-                name: "auto",
-                address: "auto",
-              },
-            }
-          : {
-              customer_email: email!,
-            }),
-        currency: "usd",
-        payment_method_types: ["card"],
-        tax_id_collection: {
-          enabled: true,
-        },
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        subscription_data: {
-          metadata: {
-            workspaceID: Actor.workspace(),
-            userID: user.properties.userID,
-            type: "lite",
-          },
-        },
-      })
+      const coupons = await Database.use((tx) =>
+        tx
+          .select({ type: CouponTable.type, timeRedeemed: CouponTable.timeRedeemed })
+          .from(CouponTable)
+          .where(eq(CouponTable.email, email)),
+      )
 
-      return session.url
+      const coupon = (() => {
+        if (coupons.some((coupon) => coupon.type === "GO12MONTHS100" && !coupon.timeRedeemed))
+          return LiteData.twelveMonths100Coupon
+        if (coupons.some((coupon) => coupon.type === "GO6MONTHS100" && !coupon.timeRedeemed))
+          return LiteData.sixMonths100Coupon
+        if (coupons.some((coupon) => coupon.type === "GO3MONTHS100" && !coupon.timeRedeemed))
+          return LiteData.threeMonths100Coupon
+        if (coupons.some((coupon) => coupon.type === "GOFREEMONTH" && !coupon.timeRedeemed))
+          return LiteData.firstMonth100Coupon
+        if (!coupons.some((coupon) => coupon.type === "GO1MONTH50")) return LiteData.firstMonth50Coupon
+        return undefined
+      })()
+      const createSession = () =>
+        Billing.stripe().checkout.sessions.create({
+          mode: "subscription",
+          discounts: coupon ? [{ coupon }] : undefined,
+          ...(billing.customerID
+            ? {
+                customer: billing.customerID,
+                customer_update: {
+                  name: "auto",
+                  address: "auto",
+                },
+              }
+            : {
+                customer_email: email,
+              }),
+          ...(() => {
+            if (method === "alipay") {
+              return {
+                line_items: [{ price: LiteData.priceID(), quantity: 1 }],
+                payment_method_types: ["alipay"],
+                adaptive_pricing: {
+                  enabled: false,
+                },
+              }
+            }
+            if (method === "upi") {
+              return {
+                line_items: [
+                  {
+                    price_data: {
+                      currency: "inr",
+                      product: LiteData.productID(),
+                      recurring: {
+                        interval: "month",
+                        interval_count: 1,
+                      },
+                      unit_amount: LiteData.priceInr(),
+                    },
+                    quantity: 1,
+                  },
+                ],
+                payment_method_types: ["upi"] as any,
+                adaptive_pricing: {
+                  enabled: false,
+                },
+              }
+            }
+            return {
+              line_items: [{ price: LiteData.priceID(), quantity: 1 }],
+              billing_address_collection: "required",
+            }
+          })(),
+          tax_id_collection: {
+            enabled: true,
+          },
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          subscription_data: {
+            metadata: {
+              workspaceID: Actor.workspace(),
+              userID: user.properties.userID,
+              userEmail: email,
+              coupon,
+              type: "lite",
+            },
+          },
+        })
+
+      try {
+        const session = await createSession()
+        return session.url
+      } catch (e: any) {
+        if (
+          e.type !== "StripeInvalidRequestError" ||
+          !e.message.includes("You cannot combine currencies on a single customer")
+        )
+          throw e
+
+        // get pending payment intent
+        const intents = await Billing.stripe().paymentIntents.search({
+          query: `-status:'canceled' AND -status:'processing' AND -status:'succeeded' AND customer:'${billing.customerID}'`,
+        })
+        if (intents.data.length === 0) throw e
+
+        for (const intent of intents.data) {
+          // get checkout session
+          const sessions = await Billing.stripe().checkout.sessions.list({
+            customer: billing.customerID!,
+            payment_intent: intent.id,
+          })
+
+          // delete pending payment intent
+          await Billing.stripe().checkout.sessions.expire(sessions.data[0].id)
+        }
+
+        const session = await createSession()
+        return session.url
+      }
     },
   )
 

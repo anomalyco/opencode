@@ -21,16 +21,16 @@ export default function TermsOfService() {
           <section data-component="brand-content">
             <article data-component="terms-of-service">
               <h1>Terms of Use</h1>
-              <p class="effective-date">Effective date: Dec 16, 2025</p>
+              <p class="effective-date">Effective date: Mar 6, 2026</p>
 
               <p>
-                Welcome to OpenCode. Please read on to learn the rules and restrictions that govern your use of OpenCode
-                (the "Services"). If you have any questions, comments, or concerns regarding these terms or the
-                Services, please contact us at:
+                Welcome to OpenCode. Please read on to learn the rules and restrictions that govern your use of
+                OpenCode&apos;s website, inference product and hosted software offering (the "Services"). If you have
+                any questions, comments, or concerns regarding these terms or the Services, please contact us at:
               </p>
 
               <p>
-                Email: <a href="mailto:contact@anoma.ly">contact@anoma.ly</a>
+                Email: <a href="mailto:help@anoma.ly">help@anoma.ly</a>
               </p>
 
               <p>
@@ -44,7 +44,10 @@ export default function TermsOfService() {
                   and/or conditions ("Additional Terms"), which are incorporated herein by reference, and you understand
                   and agree that by using or participating in any such Services, you agree to also comply with these
                   Additional Terms.
-                </strong>
+                </strong>{" "}
+                For clarity, our open source software that is not provided to you on a hosted basis is subject to the
+                open source license and terms set forth on the applicable repository where you access such open source
+                software, and such license and terms will exclusively govern your use of such open source software.
               </p>
 
               <p>
@@ -111,7 +114,7 @@ export default function TermsOfService() {
                 attempt to register for or otherwise use the Services or send us any personal information. If we learn
                 we have collected personal information from a child under 13 years of age, we will delete that
                 information as quickly as possible. If you believe that a child under 13 years of age may have provided
-                us personal information, please contact us at <a href="mailto:contact@anoma.ly">contact@anoma.ly</a>.
+                us personal information, please contact us at <a href="mailto:help@anoma.ly">help@anoma.ly</a>.
               </p>
 
               <h2 id="what-are-the-basics">What are the basics of using OpenCode?</h2>
@@ -312,7 +315,7 @@ export default function TermsOfService() {
                 specified time of the trial. You must stop using a Paid Service before the end of the trial period in
                 order to avoid being charged for that Paid Service. If you cancel prior to the end of the trial period
                 and are inadvertently charged for a Paid Service, please contact us at{" "}
-                <a href="mailto:contact@anoma.ly">contact@anoma.ly</a>.
+                <a href="mailto:help@anoma.ly">help@anoma.ly</a>.
               </p>
 
               <h2 id="what-if-i-want-to-stop">What if I want to stop using the Services?</h2>
@@ -460,10 +463,10 @@ export default function TermsOfService() {
               <h4>Opt-out</h4>
               <p>
                 You have the right to opt out of the provisions of this Section by sending written notice of your
-                decision to opt out to the following address: [ADDRESS], [CITY], Canada [ZIP CODE] postmarked within
-                thirty (30) days of first accepting these Terms. You must include (i) your name and residence address,
-                (ii) the email address and/or telephone number associated with your account, and (iii) a clear statement
-                that you want to opt out of these Terms' arbitration agreement.
+                decision to opt out to the following address: 2443 Fillmore St #380-6343, San Francisco, CA 94115,
+                United States postmarked within thirty (30) days of first accepting these Terms. You must include (i)
+                your name and residence address, (ii) the email address and/or telephone number associated with your
+                account, and (iii) a clear statement that you want to opt out of these Terms' arbitration agreement.
               </p>
 
               <h4>Exclusive Venue</h4>

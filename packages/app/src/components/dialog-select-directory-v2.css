@@ -1,0 +1,107 @@
+.directory-picker-v2-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px 16px 0;
+}
+
+.directory-picker-v2-path {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+}
+
+.directory-picker-v2-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.directory-picker-v2-suggestions {
+  position: absolute;
+  z-index: 20;
+  top: 36px;
+  right: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 6px;
+  background: var(--v2-background-bg-layer-02);
+  box-shadow: var(--v2-elevation-overlay);
+}
+
+.directory-picker-v2-suggestions button {
+  overflow: hidden;
+  padding: 6px 8px;
+  border-radius: 4px;
+  color: var(--v2-text-text-muted);
+  font-size: 12px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directory-picker-v2-suggestions button:hover,
+.directory-picker-v2-suggestions button[data-active] {
+  color: var(--v2-text-text-base);
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+.directory-picker-v2-browser {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 6px;
+  background: transparent;
+}
+
+.directory-picker-v2-tree {
+  display: block;
+  width: 100%;
+  height: 100%;
+  --trees-bg-override: transparent;
+  --trees-fg-override: var(--v2-text-text-base);
+  --trees-fg-muted-override: var(--v2-text-text-muted);
+  --trees-bg-muted-override: transparent;
+  --trees-selected-bg-override: transparent;
+  --trees-selected-fg-override: var(--v2-text-text-base);
+  --trees-selected-focused-border-color-override: transparent;
+  --trees-focus-ring-color-override: transparent;
+  --trees-focus-ring-width-override: 0px;
+  --trees-focus-ring-offset-override: 0px;
+  --trees-border-color-override: var(--v2-border-border-base);
+  --trees-font-family-override: var(--font-family-sans);
+  --trees-font-size-override: 12px;
+  --trees-item-height: 24px;
+  --trees-border-radius-override: 4px;
+}
+
+.directory-picker-v2-state {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--v2-text-text-muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.directory-picker-v2-selection {
+  overflow: hidden;
+  flex-shrink: 0;
+  color: var(--v2-text-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

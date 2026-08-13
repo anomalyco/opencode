@@ -57,8 +57,8 @@ Se l'app desktop va in crash all'avvio, si blocca o si comporta in modo strano, 
 
 Apri il tuo file di configurazione globale e cerca la chiave `plugin`.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (or `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (older installs): `~/.local/share/opencode/opencode.jsonc`
+- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (o `~/.config/opencode/opencode.json`)
+- **macOS/Linux** (installazioni vecchie): `~/.local/share/opencode/opencode.jsonc`
 - **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.config\opencode\opencode.jsonc`
 
 Se hai plugin configurati, disabilitali temporaneamente rimuovendo la chiave o impostandola a un array vuoto:
@@ -88,14 +88,14 @@ Se l'app ricomincia a funzionare, riabilita i plugin uno alla volta per capire q
 
 Se disabilitare i plugin non aiuta (o l'installazione di un plugin e bloccata), svuota la cache in modo che OpenCode possa ricostruirla.
 
-1. Quit OpenCode Desktop completely.
+1. Chiudi completamente OpenCode Desktop.
 2. Elimina la directory della cache:
 
 - **macOS**: Finder -> `Cmd+Shift+G` -> paste `~/.cache/opencode`
 - **Linux**: elimina `~/.cache/opencode` (oppure esegui `rm -rf ~/.cache/opencode`)
 - **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.cache\opencode`
 
-3. Restart OpenCode Desktop.
+3. Riavvia OpenCode Desktop.
 
 ---
 
@@ -155,7 +155,7 @@ OpenCode Desktop mostra le notifiche di sistema solo quando:
 
 Se l'app non si avvia e non riesci a ripulire le impostazioni dall'interfaccia, reimposta lo stato salvato dell'app desktop.
 
-1. Quit OpenCode Desktop.
+1. Chiudi OpenCode Desktop.
 2. Trova ed elimina questi file (si trovano nella directory dati dell'app OpenCode Desktop):
 
 - `opencode.settings.dat` (desktop default server URL)

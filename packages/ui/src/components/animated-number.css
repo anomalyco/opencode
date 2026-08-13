@@ -1,0 +1,75 @@
+[data-component="animated-number"] {
+  display: inline-flex;
+  align-items: baseline;
+  vertical-align: baseline;
+  line-height: inherit;
+  font-variant-numeric: tabular-nums;
+
+  [data-slot="animated-number-value"] {
+    display: inline-flex;
+    flex-direction: row-reverse;
+    align-items: baseline;
+    justify-content: flex-end;
+    line-height: inherit;
+    width: var(--animated-number-width, 1ch);
+    overflow: hidden;
+    transition: width var(--tool-motion-spring-ms, 560ms) var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
+  }
+
+  [data-slot="animated-number-digit"] {
+    display: inline-block;
+    width: 1ch;
+    height: 1em;
+    line-height: 1em;
+    overflow: hidden;
+    vertical-align: baseline;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      #000 var(--tool-motion-mask, 18%),
+      #000 calc(100% - var(--tool-motion-mask, 18%)),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      #000 var(--tool-motion-mask, 18%),
+      #000 calc(100% - var(--tool-motion-mask, 18%)),
+      transparent 100%
+    );
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+  }
+
+  [data-slot="animated-number-strip"] {
+    display: inline-flex;
+    flex-direction: column;
+    transform: translateY(calc(var(--animated-number-offset, 10) * -1em));
+    transition-property: transform;
+    transition-duration: var(--animated-number-duration, 560ms);
+    transition-timing-function: var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
+  }
+
+  [data-slot="animated-number-strip"][data-animating="false"] {
+    transition-duration: 0ms;
+  }
+
+  [data-slot="animated-number-cell"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1ch;
+    height: 1em;
+    line-height: 1em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="animated-number"] [data-slot="animated-number-value"] {
+    transition-duration: 0ms;
+  }
+
+  [data-component="animated-number"] [data-slot="animated-number-strip"] {
+    transition-duration: 0ms;
+  }
+}

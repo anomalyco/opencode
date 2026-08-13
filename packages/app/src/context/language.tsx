@@ -1,223 +1,241 @@
 import * as i18n from "@solid-primitives/i18n"
-import { createEffect, createMemo } from "solid-js"
+import { createEffect, createMemo, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { pluralCategory, type UiI18nPluralKey } from "@opencode-ai/ui/context/i18n"
 import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
-import { dict as zh } from "@/i18n/zh"
-import { dict as zht } from "@/i18n/zht"
-import { dict as ko } from "@/i18n/ko"
-import { dict as de } from "@/i18n/de"
-import { dict as es } from "@/i18n/es"
-import { dict as fr } from "@/i18n/fr"
-import { dict as da } from "@/i18n/da"
-import { dict as ja } from "@/i18n/ja"
-import { dict as pl } from "@/i18n/pl"
-import { dict as ru } from "@/i18n/ru"
-import { dict as ar } from "@/i18n/ar"
-import { dict as no } from "@/i18n/no"
-import { dict as br } from "@/i18n/br"
-import { dict as th } from "@/i18n/th"
-import { dict as bs } from "@/i18n/bs"
-import { dict as tr } from "@/i18n/tr"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
-import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
-import { dict as uiZht } from "@opencode-ai/ui/i18n/zht"
-import { dict as uiKo } from "@opencode-ai/ui/i18n/ko"
-import { dict as uiDe } from "@opencode-ai/ui/i18n/de"
-import { dict as uiEs } from "@opencode-ai/ui/i18n/es"
-import { dict as uiFr } from "@opencode-ai/ui/i18n/fr"
-import { dict as uiDa } from "@opencode-ai/ui/i18n/da"
-import { dict as uiJa } from "@opencode-ai/ui/i18n/ja"
-import { dict as uiPl } from "@opencode-ai/ui/i18n/pl"
-import { dict as uiRu } from "@opencode-ai/ui/i18n/ru"
-import { dict as uiAr } from "@opencode-ai/ui/i18n/ar"
-import { dict as uiNo } from "@opencode-ai/ui/i18n/no"
-import { dict as uiBr } from "@opencode-ai/ui/i18n/br"
-import { dict as uiTh } from "@opencode-ai/ui/i18n/th"
-import { dict as uiBs } from "@opencode-ai/ui/i18n/bs"
-import { dict as uiTr } from "@opencode-ai/ui/i18n/tr"
+import {
+  createDesktopNativeBundle,
+  detectDesktopNativeLocale,
+  DESKTOP_NATIVE_ENGLISH,
+  DESKTOP_NATIVE_LABELS,
+  DESKTOP_NATIVE_LOCALES,
+  DESKTOP_NATIVE_LOCALE_TAGS,
+  type DesktopNativeBundle,
+  type DesktopNativeLocale,
+} from "@/i18n/desktop-native"
 
-export type Locale =
-  | "en"
-  | "zh"
-  | "zht"
-  | "ko"
-  | "de"
-  | "es"
-  | "fr"
-  | "da"
-  | "ja"
-  | "pl"
-  | "ru"
-  | "ar"
-  | "no"
-  | "br"
-  | "th"
-  | "bs"
-  | "tr"
+export type Locale = DesktopNativeLocale
+export type Direction = "ltr" | "rtl"
+
+const RTL_LOCALES: ReadonlySet<Locale> = new Set(["ar", "ur", "pa", "fa", "dv"])
+
+function localeDirection(locale: Locale): Direction {
+  return RTL_LOCALES.has(locale) ? "rtl" : "ltr"
+}
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
+type PluralKey =
+  | UiI18nPluralKey
+  | "session.question.pending"
+  | "session.followupDock.summary"
+  | "session.revertDock.summary"
+type Source = { dict: Record<string, string> }
 
 function cookie(locale: Locale) {
   return `oc_locale=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
 }
 
-const LOCALES: readonly Locale[] = [
-  "en",
-  "zh",
-  "zht",
-  "ko",
-  "de",
-  "es",
-  "fr",
-  "da",
-  "ja",
-  "pl",
-  "ru",
-  "bs",
-  "ar",
-  "no",
-  "br",
-  "th",
-  "tr",
-]
+const LOCALES: readonly Locale[] = DESKTOP_NATIVE_LOCALES
 
-const LABEL_KEY: Record<Locale, keyof Dictionary> = {
-  en: "language.en",
-  zh: "language.zh",
-  zht: "language.zht",
-  ko: "language.ko",
-  de: "language.de",
-  es: "language.es",
-  fr: "language.fr",
-  da: "language.da",
-  ja: "language.ja",
-  pl: "language.pl",
-  ru: "language.ru",
-  ar: "language.ar",
-  no: "language.no",
-  br: "language.br",
-  th: "language.th",
-  bs: "language.bs",
-  tr: "language.tr",
-}
+const INTL = DESKTOP_NATIVE_LOCALE_TAGS
 
 const base = i18n.flatten({ ...en, ...uiEn })
-const DICT: Record<Locale, Dictionary> = {
-  en: base,
-  zh: { ...base, ...i18n.flatten({ ...zh, ...uiZh }) },
-  zht: { ...base, ...i18n.flatten({ ...zht, ...uiZht }) },
-  ko: { ...base, ...i18n.flatten({ ...ko, ...uiKo }) },
-  de: { ...base, ...i18n.flatten({ ...de, ...uiDe }) },
-  es: { ...base, ...i18n.flatten({ ...es, ...uiEs }) },
-  fr: { ...base, ...i18n.flatten({ ...fr, ...uiFr }) },
-  da: { ...base, ...i18n.flatten({ ...da, ...uiDa }) },
-  ja: { ...base, ...i18n.flatten({ ...ja, ...uiJa }) },
-  pl: { ...base, ...i18n.flatten({ ...pl, ...uiPl }) },
-  ru: { ...base, ...i18n.flatten({ ...ru, ...uiRu }) },
-  ar: { ...base, ...i18n.flatten({ ...ar, ...uiAr }) },
-  no: { ...base, ...i18n.flatten({ ...no, ...uiNo }) },
-  br: { ...base, ...i18n.flatten({ ...br, ...uiBr }) },
-  th: { ...base, ...i18n.flatten({ ...th, ...uiTh }) },
-  bs: { ...base, ...i18n.flatten({ ...bs, ...uiBs }) },
-  tr: { ...base, ...i18n.flatten({ ...tr, ...uiTr }) },
+const dicts = new Map<Locale, Dictionary>([["en", base]])
+
+const merge = (app: Promise<Source>, ui: Promise<Source>) =>
+  Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...i18n.flatten({ ...a.dict, ...b.dict }) }) as Dictionary)
+
+const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
+  zh: () => merge(import("@/i18n/zh"), import("@opencode-ai/ui/i18n/zh")),
+  zht: () => merge(import("@/i18n/zht"), import("@opencode-ai/ui/i18n/zht")),
+  ko: () => merge(import("@/i18n/ko"), import("@opencode-ai/ui/i18n/ko")),
+  de: () => merge(import("@/i18n/de"), import("@opencode-ai/ui/i18n/de")),
+  es: () => merge(import("@/i18n/es"), import("@opencode-ai/ui/i18n/es")),
+  fr: () => merge(import("@/i18n/fr"), import("@opencode-ai/ui/i18n/fr")),
+  da: () => merge(import("@/i18n/da"), import("@opencode-ai/ui/i18n/da")),
+  ja: () => merge(import("@/i18n/ja"), import("@opencode-ai/ui/i18n/ja")),
+  pl: () => merge(import("@/i18n/pl"), import("@opencode-ai/ui/i18n/pl")),
+  ru: () => merge(import("@/i18n/ru"), import("@opencode-ai/ui/i18n/ru")),
+  uk: () => merge(import("@/i18n/uk"), import("@opencode-ai/ui/i18n/uk")),
+  ar: () => merge(import("@/i18n/ar"), import("@opencode-ai/ui/i18n/ar")),
+  no: () => merge(import("@/i18n/no"), import("@opencode-ai/ui/i18n/no")),
+  br: () => merge(import("@/i18n/br"), import("@opencode-ai/ui/i18n/br")),
+  th: () => merge(import("@/i18n/th"), import("@opencode-ai/ui/i18n/th")),
+  bs: () => merge(import("@/i18n/bs"), import("@opencode-ai/ui/i18n/bs")),
+  tr: () => merge(import("@/i18n/tr"), import("@opencode-ai/ui/i18n/tr")),
+  hi: () => merge(import("@/i18n/hi"), import("@opencode-ai/ui/i18n/hi")),
+  nl: () => merge(import("@/i18n/nl"), import("@opencode-ai/ui/i18n/nl")),
+  id: () => merge(import("@/i18n/id"), import("@opencode-ai/ui/i18n/id")),
+  vi: () => merge(import("@/i18n/vi"), import("@opencode-ai/ui/i18n/vi")),
+  it: () => merge(import("@/i18n/it"), import("@opencode-ai/ui/i18n/it")),
+  ur: () => merge(import("@/i18n/ur"), import("@opencode-ai/ui/i18n/ur")),
+  pa: () => merge(import("@/i18n/pa"), import("@opencode-ai/ui/i18n/pa")),
+  az: () => merge(import("@/i18n/az"), import("@opencode-ai/ui/i18n/az")),
+  fi: () => merge(import("@/i18n/fi"), import("@opencode-ai/ui/i18n/fi")),
+  sv: () => merge(import("@/i18n/sv"), import("@opencode-ai/ui/i18n/sv")),
+  am: () => merge(import("@/i18n/am"), import("@opencode-ai/ui/i18n/am")),
+  bg: () => merge(import("@/i18n/bg"), import("@opencode-ai/ui/i18n/bg")),
+  bn: () => merge(import("@/i18n/bn"), import("@opencode-ai/ui/i18n/bn")),
+  ca: () => merge(import("@/i18n/ca"), import("@opencode-ai/ui/i18n/ca")),
+  cs: () => merge(import("@/i18n/cs"), import("@opencode-ai/ui/i18n/cs")),
+  dv: () => merge(import("@/i18n/dv"), import("@opencode-ai/ui/i18n/dv")),
+  dz: () => merge(import("@/i18n/dz"), import("@opencode-ai/ui/i18n/dz")),
+  el: () => merge(import("@/i18n/el"), import("@opencode-ai/ui/i18n/el")),
+  et: () => merge(import("@/i18n/et"), import("@opencode-ai/ui/i18n/et")),
+  fa: () => merge(import("@/i18n/fa"), import("@opencode-ai/ui/i18n/fa")),
+  fo: () => merge(import("@/i18n/fo"), import("@opencode-ai/ui/i18n/fo")),
+  hr: () => merge(import("@/i18n/hr"), import("@opencode-ai/ui/i18n/hr")),
+  hu: () => merge(import("@/i18n/hu"), import("@opencode-ai/ui/i18n/hu")),
+  hy: () => merge(import("@/i18n/hy"), import("@opencode-ai/ui/i18n/hy")),
+  is: () => merge(import("@/i18n/is"), import("@opencode-ai/ui/i18n/is")),
+  ka: () => merge(import("@/i18n/ka"), import("@opencode-ai/ui/i18n/ka")),
+  km: () => merge(import("@/i18n/km"), import("@opencode-ai/ui/i18n/km")),
+  lo: () => merge(import("@/i18n/lo"), import("@opencode-ai/ui/i18n/lo")),
+  lt: () => merge(import("@/i18n/lt"), import("@opencode-ai/ui/i18n/lt")),
+  lv: () => merge(import("@/i18n/lv"), import("@opencode-ai/ui/i18n/lv")),
+  mk: () => merge(import("@/i18n/mk"), import("@opencode-ai/ui/i18n/mk")),
+  mn: () => merge(import("@/i18n/mn"), import("@opencode-ai/ui/i18n/mn")),
+  ms: () => merge(import("@/i18n/ms"), import("@opencode-ai/ui/i18n/ms")),
+  my: () => merge(import("@/i18n/my"), import("@opencode-ai/ui/i18n/my")),
+  ne: () => merge(import("@/i18n/ne"), import("@opencode-ai/ui/i18n/ne")),
+  ro: () => merge(import("@/i18n/ro"), import("@opencode-ai/ui/i18n/ro")),
+  si: () => merge(import("@/i18n/si"), import("@opencode-ai/ui/i18n/si")),
+  sk: () => merge(import("@/i18n/sk"), import("@opencode-ai/ui/i18n/sk")),
+  sl: () => merge(import("@/i18n/sl"), import("@opencode-ai/ui/i18n/sl")),
+  sq: () => merge(import("@/i18n/sq"), import("@opencode-ai/ui/i18n/sq")),
+  sr: () => merge(import("@/i18n/sr"), import("@opencode-ai/ui/i18n/sr")),
+  tg: () => merge(import("@/i18n/tg"), import("@opencode-ai/ui/i18n/tg")),
+  tk: () => merge(import("@/i18n/tk"), import("@opencode-ai/ui/i18n/tk")),
+  uz: () => merge(import("@/i18n/uz"), import("@opencode-ai/ui/i18n/uz")),
 }
 
-const localeMatchers: Array<{ locale: Locale; match: (language: string) => boolean }> = [
-  { locale: "zht", match: (language) => language.startsWith("zh") && language.includes("hant") },
-  { locale: "zh", match: (language) => language.startsWith("zh") },
-  { locale: "ko", match: (language) => language.startsWith("ko") },
-  { locale: "de", match: (language) => language.startsWith("de") },
-  { locale: "es", match: (language) => language.startsWith("es") },
-  { locale: "fr", match: (language) => language.startsWith("fr") },
-  { locale: "da", match: (language) => language.startsWith("da") },
-  { locale: "ja", match: (language) => language.startsWith("ja") },
-  { locale: "pl", match: (language) => language.startsWith("pl") },
-  { locale: "ru", match: (language) => language.startsWith("ru") },
-  { locale: "ar", match: (language) => language.startsWith("ar") },
-  {
-    locale: "no",
-    match: (language) => language.startsWith("no") || language.startsWith("nb") || language.startsWith("nn"),
-  },
-  { locale: "br", match: (language) => language.startsWith("pt") },
-  { locale: "th", match: (language) => language.startsWith("th") },
-  { locale: "bs", match: (language) => language.startsWith("bs") },
-  { locale: "tr", match: (language) => language.startsWith("tr") },
-]
-
-type ParityKey = "command.session.previous.unseen" | "command.session.next.unseen"
-const PARITY_CHECK: Record<Exclude<Locale, "en">, Record<ParityKey, string>> = {
-  zh,
-  zht,
-  ko,
-  de,
-  es,
-  fr,
-  da,
-  ja,
-  pl,
-  ru,
-  ar,
-  no,
-  br,
-  th,
-  bs,
-  tr,
+function loadDict(locale: Locale) {
+  const hit = dicts.get(locale)
+  if (hit) return Promise.resolve(hit)
+  if (locale === "en") return Promise.resolve(base)
+  const load = loaders[locale]
+  return load().then((next: Dictionary) => {
+    dicts.set(locale, next)
+    return next
+  })
 }
-void PARITY_CHECK
+
+export function loadLocaleDict(locale: Locale) {
+  return loadDict(locale).then(() => undefined)
+}
 
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
-
-  const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
-  for (const language of languages) {
-    if (!language) continue
-    const normalized = language.toLowerCase()
-    const match = localeMatchers.find((entry) => entry.match(normalized))
-    if (match) return match.locale
-  }
-
-  return "en"
+  return detectDesktopNativeLocale(navigator.languages?.length ? navigator.languages : [navigator.language])
 }
 
-function normalizeLocale(value: string): Locale {
+export function normalizeLocale(value: string): Locale {
   return LOCALES.includes(value as Locale) ? (value as Locale) : "en"
+}
+
+function readStoredLocale() {
+  if (typeof localStorage !== "object") return
+  try {
+    const raw = localStorage.getItem("opencode.global.dat:language")
+    if (!raw) return
+    const next = JSON.parse(raw) as { locale?: string }
+    if (typeof next?.locale !== "string") return
+    return normalizeLocale(next.locale)
+  } catch {
+    return
+  }
+}
+
+const warm = readStoredLocale() ?? detectLocale()
+const initialLocale =
+  warm === "en"
+    ? Promise.resolve(warm)
+    : loadDict(warm).then(
+        () => warm,
+        () => "en" as const,
+      )
+
+export function loadInitialLocale() {
+  return initialLocale
 }
 
 export const { use: useLanguage, provider: LanguageProvider } = createSimpleContext({
   name: "Language",
-  init: () => {
+  gate: false,
+  init: (props: { locale?: Locale; onNativeTranslations?: (bundle: DesktopNativeBundle) => void }) => {
+    const initial = props.locale ?? readStoredLocale() ?? detectLocale()
     const [store, setStore, _, ready] = persisted(
       Persist.global("language", ["language.v1"]),
       createStore({
-        locale: detectLocale() as Locale,
+        locale: initial,
       }),
     )
 
     const locale = createMemo<Locale>(() => normalizeLocale(store.locale))
+    const intl = createMemo(() => INTL[locale()])
+    const [layout, setLayout] = createStore({ direction: undefined as Direction | undefined })
+    const direction = createMemo(() => layout.direction ?? localeDirection(locale()))
+    const layoutLocale = createMemo(() => {
+      if (!layout.direction) return intl()
+      // Kobalte derives menu direction from locale rather than accepting a direction override.
+      return layout.direction === "rtl" ? "ar" : "en"
+    })
 
-    const dict = createMemo<Dictionary>(() => DICT[locale()])
+    const [dict] = createResource(locale, loadDict, {
+      initialValue: dicts.get(initial) ?? base,
+    })
 
-    const t = i18n.translator(dict, i18n.resolveTemplate)
+    const t = i18n.translator(() => dict() ?? base, i18n.resolveTemplate) as (
+      key: keyof Dictionary,
+      params?: Record<string, string | number | boolean>,
+    ) => string
 
-    const label = (value: Locale) => t(LABEL_KEY[value])
+    const plural = (key: PluralKey, count: number, params?: Record<string, string | number | boolean>) => {
+      const category = pluralCategory(intl(), count)
+      const current = (dict.loading ? base : (dict() ?? base)) as Record<string, string>
+      const candidate = `${key}.${category}`
+      const fallback = `${key}.other`
+      return i18n.resolveTemplate(current[candidate] ?? current[fallback] ?? fallback, { ...params, count })
+    }
+
+    const label = (value: Locale) => DESKTOP_NATIVE_LABELS[value]
 
     createEffect(() => {
       if (typeof document !== "object") return
-      document.documentElement.lang = locale()
-      document.cookie = cookie(locale())
+      const value = locale()
+      document.documentElement.lang = intl()
+      document.documentElement.dir = direction()
+      document.cookie = cookie(value)
+    })
+
+    createEffect(() => {
+      if (!props.onNativeTranslations || dict.loading) return
+      const current = dict()
+      if (!current) return
+      props.onNativeTranslations(
+        createDesktopNativeBundle(locale(), (key) => current[key] ?? DESKTOP_NATIVE_ENGLISH[key]),
+      )
     })
 
     return {
       ready,
       locale,
+      intl,
+      direction,
+      layoutLocale,
       locales: LOCALES,
       label,
       t,
+      plural,
       setLocale(next: Locale) {
         setStore("locale", normalizeLocale(next))
+      },
+      setDirection(next: Direction) {
+        setLayout("direction", next === localeDirection(locale()) ? undefined : next)
       },
     }
   },

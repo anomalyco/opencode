@@ -1,12 +1,13 @@
 import { SECRET } from "./secret"
-import { domain, shortDomain } from "./stage"
+import { shortDomain } from "./stage"
 
 const storage = new sst.cloudflare.Bucket("EnterpriseStorage")
 
-const teams = new sst.cloudflare.x.SolidStart("Teams", {
+new sst.cloudflare.x.SolidStart("Teams", {
   domain: shortDomain,
   path: "packages/enterprise",
   buildCommand: "bun run build:cloudflare",
+  link: [SECRET.SupportApiKey],
   environment: {
     OPENCODE_STORAGE_ADAPTER: "r2",
     OPENCODE_STORAGE_ACCOUNT_ID: sst.cloudflare.DEFAULT_ACCOUNT_ID,
