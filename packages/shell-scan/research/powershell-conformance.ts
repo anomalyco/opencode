@@ -108,8 +108,8 @@ if (
   [...sources].some((source) => !returned.has(source))
 )
   throw new Error(`PowerShell oracle returned ${oracle.results.length} results for ${sources.size} unique sources`)
-const findings = oracle.results.flatMap((item) => {
-  const scanned = ShellScan.scanPowerShell(item.source)
+const evaluated = oracle.results.map((item) => ({ item, scanned: ShellScan.scanPowerShell(item.source) }))
+const findings = evaluated.flatMap(({ item, scanned }) => {
   if (unsupported.includes(item.source as (typeof unsupported)[number]) && scanned.kind !== "opaque")
     return [{ source: item.source, reason: "unsupported-scanned", expected: [], actual: [], missing: [] }]
   if (item.errors.length > 0)
@@ -133,9 +133,7 @@ const findings = oracle.results.flatMap((item) => {
     return [{ source: item.source, reason: "invalid-extent", expected, actual, missing: [invalidExtent.text] }]
   return missing.length > 0 ? [{ source: item.source, reason: "missing-command", expected, actual, missing }] : []
 })
-const scannedCount = oracle.results.filter(
-  (result) => ShellScan.scanPowerShell(result.source).kind === "scanned",
-).length
+const scannedCount = evaluated.filter(({ scanned }) => scanned.kind === "scanned").length
 if (scannedCount < 2_000) throw new Error(`PowerShell scanned coverage fell below floor: ${scannedCount}`)
 
 console.log(

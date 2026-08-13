@@ -51,6 +51,22 @@ const BASH_DYNAMIC_BUILTINS = new Set([
   "unalias",
   "unset",
 ])
+const BASH_COMPOUND_KEYWORDS = new Set([
+  "if",
+  "then",
+  "elif",
+  "else",
+  "fi",
+  "for",
+  "while",
+  "until",
+  "case",
+  "select",
+  "function",
+  "do",
+  "done",
+  "coproc",
+])
 const POWERSHELL_LOCATIONS = new Set(["set-location", "cd", "chdir", "sl", "push-location"])
 const POWERSHELL_SHELLS = new Set(["powershell", "powershell.exe", "pwsh", "pwsh.exe"])
 const POWERSHELL_DYNAMIC_COMMANDS = new Set([
@@ -332,27 +348,7 @@ function scanBash(input: string, depth: number): Result {
   if (separated && comment === undefined && !input.slice(segment).trim()) invalidStructure = true
   if (invalidStructure) return { kind: "opaque", reason: "invalid-structure" }
   if (invalidRedirect) return { kind: "opaque", reason: "invalid-redirect" }
-  if (
-    compound ||
-    commands.some((command) =>
-      new Set([
-        "if",
-        "then",
-        "elif",
-        "else",
-        "fi",
-        "for",
-        "while",
-        "until",
-        "case",
-        "select",
-        "function",
-        "do",
-        "done",
-        "coproc",
-      ]).has(command.words[0] ?? ""),
-    )
-  )
+  if (compound || commands.some((command) => BASH_COMPOUND_KEYWORDS.has(command.words[0] ?? "")))
     return { kind: "opaque", reason: "compound-command" }
   if (
     commands.some((command) => command.words[0]?.includes("$")) ||
@@ -603,7 +599,8 @@ export function scanPowerShell(input: string): Result {
 }
 
 function shellCommandName(word: string | undefined) {
-  return (word ?? "").toLowerCase().split(/[\\/]/).at(-1) ?? ""
+  const value = (word ?? "").toLowerCase()
+  return value.slice(Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\")) + 1)
 }
 
 function knownPowerShellDirectory(word: string) {

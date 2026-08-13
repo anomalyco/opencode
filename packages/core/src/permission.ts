@@ -319,8 +319,7 @@ const layer = Layer.effect(
           if (input.reply !== "always" || !existing.request.save?.length) return
 
           for (const [id, item] of pending) {
-            const input = { ...item.request }
-            const result = yield* evaluateInput({ ...input, agent: item.agent }).pipe(
+            const result = yield* evaluateInput({ ...item.request, agent: item.agent }).pipe(
               Effect.catchTag("Session.NotFoundError", () => Effect.succeed(undefined)),
             )
             if (!result || result.effect !== "allow") continue
