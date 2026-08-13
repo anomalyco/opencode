@@ -1938,6 +1938,7 @@ function RevertMessage(props: {
 
 function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "shell" }> }) {
   const theme = useTheme("elevated")
+  const { currentSyntax: syntax } = useThemes()
   const output = createMemo(() => stripAnsi(props.message.output?.output.trim() ?? ""))
 
   return (
@@ -1952,7 +1953,16 @@ function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "she
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={theme.background.default}
     >
-      <text fg={theme.text.default}>$ {props.message.command}</text>
+      <box flexDirection="row" gap={1}>
+        <text fg={theme.text.default}>$</text>
+        <code
+          conceal={false}
+          fg={theme.text.default}
+          filetype="bash"
+          syntaxStyle={syntax()}
+          content={props.message.command}
+        />
+      </box>
       <Show when={output()}>
         <text fg={theme.text.subdued}>{output()}</text>
       </Show>
@@ -2784,6 +2794,7 @@ const SHELL_DISPLAY_LIMIT = 1024 * 1024
 
 function Shell(props: ToolProps) {
   const theme = useTheme()
+  const { currentSyntax: syntax } = useThemes()
   const ctx = use()
   const client = useClient()
   const data = useData()
@@ -2915,11 +2926,20 @@ function Shell(props: ToolProps) {
             fallback={
               <box flexDirection="row" gap={1}>
                 <text fg={theme.text.default}>{prompt()}</text>
-                <text fg={theme.text.default}>{limitedInput()}</text>
+                <code
+                  conceal={false}
+                  fg={theme.text.default}
+                  filetype="bash"
+                  syntaxStyle={syntax()}
+                  content={limitedInput()}
+                />
               </box>
             }
           >
-            <Spinner color={color()}>{limitedInput()}</Spinner>
+            <box flexDirection="row" gap={1}>
+              <Spinner color={color()} />
+              <code conceal={false} fg={color()} filetype="bash" syntaxStyle={syntax()} content={limitedInput()} />
+            </box>
           </Show>
           <Show when={limitedOutput()}>
             <text fg={theme.text.subdued}>{limitedOutput()}</text>

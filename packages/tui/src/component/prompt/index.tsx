@@ -5,6 +5,7 @@ import {
   MouseEvent,
   PasteEvent,
   decodePasteBytes,
+  getTreeSitterClient,
   type ColorInput,
   type KeyEvent,
 } from "@opentui/core"
@@ -98,6 +99,7 @@ export type PromptRef = {
 }
 
 const DRAFT_RETENTION_MIN_CHARS = 20
+const SHELL_SYNTAX_HIGHLIGHT_REF = 65_535
 
 function randomIndex(count: number) {
   if (count <= 0) return 0
@@ -340,6 +342,47 @@ export function Prompt(props: PromptProps) {
   })
   let disposed = false
   let pasteQueue = Promise.resolve()
+  let syntaxHighlightVersion = 0
+
+  createEffect(() => {
+    const mode = store.mode
+    const content = store.prompt.text
+    const style = syntax()
+    const version = ++syntaxHighlightVersion
+
+    if (input && !input.isDestroyed) input.editBuffer.removeHighlightsByRef(SHELL_SYNTAX_HIGHLIGHT_REF)
+    if (mode !== "shell" || !content || !input || input.isDestroyed) return
+
+    const timeout = setTimeout(() => {
+      getTreeSitterClient()
+        .highlightOnce(content, "bash")
+        .then((result) => {
+          if (version !== syntaxHighlightVersion || !result.highlights || !input || input.isDestroyed) return
+
+          const bytes = new TextEncoder().encode(content)
+          const decoder = new TextDecoder()
+          result.highlights.forEach(([start, end, group]) => {
+            const styleId = style.getStyleId(group)
+            if (styleId === null) return
+            const before = decoder.decode(bytes.subarray(0, start))
+            const highlighted = decoder.decode(bytes.subarray(start, end))
+            input.editBuffer.addHighlightByCharRange({
+              start: promptOffsetWidth(before) - (before.match(/\n/g)?.length ?? 0),
+              end:
+                promptOffsetWidth(before) +
+                promptOffsetWidth(highlighted) -
+                ((before + highlighted).match(/\n/g)?.length ?? 0),
+              styleId,
+              priority: 0,
+              hlRef: SHELL_SYNTAX_HIGHLIGHT_REF,
+            })
+          })
+          renderer.requestRender()
+        })
+        .catch(() => {})
+    }, 50)
+    onCleanup(() => clearTimeout(timeout))
+  })
 
   function enqueuePaste(run: (changed: () => boolean) => Promise<void>) {
     pasteQueue = pasteQueue
