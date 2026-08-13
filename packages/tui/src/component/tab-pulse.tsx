@@ -190,7 +190,7 @@ class PulseState {
   }
 
   get live() {
-    return this.active || this.breathing || this.envelopes.some(envelopeActive)
+    return this.enabled && (this.active || this.breathing || this.envelopes.some(envelopeActive))
   }
 
   get running() {
