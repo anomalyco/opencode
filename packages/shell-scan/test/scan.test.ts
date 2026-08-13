@@ -166,6 +166,13 @@ describe("ShellScan", () => {
 })
 
 describe("ShellScan PowerShell", () => {
+  test("splits carriage-return statement separators", () => {
+    const result = ShellScan.scanPowerShell("Get-ChildItem\rRemove-Item victim")
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") return
+    expect(result.commands.map((command) => command.words[0])).toEqual(["Get-ChildItem", "Remove-Item"])
+  })
+
   test("scans static commands and pipelines", () => {
     expect(ShellScan.scanPowerShell("Get-ChildItem; Write-Output 'done' | Out-File output.txt")).toEqual({
       kind: "scanned",

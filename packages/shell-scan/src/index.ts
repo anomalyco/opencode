@@ -5,6 +5,7 @@ export type OpaqueReason =
   | "compound-command"
   | "command-wrapper"
   | "dynamic-command-name"
+  | "dynamic-directory"
   | "dynamic-execution"
   | "heredoc"
   | "invalid-redirect"
@@ -18,6 +19,7 @@ export type Result =
   | { kind: "opaque"; reason: OpaqueReason }
 
 const BASH_WRAPPERS = new Set([
+  "-",
   "time",
   "command",
   "builtin",
@@ -37,7 +39,9 @@ const BASH_WRAPPERS = new Set([
 const BASH_SHELLS = new Set(["bash", "sh", "dash", "zsh", "ksh"])
 const BASH_DYNAMIC_BUILTINS = new Set([
   "alias",
+  "emulate",
   "enable",
+  "fc",
   "hash",
   "let",
   "mapfile",
@@ -50,24 +54,36 @@ const BASH_DYNAMIC_BUILTINS = new Set([
 const POWERSHELL_LOCATIONS = new Set(["set-location", "cd", "chdir", "sl", "push-location"])
 const POWERSHELL_SHELLS = new Set(["powershell", "powershell.exe", "pwsh", "pwsh.exe"])
 const POWERSHELL_DYNAMIC_COMMANDS = new Set([
+  "add-pssnapin",
+  "add-type",
   "cmd",
   "cmd.exe",
   "cscript",
   "cscript.exe",
+  "enter-pssession",
   "foreach-object",
   "iex",
   "import-alias",
   "import-module",
+  "import-pssession",
+  "invoke-history",
   "invoke-command",
   "invoke-expression",
   "invoke-item",
   "measure-command",
   "new-alias",
+  "new-module",
+  "register-objectevent",
   "register-engineevent",
   "remove-alias",
+  "remove-module",
+  "remove-pssnapin",
   "set-alias",
   "start-job",
   "start-process",
+  "start-threadjob",
+  "set-psbreakpoint",
+  "trace-command",
   "where-object",
   "wscript",
   "wscript.exe",
@@ -75,30 +91,47 @@ const POWERSHELL_DYNAMIC_COMMANDS = new Set([
 const POWERSHELL_ALIASES: Record<string, string> = {
   "%": "foreach-object",
   "?": "where-object",
+  ac: "add-content",
+  asnp: "add-pssnapin",
+  cli: "clear-item",
+  clc: "clear-content",
   copy: "copy-item",
   cp: "copy-item",
   cpi: "copy-item",
   del: "remove-item",
   erase: "remove-item",
+  etsn: "enter-pssession",
   foreach: "foreach-object",
   icm: "invoke-command",
+  ihy: "invoke-history",
   ii: "invoke-item",
+  ipal: "import-alias",
   ipmo: "import-module",
+  ipsn: "import-pssession",
   mi: "move-item",
   move: "move-item",
   mv: "move-item",
   nal: "new-alias",
   ni: "new-item",
+  nmo: "new-module",
+  r: "invoke-history",
   rd: "remove-item",
   ren: "rename-item",
   ri: "remove-item",
   rm: "remove-item",
   rmdir: "remove-item",
   rni: "rename-item",
+  rmo: "remove-module",
+  rsnp: "remove-pssnapin",
+  sajb: "start-job",
   sal: "set-alias",
   saps: "start-process",
+  sbp: "set-psbreakpoint",
+  sc: "set-content",
   si: "set-item",
   start: "start-process",
+  pushd: "push-location",
+  trcm: "trace-command",
   where: "where-object",
 }
 const MAX_BASH_INPUT_LENGTH = 64 * 1024
@@ -195,6 +228,10 @@ function scanBash(input: string, depth: number): Result {
         index = substitution.end
       }
       else {
+        if (char === "$" && /^\$\{[^}:@]+@P\}/.test(input.slice(index)))
+          return { kind: "opaque", reason: "dynamic-execution" }
+        if (char === "$" && /^\$\{\([^)]*e[^)]*\)/.test(input.slice(index)))
+          return { kind: "opaque", reason: "dynamic-execution" }
         if (char === "$") dynamicWord = true
         word += char
       }
@@ -233,6 +270,10 @@ function scanBash(input: string, depth: number): Result {
       index = substitution.end
       continue
     }
+    if (char === "$" && input[index + 1] === "{" && /^\$\{[^}:@]+@P\}/.test(input.slice(index)))
+      return { kind: "opaque", reason: "dynamic-execution" }
+    if (char === "$" && /^\$\{\([^)]*e[^)]*\)/.test(input.slice(index)))
+      return { kind: "opaque", reason: "dynamic-execution" }
     if (char === "$" && input[index + 1] === "[") return { kind: "opaque", reason: "dynamic-execution" }
     if (char === "<" && input[index + 1] === "<") heredoc = true
     if (char === "#" && !wordStarted) {
@@ -320,6 +361,8 @@ function scanBash(input: string, depth: number): Result {
     (dynamicWord && commands[0]?.words[0]?.includes("$"))
   )
     return { kind: "opaque", reason: "dynamic-command-name" }
+  if (commands.some((command) => command.words[0]?.startsWith("=")))
+    return { kind: "opaque", reason: "dynamic-command-name" }
   if (dynamicAssignment) return { kind: "opaque", reason: "dynamic-command-name" }
   if (
     commands.some((command) => BASH_WRAPPERS.has(shellCommandName(command.words[0])))
@@ -332,20 +375,27 @@ function scanBash(input: string, depth: number): Result {
       if (BASH_SHELLS.has(name)) return true
       if (BASH_DYNAMIC_BUILTINS.has(name)) return true
       if (["declare", "local", "typeset"].includes(name))
-        return command.words.some((word, index) => index > 0 && /^-[^-]*i/.test(word))
+        return command.words.some(
+          (word, index) => index > 0 && (/^-[^-]*[aAi]/.test(word) || (/\[[^\]]*\$/.test(word) && word.includes("="))),
+        )
       if (name === "printf") return command.words.some((word, index) => index > 0 && word === "-v")
       if (name === "test" || name === "[") return command.words.some((word) => word === "-v")
-      if (name === "find") return command.words.some((word) => word === "-exec" || word === "-execdir" || word === "-ok")
+      if (name === "find")
+        return command.words.some(
+          (word) => word === "-exec" || word === "-execdir" || word === "-ok" || word === "-okdir",
+        )
       if (name === "awk" || name === "gawk" || name === "mawk" || name === "nawk") return true
       if (name === "git")
         return command.words.some((word, index) => index > 0 && /^alias\.[^=]+=!/.test(word))
-      if (["python", "python3", "perl", "ruby", "node", "bun"].includes(name))
+      if (name === "python" || name === "python3")
+        return command.words.some((word, index) => index > 0 && (/^-[A-Za-z]*c/.test(word) || word === "-c"))
+      if (name === "perl" || name === "ruby")
+        return command.words.some((word, index) => index > 0 && (/^-[A-Za-z]*e/.test(word) || word === "-e"))
+      if (name === "node" || name === "bun")
         return command.words.some(
           (word, index) =>
             index > 0 &&
-            (["-c", "-e", "-p", "--eval", "--print"].includes(word) ||
-              /^-(?:c|e|p).+/.test(word) ||
-              /^(?:--eval|--print)=.+/.test(word)),
+            (/^-[A-Za-z]*[ep]/.test(word) || ["-e", "-p", "--eval", "--print"].includes(word) || /^(?:--eval|--print)=/.test(word)),
         )
       return false
     })
@@ -418,6 +468,7 @@ export function scanPowerShell(input: string): Result {
   let comment = false
   let separated = false
   let dangling = false
+  let dynamicDirectory = false
 
   const finishWord = () => {
     if (!started) return
@@ -457,11 +508,15 @@ export function scanPowerShell(input: string): Result {
     }
     if (char === "`" && index + 1 < input.length) {
       started = true
-      word += input[++index]
+      if (input[index + 1] === "\r" && input[index + 2] === "\n") index += 2
+      else if (input[index + 1] === "\r" || input[index + 1] === "\n") index++
+      else word += input[++index]
       continue
     }
     if (char === "`") return { kind: "opaque", reason: "unterminated-escape" }
+    if (char === "<" && input[index + 1] === "#") return { kind: "opaque", reason: "dynamic-execution" }
     if (char === "#" && !started) {
+      if (/^#requires\b/i.test(input.slice(index))) return { kind: "opaque", reason: "dynamic-execution" }
       finishCommand(index)
       comment = true
       const newline = input.indexOf("\n", index)
@@ -478,7 +533,7 @@ export function scanPowerShell(input: string): Result {
       continue
     }
     if ("{}@()".includes(char) || char === "&" || (char === "." && !started)) dynamic = true
-    if (/\s/.test(char) && char !== "\n") {
+    if (/\s/.test(char) && char !== "\n" && char !== "\r") {
       finishWord()
       continue
     }
@@ -486,7 +541,7 @@ export function scanPowerShell(input: string): Result {
     const separator =
       (char === "&" && next === "&") || (char === "|" && next === "|")
         ? char + next
-        : char === ";" || char === "|" || char === "\n"
+        : char === ";" || char === "|" || char === "\n" || char === "\r"
           ? char
           : undefined
     if (separator) {
@@ -508,22 +563,40 @@ export function scanPowerShell(input: string): Result {
   if (
     dynamic ||
     commands.some((command) => {
-      const rawName = shellCommandName(command.words[0])
+      const head = command.words[0] ?? ""
+      if (head.includes("\\") && !/^[A-Za-z]:\\/.test(head)) return true
+      const rawName = shellCommandName(head)
       const name = POWERSHELL_ALIASES[rawName] ?? rawName
-      if (name?.startsWith("$") || name?.startsWith("@")) return true
+      if (name === "using" && /^(?:module|assembly)$/i.test(command.words[1] ?? "")) return true
+      if (head.includes("$") || head.includes("@")) return true
+      if (["return", "throw", "exit", "break", "continue"].includes(name) && command.words.length > 1) return true
       if (POWERSHELL_DYNAMIC_COMMANDS.has(name)) return true
       if (/\.(?:ps1|psm1|cmd|bat|vbs|wsf)$/i.test(name)) return true
-      if (["set-item", "new-item", "remove-item", "rename-item", "copy-item"].includes(name))
+      if (
+        [
+          "set-item",
+          "new-item",
+          "remove-item",
+          "rename-item",
+          "copy-item",
+          "move-item",
+          "clear-item",
+          "set-content",
+          "add-content",
+          "clear-content",
+          "out-file",
+        ].includes(name)
+      )
         return command.words.some((word) => /^(?:alias|function|env):/i.test(word))
       if (POWERSHELL_LOCATIONS.has(name ?? ""))
-        return command.words.some(
+        return (dynamicDirectory = command.words.some(
           (word, index) => index > 0 && (word.includes("(") || (word.includes("$") && !knownPowerShellDirectory(word))),
-        )
+        ) || command.words.some((word, index) => index > 0 && /^[A-Za-z]+:/.test(word) && !/^[A-Za-z]:[\\/]/.test(word)))
       if (!POWERSHELL_SHELLS.has(name)) return false
       return command.words.length > 1
     })
   )
-    return { kind: "opaque", reason: "dynamic-execution" }
+    return { kind: "opaque", reason: dynamicDirectory ? "dynamic-directory" : "dynamic-execution" }
   return { kind: "scanned", commands }
 }
 

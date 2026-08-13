@@ -156,7 +156,12 @@ export const scan = Effect.fn("ShellParse.scan")(function* (command: string, she
 function scanCommands(command: string, cwd: string, shell: string, powershell: boolean) {
   const result = powershell ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
   if (result.kind === "opaque")
-    return { commands: [{ resource: command }], directories: [], opaque: true, directoryUnknown: true }
+    return {
+      commands: [{ resource: command }],
+      directories: [],
+      opaque: true,
+      ...(result.reason === "dynamic-directory" ? { directoryUnknown: true as const } : {}),
+    }
   if (
     result.commands.some((item) => {
       const name = powershell ? item.words[0]?.toLowerCase() : item.words[0]

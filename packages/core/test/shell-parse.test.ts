@@ -42,7 +42,6 @@ describe("ShellParse", () => {
       commands: [{ resource: command }],
       directories: [],
       opaque: true,
-      directoryUnknown: true,
     })
   })
 
@@ -51,10 +50,10 @@ describe("ShellParse", () => {
     async (command) => {
       const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
       expect(result).toEqual({
-        commands: [{ resource: command }],
-        directories: [],
-        opaque: true,
-        directoryUnknown: true,
+      commands: [{ resource: command }],
+      directories: [],
+      opaque: true,
+      directoryUnknown: true,
       })
     },
   )
@@ -82,7 +81,6 @@ describe("ShellParse", () => {
       commands: [{ resource: 'Write-Output "$(Get-ChildItem)"' }],
       directories: [],
       opaque: true,
-      directoryUnknown: true,
     })
   })
 

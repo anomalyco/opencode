@@ -184,7 +184,7 @@ const layer = Layer.effect(
           (rule) =>
             rule.effect === "deny" &&
             Wildcard.match(input.action, rule.action) &&
-            input.resources.some((resource) => Wildcard.match(resource, rule.resource)),
+            input.resources.some((resource) => resource === "*" || Wildcard.match(resource, rule.resource)),
         )
       return input.resources.some((resource) => evaluate(input.action, resource, rules).effect === "deny")
     }
@@ -200,7 +200,7 @@ const layer = Layer.effect(
       if (
         input.opaque &&
         rules.some(
-          (rule) => rule.effect === "deny" && rule.resource !== "*" && Wildcard.match(input.action, rule.action),
+          (rule) => rule.effect !== "allow" && rule.resource !== "*" && Wildcard.match(input.action, rule.action),
         )
       )
         return { effect: "ask" as const, rules }
