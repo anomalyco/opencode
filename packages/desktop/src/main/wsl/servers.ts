@@ -26,7 +26,7 @@ import {
 } from "./runtime"
 
 type RunningSidecar = {
-  stop: () => void
+  stop: () => Promise<void>
   onExit: (cb: (code: number | null, signal: NodeJS.Signals | null) => void) => void
   url: string
   username: string | null
@@ -158,7 +158,7 @@ export function createWslServersController(options: WslServersControllerOptions)
   const startServer = async (id: string) => {
     const item = state.servers.find((x) => x.config.id === id)
     if (!item) return
-    stopServer(id)
+    await stopServer(id)
     setRuntime(id, { kind: "starting" })
     options.logger?.log("wsl sidecar starting", { id, distro: item.config.distro })
     try {
@@ -186,11 +186,12 @@ export function createWslServersController(options: WslServersControllerOptions)
     }
   }
 
-  const stopServer = (id: string) => {
+  const stopServer = async (id: string) => {
     const existing = sidecars.get(id)
     if (!existing) return
     sidecars.delete(id)
-    existing.stop()
+    await existing.stop()
+    setRuntime(id, { kind: "stopped" })
   }
 
   const runJob = async <T>(job: WslJob, runner: () => Promise<T>) => {
@@ -260,9 +261,10 @@ export function createWslServersController(options: WslServersControllerOptions)
 
     async installOpencode(distro: string) {
       await runJob({ kind: "install-opencode", distro, startedAt: Date.now() }, async () => {
+        const id = state.servers.find((item) => item.config.distro === distro)?.config.id
+        if (id) await stopServer(id)
         await (options.installCli ?? installWslCli)(distro, options.cli)
         requireMatchingCli(await refreshCliCheck(distro), options.cli.version)
-        const id = state.servers.find((item) => item.config.distro === distro)?.config.id
         if (id) await startServer(id)
       })
     },
@@ -290,7 +292,7 @@ export function createWslServersController(options: WslServersControllerOptions)
 
     async removeServer(id: string) {
       const distro = state.servers.find((item) => item.config.id === id)?.config.distro
-      stopServer(id)
+      await stopServer(id)
       const remaining = readServers().filter((item) => item.id !== id)
       writeServers(remaining)
       setState({
@@ -301,8 +303,8 @@ export function createWslServersController(options: WslServersControllerOptions)
 
     startServer,
 
-    stopServers() {
-      sidecars.forEach((sidecar) => sidecar.stop())
+    async stopServers() {
+      await Promise.all([...sidecars.values()].map((sidecar) => sidecar.stop()))
       sidecars.clear()
     },
   }

@@ -7,7 +7,7 @@ import { type WslCommandLine, resolveWslCli, shellEscape, wslArgs } from "./runt
 import { nativeT } from "../native-translations"
 
 export type WslSidecar = {
-  stop: () => void
+  stop: () => Promise<void>
   onExit: (cb: (code: number | null, signal: NodeJS.Signals | null) => void) => void
   url: string
   username: string | null
@@ -80,7 +80,13 @@ export async function spawnWslSidecar(
       startup.abort()
     })
   return {
-    stop: () => child.kill(),
+    stop: async () => {
+      if (child.exitCode !== null || child.signalCode !== null) return
+      await new Promise<void>((resolve) => {
+        child.once("exit", () => resolve())
+        child.kill()
+      })
+    },
     onExit: (cb) => child.once("exit", cb),
     url,
     username,

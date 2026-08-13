@@ -46,6 +46,37 @@ test("rejects a WSL CLI version that differs from the bundled version", async ()
   )
 })
 
+test("stops a running WSL server before replacing its CLI", async () => {
+  persistedServers = [{ id: "wsl:Debian", distro: "Debian" }]
+  const events: string[] = []
+  const controller = createWslServersController(
+    testControllerOptions({
+      spawnSidecar: async () => {
+        events.push("start")
+        return {
+          stop: async () => {
+            events.push("stop")
+          },
+          onExit: () => undefined,
+          url: "http://127.0.0.1:4096",
+          username: "opencode",
+          password: "secret",
+        }
+      },
+      installCli: async () => {
+        events.push("install")
+      },
+    }),
+  )
+  controller.startConfiguredServers()
+  await waitFor(() => controller.getState().servers[0]?.runtime.kind === "ready")
+
+  await controller.installOpencode("Debian")
+
+  expect(events).toEqual(["start", "stop", "install", "start"])
+  await controller.stopServers()
+})
+
 test("probes addable distros in parallel before checking OpenCode", async () => {
   persistedServers = []
   const started: string[] = []
@@ -118,7 +149,7 @@ function testControllerOptions(overrides: Partial<ControllerOptions> = {}): Cont
   return {
     cli: { version: "0.0.0-next-16365" },
     spawnSidecar: async () => ({
-      stop: () => undefined,
+      stop: async () => undefined,
       onExit: () => undefined,
       url: "http://127.0.0.1:4096",
       username: "opencode",
