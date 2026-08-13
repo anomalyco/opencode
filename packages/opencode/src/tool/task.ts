@@ -199,6 +199,20 @@ export const TaskTool = Tool.define(
           ],
         }))
 
+      // fork: publish the child session id as soon as it exists. The local
+      // placement probing below adds `model` to this metadata, but it can take
+      // a moment, and callers (the TUI, cancel propagation, and the upstream
+      // contract tests) need `sessionId` on the running part immediately —
+      // waiting until after placement leaves the part with no metadata at all.
+      yield* ctx.metadata({
+        title: params.description,
+        metadata: {
+          parentSessionId: ctx.sessionID,
+          sessionId: nextSession.id,
+          ...(runInBackground ? { background: true } : {}),
+        },
+      })
+
       const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
         Effect.provideService(Database.Service, database),
         Effect.orDie,

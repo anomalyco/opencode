@@ -1464,7 +1464,12 @@ it.instance("prompt submitted during an active run is included in the next LLM i
     expect(inputs).toHaveLength(2)
     const messages = inputs.at(-1)?.messages
     if (!Array.isArray(messages)) throw new Error("expected LLM messages")
-    expect(messages.at(-1)).toEqual({ role: "user", content: "second" })
+    const steered = messages.at(-1)
+    expect(steered?.role).toBe("user")
+    // fork: a prompt submitted mid-run is delivered wrapped in a <system-reminder>
+    // so the model can tell it apart from the turn it is already answering.
+    // Upstream has no equivalent, so assert containment rather than equality.
+    expect(String(steered?.content)).toContain("second")
   }),
 )
 
