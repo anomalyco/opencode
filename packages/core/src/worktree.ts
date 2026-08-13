@@ -214,8 +214,12 @@ const layer = Layer.effect(
     const strategies = () => Array.from(registry.values())
 
     const source = Effect.fnUntraced(function* (projectID: ProjectSchema.ID) {
+      // Prefer canonical roots (no strategy) over managed worktrees so the source is deterministic
+      const candidates = (yield* ops.list(projectID)).toSorted(
+        (a, b) => Number(a.strategy !== undefined) - Number(b.strategy !== undefined),
+      )
       const checked = yield* Effect.forEach(
-        yield* ops.list(projectID),
+        candidates,
         (item) =>
           canonical(fs, item.directory).pipe(
             Effect.catchTag("Worktree.DirectoryUnavailableError", () => Effect.succeed(undefined)),
