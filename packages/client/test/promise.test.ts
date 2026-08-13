@@ -271,6 +271,7 @@ test("worktree methods use the global project contract", async () => {
     await client.worktree.create({
       projectID: "proj_test",
       strategy: "git",
+      sourceDirectory: "/tmp/project",
       directory: "/tmp/worktrees",
       name: "api",
     }),
@@ -288,7 +289,12 @@ test("worktree methods use the global project contract", async () => {
     ["DELETE", "http://localhost:3000/api/experimental/project/proj_test/worktree"],
     ["POST", "http://localhost:3000/api/experimental/project/proj_test/worktree/refresh"],
   ])
-  expect(await requests[1]?.json()).toEqual({ strategy: "git", directory: "/tmp/worktrees", name: "api" })
+  expect(await requests[1]?.json()).toEqual({
+    strategy: "git",
+    sourceDirectory: "/tmp/project",
+    directory: "/tmp/worktrees",
+    name: "api",
+  })
   expect(await requests[2]?.json()).toEqual({ directory: "/tmp/worktrees/api", force: false })
 })
 

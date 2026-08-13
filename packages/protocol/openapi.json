@@ -11502,6 +11502,7 @@
                 },
                 "required": [
                   "strategy",
+                  "sourceDirectory",
                   "directory"
                 ],
                 "additionalProperties": false

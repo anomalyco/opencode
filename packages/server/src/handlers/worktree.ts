@@ -44,7 +44,7 @@ function badRequest<A, R>(effect: Effect.Effect<A, Worktree.Error, R>) {
 
 function message(error: Worktree.Error) {
   if (error instanceof Worktree.SourceDirectoryNotFoundError)
-    return `Worktree source not found for project: ${error.projectID}`
+    return `Worktree source not found: ${error.directory}`
   if (error instanceof Worktree.DestinationExistsError) return `Worktree destination already exists: ${error.directory}`
   if (error instanceof Worktree.DirectoryUnavailableError) return `Worktree directory unavailable: ${error.directory}`
   if (error instanceof Worktree.InvalidDirectoryError) return `Invalid worktree directory: ${error.directory}`

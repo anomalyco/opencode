@@ -119,6 +119,7 @@ describe("Worktree", () => {
         .create({
           projectID: input.projectID,
           strategy: unavailable,
+          sourceDirectory: input.sourceDirectory,
           directory: abs(`${input.root.path}-missing-strategy`),
           name: "worktree",
         })
@@ -142,13 +143,14 @@ describe("Worktree", () => {
         .create({
           projectID: input.projectID,
           strategy: gitWorktree,
+          sourceDirectory: input.sourceDirectory,
           directory: abs(`${input.root.path}-missing-source`),
           name: "worktree",
         })
         .pipe(Effect.flip)
 
       expect(error).toBeInstanceOf(Worktree.SourceDirectoryNotFoundError)
-      if (error instanceof Worktree.SourceDirectoryNotFoundError) expect(error.projectID).toBe(input.projectID)
+      if (error instanceof Worktree.SourceDirectoryNotFoundError) expect(error.directory).toBe(input.sourceDirectory)
     }),
   )
 
@@ -171,6 +173,7 @@ describe("Worktree", () => {
       const created = yield* worktree.create({
         projectID: input.projectID,
         strategy: gitWorktree,
+        sourceDirectory: input.sourceDirectory,
         directory: parent,
         name: "worktree",
       })
@@ -190,43 +193,23 @@ describe("Worktree", () => {
     }),
   )
 
-  it.live("creates from an explicit source directory", () =>
+  it.live("rejects a missing source directory", () =>
     Effect.gen(function* () {
       const input = yield* setup()
       const worktree = yield* Worktree.Service
       const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
-      const parent = abs(path.join(temp, path.basename(input.root.path) + "-explicit-source"))
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(() => fs.rm(parent, { recursive: true, force: true })).pipe(Effect.ignore),
-      )
-      // An untracked source works: rows for the project are not consulted.
-      yield* input.db
-        .delete(WorktreeTable)
-        .where(eq(WorktreeTable.project_id, input.projectID))
-        .run()
-        .pipe(Effect.orDie)
 
-      const created = yield* worktree.create({
-        projectID: input.projectID,
-        strategy: gitWorktree,
-        sourceDirectory: input.sourceDirectory,
-        directory: parent,
-        name: "explicit",
-      })
-
-      expect(created.directory).toBe(abs(path.join(parent, "explicit")))
-      yield* worktree.remove({ projectID: input.projectID, directory: created.directory, force: false })
-
-      const missing = yield* worktree
+      const error = yield* worktree
         .create({
           projectID: input.projectID,
           strategy: gitWorktree,
           sourceDirectory: abs(path.join(temp, "does-not-exist")),
-          directory: parent,
-          name: "explicit",
+          directory: abs(`${input.root.path}-missing-directory`),
+          name: "worktree",
         })
         .pipe(Effect.flip)
-      expect(missing).toBeInstanceOf(WorktreeDirectory.DirectoryUnavailableError)
+
+      expect(error).toBeInstanceOf(WorktreeDirectory.DirectoryUnavailableError)
     }),
   )
 
@@ -246,6 +229,7 @@ describe("Worktree", () => {
       const source = yield* worktree.create({
         projectID: input.projectID,
         strategy: gitWorktree,
+        sourceDirectory: input.sourceDirectory,
         directory: sourceParent,
         name: "source",
       })
@@ -258,6 +242,7 @@ describe("Worktree", () => {
       const created = yield* worktree.create({
         projectID: input.projectID,
         strategy: gitWorktree,
+        sourceDirectory: source.directory,
         directory: targetParent,
         name: "target",
       })
@@ -280,6 +265,7 @@ describe("Worktree", () => {
       const created = yield* worktree.create({
         projectID: input.projectID,
         strategy: gitWorktree,
+        sourceDirectory: input.sourceDirectory,
         directory: parent,
         name: "worktree",
       })
@@ -340,6 +326,7 @@ describe("Worktree", () => {
       const created = yield* worktree.create({
         projectID: input.projectID,
         strategy: gitWorktree,
+        sourceDirectory: input.sourceDirectory,
         directory: parent,
         name: "worktree",
       })
@@ -377,6 +364,7 @@ describe("Worktree", () => {
         .create({
           projectID: input.projectID,
           strategy: gitWorktree,
+          sourceDirectory: input.sourceDirectory,
           directory: parent,
           name: "worktree",
         })

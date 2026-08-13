@@ -57,7 +57,7 @@ export type ListEntry = typeof ListEntry.Type
 
 export class SourceDirectoryNotFoundError extends Schema.TaggedErrorClass<SourceDirectoryNotFoundError>()(
   "Worktree.SourceDirectoryNotFoundError",
-  { projectID: ProjectSchema.ID },
+  { directory: AbsolutePath },
 ) {}
 
 export class DestinationExistsError extends Schema.TaggedErrorClass<DestinationExistsError>()(
@@ -213,23 +213,11 @@ const layer = Layer.effect(
 
     const strategies = () => Array.from(registry.values())
 
-    const source = Effect.fnUntraced(function* (input: CreateInput) {
-      if (input.sourceDirectory) return yield* canonical(fs, input.sourceDirectory)
-      // Prefer canonical roots (no strategy) over managed worktrees so the source is deterministic
-      const candidates = (yield* ops.list(input.projectID)).toSorted(
-        (a, b) => Number(a.strategy !== undefined) - Number(b.strategy !== undefined),
-      )
-      const checked = yield* Effect.forEach(
-        candidates,
-        (item) =>
-          canonical(fs, item.directory).pipe(
-            Effect.catchTag("Worktree.DirectoryUnavailableError", () => Effect.succeed(undefined)),
-          ),
-        { concurrency: "unbounded" },
-      )
-      const found = checked.find((directory) => directory !== undefined)
-      if (!found) return yield* new SourceDirectoryNotFoundError({ projectID: input.projectID })
-      return found
+    const source = Effect.fnUntraced(function* (input: AbsolutePath, projectID: ProjectSchema.ID) {
+      const sourceDirectory = yield* canonical(fs, input)
+      if ((yield* ops.find(projectID, sourceDirectory)) === undefined)
+        return yield* new SourceDirectoryNotFoundError({ directory: sourceDirectory })
+      return sourceDirectory
     })
 
     const getStrategy = Effect.fnUntraced(function* (id: StrategyID) {
@@ -240,7 +228,7 @@ const layer = Layer.effect(
 
     const create = Effect.fn("Worktree.create")(function* (input: CreateInput) {
       const selected = yield* getStrategy(input.strategy)
-      const sourceDirectory = yield* source(input)
+      const sourceDirectory = yield* source(input.sourceDirectory, input.projectID)
       yield* fs.makeDirectory(input.directory, { recursive: true }).pipe(Effect.orDie)
       const name = input.name ?? Slug.create()
       let suffix = 1
