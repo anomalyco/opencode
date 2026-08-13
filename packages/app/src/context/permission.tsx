@@ -11,7 +11,7 @@ import { useGlobal } from "./global"
 import { ServerConnection, useServer } from "./server"
 import { type DraftTab, useTabs } from "./tabs"
 import { useSettings } from "./settings"
-import { requireServerKey } from "@/utils/session-route"
+import { parseServerKey } from "@/utils/session-route"
 import type { ServerScope } from "@/utils/server-scope"
 import { normalizePermissionRequest } from "./global-sync/utils"
 import {
@@ -71,7 +71,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     })
 
     const activeServer = createMemo(() => {
-      if (params.serverKey && settings.general.newLayoutDesigns()) return requireServerKey(params.serverKey)
+      if (params.serverKey && settings.general.newLayoutDesigns()) return parseServerKey(params.serverKey) ?? server.key
       return activeDraft()?.server ?? server.key
     })
 

@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { ServerConnection } from "@/context/server"
-import { legacySessionHref, legacySessionServer, requireServerKey, rootSession, sessionHref } from "./session-route"
+import {
+  legacySessionHref,
+  legacySessionServer,
+  parseServerKey,
+  retainServerKey,
+  rootSession,
+  sessionHref,
+} from "./session-route"
 
 describe("session routes", () => {
   test("uses the unique persisted server for a legacy session route", () => {
@@ -31,11 +38,17 @@ describe("session routes", () => {
     const href = sessionHref(server, "session-1")
 
     expect(href).toBe("/server/aHR0cHM6Ly9leGFtcGxlLmNvbTo0MDk2/session/session-1")
-    expect(requireServerKey(href.split("/")[2])).toBe(server)
+    expect(parseServerKey(href.split("/")[2])).toBe(server)
   })
 
-  test("rejects malformed server keys", () => {
-    expect(() => requireServerKey("not-base64")).toThrow("Invalid server route")
+  test("returns undefined for malformed server routes", () => {
+    expect(parseServerKey("not-base64")).toBeUndefined()
+  })
+
+  test("retains the current server while a route is being removed", () => {
+    const server = ServerConnection.Key.make("https://example.com:4096")
+    expect(retainServerKey(server, undefined)).toBe(server)
+    expect(retainServerKey(server, "not-base64")).toBeUndefined()
   })
 
   test("builds the legacy directory-keyed route", () => {

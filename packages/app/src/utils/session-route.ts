@@ -10,10 +10,15 @@ export function legacySessionHref(directory: string, sessionID: string) {
   return `/${base64Encode(directory)}/session/${sessionID}`
 }
 
-export function requireServerKey(segment: string | undefined) {
+export function parseServerKey(segment: string | undefined) {
   const key = decode64(segment)
-  if (!key || base64Encode(key) !== segment) throw new Error("Invalid server route")
+  if (!key || base64Encode(key) !== segment) return undefined
   return ServerConnection.Key.make(key)
+}
+
+export function retainServerKey(previous: ServerConnection.Key | undefined, segment: string | undefined) {
+  if (segment === undefined) return previous
+  return parseServerKey(segment)
 }
 
 export function legacySessionServer(

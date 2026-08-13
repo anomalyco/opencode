@@ -64,10 +64,11 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { useServerSDK } from "@/context/server-sdk"
+import { ServerConnection } from "@/context/server"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useTabs } from "@/context/tabs"
-import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { legacySessionHref, sessionHref } from "@/utils/session-route"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
@@ -793,7 +794,9 @@ export function MessageTimeline(props: {
   const navigateAfterSessionRemoval = (sessionID: string, parentID?: string, nextSessionID?: string) => {
     if (params.id !== sessionID) return
     const href = (id: string) =>
-      params.serverKey ? sessionHref(requireServerKey(params.serverKey), id) : legacySessionHref(sdk().directory, id)
+      params.serverKey
+        ? sessionHref(ServerConnection.key(serverSDK().server), id)
+        : legacySessionHref(sdk().directory, id)
     if (parentID) {
       navigate(href(parentID))
       return
@@ -803,7 +806,7 @@ export function MessageTimeline(props: {
       return
     }
     if (params.serverKey) {
-      tabs.newDraft({ server: requireServerKey(params.serverKey), directory: sdk().directory })
+      tabs.newDraft({ server: ServerConnection.key(serverSDK().server), directory: sdk().directory })
       return
     }
     navigate(`/${params.dir}/session`)
@@ -930,7 +933,9 @@ export function MessageTimeline(props: {
     const id = parentID()
     if (!id) return
     navigate(
-      params.serverKey ? sessionHref(requireServerKey(params.serverKey), id) : legacySessionHref(sdk().directory, id),
+      params.serverKey
+        ? sessionHref(ServerConnection.key(serverSDK().server), id)
+        : legacySessionHref(sdk().directory, id),
     )
   }
 

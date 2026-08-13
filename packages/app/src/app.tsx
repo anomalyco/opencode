@@ -41,7 +41,7 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
-import { ServerSDKProvider } from "@/context/server-sdk"
+import { ServerSDKProvider, useServerSDK } from "@/context/server-sdk"
 import { ServerSyncProvider, useServerSync } from "@/context/server-sync"
 import { GlobalProvider, useGlobal } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
@@ -62,7 +62,13 @@ import LegacyLayout from "@/pages/layout"
 import NewLayout from "@/pages/layout-new"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
-import { legacySessionHref, legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
+import {
+  legacySessionHref,
+  legacySessionServer,
+  parseServerKey,
+  retainServerKey,
+  sessionHref,
+} from "./utils/session-route"
 import { createSessionLineage } from "@/pages/session/session-lineage"
 
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
@@ -110,16 +116,22 @@ const SessionRoute = () => {
 function TargetServerRoute(props: ParentProps) {
   const params = useParams<{ serverKey: string; id: string }>()
   const global = useGlobal()
+  const initial = parseServerKey(params.serverKey)
+  const key = createMemo<ServerConnection.Key | undefined>(
+    (previous) => retainServerKey(previous, params.serverKey),
+    initial,
+  )
   const conn = createMemo(() => {
-    const key = requireServerKey(params.serverKey)
-    return global.servers.list().find((item) => ServerConnection.key(item) === key)
+    const current = key()
+    if (!current) return undefined
+    return global.servers.list().find((item) => ServerConnection.key(item) === current)
   })
 
   return (
     // Owns the server-identity remount. Session changes must NOT remount this
     // subtree (SessionRouteErrorBoundary resets and createSessionLineage
     // re-resolves reactively instead); both rely on this key for server changes.
-    <Show when={requireServerKey(params.serverKey)} keyed>
+    <Show when={key()} keyed fallback={<Navigate href="/" />}>
       <ServerSDKProvider server={conn}>
         <ServerSyncProvider server={conn}>{props.children}</ServerSyncProvider>
       </ServerSDKProvider>
@@ -134,13 +146,20 @@ const TargetSessionRoute = () => (
 )
 
 function LegacyTargetSessionRoute() {
-  const params = useParams<{ serverKey: string; id: string }>()
   return (
     <TargetServerRoute>
-      <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
-        <LegacyTargetSessionRedirect />
-      </SessionRouteErrorBoundary>
+      <LegacyTargetSessionRouteContent />
     </TargetServerRoute>
+  )
+}
+
+function LegacyTargetSessionRouteContent() {
+  const params = useParams<{ id: string }>()
+  const serverSDK = useServerSDK()
+  return (
+    <SessionRouteErrorBoundary sessionID={params.id} serverKey={ServerConnection.key(serverSDK().server)}>
+      <LegacyTargetSessionRedirect />
+    </SessionRouteErrorBoundary>
   )
 }
 

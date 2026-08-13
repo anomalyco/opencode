@@ -1,5 +1,6 @@
 import { Select as Kobalte } from "@kobalte/core/select"
 import { Show, createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
+import { deferSelect } from "../../components/select-defer"
 import "./select-v2.css"
 
 function groupOptions<T>(options: T[], groupBy?: (x: T) => string): { category: string; options: T[] }[] {
@@ -165,7 +166,7 @@ export function SelectV2<T>(props: SelectV2Props<T>) {
       )}
       onChange={(next) => {
         const v = next == null ? null : Array.isArray(next) ? ((next[0] as T) ?? null) : (next as T)
-        local.onSelect?.(v)
+        deferSelect(local.onSelect, v)
         stop()
       }}
       onOpenChange={(open) => {

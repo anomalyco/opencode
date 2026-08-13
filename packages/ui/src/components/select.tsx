@@ -3,6 +3,7 @@ import { createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from
 import { pipe, groupBy, entries, map } from "remeda"
 import { Button, ButtonProps } from "./button"
 import { Icon } from "./icon"
+import { deferSelect } from "./select-defer"
 
 export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "onSelect" | "children"> & {
   placeholder?: string
@@ -124,7 +125,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
         </Kobalte.Item>
       )}
       onChange={(v) => {
-        local.onSelect?.(v ?? undefined)
+        deferSelect(local.onSelect, v ?? undefined)
         stop()
       }}
       onOpenChange={(open) => {

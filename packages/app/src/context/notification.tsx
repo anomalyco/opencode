@@ -15,7 +15,7 @@ import { playSoundById } from "@/utils/sound"
 import { useGlobal } from "./global"
 import { ServerConnection, useServer } from "./server"
 import { type DraftTab, useTabs } from "./tabs"
-import { requireServerKey } from "@/utils/session-route"
+import { parseServerKey } from "@/utils/session-route"
 import type { ServerScope } from "@/utils/server-scope"
 
 type NotificationBase = {
@@ -126,7 +126,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const states = new Map<ServerScope, { dispose: () => void; state: NotificationState }>()
 
     const activeServer = createMemo(() => {
-      if (params.serverKey) return requireServerKey(params.serverKey)
+      if (params.serverKey) return parseServerKey(params.serverKey) ?? server.key
       if (search.draftId) {
         const draft = tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)
         if (draft) return draft.server

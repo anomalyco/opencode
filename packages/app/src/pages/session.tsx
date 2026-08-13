@@ -99,7 +99,7 @@ import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
-import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { legacySessionHref, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
@@ -158,6 +158,7 @@ export function SessionPage() {
 // workspace-scoped state (terminal, directory providers) lives below.
 export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
+  const serverSDK = useServerSDK()
   const serverSync = useServerSync()
   const directory = createMemo(() => serverSync().session.lineage.peek(params.id)?.session.directory)
   return (
@@ -165,7 +166,7 @@ export function TargetSessionRouteContent() {
     // when session content falls back to the route error boundary.
     <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
       <TargetSessionSettingsCommand />
-      <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
+      <SessionRouteErrorBoundary sessionID={params.id} serverKey={ServerConnection.key(serverSDK().server)} padded>
         <ResolvedTargetSessionRoute />
       </SessionRouteErrorBoundary>
     </TargetServerScopedProviders>
@@ -244,10 +245,11 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
 }
 
 function ResolvedTargetSessionRoute() {
-  const params = useParams<{ serverKey: string; id: string }>()
+  const params = useParams<{ id: string }>()
+  const serverSDK = useServerSDK()
   const tabs = useTabs()
   const sync = useServerSync()
-  const serverKey = createMemo(() => requireServerKey(params.serverKey))
+  const serverKey = createMemo(() => ServerConnection.key(serverSDK().server))
   const current = createSessionLineage(
     () => params.id,
     () => sync().session.lineage,
@@ -2165,7 +2167,7 @@ export default function Page() {
               if (!id) return
               navigate(
                 params.serverKey
-                  ? sessionHref(requireServerKey(params.serverKey), id)
+                  ? sessionHref(ServerConnection.key(serverSDK().server), id)
                   : legacySessionHref(sdk().directory, id),
               )
             },
