@@ -42,7 +42,7 @@ function ToastSurface(props: {
       paddingRight={2}
       paddingTop={1}
       paddingBottom={1}
-      backgroundColor={hovered() ? theme.raise(theme.background.default) : theme.background.default}
+      backgroundColor={theme.background.default}
       borderColor={theme.text.feedback[props.toast.variant].default}
       border={["left", "right"]}
       customBorderChars={SplitBorder.customBorderChars}
