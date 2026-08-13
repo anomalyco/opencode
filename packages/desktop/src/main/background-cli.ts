@@ -21,7 +21,7 @@ export async function startBackgroundCli(logger: Logger) {
   const development = !app.isPackaged && process.env.OPENCODE_DESKTOP_CLI_DEV
   const cli = development
     ? {
-        version: "local",
+        version: process.env.OPENCODE_VERSION ?? "local",
         command: ["bun", "run", "--cwd", development, "dev", "--"],
         binary: undefined,
       }
