@@ -1,6 +1,7 @@
 export * as ShellParse from "./parse.js"
 
 import { Effect } from "effect"
+import { ShellScan } from "@opencode-ai/shell-scan"
 import { fileURLToPath } from "url"
 import os from "os"
 import path from "path"
@@ -152,7 +153,18 @@ const ARITY: Record<string, number> = {
   "yarn run": 3,
 }
 
-export const scan = Effect.fn("ShellParse.scan")(function* (command: string, shell: string, cwd: string) {
+export const scan = Effect.fn("ShellParse.scan")(function* (
+  command: string,
+  shell: string,
+  cwd: string,
+  options?: { portable?: boolean },
+) {
+  const legacy = yield* scanLegacy(command, shell, cwd)
+  if (!options?.portable) return legacy
+  return scanPortable(command, shell, cwd, legacy) ?? legacy
+})
+
+const scanLegacy = Effect.fn("ShellParse.scanLegacy")(function* (command: string, shell: string, cwd: string) {
   const parsers = yield* Effect.promise(load)
   const powershell = ShellSelect.ps(shell)
   const tree = (powershell ? parsers.ps : parsers.bash).parse(command)
@@ -185,6 +197,71 @@ export const scan = Effect.fn("ShellParse.scan")(function* (command: string, she
     (tree) => Effect.sync(() => tree.delete()),
   )
 })
+
+function scanPortable(
+  command: string,
+  shell: string,
+  cwd: string,
+  legacy: { commands: Array<{ resource: string; save: string }>; directories: string[] },
+) {
+  const powershell = ShellSelect.ps(shell)
+  const result = powershell ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
+  if (result.kind === "opaque") return
+
+  // Reuse only legacy resources so experimental scanning cannot tighten arbitrary permission rules.
+  const portable = result.commands.reduce(
+    (output, item) => {
+      const name = powershell ? item.words[0]?.toLowerCase() : item.words[0]
+      if (!name) return output
+      if (CWD.has(name)) {
+        const directories = portableDirectoryArgs(item.words, powershell, cwd, shell)
+        if (directories.length === 0) output.compatible = false
+        output.directories.push(...directories)
+        return output
+      }
+      const previous = legacy.commands.find((candidate) => candidate.resource === item.resource)
+      if (!previous) output.compatible = false
+      if (previous) output.commands.push(previous)
+      return output
+    },
+    {
+      commands: [] as Array<{ resource: string; save: string }>,
+      directories: [] as string[],
+      compatible: true,
+    },
+  )
+  if (!portable.compatible) return
+  if (portable.directories.some((directory) => !legacy.directories.includes(directory))) return
+  return { commands: portable.commands, directories: portable.directories }
+}
+
+function portableDirectoryArgs(command: string[], powershell: boolean, cwd: string, shell: string) {
+  if (!powershell)
+    return directoryArgs(
+      command.map((text) => ({ type: "word", text })),
+      false,
+      cwd,
+      shell,
+    )
+
+  const directories: string[] = []
+  let expectsPath = false
+  for (const part of command.slice(1)) {
+    if (expectsPath) {
+      const value = directoryArgument(part, true, cwd, shell)
+      if (value) directories.push(value)
+      expectsPath = false
+      continue
+    }
+    if (part.startsWith("-")) {
+      expectsPath = POWERSHELL_PATH_FLAGS.has(part.toLowerCase())
+      continue
+    }
+    const value = directoryArgument(part, true, cwd, shell)
+    if (value) directories.push(value)
+  }
+  return directories
+}
 
 function parts(node: Node) {
   return Array.from({ length: node.childCount }).flatMap((_, index): Part[] => {

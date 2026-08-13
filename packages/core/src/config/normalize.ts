@@ -401,6 +401,15 @@ function normalizeExperimental(
       unsupportedExperimental.forEach((key) =>
         unsupportedIfPresent(experimental, key, ["experimental", key], diagnostics),
       )
+      if (own(experimental, "portable_shell_scanner")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.portable_shell_scanner,
+          experimental.portable_shell_scanner,
+          ["experimental", "portable_shell_scanner"],
+          diagnostics,
+        )
+        if (value !== undefined) result.portable_shell_scanner = value
+      }
       if (own(experimental, "subagent_depth")) {
         const value = decodeEncoded(
           ConfigExperimental.Info.fields.subagent_depth,

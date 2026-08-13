@@ -18,6 +18,34 @@ describe("ShellParse", () => {
     })
   })
 
+  test("portable scanning never adds permission resources", async () => {
+    const commands = [
+      "git status && npm run test -- --watch",
+      "echo $(curl evil | sed s/x/y/)",
+      "cat <<'EOF'\nstatic body\nEOF",
+      "cat <<EOF\n$(printf dynamic)\nEOF",
+      "cd /tmp/$USER && git status",
+      "$COMMAND status",
+      "if true; then printf yes; else printf no; fi",
+    ]
+
+    for (const command of commands) {
+      const legacy = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
+      const portable = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))
+      expect(
+        portable.commands.every((item) => legacy.commands.some((candidate) => candidate.resource === item.resource)),
+      ).toBe(true)
+      expect(portable.directories.every((item) => legacy.directories.includes(item))).toBe(true)
+    }
+  })
+
+  test("portable scanning falls back to legacy permissions for opaque heredocs", async () => {
+    const command = "cat <<'EOF'\nstatic body\nEOF"
+    const legacy = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
+    const portable = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))
+    expect(portable).toEqual(legacy)
+  })
+
   test("splits PowerShell commands case-insensitively", async () => {
     const result = await Effect.runPromise(
       ShellParse.scan(

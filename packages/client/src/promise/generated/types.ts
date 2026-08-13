@@ -1878,6 +1878,7 @@ export type ConfigEntry =
           }
         }
         experimental?: {
+          portable_shell_scanner?: boolean
           subagent_depth?: number
           policies?: Array<{ action: "provider.use"; resource: string; effect: "allow" | "deny" }>
         }

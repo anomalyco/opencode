@@ -393,11 +393,13 @@ describe("ConfigNormalize", () => {
         enabled_providers: ["anthropic"],
         disabled_providers: ["openai"],
         experimental: {
+          portable_shell_scanner: true,
           subagent_depth: 0,
           policies: [{ action: "provider.use", resource: "custom", effect: "allow" }],
         },
       }).encoded.experimental,
     ).toEqual({
+      portable_shell_scanner: true,
       subagent_depth: 0,
       policies: [
         { action: "provider.use", resource: "*", effect: "deny" },

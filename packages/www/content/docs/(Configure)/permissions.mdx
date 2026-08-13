@@ -127,6 +127,26 @@ Relative mutation paths cannot escape the active Location, and symlink escapes
 from inside it are rejected. Explicit external paths are canonicalized before
 matching, so authorize only trusted directory boundaries.
 
+## Experimental shell scanner
+
+Set `experimental.portable_shell_scanner` to `true` to test the portable shell
+permission scanner. The default remains the tree-sitter scanner.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "portable_shell_scanner": true,
+  },
+}
+```
+
+Experimental scanning is compatibility-gated: OpenCode uses portable output
+only when its command and directory permission resources are a subset of the
+default scanner's output. Unsupported or incomparable syntax, including
+heredocs, falls back to the default scanner and cannot add permission prompts
+or denials.
+
 ## Defaults
 
 Every agent, including custom agents, starts with ordered defaults that allow

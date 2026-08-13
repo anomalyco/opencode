@@ -512,6 +512,31 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
+  it.live("does not add external-directory permission for an experimental portable heredoc", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          if (isWindows) return
+          reset()
+          denyAction = "external_directory"
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({ experimental: { portable_shell_scanner: true } }),
+            ),
+          )
+          const settled = yield* withSession(tmp.path, (registry) =>
+            executeTool(registry, call({ command: "cat <<'EOF'\nhello\nEOF" }, "call-portable-heredoc")),
+          )
+          expect(settled.status).toBe("completed")
+          expect(assertions.map((item) => item.action)).toEqual(["shell"])
+          expect(settled.content?.[0]).toMatchObject({ type: "text", text: "hello\n" })
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
   it.live("keeps non-zero exits useful", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

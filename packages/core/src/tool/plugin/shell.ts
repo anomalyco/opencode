@@ -163,7 +163,11 @@ export const Plugin = {
                     invocation.cwd = target.absolute
                     finalTimeout = invocation.timeout
                     if (!unrestricted) {
-                      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute)
+                      const portable =
+                        Config.latest(yield* config.entries(), "experimental")?.portable_shell_scanner === true
+                      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, {
+                        portable,
+                      })
                       const directories = yield* Effect.forEach(parsed.directories, (directory) =>
                         mutation.resolve({ path: path.resolve(target.absolute, directory), kind: "directory" }),
                       )
