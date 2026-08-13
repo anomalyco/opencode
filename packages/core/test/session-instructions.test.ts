@@ -61,6 +61,7 @@ const projects = Layer.succeed(
 const permission = Layer.succeed(
   Permission.Service,
   Permission.Service.of({
+    allowsAll: () => Effect.succeed(false),
     assert: () => Effect.void,
     ask: () => Effect.die("unused"),
     reply: () => Effect.die("unused"),

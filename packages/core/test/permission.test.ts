@@ -112,6 +112,31 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("proves only unconditional configured allows", () =>
+    Effect.gen(function* () {
+      const service = yield* Permission.Service
+      const input = { sessionID: Session.ID.make("ses_test"), action: "shell" }
+
+      yield* setup([{ action: "shell", resource: "*", effect: "allow" }])
+      expect(yield* service.allowsAll(input)).toBe(true)
+
+      yield* setRules([
+        { action: "shell", resource: "*", effect: "allow" },
+        { action: "shell", resource: "rm *", effect: "deny" },
+      ])
+      expect(yield* service.allowsAll(input)).toBe(false)
+
+      yield* setRules([{ action: "shell", resource: "git *", effect: "allow" }])
+      expect(yield* service.allowsAll(input)).toBe(false)
+
+      yield* setRules([
+        { action: "shell", resource: "rm *", effect: "deny" },
+        { action: "shell", resource: "*", effect: "allow" },
+      ])
+      expect(yield* service.allowsAll(input)).toBe(true)
+    }),
+  )
+
   it.effect("evaluates against an explicit provider-turn agent", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])

@@ -36,6 +36,7 @@ let denyAction: string | undefined
 const permission = Layer.succeed(
   Permission.Service,
   Permission.Service.of({
+    allowsAll: () => Effect.succeed(false),
     assert: (input) =>
       Effect.sync(() => assertions.push(input)).pipe(
         Effect.andThen(

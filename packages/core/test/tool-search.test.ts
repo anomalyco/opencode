@@ -52,6 +52,7 @@ const withTools = <A, E, R>(
           Layer.succeed(
             Permission.Service,
             Permission.Service.of({
+              allowsAll: () => Effect.succeed(false),
               assert: (input) =>
                 Effect.sync(() => {
                   assertions?.push(input)

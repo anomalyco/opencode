@@ -221,6 +221,7 @@ const permissionFail = {
 const permission = Layer.succeed(
   Permission.Service,
   Permission.Service.of({
+    allowsAll: () => Effect.succeed(false),
     assert: () => Effect.die("unused"),
     ask: () => Effect.die("unused"),
     reply: () => Effect.die("unused"),

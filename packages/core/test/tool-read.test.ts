@@ -73,6 +73,7 @@ let allow = true
 const permission = Layer.succeed(
   Permission.Service,
   Permission.Service.of({
+    allowsAll: () => Effect.succeed(false),
     assert: (input) =>
       Effect.sync(() => {
         assertions.push(input)

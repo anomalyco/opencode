@@ -99,6 +99,11 @@ export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {
 }
 
 export interface Interface {
+  readonly allowsAll: (input: {
+    readonly sessionID: SessionSchema.ID
+    readonly action: string
+    readonly agent?: Agent.ID
+  }) => Effect.Effect<boolean, SessionErrors.NotFoundError>
   readonly ask: (input: AssertInput) => Effect.Effect<AskResult, SessionErrors.NotFoundError>
   readonly assert: (input: AssertInput) => Effect.Effect<void, Error | SessionErrors.NotFoundError>
   readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
@@ -152,6 +157,24 @@ const layer = Layer.effect(
       if (!session) return yield* new SessionErrors.NotFoundError({ sessionID })
       const agent = yield* agents.resolve(agentID ?? session.agent)
       return agent?.permissions ?? missingAgentPermissions
+    })
+
+    const allowsAll = Effect.fn("Permission.allowsAll")(function* (input: {
+      readonly sessionID: SessionSchema.ID
+      readonly action: string
+      readonly agent?: Agent.ID
+    }) {
+      const rules = yield* configured(input.sessionID, input.agent)
+      const relevant = rules.filter((rule) => Wildcard.match(input.action, rule.action))
+      for (let index = relevant.length - 1; index >= 0; index--) {
+        const rule = relevant[index]
+        if (rule.resource !== "*") {
+          if (rule.effect !== "allow") return false
+          continue
+        }
+        return rule.effect === "allow"
+      }
+      return false
     })
 
     function denied(input: AssertInput, rules: Permission.Ruleset) {
@@ -315,7 +338,7 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
     })
 
-    return Service.of({ ask, assert, reply, get, forSession, list })
+    return Service.of({ allowsAll, ask, assert, reply, get, forSession, list })
   }),
 )
 
