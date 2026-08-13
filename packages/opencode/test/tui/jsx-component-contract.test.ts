@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test"
 import { readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 
-const tuiRoot = path.resolve(import.meta.dir, "../../src/cli/cmd/tui")
+// The TUI's JSX components live in packages/tui/src — `src/cli/cmd/tui` is a
+// single file (the CLI entry point), so this scan pointed at a directory that
+// has never existed and the contract was never actually checked.
+const tuiRoot = path.resolve(import.meta.dir, "../../../tui/src")
 
 async function files(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true })
