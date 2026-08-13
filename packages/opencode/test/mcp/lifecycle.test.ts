@@ -1,3 +1,4 @@
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { expect, mock, beforeEach, afterAll } from "bun:test"
@@ -269,7 +270,7 @@ afterAll(() => {
 const { MCP } = await import("../../src/mcp/index")
 const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
 
-const it = testEffect(MCP.defaultLayer)
+const it = testEffect(AppNodeBuilder.build(MCP.node))
 
 function statusName(status: Record<string, MCPNS.Status> | MCPNS.Status, server: string) {
   if ("status" in status) return status.status

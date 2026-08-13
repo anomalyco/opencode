@@ -1,12 +1,10 @@
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { which } from "@/util/which"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Stream as StreamModule } from "effect"
-import * as Log from "@opencode-ai/core/util/log"
-
-const log = Log.create({ service: "beads" })
 
 export class BeadsDownError extends Schema.TaggedErrorClass<BeadsDownError>()("BeadsDownError", {
   cause: Schema.String,
@@ -60,7 +58,7 @@ function execBd(args: string[]): Effect.Effect<{ code: number; text: string; std
     const code = yield* handle.exitCode
     return { code: Number(code), text, stderr }
   }).pipe(
-    Effect.provide(CrossSpawnSpawner.defaultLayer),
+    Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)),
     Effect.catch(() => Effect.succeed({ code: 1, text: "", stderr: "" })),
   ) as Effect.Effect<
     { code: number; text: string; stderr: string },

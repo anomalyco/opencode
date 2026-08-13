@@ -93,7 +93,10 @@ export function parseLoopArgs(input: string): ParsedLoopArgs {
     // takes the rest of the line rather than one token. It therefore has to
     // come last — which is also how it reads naturally.
     if (token === "--guidance") {
-      const rest = tokens.slice(i + 1).join(" ").trim()
+      const rest = tokens
+        .slice(i + 1)
+        .join(" ")
+        .trim()
       if (rest === "") throw new LoopArgError("--guidance requires text")
       guidance = rest
       i = tokens.length

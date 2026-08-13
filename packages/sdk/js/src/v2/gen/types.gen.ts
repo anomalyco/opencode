@@ -93,6 +93,8 @@ export type Event =
   | EventWorktreeFailed
   | EventServerConnected
   | EventGlobalDisposed
+  | EventLoopUpdated
+  | EventSideQuestionResponse
   | EventServerInstanceDisposed
 
 export type QuestionReplied = {
@@ -726,6 +728,38 @@ export type QuestionTool = {
 }
 
 export type QuestionAnswer = Array<string>
+
+export type Loop = {
+  id: string
+  directory: string
+  sessionID: string
+  parentSessionID?: string
+  prompt: string
+  status: "running" | "paused" | "completed" | "stalled" | "cancelled" | "max_reached" | "error"
+  maxIterations: number
+  interval?: number
+  noProgressLimit: number
+  completionToken: string
+  iteration: number
+  iterations: Array<{
+    iteration: number
+    sessionID: string
+    toolCalls: number
+    outputLength: number
+    complete: boolean
+    skipped?: boolean
+    startedAt: number
+    finishedAt: number
+  }>
+  iterationSessionID?: string
+  mode?: "prompt" | "queue"
+  currentChange?: string
+  currentGate?: string
+  report?: string
+  startedAt: number
+  lastRunAt?: number
+  finishedAt?: number
+}
 
 export type GlobalEvent = {
   directory: string
@@ -1600,6 +1634,22 @@ export type GlobalEvent = {
           [key: string]: unknown
         }
       }
+    | {
+        id: string
+        type: "loop.updated"
+        properties: {
+          loop: Loop
+        }
+      }
+    | {
+        id: string
+        type: "side-question.response"
+        properties: {
+          sessionID: string
+          messageID: string
+          text: string
+        }
+      }
     | EventServerInstanceDisposed
     | SyncEventSessionCreated
     | SyncEventSessionUpdated
@@ -2095,7 +2145,7 @@ export type Model = {
     interleaved:
       | boolean
       | {
-          field: "reasoning" | "reasoning_content" | "reasoning_details"
+          field: "reasoning" | "reasoning_content" | "reasoning_text" | string
         }
   }
   cost: {
@@ -2545,38 +2595,6 @@ export type GalleryEntry = {
   variants: Array<GalleryVariantFit>
   vramFreeMB: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   vramTotalMB: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-}
-
-export type Loop = {
-  id: string
-  directory: string
-  sessionID: string
-  parentSessionID?: string
-  prompt: string
-  status: "running" | "paused" | "completed" | "stalled" | "cancelled" | "max_reached" | "error"
-  maxIterations: number
-  interval?: number
-  noProgressLimit: number
-  completionToken: string
-  iteration: number
-  iterations: Array<{
-    iteration: number
-    sessionID: string
-    toolCalls: number
-    outputLength: number
-    complete: boolean
-    skipped?: boolean
-    startedAt: number
-    finishedAt: number
-  }>
-  iterationSessionID?: string
-  mode?: "prompt" | "queue"
-  currentChange?: string
-  currentGate?: string
-  report?: string
-  startedAt: number
-  lastRunAt?: number
-  finishedAt?: number
 }
 
 export type NotFoundError = {
@@ -3149,6 +3167,8 @@ export type V2Event =
   | WorktreeFailed
   | ServerConnected
   | GlobalDisposed
+  | LoopUpdated
+  | SideQuestionResponse
 
 export type V2EventStream = string
 
@@ -6313,6 +6333,42 @@ export type GlobalDisposed = {
   }
 }
 
+export type LoopUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "loop.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    loop: Loop
+  }
+}
+
+export type SideQuestionResponse = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "side-question.response"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    messageID: string
+    text: string
+  }
+}
+
 export type QuestionV2Request = {
   id: string
   sessionID: string
@@ -7257,6 +7313,24 @@ export type EventGlobalDisposed = {
   type: "global.disposed"
   properties: {
     [key: string]: unknown
+  }
+}
+
+export type EventLoopUpdated = {
+  id: string
+  type: "loop.updated"
+  properties: {
+    loop: Loop
+  }
+}
+
+export type EventSideQuestionResponse = {
+  id: string
+  type: "side-question.response"
+  properties: {
+    sessionID: string
+    messageID: string
+    text: string
   }
 }
 

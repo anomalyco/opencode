@@ -1,5 +1,6 @@
 // IMPORTANT: Set env vars BEFORE any imports from src/ directory
 // xdg-basedir reads env vars at import time, so we must set these first
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import os from "os"
 import path from "path"
 import fs from "fs/promises"
@@ -83,7 +84,7 @@ delete process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]
 delete process.env["OTEL_EXPORTER_OTLP_HEADERS"]
 delete process.env["OTEL_RESOURCE_ATTRIBUTES"]
 
-// Keep tests off the real network: without this, Provider.defaultLayer's
+// Keep tests off the real network: without this, AppNodeBuilder.build(Provider.node)'s
 // LocalProviderSync scans the LAN via mDNS, writes any discovered llama-skein
 // fleet into the (test-scoped) global config, and default model resolution
 // can then route test prompts to a real machine.

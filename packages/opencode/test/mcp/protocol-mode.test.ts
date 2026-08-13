@@ -1,3 +1,4 @@
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { expect, mock, beforeEach, afterAll } from "bun:test"
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
@@ -65,7 +66,7 @@ afterAll(() => {
 })
 
 const { MCP } = await import("../../src/mcp/index")
-const it = testEffect(MCP.defaultLayer)
+const it = testEffect(AppNodeBuilder.build(MCP.node))
 
 const localConfig = (name: string, protocolMode?: "legacy" | "auto" | "modern") => ({
   mcp: {

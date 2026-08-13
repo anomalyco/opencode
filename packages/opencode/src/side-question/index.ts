@@ -208,14 +208,10 @@ export const layer: Layer.Layer<
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(Session.defaultLayer),
-  Layer.provide(Agent.defaultLayer),
-  Layer.provide(Provider.defaultLayer),
-  Layer.provide(LLM.defaultLayer),
-  Layer.provide(EventV2Bridge.defaultLayer),
-)
-
-export const node = LayerNode.make(layer, [Session.node, Agent.node, Provider.node, LLM.node, EventV2Bridge.node])
+export const node = LayerNode.make({
+  service: Service,
+  layer,
+  deps: [Session.node, Agent.node, Provider.node, LLM.node, EventV2Bridge.node],
+})
 
 export * as SideQuestion from "."

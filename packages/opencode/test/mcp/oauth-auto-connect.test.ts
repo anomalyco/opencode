@@ -1,3 +1,4 @@
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { expect, mock, beforeEach, afterAll } from "bun:test"
 import { Effect, Layer } from "effect"
 import { testEffect } from "../lib/effect"
@@ -149,13 +150,13 @@ const { CrossSpawnSpawner } = await import("@opencode-ai/core/cross-spawn-spawne
 const mcpTest = testEffect(
   Layer.mergeAll(
     MCP.layer.pipe(
-      Layer.provide(McpAuth.defaultLayer),
-      Layer.provideMerge(EventV2Bridge.defaultLayer),
-      Layer.provide(Config.defaultLayer),
-      Layer.provide(CrossSpawnSpawner.defaultLayer),
-      Layer.provide(FSUtil.defaultLayer),
+      Layer.provide(AppNodeBuilder.build(McpAuth.node)),
+      Layer.provideMerge(AppNodeBuilder.build(EventV2Bridge.node)),
+      Layer.provide(AppNodeBuilder.build(Config.node)),
+      Layer.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)),
+      Layer.provide(AppNodeBuilder.build(FSUtil.node)),
     ),
-    McpAuth.defaultLayer,
+    AppNodeBuilder.build(McpAuth.node),
   ),
 )
 

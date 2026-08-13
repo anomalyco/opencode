@@ -40,10 +40,6 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
-// fork: legacy logger shim (upstream removed core/util/log in #31310)
-import * as Log from "@opencode-ai/core/util/log"
-
-const log = Log.create({ service: "provider" })
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 // fork: local/llama-skein providers (@ai-sdk/openai-compatible) got NO
@@ -1046,10 +1042,15 @@ const ProviderModalities = Schema.Struct({
   pdf: Schema.Boolean,
 })
 
+const ProviderInterleavedField = Schema.Union([
+  Schema.Literals(["reasoning", "reasoning_content", "reasoning_text"]),
+  Schema.String,
+])
+
 const ProviderInterleaved = Schema.Union([
   Schema.Boolean,
   Schema.Struct({
-    field: Schema.Literals(["reasoning", "reasoning_content", "reasoning_details"]),
+    field: ProviderInterleavedField,
   }),
 ])
 
@@ -1167,7 +1168,7 @@ export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundErr
   providerID: ProviderV2.ID,
   modelID: ModelV2.ID,
   suggestions: Schema.optional(Schema.Array(Schema.String)),
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {
   static isInstance(input: unknown): input is ModelNotFoundError {
     return input instanceof ModelNotFoundError
@@ -1176,7 +1177,7 @@ export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundErr
 
 export class InitError extends Schema.TaggedErrorClass<InitError>()("ProviderInitError", {
   providerID: ProviderV2.ID,
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {
   static isInstance(input: unknown): input is InitError {
     return input instanceof InitError
@@ -1291,7 +1292,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     },
     capabilities: {
       temperature: model.temperature ?? false,
-      reasoning: model.reasoning ?? false,
+      reasoning: Boolean(model.reasoning ?? false),
       attachment: model.attachment ?? false,
       toolcall: model.tool_call ?? true,
       input: {
@@ -1308,7 +1309,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
         video: model.modalities?.output?.includes("video") ?? false,
         pdf: model.modalities?.output?.includes("pdf") ?? false,
       },
-      interleaved: model.interleaved ?? false,
+      interleaved: typeof model.interleaved === "string" ? { field: model.interleaved } : (model.interleaved ?? false),
     },
     release_date: model.release_date ?? "",
     variants: {},
@@ -1574,13 +1575,21 @@ export function mergeDiscoveredModel(existing: Model | undefined, discovered: Mo
   }
 }
 
+type DiscoveryResult = {
+  models: Record<string, Model>
+  warnings: { message: string; fields: Record<string, unknown> }[]
+}
+
 async function discoverOpenAICompatibleModels(input: {
   providerID: ProviderV2.ID
   provider: NonNullable<Config.Info["provider"]>[string]
   existing: Info | undefined
-}): Promise<Record<string, Model>> {
+}): Promise<DiscoveryResult> {
+  // fork: warnings are returned, not logged here — this helper is a plain
+  // promise chain, and the Effect caller does the logging.
+  const warnings: DiscoveryResult["warnings"] = []
   const base = String(input.provider.options?.baseURL ?? "").replace(/\/+$/, "")
-  if (!base) return {}
+  if (!base) return { models: {}, warnings }
   const url = `${base}/models`
   // fork: control-plane root for /api/fit lives one level up from the openai-compatible
   // `/v1` path. Fetched in parallel with, but under its own abort budget from,
@@ -1608,7 +1617,7 @@ async function discoverOpenAICompatibleModels(input: {
       return response.json() as Promise<{ data?: Array<Record<string, unknown>> }>
     })
     .then(async (body) => {
-      if (!body) return {}
+      if (!body) return { models: {}, warnings }
       const fitByModel = await fitPromise
       const discovered: Record<string, Model> = {}
       for (const item of body.data ?? []) {
@@ -1637,10 +1646,11 @@ async function discoverOpenAICompatibleModels(input: {
         if (fit?.maxSafeCtx) {
           context = fit.maxSafeCtx
         } else if (previouslyKnownContext && reportedContext > previouslyKnownContext) {
-          log.warn(
-            "openai-compatible model discovery: fit probe unavailable and reported context_length exceeds the previously-known context — keeping the conservative value",
-            { providerID: input.providerID, modelID, reportedContext, previouslyKnownContext },
-          )
+          warnings.push({
+            message:
+              "openai-compatible model discovery: fit probe unavailable and reported context_length exceeds the previously-known context — keeping the conservative value",
+            fields: { providerID: input.providerID, modelID, reportedContext, previouslyKnownContext },
+          })
           context = previouslyKnownContext
         } else {
           context = reportedContext
@@ -1714,12 +1724,18 @@ async function discoverOpenAICompatibleModels(input: {
           variants: existingModel?.variants ?? {},
         }
       }
-      return discovered
+      return { models: discovered, warnings }
     })
-    .catch((e: unknown) => {
-      log.warn("openai-compatible model discovery failed", { providerID: input.providerID, url, error: e })
-      return {}
-    })
+    .catch((e: unknown) => ({
+      models: {} as Record<string, Model>,
+      warnings: [
+        ...warnings,
+        {
+          message: "openai-compatible model discovery failed",
+          fields: { providerID: input.providerID, url, error: e },
+        },
+      ],
+    }))
     .finally(() => {
       clearTimeout(modelsTimer)
       clearTimeout(fitTimer)
@@ -1898,7 +1914,7 @@ export const layer = Layer.effect(
               providerID: ProviderV2.ID.make(providerID),
               capabilities: {
                 temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
-                reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
+                reasoning: Boolean(model.reasoning ?? existingModel?.capabilities.reasoning ?? false),
                 attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
                 toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
                 input: {
@@ -1919,7 +1935,7 @@ export const layer = Layer.effect(
                   pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
                 },
                 interleaved:
-                  model.interleaved ??
+                  (typeof model.interleaved === "string" ? { field: model.interleaved } : model.interleaved) ??
                   existingModel?.capabilities.interleaved ??
                   (!existingModel && apiNpm === "@ai-sdk/openai-compatible" && apiID.includes("deepseek")
                     ? { field: "reasoning_content" }
@@ -2045,8 +2061,10 @@ export const layer = Layer.effect(
               ),
             ),
           )
+          for (const result of results)
+            for (const w of result.warnings) yield* Effect.logWarning(w.message, w.fields)
           toDiscover.forEach(({ target }, i) => {
-            for (const [modelID, model] of Object.entries(results[i])) {
+            for (const [modelID, model] of Object.entries(results[i].models)) {
               target.models[modelID] = mergeDiscoveredModel(target.models[modelID], model)
             }
           })
@@ -2529,19 +2547,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = Layer.suspend(() =>
-  layer.pipe(
-    Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(Env.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(Auth.defaultLayer),
-    Layer.provide(Plugin.defaultLayer),
-    Layer.provide(ModelsDev.defaultLayer),
-    Layer.provide(RuntimeFlags.defaultLayer),
-    Layer.provide(LocalProviderSync.defaultLayer),
-  ),
-)
-
 const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
 export function sort<T extends { id: string }>(models: T[]) {
   return sortBy(
@@ -2560,7 +2565,10 @@ export function parseModel(model: string) {
   }
 }
 
-export const node = LayerNode.make(layer, [
+export const node = LayerNode.make({
+  service: Service,
+  layer,
+  deps: [
   FSUtil.node,
   Config.node,
   Auth.node,
@@ -2568,6 +2576,7 @@ export const node = LayerNode.make(layer, [
   Plugin.node,
   ModelsDev.node,
   RuntimeFlags.node,
-])
+],
+})
 
 export * as Provider from "./provider"

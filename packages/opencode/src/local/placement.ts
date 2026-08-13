@@ -1,12 +1,9 @@
-import * as Log from "@opencode-ai/core/util/log"
 import type { ModelV2 } from "@opencode-ai/core/model"
 import type { ProviderV2 } from "@opencode-ai/core/provider"
 import type { Provider } from "@/provider/provider"
 import { createClient, createConfig } from "./llama-skein/gen/client"
 import { LlamaSkeinClient } from "./llama-skein/gen/sdk.gen"
 import type { FitReport, ModelFit, ResourceSnapshot } from "./llama-skein/gen/types.gen"
-
-const log = Log.create({ service: "local-placement" })
 
 export type Placement = { providerID: ProviderV2.ID; modelID: ModelV2.ID }
 
@@ -309,6 +306,16 @@ export function hostRankFor(prefer: "inherit" | "local" | readonly string[] | un
   return index === -1 ? 0 : (prefer.length - index) * HOST_PREFERENCE_STEP
 }
 
+/**
+ * Why an outcome rather than `| null`: placement diagnostics belong in the
+ * Effect layer that calls this, not in here. `pick` stays plain so its slot
+ * reservation stays synchronous (see below), and the caller does the logging.
+ */
+export type PickOutcome =
+  | { kind: "placed"; placement: Placement; release: () => void; probed: number; requiredCtx: number }
+  | { kind: "none"; probed: number }
+  | { kind: "failed"; error: string }
+
 export async function pick(input: {
   parent: Placement
   providers: Record<string, Provider.Info>
@@ -329,7 +336,7 @@ export async function pick(input: {
    * A host list is a preference, never a requirement — see the ordering below.
    */
   prefer?: "inherit" | "local" | readonly string[]
-}): Promise<{ placement: Placement; release: () => void } | null> {
+}): Promise<PickOutcome> {
   try {
     const requiredCtx = input.requiredCtx ?? estimateRequiredCtx(input.promptText)
     const parentInfo = input.providers[input.parent.providerID]
@@ -346,7 +353,7 @@ export async function pick(input: {
         prefer: input.prefer,
       })
     )
-      return null
+      return { kind: "none", probed: 0 }
 
     const candidates = Object.values(input.providers)
       .filter((info) => (input.target ? info.id === input.target : info.id !== input.parent.providerID))
@@ -354,7 +361,7 @@ export async function pick(input: {
         const baseURL = baseURLOf(info)
         return baseURL ? [{ info, baseURL }] : []
       })
-    if (candidates.length === 0) return null
+    if (candidates.length === 0) return { kind: "none", probed: 0 }
 
     const aborter = new AbortController()
     const timer = setTimeout(() => aborter.abort(), input.timeoutMs ?? 1_500)
@@ -406,24 +413,12 @@ export async function pick(input: {
       // TTL backstop fires).
       const release = reserve(best.placement.providerID)
       recentPlacements.set(best.placement.providerID, Date.now())
-      log.info("placed subagent on idle local provider", {
-        provider: best.placement.providerID,
-        model: best.placement.modelID,
-        parent: input.parent.providerID,
-        requiredCtx,
-        probed: candidates.length,
-      })
-      return { placement: best.placement, release }
+      return { kind: "placed", placement: best.placement, release, probed: candidates.length, requiredCtx }
     }
-    log.info("no idle local provider, inheriting parent", {
-      parent: input.parent.providerID,
-      probed: candidates.length,
-    })
-    return null
+    return { kind: "none", probed: candidates.length }
   } catch (err) {
     // Placement is an optimization; a failure here must never break the spawn.
-    log.error("placement failed, inheriting parent", { error: String(err) })
-    return null
+    return { kind: "failed", error: String(err) }
   }
 }
 

@@ -31,8 +31,10 @@ export const layer: Layer.Layer<Service, never, Config.Service> = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
+export const node = LayerNode.make({
+  service: Service,
+  layer,
+  deps: [Config.node],
+})
 
-export const node = LayerNode.make(layer, [Config.node])
-
-export const AutoMode = { Service, layer, defaultLayer, node, setAutoMode }
+export const AutoMode = { Service, layer, node, setAutoMode }

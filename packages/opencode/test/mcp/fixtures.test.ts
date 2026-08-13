@@ -1,3 +1,4 @@
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import path from "node:path"
 import { test, expect } from "bun:test"
 import { Effect } from "effect"
@@ -73,10 +74,10 @@ test("mcp-dual-era fixture still serves the legacy handshake when the client pin
 // full opencode connection path (protocolMode resolution, diagnostics,
 // PriorDiscovery caching) against a real server, not just against the
 // hand-mocked Client used in protocol-mode.test.ts.
-const it = testEffect(MCP.defaultLayer)
+const it = testEffect(AppNodeBuilder.build(MCP.node))
 
 // fork(mcp-dual-era-client D2): each test/file uses a unique server name —
-// MCP.defaultLayer's state is not isolated across concurrently-running
+// AppNodeBuilder.build(MCP.node)'s state is not isolated across concurrently-running
 // it.instance() fibers by server name, so reusing a name (e.g. "fixture")
 // across files caused real cross-test interference when the full test/mcp/
 // suite ran together (never reproduced running one file in isolation).
@@ -153,7 +154,7 @@ it.instance(
 // module, static vs. dynamic import, cache-busted import specifiers,
 // alphabetical file-name reordering) failed to resolve it, and the actual
 // mechanism was never conclusively identified. Co-locating with this
-// file's already-proven-safe MCP.defaultLayer usage sidesteps it entirely.
+// file's already-proven-safe AppNodeBuilder.build(MCP.node) usage sidesteps it entirely.
 //
 // tools() resolves per-server config from the static Config.Service (the
 // `config:` fixture below), not from what's passed to mcp.add() at runtime

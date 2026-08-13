@@ -218,7 +218,7 @@ export const TaskTool = Tool.define(
       // attempting even from a cloud parent — see LocalPlacement.pick. The
       // kill-switch and an explicit host argument both still win.
       const rolePlacement = next.placement && next.placement !== "inherit" ? next.placement : undefined
-      const placed =
+      const outcome =
         !provider || next.model || session || (cfg.experimental?.local_subagent_placement === false && !params.provider)
           ? null
           : yield* provider.list().pipe(
@@ -235,6 +235,25 @@ export const TaskTool = Tool.define(
                 ),
               ),
             )
+      // pick() stays plain so its slot reservation is synchronous; it reports
+      // the outcome and the logging happens here, in Effect context.
+      if (outcome?.kind === "placed")
+        yield* Effect.logInfo("placed subagent on idle local provider", {
+          provider: outcome.placement.providerID,
+          model: outcome.placement.modelID,
+          parent: inherited.providerID,
+          requiredCtx: outcome.requiredCtx,
+          probed: outcome.probed,
+        })
+      else if (outcome?.kind === "none")
+        yield* Effect.logInfo("no idle local provider, inheriting parent", {
+          parent: inherited.providerID,
+          probed: outcome.probed,
+        })
+      else if (outcome?.kind === "failed")
+        yield* Effect.logError("placement failed, inheriting parent", { error: outcome.error })
+
+      const placed = outcome?.kind === "placed" ? outcome : null
       // An explicitly requested host must be honored or refused loudly —
       // silently placing elsewhere (or inheriting) would do the opposite of
       // what the user asked for.

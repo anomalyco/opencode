@@ -1,3 +1,4 @@
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { NodeFileSystem } from "@effect/platform-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { AutoMode } from "@/auto-mode/service"
@@ -97,68 +98,68 @@ const lsp = Layer.succeed(
   }),
 )
 
-const status = SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))
-const run = SessionRunState.layer.pipe(Layer.provide(status))
-const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
+const status = AppNodeBuilder.build(SessionStatus.node).pipe(Layer.provideMerge(AppNodeBuilder.build(EventV2Bridge.node)))
+const run = AppNodeBuilder.build(SessionRunState.node).pipe(Layer.provide(status))
+const infra = Layer.mergeAll(NodeFileSystem.layer, AppNodeBuilder.build(CrossSpawnSpawner.node))
 
 function makeLoop() {
   const deps = Layer.mergeAll(
-    Session.defaultLayer,
-    Snapshot.defaultLayer,
-    LLM.defaultLayer,
-    Env.defaultLayer,
-    AgentSvc.defaultLayer,
-    Command.defaultLayer,
-    Permission.defaultLayer,
-    Plugin.defaultLayer,
-    Config.defaultLayer,
-    ProviderSvc.defaultLayer,
+    AppNodeBuilder.build(Session.node),
+    AppNodeBuilder.build(Snapshot.node),
+    AppNodeBuilder.build(LLM.node),
+    AppNodeBuilder.build(Env.node),
+    AppNodeBuilder.build(AgentSvc.node),
+    AppNodeBuilder.build(Command.node),
+    AppNodeBuilder.build(Permission.node),
+    AppNodeBuilder.build(Plugin.node),
+    AppNodeBuilder.build(Config.node),
+    AppNodeBuilder.build(ProviderSvc.node),
     lsp,
     mcp,
-    FSUtil.defaultLayer,
-    BackgroundJob.defaultLayer,
+    AppNodeBuilder.build(FSUtil.node),
+    AppNodeBuilder.build(BackgroundJob.node),
     status,
-    Database.defaultLayer,
-    EventV2Bridge.defaultLayer,
-    AutoMode.defaultLayer,
+    AppNodeBuilder.build(Database.node),
+    AppNodeBuilder.build(EventV2Bridge.node),
+    AppNodeBuilder.build(AutoMode.node),
   ).pipe(Layer.provideMerge(infra))
-  const question = Question.layer.pipe(Layer.provideMerge(deps))
-  const todo = Todo.layer.pipe(Layer.provideMerge(deps))
-  const registry = ToolRegistry.layer.pipe(
-    Layer.provide(Skill.defaultLayer),
+  const question = AppNodeBuilder.build(Question.node).pipe(Layer.provideMerge(deps))
+  const todo = AppNodeBuilder.build(Todo.node).pipe(Layer.provideMerge(deps))
+  const registry = AppNodeBuilder.build(ToolRegistry.node).pipe(
+    Layer.provide(AppNodeBuilder.build(Skill.node)),
     Layer.provide(FetchHttpClient.layer),
-    Layer.provide(CrossSpawnSpawner.defaultLayer),
-    Layer.provide(Git.defaultLayer),
-    Layer.provide(Ripgrep.defaultLayer),
-    Layer.provide(Format.defaultLayer),
+    Layer.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)),
+    Layer.provide(AppNodeBuilder.build(Git.node)),
+    Layer.provide(AppNodeBuilder.build(Ripgrep.node)),
+    Layer.provide(AppNodeBuilder.build(Format.node)),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
   )
-  const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(
+  const trunc = AppNodeBuilder.build(Truncate.node).pipe(Layer.provideMerge(deps))
+  const proc = AppNodeBuilder.build(SessionProcessor.node).pipe(
     Layer.provide(summary),
-    Layer.provide(Image.defaultLayer),
+    Layer.provide(AppNodeBuilder.build(Image.node)),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(deps),
   )
-  const compact = SessionCompaction.layer.pipe(
+  const compact = AppNodeBuilder.build(SessionCompaction.node).pipe(
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(proc),
     Layer.provideMerge(deps),
   )
   const promptLayer = SessionPrompt.layer.pipe(
-    Layer.provide(SessionRevert.defaultLayer),
-    Layer.provide(Image.defaultLayer),
+    Layer.provide(AppNodeBuilder.build(SessionRevert.node)),
+    Layer.provide(AppNodeBuilder.build(Image.node)),
     Layer.provide(summary),
     Layer.provideMerge(run),
     Layer.provideMerge(compact),
     Layer.provideMerge(proc),
     Layer.provideMerge(registry),
     Layer.provideMerge(trunc),
-    Layer.provide(Instruction.defaultLayer),
-    Layer.provide(SystemPrompt.defaultLayer),
+    Layer.provide(AppNodeBuilder.build(Instruction.node)),
+    Layer.provide(AppNodeBuilder.build(SystemPrompt.node)),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(deps),
     Layer.provide(summary),

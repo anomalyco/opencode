@@ -1,11 +1,9 @@
-import * as Log from "@opencode-ai/core/util/log"
 import os from "os"
 import { Config } from "@/config/config"
 import { Effect, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { withGlobalConfigLock } from "./config-lock"
 import { scanLlamaSwap } from "./mdns"
-
-const log = Log.create({ service: "local-provider-sync" })
 
 function normalizeBaseURL(url: string) {
   return url.replace(/\/+$/, "").toLowerCase()
@@ -73,7 +71,7 @@ const syncLocalProviders = Effect.gen(function* () {
   // finds into the global config, which then becomes eligible for default
   // model resolution — a unit test silently prompting a real machine.
   if (process.env["OPENCODE_DISABLE_LOCAL_SYNC"]) {
-    log.info("local provider sync disabled via OPENCODE_DISABLE_LOCAL_SYNC")
+    yield* Effect.logInfo("local provider sync disabled via OPENCODE_DISABLE_LOCAL_SYNC")
     return
   }
   const configSvc = yield* Config.Service
@@ -81,11 +79,11 @@ const syncLocalProviders = Effect.gen(function* () {
   const online = discovered.filter((svc) => svc.online)
 
   if (online.length === 0) {
-    log.info("no local providers found")
+    yield* Effect.logInfo("no local providers found")
     return
   }
 
-  log.info("found local providers", { count: online.length, names: online.map((s) => s.name) })
+  yield* Effect.logInfo("found local providers", { count: online.length, names: online.map((s) => s.name) })
 
   // The read-modify-write below runs under the global config lock — the scan
   // above is lock-free (slow, network), but the config must be read and
@@ -111,7 +109,7 @@ const syncLocalProviders = Effect.gen(function* () {
         if (!host || host === "localhost" || host.startsWith("127.")) continue
         if (selfIPs.has(host) && id !== selfSlug) {
           delete providers[id]
-          log.info("removed stale provider pointing at own IP", { id, host })
+          yield* Effect.logInfo("removed stale provider pointing at own IP", { id, host })
           changed = true
         }
       }
@@ -143,7 +141,12 @@ const syncLocalProviders = Effect.gen(function* () {
             options: { baseURL: svc.baseURL, apiKey: "skein" },
             discoverModels: true,
           }
-          log.info("added provider", { slug, baseURL: svc.baseURL, source: svc.source, defaultModel: svc.defaultModel })
+          yield* Effect.logInfo("added provider", {
+            slug,
+            baseURL: svc.baseURL,
+            source: svc.source,
+            defaultModel: svc.defaultModel,
+          })
           changed = true
           continue
         }
@@ -154,7 +157,12 @@ const syncLocalProviders = Effect.gen(function* () {
           const existing = providers[slug] as ProviderEntry
           const oldURL = existing.options?.baseURL ?? ""
           providers[slug] = { ...(existing as object), options: { ...(existing.options ?? {}), baseURL: svc.baseURL } }
-          log.info("updated provider baseURL", { slug, old: oldURL, new: svc.baseURL, defaultModel: svc.defaultModel })
+          yield* Effect.logInfo("updated provider baseURL", {
+            slug,
+            old: oldURL,
+            new: svc.baseURL,
+            defaultModel: svc.defaultModel,
+          })
           changed = true
         } else {
           providers[slug] = {
@@ -163,7 +171,12 @@ const syncLocalProviders = Effect.gen(function* () {
             options: { baseURL: svc.baseURL, apiKey: "skein" },
             discoverModels: true,
           }
-          log.info("added provider", { slug, baseURL: svc.baseURL, source: svc.source, defaultModel: svc.defaultModel })
+          yield* Effect.logInfo("added provider", {
+            slug,
+            baseURL: svc.baseURL,
+            source: svc.source,
+            defaultModel: svc.defaultModel,
+          })
           changed = true
         }
 
@@ -172,7 +185,11 @@ const syncLocalProviders = Effect.gen(function* () {
         // "m5"). Remove it so it stops shadowing the canonical entry.
         if (urlOwner && urlOwner !== slug && isAutoDiscovered(providers[urlOwner])) {
           delete providers[urlOwner]
-          log.info("removed duplicate provider for same baseURL", { id: urlOwner, kept: slug, baseURL: svc.baseURL })
+          yield* Effect.logInfo("removed duplicate provider for same baseURL", {
+            id: urlOwner,
+            kept: slug,
+            baseURL: svc.baseURL,
+          })
           changed = true
         }
       }
@@ -185,9 +202,13 @@ const syncLocalProviders = Effect.gen(function* () {
 // Run synchronously so Provider (which reads cfg.provider) gets the discovered
 // entries. The 1–2 s mDNS + LAN scan is bounded and only runs once at startup.
 export const layer = Layer.effectDiscard(
-  syncLocalProviders.pipe(Effect.catch((err) => Effect.sync(() => log.error("sync failed", { error: String(err) })))),
+  syncLocalProviders.pipe(Effect.catch((err) => Effect.logError("sync failed", { error: String(err) }))),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
+export const node = LayerNode.make({
+  name: "@opencode/LocalProviderSync",
+  layer,
+  deps: [Config.node],
+})
 
 export * as LocalProviderSync from "./sync"

@@ -1,4 +1,6 @@
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Context, Effect, Layer, Schema, Stream } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Todo } from "@/session/todo"
 import { BeadsDownError } from "@/beads/beads"
@@ -9,10 +11,7 @@ import { which } from "@/util/which"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import * as Log from "@opencode-ai/core/util/log"
 import path from "path"
-
-const log = Log.create({ service: "beads-sync" })
 
 const OPCODE_TO_BEADS_STATUS: Record<string, string> = {
   pending: "open",
@@ -44,7 +43,7 @@ function execBd(args: string[]): Effect.Effect<{ code: number; text: string; std
     const code = yield* handle.exitCode
     return { code: Number(code), text, stderr }
   }).pipe(
-    Effect.provide(CrossSpawnSpawner.defaultLayer),
+    Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)),
     Effect.catch(() => Effect.succeed({ code: 1, text: "", stderr: "" })),
   ) as Effect.Effect<
     { code: number; text: string; stderr: string },
@@ -194,7 +193,7 @@ export const layer: Layer.Layer<Service, never, EventV2Bridge.Service> = Layer.e
 
     const hasBd = yield* Effect.sync(() => which("bd") !== null)
     if (!hasBd) {
-      log.debug("bd not found, sync disabled")
+      yield* Effect.logDebug("bd not found, sync disabled")
       return { sync: () => Effect.void } satisfies Interface
     }
 
@@ -221,11 +220,7 @@ export const layer: Layer.Layer<Service, never, EventV2Bridge.Service> = Layer.e
 
         yield* Mapping.save(mappingDir, mapping)
       }).pipe(
-        Effect.catch((err) =>
-          Effect.sync(() =>
-            log.error("beads sync failed", { sessionID: input.sessionID, error: String(err) }),
-          ),
-        ),
+        Effect.catch((err) => Effect.logError("beads sync failed", { sessionID: input.sessionID, error: String(err) })),
       )
 
     yield* events.subscribe(Todo.Event.Updated).pipe(
@@ -234,9 +229,7 @@ export const layer: Layer.Layer<Service, never, EventV2Bridge.Service> = Layer.e
           const todos = event.data.todos as { content: string; status: string; priority: string }[]
           yield* sync({ sessionID: event.data.sessionID, todos }).pipe(
             Effect.catch((err) =>
-              Effect.sync(() =>
-                log.error("beads sync failed", { sessionID: event.data.sessionID, error: String(err) }),
-              ),
+              Effect.logError("beads sync failed", { sessionID: event.data.sessionID, error: String(err) }),
             ),
           )
         }),
@@ -248,6 +241,10 @@ export const layer: Layer.Layer<Service, never, EventV2Bridge.Service> = Layer.e
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
+export const node = LayerNode.make({
+  service: Service,
+  layer,
+  deps: [EventV2Bridge.node],
+})
 
 export * as BeadsSync from "./sync"

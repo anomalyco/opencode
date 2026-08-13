@@ -7,7 +7,7 @@
 import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
-import { withStatics } from "@opencode-ai/core/schema"
+import { statics } from "@opencode-ai/schema/schema"
 import { AbortedError, SessionV1 } from "@opencode-ai/core/v1/session"
 import { Cause, Context, Deferred, Effect, Layer, Ref, Result, Schema, Scope } from "effect"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -68,7 +68,7 @@ const NoProgressSimilarityThreshold = 0.92
 
 export const LoopID = Schema.String.check(Schema.isStartsWith("loop")).pipe(
   Schema.brand("LoopID"),
-  withStatics((s) => ({
+  statics((s) => ({
     ascending: (id?: string) => s.make(Identifier.ascending("loop", id)),
   })),
 )
@@ -1557,16 +1557,10 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(Session.defaultLayer),
-  Layer.provide(SessionPrompt.defaultLayer),
-  Layer.provide(SessionStatus.defaultLayer),
-  Layer.provide(Config.defaultLayer),
-  Layer.provide(Provider.defaultLayer),
-  Layer.provide(EventV2Bridge.defaultLayer),
-)
-
-export const node = LayerNode.make(layer, [
+export const node = LayerNode.make({
+  service: Service,
+  layer,
+  deps: [
   Session.node,
   SessionPrompt.node,
   SessionStatus.node,
@@ -1575,6 +1569,7 @@ export const node = LayerNode.make(layer, [
   AgentSvc.node,
   Permission.node,
   EventV2Bridge.node,
-])
+],
+})
 
 export * as Loop from "./loop"

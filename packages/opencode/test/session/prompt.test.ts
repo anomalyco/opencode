@@ -1,3 +1,5 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { NodeFileSystem } from "@effect/platform-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { AutoMode } from "@/auto-mode/service"
@@ -152,9 +154,9 @@ const lsp = Layer.succeed(
   }),
 )
 
-const status = SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))
-const run = SessionRunState.layer.pipe(Layer.provide(status))
-const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
+const status = AppNodeBuilder.build(SessionStatus.node).pipe(Layer.provideMerge(AppNodeBuilder.build(EventV2Bridge.node)))
+const run = AppNodeBuilder.build(SessionRunState.node).pipe(Layer.provide(status))
+const infra = Layer.mergeAll(NodeFileSystem.layer, AppNodeBuilder.build(CrossSpawnSpawner.node))
 
 const processorCreateStarted: Array<() => void> = []
 const blockingProcessor = Layer.succeed(
@@ -165,66 +167,74 @@ const blockingProcessor = Layer.succeed(
 )
 
 function makePrompt(input?: { processor?: "blocking" }) {
+  // One graph, not one per service: AppNodeBuilder.build() constructs a fresh
+  // instance of every transitive dependency, so N separate builds give N
+  // separate Databases and a session written through one is invisible to the
+  // others. Group the nodes so shared deps are built once.
   const deps = Layer.mergeAll(
-    Session.defaultLayer,
-    Snapshot.defaultLayer,
-    LLM.defaultLayer,
-    Env.defaultLayer,
-    AgentSvc.defaultLayer,
-    Command.defaultLayer,
-    Permission.defaultLayer,
-    Plugin.defaultLayer,
-    Config.defaultLayer,
-    ProviderSvc.defaultLayer,
+    AppNodeBuilder.build(
+      LayerNode.group([
+        Session.node,
+        Snapshot.node,
+        LLM.node,
+        Env.node,
+        AgentSvc.node,
+        Command.node,
+        Permission.node,
+        Plugin.node,
+        Config.node,
+        ProviderSvc.node,
+        FSUtil.node,
+        BackgroundJob.node,
+        SessionStatus.node,
+        Database.node,
+        EventV2Bridge.node,
+        AutoMode.node,
+      ]),
+    ),
     lsp,
     mcp,
-    FSUtil.defaultLayer,
-    BackgroundJob.defaultLayer,
-    status,
-    Database.defaultLayer,
-    EventV2Bridge.defaultLayer,
-    AutoMode.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
-  const question = Question.layer.pipe(Layer.provideMerge(deps))
-  const todo = Todo.layer.pipe(Layer.provideMerge(deps))
-  const registry = ToolRegistry.layer.pipe(
-    Layer.provide(Skill.defaultLayer),
+  const question = AppNodeBuilder.build(Question.node).pipe(Layer.provideMerge(deps))
+  const todo = AppNodeBuilder.build(Todo.node).pipe(Layer.provideMerge(deps))
+  const registry = AppNodeBuilder.build(ToolRegistry.node).pipe(
+    Layer.provide(AppNodeBuilder.build(Skill.node)),
     Layer.provide(FetchHttpClient.layer),
-    Layer.provide(CrossSpawnSpawner.defaultLayer),
-    Layer.provide(Git.defaultLayer),
-    Layer.provide(Ripgrep.defaultLayer),
-    Layer.provide(Format.defaultLayer),
+    Layer.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)),
+    Layer.provide(AppNodeBuilder.build(Git.node)),
+    Layer.provide(AppNodeBuilder.build(Ripgrep.node)),
+    Layer.provide(AppNodeBuilder.build(Format.node)),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
   )
-  const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
+  const trunc = AppNodeBuilder.build(Truncate.node).pipe(Layer.provideMerge(deps))
   const proc =
     input?.processor === "blocking"
       ? blockingProcessor
-      : SessionProcessor.layer.pipe(
+      : AppNodeBuilder.build(SessionProcessor.node).pipe(
           Layer.provide(summary),
-          Layer.provide(Image.defaultLayer),
+          Layer.provide(AppNodeBuilder.build(Image.node)),
           Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
           Layer.provideMerge(deps),
         )
-  const compact = SessionCompaction.layer.pipe(
+  const compact = AppNodeBuilder.build(SessionCompaction.node).pipe(
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(proc),
     Layer.provideMerge(deps),
   )
   return SessionPrompt.layer.pipe(
-    Layer.provide(SessionRevert.defaultLayer),
-    Layer.provide(Image.defaultLayer),
+    Layer.provide(AppNodeBuilder.build(SessionRevert.node)),
+    Layer.provide(AppNodeBuilder.build(Image.node)),
     Layer.provide(summary),
     Layer.provideMerge(run),
     Layer.provideMerge(compact),
     Layer.provideMerge(proc),
     Layer.provideMerge(registry),
     Layer.provideMerge(trunc),
-    Layer.provide(Instruction.defaultLayer),
-    Layer.provide(SystemPrompt.defaultLayer),
+    Layer.provide(AppNodeBuilder.build(Instruction.node)),
+    Layer.provide(AppNodeBuilder.build(SystemPrompt.node)),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(deps),
     Layer.provide(summary),
@@ -649,7 +659,7 @@ noLLMServer.instance.skip(
 
       const messages = yield* SessionV2.Service.use((session) => session.messages({ sessionID: chat.id })).pipe(
         Effect.provide(SessionExecution.noopLayer),
-        Effect.provide(SessionV2.defaultLayer),
+        Effect.provide(AppNodeBuilder.build(SessionV2.node)),
       )
       const { db } = yield* Database.Service
       const row = yield* db
