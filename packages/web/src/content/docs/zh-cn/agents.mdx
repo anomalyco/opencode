@@ -87,7 +87,7 @@ _模式_：`subagent`
 
 _模式_：`subagent`
 
-一个用于外部文档和依赖研究的只读智能体。当您需要将某个依赖仓库克隆到 OpenCode 的托管缓存中、检查库的源代码，或在不修改工作区的情况下将本地代码与 upstream 实现进行交叉对照时，请使用此智能体。
+一个用于外部文档和依赖研究的只读智能体。当您需要将某个依赖仓库克隆到 OpenCode 的托管缓存中、检查库的源代码，或在不修改工作区的情况下将本地代码与上游实现进行交叉对照时，请使用此智能体。
 
 ---
 
@@ -127,11 +127,14 @@ _模式_：`primary`
      @general help me search for this function
      ```
 
-3. **会话间导航**：当子智能体创建自己的子会话时，您可以使用以下方式在父会话和所有子会话之间导航：
-   - **\<Leader>+Right**（或配置的 `session_child_cycle` 快捷键）向前循环：父会话 → 子会话1 → 子会话2 → ... → 父会话
-   - **\<Leader>+Left**（或配置的 `session_child_cycle_reverse` 快捷键）向后循环：父会话 ← 子会话1 ← 子会话2 ← ... ← 父会话
+3. **会话间导航**：当子智能体创建子会话时，使用 `session_child_first`（默认：**\<Leader>+Down**）从父会话进入第一个子会话。
 
-   这使您可以在主对话和专门的子智能体工作之间无缝切换。
+4. 进入子会话后，使用：
+   - `session_child_cycle`（默认：**Right**）循环到下一个子会话
+   - `session_child_cycle_reverse`（默认：**Left**）循环到上一个子会话
+   - `session_parent`（默认：**Up**）返回父会话
+
+   这使您可以在主对话和专门的子智能体工作之间切换。
 
 ---
 
@@ -153,19 +156,17 @@ _模式_：`primary`
       "mode": "primary",
       "model": "anthropic/claude-sonnet-4-20250514",
       "prompt": "{file:./prompts/build.txt}",
-      "tools": {
-        "write": true,
-        "edit": true,
-        "bash": true
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
       }
     },
     "plan": {
       "mode": "primary",
       "model": "anthropic/claude-haiku-4-20250514",
-      "tools": {
-        "write": false,
-        "edit": false,
-        "bash": false
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
       }
     },
     "code-reviewer": {
@@ -173,9 +174,8 @@ _模式_：`primary`
       "mode": "subagent",
       "model": "anthropic/claude-sonnet-4-20250514",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
-        "write": false,
-        "edit": false
+      "permission": {
+        "edit": "deny"
       }
     }
   }
@@ -197,10 +197,9 @@ description: Reviews code for quality and best practices
 mode: subagent
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
-tools:
-  write: false
-  edit: false
-  bash: false
+permission:
+  edit: deny
+  bash: deny
 ---
 
 You are in code review mode. Focus on:
@@ -262,7 +261,7 @@ Markdown 文件名即为智能体名称。例如，`review.md` 会创建一个�
 
 温度值通常范围为 0.0 到 1.0：
 
-- **0.0-0.2**：非常集中和确定性的响应，适合代码分析和规划
+- **0.0-0.2**：非常集中和更具确定性的响应，适合代码分析和规划
 - **0.3-0.5**：平衡的响应，兼顾一定创造力，适合一般开发任务
 - **0.6-1.0**：更有创造力和多样性的响应，适合头脑风暴和探索
 
@@ -370,9 +369,11 @@ OpenCode 配置中的模型 ID 使用 `provider/model-id` 格式。例如，如�
 
 ---
 
-### 工具
+### 工具（已弃用）
 
-使用 `tools` 配置控制智能体中可用的工具。您可以通过将特定工具设置为 `true` 或 `false` 来启用或禁用它们。
+`tools` 已**弃用**。对于新配置、更新以及更细粒度的控制，请优先使用智能体的 [`permission`](#permissions) 字段。
+
+允许您控制该智能体中可用的工具。您可以通过将特定工具设置为 `true` 或 `false` 来启用或禁用它们。在智能体的 `tools` 配置中，`true` 等价于 `{"*": "allow"}` 权限，`false` 等价于 `{"*": "deny"}` 权限。
 
 ```json title="opencode.json" {3-6,9-12}
 {
@@ -396,7 +397,7 @@ OpenCode 配置中的模型 ID 使用 `provider/model-id` 格式。例如，如�
 智能体级配置会覆盖全局配置。
 :::
 
-您还可以使用通配符同时控制多个工具。例如，要禁用 MCP 服务器中的所有工具：
+您还可以在旧版 `tools` 条目中使用通配符同时控制多个工具。例如，要禁用 MCP 服务器中的所有工具：
 
 ```json title="opencode.json"
 {
@@ -419,11 +420,37 @@ OpenCode 配置中的模型 ID 使用 `provider/model-id` 格式。例如，如�
 
 ### 权限
 
-您可以配置权限来管理智能体可以执行的操作。目前，`edit`、`bash` 和 `webfetch` 工具的权限可以配置为：
+您可以配置权限来管理智能体可以执行的操作。每个权限键可以设置为：
 
 - `"ask"` — 运行工具前提示审批
 - `"allow"` — 允许所有操作，无需审批
 - `"deny"` — 禁用该工具
+
+可用的权限键有：
+
+| 键                   | 其管辖的工具                                                         |
+| -------------------- | -------------------------------------------------------------------- |
+| `read`               | `read`                                                               |
+| `edit`               | `write`、`edit`、`apply_patch`                                       |
+| `glob`               | `glob`                                                               |
+| `grep`               | `grep`                                                               |
+| `list`               | `list`                                                               |
+| `bash`               | `bash`                                                               |
+| `task`               | `task`                                                               |
+| `external_directory` | 任何在项目工作区之外读取或写入文件的工具                             |
+| `todowrite`          | `todowrite`、`todoread`                                              |
+| `webfetch`           | `webfetch`                                                           |
+| `websearch`          | `websearch`                                                          |
+| `lsp`                | `lsp`                                                                |
+| `skill`              | `skill`                                                              |
+| `question`           | `question`                                                           |
+| `doom_loop`          | 当智能体看起来卡住时的恢复提示                                       |
+
+`read`、`edit`、`glob`、`grep`、`list`、`bash`、`task`、`external_directory`、`lsp` 和 `skill` 既可以接受简写动作（`"allow" | "ask" | "deny"`），也可以接受 glob/模式 → 动作的对象以进行细粒度控制。其余键只接受简写动作。
+
+:::note
+权限键会作为通配符模式与底层工具名称进行匹配，因此相同的语法适用于内置工具、自定义工具和 MCP 工具——例如 `"mymcp_*": "deny"` 会拒绝 MCP 服务器中的每个工具，而 `"mymcp_search": "ask"` 只针对单个工具。
+:::
 
 ```json title="opencode.json"
 {
@@ -591,7 +618,7 @@ Only analyze code and suggest changes.
 }
 ```
 
-当设置为 `deny` 时，子智能体将从 Task 工具描述中完全移除，因此模型不会尝试调用它。
+当设置为 `deny` 时，子智能体会从 Task 工具描述中完全移除，因此模型不会尝试调用它。
 
 :::tip
 规则按顺序评估，**最后匹配的规则优先**。在上面的示例中，`orchestrator-planner` 同时匹配 `*`（deny）和 `orchestrator-*`（allow），但由于 `orchestrator-*` 在 `*` 之后，所以结果为 `allow`。
@@ -644,7 +671,7 @@ Only analyze code and suggest changes.
 
 ### 其他选项
 
-您在智能体配置中指定的任何其他选项都将作为模型选项**直接传递**给提供商。这允许您使用提供商特定的功能和参数。
+您在智能体配置中指定的任何其他选项都将作为模型选项**透传**给提供商。这允许您使用提供商特定的功能和参数。
 
 例如，使用 OpenAI 的推理模型时，您可以控制推理力度：
 
@@ -682,7 +709,7 @@ opencode agent create
 1. 询问智能体的保存位置——全局或项目级。
 2. 描述智能体应该做什么。
 3. 生成合适的系统提示词和标识符。
-4. 让您选择智能体可以访问哪些工具。
+4. 让您选择允许智能体使用哪些权限（您未选择的权限都会被拒绝）。
 5. 最后，创建一个包含智能体配置的 Markdown 文件。
 
 ---
@@ -715,8 +742,8 @@ opencode agent create
 ---
 description: Writes and maintains project documentation
 mode: subagent
-tools:
-  bash: false
+permission:
+  bash: deny
 ---
 
 You are a technical writer. Create clear, comprehensive documentation.
@@ -737,9 +764,8 @@ Focus on:
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent
-tools:
-  write: false
-  edit: false
+permission:
+  edit: deny
 ---
 
 You are a security expert. Focus on identifying potential security issues.
