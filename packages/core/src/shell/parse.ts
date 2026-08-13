@@ -1,6 +1,7 @@
 export * as ShellParse from "./parse.js"
 
 import { Effect } from "effect"
+import { ShellScan } from "@opencode-ai/shell-scan"
 import { fileURLToPath } from "url"
 import os from "os"
 import path from "path"
@@ -153,9 +154,10 @@ const ARITY: Record<string, number> = {
 }
 
 export const scan = Effect.fn("ShellParse.scan")(function* (command: string, shell: string, cwd: string) {
-  const parsers = yield* Effect.promise(load)
   const powershell = ShellSelect.ps(shell)
-  const tree = (powershell ? parsers.ps : parsers.bash).parse(command)
+  if (!powershell) return scanBash(command, cwd, shell)
+  const parser = yield* Effect.promise(load)
+  const tree = parser.parse(command)
   if (!tree) return yield* Effect.fail(new Error("Failed to parse shell command"))
 
   return yield* Effect.acquireUseRelease(
@@ -168,9 +170,9 @@ export const scan = Effect.fn("ShellParse.scan")(function* (command: string, she
             const command = parts(node)
             const tokens = command.map((part) => part.text)
             if (tokens.length === 0) return result
-            const name = powershell ? tokens[0].toLowerCase() : tokens[0]
+            const name = tokens[0].toLowerCase()
             if (CWD.has(name)) {
-              result.directories.push(...directoryArgs(command, powershell, cwd, shell))
+              result.directories.push(...directoryArgs(command, true, cwd, shell))
               return result
             }
             result.commands.push({
@@ -179,12 +181,37 @@ export const scan = Effect.fn("ShellParse.scan")(function* (command: string, she
             })
             return result
           },
-          { commands: [] as Array<{ resource: string; save: string }>, directories: [] as string[] },
+          { commands: [] as Array<{ resource: string; save: string }>, directories: [] as string[], opaque: false },
         ),
       ),
     (tree) => Effect.sync(() => tree.delete()),
   )
 })
+
+function scanBash(command: string, cwd: string, shell: string) {
+  const result = ShellScan.scan(command)
+  if (result.kind === "opaque") return { commands: [{ resource: command }], directories: [], opaque: true }
+  return result.commands.reduce(
+    (output, item) => {
+      const name = item.words[0]
+      if (!name) return output
+      if (CWD.has(name)) {
+        output.directories.push(
+          ...directoryArgs(
+            item.words.map((text) => ({ type: "word", text })),
+            false,
+            cwd,
+            shell,
+          ),
+        )
+        return output
+      }
+      output.commands.push({ resource: item.resource, save: `${prefix(item.words).join(" ")} *` })
+      return output
+    },
+    { commands: [] as Array<{ resource: string; save: string }>, directories: [] as string[], opaque: false },
+  )
+}
 
 function parts(node: Node) {
   return Array.from({ length: node.childCount }).flatMap((_, index): Part[] => {
@@ -282,15 +309,12 @@ const load = (() => {
 })()
 
 async function initialize() {
+  if (!shellParserWasm.runtime || !shellParserWasm.powershell)
+    throw new Error("PowerShell parser assets are unavailable")
   const { Parser, Language } = await import("web-tree-sitter")
   await Parser.init({ locateFile: () => resolve(shellParserWasm.runtime) })
-  const [bashLanguage, psLanguage] = await Promise.all([
-    Language.load(resolve(shellParserWasm.bash)),
-    Language.load(resolve(shellParserWasm.powershell)),
-  ])
-  const bash = new Parser()
-  bash.setLanguage(bashLanguage)
+  const psLanguage = await Language.load(resolve(shellParserWasm.powershell))
   const ps = new Parser()
   ps.setLanguage(psLanguage)
-  return { bash, ps }
+  return ps
 }

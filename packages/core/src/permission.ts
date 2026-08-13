@@ -28,6 +28,7 @@ const RequestFields = {
   action: Permission.Request.fields.action,
   resources: Permission.Request.fields.resources,
   save: Permission.Request.fields.save,
+  opaque: Permission.Request.fields.opaque,
   metadata: Permission.Request.fields.metadata,
   source: Permission.Request.fields.source,
 }
@@ -87,6 +88,16 @@ export function evaluate(action: string, resource: string, ...rulesets: Permissi
     rulesets
       .flat()
       .findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource)) ?? {
+      action,
+      resource: "*",
+      effect: "ask",
+    }
+  )
+}
+
+function evaluateOpaque(action: string, rules: Permission.Ruleset): Permission.Rule {
+  return (
+    rules.findLast((rule) => Wildcard.match(action, rule.action) && rule.resource === "*") ?? {
       action,
       resource: "*",
       effect: "ask",
@@ -189,7 +200,9 @@ const layer = Layer.effect(
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
-      const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
+      const effects = input.opaque
+        ? [evaluateOpaque(input.action, all).effect]
+        : input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Permission.Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
       return { effect, rules: all }
     })
@@ -201,6 +214,7 @@ const layer = Layer.effect(
         action: input.action,
         resources: input.resources,
         save: input.save,
+        opaque: input.opaque,
         metadata: input.metadata,
         source: input.source,
       }
@@ -309,9 +323,11 @@ const layer = Layer.effect(
             if (denied(input, rules)) continue
             const effective = [...rules, ...rememberedRules]
             if (
-              !item.request.resources.every(
-                (resource) => evaluate(item.request.action, resource, effective).effect === "allow",
-              )
+              (item.request.opaque
+                ? evaluateOpaque(item.request.action, effective).effect === "allow"
+                : item.request.resources.every(
+                    (resource) => evaluate(item.request.action, resource, effective).effect === "allow",
+                  )) !== true
             )
               continue
             yield* bus.publish(Permission.Event.Replied, {
