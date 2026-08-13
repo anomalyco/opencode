@@ -52,8 +52,17 @@ async function renderSessionTabs(
   }
   const events = createEventStream()
   const sessions: string[] = []
+  const locations: string[] = []
   const vcsLocations: string[] = []
   const calls = createFetch(async (url) => {
+    if (url.pathname === "/api/location") {
+      const requested = url.searchParams.get("location[directory]") ?? directory
+      locations.push(requested)
+      return json({
+        directory: requested,
+        project: { id: "project", directory: requested, canonical: directory },
+      })
+    }
     if (url.pathname === "/api/vcs") {
       const requested = url.searchParams.get("location[directory]") ?? directory
       vcsLocations.push(requested)
@@ -123,6 +132,7 @@ async function renderSessionTabs(
     route,
     data,
     sessions,
+    locations,
     vcsLocations,
     state,
     emit: (event: OpenCodeEvent) => events.emit({ ...event, location: { directory } }),
@@ -163,6 +173,7 @@ test("loads VCS metadata for each persisted tab location", async () => {
   })
 
   try {
+    await wait(() => setup.locations.includes(other))
     await wait(() => setup.vcsLocations.includes(other))
   } finally {
     await setup.destroy()

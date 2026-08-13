@@ -414,7 +414,8 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                 const currentProject = project()
                 const projectLabel = projectName(currentProject, value?.location.directory) ?? ""
                 const vcs = value ? data.location.vcs.info(value.location) : undefined
-                const worktree = !!value && !!currentProject?.sandboxes.includes(value.location.directory)
+                const location = value ? data.location.info(value.location) : undefined
+                const worktree = !!location && location.project.directory !== location.project.canonical
                 return sessionTabDetail(projectLabel, vcs?.branch.current, vcs?.branch.default, worktree)
               })
               const visibleDetail = createMemo(() => Locale.takeWidth(detail(), titleWidth()))

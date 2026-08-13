@@ -184,7 +184,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
             .filter((location) => location !== undefined)
             .map((location) => [`${location.directory}\n${location.workspaceID ?? ""}`, location]),
         )
-        await Promise.allSettled(Array.from(locations.values(), (location) => data.location.vcs.sync(location)))
+        await Promise.allSettled(
+          Array.from(locations.values(), async (location) => {
+            await data.location.sync(location)
+            await data.location.vcs.sync(location)
+          }),
+        )
       })()
       const timer = setTimeout(async () => {
         const sessions = state()
