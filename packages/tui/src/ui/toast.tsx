@@ -1,4 +1,4 @@
-import { createContext, useContext, type ParentProps, Show } from "solid-js"
+import { createContext, createSignal, onCleanup, useContext, type ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
@@ -9,42 +9,112 @@ export type ToastOptions = {
   message: string
   variant: "info" | "success" | "warning" | "error"
   duration: number
+  action?: {
+    label: string
+    run: () => void
+  }
 }
 type ToastInput = Omit<ToastOptions, "duration"> & { duration?: number }
 
-export function Toast() {
-  const toast = useToast()
+function ToastSurface(props: {
+  toast: ToastOptions
+  pending?: number
+  onHover?: (hovered: boolean) => void
+  onActivate: () => void
+}) {
   const theme = useTheme("overlay")
   const dimensions = useTerminalDimensions()
+  const [hovered, setHovered] = createSignal(false)
+  const hover = (value: boolean) => {
+    setHovered(value)
+    props.onHover?.(value)
+  }
+
+  return (
+    <box
+      position="absolute"
+      top={1}
+      right={2}
+      maxWidth={Math.min(60, dimensions().width - 6)}
+      justifyContent="center"
+      alignItems="flex-start"
+      paddingLeft={2}
+      paddingRight={2}
+      paddingTop={1}
+      paddingBottom={1}
+      backgroundColor={hovered() ? theme.background.action.primary.hovered : theme.background.default}
+      borderColor={theme.text.feedback[props.toast.variant].default}
+      border={["left", "right"]}
+      customBorderChars={SplitBorder.customBorderChars}
+      onMouseOver={() => hover(true)}
+      onMouseOut={() => hover(false)}
+      onMouseUp={props.onActivate}
+    >
+      <Show
+        when={props.toast.title}
+        fallback={
+          <box flexDirection="row" width="100%">
+            <text fg={theme.text.default} wrapMode="word" flexGrow={1}>
+              {props.toast.message}
+            </text>
+            <Show when={props.toast.action || hovered()}>
+              <text
+                flexShrink={0}
+                marginLeft={2}
+                wrapMode="none"
+                attributes={hovered() ? TextAttributes.BOLD : undefined}
+                fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
+              >
+                {hovered() ? "› " : ""}
+                {props.toast.action?.label ?? "Dismiss"}
+              </text>
+            </Show>
+          </box>
+        }
+      >
+        <box flexDirection="row" width="100%" marginBottom={1}>
+          <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
+            {props.toast.title}
+          </text>
+          <box flexGrow={1} />
+          <Show when={props.toast.action || hovered()}>
+            <text
+              flexShrink={0}
+              marginLeft={2}
+              wrapMode="none"
+              attributes={hovered() ? TextAttributes.BOLD : undefined}
+              fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
+            >
+              {hovered() ? "› " : ""}
+              {props.toast.action?.label ?? "Dismiss"}
+            </text>
+          </Show>
+        </box>
+        <text fg={theme.text.default} wrapMode="word" width="100%">
+          {props.toast.message}
+        </text>
+      </Show>
+      <Show when={props.pending}>
+        <text fg={theme.text.subdued} marginTop={1}>
+          +{props.pending} more
+        </text>
+      </Show>
+    </box>
+  )
+}
+
+export function Toast() {
+  const toast = useToast()
 
   return (
     <Show when={toast.currentToast}>
       {(current) => (
-        <box
-          position="absolute"
-          justifyContent="center"
-          alignItems="flex-start"
-          top={1}
-          right={2}
-          maxWidth={Math.min(60, dimensions().width - 6)}
-          paddingLeft={2}
-          paddingRight={2}
-          paddingTop={1}
-          paddingBottom={1}
-          backgroundColor={theme.background.default}
-          borderColor={theme.text.feedback[current().variant].default}
-          border={["left", "right"]}
-          customBorderChars={SplitBorder.customBorderChars}
-        >
-          <Show when={current().title}>
-            <text attributes={TextAttributes.BOLD} marginBottom={1} fg={theme.text.default}>
-              {current().title}
-            </text>
-          </Show>
-          <text fg={theme.text.default} wrapMode="word" width="100%">
-            {current().message}
-          </text>
-        </box>
+        <ToastSurface
+          toast={current()}
+          pending={toast.pending}
+          onHover={(hovered) => (hovered ? toast.pause() : toast.resume())}
+          onActivate={toast.activate}
+        />
       )}
     </Show>
   )
@@ -53,18 +123,45 @@ export function Toast() {
 function init() {
   const [store, setStore] = createStore({
     currentToast: null as ToastOptions | null,
+    queue: [] as ToastOptions[],
   })
 
   let timeoutHandle: NodeJS.Timeout | null = null
+  let startedAt = 0
+  let remaining = 0
+  let paused = false
+
+  const clear = () => {
+    if (!timeoutHandle) return
+    clearTimeout(timeoutHandle)
+    timeoutHandle = null
+  }
+
+  const start = (duration: number) => {
+    clear()
+    remaining = duration
+    startedAt = Date.now()
+    timeoutHandle = setTimeout(() => dismiss(), duration).unref()
+  }
+
+  const dismiss = () => {
+    clear()
+    paused = false
+    const next = store.queue[0]
+    setStore("queue", (queue) => queue.slice(1))
+    setStore("currentToast", next ?? null)
+    if (next) start(next.duration)
+  }
 
   const toast = {
     show(options: ToastInput) {
       const toastOptions = { ...options, duration: options.duration ?? 5000 }
+      if (store.currentToast && (paused || store.queue.length > 0)) {
+        setStore("queue", (queue) => [...queue, toastOptions])
+        return
+      }
       setStore("currentToast", toastOptions)
-      if (timeoutHandle) clearTimeout(timeoutHandle)
-      timeoutHandle = setTimeout(() => {
-        setStore("currentToast", null)
-      }, toastOptions.duration).unref()
+      start(toastOptions.duration)
     },
     error: (err: any) => {
       if (err instanceof Error)
@@ -77,10 +174,31 @@ function init() {
         message: "An unknown error has occurred",
       })
     },
+    pause() {
+      if (!store.currentToast || paused) return
+      paused = true
+      remaining = Math.max(0, remaining - (Date.now() - startedAt))
+      clear()
+    },
+    resume() {
+      if (!store.currentToast || !paused) return
+      paused = false
+      start(remaining)
+    },
+    dismiss,
+    activate() {
+      const action = store.currentToast?.action
+      dismiss()
+      action?.run()
+    },
     get currentToast(): ToastOptions | null {
       return store.currentToast
     },
+    get pending() {
+      return store.queue.length
+    },
   }
+  onCleanup(clear)
   return toast
 }
 

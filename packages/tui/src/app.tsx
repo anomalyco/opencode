@@ -497,12 +497,14 @@ function App(props: { pair?: DialogPairCredentials }) {
           variant: "warning",
           title: "MCP server needs authentication",
           message: `Connect "${server.name}" to use its tools.`,
+          action: { label: "Open MCP servers", run: () => keymap.dispatch("mcp.list") },
         })
       else
         toast.show({
           variant: "error",
           title: `MCP server failed: ${server.name}`,
           message: "Run /mcps to view details.",
+          action: { label: "Open MCP servers", run: () => keymap.dispatch("mcp.list") },
         })
     }
   })

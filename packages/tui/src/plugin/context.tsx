@@ -395,6 +395,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
           variant: "error",
           title: `Plugin failed: ${state.target}`,
           message: "Run /plugins to view details.",
+          action: { label: "Open plugins", run: () => host.keymap.dispatch("plugins.list") },
         })
     setStore("states", reconcileStore(states))
   }
