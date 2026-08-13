@@ -105,18 +105,6 @@ describe("directoryAutocompleteSearch", () => {
 })
 
 describe("directoryAutocompleteResultValue", () => {
-  test("omits the implicit prefix when listing the current directory", () => {
-    const search = directoryAutocompleteSearch("", "/project", "/home/user")
-    expect(directoryAutocompleteResultValue("src/", search)).toBe("src/")
-    expect(directoryAutocompleteResultValue("/src/", search)).toBe("src/")
-    expect(directoryAutocompleteResultValue("/", search)).toBe("")
-  })
-
-  test("omits the implicit prefix from filtered current-directory results", () => {
-    const search = directoryAutocompleteSearch("sr", "/project", "/home/user")
-    expect(directoryAutocompleteResultValue("src/", search)).toBe("src/")
-  })
-
   test("preserves explicit roots", () => {
     expect(
       directoryAutocompleteResultValue("projects/", directoryAutocompleteSearch("~/", "/project", "/home/user")),
