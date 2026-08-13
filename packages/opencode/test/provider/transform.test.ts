@@ -681,14 +681,34 @@ describe("ProviderTransform.options - gpt-5 reasoningEffort", () => {
     expect(result.reasoningEffort).toBeUndefined()
   })
 
-  test("gpt-5.5 should NOT set reasoningEffort", () => {
+  test("gpt-5.5 should NOT set reasoningEffort for the completions API", () => {
     const result = ProviderTransform.options({
       model: createModel("gpt-5.5"),
+      sessionID,
+      providerOptions: { useCompletionUrls: true },
+    })
+
+    expect(result.reasoningEffort).toBeUndefined()
+  })
+
+  test("gpt-5.6 should NOT set reasoningEffort for the completions API", () => {
+    const result = ProviderTransform.options({
+      model: createModel("gpt-5.6"),
+      sessionID,
+      providerOptions: { useCompletionUrls: true },
+    })
+
+    expect(result.reasoningEffort).toBeUndefined()
+  })
+
+  test("gpt-5.6 should set reasoningEffort for the responses API", () => {
+    const result = ProviderTransform.options({
+      model: createModel("gpt-5.6"),
       sessionID,
       providerOptions: {},
     })
 
-    expect(result.reasoningEffort).toBeUndefined()
+    expect(result.reasoningEffort).toBe("medium")
   })
 })
 
@@ -3186,7 +3206,100 @@ describe("ProviderTransform.message - cache control on gateway", () => {
 
 describe("ProviderTransform.temperature - Cohere North", () => {
   test("defaults north-mini-code models to 1.0", () => {
-    expect(ProviderTransform.temperature({ id: "cohere/North-Mini-Code-1-0-latest" } as any)).toBe(1.0)
+    expect(
+      ProviderTransform.temperature({
+        id: "cohere/North-Mini-Code-1-0-latest",
+        api: { id: "North-Mini-Code-1-0-latest" },
+      } as any),
+    ).toBe(1.0)
+  })
+})
+
+describe("ProviderTransform sampling defaults - Gemini", () => {
+  const model = (id: string) =>
+    ({
+      id: `google/${id}`,
+      api: { id },
+    }) as any
+
+  const alias = (id: string, apiID: string) =>
+    ({
+      id,
+      api: { id: apiID },
+    }) as any
+
+  test.each([
+    "gemini-3.5-flash-lite",
+    "gemini-3-5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-3-6-flash",
+    "gemini-4-pro",
+    "gemini-future",
+  ])("omits deprecated sampling controls for %s", (id) => {
+    expect(ProviderTransform.temperature(model(id))).toBeUndefined()
+    expect(ProviderTransform.topP(model(id))).toBeUndefined()
+    expect(ProviderTransform.topK(model(id))).toBeUndefined()
+  })
+
+  test.each([
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash-lite",
+    "gemini-2-5-flash-lite",
+    "gemini-3-flash-preview",
+    "gemini-3-pro-image",
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro-preview",
+    "gemini-3-1-pro-preview",
+    "gemini-3.5-flash",
+    "gemini-3-5-flash",
+  ])("preserves sampling defaults for %s", (id) => {
+    expect(ProviderTransform.temperature(model(id))).toBe(1)
+    expect(ProviderTransform.topP(model(id))).toBe(0.95)
+    expect(ProviderTransform.topK(model(id))).toBe(64)
+  })
+
+  test("uses the API model ID for configured aliases", () => {
+    const deprecated = alias("google/gemini-3.5-flash", "google/gemini-3.6-flash")
+    expect(ProviderTransform.temperature(deprecated)).toBeUndefined()
+    expect(ProviderTransform.topP(deprecated)).toBeUndefined()
+    expect(ProviderTransform.topK(deprecated)).toBeUndefined()
+
+    const supported = alias("my-gemini", "google/gemini-2.5-flash")
+    expect(ProviderTransform.temperature(supported)).toBe(1)
+    expect(ProviderTransform.topP(supported)).toBe(0.95)
+    expect(ProviderTransform.topK(supported)).toBe(64)
+  })
+})
+
+describe("ProviderTransform sampling defaults - DeepSeek", () => {
+  const model = (providerID: string, id: string) =>
+    ({
+      id: `${providerID}/${id}`,
+      providerID,
+      api: { id },
+    }) as any
+
+  test.each([
+    ["deepseek", "deepseek-v4-flash"],
+    ["opencode", "deepseek-v4-flash"],
+    ["opencode-go", "deepseek-v4-flash"],
+    ["openrouter", "deepseek/deepseek-v4-flash-0731"],
+    ["ollama-cloud", "deepseek-v4-flash:0731"],
+  ])("defaults top_p for %s/%s", (providerID, id) => {
+    expect(ProviderTransform.temperature(model(providerID, id))).toBeUndefined()
+    expect(ProviderTransform.topP(model(providerID, id))).toBe(0.95)
+    expect(ProviderTransform.topK(model(providerID, id))).toBeUndefined()
+  })
+
+  test.each([
+    ["openrouter", "deepseek/deepseek-v4-flash"],
+    ["vercel", "deepseek/deepseek-v4-flash"],
+    ["custom", "deepseek-ai/DeepSeek-V4-Flash"],
+  ])("preserves legacy defaults for %s/%s", (providerID, id) => {
+    expect(ProviderTransform.temperature(model(providerID, id))).toBeUndefined()
+    expect(ProviderTransform.topP(model(providerID, id))).toBeUndefined()
+    expect(ProviderTransform.topK(model(providerID, id))).toBeUndefined()
   })
 })
 
@@ -3257,6 +3370,7 @@ describe("ProviderTransform.reasoningVariants", () => {
     ["@ai-sdk/togetherai", { reasoningEffort: "high" }],
     ["venice-ai-sdk-provider", { reasoningEffort: "high" }],
     ["ai-gateway-provider", { reasoningEffort: "high" }],
+    ["merge-gateway-ai-sdk-provider", { reasoningEffort: "high" }],
     ["@ai-sdk/amazon-bedrock", { reasoningConfig: { type: "enabled", maxReasoningEffort: "high" } }],
   ])("converts effort for %s", (npm, expected, ...args) => {
     const id = args[0] as string | undefined
@@ -5439,6 +5553,25 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     // which @ai-sdk/openai-compatible never reads, silently dropping reasoningEffort.
     const result = ProviderTransform.providerOptions(createModel(), { reasoningEffort: "high" })
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
+  })
+})
+
+describe("ProviderTransform.providerOptions - merge-gateway-ai-sdk-provider", () => {
+  const model = {
+    id: "merge-gateway/openai/gpt-5.6-sol",
+    providerID: "merge-gateway",
+    api: {
+      id: "openai/gpt-5.6-sol",
+      url: "https://api-gateway.merge.dev/v1/ai-sdk",
+      npm: "merge-gateway-ai-sdk-provider",
+    },
+    capabilities: { reasoning: true },
+  } as any
+
+  test("routes normalized effort under the adapter's mergeGateway key", () => {
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "high" })).toEqual({
+      mergeGateway: { reasoningEffort: "high" },
+    })
   })
 })
 

@@ -55,6 +55,7 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
         controller={props.controller}
         borderUnderlay={props.borderUnderlay}
         class={props.class}
+        variantControlVisible={!props.controller.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
         modelControl={
@@ -136,7 +137,10 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       t: (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
     }),
   )
-  const designPlaceholder = () => promptDesignPlaceholder(mode(), placeholder())
+  const designPlaceholder = () =>
+    promptDesignPlaceholder(mode(), placeholder(), (key, params) =>
+      language.t(key as Parameters<typeof language.t>[0], params as never),
+    )
 
   const historyComments = () => {
     const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))
@@ -343,7 +347,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       if (item?.commentID) comments.remove(item.path, item.commentID)
     },
     openAttachment: (attachment) =>
-      dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />),
+      dialog.show(() => <ImagePreview src={attachment.blob.url} alt={attachment.filename} />),
     openContext(key) {
       const item = controller.contextItem(key)
       if (item) openComment(item, props, sync, layout, files, comments)
@@ -367,6 +371,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
           title: language.t("prompt.toast.pasteUnsupported.title"),
           description: language.t("prompt.toast.pasteUnsupported.description"),
         }),
+      duplicate: () => showToast({ title: language.t("prompt.toast.attachmentDuplicate.title") }),
       onError: (error) =>
         showToast({
           variant: "error",
@@ -375,6 +380,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
         }),
       readClipboardImage: platform.readClipboardImage,
       getPathForFile: platform.getPathForFile,
+      store: platform.draftStore?.putBlob,
     },
     view: {
       placeholder: designPlaceholder,
@@ -522,20 +528,22 @@ function PromptInputV2ModelControl(props: {
         >
           <ModelSelectorPopoverV2
             model={props.model}
-            triggerAs={ButtonV2}
-            triggerProps={{
-              variant: "ghost-muted",
-              size: "normal",
-              style: { height: "28px" },
-              class: "min-w-0 max-w-[220px] justify-start ![font-weight:440] group",
-              classList: { "animate-in fade-in": shouldAnimate() },
-              "data-action": "prompt-model",
-              "data-control-type": "popover",
-            }}
+            trigger={(triggerProps) => (
+              <ButtonV2
+                {...triggerProps}
+                variant="ghost-muted"
+                size="normal"
+                style={{ height: "28px" }}
+                class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+                classList={{ "animate-in fade-in": shouldAnimate() }}
+                data-action="prompt-model"
+                data-control-type="popover"
+              >
+                {content()}
+              </ButtonV2>
+            )}
             onClose={props.onClose}
-          >
-            {content()}
-          </ModelSelectorPopoverV2>
+          />
         </Show>
       </TooltipV2>
     </Show>
