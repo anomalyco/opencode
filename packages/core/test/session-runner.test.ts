@@ -1135,13 +1135,74 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(2)
       expect(userTexts(requests[0])[0]).toContain(
-        "<previous-summary>\n## Objective\n- Preserve the task\n</previous-summary>",
+        "<prior-summary>\n## Objective\n- Preserve the task\n</prior-summary>",
       )
       expect(userTexts(requests[0])[0]).toContain("Recent exact request")
       expect((yield* (yield* SessionStore.Service).context(sessionID))[0]).toMatchObject({
         type: "compaction",
         summary: "## Objective\n- Preserve the updated task",
       })
+    }),
+  )
+
+  it.effect("retains only complete serialized messages during compaction", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const earlier = `EARLIER_BOUNDARY ${"a".repeat(3_000)} EARLIER_END`
+      const recent = `RECENT_BOUNDARY ${"b".repeat(3_000)} RECENT_END`
+      response = fragmentFixture("text", "text-earlier", ["Earlier answer"]).completeEvents
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: earlier }), resume: false })
+      yield* session.resume(sessionID)
+
+      currentModel = compactModel
+      requests.length = 0
+      responses = [
+        fragmentFixture("text", "text-summary", ["## Objective\n- Preserve the task"]).completeEvents,
+        fragmentFixture("text", "text-final", ["Continued"]).completeEvents,
+      ]
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: recent }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      const summary = userTexts(requests[0])[0]
+      const continuation = userTexts(requests[1])[0]
+      expect(summary.match(/EARLIER_BOUNDARY/g)).toHaveLength(1)
+      expect(summary).toContain(`EARLIER_BOUNDARY ${"a".repeat(3_000)} EARLIER_END`)
+      expect(summary).not.toContain("RECENT_BOUNDARY")
+      expect(continuation).not.toContain("EARLIER_BOUNDARY")
+      expect(continuation).not.toContain("EARLIER_END")
+      expect(continuation).toContain("<recent-context>\n[Assistant]: Earlier answer")
+      expect(continuation).toContain(`RECENT_BOUNDARY ${"b".repeat(3_000)} RECENT_END`)
+    }),
+  )
+
+  it.effect("summarizes an oversized newest message without retaining a fragment", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      response = fragmentFixture("text", "text-earlier", ["Earlier answer"]).completeEvents
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Earlier question" }), resume: false })
+      yield* session.resume(sessionID)
+
+      const oversized = `OVERSIZED_BOUNDARY ${"x".repeat(4_500)} OVERSIZED_END`
+      currentModel = compactModel
+      requests.length = 0
+      responses = [
+        fragmentFixture("text", "text-summary", ["## Objective\n- Preserve the task"]).completeEvents,
+        fragmentFixture("text", "text-final", ["Continued"]).completeEvents,
+      ]
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: oversized }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      const summary = userTexts(requests[0])[0]
+      const continuation = userTexts(requests[1])[0]
+      expect(summary.match(/OVERSIZED_BOUNDARY/g)).toHaveLength(1)
+      expect(summary).toContain(oversized)
+      expect(continuation).not.toContain("OVERSIZED_BOUNDARY")
+      expect(continuation).not.toContain("OVERSIZED_END")
+      expect(continuation).toContain("<recent-context>\n\n</recent-context>")
     }),
   )
 
