@@ -2,13 +2,11 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { eq } from "drizzle-orm"
 import { Effect, Layer, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Database } from "@opencode-ai/core/database/database"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { WorktreeTable } from "@opencode-ai/core/worktree/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Hash } from "@opencode-ai/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
@@ -366,16 +364,6 @@ describe("Project.resolve", () => {
         sandboxes: [abs("/preserved-sandbox")],
         time: { created: 1, initialized: 2 },
       })
-      expect(
-        (yield* db
-          .select({ directory: WorktreeTable.directory, strategy: WorktreeTable.strategy })
-          .from(WorktreeTable)
-          .where(eq(WorktreeTable.project_id, id))
-          .all()
-          .pipe(Effect.orDie))
-          .map((item) => ({ directory: item.directory, strategy: item.strategy ?? undefined }))
-          .toSorted((a, b) => a.directory.localeCompare(b.directory)),
-      ).toEqual([{ directory: yield* real(tmp.path), strategy: undefined }, { directory: yield* real(worktree), strategy: "git" }])
     }),
   )
 })

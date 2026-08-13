@@ -18,6 +18,9 @@ import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Worktree.node, Database.node, Bus.node])))
+const projectIt = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Project.node, Worktree.node, Database.node, Bus.node])),
+)
 
 function abs(input: string) {
   return AbsolutePath.make(input)
@@ -73,6 +76,31 @@ function stored(projectID: Project.ID) {
 }
 
 describe("Worktree", () => {
+  projectIt.live("tracks canonical and linked worktrees when a project resolves", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(root.path))
+      const linked = `${root.path}-linked`
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => fs.rm(linked, { recursive: true, force: true })).pipe(Effect.ignore),
+      )
+      yield* Effect.promise(() => $`git worktree add ${linked} -b linked-${Date.now()}`.cwd(root.path).quiet())
+      const project = yield* Project.Service
+
+      const resolved = yield* project.resolve(abs(linked))
+
+      expect(yield* stored(resolved.id)).toEqual(
+        [
+          { directory: abs(yield* Effect.promise(() => fs.realpath(root.path))), strategy: null },
+          { directory: abs(yield* Effect.promise(() => fs.realpath(linked))), strategy: "git" },
+        ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
+      )
+    }),
+  )
+
   it.effect("accepts arbitrary non-empty strategy ids", () =>
     Effect.sync(() => {
       expect(String(Worktree.StrategyID.make("acme/snapshot"))).toBe("acme/snapshot")
