@@ -1,7 +1,7 @@
 import type { ToolDefinition } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
-import { Effect, JsonSchema, Schema } from "effect"
+import { Effect, JsonSchema, Schema, SchemaAST, SchemaIssue } from "effect"
 
 export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
   name: effectiveName(tool),
@@ -33,11 +33,44 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
 
 const decodeInput = (schema: Tool.ValueSchema<any>, value: unknown) => {
   if (Schema.isSchema(schema))
-    return Schema.decodeUnknownEffect(schema)(value).pipe(
+    return Schema.decodeUnknownEffect(schema)(value, { errors: "all" }).pipe(
+      Effect.catch((error) => {
+        const input = dropInvalidOptionalFields(schema, value, error)
+        return input === value ? Effect.fail(error) : Schema.decodeUnknownEffect(schema)(input)
+      }),
       Effect.mapError((error) => new Tool.Error({ message: `Invalid tool input: ${error.message}` })),
     )
   if (isStandardSchema(schema)) return validateStandard(schema, value, "Invalid tool input")
   return Effect.succeed(value)
+}
+
+const dropInvalidOptionalFields = (schema: Schema.Codec<any, any>, value: unknown, error: unknown) => {
+  if (
+    schema.ast._tag !== "Objects" ||
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !Schema.isSchemaError(error)
+  )
+    return value
+  const optional = new Set(
+    schema.ast.propertySignatures
+      .filter((field) => SchemaAST.isOptional(field.type))
+      .map((field) => field.name)
+      .filter((key): key is string => typeof key === "string"),
+  )
+  const invalid = new Set(
+    issueKeys(error.issue).filter((key): key is string => typeof key === "string" && optional.has(key)),
+  )
+  if (invalid.size === 0) return value
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !invalid.has(key)))
+}
+
+const issueKeys = (issue: SchemaIssue.Issue): ReadonlyArray<PropertyKey> => {
+  if (issue._tag === "Pointer") return issue.path.slice(0, 1)
+  if (issue._tag === "Composite" || issue._tag === "AnyOf") return issue.issues.flatMap(issueKeys)
+  if (issue._tag === "Encoding" || issue._tag === "Filter") return issueKeys(issue.issue)
+  return []
 }
 
 const encodeOutput = (schema: Tool.ValueSchema<any>, value: unknown) => {

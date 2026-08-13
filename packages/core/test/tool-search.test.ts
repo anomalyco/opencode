@@ -70,7 +70,7 @@ const call = (name: "glob" | "grep", input: unknown) => ({
 const it = testEffect(Layer.empty)
 
 describe("search tools", () => {
-  it.live("bounds omitted glob and grep limits", () =>
+  it.live("bounds omitted and invalid optional search limits", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -85,9 +85,11 @@ describe("search tools", () => {
           yield* withTools(tmp.path, (registry) =>
             Effect.gen(function* () {
               const glob = yield* executeTool(registry, call("glob", { pattern: "*" }))
+              const invalidGlob = yield* executeTool(registry, call("glob", { pattern: "*", limit: "many" }))
               const grep = yield* executeTool(registry, call("grep", { pattern: "needle" }))
 
               expect(glob.metadata).toEqual({ count: FileSystem.DEFAULT_SEARCH_LIMIT, truncated: true })
+              expect(invalidGlob.metadata).toEqual({ count: FileSystem.DEFAULT_SEARCH_LIMIT, truncated: true })
               expect(grep.metadata).toEqual({ matches: FileSystem.DEFAULT_SEARCH_LIMIT, truncated: true })
               expect(glob.content).toHaveLength(1)
               expect(grep.content).toHaveLength(1)
