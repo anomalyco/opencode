@@ -2,6 +2,7 @@ export * as InstructionDiscovery from "./instruction-discovery.js"
 
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { createPatch } from "diff"
 import { Bus } from "./bus.js"
 import { Instructions } from "./instructions/index.js"
 import { AbsolutePath } from "./schema.js"
@@ -81,8 +82,7 @@ export const layer = (options?: Options) =>
           read: Effect.succeed(value),
           render: {
             initial: render,
-            changed: (_previous, current) =>
-              `These instructions replace all previously loaded ambient instructions.\n\n${render(current)}`,
+            changed: renderUpdate,
             removed: () => "Previously loaded instructions no longer apply.",
           },
         })
@@ -119,4 +119,29 @@ export const node = configured()
 
 function render(files: ReadonlyArray<File>) {
   return files.map((file) => `Instructions from: ${file.path}\n${file.content}`).join("\n\n")
+}
+
+function renderUpdate(previous: ReadonlyArray<File>, current: ReadonlyArray<File>) {
+  const changes = Instructions.diffByKey(
+    previous,
+    current,
+    (file) => file.path,
+    (before, after) => before.content !== after.content,
+  )
+  const order = current.map((file) => file.path)
+  const reordered = previous.length !== current.length || previous.some((file, index) => file.path !== order[index])
+  return [
+    ...changes.removed.map((file) => `The ambient instruction file at ${file.path} no longer applies.`),
+    ...changes.added.map((file) => `A new ambient instruction file now applies:\n${render([file])}`),
+    ...(reordered ? [`Ambient instruction files now apply in this order:\n${order.join("\n")}`] : []),
+    ...changes.changed.map(({ previous: before, current: after }) => {
+      const patch = createPatch(after.path, before.content, after.content, "", "", { context: 3 })
+      return [
+        `The ambient instructions in ${after.path} changed. Apply this patch to the previously loaded version:`,
+        "```diff",
+        patch.slice(patch.indexOf("@@")).trimEnd(),
+        "```",
+      ].join("\n")
+    }),
+  ].join("\n\n")
 }
