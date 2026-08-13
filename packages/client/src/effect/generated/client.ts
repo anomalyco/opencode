@@ -139,8 +139,6 @@ import type {
   Endpoint13_0Output,
   Endpoint13_1Input,
   Endpoint13_1Output,
-  Endpoint13_2Input,
-  Endpoint13_2Output,
   Endpoint14_0Input,
   Endpoint14_0Output,
   Endpoint14_1Input,
@@ -216,6 +214,8 @@ import type {
   Endpoint24_1Output,
   Endpoint24_2Input,
   Endpoint24_2Output,
+  Endpoint24_3Input,
+  Endpoint24_3Output,
   Endpoint25_0Input,
   Endpoint25_0Output,
   Endpoint25_1Input,
@@ -876,19 +876,7 @@ const Endpoint13_1 = (raw: RawClient["server.project"]) => (input?: Endpoint13_1
     raw["project.current"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const Endpoint13_2 = (raw: RawClient["server.project"]) => (input: Endpoint13_2Input) =>
-  preserveEffect<Endpoint13_2Output>()(
-    raw["project.directories"]({
-      params: { projectID: input["projectID"] },
-      query: { location: input["location"] },
-    }).pipe(Effect.mapError(mapClientError)),
-  )
-
-const adaptGroup13 = (raw: RawClient["server.project"]) => ({
-  list: Endpoint13_0(raw),
-  current: Endpoint13_1(raw),
-  directories: Endpoint13_2(raw),
-})
+const adaptGroup13 = (raw: RawClient["server.project"]) => ({ list: Endpoint13_0(raw), current: Endpoint13_1(raw) })
 
 const Endpoint14_0 = (raw: RawClient["server.form"]) => (input?: Endpoint14_0Input) =>
   preserveEffect<Endpoint14_0Output>()(
@@ -1213,36 +1201,37 @@ const Endpoint23_0 = (raw: RawClient["server.reference"]) => (input?: Endpoint23
 
 const adaptGroup23 = (raw: RawClient["server.reference"]) => ({ list: Endpoint23_0(raw) })
 
-const Endpoint24_0 = (raw: RawClient["server.projectCopy"]) => (input: Endpoint24_0Input) =>
+const Endpoint24_0 = (raw: RawClient["server.worktree"]) => (input: Endpoint24_0Input) =>
   preserveEffect<Endpoint24_0Output>()(
-    raw["projectCopy.create"]({
+    raw["worktree.list"]({ params: { projectID: input["projectID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const Endpoint24_1 = (raw: RawClient["server.worktree"]) => (input: Endpoint24_1Input) =>
+  preserveEffect<Endpoint24_1Output>()(
+    raw["worktree.create"]({
       params: { projectID: input["projectID"] },
-      query: { location: input["location"] },
-      payload: { strategy: input["strategy"], directory: input["directory"], name: input["name"] },
+      payload: { strategy: input["strategy"], from: input["from"], directory: input["directory"], name: input["name"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const Endpoint24_1 = (raw: RawClient["server.projectCopy"]) => (input: Endpoint24_1Input) =>
-  preserveEffect<Endpoint24_1Output>()(
-    raw["projectCopy.remove"]({
+const Endpoint24_2 = (raw: RawClient["server.worktree"]) => (input: Endpoint24_2Input) =>
+  preserveEffect<Endpoint24_2Output>()(
+    raw["worktree.remove"]({
       params: { projectID: input["projectID"] },
-      query: { location: input["location"] },
       payload: { directory: input["directory"], force: input["force"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const Endpoint24_2 = (raw: RawClient["server.projectCopy"]) => (input: Endpoint24_2Input) =>
-  preserveEffect<Endpoint24_2Output>()(
-    raw["projectCopy.refresh"]({
-      params: { projectID: input["projectID"] },
-      query: { location: input["location"] },
-    }).pipe(Effect.mapError(mapClientError)),
+const Endpoint24_3 = (raw: RawClient["server.worktree"]) => (input: Endpoint24_3Input) =>
+  preserveEffect<Endpoint24_3Output>()(
+    raw["worktree.refresh"]({ params: { projectID: input["projectID"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroup24 = (raw: RawClient["server.projectCopy"]) => ({
-  create: Endpoint24_0(raw),
-  remove: Endpoint24_1(raw),
-  refresh: Endpoint24_2(raw),
+const adaptGroup24 = (raw: RawClient["server.worktree"]) => ({
+  list: Endpoint24_0(raw),
+  create: Endpoint24_1(raw),
+  remove: Endpoint24_2(raw),
+  refresh: Endpoint24_3(raw),
 })
 
 const Endpoint25_0 = (raw: RawClient["server.vcs"]) => (input?: Endpoint25_0Input) =>
@@ -1335,7 +1324,7 @@ const adaptClient = (raw: RawClient) => ({
   shell: adaptGroup21(raw["server.shell"]),
   question: adaptGroup22(raw["server.question"]),
   reference: adaptGroup23(raw["server.reference"]),
-  projectCopy: adaptGroup24(raw["server.projectCopy"]),
+  worktree: adaptGroup24(raw["server.worktree"]),
   vcs: adaptGroup25(raw["server.vcs"]),
   debug: adaptGroup26(raw["server.debug"]),
   migration: adaptGroup27(raw["server.migration"]),

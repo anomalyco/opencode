@@ -39,7 +39,7 @@ import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 import { nonEmptyToolContent } from "../util/tool-display"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
-import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
+import { Worktree } from "@opencode-ai/schema/worktree"
 import { createEffect, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
@@ -458,9 +458,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           }
           break
         }
-        case "project.directory.resolved": {
+        case "worktree.resolved": {
           for (const [sessionID, info] of Object.entries(store.session.info)) {
-            const adopted = ProjectDirectories.adopt(
+            const adopted = Worktree.adopt(
               { projectID: info.projectID, directory: info.location.directory },
               event.data,
             )

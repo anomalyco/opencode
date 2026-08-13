@@ -379,11 +379,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     if (isNewSession) {
       if (worktreeSelection === "create") {
         const createdWorktree = await sdk()
-          .api.projectCopy.create({
+          .api.worktree.create({
             projectID: sync().data.project,
-            strategy: "git_worktree",
+            strategy: "git",
             directory: getDirectory(projectDirectory),
-            location: { directory: projectDirectory },
           })
           .catch((err) => {
             showToast({

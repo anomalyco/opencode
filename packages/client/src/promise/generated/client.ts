@@ -133,8 +133,6 @@ import type {
   ProjectListOutput,
   ProjectCurrentInput,
   ProjectCurrentOutput,
-  ProjectDirectoriesInput,
-  ProjectDirectoriesOutput,
   FormRequestListInput,
   FormRequestListOutput,
   FormListInput,
@@ -206,12 +204,14 @@ import type {
   QuestionRejectOutput,
   ReferenceListInput,
   ReferenceListOutput,
-  ProjectCopyCreateInput,
-  ProjectCopyCreateOutput,
-  ProjectCopyRemoveInput,
-  ProjectCopyRemoveOutput,
-  ProjectCopyRefreshInput,
-  ProjectCopyRefreshOutput,
+  WorktreeListInput,
+  WorktreeListOutput,
+  WorktreeCreateInput,
+  WorktreeCreateOutput,
+  WorktreeRemoveInput,
+  WorktreeRemoveOutput,
+  WorktreeRefreshInput,
+  WorktreeRefreshOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsStatusInput,
@@ -1255,18 +1255,6 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      directories: (input: ProjectDirectoriesInput, requestOptions?: RequestOptions) =>
-        request<ProjectDirectoriesOutput>(
-          {
-            method: "GET",
-            path: `/api/project/${encodeURIComponent(input.projectID)}/directories`,
-            query: { location: input["location"] },
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
     },
     form: {
       request: {
@@ -1737,26 +1725,40 @@ export function make(options: ClientOptions) {
           requestOptions,
         ),
     },
-    projectCopy: {
-      create: (input: ProjectCopyCreateInput, requestOptions?: RequestOptions) =>
-        request<ProjectCopyCreateOutput>(
+    worktree: {
+      list: (input: WorktreeListInput, requestOptions?: RequestOptions) =>
+        request<WorktreeListOutput>(
+          {
+            method: "GET",
+            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/worktree`,
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      create: (input: WorktreeCreateInput, requestOptions?: RequestOptions) =>
+        request<WorktreeCreateOutput>(
           {
             method: "POST",
-            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/copy`,
-            query: { location: input["location"] },
-            body: { strategy: input["strategy"], directory: input["directory"], name: input["name"] },
+            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/worktree`,
+            body: {
+              strategy: input["strategy"],
+              from: input["from"],
+              directory: input["directory"],
+              name: input["name"],
+            },
             successStatus: 200,
             declaredStatuses: [400, 401],
             empty: false,
           },
           requestOptions,
         ),
-      remove: (input: ProjectCopyRemoveInput, requestOptions?: RequestOptions) =>
-        request<ProjectCopyRemoveOutput>(
+      remove: (input: WorktreeRemoveInput, requestOptions?: RequestOptions) =>
+        request<WorktreeRemoveOutput>(
           {
             method: "DELETE",
-            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/copy`,
-            query: { location: input["location"] },
+            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/worktree`,
             body: { directory: input["directory"], force: input["force"] },
             successStatus: 204,
             declaredStatuses: [400, 401],
@@ -1764,12 +1766,11 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      refresh: (input: ProjectCopyRefreshInput, requestOptions?: RequestOptions) =>
-        request<ProjectCopyRefreshOutput>(
+      refresh: (input: WorktreeRefreshInput, requestOptions?: RequestOptions) =>
+        request<WorktreeRefreshOutput>(
           {
             method: "POST",
-            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/copy/refresh`,
-            query: { location: input["location"] },
+            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/worktree/refresh`,
             successStatus: 204,
             declaredStatuses: [400, 401],
             empty: true,

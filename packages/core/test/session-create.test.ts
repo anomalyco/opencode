@@ -137,7 +137,7 @@ describe("Session.create", () => {
           .where(eq(EventTable.aggregate_id, project.id))
           .all()
           .pipe(Effect.orDie)
-        expect(announced.map((event) => event.type)).toEqual(["project.directory.resolved.1"])
+        expect(announced.map((event) => event.type)).toEqual(["worktree.resolved.1"])
       }),
     ),
   )

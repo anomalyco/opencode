@@ -114,7 +114,7 @@ describe("public event manifest", () => {
         "session.revert.staged.1",
         "session.revert.cleared.1",
         "session.revert.committed.1",
-        "project.directory.resolved.1",
+        "worktree.resolved.1",
       ].toSorted(),
     )
     expect(SessionEvent.DurableDefinitions).toEqual([

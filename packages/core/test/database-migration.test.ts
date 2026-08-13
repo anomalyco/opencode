@@ -12,6 +12,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { tmpdir } from "./fixture/tmpdir"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 import legacyCredentialsMigration from "@opencode-ai/core/database/migration/20260805200742_import_legacy_credentials"
+import worktreeMigration from "@opencode-ai/core/database/migration/20260812213948_worktree"
 import { Global } from "@opencode-ai/util/global"
 
 const run = <A, E>(
@@ -123,6 +124,31 @@ describe("DatabaseMigration", () => {
           { id: "first" },
           { id: "second" },
         ])
+      }),
+    )
+  })
+
+  test("copies project directories into worktrees without removing the old table", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE project (id text PRIMARY KEY)`)
+        yield* db.run(
+          sql`CREATE TABLE project_directory (project_id text NOT NULL, directory text NOT NULL, type text, strategy text, time_created integer NOT NULL, PRIMARY KEY (project_id, directory))`,
+        )
+        yield* db.run(
+          sql`INSERT INTO project_directory (project_id, directory, type, strategy, time_created) VALUES ('project', '/root', 'main', NULL, 1), ('project', '/legacy', 'git_worktree', NULL, 2), ('project', '/strategy', NULL, 'git_worktree', 3), ('project', '/custom', NULL, 'acme/snapshot', 4)`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [worktreeMigration])
+
+        expect(yield* db.all(sql`SELECT directory, strategy FROM worktree ORDER BY directory`)).toEqual([
+          { directory: "/custom", strategy: "acme/snapshot" },
+          { directory: "/legacy", strategy: "git" },
+          { directory: "/root", strategy: null },
+          { directory: "/strategy", strategy: "git" },
+        ])
+        expect(yield* db.get(sql`SELECT count(*) AS count FROM project_directory`)).toEqual({ count: 4 })
       }),
     )
   })

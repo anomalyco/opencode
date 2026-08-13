@@ -16,14 +16,14 @@ import { isRecord } from "../util/record"
 import { useToast } from "../ui/toast"
 import { Spinner } from "./spinner"
 import { DialogWorkspaceFileChanges } from "./dialog-workspace-file-changes"
-import type { ProjectDirectoriesOutput } from "@opencode-ai/client"
+import type { WorktreeListOutput } from "@opencode-ai/client"
 import { useRoute } from "../context/route"
-import { DialogProjectCopyName } from "./dialog-project-copy-name"
+import { DialogWorktreeName } from "./dialog-worktree-name"
 
 export type MoveSessionSelection =
   | { type: "directory"; directory: string; subdirectory: boolean }
   | { type: "new"; name: string }
-type ProjectDirectory = ProjectDirectoriesOutput[number]
+type ProjectDirectory = WorktreeListOutput[number]
 
 type DialogMoveSessionProps = {
   projectID: string
@@ -79,15 +79,8 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     () => (props.fixture || props.initialRemoving ? undefined : props.projectID),
     async (projectID, info): Promise<ReadonlyArray<ProjectDirectory> | undefined> => {
       try {
-        const requestLocation = { directory: location()?.directory || paths.cwd }
-        await client.api.projectCopy.refresh({
-          projectID,
-          location: requestLocation,
-        })
-        const directories = await client.api.project.directories({
-          projectID,
-          location: requestLocation,
-        })
+        await client.api.worktree.refresh({ projectID })
+        const directories = await client.api.worktree.list({ projectID })
         setLoadError(undefined)
         return directories
       } catch (error) {
@@ -230,10 +223,9 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     setToDelete(undefined)
     setRemoving(selected.directory)
     setWorking(true)
-    const error = await client.api.projectCopy
+    const error = await client.api.worktree
       .remove({
         projectID: props.projectID,
-        location: { directory: location()?.directory || paths.cwd },
         directory: selected.directory,
         force: false,
       })
@@ -249,18 +241,17 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
           .status({ location: { directory: selected.directory } })
           .catch(() => undefined)
         const choice = await DialogWorkspaceFileChanges.show(dialog, status?.data ?? [], {
-          title: "Delete working copy?",
-          message: "This working copy has file changes. Do you want to delete it anyway?",
+          title: "Delete worktree?",
+          message: "This worktree has file changes. Do you want to delete it anyway?",
         })
         if (choice !== "yes") {
           reopen()
           return
         }
         reopen(selected.directory)
-        const forcedError = await client.api.projectCopy
+        const forcedError = await client.api.worktree
           .remove({
             projectID: props.projectID,
-            location: { directory: location()?.directory || paths.cwd },
             directory: selected.directory,
             force: true,
           })
@@ -271,7 +262,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         if (forcedError) {
           toast.show({
             variant: "error",
-            title: "Failed to delete project copy",
+            title: "Failed to delete worktree",
             message: errorMessage(forcedError),
           })
           reopen()
@@ -285,7 +276,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       }
       toast.show({
         variant: "error",
-        title: "Failed to delete project copy",
+        title: "Failed to delete worktree",
         message: errorMessage(error),
       })
       return
@@ -297,7 +288,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   }
 
   async function create() {
-    const name = await DialogProjectCopyName.show(dialog)
+    const name = await DialogWorktreeName.show(dialog)
     if (name === null) return
     props.onSelect({ type: "new", name })
   }
@@ -327,24 +318,24 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
           showError() ? (
             <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.text.feedback.error.default} attributes={TextAttributes.BOLD}>
-                Could not load project directories
+                Could not load worktrees
               </text>
               <text fg={theme.text.subdued}>{errorMessage(loadError())}</text>
               <text fg={theme.text.subdued}>Close and reopen Move session to try again.</text>
             </box>
           ) : directories.loading || loadedProject.loading ? (
             <box paddingLeft={4} paddingRight={4}>
-              <text fg={theme.text.subdued}>Loading project directories…</text>
+              <text fg={theme.text.subdued}>Loading worktrees…</text>
             </box>
           ) : (
             <box paddingLeft={4} paddingRight={4}>
-              <text fg={theme.text.subdued}>No project directories available</text>
+              <text fg={theme.text.subdued}>No worktrees available</text>
             </box>
           )
         }
         noMatchView={
           <box paddingLeft={4} paddingRight={4}>
-            <text fg={theme.text.subdued}>No project directories found</text>
+            <text fg={theme.text.subdued}>No worktrees found</text>
           </box>
         }
         locked={showError() || directories.loading || loadedProject.loading || Boolean(removing())}

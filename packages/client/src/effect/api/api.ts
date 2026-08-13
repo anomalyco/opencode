@@ -34,7 +34,7 @@ import type { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
 import type { Pty } from "@opencode-ai/schema/pty"
 import type { Question } from "@opencode-ai/schema/question"
 import type { Reference } from "@opencode-ai/schema/reference"
-import type { ProjectCopy } from "@opencode-ai/schema/project-copy"
+import type { Worktree } from "@opencode-ai/schema/worktree"
 import type { Vcs } from "@opencode-ai/schema/vcs"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
 import type { WebSearch } from "@opencode-ai/schema/websearch"
@@ -1230,17 +1230,9 @@ export type Endpoint13_1Input = {
 export type Endpoint13_1Output = Project.Current
 export type ProjectCurrentOperation<E = never> = (input?: Endpoint13_1Input) => Effect.Effect<Endpoint13_1Output, E>
 
-export type Endpoint13_2Input = {
-  readonly projectID: Project.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
-export type Endpoint13_2Output = Project.Directories
-export type ProjectDirectoriesOperation<E = never> = (input: Endpoint13_2Input) => Effect.Effect<Endpoint13_2Output, E>
-
 export interface ProjectApi<E = never> {
   readonly list: ProjectListOperation<E>
   readonly current: ProjectCurrentOperation<E>
-  readonly directories: ProjectDirectoriesOperation<E>
 }
 
 export type Endpoint14_0Input = {
@@ -1550,36 +1542,37 @@ export interface ReferenceApi<E = never> {
   readonly list: ReferenceListOperation<E>
 }
 
-export type Endpoint24_0Input = {
-  readonly projectID: Project.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  readonly strategy: ProjectCopy.StrategyID
-  readonly directory: AbsolutePath
-  readonly name?: string | undefined
-}
-export type Endpoint24_0Output = ProjectCopy.Copy
-export type ProjectCopyCreateOperation<E = never> = (input: Endpoint24_0Input) => Effect.Effect<Endpoint24_0Output, E>
+export type Endpoint24_0Input = { readonly projectID: Project.ID }
+export type Endpoint24_0Output = Worktree.List
+export type WorktreeListOperation<E = never> = (input: Endpoint24_0Input) => Effect.Effect<Endpoint24_0Output, E>
 
 export type Endpoint24_1Input = {
   readonly projectID: Project.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly strategy: Worktree.StrategyID
+  readonly from?: AbsolutePath | undefined
   readonly directory: AbsolutePath
-  readonly force: boolean
+  readonly name?: string | undefined
 }
-export type Endpoint24_1Output = void
-export type ProjectCopyRemoveOperation<E = never> = (input: Endpoint24_1Input) => Effect.Effect<Endpoint24_1Output, E>
+export type Endpoint24_1Output = Worktree.Info
+export type WorktreeCreateOperation<E = never> = (input: Endpoint24_1Input) => Effect.Effect<Endpoint24_1Output, E>
 
 export type Endpoint24_2Input = {
   readonly projectID: Project.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+  readonly directory: AbsolutePath
+  readonly force: boolean
 }
 export type Endpoint24_2Output = void
-export type ProjectCopyRefreshOperation<E = never> = (input: Endpoint24_2Input) => Effect.Effect<Endpoint24_2Output, E>
+export type WorktreeRemoveOperation<E = never> = (input: Endpoint24_2Input) => Effect.Effect<Endpoint24_2Output, E>
 
-export interface ProjectCopyApi<E = never> {
-  readonly create: ProjectCopyCreateOperation<E>
-  readonly remove: ProjectCopyRemoveOperation<E>
-  readonly refresh: ProjectCopyRefreshOperation<E>
+export type Endpoint24_3Input = { readonly projectID: Project.ID }
+export type Endpoint24_3Output = void
+export type WorktreeRefreshOperation<E = never> = (input: Endpoint24_3Input) => Effect.Effect<Endpoint24_3Output, E>
+
+export interface WorktreeApi<E = never> {
+  readonly list: WorktreeListOperation<E>
+  readonly create: WorktreeCreateOperation<E>
+  readonly remove: WorktreeRemoveOperation<E>
+  readonly refresh: WorktreeRefreshOperation<E>
 }
 
 export type Endpoint25_0Input = {
@@ -1692,7 +1685,7 @@ export interface AppApi<E = never> {
   readonly shell: ShellApi<E>
   readonly question: QuestionApi<E>
   readonly reference: ReferenceApi<E>
-  readonly projectCopy: ProjectCopyApi<E>
+  readonly worktree: WorktreeApi<E>
   readonly vcs: VcsApi<E>
   readonly debug: DebugApi<E>
   readonly migration: MigrationApi<E>

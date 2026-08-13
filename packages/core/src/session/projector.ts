@@ -18,7 +18,7 @@ import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { Slug } from "../util/slug.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Money } from "@opencode-ai/schema/money"
-import { Event } from "@opencode-ai/schema/project-directories"
+import { Worktree } from "@opencode-ai/schema/worktree"
 import { Project } from "@opencode-ai/schema/project"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import type { SessionSchema } from "./schema.js"
@@ -441,7 +441,7 @@ const layer = Layer.effectDiscard(
     // Sessions whose ownership came from the directory's previous resolution
     // follow its new identity. Location, transcript, instructions, and recency
     // are untouched: the session did not move, its directory got identified.
-    yield* bus.project(Event.Resolved, (event) =>
+    yield* bus.project(Worktree.Event.Resolved, (event) =>
       Effect.gen(function* () {
         const stale = [event.data.previous, Project.ID.global].filter((id) => id !== event.data.projectID)
         if (stale.length === 0) return

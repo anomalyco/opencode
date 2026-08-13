@@ -1842,7 +1842,7 @@ export function Prompt(props: PromptProps) {
                   <Match when={move.pendingNew()}>
                     <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
                       <text fg={theme.hue.accent[500]} wrapMode="none" truncate>
-                        (new working copy)
+                        (new worktree)
                       </text>
                     </box>
                   </Match>

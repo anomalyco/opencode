@@ -6,7 +6,7 @@ import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { useConfig } from "../config"
 
-export function DialogProjectCopyName(props: { onConfirm: (name: string) => void }) {
+export function DialogWorktreeName(props: { onConfirm: (name: string) => void }) {
   const dialog = useDialog()
   const theme = useTheme("elevated")
   const shortcuts = Keymap.useShortcuts()
@@ -30,8 +30,8 @@ export function DialogProjectCopyName(props: { onConfirm: (name: string) => void
     priority: 1,
     commands: [
       {
-        id: "dialog.project_copy.generate",
-        title: "Generate project copy name",
+        id: "dialog.worktree.generate",
+        title: "Generate worktree name",
         group: "Dialog",
         run: generate,
       },
@@ -50,7 +50,7 @@ export function DialogProjectCopyName(props: { onConfirm: (name: string) => void
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
-          Name project copy
+          Name worktree
         </text>
         <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
@@ -63,7 +63,7 @@ export function DialogProjectCopyName(props: { onConfirm: (name: string) => void
           setInputTarget(value)
         }}
         onSubmit={confirm}
-        placeholder="Project copy name"
+        placeholder="Worktree name"
         placeholderColor={theme.text.subdued}
         textColor={theme.text.formfield.default}
         focusedTextColor={theme.text.formfield.default}
@@ -74,17 +74,17 @@ export function DialogProjectCopyName(props: { onConfirm: (name: string) => void
           enter <span style={{ fg: theme.text.subdued }}>submit</span>
         </text>
         <text fg={theme.text.default}>
-          {shortcuts.get("dialog.project_copy.generate")} <span style={{ fg: theme.text.subdued }}>generate one</span>
+          {shortcuts.get("dialog.worktree.generate")} <span style={{ fg: theme.text.subdued }}>generate one</span>
         </text>
       </box>
     </box>
   )
 }
 
-DialogProjectCopyName.show = (dialog: DialogContext) =>
+DialogWorktreeName.show = (dialog: DialogContext) =>
   new Promise<string | null>((resolve) => {
     dialog.replace(
-      () => <DialogProjectCopyName onConfirm={resolve} />,
+      () => <DialogWorktreeName onConfirm={resolve} />,
       () => resolve(null),
     )
   })

@@ -29,7 +29,7 @@ test("exposes every standard HTTP API group", () => {
     "shell",
     "question",
     "reference",
-    "projectCopy",
+    "worktree",
     "vcs",
     "debug",
     "migration",
@@ -49,7 +49,8 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.vcs)).toEqual(["get", "status", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove"])
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
-  expect(Object.keys(client.project)).toEqual(["list", "current", "directories"])
+  expect(Object.keys(client.project)).toEqual(["list", "current"])
+  expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
 })
 
 test("config.get returns ordered config entries for a location", async () => {
@@ -251,30 +252,48 @@ test("file.read returns binary content from the public HTTP contract", async () 
   )
 })
 
-test("project methods use the public HTTP contract", async () => {
-  const requests: string[] = []
+test("worktree methods use the global project contract", async () => {
+  const requests: Request[] = []
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
-    fetch: async (input) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
-      requests.push(url)
-      if (url.includes("/directories")) return Response.json([])
-      return Response.json({ id: "proj_test", directory: "/tmp/project" })
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(request)
+      if (request.method === "GET") return Response.json([{ directory: "/tmp/project" }])
+      if (request.method === "POST" && !request.url.endsWith("/refresh"))
+        return Response.json({ directory: "/tmp/worktrees/api" })
+      return new Response(null, { status: 204 })
     },
   })
 
-  const current = await client.project.current({ location: { workspace: "wrk_test" } })
-  const directories = await client.project.directories({
-    projectID: current.id,
-    location: { directory: current.directory },
+  expect(await client.worktree.list({ projectID: "proj_test" })).toEqual([{ directory: "/tmp/project" }])
+  expect(
+    await client.worktree.create({
+      projectID: "proj_test",
+      strategy: "git",
+      directory: "/tmp/worktrees",
+      name: "api",
+    }),
+  ).toEqual({ directory: "/tmp/worktrees/api" })
+  await client.worktree.remove({
+    projectID: "proj_test",
+    directory: "/tmp/worktrees/api",
+    force: false,
   })
+  await client.worktree.refresh({ projectID: "proj_test" })
 
-  expect(current).toEqual({ id: "proj_test", directory: "/tmp/project" })
-  expect(directories).toEqual([])
-  expect(requests).toEqual([
-    "http://localhost:3000/api/project/current?location%5Bworkspace%5D=wrk_test",
-    "http://localhost:3000/api/project/proj_test/directories?location%5Bdirectory%5D=%2Ftmp%2Fproject",
+  expect(requests.map((request) => [request.method, request.url])).toEqual([
+    ["GET", "http://localhost:3000/api/experimental/project/proj_test/worktree"],
+    ["POST", "http://localhost:3000/api/experimental/project/proj_test/worktree"],
+    ["DELETE", "http://localhost:3000/api/experimental/project/proj_test/worktree"],
+    ["POST", "http://localhost:3000/api/experimental/project/proj_test/worktree/refresh"],
   ])
+  expect(await requests[1]?.json()).toEqual({
+    strategy: "git",
+    directory: "/tmp/worktrees",
+    name: "api",
+  })
+  expect(await requests[2]?.json()).toEqual({ directory: "/tmp/worktrees/api", force: false })
 })
 
 test("shell list and remove use the public HTTP contract", async () => {
