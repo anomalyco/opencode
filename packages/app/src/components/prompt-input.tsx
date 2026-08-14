@@ -546,6 +546,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const cursor = currentCursor()
     savedCursor = cursor
     if (cursor !== null && cursor !== prompt.cursor()) prompt.set(prompt.current(), cursor)
+    // Re-sync the DOM with the store. While focused we skip the rebuild in the
+    // prompt.current() effect to avoid stealing the caret during agent streaming
+    // (#41332); this catches up any programmatic draft change made while focused.
+    reconcile(prompt.current().filter((part) => part.type !== "image"))
     closePopover()
     setComposing(false)
   }
@@ -866,6 +870,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       () => prompt.current(),
       (parts) => {
         if (composing()) return
+        // Don't rebuild the editor DOM while the user is actively editing inside it.
+        // A programmatic change to the draft (e.g. a draft restore while the agent
+        // is streaming) used to clear and rebuild the contenteditable, which
+        // collapsed the caret to position 0 and yanked focus away from whatever the
+        // user was doing — see #41332. The store stays authoritative and is re-synced
+        // to the DOM on blur (handleBlur below).
+        if (document.activeElement === editorRef) return
         reconcile(parts.filter((part) => part.type !== "image"))
       },
     ),

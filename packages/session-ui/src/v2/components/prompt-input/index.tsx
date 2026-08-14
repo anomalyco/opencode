@@ -70,6 +70,13 @@ export function PromptInputV2(props: PromptInputV2Props) {
       localInput = false
       return
     }
+    // Don't rebuild the editor DOM while the user is actively editing inside it.
+    // A programmatic change to the draft (e.g. a draft restore while the agent is
+    // streaming) used to clear and rebuild the contenteditable, which collapsed the
+    // caret and yanked focus away from the user — see #41332. The store stays
+    // authoritative; the editor is re-synced from parts() on the next editable
+    // change (localInput) and on blur.
+    if (document.activeElement === editor) return
     renderPromptInputV2Editor(editor, parts)
   })
 
