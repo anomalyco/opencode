@@ -313,7 +313,17 @@ test("enter on an empty custom multiselect option clearly enters editing", async
 
     prompt.app.mockInput.pressEnter()
     await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
-    await prompt.app.waitForFrame((frame) => frame.includes("enter done"))
+    await prompt.app.waitForFrame((frame) => frame.includes("[✓] Type your own answer") && frame.includes("enter done"))
+
+    prompt.app.mockInput.pressEscape()
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor === null)
+    await prompt.app.waitForFrame((frame) => frame.includes("[ ] Type your own answer"))
+
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor === null)
+    await prompt.app.waitForFrame((frame) => frame.includes("[ ] Type your own answer"))
 
     expect(prompt.replies).toEqual([])
   } finally {

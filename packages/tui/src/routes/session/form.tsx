@@ -185,6 +185,7 @@ export function FormPrompt(props: {
     if (Array.isArray(answer)) return answer.includes(value)
     return answer === value
   })
+  const customChecked = createMemo(() => customPicked() || (multi() && other() && store.editing))
   const actionLabel = createMemo(() => {
     if (confirm()) return "submit"
     const external = externalField()
@@ -951,14 +952,14 @@ export function FormPrompt(props: {
                         <Show when={multi()}>
                           <text
                             fg={
-                              customPicked()
+                              customChecked()
                                 ? theme.text.feedback.success.default
                                 : other()
                                   ? theme.text.formfield.focused
                                   : theme.text.formfield.default
                             }
                           >
-                            [{customPicked() ? "✓" : " "}]
+                            [{customChecked() ? "✓" : " "}]
                           </text>
                         </Show>
                         <Show
