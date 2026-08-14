@@ -145,6 +145,7 @@ const pendingOAuthTransports = new Map<string, TransportWithAuth>()
 // Prompt cache types
 type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
 type ResourceInfo = Awaited<ReturnType<MCPClient["listResources"]>>["resources"][number]
+type ResourceTemplateInfo = Awaited<ReturnType<MCPClient["listResourceTemplates"]>>["resourceTemplates"][number]
 type McpEntry = NonNullable<ConfigV1.Info["mcp"]>[string]
 
 function isMcpConfigured(entry: McpEntry): entry is ConfigMCPV1.Info {
@@ -185,11 +186,30 @@ interface AuthResult {
 
 // --- Effect Service ---
 
+/**
+ * A tool as the registry consumes it: the cached definition plus the client to
+ * invoke it through. Conversion to an ai-sdk Tool happens at the call site, not
+ * here — the MCP service stays free of tool-loop concerns.
+ */
+export interface McpTool {
+  /** Shared cached definition; consumers must copy rather than mutate it. */
+  readonly def: MCPToolDef
+  readonly client: MCPClient
+  readonly timeout?: number
+}
+
+export interface ServerInstructions {
+  name: string
+  instructions: string
+  tools: string[]
+}
+
 interface State {
   config: Record<string, ConfigMCPV1.Info>
   status: Record<string, Status>
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
+  instructions: Record<string, string>
   // fork(mcp-dual-era-client B2): cached era verdict per server, adopted on
   // reconnect via ConnectOptions.prior so a known-legacy server never repeats
   // the server/discover probe within the same process. Never cleared on
@@ -200,9 +220,11 @@ interface State {
 export interface Interface {
   readonly status: () => Effect.Effect<Record<string, Status>>
   readonly clients: () => Effect.Effect<Record<string, MCPClient>>
-  readonly tools: () => Effect.Effect<Record<string, Tool>>
+  readonly instructions: () => Effect.Effect<ServerInstructions[]>
+  readonly tools: () => Effect.Effect<Record<string, McpTool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: () => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
+  readonly resourceTemplates: () => Effect.Effect<Record<string, ResourceTemplateInfo & { client: string }>>
   readonly add: (name: string, mcp: ConfigMCPV1.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
   readonly connect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (name: string) => Effect.Effect<void, NotFoundError>
@@ -218,7 +240,10 @@ export interface Interface {
   readonly startAuth: (
     mcpName: string,
   ) => Effect.Effect<{ authorizationUrl: string; oauthState: string }, NotFoundError>
-  readonly authenticate: (mcpName: string) => Effect.Effect<Status, NotFoundError>
+  readonly authenticate: (
+    mcpName: string,
+    onAuthorization?: (authorizationUrl: string) => void,
+  ) => Effect.Effect<Status, NotFoundError>
   readonly finishAuth: (mcpName: string, authorizationCode: string) => Effect.Effect<Status, NotFoundError>
   readonly removeAuth: (mcpName: string) => Effect.Effect<void>
   readonly supportsOAuth: (mcpName: string) => Effect.Effect<boolean, NotFoundError>
@@ -559,6 +584,7 @@ export const layer = Layer.effect(
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
         s.defs[name] = listed
+        setInstructions(s, name, client.getInstructions()?.trim())
         await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
       })
     }
@@ -596,6 +622,7 @@ export const layer = Layer.effect(
           status: {},
           clients: {},
           defs: {},
+          instructions: {},
           priorDiscovery: {},
         }
 
@@ -618,6 +645,7 @@ export const layer = Layer.effect(
               if (result.mcpClient) {
                 s.clients[key] = result.mcpClient
                 s.defs[key] = result.defs!
+                setInstructions(s, key, result.mcpClient.getInstructions()?.trim())
                 watch(s, key, result.mcpClient, bridge, mcp.timeout)
               }
             }),
@@ -679,6 +707,7 @@ export const layer = Layer.effect(
       s.status[name] = status ?? { status: "connected" }
       s.clients[name] = client
       s.defs[name] = listed
+      setInstructions(s, name, client.getInstructions()?.trim())
       watch(s, name, client, bridge, timeout)
       if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
       return s.status[name]
@@ -747,8 +776,25 @@ export const layer = Layer.effect(
       return s.config[name]?.timeout ?? staticTimeout ?? fallback
     }
 
+    function setInstructions(s: State, name: string, instructions: string | undefined) {
+      if (instructions) s.instructions[name] = instructions
+      else delete s.instructions[name]
+    }
+
+    const instructions = Effect.fn("MCP.instructions")(function* () {
+      const s = yield* InstanceState.get(state)
+      return Object.entries(s.instructions)
+        .filter(([name]) => s.status[name]?.status === "connected")
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([name, item]) => ({
+          name,
+          instructions: item,
+          tools: (s.defs[name] ?? []).map((tool) => McpCatalog.toolName(name, tool.name)),
+        }))
+    })
+
     const tools = Effect.fn("MCP.tools")(function* () {
-      const result: Record<string, Tool> = {}
+      const result: Record<string, McpTool> = {}
       const s = yield* InstanceState.get(state)
 
       const cfg = yield* cfgSvc.get()
@@ -780,9 +826,8 @@ export const layer = Layer.effect(
           })
         }
         const filtered = profileName ? listed.filter((mcpTool) => (allowlist ?? []).includes(mcpTool.name)) : listed
-        for (const mcpTool of filtered) {
-          const key = McpCatalog.sanitize(clientName) + "_" + McpCatalog.sanitize(mcpTool.name)
-          result[key] = McpCatalog.convertTool(mcpTool, client, timeout)
+        for (const def of filtered) {
+          result[McpCatalog.toolName(clientName, def.name)] = { def, client, timeout }
         }
       }
       return result
@@ -815,6 +860,14 @@ export const layer = Layer.effect(
 
     const resources = Effect.fn("MCP.resources")(function* () {
       return yield* collectFromConnected(yield* InstanceState.get(state), McpCatalog.resources, "resources")
+    })
+
+    const resourceTemplates = Effect.fn("MCP.resourceTemplates")(function* () {
+      return yield* collectFromConnected(
+        yield* InstanceState.get(state),
+        McpCatalog.resourceTemplates,
+        "resource templates",
+      )
     })
 
     const withClient = Effect.fnUntraced(function* <A>(
@@ -950,7 +1003,10 @@ export const layer = Layer.effect(
       )
     })
 
-    const authenticate = Effect.fn("MCP.authenticate")(function* (mcpName: string) {
+    const authenticate = Effect.fn("MCP.authenticate")(function* (
+      mcpName: string,
+      onAuthorization?: (authorizationUrl: string) => void,
+    ) {
       const result = yield* startAuth(mcpName)
       if (!result.authorizationUrl) {
         const client = "client" in result ? result.client : undefined
@@ -983,6 +1039,8 @@ export const layer = Layer.effect(
       }
 
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
+
+      onAuthorization?.(result.authorizationUrl)
 
       yield* Effect.tryPromise(() => open(result.authorizationUrl)).pipe(
         Effect.flatMap((subprocess) =>
@@ -1059,16 +1117,19 @@ export const layer = Layer.effect(
     const getAuthStatus = Effect.fn("MCP.getAuthStatus")(function* (mcpName: string) {
       const entry = yield* auth.get(mcpName)
       if (!entry?.tokens) return "not_authenticated"
-      const expired = yield* auth.isTokenExpired(mcpName)
+      // auth stores an absolute expiry; there is no isTokenExpired member.
+      const expired = entry.tokens.expiresAt !== undefined && entry.tokens.expiresAt <= Date.now()
       return expired ? "expired" : "authenticated"
     })
 
     return Service.of({
       status,
       clients,
+      instructions,
       tools,
       prompts,
       resources,
+      resourceTemplates,
       add,
       connect,
       disconnect,

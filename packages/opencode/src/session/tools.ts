@@ -1,3 +1,4 @@
+import { McpCatalog } from "@/mcp/catalog"
 import { Agent } from "@/agent/agent"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Provider } from "@/provider/provider"
@@ -166,7 +167,11 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     })
   }
 
-  for (const [key, item] of Object.entries(yield* mcp.tools())) {
+  for (const [key, mcpTool] of Object.entries(yield* mcp.tools())) {
+    // mcp.tools() hands back the cached definition plus its client; converting
+    // to an ai-sdk Tool is the caller's job so the MCP service stays free of
+    // tool-loop concerns.
+    const item = McpCatalog.convertTool(mcpTool.def, mcpTool.client, mcpTool.timeout)
     const execute = item.execute
     if (!execute) continue
 

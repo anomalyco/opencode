@@ -63,6 +63,8 @@ const summary = Layer.succeed(
 const mcp = Layer.succeed(
   MCP.Service,
   MCP.Service.of({
+    instructions: () => Effect.succeed([]),
+    resourceTemplates: () => Effect.succeed({}),
     status: () => Effect.succeed({}),
     clients: () => Effect.succeed({}),
     tools: () => Effect.succeed({}),
