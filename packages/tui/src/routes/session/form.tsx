@@ -733,7 +733,7 @@ export function FormPrompt(props: {
           </box>
         </Show>
         <Show when={!single() && !tabbed()}>
-          <box flexDirection="row" gap={1} paddingLeft={1}>
+          <box flexDirection="row" gap={3} paddingLeft={1}>
             <text fg={theme.text.subdued}>
               {confirm() ? "Review" : `Field ${Math.min(store.tab, fields().length - 1) + 1} of ${fields().length}`}
             </text>
@@ -757,7 +757,6 @@ export function FormPrompt(props: {
                       : theme.text.subdued
                 return (
                   <box
-                    paddingRight={2}
                     backgroundColor={
                       isTab()
                         ? theme.background.formfield.selected
