@@ -80,6 +80,11 @@
       "file": "packages/opencode/test/fixture/fixture.ts",
       "marker": "disposeDirectory",
       "note": "Disposes each test's instance when the test ends. InstanceStore otherwise holds every instance the suite creates \u2014 each with its own :memory: SQLite and slice of the app graph \u2014 until the process exits, which measured as the bulk of the suite's memory (provider dir: 3004 -> 2577 MB)."
+    },
+    {
+      "file": "packages/core/src/npm.ts",
+      "marker": "basePackage",
+      "note": "Splits a package specifier from its export subpath. `@ai-sdk/amazon-bedrock/mantle` is not an installable npm spec \u2014 npa cannot parse it, so npm treats it as a local folder and arborist reads <cwd>/@ai-sdk/... Install the base package, resolve the full specifier for the entrypoint."
     }
   ],
   "divergence": {
