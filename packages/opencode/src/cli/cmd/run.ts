@@ -265,16 +265,9 @@ export const RunCommand = effectCmd({
     const { RuntimeFlags } = yield* Effect.promise(() => import("@/effect/runtime-flags"))
     const { InstanceRef } = yield* Effect.promise(() => import("@/effect/instance-ref"))
     const { ServerAuth } = yield* Effect.promise(() => import("@/server/auth"))
-    // fork: auto-mode — `--auto` (or OPENCODE_AUTO_MODE) auto-approves
-    // permissions that are not explicitly denied for the whole run.
-    const { setAutoMode } = yield* Effect.promise(() => import("@/auto-mode/service"))
     const agentSvc = yield* Agent.Service
     const flags = yield* RuntimeFlags.Service
     const localInstance = yield* InstanceRef
-    if (args["auto"] || flags.autoMode) {
-      setAutoMode(true)
-      yield* Effect.logInfo("Auto mode enabled", { auto: args["auto"], env: flags.autoMode })
-    }
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const interactive = args.mini

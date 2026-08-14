@@ -226,6 +226,326 @@
       "file": "packages/core/src/npm.ts",
       "marker": "basePackage",
       "note": "Splits a package specifier from its export subpath. `@ai-sdk/amazon-bedrock/mantle` is not an installable npm spec \u2014 npa cannot parse it, so npm treats it as a local folder and arborist reads <cwd>/@ai-sdk/... Install the base package, resolve the full specifier for the entrypoint."
+    },
+    {
+      "file": "packages/core/src/config.ts",
+      "marker": "ConfigEventJournal",
+      "note": "Fork edit to an upstream file (+4/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/core/src/database/database.ts",
+      "marker": "fork: 5s was not enough headroom on a mu",
+      "note": "Fork edit to an upstream file (+11/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/core/src/database/sqlite.bun.ts",
+      "marker": "fork: this DB file is shared by every co",
+      "note": "Fork edit to an upstream file (+9/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/core/src/v1/config/agent.ts",
+      "marker": "authorization",
+      "note": "Fork edit to an upstream file (+11/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/core/src/v1/config/config.ts",
+      "marker": "Independent",
+      "note": "Fork edit to an upstream file (+57/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/core/src/v1/config/mcp.ts",
+      "marker": "ProtocolMode",
+      "note": "Fork edit to an upstream file (+26/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/core/src/v1/config/provider.ts",
+      "marker": "discoverModels",
+      "note": "Fork edit to an upstream file (+4/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/agent/agent.ts",
+      "marker": "authorizes",
+      "note": "Fork edit to an upstream file (+6/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/github.ts",
+      "marker": "SessionPart",
+      "note": "Fork edit to an upstream file (+1629/-18 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/mcp.ts",
+      "marker": "negotiated",
+      "note": "Fork edit to an upstream file (+15/-5 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/models.ts",
+      "marker": "formatSize",
+      "note": "Fork edit to an upstream file (+9/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run.ts",
+      "marker": "fork: auto-mode \u2014 `--auto` (or OPENCODE_",
+      "note": "Fork edit to an upstream file (+7/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/stream.transport.ts",
+      "marker": "sideQuestion",
+      "note": "Fork edit to an upstream file (+87/-48 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/tui.ts",
+      "marker": "fork: a worker that dies (module-eval cr",
+      "note": "Fork edit to an upstream file (+10/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/upgrade.ts",
+      "marker": "InstallationLocal",
+      "note": "Fork edit to an upstream file (+8/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/command/index.ts",
+      "marker": "conversation",
+      "note": "Fork edit to an upstream file (+10/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/config/config.ts",
+      "marker": "structural",
+      "note": "Fork edit to an upstream file (+69/-9 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/effect/runner.ts",
+      "marker": "Cancellation",
+      "note": "Fork edit to an upstream file (+99/-42 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/effect/runtime-flags.ts",
+      "marker": "OPENCODE_AUTO_MODE",
+      "note": "Fork edit to an upstream file (+1/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/ide/index.ts",
+      "marker": "TaggedErrorClass",
+      "note": "Fork edit to an upstream file (+11/-4 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/mcp/catalog.ts",
+      "marker": "fork: @modelcontextprotocol/core re-expo",
+      "note": "Fork edit to an upstream file (+8/-8 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/mcp/index.ts",
+      "marker": "fork: capability discovery failing is a",
+      "note": "Fork edit to an upstream file (+306/-137 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/api.ts",
+      "marker": "GalleryApi",
+      "note": "Fork edit to an upstream file (+8/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/groups/provider.ts",
+      "marker": "ProviderBalance",
+      "note": "Fork edit to an upstream file (+16/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/groups/session.ts",
+      "marker": "SideQuestionPayload",
+      "note": "Fork edit to an upstream file (+25/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/handlers/global.ts",
+      "marker": "fork: name the binary location \u2014 the com",
+      "note": "Fork edit to an upstream file (+7/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/handlers/provider.ts",
+      "marker": "BALANCE_PROBES",
+      "note": "Fork edit to an upstream file (+23/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts",
+      "marker": "SideQuestionPayload",
+      "note": "Fork edit to an upstream file (+21/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/server/routes/instance/httpapi/server.ts",
+      "marker": "@/loop/loop",
+      "note": "Fork edit to an upstream file (+14/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/session/llm.ts",
+      "marker": "@/local/skein-loading",
+      "note": "Fork edit to an upstream file (+70/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/session/message-v2.ts",
+      "marker": "StreamStalledError",
+      "note": "Fork edit to an upstream file (+16/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/session/overflow.ts",
+      "marker": "inputLimit",
+      "note": "Fork edit to an upstream file (+6/-4 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/session/prompt.ts",
+      "marker": "fork: loop detection \u2014 if consecutive as",
+      "note": "Fork edit to an upstream file (+287/-121 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/session/summary.ts",
+      "marker": "fork: processor.ts calls summarize() on",
+      "note": "Fork edit to an upstream file (+55/-22 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/session/tools.ts",
+      "marker": "fork: the stream watchdog must not count",
+      "note": "Fork edit to an upstream file (+116/-83 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/tool/code-mode.ts",
+      "marker": "fork: the result shape comes from the 2.",
+      "note": "Fork edit to an upstream file (+5/-2 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/tool/registry.ts",
+      "marker": "fork: PeersTool reads session status and",
+      "note": "Fork edit to an upstream file (+7/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/tool/shell.ts",
+      "marker": "fork: human-readable title for the permi",
+      "note": "Fork edit to an upstream file (+32/-3 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/tool/task.ts",
+      "marker": "fork: total-duration backstop for a fore",
+      "note": "Fork edit to an upstream file (+216/-17 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/config/config.test.ts",
+      "marker": "staleProvider",
+      "note": "Fork edit to an upstream file (+92/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/effect/runner.test.ts",
+      "marker": "cancellation",
+      "note": "Fork edit to an upstream file (+111/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/event-manifest.test.ts",
+      "marker": "fork: the opencode manifest is the share",
+      "note": "Fork edit to an upstream file (+7/-3 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/fake/provider.ts",
+      "marker": "setModelContextLimit",
+      "note": "Fork edit to an upstream file (+1/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/installation/installation.test.ts",
+      "marker": "fork: the updater resolves against the f",
+      "note": "Fork edit to an upstream file (+20/-6 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/mcp/catalog.test.ts",
+      "marker": "Parameters",
+      "note": "Fork edit to an upstream file (+4/-2 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/mcp/headers.test.ts",
+      "marker": "AppNodeBuilder",
+      "note": "Fork edit to an upstream file (+110/-70 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/mcp/lifecycle.test.ts",
+      "marker": "AppNodeBuilder",
+      "note": "Fork edit to an upstream file (+1136/-467 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/mcp/oauth-auto-connect.test.ts",
+      "marker": "AppNodeBuilder",
+      "note": "Fork edit to an upstream file (+240/-251 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/mcp/oauth-browser.test.ts",
+      "marker": "AppNodeBuilder",
+      "note": "Fork edit to an upstream file (+220/-193 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/mcp/session-recovery.test.ts",
+      "marker": "modelcontextprotocol",
+      "note": "Fork edit to an upstream file (+10/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/preload.ts",
+      "marker": "AppNodeBuilder",
+      "note": "Fork edit to an upstream file (+7/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/provider/provider.test.ts",
+      "marker": "fork: fit has its own (more generous) ab",
+      "note": "Fork edit to an upstream file (+581/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/session/compaction.test.ts",
+      "marker": "aggressive",
+      "note": "Fork edit to an upstream file (+42/-4 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/session/llm.test.ts",
+      "marker": "fork: openai-compatible discovery also p",
+      "note": "Fork edit to an upstream file (+20/-2 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/test/session/prompt.test.ts",
+      "marker": "fork: a prompt submitted mid-run is deli",
+      "note": "Fork edit to an upstream file (+67/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/app.tsx",
+      "marker": "fork: surface the server's actual error",
+      "note": "Fork edit to an upstream file (+127/-77 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/component/dialog-model.tsx",
+      "marker": "DialogModelCtx",
+      "note": "Fork edit to an upstream file (+104/-4 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/component/prompt/index.tsx",
+      "marker": "interactions",
+      "note": "Fork edit to an upstream file (+285/-15 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/context/sync.tsx",
+      "marker": "refreshProviders",
+      "note": "Fork edit to an upstream file (+14/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/routes/session/index.tsx",
+      "marker": "fork: the footer advertises this keybind",
+      "note": "Fork edit to an upstream file (+88/-10 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/routes/session/permission.tsx",
+      "marker": "independent",
+      "note": "Fork edit to an upstream file (+11/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/theme/index.ts",
+      "marker": "knightRider",
+      "note": "Fork edit to an upstream file (+6/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/src/ui/dialog-select.tsx",
+      "marker": "displacing",
+      "note": "Fork edit to an upstream file (+17/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/tui/test/cli/cmd/tui/provider-options.test.ts",
+      "marker": "fork: LAN discovery for llama-skein host",
+      "note": "Fork edit to an upstream file (+18/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
     }
   ],
   "divergence": {
@@ -234,88 +554,24 @@
       "^packages/[^/]+/(src|test)/"
     ],
     "accepted": [
-      "packages/core/src/config.ts",
-      "packages/core/src/database/database.ts",
-      "packages/core/src/database/sqlite.bun.ts",
       "packages/core/src/effect/dfdf",
-      "packages/core/src/v1/config/agent.ts",
-      "packages/core/src/v1/config/config.ts",
-      "packages/core/src/v1/config/mcp.ts",
-      "packages/core/src/v1/config/provider.ts",
-      "packages/opencode/src/agent/agent.ts",
       "packages/opencode/src/cli/cmd/agent.ts",
-      "packages/opencode/src/cli/cmd/github.ts",
       "packages/opencode/src/cli/cmd/import.ts",
-      "packages/opencode/src/cli/cmd/mcp.ts",
-      "packages/opencode/src/cli/cmd/models.ts",
-      "packages/opencode/src/cli/cmd/run.ts",
       "packages/opencode/src/cli/cmd/run/demo.ts",
       "packages/opencode/src/cli/cmd/run/session-data.ts",
-      "packages/opencode/src/cli/cmd/run/stream.transport.ts",
       "packages/opencode/src/cli/cmd/run/subagent-data.ts",
-      "packages/opencode/src/cli/cmd/tui.ts",
-      "packages/opencode/src/cli/upgrade.ts",
-      "packages/opencode/src/command/index.ts",
-      "packages/opencode/src/config/config.ts",
       "packages/opencode/src/effect/instance-state.ts",
-      "packages/opencode/src/effect/runner.ts",
-      "packages/opencode/src/effect/runtime-flags.ts",
       "packages/opencode/src/id/id.ts",
-      "packages/opencode/src/ide/index.ts",
-      "packages/opencode/src/mcp/catalog.ts",
-      "packages/opencode/src/mcp/index.ts",
       "packages/opencode/src/mcp/oauth-provider.ts",
       "packages/opencode/src/provider/transform.ts",
-      "packages/opencode/src/server/routes/instance/httpapi/api.ts",
-      "packages/opencode/src/server/routes/instance/httpapi/groups/provider.ts",
-      "packages/opencode/src/server/routes/instance/httpapi/groups/session.ts",
-      "packages/opencode/src/server/routes/instance/httpapi/handlers/global.ts",
-      "packages/opencode/src/server/routes/instance/httpapi/handlers/provider.ts",
-      "packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts",
-      "packages/opencode/src/server/routes/instance/httpapi/server.ts",
-      "packages/opencode/src/session/llm.ts",
-      "packages/opencode/src/session/message-v2.ts",
-      "packages/opencode/src/session/overflow.ts",
-      "packages/opencode/src/session/prompt.ts",
-      "packages/opencode/src/session/summary.ts",
-      "packages/opencode/src/session/tools.ts",
-      "packages/opencode/src/tool/code-mode.ts",
-      "packages/opencode/src/tool/registry.ts",
-      "packages/opencode/src/tool/shell.ts",
-      "packages/opencode/src/tool/task.ts",
       "packages/opencode/test/cli/run/stream.transport.test.ts",
-      "packages/opencode/test/config/config.test.ts",
-      "packages/opencode/test/effect/runner.test.ts",
-      "packages/opencode/test/event-manifest.test.ts",
-      "packages/opencode/test/fake/provider.ts",
       "packages/opencode/test/fixture/mcp-session-recovery.ts",
-      "packages/opencode/test/installation/installation.test.ts",
-      "packages/opencode/test/mcp/catalog.test.ts",
-      "packages/opencode/test/mcp/headers.test.ts",
-      "packages/opencode/test/mcp/lifecycle.test.ts",
-      "packages/opencode/test/mcp/oauth-auto-connect.test.ts",
-      "packages/opencode/test/mcp/oauth-browser.test.ts",
-      "packages/opencode/test/mcp/session-recovery.test.ts",
-      "packages/opencode/test/preload.ts",
-      "packages/opencode/test/provider/provider.test.ts",
       "packages/opencode/test/server/httpapi-exercise/index.ts",
-      "packages/opencode/test/session/compaction.test.ts",
-      "packages/opencode/test/session/llm.test.ts",
-      "packages/opencode/test/session/prompt.test.ts",
       "packages/opencode/test/tool/__snapshots__/parameters.test.ts.snap",
       "packages/opencode/test/tool/code-mode-integration.test.ts",
       "packages/opencode/test/tool/code-mode.test.ts",
       "packages/opencode/test/tool/registry.test.ts",
-      "packages/tui/src/app.tsx",
-      "packages/tui/src/component/dialog-model.tsx",
-      "packages/tui/src/component/prompt/index.tsx",
-      "packages/tui/src/context/sync.tsx",
-      "packages/tui/src/routes/session/index.tsx",
-      "packages/tui/src/routes/session/permission.tsx",
       "packages/tui/src/routes/session/subagent-footer.tsx",
-      "packages/tui/src/theme/index.ts",
-      "packages/tui/src/ui/dialog-select.tsx",
-      "packages/tui/test/cli/cmd/tui/provider-options.test.ts",
       "packages/tui/test/cli/cmd/tui/sync-fixture.tsx",
       "packages/tui/test/theme.test.ts"
     ]
