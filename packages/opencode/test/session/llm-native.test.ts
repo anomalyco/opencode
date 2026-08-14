@@ -455,6 +455,20 @@ describe("session.llm-native.request", () => {
     ).toEqual({ type: "unsupported", reason: "API key is not configured" })
   })
 
+  test("enables native runtime without an API key for custom OpenAI-compatible providers", () => {
+    const model = {
+      ...baseModel,
+      providerID: ProviderV2.ID.make("local"),
+      api: { ...baseModel.api, npm: "@ai-sdk/openai-compatible", url: "http://192.168.1.34:8000/v1" },
+    }
+    const provider = { ...providerInfo, id: ProviderV2.ID.make("local"), options: {} }
+
+    expect(LLMNativeRuntime.status({ model, provider, auth: undefined })).toEqual({
+      type: "supported",
+      baseURL: "http://192.168.1.34:8000/v1",
+    })
+  })
+
   test("enables native runtime for Anthropic API-key models", () => {
     expect(
       LLMNativeRuntime.status({

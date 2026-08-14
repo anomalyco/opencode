@@ -20,7 +20,7 @@ import type { LLMClientShape } from "@opencode-ai/llm/route"
 import { LLMNative } from "./native-request"
 
 export type RuntimeStatus =
-  | { readonly type: "supported"; readonly apiKey: string; readonly baseURL?: string }
+  | { readonly type: "supported"; readonly apiKey?: string; readonly baseURL?: string }
   | { readonly type: "unsupported"; readonly reason: string }
 export type StreamResult =
   | { readonly type: "supported"; readonly stream: Stream.Stream<LLMEvent, unknown> }
@@ -52,7 +52,9 @@ function statusWithFetch(
   fetch: typeof globalThis.fetch | undefined,
 ): RuntimeStatus {
   const providerID = input.model.providerID
-  if (providerID !== "openai" && providerID !== "anthropic" && !providerID.startsWith("opencode"))
+  const baseURL = typeof input.provider.options.baseURL === "string" ? input.provider.options.baseURL : undefined
+  const compatible = input.model.api.npm === "@ai-sdk/openai-compatible"
+  if (providerID !== "openai" && providerID !== "anthropic" && !providerID.startsWith("opencode") && !compatible)
     return { type: "unsupported", reason: "provider is not openai, opencode, or anthropic" }
   const npm = input.model.api.npm
   if (npm !== "@ai-sdk/openai" && npm !== "@ai-sdk/openai-compatible" && npm !== "@ai-sdk/anthropic")
@@ -62,12 +64,12 @@ function statusWithFetch(
   }
 
   const apiKey = typeof input.provider.options.apiKey === "string" ? input.provider.options.apiKey : input.provider.key
-  if (!apiKey) return { type: "unsupported", reason: "API key is not configured" }
+  if (!apiKey && !compatible) return { type: "unsupported", reason: "API key is not configured" }
 
   return {
     type: "supported",
     apiKey,
-    baseURL: typeof input.provider.options.baseURL === "string" ? input.provider.options.baseURL : undefined,
+    baseURL,
   }
 }
 
