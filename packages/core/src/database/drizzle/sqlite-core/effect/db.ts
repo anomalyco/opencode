@@ -239,58 +239,5 @@ export class SQLiteEffectDatabase<
   ) => Effect.Effect<A, E | SqlError, R> = (tx, config) => this.session.transaction(tx, config)
 }
 
-export type SQLiteEffectWithReplicas<Q> = Q & { $primary: Q; $replicas: Q[] }
-
-export const withReplicas = <
-  TEffectHKT extends QueryEffectHKTBase,
-  TRunResult,
-  TRelations extends AnyRelations,
-  Q extends SQLiteEffectDatabase<TEffectHKT, TRunResult, TRelations>,
->(
-  primary: Q,
-  replicas: [Q, ...Q[]],
-  getReplica: (replicas: Q[]) => Q = () => replicas[Math.floor(Math.random() * replicas.length)]!,
-): SQLiteEffectWithReplicas<Q> => {
-  const select: Q["select"] = (...args: []) => getReplica(replicas).select(...args)
-  const selectDistinct: Q["selectDistinct"] = (...args: []) => getReplica(replicas).selectDistinct(...args)
-  const $count: Q["$count"] = (...args: [any]) => getReplica(replicas).$count(...args)
-  const _with: Q["with"] = (...args: []) => getReplica(replicas).with(...args)
-  const $with = ((...args: [string] | [string, ColumnsSelection]) =>
-    args.length === 1
-      ? getReplica(replicas).$with(args[0])
-      : getReplica(replicas).$with(args[0], args[1])) as Q["$with"]
-
-  const update: Q["update"] = (...args: [any]) => primary.update(...args)
-  const insert: Q["insert"] = (...args: [any]) => primary.insert(...args)
-  const $delete: Q["delete"] = (...args: [any]) => primary.delete(...args)
-  const run: Q["run"] = (...args: [any]) => primary.run(...args)
-  const all: Q["all"] = (...args: [any]) => primary.all(...args)
-  const get: Q["get"] = (...args: [any]) => primary.get(...args)
-  const values: Q["values"] = (...args: [any]) => primary.values(...args)
-  const transaction: Q["transaction"] = (...args: [any]) => primary.transaction(...args)
-
-  return {
-    ...primary,
-    update,
-    insert,
-    delete: $delete,
-    run,
-    all,
-    get,
-    values,
-    transaction,
-    $primary: primary,
-    $replicas: replicas,
-    select,
-    selectDistinct,
-    $count,
-    $with,
-    with: _with,
-    get query() {
-      return getReplica(replicas).query
-    },
-  }
-}
-
 export type AnySQLiteEffectDatabase = SQLiteEffectDatabase<any, any, any>
 export type AnySQLiteEffectSelectBase = SQLiteEffectSelectBase<any, any, any, any, any, any, any, any, any, any>
