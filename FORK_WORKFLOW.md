@@ -131,3 +131,35 @@ Go-side work.
   the backend LLM proxy API. Unrelated to opencode's HTTP API; do not align them.
 - **opencode spec** (`packages/sdk/openapi.json`) — taken from upstream unchanged;
   we extend it at runtime with `/local/*` routes but never edit the spec file.
+
+## Feature or drift
+
+Every file that differs from the upstream baseline is one of two things, and the
+distinction is the whole job during a sync:
+
+- **Feature** — something this fork added for a reason we can name (loop, local
+  provider discovery, beads sync, peers tool, fork distribution targets,
+  self-healing compaction). It belongs in `fork/manifest.json`, as `owned` if the
+  file is ours outright or `patched` (with a marker) if it is an upstream file we
+  edit. Registering it is what makes `fork:verify` notice when a merge deletes it.
+
+- **Drift** — a local copy, a compatibility shim, or a stale pattern that exists
+  only because upstream moved and we did not follow. It has no defenders. Revert
+  it to upstream.
+
+There is no third category. Drift is more dangerous than dead code: it compiles
+and runs, so nobody finds it by reading — it surfaces when a sync detonates.
+
+`bun run fork:verify` enforces this. Anything in scope that differs from
+`baseline.upstreamRef` and is neither registered nor in `divergence.accepted`
+fails the check. `accepted` is a ratchet holding the divergence that already
+existed when the gate was added; new files must be classified immediately.
+Re-baseline deliberately, never reflexively:
+
+    bun run fork:verify --accept-divergence
+
+The gate exists because of a real loss: the 0d927ba03f merge returned
+`session/compaction.ts` byte-identical to upstream, silently deleting the fork's
+self-healing overflow recovery. Nothing caught it — the feature was not in the
+manifest — and it was only found because a fork-only test that had never been
+able to run finally ran and asserted the missing behaviour.
