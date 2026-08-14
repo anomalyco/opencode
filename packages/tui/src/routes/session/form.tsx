@@ -745,7 +745,7 @@ export function FormPrompt(props: {
           </box>
         </Show>
         <Show when={!single() && tabbed()}>
-          <box flexDirection="row" gap={1} paddingLeft={1}>
+          <box flexDirection="row" paddingLeft={1}>
             <For each={fields()}>
               {(item, index) => {
                 const isTab = () => index() === store.tab
@@ -757,6 +757,7 @@ export function FormPrompt(props: {
                       : theme.text.subdued
                 return (
                   <box
+                    paddingRight={2}
                     backgroundColor={
                       isTab()
                         ? theme.background.formfield.selected

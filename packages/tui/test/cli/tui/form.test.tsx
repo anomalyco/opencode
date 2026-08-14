@@ -185,6 +185,7 @@ test("confirmation fits wrapped answers before offering scroll", async () => {
     40,
   )
   try {
+    expect(prompt.app.captureCharFrame()).toContain("Include  Priority  Submit")
     prompt.app.mockInput.pressArrow("right")
     prompt.app.mockInput.pressArrow("right")
     await prompt.app.waitForFrame((frame) => frame.includes("Priority: Now") && frame.includes("enter submit"))
