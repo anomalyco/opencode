@@ -64,7 +64,6 @@ export type PromptProps = {
   onEmptySubmit?: () => boolean | Promise<boolean>
   ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
-  runningHint?: JSX.Element
   right?: JSX.Element
   showPlaceholder?: boolean
   placeholders?: {
@@ -1659,7 +1658,6 @@ export function Prompt(props: PromptProps) {
                       {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
                     </span>
                   </text>
-                  {props.runningHint}
                 </box>
               </Match>
               <Match when={move.progress()}>

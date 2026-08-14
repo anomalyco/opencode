@@ -1112,7 +1112,7 @@ export function Session() {
                       return mutatePending("steer", next.id)
                     }}
                     sessionID={route.sessionID}
-                    runningHint={<BackgroundToolHint messages={messages()} />}
+                    right={<BackgroundToolHint messages={messages()} />}
                   />
                 </Match>
               </Switch>
