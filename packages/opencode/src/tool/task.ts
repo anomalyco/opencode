@@ -304,15 +304,21 @@ export const TaskTool = Tool.define(
               Effect.promise(() => LocalPlacement.parentCapacity({ parent: inherited, providers })),
             ),
           )
-        // Block inheritance when the parent is busy OR unreachable. A probe
-        // failure returns "unknown" — we cannot confirm the parent has a free
-        // slot, so inheriting would risk queuing behind it on a single-slot
-        // server and hanging forever.
-        if (capacity !== "free") {
+        // Block inheritance only when the parent is KNOWN busy. A probe failure
+        // returns "unknown", and an unreachable probe is not evidence of a full
+        // queue: failing closed there turns any transient probe blip — or a
+        // provider that simply does not answer /api/fit, like a test mock or a
+        // non-llama-skein openai-compatible endpoint — into a hard subagent
+        // failure. The hang this guard protects against needs a real single-slot
+        // server that is really busy, and "no-slot" is what says so.
+        if (capacity === "unknown")
+          yield* Effect.logWarning("subagent capacity probe unreachable, inheriting parent anyway", {
+            provider: inherited.providerID,
+          })
+        if (capacity === "no-slot") {
           return yield* Effect.fail(
             new Error(
               `No capacity for subagent: local provider "${inherited.providerID}" has no free slot ` +
-                (capacity === "unknown" ? "(unreachable) " : "") +
                 `and no idle local peer was available. It serves one session at a time, so running ` +
                 `here would queue behind this session and never return. Retry when it frees up, or ` +
                 `pass an explicit model on a different provider.`,
