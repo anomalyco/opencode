@@ -1,4 +1,6 @@
+import { Bus } from "@opencode-ai/core/bus"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Config } from "@opencode-ai/core/config"
 import { Integration } from "@opencode-ai/core/integration"
 import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
@@ -6,12 +8,14 @@ import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { LMStudioPlugin, make } from "@opencode-ai/core/plugin/provider/lmstudio"
 import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { Provider } from "@opencode-ai/core/provider"
+import { Document, Event, Info } from "@opencode-ai/schema/config"
 import { describe, expect } from "bun:test"
-import { Duration, Effect } from "effect"
+import { Duration, Effect, Layer, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
-const it = testEffect(PluginTestLayer)
+const it = testEffect(Layer.merge(PluginTestLayer, Config.testLayer()))
+const decode = Schema.decodeUnknownSync(Info)
 
 const addPlugin = Effect.fn(function* (origin: string, interval: Duration.Input = "1 hour") {
   const plugin = yield* Plugin.Service
@@ -150,6 +154,71 @@ describe("LMStudioPlugin", () => {
     ),
   )
 
+  it.live("discovers from configured endpoints with bearer authentication", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const requests: Array<{ authorization: string | null; path: string }> = []
+        const model = (key: string) => ({
+          type: "llm",
+          key,
+          display_name: key,
+          loaded_instances: [],
+          max_context_length: 32_768,
+        })
+        return {
+          requests,
+          initial: Bun.serve({ port: 0, fetch: () => Response.json({ models: [model("initial-model")] }) }),
+          configured: Bun.serve({
+            port: 0,
+            fetch: (request) => {
+              requests.push({
+                authorization: request.headers.get("authorization"),
+                path: new URL(request.url).pathname,
+              })
+              return Response.json({ models: [model("configured-model")] })
+            },
+          }),
+        }
+      }),
+      ({ requests, initial, configured }) =>
+        Effect.gen(function* () {
+          const bus = yield* Bus.Service
+          const catalog = yield* Catalog.Service
+          const config = yield* Config.Test
+          const providerID = Provider.ID.make("lmstudio")
+          yield* addPlugin(initial.url.origin)
+          yield* eventually(
+            catalog.model.get(providerID, Model.ID.make("initial-model")),
+            (model) => model !== undefined,
+          )
+
+          const baseURL = `${configured.url.origin}/proxy/v1`
+          yield* config.setEntries([configuration(baseURL, "secret")])
+          yield* bus.publish(Event.Updated, {})
+          yield* eventually(
+            catalog.model.get(providerID, Model.ID.make("configured-model")),
+            (model) => model !== undefined,
+          )
+
+          expect(requests).toContainEqual({ authorization: "Bearer secret", path: "/proxy/api/v1/models" })
+          expect(yield* catalog.model.get(providerID, Model.ID.make("initial-model"))).toBeUndefined()
+          expect((yield* catalog.provider.get(providerID))?.settings).toEqual({
+            baseURL,
+            provider: "lmstudio",
+            apiKey: "secret",
+          })
+
+          requests.splice(0)
+          yield* config.setEntries([configuration(baseURL, "secret"), configuration(baseURL, null)])
+          yield* bus.publish(Event.Updated, {})
+          yield* eventually(catalog.provider.get(providerID), (provider) => provider?.settings?.apiKey === "")
+          expect(requests).toContainEqual({ authorization: null, path: "/proxy/api/v1/models" })
+        }),
+      ({ initial, configured }) => Effect.promise(() => Promise.all([initial.stop(true), configured.stop(true)])),
+    ),
+    10_000,
+  )
+
   it.live("shares discovery requests across plugin instances", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -260,3 +329,10 @@ describe("LMStudioPlugin", () => {
     ),
   )
 })
+
+function configuration(baseURL: string, apiKey: string | null) {
+  return new Document({
+    type: "document",
+    info: decode({ providers: { lmstudio: { settings: { baseURL, apiKey } } } }),
+  })
+}

@@ -176,6 +176,24 @@ OpenCode refreshes the inventory in the background and reads context, vision, an
 Studio. Embedding models are excluded because they cannot drive a session. Disable discovery with
 `"plugins": ["-opencode.provider.lmstudio"]`.
 
+For a different host or port, configure the OpenAI-compatible base URL. Models are still discovered automatically:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "lmstudio": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:LMSTUDIO_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+Omit `apiKey` when LM Studio authentication is disabled.
+
 For an OpenAI-compatible server, define a provider package, endpoint, and at least one model:
 
 ```jsonc title="opencode.jsonc"
