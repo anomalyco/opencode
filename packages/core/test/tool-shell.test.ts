@@ -167,10 +167,8 @@ const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
 })
 
 const isWindows = process.platform === "win32"
-const cwdCommand = isWindows
-  ? "Get-Location | Select-Object -ExpandProperty Path; Start-Sleep -Milliseconds 100"
-  : "pwd"
-const helloCommand = isWindows ? "Write-Output hello; Start-Sleep -Milliseconds 100" : "printf hello"
+const cwdCommand = isWindows ? "(Get-Location).Path; Start-Sleep -Milliseconds 100" : "pwd"
+const helloCommand = isWindows ? "[Console]::Out.Write('hello'); Start-Sleep -Milliseconds 100" : "printf hello"
 const stderrCommand = isWindows
   ? "[Console]::Error.Write('stderr only'); Start-Sleep -Milliseconds 100"
   : "printf 'stderr only' >&2"
@@ -240,7 +238,7 @@ describe("ShellTool", () => {
               const settled = yield* executeTool(registry, call({ command: helloCommand }))
               expect(settled.status).toBe("completed")
               expect(settled.metadata).toMatchObject({ exit: 0, truncated: false })
-              expect(settled.content?.[0]).toMatchObject({ type: "text", text: expect.stringContaining("hello") })
+              expect(settled.content?.[0]).toEqual({ type: "text", text: "hello" })
               expect(settled.content?.[1]).toMatchObject({
                 type: "text",
                 text: expect.stringContaining("Command exited with code 0."),
@@ -249,10 +247,10 @@ describe("ShellTool", () => {
                 {
                   sessionID,
                   action: "shell",
-                  resources: isWindows ? ["Write-Output hello", "Start-Sleep -Milliseconds 100"] : [helloCommand],
+                  resources: [isWindows ? "Start-Sleep -Milliseconds 100" : helloCommand],
                 },
               ])
-              expect(assertions[0]?.save).toEqual(isWindows ? ["Write-Output *", "Start-Sleep *"] : ["printf *"])
+              expect(assertions[0]?.save).toEqual([isWindows ? "Start-Sleep *" : "printf *"])
             }),
           )
         },
@@ -445,7 +443,7 @@ describe("ShellTool", () => {
         ([active, outside]) => {
           reset()
           const command = isWindows
-            ? `Set-Location -LiteralPath '${outside.path}'; Get-Location | Select-Object -ExpandProperty Path`
+            ? `Set-Location -LiteralPath '${outside.path}'; (Get-Location).Path`
             : `cd '${outside.path}' && pwd`
           return withSession(active.path, (registry) =>
             executeTool(registry, call({ command }, "call-external-cd")),
@@ -473,9 +471,7 @@ describe("ShellTool", () => {
       Effect.promise(() => tmpdir()),
       (tmp) => {
         reset()
-        const command = isWindows
-          ? "Set-Location $HOME; Get-Location | Select-Object -ExpandProperty Path"
-          : "cd ~ && pwd"
+        const command = isWindows ? "Set-Location $HOME; (Get-Location).Path" : "cd ~ && pwd"
         return withSession(tmp.path, (registry) => executeTool(registry, call({ command }, "call-external-home"))).pipe(
           Effect.andThen(
             Effect.sync(() => {

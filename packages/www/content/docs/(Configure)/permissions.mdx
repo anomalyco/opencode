@@ -120,10 +120,7 @@ raw command text and are **not** home-expanded.
   `shell` runs with the host user's filesystem, process, and network authority. Its resource is raw text, not a parsed
   command. External command arguments produce only best-effort warnings; `external_directory` is enforced for the
   working directory, not every path embedded in a command. Prefer a narrow shell allowlist over patterns intended to
-  identify every dangerous command. Shell permission scanning identifies commands introduced by shell syntax, but it
-  does not inspect source, callbacks, plugins, package scripts, remote commands, or other executable behavior delegated
-  through an allowed program. For example, allowing `npm *`, `make *`, or `ssh *` also trusts what that program
-  executes.
+  identify every dangerous command.
 </Callout>
 
 Relative mutation paths cannot escape the active Location, and symlink escapes
