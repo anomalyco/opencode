@@ -6,14 +6,12 @@ import { Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { verifyArtifact } from "./verify-artifact"
 
 const nodeBuild = process.argv.includes("--node")
 const target = `cli${nodeBuild ? "-node" : ""}-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`
 const directory = path.join(import.meta.dir, "..", "dist", ...(nodeBuild ? ["node"] : []), target, "bin")
 const binary = path.join(directory, `opencode2${nodeBuild ? "-node" : ""}${process.platform === "win32" ? ".exe" : ""}`)
 if (!(await Bun.file(binary).exists())) throw new Error(`Missing compiled CLI in ${directory}`)
-await verifyArtifact(binary)
 
 const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-smoke-")))
 const env = {
@@ -90,6 +88,7 @@ try {
   if (!(await exitsWithin(winner, 10_000))) throw new Error("Compiled service did not stop")
   for (let attempt = 0; attempt < 200 && (await Bun.file(registration).exists()); attempt++) await Bun.sleep(25)
   if (await Bun.file(registration).exists()) throw new Error("Compiled service registration was not removed")
+  await driveSmoke()
 } catch (cause) {
   failure = cause
 } finally {
@@ -111,6 +110,50 @@ function spawnService() {
   processes.push(process)
   errors.push(new Response(process.stderr).text())
   return process
+}
+
+async function driveSmoke() {
+  const name = "compiled-artifact"
+  const drive = path.resolve(import.meta.dir, "../../drive/src/cli/index.ts")
+  const driveEnv = {
+    ...env,
+    DRIVE_REGISTRY_DIR: path.join(root, "drive-registry"),
+    OPENCODE_DRIVE_KEEP_ARTIFACTS: "1",
+    OPENCODE_DRIVE_MEDIA_DIR: path.join(root, "drive-media"),
+  }
+  let started = false
+  try {
+    await runDrive(["start", "--name", name, "--", binary], drive, driveEnv)
+    started = true
+    const screenshot = (
+      await runDrive(
+        ["send", "--name", name, "--command.ui.screenshot", '{"name":"compiled-capture"}'],
+        drive,
+        driveEnv,
+      )
+    ).trim()
+    const bytes = Buffer.from(await Bun.file(screenshot).arrayBuffer())
+    if (!bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
+      throw new Error("Compiled Drive bridge did not produce a PNG capture")
+  } finally {
+    if (started) await runDrive(["stop", "--name", name], drive, driveEnv)
+  }
+}
+
+async function runDrive(args: ReadonlyArray<string>, drive: string, driveEnv: Record<string, string | undefined>) {
+  const child = Bun.spawn([process.execPath, drive, ...args], {
+    cwd: root,
+    env: driveEnv,
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const [status, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ])
+  if (status !== 0) throw new Error(`opencode-drive ${args[0]} failed:\n${stderr}`)
+  return stdout
 }
 
 async function waitForRegistration() {

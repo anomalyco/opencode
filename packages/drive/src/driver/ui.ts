@@ -182,8 +182,6 @@ export const make = (connection: UiConnection, options?: Options): Control => {
   const capture = Effect.fn("Ui.capture")(() => call("capture", rpc["ui.capture"]()))
   const matches = Effect.fn("Ui.matches")((text: string) => call("matches", rpc["ui.matches"]({ text })))
   const screenshot = Effect.fn("Ui.screenshot")(function* (name?: string) {
-    if (connection.compatibility._tag === "Legacy")
-      return yield* call("screenshot", rpc["ui.screenshot"](name === undefined ? undefined : { name }))
     const frame = yield* capture()
     return yield* Effect.tryPromise({
       try: () => renderScreenshot(frame, options?.screenshotDirectory ?? mediaDirectory(), name),

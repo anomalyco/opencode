@@ -6,6 +6,7 @@ import { sendError, sendResult, startTransportPeer } from "../simulation/transpo
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { createCanvas, loadImage } from "@napi-rs/canvas"
 
 const editor = {
   id: "prompt",
@@ -151,23 +152,34 @@ describe("OpenCodeUi", () => {
     })
   })
 
-  it.live("uses remote screenshots for legacy endpoints", () => {
-    const peer = startTransportPeer(
-      ({ request, socket }) => {
-        if (request.method === "simulation.handshake") {
-          sendError(socket, request, "method not found", -32601)
-          return
-        }
-        sendResult(socket, request, "/tmp/legacy.png")
-      },
-      { handshake: false },
-    )
-
+  it.live("preserves transparent foreground and background colors in screenshots", () => {
+    const transparent = {
+      cols: 2,
+      rows: 1,
+      cursor: [0, 0] as const,
+      lines: [
+        {
+          spans: [
+            { text: "█", fg: [0, 255, 0, 0] as const, bg: [255, 0, 0, 255] as const, attributes: 0, width: 1 },
+            { text: " ", fg: [255, 255, 255, 255] as const, bg: [0, 0, 255, 0] as const, attributes: 0, width: 1 },
+          ],
+        },
+      ],
+    }
+    const peer = startTransportPeer(({ request, socket }) => sendResult(socket, request, transparent))
     return Effect.gen(function* () {
       yield* Effect.addFinalizer(() => Effect.promise(() => peer.stop()))
+      const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "opencode-drive-alpha-")))
+      yield* Effect.addFinalizer(() => Effect.promise(() => rm(directory, { recursive: true, force: true })))
       const connection = yield* SimulationConnector.ui(peer.url)
-      expect(yield* OpenCodeUi.make(connection).screenshot("legacy")).toBe("/tmp/legacy.png")
-      expect(peer.received.map(({ request }) => request.method)).toEqual(["simulation.handshake", "ui.screenshot"])
+      const path = yield* OpenCodeUi.make(connection, { screenshotDirectory: directory }).screenshot("alpha")
+      const image = yield* Effect.promise(() => loadImage(path))
+      const canvas = createCanvas(image.width, image.height)
+      const context = canvas.getContext("2d")
+      context.drawImage(image, 0, 0)
+
+      expect(Array.from(context.getImageData(5, 10, 1, 1).data)).toEqual([255, 0, 0, 255])
+      expect(Array.from(context.getImageData(15, 10, 1, 1).data)).toEqual([8, 8, 8, 255])
     })
   })
 

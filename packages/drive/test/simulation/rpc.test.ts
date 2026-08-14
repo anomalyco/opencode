@@ -31,10 +31,6 @@ describe("OpenCode simulation RPC contracts", () => {
                 )
               return Effect.succeed(true)
             },
-            "ui.screenshot": (payload) => {
-              calls.push({ method: "ui.screenshot", payload })
-              return Effect.succeed(`/tmp/${payload?.name ?? "screen"}.png`)
-            },
             "ui.recording.finish": (payload) => {
               calls.push({ method: "ui.recording.finish", payload })
               return Effect.succeed("/tmp/recording.jsonl")
@@ -62,8 +58,6 @@ describe("OpenCode simulation RPC contracts", () => {
         code: -32000,
         message: "match failed",
       })
-      expect(yield* client["ui.screenshot"](undefined)).toBe("/tmp/screen.png")
-      expect(yield* client["ui.screenshot"]({ name: "home" })).toBe("/tmp/home.png")
       expect(yield* client["ui.recording.finish"]()).toBe("/tmp/recording.jsonl")
       expect(yield* client["ui.type"]({ text: "hello" })).toEqual(state)
 
@@ -71,8 +65,6 @@ describe("OpenCode simulation RPC contracts", () => {
         { method: "ui.state", payload: undefined },
         { method: "ui.matches", payload: { text: "ready" } },
         { method: "ui.matches", payload: { text: "fail" } },
-        { method: "ui.screenshot", payload: undefined },
-        { method: "ui.screenshot", payload: { name: "home" } },
         { method: "ui.recording.finish", payload: undefined },
         { method: "ui.type", payload: { text: "hello" } },
       ])

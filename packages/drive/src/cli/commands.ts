@@ -1,6 +1,7 @@
 import * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
+import * as Schema from "effect/Schema"
 import { Frontend } from "../client/protocol.js"
 import { recordLog } from "../log.js"
 import * as SimulationConnector from "../simulation/connector.js"
@@ -91,6 +92,7 @@ export class CommandBatchError extends Error {
 }
 
 const callTimeout = 30_000
+const ScreenshotParams = Schema.Struct({ name: Schema.optional(Schema.String) })
 
 export async function executeCommands(
   endpoint: string,
@@ -132,7 +134,14 @@ const execute = (
 ): Effect.Effect<unknown, SimulationError> =>
   Effect.suspend(() => {
     recordLog("INFO", `ui command ${command.operation} params=${command.value ?? "undefined"}`)
-    return dispatch(connection, decodeCommand(command), options)
+    if (command.operation === "ui.screenshot") {
+      const params = Schema.decodeUnknownSync(ScreenshotParams)(
+        command.value === undefined ? {} : JSON.parse(command.value),
+        { onExcessProperty: "error" },
+      )
+      return OpenCodeUi.make(connection, options).screenshot(params.name)
+    }
+    return dispatch(connection, decodeCommand(command))
   }).pipe(
     Effect.timeoutOrElse({
       duration: callTimeout,
@@ -152,10 +161,12 @@ const execute = (
 function decodeCommand(command: DriveCommand): Frontend.Request {
   if (command.value === undefined && commandInfo[command.operation].value === true)
     throw new Error(`${command.operation} requires a value`)
+  const operation = command.operation
+  if (operation === "ui.screenshot") throw new Error("ui.screenshot must be decoded by Drive")
   return Frontend.decodeRequest(
     {
       jsonrpc: "2.0",
-      method: command.operation,
+      method: operation,
       ...(command.value === undefined ? {} : { params: JSON.parse(command.value) }),
     },
     { onExcessProperty: "error" },
@@ -165,7 +176,6 @@ function decodeCommand(command: DriveCommand): Frontend.Request {
 function dispatch(
   connection: SimulationConnector.UiConnection,
   request: Frontend.Request,
-  options?: OpenCodeUi.Options,
 ): Effect.Effect<unknown, unknown> {
   if (
     request.method === "ui.snapshot" &&
@@ -195,8 +205,6 @@ function dispatch(
       return connection.rpc["ui.click"](request.params)
     case "ui.resize":
       return connection.rpc["ui.resize"](request.params)
-    case "ui.screenshot":
-      return OpenCodeUi.make(connection, options).screenshot(request.params?.name)
     case "ui.capture":
       return connection.rpc["ui.capture"]()
     case "ui.state":

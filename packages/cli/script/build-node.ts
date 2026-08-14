@@ -92,7 +92,7 @@ for (const target of targets) {
   await copyNodeAssets(assets)
   await build(mainConfig(input))
   await assertTextImportsInlined("dist-node/opencode.mjs")
-  await verifyArtifact("dist-node/opencode.mjs")
+  if (bundleOnly) await verifyArtifact("dist-node/opencode.mjs")
 
   const host = target.platform === process.platform && target.arch === process.arch
   if (host) {

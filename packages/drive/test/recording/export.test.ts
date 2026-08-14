@@ -168,7 +168,7 @@ test("joins rendered frames horizontally", async () => {
 })
 
 test("renders the canonical OpenCode symbol set with the fallback font", async () => {
-  const symbols = [..."△⇆⊙⚙✱↳◌◈⟳▸▾■⬝⬥⬩⬪"]
+  const symbols = [..."△⇆⊙⚙✱↳◌◈⟳▸▾■⬝⬥⬩⬪⠹"]
   const image = await loadImage(
     renderFrame({
       cols: symbols.length,
@@ -210,6 +210,30 @@ test("renders the canonical OpenCode symbol set with the fallback font", async (
   })
 
   expect(new Set(masks).size).toBe(symbols.length)
+})
+
+test("draws heavy vertical box elements continuously across cell boundaries", async () => {
+  const image = await loadImage(
+    renderFrame({
+      cols: 1,
+      rows: 2,
+      cursor: { row: 0, col: 0, visible: false },
+      lines: [
+        { spans: [{ text: "┃", width: 1, fg: 0xffffff, bg: 0x000000, attributes: 0 }] },
+        { spans: [{ text: "╹", width: 1, fg: 0xffffff, bg: 0x000000, attributes: 0 }] },
+      ],
+    }),
+  )
+  const canvas = createCanvas(image.width, image.height)
+  const context = canvas.getContext("2d")
+  context.drawImage(image, 0, 0)
+
+  expect(Array.from(context.getImageData(4, 0, 2, 30).data)).toEqual(
+    Array.from({ length: 60 }, () => [255, 255, 255, 255]).flat(),
+  )
+  expect(Array.from(context.getImageData(4, 30, 2, 10).data)).toEqual(
+    Array.from({ length: 20 }, () => [0, 0, 0, 255]).flat(),
+  )
 })
 
 test("accepts valid capture font overrides", async () => {

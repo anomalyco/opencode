@@ -3,21 +3,23 @@ export { TextStyle } from "../frame/index.js"
 export interface CapturedSpan {
   text: string
   width: number
-  fg: number
-  bg: number
-  attributes: number
+  readonly fg: Color
+  readonly bg: Color
+  readonly attributes: number
 }
 
 export interface CapturedLine {
-  spans: CapturedSpan[]
+  readonly spans: ReadonlyArray<CapturedSpan>
 }
 
 export interface CapturedFrame {
-  cols: number
-  rows: number
-  cursor: { row: number; col: number; visible: boolean }
-  lines: CapturedLine[]
+  readonly cols: number
+  readonly rows: number
+  readonly cursor: { readonly row: number; readonly col: number; readonly visible: boolean } | readonly [number, number]
+  readonly lines: ReadonlyArray<CapturedLine>
 }
+
+export type Color = number | readonly [number, number, number, number]
 
 export interface SampledFrame {
   atMs: number
