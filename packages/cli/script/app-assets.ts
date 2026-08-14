@@ -1,7 +1,7 @@
 import { $ } from "bun"
-import { readdir } from "node:fs/promises"
 import path from "node:path"
 import { brotliCompressSync, constants } from "node:zlib"
+import { collectFiles } from "./files"
 
 export async function buildAppArchive(channel: string, options?: { skipBuild?: boolean }) {
   if (options?.skipBuild) return compress({})
@@ -9,8 +9,10 @@ export async function buildAppArchive(channel: string, options?: { skipBuild?: b
   await $`bun run build`.cwd(root).env({ ...process.env, OPENCODE_CHANNEL: channel })
   const assets = Object.fromEntries(
     await Promise.all(
-      (await files(path.join(root, "dist")))
+      (await collectFiles(path.join(root, "dist")))
+        .map((key) => key.replaceAll(path.sep, "/"))
         .filter((key) => !key.endsWith(".map"))
+        .toSorted()
         .map(async (key) => {
           const source = path.join(root, "dist", key)
           const body = Buffer.from(await Bun.file(source).arrayBuffer())
@@ -30,17 +32,4 @@ function compress(assets: object) {
 
 function isText(key: string) {
   return key === "_headers" || /\.(?:css|html|js|json|svg|txt|webmanifest|xml)$/.test(key)
-}
-
-async function files(root: string, current = root): Promise<string[]> {
-  return (
-    await Promise.all(
-      (await readdir(current, { withFileTypes: true })).map((entry) => {
-        const target = path.join(current, entry.name)
-        return entry.isDirectory() ? files(root, target) : [path.relative(root, target).replaceAll(path.sep, "/")]
-      }),
-    )
-  )
-    .flat()
-    .toSorted()
 }

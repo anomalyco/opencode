@@ -114,7 +114,7 @@ addDefaultParsers(parsers.parsers)
 
 // Exclude temporary bottom space when measuring the real transcript height.
 const NAVIGATION_SLACK_ID = "session-navigation-slack"
-const BACKGROUND_TOOL_HINT_DELAY = 1_000
+const BACKGROUND_TOOL_HINT_DELAY = 3_000
 
 // The tail comfortably overfills a tall viewport; older rows mount as the reader approaches them.
 const TRANSCRIPT_TAIL_ROWS = 40

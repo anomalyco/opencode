@@ -69,10 +69,10 @@ describe("provider error classification", () => {
 
   test("classifies V1 overloaded provider codes", () => {
     expect(
-      ['{"code":"resource_exhausted"}', '{"code":"service_unavailable"}'].map(
+      ['{"code":"resource_exhausted"}', '{"code":"service_unavailable"}', '{"code":"slow_down"}'].map(
         (message) => classifyProviderFailure({ message })._tag,
       ),
-    ).toEqual(["ProviderInternal", "ProviderInternal"])
+    ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal"])
   })
 
   test("classifies transient client statuses as provider internal", () => {

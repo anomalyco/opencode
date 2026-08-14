@@ -12,6 +12,7 @@ import { collectNodeAssets, copyNodeAssets, hashNodeAssets, seaAssetMap } from "
 import { mainConfig } from "../vite.node.config"
 import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
 import { buildAppArchive } from "./app-assets"
+import { verifyArtifact } from "./verify-artifact"
 
 const NODE_VERSION = "26.4.0"
 const dir = path.resolve(import.meta.dirname, "..")
@@ -91,6 +92,7 @@ for (const target of targets) {
   await copyNodeAssets(assets)
   await build(mainConfig(input))
   await assertTextImportsInlined("dist-node/opencode.mjs")
+  if (bundleOnly) await verifyArtifact("dist-node/opencode.mjs")
 
   const host = target.platform === process.platform && target.arch === process.arch
   if (host) {
@@ -139,6 +141,7 @@ for (const target of targets) {
       2,
     )}\n`,
   )
+  await verifyArtifact(path.join(outdir, name))
   if (host) await smoke(output)
 }
 

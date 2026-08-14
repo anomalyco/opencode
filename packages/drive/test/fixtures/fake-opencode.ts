@@ -301,10 +301,6 @@ function frontend(method: string, params: unknown) {
       ],
     }
   }
-  if (method === "ui.screenshot") {
-    const name = isRecord(params) && typeof params.name === "string" ? params.name : `screenshot-${crypto.randomUUID()}`
-    return `${process.env.OPENCODE_DRIVE_MEDIA_DIR}/${name}.png`
-  }
   if (method === "ui.recording.finish") {
     if (!drive.recording) throw new Error("recording is not enabled")
     return drive.recording.timeline

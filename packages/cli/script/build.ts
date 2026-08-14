@@ -8,6 +8,7 @@ import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 import type { BunPlugin } from "bun"
 import pkg from "../package.json"
 import { buildAppArchive } from "./app-assets"
+import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
 
 const dir = path.resolve(import.meta.dirname, "..")
 const binary = "opencode2"
@@ -76,6 +77,16 @@ const appAssetsPlugin: BunPlugin = {
 }
 
 for (const item of targets) {
+  const simulationInputs = new Set<string>()
+  const simulationGraphPlugin: BunPlugin = {
+    name: "opencode-simulation-graph",
+    setup(build) {
+      build.onLoad(
+        { filter: /packages[/\\]simulation[/\\]src[/\\](frontend[/\\](simulation|server)|control-server)\.ts$/ },
+        (args) => void simulationInputs.add(args.path),
+      )
+    },
+  }
   const parcelWatcherPackage = `@parcel/watcher-${item.os}-${item.arch}${item.os === "linux" ? `-${item.abi ?? "glibc"}` : ""}`
   const parcelWatcherPlugin: BunPlugin = {
     name: "parcel-watcher-binding",
@@ -92,7 +103,7 @@ for (const item of targets) {
   const result = await Bun.build({
     entrypoints: ["./src/index.ts"],
     tsconfig: "./tsconfig.json",
-    plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin],
+    plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin, simulationGraphPlugin],
     external: ["node-gyp"],
     format: "esm",
     minify: true,
@@ -123,6 +134,7 @@ for (const item of targets) {
     for (const log of result.logs) console.error(log)
     process.exit(1)
   }
+  verifySimulationGraph(simulationInputs)
 
   await Bun.write(
     path.join(outdir, name, "package.json"),
@@ -139,6 +151,7 @@ for (const item of targets) {
       2,
     ),
   )
+  await verifyArtifact(path.join(outdir, name))
 }
 
 function targetName(item: (typeof allTargets)[number]) {

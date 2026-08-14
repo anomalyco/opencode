@@ -18,11 +18,6 @@ describe("OpenCode Effect RPC compatibility protocol", () => {
         sendError(socket, request, "match failed")
         return
       }
-      if (request.method === "ui.screenshot") {
-        const params = request.params as { readonly name?: string } | undefined
-        sendResult(socket, request, `/tmp/${params?.name ?? "screen"}.png`)
-        return
-      }
       if (request.method === "ui.state")
         socket.send(
           JSON.stringify({
@@ -42,8 +37,6 @@ describe("OpenCode Effect RPC compatibility protocol", () => {
       const client = yield* RpcClient.make(UiRpcs).pipe(Effect.provideService(RpcClient.Protocol, protocol))
 
       expect(yield* client["ui.state"]()).toEqual(state)
-      expect(yield* client["ui.screenshot"](undefined)).toBe("/tmp/screen.png")
-      expect(yield* client["ui.screenshot"]({ name: "home" })).toBe("/tmp/home.png")
       expect(yield* client["ui.press"]({ key: "right" })).toEqual(state)
       expect(yield* client["ui.press"]({ key: "down", modifiers: { meta: true } })).toEqual(state)
       expect(yield* client["ui.press"]({ key: "tab", modifiers: { ctrl: true } })).toEqual(state)
@@ -64,35 +57,24 @@ describe("OpenCode Effect RPC compatibility protocol", () => {
         {
           jsonrpc: "2.0",
           id: firstId + 1,
-          method: "ui.screenshot",
-        },
-        {
-          jsonrpc: "2.0",
-          id: firstId + 2,
-          method: "ui.screenshot",
-          params: { name: "home" },
-        },
-        {
-          jsonrpc: "2.0",
-          id: firstId + 3,
           method: "ui.press",
           params: { key: "\u001b[C" },
         },
         {
           jsonrpc: "2.0",
-          id: firstId + 4,
+          id: firstId + 2,
           method: "ui.press",
           params: { key: "\u001b[1;3B" },
         },
         {
           jsonrpc: "2.0",
-          id: firstId + 5,
+          id: firstId + 3,
           method: "ui.press",
           params: { key: "\u001b[9;5u" },
         },
         {
           jsonrpc: "2.0",
-          id: firstId + 6,
+          id: firstId + 4,
           method: "ui.matches",
           params: { text: "fail" },
         },

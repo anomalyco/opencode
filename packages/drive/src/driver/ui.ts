@@ -5,6 +5,8 @@ import type { RpcClientError } from "effect/unstable/rpc"
 import { supportsCapability, type UiConnection } from "../simulation/connector.js"
 import { Frontend } from "../client/protocol.js"
 import type { SimulationRequestError } from "@opencode-ai/protocol/simulation"
+import { mediaDirectory } from "../instance/media.js"
+import { renderScreenshot } from "./screenshot.js"
 
 export interface WaitOptions {
   /** Maximum wait in milliseconds. Defaults to 5,000. */
@@ -71,9 +73,16 @@ export class UiPredicateError extends Schema.TaggedErrorClass<UiPredicateError>(
   message: Schema.String,
 }) {}
 
+export class UiScreenshotError extends Schema.TaggedErrorClass<UiScreenshotError>()("UiScreenshotError", {
+  cause: Schema.Defect(),
+  message: Schema.String,
+}) {}
+
 export interface Options {
   /** Per-RPC timeout in milliseconds. Defaults to 30,000. */
   readonly requestTimeout?: number
+  /** Directory where Drive writes locally rendered screenshots. */
+  readonly screenshotDirectory?: string
 }
 
 const RequestTimeout = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
@@ -81,6 +90,7 @@ const RequestTimeout = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
 export type WaitError = UiTimeoutError | UiWaitOptionsError
 type RpcError = SimulationRequestError | RpcClientError.RpcClientError
 export type OperationError = RpcError | UiTimeoutError
+export type ScreenshotError = OperationError | UiScreenshotError
 export type SemanticOperationError = OperationError | UiCapabilityError
 
 export interface Ui {
@@ -88,7 +98,7 @@ export interface Ui {
   readonly snapshot: () => Effect.Effect<Frontend.SemanticSnapshot, SemanticOperationError>
   readonly capture: () => Effect.Effect<Frontend.CapturedFrame, OperationError>
   readonly matches: (text: string) => Effect.Effect<boolean, OperationError>
-  readonly screenshot: (name?: string) => Effect.Effect<string, OperationError>
+  readonly screenshot: (name?: string) => Effect.Effect<string, ScreenshotError>
   readonly type: (text: string) => Effect.Effect<Frontend.State, OperationError>
   readonly press: (key: string, modifiers?: Frontend.KeyModifiers) => Effect.Effect<Frontend.State, OperationError>
   readonly enter: () => Effect.Effect<Frontend.State, OperationError>
@@ -172,9 +182,17 @@ export const make = (connection: UiConnection, options?: Options): Control => {
   })
   const capture = Effect.fn("Ui.capture")(() => call("capture", rpc["ui.capture"]()))
   const matches = Effect.fn("Ui.matches")((text: string) => call("matches", rpc["ui.matches"]({ text })))
-  const screenshot = Effect.fn("Ui.screenshot")((name?: string) =>
-    call("screenshot", rpc["ui.screenshot"](name === undefined ? undefined : { name })),
-  )
+  const screenshot = Effect.fn("Ui.screenshot")(function* (name?: string) {
+    const frame = yield* capture()
+    return yield* Effect.tryPromise({
+      try: () => renderScreenshot(frame, options?.screenshotDirectory ?? mediaDirectory(), name),
+      catch: (cause) =>
+        new UiScreenshotError({
+          cause,
+          message: cause instanceof Error ? cause.message : String(cause),
+        }),
+    })
+  })
   const finishRecording = Effect.fn("Ui.finishRecording")(() => call("finishRecording", rpc["ui.recording.finish"]()))
   const type = Effect.fn("Ui.type")((text: string) => call("type", rpc["ui.type"]({ text })))
   const press = Effect.fn("Ui.press")((key: string, modifiers?: Frontend.KeyModifiers) =>

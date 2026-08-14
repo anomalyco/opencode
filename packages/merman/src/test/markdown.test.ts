@@ -78,6 +78,29 @@ flowchart LR
   expect(markdown.getChildren()[0]?.marginTop).toBe(1)
 })
 
+test("uses compact terminal spacing for Mermaid diagrams by default", async () => {
+  const testRenderer = await createTestRenderer({ width: 80, height: 40 })
+  renderer = testRenderer.renderer
+  const markdown = new MarkdownRenderable(renderer, {
+    id: "markdown-compact-mermaid",
+    content: `\`\`\`mermaid
+flowchart TD
+  repo[Organization profile repo] --> build[Build]
+  build --> worker[Isolated organization Worker]
+  worker --> sessions[SessionDOs]
+  sessions --> opencode[OpenCode + native plugins]
+  opencode --> modal[Modal workspaces]
+\`\`\``,
+    syntaxStyle,
+    renderNode: createMermaidMarkdownRenderer(renderer),
+  })
+
+  renderer.root.add(markdown)
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+
+  expect(markdown.getChildren()[0]?.height).toBe(28)
+})
+
 test("recognizes normalized Mermaid fence info strings", async () => {
   const testRenderer = await createTestRenderer({ width: 80, height: 14 })
   renderer = testRenderer.renderer

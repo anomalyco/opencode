@@ -1,9 +1,11 @@
 import * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
+import * as Schema from "effect/Schema"
 import { Frontend } from "../client/protocol.js"
 import { recordLog } from "../log.js"
 import * as SimulationConnector from "../simulation/connector.js"
+import * as OpenCodeUi from "../driver/ui.js"
 import type { DriveCommand } from "./types.js"
 
 export const commandInfo = {
@@ -48,11 +50,11 @@ export const commandInfo = {
     description: "Finish recording and return the timeline path",
   },
 } as const satisfies Record<
-  Exclude<Frontend.Capability, "ui.click.semantic">,
+  DriveCommand["operation"],
   { readonly value: boolean | "optional"; readonly description: string }
 >
 
-type CommandName = Exclude<Frontend.Capability, "ui.click.semantic">
+type CommandName = DriveCommand["operation"]
 
 export function isCommandName(operation: string): operation is CommandName {
   return Object.hasOwn(commandInfo, operation)
@@ -90,9 +92,14 @@ export class CommandBatchError extends Error {
 }
 
 const callTimeout = 30_000
+const ScreenshotParams = Schema.Struct({ name: Schema.optional(Schema.String) })
 
-export async function executeCommands(endpoint: string, commands: ReadonlyArray<DriveCommand>) {
-  const exit = await Effect.runPromiseExit(Effect.scoped(executeBatch(endpoint, commands)))
+export async function executeCommands(
+  endpoint: string,
+  commands: ReadonlyArray<DriveCommand>,
+  options?: OpenCodeUi.Options,
+) {
+  const exit = await Effect.runPromiseExit(Effect.scoped(executeBatch(endpoint, commands, options)))
   if (Exit.isSuccess(exit)) return exit.value
   const reason = Cause.squash(exit.cause)
   throw reason instanceof CommandBatchError ? reason : new CommandBatchError([], reason)
@@ -101,6 +108,7 @@ export async function executeCommands(endpoint: string, commands: ReadonlyArray<
 const executeBatch = Effect.fn("DriveCli.executeBatch")(function* (
   endpoint: string,
   commands: ReadonlyArray<DriveCommand>,
+  options?: OpenCodeUi.Options,
 ) {
   const connection = yield* SimulationConnector.ui(endpoint, {
     connectTimeout: callTimeout,
@@ -111,7 +119,7 @@ const executeBatch = Effect.fn("DriveCli.executeBatch")(function* (
   )
   const results: Array<{ readonly command: string; readonly result: unknown }> = []
   for (const command of commands) {
-    const result = yield* execute(connection, command).pipe(
+    const result = yield* execute(connection, command, options).pipe(
       Effect.mapError((error) => new CommandBatchError(results, error)),
     )
     results.push({ command: command.operation, result })
@@ -122,9 +130,17 @@ const executeBatch = Effect.fn("DriveCli.executeBatch")(function* (
 const execute = (
   connection: SimulationConnector.UiConnection,
   command: DriveCommand,
+  options?: OpenCodeUi.Options,
 ): Effect.Effect<unknown, SimulationError> =>
   Effect.suspend(() => {
     recordLog("INFO", `ui command ${command.operation} params=${command.value ?? "undefined"}`)
+    if (command.operation === "ui.screenshot") {
+      const params = Schema.decodeUnknownSync(ScreenshotParams)(
+        command.value === undefined ? {} : JSON.parse(command.value),
+        { onExcessProperty: "error" },
+      )
+      return OpenCodeUi.make(connection, options).screenshot(params.name)
+    }
     return dispatch(connection, decodeCommand(command))
   }).pipe(
     Effect.timeoutOrElse({
@@ -145,10 +161,12 @@ const execute = (
 function decodeCommand(command: DriveCommand): Frontend.Request {
   if (command.value === undefined && commandInfo[command.operation].value === true)
     throw new Error(`${command.operation} requires a value`)
+  const operation = command.operation
+  if (operation === "ui.screenshot") throw new Error("ui.screenshot must be decoded by Drive")
   return Frontend.decodeRequest(
     {
       jsonrpc: "2.0",
-      method: command.operation,
+      method: operation,
       ...(command.value === undefined ? {} : { params: JSON.parse(command.value) }),
     },
     { onExcessProperty: "error" },
@@ -187,8 +205,6 @@ function dispatch(
       return connection.rpc["ui.click"](request.params)
     case "ui.resize":
       return connection.rpc["ui.resize"](request.params)
-    case "ui.screenshot":
-      return connection.rpc["ui.screenshot"](request.params)
     case "ui.capture":
       return connection.rpc["ui.capture"]()
     case "ui.state":

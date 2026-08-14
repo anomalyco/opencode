@@ -11,6 +11,7 @@ import {
   baselineOffset,
   drawBlockGlyph,
 } from "../frame/index.js"
+import type { Frontend } from "../client/protocol.js"
 import type { CapturedFrame } from "./types.js"
 
 export { CellHeight, CellWidth } from "../frame/index.js"
@@ -47,8 +48,10 @@ for (const [file, family] of [
   if (!GlobalFonts.registerFromPath(path, family)) throw new Error(`Failed to register capture symbol font: ${path}`)
 }
 
-function color(rgb: number, alpha = 1) {
-  return `rgba(${(rgb >> 16) & 255}, ${(rgb >> 8) & 255}, ${rgb & 255}, ${alpha})`
+function color(value: number | Frontend.Color, opacity = 1) {
+  if (typeof value === "number")
+    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${opacity})`
+  return `rgba(${value[0]}, ${value[1]}, ${value[2]}, ${(value[3] / 255) * opacity})`
 }
 
 export interface RenderFrameOptions {
@@ -57,7 +60,7 @@ export interface RenderFrameOptions {
   readonly header?: string
 }
 
-export function renderFrame(frame: CapturedFrame, options: RenderFrameOptions = {}): Buffer {
+export function renderFrame(frame: CapturedFrame | Frontend.CapturedFrame, options: RenderFrameOptions = {}): Buffer {
   const cols = Math.max(frame.cols, options.cols ?? frame.cols)
   const rows = Math.max(frame.rows, options.rows ?? frame.rows)
   const headerHeight = options.header ? 40 : 0
@@ -118,12 +121,13 @@ export function renderFrame(frame: CapturedFrame, options: RenderFrameOptions = 
     }
   })
 
-  if (frame.cursor.visible && frame.cursor.row >= 0 && frame.cursor.row < frame.rows) {
+  const cursor = frame.cursor
+  if ("visible" in cursor && cursor.visible && cursor.row >= 0 && cursor.row < frame.rows) {
     context.strokeStyle = "#d8d8d8"
     context.lineWidth = 2
     context.strokeRect(
-      frame.cursor.col * CellWidth + 1,
-      headerHeight + frame.cursor.row * CellHeight + 1,
+      cursor.col * CellWidth + 1,
+      headerHeight + cursor.row * CellHeight + 1,
       CellWidth - 2,
       CellHeight - 2,
     )

@@ -17,8 +17,6 @@ function handle(harness: Harness, request: SimulationProtocol.Frontend.Request, 
       )
     case "ui.capture":
       return SimulationActions.capture(harness)
-    case "ui.screenshot":
-      return SimulationActions.screenshot(harness, request.params?.name)
     case "ui.state":
       return Effect.sync(() => SimulationActions.state(harness))
     case "ui.snapshot":

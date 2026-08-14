@@ -106,6 +106,13 @@ export class TransportReason extends Schema.Class<TransportReason>("AI.Error.Tra
   code: Schema.optional(Schema.String),
   url: Schema.optional(Schema.String),
   http: Schema.optional(HttpContext),
+  phase: Schema.optional(
+    Schema.Literals(["prepare", "queue", "connect", "send", "receive", "decode", "complete", "fallback", "close"]),
+  ),
+  delivery: Schema.optional(Schema.Literals(["not-sent", "rejected", "ambiguous", "accepted"])),
+  recovery: Schema.optional(
+    Schema.Literals(["retry-connect", "retry-full", "rotate-and-retry-full", "fallback-http", "fail"]),
+  ),
 }) {}
 
 export class InvalidProviderOutputReason extends Schema.Class<InvalidProviderOutputReason>(

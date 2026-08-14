@@ -1,8 +1,12 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, type Types } from "effect"
 import * as OpenCodeUi from "../../src/driver/ui.js"
 import * as SimulationConnector from "../../src/simulation/connector.js"
 import { sendError, sendResult, startTransportPeer } from "../simulation/transport-peer.js"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { createCanvas, loadImage } from "@napi-rs/canvas"
 
 const editor = {
   id: "prompt",
@@ -58,6 +62,15 @@ const frame = {
   ],
 }
 
+type ScreenshotFailure = Effect.Effect.Error<ReturnType<OpenCodeUi.Ui["screenshot"]>>
+const operationErrorExcludesScreenshotError: Types.Equals<
+  Extract<OpenCodeUi.OperationError, OpenCodeUi.UiScreenshotError>,
+  never
+> = true
+const screenshotErrorIsSpecific: Types.Equals<ScreenshotFailure, OpenCodeUi.ScreenshotError> = true
+void operationErrorExcludesScreenshotError
+void screenshotErrorIsSpecific
+
 describe("OpenCodeUi", () => {
   it.live("captures a normalized terminal frame", () => {
     const peer = startTransportPeer(({ request, socket }) => sendResult(socket, request, frame))
@@ -78,10 +91,6 @@ describe("OpenCodeUi", () => {
         sendResult(socket, request, matchCalls > 1)
         return
       }
-      if (request.method === "ui.screenshot") {
-        sendResult(socket, request, "/tmp/home.png")
-        return
-      }
       sendResult(socket, request, state)
     })
 
@@ -93,7 +102,6 @@ describe("OpenCodeUi", () => {
       expect(yield* ui.submit("hello")).toEqual(state)
       expect(yield* ui.press("escape", { ctrl: true })).toEqual(state)
       expect(yield* ui.click(3)).toEqual(state)
-      expect(yield* ui.screenshot("home")).toBe("/tmp/home.png")
       expect(yield* ui.waitFor("ready", { timeout: 1_000, interval: 1 })).toEqual(state)
       expect(yield* ui.getElement({ editor: true })).toEqual(editor)
 
@@ -121,8 +129,8 @@ describe("OpenCodeUi", () => {
         {
           jsonrpc: "2.0",
           id: 6,
-          method: "ui.screenshot",
-          params: { name: "home" },
+          method: "ui.matches",
+          params: { text: "ready" },
         },
         {
           jsonrpc: "2.0",
@@ -130,15 +138,57 @@ describe("OpenCodeUi", () => {
           method: "ui.matches",
           params: { text: "ready" },
         },
-        {
-          jsonrpc: "2.0",
-          id: 8,
-          method: "ui.matches",
-          params: { text: "ready" },
-        },
+        { jsonrpc: "2.0", id: 8, method: "ui.state" },
         { jsonrpc: "2.0", id: 9, method: "ui.state" },
-        { jsonrpc: "2.0", id: 10, method: "ui.state" },
       ])
+    })
+  })
+
+  it.live("renders negotiated screenshots from captured frames inside Drive", () => {
+    const peer = startTransportPeer(({ request, socket }) => sendResult(socket, request, frame))
+
+    return Effect.gen(function* () {
+      yield* Effect.addFinalizer(() => Effect.promise(() => peer.stop()))
+      const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "opencode-drive-screenshot-")))
+      yield* Effect.addFinalizer(() => Effect.promise(() => rm(directory, { recursive: true, force: true })))
+      const connection = yield* SimulationConnector.ui(peer.url)
+      const path = yield* OpenCodeUi.make(connection, { screenshotDirectory: directory }).screenshot("home")
+
+      expect(path).toBe(join(directory, "home.png"))
+      const bytes = yield* Effect.promise(() => Bun.file(path).arrayBuffer())
+      expect(Buffer.from(bytes).subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      expect(peer.received.map(({ request }) => request)).toEqual([{ jsonrpc: "2.0", id: 1, method: "ui.capture" }])
+    })
+  })
+
+  it.live("preserves transparent foreground and background colors in screenshots", () => {
+    const transparent = {
+      cols: 2,
+      rows: 1,
+      cursor: [0, 0] as const,
+      lines: [
+        {
+          spans: [
+            { text: "█", fg: [0, 255, 0, 0] as const, bg: [255, 0, 0, 255] as const, attributes: 0, width: 1 },
+            { text: " ", fg: [255, 255, 255, 255] as const, bg: [0, 0, 255, 0] as const, attributes: 0, width: 1 },
+          ],
+        },
+      ],
+    }
+    const peer = startTransportPeer(({ request, socket }) => sendResult(socket, request, transparent))
+    return Effect.gen(function* () {
+      yield* Effect.addFinalizer(() => Effect.promise(() => peer.stop()))
+      const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "opencode-drive-alpha-")))
+      yield* Effect.addFinalizer(() => Effect.promise(() => rm(directory, { recursive: true, force: true })))
+      const connection = yield* SimulationConnector.ui(peer.url)
+      const path = yield* OpenCodeUi.make(connection, { screenshotDirectory: directory }).screenshot("alpha")
+      const image = yield* Effect.promise(() => loadImage(path))
+      const canvas = createCanvas(image.width, image.height)
+      const context = canvas.getContext("2d")
+      context.drawImage(image, 0, 0)
+
+      expect(Array.from(context.getImageData(5, 10, 1, 1).data)).toEqual([255, 0, 0, 255])
+      expect(Array.from(context.getImageData(15, 10, 1, 1).data)).toEqual([8, 8, 8, 255])
     })
   })
 

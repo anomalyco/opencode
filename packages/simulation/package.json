@@ -17,22 +17,19 @@
     "typecheck": "tsgo -b"
   },
   "dependencies": {
-    "@fontsource/commit-mono": "5.2.5",
-    "@fontsource/noto-sans-math": "5.2.5",
-    "@fontsource/noto-sans-symbols": "5.2.5",
-    "@fontsource/noto-sans-symbols-2": "5.2.5",
-    "@napi-rs/canvas": "1.0.2",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/ai": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/protocol": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "@opentui/core": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "ws": "8.21.0"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
+    "@types/ws": "8.18.1",
     "@typescript/native-preview": "catalog:"
   }
 }

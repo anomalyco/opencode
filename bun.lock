@@ -774,11 +774,6 @@
       "name": "@opencode-ai/simulation",
       "version": "1.17.13",
       "dependencies": {
-        "@fontsource/commit-mono": "5.2.5",
-        "@fontsource/noto-sans-math": "5.2.5",
-        "@fontsource/noto-sans-symbols": "5.2.5",
-        "@fontsource/noto-sans-symbols-2": "5.2.5",
-        "@napi-rs/canvas": "1.0.2",
         "@opencode-ai/ai": "workspace:*",
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
@@ -786,10 +781,12 @@
         "@opencode-ai/util": "workspace:*",
         "@opentui/core": "catalog:",
         "effect": "catalog:",
+        "ws": "8.21.0",
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
+        "@types/ws": "8.18.1",
         "@typescript/native-preview": "catalog:",
       },
     },
@@ -6459,12 +6456,6 @@
     "@opencode-ai/session-ui/@opencode-ai/sdk": ["@opencode-ai/sdk@../app/vendor/opencode-ai-sdk-1.18.8-dev.tgz", { "dependencies": { "cross-spawn": "7.0.6" } }, "sha512-C2nfk4x0sPINwE5V6DPkFSuH3PkUmKPWHPzxpXC1j+3Ui5hslLCWJbkk8WcOG1Lyt3C0+yp4ea64v/kmtYCO4w=="],
 
     "@opencode-ai/session-ui/@solid-primitives/resize-observer": ["@solid-primitives/resize-observer@2.1.3", "", { "dependencies": { "@solid-primitives/event-listener": "^2.4.3", "@solid-primitives/rootless": "^1.5.2", "@solid-primitives/static-store": "^0.1.2", "@solid-primitives/utils": "^6.3.2" }, "peerDependencies": { "solid-js": "^1.6.12" } }, "sha512-zBLje5E06TgOg93S7rGPldmhDnouNGhvfZVKOp+oG2XU8snA+GoCSSCz1M+jpNAg5Ek2EakU5UVQqL152WmdXQ=="],
-
-    "@opencode-ai/simulation/@fontsource/noto-sans-math": ["@fontsource/noto-sans-math@5.2.5", "", {}, "sha512-1bxEvVlF51Vfgpju32mRZzI/CHvsfqjXjI2+sAuEyHYvXABUAIyj+93sCO3QZIoMG5drWyrzgoCqRQRaL6wQ8Q=="],
-
-    "@opencode-ai/simulation/@fontsource/noto-sans-symbols": ["@fontsource/noto-sans-symbols@5.2.5", "", {}, "sha512-mxoIRstsmZpZFzd/SRWiD+l6T7TGhpgCrGs7TEnnuGSQIfjVMrQT9Zej2enh9pkfmPNAFyeaGJkHkszJ1hH++w=="],
-
-    "@opencode-ai/simulation/@fontsource/noto-sans-symbols-2": ["@fontsource/noto-sans-symbols-2@5.2.5", "", {}, "sha512-F4O9WLifwoZS1quNzY1ebjMNo2cQPe/UP68Dmud0ONi2lOxaR6xp6fFPO2gG17MI7DwAnfMyQFl64A2tAd28hg=="],
 
     "@opencode-ai/storybook/@types/react": ["@types/react@18.0.25", "", { "dependencies": { "@types/prop-types": "*", "@types/scheduler": "*", "csstype": "^3.0.2" } }, "sha512-xD6c0KDT4m7n9uD4ZHi02lzskaiqcBxf4zi+tXZY98a04wvc0hi/TcCPC2FOESZi51Nd7tlUeOJY8RofL799/g=="],
 

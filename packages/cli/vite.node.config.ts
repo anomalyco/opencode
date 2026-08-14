@@ -4,6 +4,7 @@ import { createRequire } from "node:module"
 import { defineConfig, type Plugin, type UserConfig } from "vite"
 import solid from "vite-plugin-solid"
 import { nodeExecArgv, nodeTarget, type NodeTarget, photonWasmAsset, shellParserWasmAssets } from "./src/node/target"
+import { verifySimulationGraph } from "./script/verify-artifact"
 
 const dir = import.meta.dirname
 
@@ -44,6 +45,15 @@ function runtimeRequirePlugin(): Plugin {
       const transformed = code.replace("    var domino = require('@mixmark-io/domino');", "")
       if (transformed === code) this.error("Failed to rewrite Turndown's Domino require")
       return `import domino from "@mixmark-io/domino"\n${transformed}`
+    },
+  }
+}
+
+function simulationGraphPlugin(): Plugin {
+  return {
+    name: "opencode:simulation-graph",
+    generateBundle() {
+      verifySimulationGraph(this.getModuleIds())
     },
   }
 }
@@ -240,6 +250,7 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
       rawTextPlugin(),
       runtimeRequirePlugin(),
       fffNodePlugin(),
+      simulationGraphPlugin(),
       solid({
         solid: {
           generate: "universal",
@@ -255,6 +266,7 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
       OPENCODE_CHANNEL: JSON.stringify(input.channel),
       OPENCODE_LIBC: input.target.platform === "linux" ? JSON.stringify("glibc") : "undefined",
       FFF_LIBC: input.target.platform === "linux" ? JSON.stringify("gnu") : "undefined",
+      "process.env.WS_NO_BUFFER_UTIL": JSON.stringify("1"),
     },
     ssr: { noExternal: true },
     build: {
@@ -264,7 +276,6 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
       emptyOutDir: false,
       minify: true,
       rollupOptions: {
-        external: [/^@opencode-ai\/simulation(?:\/|$)/],
         output: output("opencode.mjs", nodePrelude(input)),
       },
     },

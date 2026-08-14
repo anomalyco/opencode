@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test"
-import { mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readdir, realpath, rename, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { basename, dirname, join, resolve } from "node:path"
 import {
@@ -185,6 +185,17 @@ describe("opencode-drive", () => {
     expect(manifest.visible).toBe(false)
     expect(manifest.endpoints.ui).toMatch(/^ws:\/\/127\.0\.0\.1:\d+$/)
     expect(manifest.endpoints.backend).toMatch(/^ws:\/\/127\.0\.0\.1:\d+$/)
+
+    const runtimeManifest = join(manifest.artifacts, "drive", `${name}.json`)
+    const hiddenRuntimeManifest = `${runtimeManifest}.hidden`
+    await rename(runtimeManifest, hiddenRuntimeManifest)
+    const batch = spawn(
+      ["send", "--name", name, "--command.ui.state", "--command.ui.matches", '{"text":"Fake OpenCode"}'],
+      root,
+    )
+    expect(await batch.exited).toBe(0)
+    expect(await new Response(batch.stdout).text()).toBe("success\n")
+    await rename(hiddenRuntimeManifest, runtimeManifest)
 
     const state = spawn(["send", "--name", name, "--command.ui.state"], root)
     expect(await state.exited).toBe(0)
