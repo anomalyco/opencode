@@ -28,9 +28,9 @@ interface Failures extends Record<keyof Domains, unknown> {
 type Callback<Event, Error> = (event: Event) => Effect.Effect<void, Error>
 
 export interface Interface {
-  readonly has: <Domain extends keyof Domains, Name extends keyof Domains[Domain] & keyof Failures[Domain]>(
+  readonly has: <Domain extends keyof Domains>(
     domain: Domain,
-    name: Name,
+    name: keyof Domains[Domain] & keyof Failures[Domain],
   ) => Effect.Effect<boolean>
   readonly register: <Domain extends keyof Domains, Name extends keyof Domains[Domain] & keyof Failures[Domain]>(
     domain: Domain,
