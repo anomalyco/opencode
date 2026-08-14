@@ -41,7 +41,6 @@ const mcp = Layer.succeed(
     tools: () => Effect.succeed({}),
     prompts: () => Effect.succeed({}),
     resources: () => Effect.succeed({}),
-    resourceTemplates: () => Effect.succeed({}),
     add: () => Effect.succeed({ status: { status: "disabled" as const } }),
     connect: () => Effect.void,
     disconnect: () => Effect.void,

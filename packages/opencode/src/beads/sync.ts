@@ -247,4 +247,6 @@ export const node = LayerNode.make({
   deps: [EventV2Bridge.node],
 })
 
+export const node = LayerNode.make({ service: Service, layer, deps: [EventV2Bridge.node] })
+
 export * as BeadsSync from "./sync"

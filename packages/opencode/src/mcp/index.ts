@@ -88,6 +88,15 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP
 
 type MCPClient = Client
 
+// Raw MCP tool + the client/timeout needed to call it directly (code-mode's
+// sandboxed execution path calls client.callTool itself rather than going
+// through the AI-SDK Tool.execute closure tools() builds).
+export type McpTool = {
+  def: MCPToolDef
+  client: Client
+  timeout?: number
+}
+
 function createClient(directory: string, versionNegotiation: NonNullable<ClientOptions["versionNegotiation"]>) {
   const client = new Client({ name: "opencode", version: InstallationVersion }, { ...CLIENT_OPTIONS, versionNegotiation })
   client.setRequestHandler("roots/list", () =>
@@ -803,6 +812,10 @@ export const layer = Layer.effect(
         }))
     })
 
+    // Returns the raw MCPToolDef + client + timeout, not an AI-SDK Tool —
+    // callers that need to hand this to a model (SessionPrompt) convert via
+    // McpCatalog.convertTool themselves; code-mode's sandboxed execution path
+    // calls client.callTool directly instead, which needs the raw def/client.
     const tools = Effect.fn("MCP.tools")(function* () {
       const result: Record<string, McpTool> = {}
       const s = yield* InstanceState.get(state)

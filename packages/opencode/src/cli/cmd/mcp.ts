@@ -264,15 +264,12 @@ export const McpAuthCommand = effectCmd({
     }
 
     const spinner = prompts.spinner()
-    spinner.start("Starting OAuth flow...")
+    // authenticate() opens the browser itself now; there's no callback to
+    // report the URL through, so this can only say what's happening, not
+    // repeat the URL onscreen.
+    spinner.start("Opening your browser to authorize...")
 
-    yield* MCP.Service.use((mcp) =>
-      mcp.authenticate(serverName, (url) => {
-        spinner.stop("Authorize in your browser:")
-        prompts.log.info(url)
-        spinner.start("Waiting for authorization...")
-      }),
-    ).pipe(
+    yield* MCP.Service.use((mcp) => mcp.authenticate(serverName)).pipe(
       Effect.tap((status) =>
         Effect.sync(() => {
           if (status.status === "connected") {

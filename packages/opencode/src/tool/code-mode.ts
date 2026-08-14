@@ -1,7 +1,4 @@
 import * as Tool from "./tool"
-// fork: the result shape comes from the 2.0 client this fork uses, not the 1.x
-// SDK's CallToolResult — deriving it keeps the two eras from drifting apart.
-type CallToolResult = Awaited<ReturnType<MCP.McpTool["client"]["callTool"]>>
 import { Cause, Effect, Schema } from "effect"
 import { CodeMode, Tool as SandboxTool, toolError } from "@opencode-ai/codemode"
 import { MCP } from "@/mcp"
@@ -12,6 +9,10 @@ import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 
 export const CODE_MODE_TOOL = "execute"
+
+// fork: the result shape comes from the 2.0 client this fork uses, not the 1.x
+// SDK's CallToolResult — deriving it keeps the two eras from drifting apart.
+type CallToolResult = Awaited<ReturnType<MCP.McpTool["client"]["callTool"]>>
 
 const DESCRIPTION = "Run a confined orchestration script with access to connected MCP tools."
 

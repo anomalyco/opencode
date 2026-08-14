@@ -38,6 +38,7 @@ import { SyncProvider, useSync } from "./context/sync"
 import { DataProvider } from "./context/data"
 import { LocalProvider, useLocal } from "./context/local"
 import { PermissionProvider } from "./context/permission"
+import { LocationProvider } from "./context/location"
 import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
@@ -276,6 +277,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                           <OpencodeKeymapProvider keymap={keymap}>
                             <ArgsProvider {...input.args}>
                               <PermissionProvider>
+                              <LocationProvider>
                               <KVProvider>
                                 <ToastProvider>
                                   <RouteProvider
@@ -329,6 +331,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                   </RouteProvider>
                                 </ToastProvider>
                               </KVProvider>
+                              </LocationProvider>
                               </PermissionProvider>
                             </ArgsProvider>
                           </OpencodeKeymapProvider>

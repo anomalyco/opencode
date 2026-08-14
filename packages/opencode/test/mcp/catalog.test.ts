@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
-import { Server } from "@modelcontextprotocol/sdk/server/index.js"
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client"
+import { Server } from "@modelcontextprotocol/server"
 import { McpCatalog } from "@/mcp/catalog"
 import { Effect } from "effect"
 
@@ -54,7 +52,7 @@ describe("McpCatalog.convertTool", () => {
 
 test("preserves output schema validation across paginated tool discovery", async () => {
   const server = new Server({ name: "pagination", version: "1.0.0" }, { capabilities: { tools: {} } })
-  server.setRequestHandler(ListToolsRequestSchema, ({ params }) =>
+  server.setRequestHandler("tools/list", ({ params }) =>
     Promise.resolve(
       params?.cursor === "page-2"
         ? {
@@ -86,7 +84,7 @@ test("preserves output schema validation across paginated tool discovery", async
           },
     ),
   )
-  server.setRequestHandler(CallToolRequestSchema, ({ params }) =>
+  server.setRequestHandler("tools/call", ({ params }) =>
     Promise.resolve({
       content: [],
       structuredContent: { value: params.name === "first" ? 42 : 1 },

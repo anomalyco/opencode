@@ -1910,7 +1910,11 @@ export const layer = Layer.effect(
           const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
 
           provider.models = yield* Effect.promise(async () => {
-            const next = await models(toPublicInfo(provider), { auth: pluginAuth })
+            // The generated plugin SDK's `interleaved.field` is narrower
+            // (3 literals) than the real values providers report (e.g.
+            // "vendor_reasoning"); the SDK types are stale relative to the
+            // spec's sibling schema, which already allows an open string.
+            const next = await models(toPublicInfo(provider) as Parameters<typeof models>[0], { auth: pluginAuth })
             return Object.fromEntries(
               Object.entries(next).map(([id, model]) => [
                 id,

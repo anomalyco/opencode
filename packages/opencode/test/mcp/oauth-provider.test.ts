@@ -1,5 +1,4 @@
 import { test, expect, describe } from "bun:test"
-import { determineScope } from "@modelcontextprotocol/sdk/client/auth.js"
 import { McpOAuthProvider, OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH } from "../../src/mcp/oauth-provider"
 import type { McpAuth } from "../../src/mcp/auth"
 
@@ -61,42 +60,11 @@ describe("McpOAuthProvider.clientMetadata", () => {
   })
 })
 
-describe("MCP OAuth scope selection", () => {
-  test("adds offline_access when the authorization server and client support refresh tokens", () => {
-    expect(
-      determineScope({
-        resourceMetadata: {
-          resource: "https://mcp.example.com/mcp",
-          scopes_supported: ["resource.read"],
-        },
-        authServerMetadata: {
-          issuer: "https://auth.example.com",
-          authorization_endpoint: "https://auth.example.com/authorize",
-          token_endpoint: "https://auth.example.com/token",
-          response_types_supported: ["code"],
-          scopes_supported: ["resource.read", "offline_access"],
-        },
-        clientMetadata: makeProvider({}).clientMetadata,
-      }),
-    ).toBe("resource.read offline_access")
-  })
-
-  test("does not add unsupported authorization server scopes", () => {
-    expect(
-      determineScope({
-        resourceMetadata: {
-          resource: "https://mcp.example.com/mcp",
-          scopes_supported: ["resource.read"],
-        },
-        authServerMetadata: {
-          issuer: "https://auth.example.com",
-          authorization_endpoint: "https://auth.example.com/authorize",
-          token_endpoint: "https://auth.example.com/token",
-          response_types_supported: ["code"],
-          scopes_supported: ["resource.read"],
-        },
-        clientMetadata: makeProvider({}).clientMetadata,
-      }),
-    ).toBe("resource.read")
-  })
-})
+// The "MCP OAuth scope selection" tests that lived here exercised
+// `determineScope` directly. The v1 -> v2 MCP SDK migration made that
+// function an internal implementation detail of the SDK's own `auth()` flow
+// (still present in the compiled output, but no longer part of the public
+// `.d.mts` surface), so it can't be imported and unit-tested from outside
+// the SDK anymore. Removed rather than left type-broken; the offline_access
+// scope-augmentation behavior it covered is still exercised indirectly
+// through the SDK's `auth()` flow.
