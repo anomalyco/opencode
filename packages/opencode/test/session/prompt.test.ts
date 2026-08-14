@@ -57,6 +57,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { InstanceActivity } from "@opencode-ai/core/instance-activity"
+import { InstanceState } from "@/effect/instance-state"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -1496,30 +1498,71 @@ it.instance("prompt submitted during an active run is included in the next LLM i
   }),
 )
 
-it.instance("assertNotBusy fails with BusyError when loop running", () =>
+it.instance(
+  "assertNotBusy fails with BusyError when loop running",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const run = yield* SessionRunState.Service
+      const sessions = yield* Session.Service
+      const directory = yield* InstanceState.directory
+      const activity = InstanceActivity.identify(directory)
+      const before = InstanceActivity.snapshot(activity).generation
+      yield* llm.hang
+
+      const chat = yield* sessions.create({})
+      yield* user(chat.id, "hi")
+
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
+      yield* waitForBusy(chat.id)
+
+      expect(yield* run.isActive()).toBe(true)
+      const active = InstanceActivity.snapshot(activity).generation
+      expect(active).toBeGreaterThan(before)
+      const exit = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "SessionBusyError", sessionID: chat.id })
+      }
+
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.await(fiber)
+      expect(yield* run.isActive()).toBe(false)
+      expect(InstanceActivity.snapshot(activity).generation).toBeGreaterThan(active)
+    }),
+  20_000,
+)
+
+noLLMServer.instance("records status and background activity epochs", () =>
   Effect.gen(function* () {
-    const { llm } = yield* useServerConfig(providerCfg)
-    const prompt = yield* SessionPrompt.Service
-    const run = yield* SessionRunState.Service
     const sessions = yield* Session.Service
-    yield* llm.hang
-
+    const statuses = yield* SessionStatus.Service
+    const background = yield* BackgroundJob.Service
+    const directory = yield* InstanceState.directory
     const chat = yield* sessions.create({})
-    yield* user(chat.id, "hi")
 
-    const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-    yield* llm.wait(1)
-    yield* waitForBusy(chat.id)
+    const activity = InstanceActivity.identify(directory)
+    const beforeStatus = InstanceActivity.snapshot(activity).generation
+    yield* statuses.set(chat.id, { type: "busy" })
+    yield* statuses.set(chat.id, { type: "idle" })
+    const afterStatus = InstanceActivity.snapshot(activity).generation
+    expect(afterStatus).toBeGreaterThan(beforeStatus)
 
-    const exit = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
-    expect(Exit.isFailure(exit)).toBe(true)
-    if (Exit.isFailure(exit)) {
-      expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
-      expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "SessionBusyError", sessionID: chat.id })
-    }
-
-    yield* prompt.cancel(chat.id)
-    yield* Fiber.await(fiber)
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const job = yield* background.start({
+      type: "test",
+      run: Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as("done")),
+    })
+    yield* Deferred.await(started)
+    const afterStart = InstanceActivity.snapshot(activity).generation
+    expect(afterStart).toBeGreaterThan(afterStatus)
+    yield* Deferred.succeed(release, undefined)
+    yield* background.wait({ id: job.id })
+    expect(InstanceActivity.snapshot(activity).generation).toBeGreaterThan(afterStart)
   }),
 )
 
