@@ -336,6 +336,66 @@ describe("AmazonBedrockPlugin", () => {
     ),
   )
 
+  it.effect("expands the AWS_REGION template in the catalog Mantle base URL", () =>
+    withEnv({ AWS_BEARER_TOKEN_BEDROCK: "token", AWS_PROFILE: undefined, AWS_REGION: undefined }, () =>
+      Effect.gen(function* () {
+        const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+        const result = yield* aisdk.runSDK({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-5.6-sol")),
+            api: {
+              id: ModelV2.ID.make("openai.gpt-5.6-sol"),
+              type: "aisdk",
+              package: "@ai-sdk/amazon-bedrock/mantle",
+            },
+          }),
+          package: "@ai-sdk/amazon-bedrock/mantle",
+          options: {
+            name: "amazon-bedrock",
+            // models.dev advertises the Mantle endpoint as a template
+            baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1",
+            region: "us-east-2",
+          },
+        })
+        const language = result.sdk.responses("openai.gpt-5.6-sol")
+        expect(openAIUrl(language, "/responses", "openai.gpt-5.6-sol")).toBe(
+          "https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses",
+        )
+      }),
+    ),
+  )
+
+  it.effect("expands the AWS_REGION template from the environment region", () =>
+    withEnv({ AWS_BEARER_TOKEN_BEDROCK: "token", AWS_PROFILE: undefined, AWS_REGION: "us-east-1" }, () =>
+      Effect.gen(function* () {
+        const plugin = yield* PluginV2.Service
+        const aisdk = yield* AISDK.Service
+        yield* addPlugin()
+        const result = yield* aisdk.runSDK({
+          model: ModelV2.Info.make({
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-oss-safeguard-120b")),
+            api: {
+              id: ModelV2.ID.make("openai.gpt-oss-safeguard-120b"),
+              type: "aisdk",
+              package: "@ai-sdk/amazon-bedrock/mantle",
+            },
+          }),
+          package: "@ai-sdk/amazon-bedrock/mantle",
+          options: {
+            name: "amazon-bedrock",
+            baseURL: "https://bedrock-mantle.${AWS_REGION}.api.aws/v1",
+          },
+        })
+        const language = result.sdk.chat("openai.gpt-oss-safeguard-120b")
+        expect(openAIUrl(language, "/chat/completions", "openai.gpt-oss-safeguard-120b")).toBe(
+          "https://bedrock-mantle.us-east-1.api.aws/v1/chat/completions",
+        )
+      }),
+    ),
+  )
+
   it.effect("selects Mantle APIs without Bedrock cross-region prefixes", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service

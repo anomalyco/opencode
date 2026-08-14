@@ -283,6 +283,40 @@ To use Amazon Bedrock with OpenCode:
 
    ***
 
+   #### OpenAI models on Bedrock
+
+   The `openai.*` models on Bedrock — GPT-5.6 Sol, Terra, and Luna, plus the
+   `gpt-oss` models — are served by Bedrock's OpenAI-compatible endpoint
+   (`https://bedrock-mantle.{region}.api.aws`) rather than the Converse API.
+   opencode routes them there automatically using the same authentication as the
+   rest of Bedrock, so no extra configuration is needed.
+
+   These models are available in fewer regions than the rest of the catalog:
+
+   | Model                  | Regions                               |
+   | ---------------------- | ------------------------------------- |
+   | `openai.gpt-5.6-sol`   | `us-east-1`, `us-east-2`              |
+   | `openai.gpt-5.6-terra` | `us-east-1`, `us-east-2`, `us-west-2` |
+   | `openai.gpt-5.6-luna`  | `us-east-1`, `us-east-2`, `us-west-2` |
+
+   Set `region` explicitly if your default region isn't one of them, otherwise
+   the model won't be reachable:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1"
+         }
+       }
+     }
+   }
+   ```
+
+   ***
+
    #### Authentication Methods
    - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Create an IAM user and generate access keys in the AWS Console
    - **`AWS_PROFILE`**: Use named profiles from `~/.aws/credentials`. First configure with `aws configure --profile my-profile` or `aws sso login`

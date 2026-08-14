@@ -94,6 +94,10 @@ export const AmazonBedrockPlugin = define({
 
         options.region = region
         if (typeof options.endpoint === "string") options.baseURL = options.endpoint
+        // The catalog advertises the Mantle endpoint as a template, ie.
+        // https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1, and nothing else
+        // substitutes it on the v2 path.
+        if (typeof options.baseURL === "string") options.baseURL = options.baseURL.replaceAll("${AWS_REGION}", region)
         if (!bearerToken && options.credentialProvider === undefined) {
           // Do not gate SDK creation on explicit AWS env vars. The default chain
           // also handles ~/.aws/credentials, SSO, process creds, and instance roles.
