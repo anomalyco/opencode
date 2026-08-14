@@ -1010,13 +1010,10 @@ describe("SessionRunnerLLM", () => {
       })
       const http = prepared.options.http ?? (yield* Effect.die("Expected Session HTTP middleware"))
 
-      const response = yield* http(
-        HttpClientRequest.post("https://provider.test/responses"),
-        (request) => {
-          expect(request.headers["x-request-hook"]).toBe("active")
-          return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("network")))
-        },
-      )
+      const response = yield* http(HttpClientRequest.post("https://provider.test/responses"), (request) => {
+        expect(request.headers["x-request-hook"]).toBe("active")
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("network")))
+      })
 
       expect(prepared.webSocketEligible).toBe(false)
       expect(response.headers["x-response-hook"]).toBe("active")
