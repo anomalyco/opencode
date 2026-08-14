@@ -1,11 +1,12 @@
 import { Effect, Schema } from "effect"
-import { HttpClient } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import * as Tool from "./tool"
 import * as McpWebSearch from "./mcp-websearch"
 import DESCRIPTION from "./websearch.txt"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Auth } from "@/auth"
 
 export const Parameters = Schema.Struct({
   query: Schema.String.annotate({ description: "Websearch query" }),
@@ -24,19 +25,21 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-const WebSearchProviderSchema = Schema.Literals(["exa", "parallel"])
+const WebSearchProviderSchema = Schema.Literals(["exa", "parallel", "synthetic"])
 export type WebSearchProvider = Schema.Schema.Type<typeof WebSearchProviderSchema>
 
-export function selectWebSearchProvider(sessionID: string, flags = { exa: false, parallel: false }): WebSearchProvider {
+export function selectWebSearchProvider(sessionID: string, flags = { exa: false, parallel: false, synthetic: false }): WebSearchProvider {
   const override = process.env.OPENCODE_WEBSEARCH_PROVIDER
-  if (override === "exa" || override === "parallel") return override
+  if (override === "exa" || override === "parallel" || override === "synthetic") return override
+  if (flags.synthetic) return "synthetic"
   if (flags.parallel) return "parallel"
   if (flags.exa) return "exa"
 
-  return Number.parseInt(checksum(sessionID) ?? "0", 36) % 2 === 0 ? "exa" : "parallel"
+  return Number.parseInt(checksum(sessionID) ?? "0", 36) % 3 === 0 ? "synthetic" : Number.parseInt(checksum(sessionID) ?? "0", 36) % 3 === 1 ? "exa" : "parallel"
 }
 
 export function webSearchProviderLabel(provider: unknown) {
+  if (provider === "synthetic") return "Synthetic Web Search"
   if (provider === "parallel") return "Parallel Web Search"
   if (provider === "exa") return "Exa Web Search"
   return "Web Search"
@@ -57,12 +60,38 @@ function parallelAuthHeaders() {
   return { ...headers, Authorization: `Bearer ${process.env.PARALLEL_API_KEY}` }
 }
 
+function syntheticAuthHeaders(apiKey: string) {
+  return { "User-Agent": `opencode/${InstallationVersion}`, Authorization: `Bearer ${apiKey}` }
+}
+
 function callProvider(
   http: HttpClient.HttpClient,
   provider: WebSearchProvider,
   params: Schema.Schema.Type<typeof Parameters>,
   ctx: Tool.Context,
+  syntheticKey?: string,
 ) {
+  if (provider === "synthetic" && syntheticKey) {
+    return Effect.gen(function* () {
+      const request = HttpClientRequest.post("https://api.synthetic.new/v2/search").pipe(
+        HttpClientRequest.setHeaders({ "Content-Type": "application/json", ...syntheticAuthHeaders(syntheticKey) }),
+        HttpClientRequest.bodyJsonUnsafe({ query: params.query }),
+      )
+      const response = yield* http.execute(request)
+      const text = yield* response.text
+      try {
+        const data = JSON.parse(text) as { results?: Array<{ url: string; title: string; text: string; published?: string }> }
+        if (!data.results || data.results.length === 0)
+          return "No search results found."
+        return data.results
+          .map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.text}`)
+          .join("\n\n")
+      } catch {
+        return text || "No search results found."
+      }
+    }).pipe(Effect.orDie)
+  }
+
   if (provider === "parallel") {
     return McpWebSearch.call(
       http,
@@ -101,6 +130,7 @@ export const WebSearchTool = Tool.define(
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
     const flags = yield* RuntimeFlags.Service
+    const auth = yield* Auth.Service
 
     return {
       get description() {
@@ -109,10 +139,24 @@ export const WebSearchTool = Tool.define(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
-          const provider = selectWebSearchProvider(ctx.sessionID, {
+          let provider = selectWebSearchProvider(ctx.sessionID, {
             exa: flags.enableExa,
             parallel: flags.enableParallel,
+            synthetic: flags.enableSynthetic,
           })
+
+          // Resolve synthetic API key from auth store; fall back to env var
+          let syntheticKey: string | undefined
+          if (provider === "synthetic") {
+            const stored = yield* auth.get("synthetic").pipe(Effect.orDie)
+            if (stored && "key" in stored) syntheticKey = stored.key
+            if (!syntheticKey && process.env.SYNTHETIC_API_KEY) syntheticKey = process.env.SYNTHETIC_API_KEY
+            // If no key available, fall back to exa
+            if (!syntheticKey) {
+              provider = flags.enableParallel ? "parallel" : "exa"
+            }
+          }
+
           const title = webSearchProviderLabel(provider)
           yield* ctx.metadata({ title: `${title} "${params.query}"`, metadata: { provider } })
 
@@ -130,7 +174,7 @@ export const WebSearchTool = Tool.define(
             },
           })
 
-          const result = yield* callProvider(http, provider, params, ctx)
+          const result = yield* callProvider(http, provider, params, ctx, syntheticKey)
 
           return {
             output: result ?? "No search results found. Please try a different query.",

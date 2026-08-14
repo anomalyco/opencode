@@ -30,24 +30,37 @@ describe("websearch provider", () => {
   })
 
   test("routes to Exa when the Exa flag is enabled", () => {
-    expect(selectWebSearchProvider(SESSION_ID, { exa: true, parallel: false })).toBe("exa")
+    expect(selectWebSearchProvider(SESSION_ID, { exa: true, parallel: false, synthetic: false })).toBe("exa")
   })
 
   test("routes to Parallel when the Parallel flag is enabled", () => {
-    expect(selectWebSearchProvider(SESSION_ID, { exa: false, parallel: true })).toBe("parallel")
+    expect(selectWebSearchProvider(SESSION_ID, { exa: false, parallel: true, synthetic: false })).toBe("parallel")
   })
 
   test("is only enabled for opencode or explicit websearch provider flags", () => {
-    expect(webSearchEnabled(ProviderV2.ID.opencode, { exa: false, parallel: false })).toBe(true)
-    expect(webSearchEnabled(ProviderV2.ID.openai, { exa: false, parallel: false })).toBe(false)
-    expect(webSearchEnabled(ProviderV2.ID.openai, { exa: true, parallel: false })).toBe(true)
-    expect(webSearchEnabled(ProviderV2.ID.openai, { exa: false, parallel: true })).toBe(true)
+    expect(webSearchEnabled(ProviderV2.ID.opencode, { exa: false, parallel: false, synthetic: false })).toBe(true)
+    expect(webSearchEnabled(ProviderV2.ID.openai, { exa: false, parallel: false, synthetic: false })).toBe(false)
+    expect(webSearchEnabled(ProviderV2.ID.openai, { exa: true, parallel: false, synthetic: false })).toBe(true)
+    expect(webSearchEnabled(ProviderV2.ID.openai, { exa: false, parallel: true, synthetic: false })).toBe(true)
   })
 
   test("uses branded labels", () => {
     expect(webSearchProviderLabel("parallel")).toBe("Parallel Web Search")
     expect(webSearchProviderLabel("exa")).toBe("Exa Web Search")
+    expect(webSearchProviderLabel("synthetic")).toBe("Synthetic Web Search")
     expect(webSearchProviderLabel(undefined)).toBe("Web Search")
+  })
+
+  test("routes to Synthetic when the Synthetic flag is enabled", () => {
+    expect(selectWebSearchProvider(SESSION_ID, { exa: false, parallel: false, synthetic: true })).toBe("synthetic")
+  })
+
+  test("routes to Synthetic via env override", () => {
+    const orig = process.env.OPENCODE_WEBSEARCH_PROVIDER
+    process.env.OPENCODE_WEBSEARCH_PROVIDER = "synthetic"
+    expect(selectWebSearchProvider(SESSION_ID, { exa: false, parallel: false, synthetic: false })).toBe("synthetic")
+    if (orig === undefined) delete process.env.OPENCODE_WEBSEARCH_PROVIDER
+    else process.env.OPENCODE_WEBSEARCH_PROVIDER = orig
   })
 
   test("uses the provider API model id for Parallel analytics", () => {
