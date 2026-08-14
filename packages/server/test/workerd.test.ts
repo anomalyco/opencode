@@ -5,8 +5,7 @@ import { it } from "../../core/test/lib/effect"
 import { ServerWorkerd } from "../src/workerd"
 
 // Covers the profile's replacement graph composing and the database booting
-// through the injected Durable Object storage. Verification inside a real
-// isolate lives in the workerd-spike package.
+// through the injected Durable Object storage.
 it.live("boots the workerd profile over durable object storage", () =>
   Effect.gen(function* () {
     const handler = yield* ServerWorkerd.create({

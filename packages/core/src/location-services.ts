@@ -33,6 +33,7 @@ import { WebSearch } from "./websearch.js"
 import { ReferenceInstructions } from "./reference/instructions.js"
 import { SessionRunnerLLM } from "./session/runner/llm.js"
 import { SessionRunnerModel } from "./session/runner/model.js"
+import { SessionModelTransport } from "./session/model-transport.js"
 import { SessionCompaction } from "./session/compaction.js"
 import { SessionTitle } from "./session/title.js"
 import { Skill } from "./skill.js"
@@ -91,6 +92,7 @@ const locationServiceNodes = [
   McpTool.node,
   SessionInstructions.node,
   SessionRunnerModel.node,
+  SessionModelTransport.node,
   SessionCompaction.node,
   SessionTitle.node,
   Snapshot.node,

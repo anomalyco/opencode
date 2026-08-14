@@ -14,7 +14,6 @@ const forbidden = [
   "noto-sans-math-math-400-normal",
   "CommitMono-400-Regular.otf",
   "NotoSansSymbols.ttf",
-  "packages/drive/src/recording/render",
   "src/frontend/png.ts",
   "skia.darwin-",
   "skia.linux-",
@@ -37,10 +36,7 @@ export function verifySimulationGraph(inputs: Iterable<string>) {
   ]
   const missing = required.filter((input) => !modules.some((module) => module.endsWith(input)))
   if (missing.length > 0) throw new Error(`Build graph is missing simulation bridge inputs: ${missing.join(", ")}`)
-  const leaked = modules.find(
-    (module) =>
-      module.includes("/packages/simulation/src/frontend/png.") || module.includes("/packages/drive/src/recording/"),
-  )
+  const leaked = modules.find((module) => module.includes("/packages/simulation/src/frontend/png."))
   if (leaked) throw new Error(`Build graph contains Drive-only rendering input: ${leaked}`)
 }
 

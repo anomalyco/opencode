@@ -39,7 +39,7 @@ describe("Anthropic Messages sad-path recorded", () => {
 
       expect(error).toBeInstanceOf(AIError)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
-      expect(error.message).toContain("HTTP 400")
+      expect(error.reason.message).toContain("`tool_use` ids were found without `tool_result` blocks")
     }),
   )
 })

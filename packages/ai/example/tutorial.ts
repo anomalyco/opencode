@@ -1,6 +1,6 @@
 import { Config, Effect, Formatter, Layer, Schema, Stream } from "effect"
 import { LLM, LLMClient, LLMRequest, Message, ProviderID, Tool, ToolRuntime } from "@opencode-ai/ai"
-import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor, WebSocketExecutor } from "@opencode-ai/ai/route"
+import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode-ai/ai/route"
 import { OpenAI } from "@opencode-ai/ai/providers"
 
 /**
@@ -213,8 +213,7 @@ const FakeEcho = {
 // enabled at a time so the tutorial can demonstrate generate, stream, or
 // tool-loop behavior without spending tokens on every example.
 const requestExecutorLayer = RequestExecutor.fetchLayer
-const llmDeps = Layer.mergeAll(requestExecutorLayer, WebSocketExecutor.layer)
-const llmClientLayer = LLMClient.layer.pipe(Layer.provide(llmDeps))
+const llmClientLayer = LLMClient.layer.pipe(Layer.provide(requestExecutorLayer))
 
 const program = Effect.gen(function* () {
   // yield* generateOnce
@@ -222,6 +221,6 @@ const program = Effect.gen(function* () {
   // yield* generateStructuredObject
   // yield* generateDynamicObject.pipe(Effect.andThen((response) => Effect.sync(() => console.log(response.object))))
   yield* streamWithTools
-}).pipe(Effect.provide(Layer.mergeAll(llmDeps, llmClientLayer)))
+}).pipe(Effect.provide(Layer.mergeAll(requestExecutorLayer, llmClientLayer)))
 
 Effect.runPromise(program)

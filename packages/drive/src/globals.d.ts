@@ -1,3 +1,0 @@
-interface WebSocket {
-  terminate(): void
-}

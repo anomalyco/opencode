@@ -5,7 +5,6 @@ import {
   MouseEvent,
   PasteEvent,
   decodePasteBytes,
-  type ColorInput,
   type KeyEvent,
 } from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
@@ -13,6 +12,7 @@ import path from "path"
 import { useLocal } from "../../context/local"
 import { useTheme, useThemes } from "../../context/theme"
 import { tint } from "../../theme/color"
+import { createAnimatable, tween } from "../../ui/animation"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { useClipboard } from "../../context/clipboard"
@@ -110,14 +110,37 @@ function fadeColor(color: RGBA, alpha: number) {
 
 export function PromptInterruptStatus(props: {
   armed: boolean
-  text: ColorInput
-  subdued: ColorInput
-  warning: ColorInput
+  animations?: boolean
+  text: RGBA
+  subdued: RGBA
+  warning: RGBA
+  flash?: RGBA
 }) {
+  const ignition = createAnimatable(
+    { level: 0 },
+    { enabled: () => props.animations ?? false, transition: tween({ duration: 0.22 }) },
+  )
+  createEffect(
+    on(
+      () => props.armed,
+      (armed) => {
+        if (!armed || !props.animations) return ignition.jump({ level: 0 })
+        ignition.jump({ level: 0.75 })
+        ignition.animate({ level: 0 })
+      },
+      { defer: true },
+    ),
+  )
+  const armedColor = createMemo(() => {
+    const level = ignition.value().level
+    if (level === 0 || !props.flash) return props.warning
+    return tint(props.warning, props.flash, level)
+  })
+
   return (
-    <text fg={props.armed ? props.warning : props.text} wrapMode="none" truncate flexShrink={1}>
+    <text fg={props.armed ? armedColor() : props.text} wrapMode="none" truncate flexShrink={1}>
       esc{" "}
-      <span style={{ fg: props.armed ? props.warning : props.subdued }}>
+      <span style={{ fg: props.armed ? armedColor() : props.subdued }}>
         {props.armed ? "again to interrupt" : "interrupt"}
       </span>
     </text>
@@ -1823,9 +1846,11 @@ export function Prompt(props: PromptProps) {
                       </box>
                       <PromptInterruptStatus
                         armed={store.interrupt > 0}
+                        animations={animationsEnabled()}
                         text={theme.text.default}
                         subdued={theme.text.subdued}
                         warning={theme.text.feedback.warning.default}
+                        flash={theme.decrease(theme.text.feedback.warning.default, 2)}
                       />
                     </box>
                   </Match>

@@ -80,11 +80,6 @@ describe("provider package entrypoints", () => {
     expect(selected.route.defaults.limits).toEqual({ context: 200_000, output: 64_000 })
   })
 
-  test("selects transport without changing the semantic API", () => {
-    expect(model("gpt-5", { apiKey: "fixture" }).route.id).toBe("openai-responses")
-    expect(model("gpt-5", { apiKey: "fixture", transport: "websocket" }).route.id).toBe("openai-responses-websocket")
-  })
-
   test("maps OpenAI-compatible Responses settings onto the executable model", async () => {
     const OpenAICompatibleResponses = await import("@opencode-ai/ai/providers/openai-compatible/responses")
     const selected = OpenAICompatibleResponses.model("custom-model", {

@@ -68,7 +68,6 @@ import { errorMessage } from "../../util/error"
 import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
-import { sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
 import { projectedPromptInput } from "../../prompt/codec"
 import { deduplicateVisibleImages } from "../../prompt/attachment"
 import { useEpilogue } from "../../context/epilogue"
@@ -141,7 +140,7 @@ function use() {
   return ctx
 }
 
-export function Session() {
+export function Session(props: { verticalTabsWidth: number }) {
   const setEpilogue = useEpilogue()
   const clipboard = useClipboard()
   const writeExport = async (file: string, content: string) => {
@@ -228,13 +227,7 @@ export function Session() {
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
 
-  const availableWidth = createMemo(
-    () =>
-      dimensions().width -
-      (config.tabs?.enabled && config.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width)
-        ? SESSION_SIDEBAR_WIDTH
-        : 0),
-  )
+  const availableWidth = createMemo(() => dimensions().width - props.verticalTabsWidth)
   const wide = createMemo(() => availableWidth() > 120)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
@@ -290,7 +283,7 @@ export function Session() {
 
   createEffect(
     on(
-      () => [dimensions().width, dimensions().height] as const,
+      () => [dimensions().width, dimensions().height, props.verticalTabsWidth] as const,
       (_, previous) => {
         if (previous) clearMessageNavigation()
       },

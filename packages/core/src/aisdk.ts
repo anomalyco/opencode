@@ -321,7 +321,7 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
     transport: {
       id: "ai-sdk",
       prepare: (input) => Effect.succeed(input.body),
-      frames: () => Stream.empty,
+      execute: () => Effect.succeed({ frames: Stream.empty }),
     },
     defaults: {
       headers: info.headers,
