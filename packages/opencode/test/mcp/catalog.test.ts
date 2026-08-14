@@ -8,10 +8,12 @@ import { Effect } from "effect"
 
 const options = { toolCallId: "call_mcp", abortSignal: new AbortController().signal } as any
 
+// The catalog takes the 2.0 client this fork uses; the 1.x `Client` imported
+// here is only for the in-memory server fixtures below.
 function clientReturning(result: unknown) {
   return {
     callTool: async () => result,
-  } as unknown as Client
+  } as unknown as Parameters<typeof McpCatalog.convertTool>[1]
 }
 
 function mcpTool() {
@@ -96,7 +98,7 @@ test("preserves output schema validation across paginated tool discovery", async
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
 
   try {
-    const tools = await Effect.runPromise(McpCatalog.defs(client))
+    const tools = await Effect.runPromise(McpCatalog.defs(client as unknown as Parameters<typeof McpCatalog.defs>[0]))
     expect(tools?.map((tool) => tool.name)).toEqual(["first", "second"])
     await expect(client.callTool({ name: "first", arguments: {} })).rejects.toThrow(
       "Structured content does not match the tool's output schema",

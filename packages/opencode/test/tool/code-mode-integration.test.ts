@@ -132,10 +132,13 @@ async function buildTool() {
   const client = new RawJsonRpcClient(clientTransport)
   await client.connect()
 
-  const listed = (await client.listTools()).tools as MCPToolDef[]
+  const listed = (await client.listTools()).tools as unknown as MCPToolDef[]
   const mcpTools: Record<string, MCP.McpTool> = {}
   for (const def of listed) {
-    mcpTools[McpCatalog.toolName(SERVER, def.name)] = { def, client: client as unknown as Client }
+    mcpTools[McpCatalog.toolName(SERVER, def.name)] = {
+      def: def as unknown as MCP.McpTool["def"],
+      client: client as unknown as MCP.McpTool["client"],
+    }
   }
 
   const layer = Layer.mergeAll(

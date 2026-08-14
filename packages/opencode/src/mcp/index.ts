@@ -584,7 +584,7 @@ export const layer = Layer.effect(
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
         s.defs[name] = listed
-        setInstructions(s, name, client.getInstructions()?.trim())
+        setInstructions(s, name, readInstructions(client))
         await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
       })
     }
@@ -645,7 +645,7 @@ export const layer = Layer.effect(
               if (result.mcpClient) {
                 s.clients[key] = result.mcpClient
                 s.defs[key] = result.defs!
-                setInstructions(s, key, result.mcpClient.getInstructions()?.trim())
+                setInstructions(s, key, readInstructions(result.mcpClient))
                 watch(s, key, result.mcpClient, bridge, mcp.timeout)
               }
             }),
@@ -707,7 +707,7 @@ export const layer = Layer.effect(
       s.status[name] = status ?? { status: "connected" }
       s.clients[name] = client
       s.defs[name] = listed
-      setInstructions(s, name, client.getInstructions()?.trim())
+      setInstructions(s, name, readInstructions(client))
       watch(s, name, client, bridge, timeout)
       if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
       return s.status[name]
@@ -774,6 +774,14 @@ export const layer = Layer.effect(
     function requestTimeout(s: State, name: string, configured: McpEntry | undefined, fallback?: number) {
       const staticTimeout = configured && isMcpConfigured(configured) ? configured.timeout : undefined
       return s.config[name]?.timeout ?? staticTimeout ?? fallback
+    }
+
+    // Not every client answers this: legacy-era servers and test doubles may not
+    // implement getInstructions at all, and a missing instruction block is not
+    // an error — it just means the server did not send one.
+    function readInstructions(client: MCPClient) {
+      const fn = (client as { getInstructions?: () => string | undefined }).getInstructions
+      return typeof fn === "function" ? fn.call(client)?.trim() : undefined
     }
 
     function setInstructions(s: State, name: string, instructions: string | undefined) {
