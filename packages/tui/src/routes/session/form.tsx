@@ -748,7 +748,6 @@ export function FormPrompt(props: {
             <For each={fields()}>
               {(item, index) => {
                 const isTab = () => index() === store.tab
-                const isAnswered = () => store.answers[item.key] !== undefined
                 return (
                   <box
                     paddingRight={2}
@@ -772,9 +771,7 @@ export function FormPrompt(props: {
                           ? theme.text.formfield.selected
                           : tabHover() === index()
                             ? theme.text.formfield.focused
-                            : isAnswered()
-                              ? theme.text.default
-                              : theme.text.subdued
+                            : theme.text.subdued
                       }
                     >
                       {truncate(formLabel(item), 24)}
