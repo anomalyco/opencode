@@ -80,8 +80,9 @@ export const unreadGlowIntensity = (index: number, width: number, maximumTail = 
 }
 /** How far a resolving glow has diffused: the resting tail spreads across the full width as it thins away. */
 const glowReleaseSpread = (progress: number, tail: number, width: number) => tail + smootherstep(progress) * width
-/** The resting glow drains away over the first fraction of the release. */
-const glowReleaseDrain = (progress: number) => fadeOut(clamp((progress * GLOW_RELEASE_DURATION) / GLOW_FADE_OUT))
+// The resting glow drains away over this leading fraction of the release, i.e. the old 200ms fade.
+const GLOW_RELEASE_DRAIN_FRACTION = GLOW_FADE_OUT / GLOW_RELEASE_DURATION
+const glowReleaseDrain = (progress: number) => fadeOut(clamp(progress / GLOW_RELEASE_DRAIN_FRACTION))
 /** The diffusing glow swells gently above its resting level, then decays to nothing. */
 const glowReleaseSwell = (progress: number) => attackDecay(progress, GLOW_RELEASE_ATTACK, GLOW_RELEASE_PEAK, 0)
 export function blendTabPulseColor(
@@ -175,22 +176,21 @@ type GateStage = {
 class GatedEnvelope {
   private phase: "idle" | "attack" | "sustain" | "release"
   private phaseClock = 0
+  // Level captured at note-off; only meaningful while releasing.
   private releaseScale = 1
-  private clockTime = 0
 
   constructor(
-    private attack: GateStage,
+    private attackStage: GateStage,
     private releaseStage: GateStage,
     initial: "idle" | "sustain" = "idle",
   ) {
     this.phase = initial
   }
 
-  /** Note-on: run the attack from silence and hold sustain. Also restarts the stage clock. */
+  /** Note-on: run the attack from silence and hold sustain. */
   trigger() {
     this.phase = "attack"
     this.phaseClock = 0
-    this.clockTime = 0
   }
 
   /** Note-off: fade out from the current level. */
@@ -202,17 +202,15 @@ class GatedEnvelope {
   }
 
   /** Halt mid-motion without a fade, e.g. when animations are disabled. */
-  settle(gate: boolean) {
-    this.phase = gate ? "sustain" : "idle"
+  settle(phase: "idle" | "sustain") {
+    this.phase = phase
     this.phaseClock = 0
   }
 
   advance(delta: number) {
-    if (this.phase === "idle") return
-    this.clockTime += delta
-    if (this.phase === "sustain") return
+    if (this.phase === "idle" || this.phase === "sustain") return
     this.phaseClock += delta
-    const duration = this.phase === "attack" ? this.attack.duration : this.releaseStage.duration
+    const duration = this.phase === "attack" ? this.attackStage.duration : this.releaseStage.duration
     if (this.phaseClock < duration) return
     this.phase = this.phase === "attack" ? "sustain" : "idle"
     this.phaseClock = 0
@@ -221,7 +219,7 @@ class GatedEnvelope {
   get level() {
     if (this.phase === "idle") return 0
     if (this.phase === "sustain") return 1
-    if (this.phase === "attack") return this.attack.shape(this.phaseClock / this.attack.duration)
+    if (this.phase === "attack") return this.attackStage.shape(this.phaseClock / this.attackStage.duration)
     return this.releaseScale * this.releaseStage.shape(this.phaseClock / this.releaseStage.duration)
   }
 
@@ -229,8 +227,8 @@ class GatedEnvelope {
     return this.phase === "attack" || this.phase === "release"
   }
 
-  get releasing() {
-    return this.phase === "release"
+  get idle() {
+    return this.phase === "idle"
   }
 
   get releaseProgress() {
@@ -239,11 +237,6 @@ class GatedEnvelope {
 
   get noteOffLevel() {
     return this.releaseScale
-  }
-
-  /** Time since the last trigger; keeps running through sustain and release. */
-  get clock() {
-    return this.clockTime
   }
 }
 
@@ -262,12 +255,13 @@ class PulseState {
   private complete: boolean
   private glow: boolean
   private completionPending = false
+  private sweepClock = 0
   // Two gated voices: the running sweep and the unread glow. One-shots handle flash and completion.
-  private run = new GatedEnvelope(
+  private runEnvelope = new GatedEnvelope(
     { duration: RUN_ATTACK, shape: smootherstep },
     { duration: RUN_FADE_OUT, shape: fadeOut },
   )
-  private glowStage: GatedEnvelope
+  private glowEnvelope: GatedEnvelope
   private completionPulse = new Envelope(COMPLETION_DURATION, completionPulseOpacity)
   private edgeFlash = new Envelope(EDGE_FLASH_DURATION, (progress) => attackDecay(progress, EDGE_FLASH_ATTACK, 1, 0))
 
@@ -278,27 +272,27 @@ class PulseState {
     this.complete = options.complete
     this.glow = options.glow
     // A glow that exists at mount holds sustain without an ignition flash, even when animations are off.
-    this.glowStage = new GatedEnvelope(
+    this.glowEnvelope = new GatedEnvelope(
       { duration: GLOW_IGNITION_DURATION, shape: glowIgnitionLevel },
       { duration: GLOW_RELEASE_DURATION, shape: glowReleaseDrain },
       options.glow ? "sustain" : "idle",
     )
-    if (this.enabled && this.active) this.run.trigger()
+    if (this.enabled && this.active) this.runEnvelope.trigger()
   }
 
   get live() {
     return (
       this.enabled &&
       (this.active ||
-        this.run.animating ||
-        this.glowStage.animating ||
+        this.runEnvelope.animating ||
+        this.glowEnvelope.animating ||
         this.completionPulse.active ||
         this.edgeFlash.active)
     )
   }
 
   get running() {
-    return this.run.level
+    return this.runEnvelope.level
   }
 
   get completion() {
@@ -311,29 +305,32 @@ class PulseState {
 
   /** The resting glow's amplitude: ignition attack, sustain, or the draining note-off residue. */
   get glowLevel() {
-    return this.glowStage.level
+    return this.glowEnvelope.level
   }
 
   get glowReleaseProgress() {
-    return this.glowStage.releaseProgress
+    return this.glowEnvelope.releaseProgress
   }
 
-  /** The diffusing swell rides above the glow it released from, never below its resting level. */
-  get glowReleaseScale() {
-    return Math.max(1, this.glowStage.noteOffLevel)
+  /** The diffusing swell's amplitude; it rides above the glow it released from, never below its resting level. */
+  get glowReleaseSwell() {
+    const progress = this.glowEnvelope.releaseProgress
+    if (progress === undefined) return 0
+    return glowReleaseSwell(progress) * Math.max(1, this.glowEnvelope.noteOffLevel)
   }
 
   setEnabled(value: boolean) {
     if (value === this.enabled) return false
     this.enabled = value
     if (!value) {
-      this.run.settle(false)
-      this.glowStage.settle(this.glow)
+      this.runEnvelope.settle("idle")
+      this.glowEnvelope.settle(this.glow ? "sustain" : "idle")
       this.completionPulse.stop()
       this.edgeFlash.stop()
       this.completionPending = false
     } else if (this.active) {
-      this.run.trigger()
+      // Re-enable resumes the sweep from its prior position, so no sweep clock reset here.
+      this.runEnvelope.trigger()
     }
     return true
   }
@@ -343,11 +340,12 @@ class PulseState {
     this.active = value
     if (!this.enabled) return true
     if (value) {
-      this.run.trigger()
+      this.sweepClock = 0
+      this.runEnvelope.trigger()
       this.completionPulse.stop()
       this.completionPending = false
     } else {
-      this.run.release()
+      this.runEnvelope.release()
       this.completionPending = true
     }
     this.edgeFlash.start()
@@ -380,18 +378,20 @@ class PulseState {
     this.glow = value
     // Without animations the glow still holds statically; it just skips the ignition and release motion.
     if (!this.enabled) {
-      this.glowStage.settle(value)
+      this.glowEnvelope.settle(value ? "sustain" : "idle")
       return true
     }
-    if (value) this.glowStage.trigger()
-    else this.glowStage.release()
+    if (value) this.glowEnvelope.trigger()
+    else this.glowEnvelope.release()
     return true
   }
 
   advance(deltaTime: number) {
     if (!this.live) return
-    this.run.advance(deltaTime)
-    this.glowStage.advance(deltaTime)
+    // The sweep keeps coasting from note-on through the release fade.
+    if (!this.runEnvelope.idle) this.sweepClock += deltaTime
+    this.runEnvelope.advance(deltaTime)
+    this.glowEnvelope.advance(deltaTime)
     this.completionPulse.advance(deltaTime)
     this.edgeFlash.advance(deltaTime)
     if (!this.completionPending) return
@@ -400,16 +400,21 @@ class PulseState {
       this.completionPulse.start()
       return
     }
-    if (!this.run.releasing) this.completionPending = false
+    if (this.runEnvelope.releaseProgress === undefined) this.completionPending = false
   }
 
+  // Scratch tuple reused across frames so the steady-state render allocates nothing.
+  private sweepFronts: [number, number] = [0, 0]
+
   fronts(width: number) {
-    const cycles = this.run.clock / RUN_DURATION
+    const cycles = this.sweepClock / RUN_DURATION
     const progress = cycles % 1
     const start = -RUN_HEAD
     const end = width - 1 + RUN_TAIL
     const secondProgress = cycles < 0.5 ? 0 : (cycles + 0.5) % 1
-    return [start + coast(progress) * (end - start), start + coast(secondProgress) * (end - start)] as const
+    this.sweepFronts[0] = start + coast(progress) * (end - start)
+    this.sweepFronts[1] = start + coast(secondProgress) * (end - start)
+    return this.sweepFronts
   }
 }
 
@@ -669,12 +674,11 @@ class TabPulseRenderable extends Renderable {
       )
     const glowTail = Math.min(this._glowTail, Math.max(1, this.width - 2))
     const outerGlowTail = Math.min(this._outerGlowTail, Math.max(1, this.width - 2))
-    const releaseSpread = glowReleaseSpread(releaseProgress ?? 0, glowTail, this.width)
-    const releaseSwell =
-      releaseProgress === undefined ? 0 : glowReleaseSwell(releaseProgress) * this.inner.glowReleaseScale
-    const outerReleaseSpread = glowReleaseSpread(outerReleaseProgress ?? 0, outerGlowTail, this.width)
-    const outerReleaseSwell =
-      outerReleaseProgress === undefined ? 0 : glowReleaseSwell(outerReleaseProgress) * this.outer.glowReleaseScale
+    const releaseSwell = this.inner.glowReleaseSwell
+    const releaseSpread = releaseSwell === 0 ? 0 : glowReleaseSpread(releaseProgress!, glowTail, this.width)
+    const outerReleaseSwell = this.outer.glowReleaseSwell
+    const outerReleaseSpread =
+      outerReleaseSwell === 0 ? 0 : glowReleaseSpread(outerReleaseProgress!, outerGlowTail, this.width)
     const flashTail = this._flashTail === undefined ? undefined : Math.min(this._flashTail, Math.max(1, this.width - 2))
     const outerFlashTail =
       this._outerFlashTail === undefined ? undefined : Math.min(this._outerFlashTail, Math.max(1, this.width - 2))
