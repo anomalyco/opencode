@@ -19,8 +19,7 @@ import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Location } from "../location.js"
 import { waitForAbort } from "@opencode-ai/util/process"
 import { State } from "../state.js"
-import { MCPClient } from "./client.js"
-import { MCPOAuth } from "./oauth.js"
+import type { MCPClient } from "./client.js"
 
 export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
 export type ServerName = typeof ServerName.Type
@@ -245,7 +244,11 @@ export const layer = (options?: Options) =>
             draft.method.update({
               integrationID,
               method: { id: methodID, type: "oauth", label: name },
-              authorize: () => MCPOAuth.authorize({ name, config: remote, methodID }),
+              authorize: () =>
+                Effect.gen(function* () {
+                  const { MCPOAuth } = yield* Effect.promise(() => import("./oauth.js"))
+                  return yield* MCPOAuth.authorize({ name, config: remote, methodID })
+                }),
             })
           })
           .pipe(Scope.provide(scope))
@@ -264,6 +267,7 @@ export const layer = (options?: Options) =>
       // opens a browser, so an auth-gated connect ends in UnauthorizedError -> needs_auth rather than a redirect.
       const connectProvider = Effect.fnUntraced(function* (entry: ServerEntry) {
         if (entry.config.type !== "remote" || !entry.integrationID) return undefined
+        const { MCPOAuth } = yield* Effect.promise(() => import("./oauth.js"))
         const remote = entry.config
         const oauth = remote.oauth || undefined
         const base = {
@@ -505,6 +509,7 @@ export const layer = (options?: Options) =>
           const scope = yield* Scope.fork(root)
           entry.scope = scope
           const authProvider = yield* connectProvider(entry)
+          const { MCPClient } = yield* Effect.promise(() => import("./client.js"))
           // List tools as part of connect so a failure here marks the server failed rather than
           // leaving it connected with a silently empty tool list and no path to recover.
           const result = yield* MCPClient.connect(
