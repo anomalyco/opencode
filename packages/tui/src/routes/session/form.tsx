@@ -893,6 +893,7 @@ export function FormPrompt(props: {
                             paddingRight={1}
                           >
                             <text
+                              attributes={TextAttributes.DIM}
                               fg={
                                 active() ? theme.text.formfieldIndicator.focused : theme.text.formfieldIndicator.default
                               }
@@ -906,6 +907,7 @@ export function FormPrompt(props: {
                               <text
                                 width={4}
                                 flexShrink={0}
+                                attributes={TextAttributes.DIM}
                                 fg={
                                   active()
                                     ? theme.text.formfieldIndicator.focused
@@ -922,7 +924,9 @@ export function FormPrompt(props: {
                             </text>
                           </box>
                           <Show when={!multi()}>
-                            <text fg={theme.text.formfieldIndicator.selected}>{picked() ? " ✓" : ""}</text>
+                            <text attributes={TextAttributes.DIM} fg={theme.text.formfieldIndicator.selected}>
+                              {picked() ? " ✓" : ""}
+                            </text>
                           </Show>
                         </box>
                         <Show when={row.description}>
@@ -949,6 +953,7 @@ export function FormPrompt(props: {
                         paddingRight={1}
                       >
                         <text
+                          attributes={TextAttributes.DIM}
                           fg={other() ? theme.text.formfieldIndicator.focused : theme.text.formfieldIndicator.default}
                         >
                           {`${rows().length + 1}.`}
@@ -963,6 +968,7 @@ export function FormPrompt(props: {
                           <text
                             width={4}
                             flexShrink={0}
+                            attributes={TextAttributes.DIM}
                             fg={
                               other()
                                 ? theme.text.formfieldIndicator.focused
@@ -982,7 +988,9 @@ export function FormPrompt(props: {
                                 {input() || "Type your own answer"}
                               </text>
                               <Show when={!multi() && customPicked()}>
-                                <text fg={theme.text.formfieldIndicator.selected}>✓</text>
+                                <text attributes={TextAttributes.DIM} fg={theme.text.formfieldIndicator.selected}>
+                                  ✓
+                                </text>
                               </Show>
                             </>
                           }
