@@ -273,12 +273,13 @@ export function SessionTabs(
     controller?: SessionTabsController
     animations?: boolean
     orientation?: "horizontal" | "vertical"
+    width?: number
   } = {},
 ) {
   return (
     <Switch>
       <Match when={props.orientation === "vertical"}>
-        <VerticalSessionTabs controller={props.controller} animations={props.animations} />
+        <VerticalSessionTabs controller={props.controller} animations={props.animations} width={props.width} />
       </Match>
       <Match when={true}>
         <HorizontalSessionTabs controller={props.controller} animations={props.animations} />
@@ -287,7 +288,7 @@ export function SessionTabs(
   )
 }
 
-function VerticalSessionTabs(props: { controller?: SessionTabsController; animations?: boolean }) {
+function VerticalSessionTabs(props: { controller?: SessionTabsController; animations?: boolean; width?: number }) {
   const contextTabs = useSessionTabs()
   const tabs: SessionTabsController = props.controller ?? contextTabs
   const data = useData()
@@ -295,7 +296,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
   const { mode } = useThemes()
   const config = useConfig().data
   const animations = () => props.animations ?? config.animations ?? true
-  const width = () => SESSION_SIDEBAR_WIDTH
+  const width = () => props.width ?? SESSION_SIDEBAR_WIDTH
   const hueStep = () => (mode() === "light" ? 800 : 200)
   const accent = () => theme.hue.accent[hueStep()]
   const activeNumber = () => theme.hue.interactive[hueStep()]
