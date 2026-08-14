@@ -1,8 +1,10 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, Show } from "solid-js"
 import { FilePath } from "../../ui/file-path"
+import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
 
 function View(props: { context: Plugin.Context }) {
+  const actions = useWorkingDirectoryActions({ directory: () => props.context.location?.directory })
   const directory = createMemo(() => {
     if (!props.context.location) return undefined
     const value = props.context.ui.format.path(props.context.location.directory)
@@ -11,7 +13,20 @@ function View(props: { context: Plugin.Context }) {
   })
   return (
     <Show when={directory()}>
-      {(value) => <FilePath value={value()} maxWidth={38} fg={props.context.theme.text.subdued} />}
+      {(value) => (
+        <box
+          id="sidebar.footer.location"
+          onMouseOver={actions.onMouseOver}
+          onMouseOut={actions.onMouseOut}
+          onMouseUp={actions.onMouseUp}
+        >
+          <FilePath
+            value={value()}
+            maxWidth={38}
+            fg={actions.hovered() ? props.context.theme.text.default : props.context.theme.text.subdued}
+          />
+        </box>
+      )}
     </Show>
   )
 }
