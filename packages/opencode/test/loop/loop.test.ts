@@ -389,6 +389,68 @@ it.instance(
 )
 
 it.instance(
+  "does not consume the iteration budget while the session is busy with a foreign turn",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const llm = yield* TestLLMServer
+      yield* writeConfig(dir, providerCfg(llm.url))
+      const loop = yield* Loop.Service
+      const session = yield* Session.Service
+      const prompt = yield* SessionPrompt.Service
+
+      const existing = yield* session.create({ title: "chat" })
+
+      // A turn this loop did not start — e.g. the user's own message sent
+      // just before starting the loop — held open until we release it.
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      yield* llm.hold("manual reply", gate)
+      yield* prompt
+        .prompt({ sessionID: existing.id, parts: [{ type: "text", text: "manual message" }] })
+        .pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const hits = yield* llm.hits
+          return hits.length > 0 ? true : undefined
+        }),
+        "manual turn never reached the mock provider",
+        "10 seconds",
+      )
+
+      // Queued for once the foreign turn frees the session up and the
+      // loop's own first iteration actually runs.
+      yield* llm.text("all done <promise>COMPLETE</promise>")
+
+      const info = yield* loop.create({
+        prompt: "do the thing",
+        sessionID: existing.id,
+        maxIterations: 3,
+        interval: 0.05,
+      })
+
+      // Old behaviour: the foreign-turn guard tripped roughly every 50ms and
+      // each trip advanced info.iteration anyway, so all 3 max iterations
+      // were burned well inside this window — the loop finalized
+      // "max_reached" without the manual turn ever finishing, and without
+      // ever sending its own prompt.
+      yield* Effect.sleep("500 millis")
+      const midFlight = yield* loop.get(info.id)
+      expect(midFlight?.status).toBe("running")
+      expect(midFlight?.iteration).toBe(0)
+
+      release()
+      const final = yield* waitForTerminal(info.id)
+      expect(final.status).toBe("completed")
+      expect(final.iteration).toBe(1)
+      expect(final.iterations).toHaveLength(1)
+    }),
+  { config: {} },
+)
+
+it.instance(
   "a stalled iteration gets a directive continuation prompt, in the visible session",
   () =>
     Effect.gen(function* () {

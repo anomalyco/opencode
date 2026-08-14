@@ -524,6 +524,25 @@ export const layer = Layer.effect(
           }
 
           const result = yield* runIteration(record)
+
+          if (result.skipped) {
+            // Foreign-turn guard tripped: the target session was busy with a
+            // turn this loop did not start (the user's own message, or a
+            // slow previous turn not yet settled), so no prompt was sent.
+            // This must not consume the iteration budget or advance the
+            // counter — doing so let a long in-flight generation burn the
+            // whole run in `interval`-second ticks (2s default) before the
+            // loop ever got to send its own first prompt, visibly racing
+            // the counter to max_reached while the model was still
+            // "thinking" on unrelated work.
+            yield* patch(id, (current) => ({
+              ...current,
+              info: { ...current.info, lastRunAt: result.finishedAt },
+            }))
+            yield* waitBetween(id, (record.info.interval ?? DefaultIntervalSeconds) * 1000)
+            continue
+          }
+
           const updated = yield* patch(id, (current) => ({
             ...current,
             info: {
@@ -542,7 +561,6 @@ export const layer = Layer.effect(
                   toolCalls: result.toolCalls,
                   outputLength: result.outputLength,
                   complete: result.complete,
-                  skipped: result.skipped ? true : undefined,
                   startedAt: result.startedAt,
                   finishedAt: result.finishedAt,
                 },
@@ -779,6 +797,13 @@ export const layer = Layer.effect(
 
     // One model turn inside a queue run. Iteration bookkeeping matches run():
     // the child session is recorded before prompting so cancel targets it.
+    //
+    // Retries internally on the foreign-turn guard (changeSessionID busy with
+    // a turn this queue run didn't start) instead of returning the skipped
+    // result to the caller — the 3 call sites treat a returned result as a
+    // real gate attempt (toolCalls: 0, output: "" would read as a failing
+    // turn and cost this change a strike), and the per-change `iterations`
+    // counter they maintain must only count turns that actually ran.
     const queueTurn = (
       id: LoopID,
       change: QueueChange,
@@ -788,45 +813,57 @@ export const layer = Layer.effect(
       persona?: string,
     ) =>
       Effect.gen(function* () {
-        const record = (yield* Ref.get(state)).get(id)
-        if (!record) return undefined
-        const peers = yield* idlePeers
-        const neighbours = yield* activePeers(changeSessionID, record.info.directory)
-        const brief = buildBrief({
-          change,
-          gate,
-          failure,
-          idlePeers: peers,
-          peers: neighbours,
-          guidance: record.queue?.guidance,
-          steers: record.steers,
-          persona,
-        })
-        const result = yield* runIteration(record, { promptText: brief, sessionID: changeSessionID })
-        yield* patch(id, (current) => ({
-          ...current,
-          info: {
-            ...current.info,
-            iteration: result.iteration,
-            iterationSessionID: result.sessionID,
-            lastRunAt: result.finishedAt,
-            iterations: [
-              ...current.info.iterations,
-              {
-                iteration: result.iteration,
-                sessionID: result.sessionID,
-                toolCalls: result.toolCalls,
-                outputLength: result.outputLength,
-                complete: result.complete,
-                skipped: result.skipped ? true : undefined,
-                startedAt: result.startedAt,
-                finishedAt: result.finishedAt,
-              },
-            ].slice(-MaxStoredIterations),
-          },
-        }))
-        yield* emit(id)
-        return result
+        while (true) {
+          const record = (yield* Ref.get(state)).get(id)
+          if (!record) return undefined
+          const peers = yield* idlePeers
+          const neighbours = yield* activePeers(changeSessionID, record.info.directory)
+          const brief = buildBrief({
+            change,
+            gate,
+            failure,
+            idlePeers: peers,
+            peers: neighbours,
+            guidance: record.queue?.guidance,
+            steers: record.steers,
+            persona,
+          })
+          const result = yield* runIteration(record, { promptText: brief, sessionID: changeSessionID })
+
+          if (result.skipped) {
+            yield* patch(id, (current) => ({
+              ...current,
+              info: { ...current.info, lastRunAt: result.finishedAt },
+            }))
+            yield* waitBetween(id, (record.info.interval ?? DefaultIntervalSeconds) * 1000)
+            if ((yield* Ref.get(state)).get(id)?.info.status !== "running") return undefined
+            continue
+          }
+
+          yield* patch(id, (current) => ({
+            ...current,
+            info: {
+              ...current.info,
+              iteration: result.iteration,
+              iterationSessionID: result.sessionID,
+              lastRunAt: result.finishedAt,
+              iterations: [
+                ...current.info.iterations,
+                {
+                  iteration: result.iteration,
+                  sessionID: result.sessionID,
+                  toolCalls: result.toolCalls,
+                  outputLength: result.outputLength,
+                  complete: result.complete,
+                  startedAt: result.startedAt,
+                  finishedAt: result.finishedAt,
+                },
+              ].slice(-MaxStoredIterations),
+            },
+          }))
+          yield* emit(id)
+          return result
+        }
       })
 
     const BLOCKED_TOKEN = "<promise>BLOCKED</promise>"
