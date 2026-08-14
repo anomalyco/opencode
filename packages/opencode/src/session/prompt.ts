@@ -42,6 +42,7 @@ import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { errorMessage } from "@/util/error"
 import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
@@ -1358,7 +1359,7 @@ const layer = Layer.effect(
             if (alreadySurfaced) return Effect.failCause(cause)
             if (!cause.reasons.some(Cause.isDieReason)) return Effect.failCause(cause)
             return Effect.gen(function* () {
-              const error = new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject()
+              const error = new NamedError.Unknown({ message: errorMessage(Cause.squash(cause)) }).toObject()
               const assistant = yield* lastAssistant(input.sessionID)
               if (assistant.info.role === "assistant") {
                 assistant.info.error = error
