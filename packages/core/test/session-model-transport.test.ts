@@ -9,6 +9,7 @@ import type {
 import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
 import { Session } from "@opencode-ai/schema/session"
 import { Deferred, Effect, Fiber, Queue, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { Headers } from "effect/unstable/http"
 
 const session = Session.ID.make("ses_transport")
@@ -46,6 +47,14 @@ const exchange = (
 
 const run = <A, E>(connector: WebSocketConnector, effect: Effect.Effect<A, E, SessionModelTransport.Service>) =>
   Effect.runPromise(effect.pipe(Effect.provide(SessionModelTransport.makeLayer(connector)), Effect.scoped))
+
+const runWithTestClock = <A, E>(
+  connector: WebSocketConnector,
+  effect: Effect.Effect<A, E, SessionModelTransport.Service>,
+) =>
+  Effect.runPromise(
+    effect.pipe(Effect.provide(SessionModelTransport.makeLayer(connector)), Effect.scoped, Effect.provide(TestClock.layer())),
+  )
 
 const collect = (executor: ReturnType<SessionModelTransport.Interface["bind"]>, item: WebSocketChannelExchange) =>
   Effect.gen(function* () {
@@ -237,6 +246,75 @@ describe("SessionModelTransport", () => {
         )
         yield* Deferred.await(started)
         yield* Fiber.interrupt(fiber)
+        expect(closed).toBe(1)
+      }),
+    )
+  })
+
+  test("closes an active exchange without waiting for its Session permit", async () => {
+    const started = Deferred.makeUnsafe<void>()
+    const messages = queue<string | Uint8Array, AIError>()
+    let closed = 0
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.succeed({
+          sendText: () => Deferred.succeed(started, undefined),
+          messages: Stream.fromQueue(messages),
+          close: Effect.sync(() => closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
+        }),
+    }
+
+    await run(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const running = yield* collect(transport.bind(session), exchange("active")).pipe(
+          Effect.forkChild({ startImmediately: true }),
+        )
+        yield* Deferred.await(started)
+
+        yield* transport.close(session)
+        const result = yield* Effect.result(Fiber.join(running))
+
+        expect(result).toMatchObject({
+          _tag: "Failure",
+          failure: { reason: { _tag: "Transport", code: "close", delivery: "ambiguous" } },
+        })
+        expect(closed).toBe(1)
+      }),
+    )
+  })
+
+  test("times out an idle accepted request and poisons its socket", async () => {
+    const started = Deferred.makeUnsafe<void>()
+    const messages = queue<string | Uint8Array, AIError>()
+    let closed = 0
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.succeed({
+          sendText: () => Deferred.succeed(started, undefined),
+          messages: Stream.fromQueue(messages),
+          close: Effect.sync(() => closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
+        }),
+    }
+
+    await runWithTestClock(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const running = yield* collect(transport.bind(session), exchange("idle")).pipe(
+          Effect.forkChild({ startImmediately: true }),
+        )
+        yield* Deferred.await(started)
+        yield* Effect.yieldNow
+
+        yield* TestClock.adjust("5 minutes")
+        const result = yield* Effect.result(Fiber.join(running))
+
+        expect(result).toMatchObject({
+          _tag: "Failure",
+          failure: { reason: { _tag: "Transport", code: "idle-timeout", delivery: "ambiguous" } },
+        })
         expect(closed).toBe(1)
       }),
     )

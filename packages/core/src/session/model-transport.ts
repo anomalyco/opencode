@@ -19,6 +19,7 @@ import { webSocketConstructor } from "../effect/app-node-platform.js"
 
 const ROTATE_AFTER_MS = 55 * 60 * 1000
 const INBOUND_CAPACITY = 128
+const IDLE_TIMEOUT = "5 minutes"
 
 type Delivery = "queued" | "connecting" | "ready" | "send-attempted" | "provider-observed" | "terminal"
 
@@ -39,6 +40,7 @@ interface Channel {
 
 interface State {
   readonly lock: Semaphore.Semaphore
+  closed: boolean
   channel?: Channel
 }
 
@@ -108,7 +110,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
       const state = (sessionID: SessionSchema.ID) => {
         const current = states.get(sessionID)
         if (current) return current
-        const created = { lock: Semaphore.makeUnsafe(1) }
+        const created = { lock: Semaphore.makeUnsafe(1), closed: false }
         states.set(sessionID, created)
         return created
       }
@@ -162,6 +164,15 @@ export const makeLayer = (connector: WebSocketConnector) =>
         return yield* Effect.uninterruptibleMask((restore) =>
           Effect.gen(function* () {
             const connection = yield* restore(connector.open(exchange.connect))
+            if (owner.closed) {
+              yield* connection.close
+              return yield* transportError("open", "Session WebSocket owner closed while connecting", {
+                operation: "request",
+                code: "owner-closed",
+                phase: "connect",
+                delivery: "not-sent",
+              })
+            }
             const channel: Channel = {
               affinity: key,
               connection,
@@ -238,6 +249,13 @@ export const makeLayer = (connector: WebSocketConnector) =>
         exchange: WebSocketChannelExchange,
         lifecycle: { delivery: Delivery },
       ) {
+        if (owner.closed)
+          return yield* transportError("start", "Session WebSocket owner is closed", {
+            operation: "request",
+            code: "owner-closed",
+            phase: "queue",
+            delivery: "not-sent",
+          })
         const key = affinity(exchange)
         const now = yield* Clock.currentTimeMillis
         const current = owner.channel
@@ -270,12 +288,14 @@ export const makeLayer = (connector: WebSocketConnector) =>
           ? owner.channel
           : yield* open(owner, exchange, key).pipe(
               Effect.catch((error) =>
-                Effect.logWarning("session websocket connect failed; using http", {
-                  sessionTransport: "websocket",
-                  phase: "connect",
-                  delivery: "not-sent",
-                  code: error.reason._tag === "Transport" ? error.reason.code : error.reason._tag,
-                }).pipe(Effect.andThen(Effect.succeed(undefined))),
+                error.reason._tag === "Transport" && error.reason.code === "owner-closed"
+                  ? Effect.fail(error)
+                  : Effect.logWarning("session websocket connect failed; using http", {
+                      sessionTransport: "websocket",
+                      phase: "connect",
+                      delivery: "not-sent",
+                      code: error.reason._tag === "Transport" ? error.reason.code : error.reason._tag,
+                    }).pipe(Effect.andThen(Effect.succeed(undefined))),
               ),
             )
         if (!channel) return fallback(exchange)
@@ -302,6 +322,19 @@ export const makeLayer = (connector: WebSocketConnector) =>
 
         let terminal = false
         const frames = Stream.fromQueue(active.queue).pipe(
+          Stream.timeoutOrElse({
+            duration: IDLE_TIMEOUT,
+            orElse: () =>
+              Stream.fail(
+                transportError("receive", "Timed out waiting for WebSocket data", {
+                  url: exchange.connect.url,
+                  operation: "read",
+                  code: "idle-timeout",
+                  phase: "receive",
+                  delivery: lifecycle.delivery === "provider-observed" ? "accepted" : "ambiguous",
+                }),
+              ),
+          }),
           Stream.mapEffect((frame) => exchange.driver.observe(create, frame)),
           Stream.tap((observation) =>
             Effect.sync(() => {
@@ -359,19 +392,22 @@ export const makeLayer = (connector: WebSocketConnector) =>
       const close = Effect.fn("SessionModelTransport.close")(function* (sessionID: SessionSchema.ID) {
         const owner = states.get(sessionID)
         if (!owner) return
-        yield* owner.lock.withPermit(
-          Effect.gen(function* () {
-            if (owner.channel) yield* closeChannel(owner, owner.channel)
-          }),
+        states.delete(sessionID)
+        owner.closed = true
+        if (owner.channel) yield* closeChannel(owner, owner.channel)
+      })
+      const closeAll = Effect.suspend(() => {
+        const owners = Array.from(states.values())
+        states.clear()
+        return Effect.forEach(
+          owners,
+          (owner) => {
+            owner.closed = true
+            return owner.channel ? closeChannel(owner, owner.channel) : Effect.void
+          },
+          { discard: true },
         )
       })
-      const closeAll = Effect.forEach(states.values(), (owner) =>
-        owner.lock.withPermit(
-          Effect.gen(function* () {
-            if (owner.channel) yield* closeChannel(owner, owner.channel)
-          }),
-        ),
-      ).pipe(Effect.asVoid)
 
       yield* Effect.addFinalizer(() => closeAll)
       return Service.of({ bind, close, closeAll })
