@@ -81,3 +81,34 @@ test("uses the remaining delay for the current value", async () => {
     jest.useRealTimers()
   }
 })
+
+test("does not restart the delay for an equivalent value", async () => {
+  jest.useFakeTimers()
+  const scope = createRoot((dispose) => {
+    const [value, setValue] = createSignal<{ id: string }>()
+    return {
+      dispose,
+      setValue,
+      visible: createDelayedPresence(value, 1_000, (previous, next) => previous.id === next.id),
+    }
+  })
+
+  try {
+    scope.setValue({ id: "first" })
+    await Promise.resolve()
+    jest.advanceTimersByTime(500)
+    scope.setValue({ id: "first" })
+    await Promise.resolve()
+    jest.advanceTimersByTime(499)
+    expect(scope.visible()).toBe(false)
+    jest.advanceTimersByTime(1)
+    expect(scope.visible()).toBe(true)
+
+    scope.setValue({ id: "second" })
+    await Promise.resolve()
+    expect(scope.visible()).toBe(false)
+  } finally {
+    scope.dispose()
+    jest.useRealTimers()
+  }
+})
