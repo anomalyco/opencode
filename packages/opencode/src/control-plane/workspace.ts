@@ -714,6 +714,7 @@ const layer = Layer.effect(
     })
 
     const list = Effect.fn("Workspace.list")(function* (project: Project.Info) {
+      if (!flags.experimentalWorkspaces) return []
       return (yield* db
         .select()
         .from(WorkspaceTable)
@@ -851,6 +852,7 @@ const layer = Layer.effect(
     })
 
     const startWorkspaceSyncing = Effect.fn("Workspace.startWorkspaceSyncing")(function* (projectID: ProjectV2.ID) {
+      if (!flags.experimentalWorkspaces) return
       const rows = yield* db
         .selectDistinct({ workspace: WorkspaceTable })
         .from(WorkspaceTable)
