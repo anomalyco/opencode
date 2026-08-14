@@ -2546,11 +2546,15 @@ test("openai-compatible: discovery skipped for non-openai-compatible npm", async
 })
 
 test("openai-compatible: discovery URL is baseURL + /models (no /v1 forced)", async () => {
-  let requestPath = ""
+  // fork: discovery also probes the llama-skein control plane at /api/fit,
+  // concurrently with the model list. Recording only the last request made this
+  // a race — collect every path and assert on the model-list one, which is what
+  // the test is actually about (no /v1 forced onto the configured baseURL).
+  const requestPaths: string[] = []
   const server = Bun.serve({
     port: 0,
     fetch(req) {
-      requestPath = new URL(req.url).pathname
+      requestPaths.push(new URL(req.url).pathname)
       return Response.json({ object: "list", data: [{ id: "model-a" }] })
     },
   })
@@ -2571,7 +2575,8 @@ test("openai-compatible: discovery URL is baseURL + /models (no /v1 forced)", as
       },
     })
     const providers = await runList(tmp.path)
-    expect(requestPath).toBe("/models")
+    expect(requestPaths).toContain("/models")
+    expect(requestPaths).not.toContain("/v1/models")
     expect(providers[ProviderV2.ID.make("local-llm")]?.models["model-a"]).toBeDefined()
   } finally {
     await server.stop()
