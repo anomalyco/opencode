@@ -20,7 +20,12 @@ function Mcp(props: { context: Plugin.Context }) {
 
   return (
     <Show when={list().length}>
-      <box gap={1} flexDirection="row" flexShrink={0}>
+      <box
+        gap={1}
+        flexDirection="row"
+        flexShrink={0}
+        onMouseUp={() => props.context.keymap.dispatch("mcp.list")}
+      >
         <text fg={props.context.theme.text.default}>
           <Switch>
             <Match when={failed()}>
@@ -56,7 +61,12 @@ function Plugins(props: { context: Plugin.Context }) {
 
   return (
     <Show when={failed()}>
-      <box gap={1} flexDirection="row" flexShrink={0}>
+      <box
+        gap={1}
+        flexDirection="row"
+        flexShrink={0}
+        onMouseUp={() => props.context.keymap.dispatch("plugins.list")}
+      >
         <text fg={props.context.theme.text.default}>
           <span style={{ fg: props.context.theme.text.feedback.error.default }}>⊙ </span>
           {failed()} plugin{failed() === 1 ? "" : "s"} failed
