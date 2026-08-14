@@ -546,34 +546,105 @@
       "file": "packages/tui/test/cli/cmd/tui/provider-options.test.ts",
       "marker": "fork: LAN discovery for llama-skein host",
       "note": "Fork edit to an upstream file (+18/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/agent.ts",
+      "marker": "if (!maybeCtx) return yield* Effect.die(new Error(\"InstanceRef not pro",
+      "note": "Fork edit to an upstream file (+1/-1 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/import.ts",
+      "marker": "if (!ctx) return yield* Effect.die(new Error(\"InstanceRef not provided",
+      "note": "Fork edit to an upstream file (+1/-1 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/demo.ts",
+      "marker": "import type { ToolPart } from \"@opencode-ai/sdk/v2\"",
+      "note": "Fork edit to an upstream file (+24/-18 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/session-data.ts",
+      "marker": "import type { Part, PermissionRequest, QuestionRequest, ToolPart } fro",
+      "note": "Fork edit to an upstream file (+2/-2 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/cli/cmd/run/subagent-data.ts",
+      "marker": "import type { Message, Part, PermissionRequest, QuestionRequest, ToolP",
+      "note": "Fork edit to an upstream file (+3/-3 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/effect/instance-state.ts",
+      "marker": "if (!ctx) return yield* Effect.die(new Error(\"InstanceRef not provided",
+      "note": "Fork edit to an upstream file (+1/-1 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/id/id.ts",
+      "marker": "loop: \"loop\",",
+      "note": "Fork edit to an upstream file (+1/-0 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/mcp/oauth-provider.ts",
+      "marker": "OAuthClientProvider,",
+      "note": "Fork edit to an upstream file (+2/-2 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/src/provider/transform.ts",
+      "marker": "if (model.limit.output > 0) return Math.min(model.limit.output, output",
+      "note": "Fork edit to an upstream file (+3/-1 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/cli/run/stream.transport.test.ts",
+      "marker": "} as unknown as SdkEvent",
+      "note": "Fork edit to an upstream file (+4/-4 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/fixture/mcp-session-recovery.ts",
+      "marker": "import { Client, StreamableHTTPClientTransport, LATEST_PROTOCOL_VERSIO",
+      "note": "Fork edit to an upstream file (+1/-3 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/server/httpapi-exercise/index.ts",
+      "marker": "http.protected.get(\"/local/capacity\", \"local.capacity\").json(200, arra",
+      "note": "Fork edit to an upstream file (+12/-0 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/tool/__snapshots__/parameters.test.ts.snap",
+      "marker": "\"provider\": {",
+      "note": "Fork edit to an upstream file (+4/-0 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/tool/code-mode-integration.test.ts",
+      "marker": "const listed = (await client.listTools()).tools as unknown as MCPToolD",
+      "note": "Fork edit to an upstream file (+5/-2 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/tool/code-mode.test.ts",
+      "marker": "import type { MCPToolDef } from \"@/mcp/catalog\"",
+      "note": "Fork edit to an upstream file (+1/-1 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/opencode/test/tool/registry.test.ts",
+      "marker": "import type { MCPToolDef } from \"@/mcp/catalog\"",
+      "note": "Fork edit to an upstream file (+1/-1 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/tui/test/cli/cmd/tui/sync-fixture.tsx",
+      "marker": "// Recorded rather than acted on: a bootstrap that decides to exit sho",
+      "note": "Fork edit to an upstream file (+17/-12 vs baseline). Marker is a full added line, verified absent from upstream's copy."
+    },
+    {
+      "file": "packages/tui/test/theme.test.ts",
+      "marker": "test(\"includes local custom themes\", () => {",
+      "note": "Fork edit to an upstream file (+7/-0 vs baseline). Marker is a full added line, verified absent from upstream's copy."
     }
   ],
   "divergence": {
-    "note": "Ratchet for the failure this fork keeps hitting: a merge silently deleting a fork feature (see the self-healing compaction entry). Any file under `scope` that differs from baseline.upstreamRef and is neither owned/patched nor listed in `accepted` fails fork:verify. `accepted` is the divergence that already existed when the gate was added \u2014 classify those as feature or drift over time; new files must be classified immediately. Re-baseline deliberately with `bun run fork:verify --accept-divergence`.",
+    "note": "Ratchet for the failure this fork keeps hitting: a merge silently deleting a fork feature (see the self-healing compaction entry). Any file under `scope` that differs from baseline.upstreamRef and is neither owned/patched nor listed in `accepted` fails fork:verify. `accepted` is the divergence that already existed when the gate was added \u2014 classify those as feature or drift over time; new files must be classified immediately. The single remaining accepted entry is packages/core/src/effect/dfdf, which upstream committed by accident \u2014 its contents are an editor's \"File to save in:\" prompt. It is deleted here on purpose; it stays accepted rather than registered because there is no file left to carry a marker. Re-baseline deliberately with `bun run fork:verify --accept-divergence`.",
     "scope": [
       "^packages/[^/]+/(src|test)/"
     ],
     "accepted": [
-      "packages/core/src/effect/dfdf",
-      "packages/opencode/src/cli/cmd/agent.ts",
-      "packages/opencode/src/cli/cmd/import.ts",
-      "packages/opencode/src/cli/cmd/run/demo.ts",
-      "packages/opencode/src/cli/cmd/run/session-data.ts",
-      "packages/opencode/src/cli/cmd/run/subagent-data.ts",
-      "packages/opencode/src/effect/instance-state.ts",
-      "packages/opencode/src/id/id.ts",
-      "packages/opencode/src/mcp/oauth-provider.ts",
-      "packages/opencode/src/provider/transform.ts",
-      "packages/opencode/test/cli/run/stream.transport.test.ts",
-      "packages/opencode/test/fixture/mcp-session-recovery.ts",
-      "packages/opencode/test/server/httpapi-exercise/index.ts",
-      "packages/opencode/test/tool/__snapshots__/parameters.test.ts.snap",
-      "packages/opencode/test/tool/code-mode-integration.test.ts",
-      "packages/opencode/test/tool/code-mode.test.ts",
-      "packages/opencode/test/tool/registry.test.ts",
-      "packages/tui/src/routes/session/subagent-footer.tsx",
-      "packages/tui/test/cli/cmd/tui/sync-fixture.tsx",
-      "packages/tui/test/theme.test.ts"
+      "packages/core/src/effect/dfdf"
     ]
   }
 }
