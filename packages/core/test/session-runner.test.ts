@@ -526,6 +526,20 @@ const providerUnavailable = () =>
     }),
   })
 
+const continuationRejected = (recovery: "retry-full" | "rotate-and-retry-full") =>
+  new AIError({
+    module: "test",
+    method: "stream",
+    reason: new TransportReason({
+      message: "Continuation rejected",
+      transport: "websocket",
+      operation: "read",
+      phase: "receive",
+      delivery: "rejected",
+      recovery,
+    }),
+  })
+
 const incompleteStream = () =>
   new AIError({
     module: "test",
@@ -4090,6 +4104,36 @@ describe("SessionRunnerLLM", () => {
       ])
       yield* replaySessionProjection(sessionID)
       expect((yield* session.context(sessionID)).filter((message) => message.type === "assistant")).toHaveLength(1)
+    }),
+  )
+
+  it.effect("immediately rebuilds once after explicit continuation rejection", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* TestLLM.push(Stream.fail(continuationRejected("retry-full")))
+      yield* TestLLM.push(TestLLM.text("Recovered", "continuation-recovery"))
+
+      yield* runPrompt(session, "Recover continuation")
+
+      expect(requests).toHaveLength(2)
+      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
+  it.effect("bounds repeated continuation rejection to one immediate recovery", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const failure = continuationRejected("rotate-and-retry-full")
+      yield* TestLLM.push(Stream.fail(failure), Stream.fail(failure))
+
+      expect(yield* runPrompt(session, "Reject continuation twice").pipe(Effect.flip)).toBe(failure)
+
+      expect(requests).toHaveLength(2)
+      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
     }),
   )
 

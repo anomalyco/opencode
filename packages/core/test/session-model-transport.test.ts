@@ -66,6 +66,15 @@ const collect = (executor: ReturnType<SessionModelTransport.Interface["bind"]>, 
     return Array.from(yield* Stream.runCollect(execution.frames))
   }).pipe(Effect.scoped)
 
+const collectComplete = (
+  executor: ReturnType<SessionModelTransport.Interface["bind"]>,
+  item: WebSocketChannelExchange,
+) =>
+  Effect.gen(function* () {
+    const execution = yield* executor.execute(item)
+    return Array.from(yield* Stream.runCollect(execution.frames.pipe(Stream.onEnd(execution.complete))))
+  }).pipe(Effect.scoped)
+
 const automatic = () => {
   const connections: Array<{
     readonly messages: Queue.Queue<string | Uint8Array, AIError>
@@ -96,6 +105,164 @@ const automatic = () => {
 }
 
 describe("SessionModelTransport", () => {
+  test("commits checkpoints only after successful outer completion", async () => {
+    const messages = queue<string | Uint8Array, AIError>()
+    const checkpoints: Array<unknown> = []
+    const candidate = { protocol: "test", value: { response: "one" } }
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.succeed({
+          sendText: (message) =>
+            Effect.sync(() => Queue.offerUnsafe(messages, `completed:${message}`)).pipe(Effect.asVoid),
+          messages: Stream.fromQueue(messages),
+          close: Queue.shutdown(messages).pipe(Effect.asVoid),
+        }),
+    }
+    const item = (id: string): WebSocketChannelExchange => ({
+      ...exchange(id),
+      driver: {
+        create: (checkpoint) =>
+          Effect.sync(() => {
+            checkpoints.push(checkpoint)
+            return { message: id, mode: checkpoint ? "incremental" : "full" }
+          }),
+        observe: (_create, frame) => Effect.succeed({ type: "completed", frame, checkpoint: candidate }),
+      },
+    })
+
+    await run(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        yield* collectComplete(executor, item("first"))
+        yield* collect(executor, item("second"))
+        yield* collect(executor, item("third"))
+
+        expect(checkpoints).toEqual([undefined, candidate, undefined])
+      }),
+    )
+  })
+
+  test("does not carry a checkpoint across physical connection rotation", async () => {
+    const fixture = automatic()
+    const checkpoints: Array<unknown> = []
+    const candidate = { protocol: "test", value: { response: "one" } }
+    const item = (id: string, authorization: string): WebSocketChannelExchange => ({
+      ...exchange(id, { headers: { authorization } }),
+      driver: {
+        create: (checkpoint) =>
+          Effect.sync(() => {
+            checkpoints.push(checkpoint)
+            return { message: id, mode: checkpoint ? "incremental" : "full" }
+          }),
+        observe: (_create, frame) => Effect.succeed({ type: "completed", frame, checkpoint: candidate }),
+      },
+    })
+
+    await run(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        yield* collectComplete(executor, item("first", "one"))
+        yield* collect(executor, item("second", "two"))
+
+        expect(checkpoints).toEqual([undefined, undefined])
+        expect(fixture.connections).toHaveLength(2)
+      }),
+    )
+  })
+
+  test("clears a rejected checkpoint before the runner retries full", async () => {
+    const fixture = automatic()
+    const checkpoints: Array<unknown> = []
+    const candidate = { protocol: "test", value: { response: "one" } }
+    const item = (id: string): WebSocketChannelExchange => ({
+      ...exchange(id),
+      driver: {
+        create: (checkpoint) =>
+          Effect.sync(() => {
+            checkpoints.push(checkpoint)
+            return { message: id, mode: checkpoint ? "incremental" : "full" }
+          }),
+        observe: (_create, frame) =>
+          id === "rejected"
+            ? Effect.succeed({
+                type: "rejected",
+                recovery: "retry-full",
+                error: new AIError({
+                  module: "test",
+                  method: "stream",
+                  reason: new TransportReason({
+                    message: "missing response",
+                    transport: "websocket",
+                    operation: "read",
+                    phase: "receive",
+                    delivery: "rejected",
+                    recovery: "retry-full",
+                  }),
+                }),
+              })
+            : Effect.succeed({ type: "completed", frame, checkpoint: candidate }),
+      },
+    })
+
+    await run(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        yield* collectComplete(executor, item("first"))
+        yield* Effect.result(collect(executor, item("rejected")))
+        yield* collect(executor, item("retry"))
+
+        expect(checkpoints).toEqual([undefined, candidate, undefined])
+        expect(fixture.connections).toHaveLength(1)
+      }),
+    )
+  })
+
+  test("rotates after the provider rejects the connection generation", async () => {
+    const fixture = automatic()
+    const rejected: WebSocketChannelExchange = {
+      ...exchange("rejected"),
+      driver: {
+        create: () => Effect.succeed({ message: "rejected", mode: "incremental" }),
+        observe: () =>
+          Effect.succeed({
+            type: "rejected",
+            recovery: "rotate-and-retry-full",
+            error: new AIError({
+              module: "test",
+              method: "stream",
+              reason: new TransportReason({
+                message: "connection limit",
+                transport: "websocket",
+                operation: "read",
+                phase: "receive",
+                delivery: "rejected",
+                recovery: "rotate-and-retry-full",
+              }),
+            }),
+          }),
+      },
+    }
+
+    await run(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        yield* Effect.result(collect(executor, rejected))
+        yield* collect(executor, exchange("retry"))
+
+        expect(fixture.connections).toHaveLength(2)
+        expect(fixture.connections[0]?.closed).toBe(1)
+      }),
+    )
+  })
+
   test("reuses one physical connection for sequential Session calls", async () => {
     const fixture = automatic()
 

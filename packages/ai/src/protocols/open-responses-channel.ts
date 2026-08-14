@@ -23,6 +23,11 @@ export interface Options {
   readonly name: string
   readonly rotateAfterMs?: number
   readonly headers?: (headers: Headers.Headers) => Headers.Headers
+  readonly driver?: (input: {
+    readonly request: Readonly<Record<string, unknown>>
+    readonly message: string
+    readonly base: WebSocketChannelDriver
+  }) => WebSocketChannelDriver
 }
 
 export interface Prepared {
@@ -40,7 +45,8 @@ const message = (body: unknown) =>
     if (!ProviderShared.isRecord(body))
       return yield* ProviderShared.invalidRequest("Open Responses WebSocket body must be a JSON object")
     const { stream: _stream, stream_options: _streamOptions, background: _background, ...request } = body
-    return encodeMessage(yield* decodeMessage({ ...request, type: "response.create" }))
+    const decoded = yield* decodeMessage({ ...request, type: "response.create" })
+    return { request: decoded, message: encodeMessage(decoded) }
   })
 
 const driver = (options: Options, body: string): WebSocketChannelDriver => {
@@ -141,20 +147,25 @@ export const transport = <Body>(options: Options): Transport<Body, Prepared, str
       Effect.gen(function* () {
         const parts = yield* HttpTransport.jsonRequestParts(input)
         const headers = Headers.remove(options.headers?.(parts.headers) ?? parts.headers, "content-length")
+        const channel = input.webSocket
+          ? yield* Effect.gen(function* () {
+              const create = yield* message(parts.jsonBody)
+              const base = driver(options, create.message)
+              return {
+                url: yield* WebSocketTransport.toWebSocketUrl(parts.url),
+                headers,
+                rotateAfterMs: options.rotateAfterMs,
+                driver: options.driver?.({ request: create.request, message: create.message, base }) ?? base,
+              }
+            })
+          : undefined
         return {
           http: {
             request: ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),
             framing: Framing.sse,
             middleware: input.middleware,
           },
-          channel: input.webSocket
-            ? {
-                url: yield* WebSocketTransport.toWebSocketUrl(parts.url),
-                headers,
-                rotateAfterMs: options.rotateAfterMs,
-                driver: driver(options, yield* message(parts.jsonBody)),
-              }
-            : undefined,
+          channel,
         }
       }),
     execute: (prepared, request, runtime, executeOptions) => {

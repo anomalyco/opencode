@@ -15,12 +15,20 @@ import {
   TransportReason,
   Usage,
 } from "../../src/index.js"
-import { Auth, LLMClient, RequestExecutor, WebSocketTransport } from "../../src/route.js"
+import {
+  Auth,
+  LLMClient,
+  RequestExecutor,
+  WebSocketTransport,
+  type ChannelObservation,
+  type WebSocketChannelDriver,
+} from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as Azure from "../../src/providers/azure.js"
 import * as OpenAI from "../../src/providers/openai.js"
 import * as XAI from "../../src/providers/xai.js"
 import * as OpenAIResponses from "../../src/protocols/openai-responses.js"
+import { OpenAIResponsesChannel } from "../../src/protocols/openai-responses-channel.js"
 import * as ProviderShared from "../../src/protocols/shared.js"
 import { continuationRequest, nativeOpenAIResponsesContinuation } from "../continuation-scenarios.js"
 import { it } from "../lib/effect.js"
@@ -32,6 +40,47 @@ const model = OpenAIResponses.route
   .model({ id: "gpt-4.1-mini" })
 
 const xaiModel = XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).responses("grok-4.5")
+
+const baseChannelDriver = (message: string): WebSocketChannelDriver => ({
+  create: () => Effect.succeed({ message, mode: "full" }),
+  observe: (_create, frame): Effect.Effect<ChannelObservation, AIError> => {
+    const event = ProviderShared.decodeJson(frame)
+    if (!ProviderShared.isRecord(event)) return Effect.die("Expected event")
+    if (event.type === "response.completed") return Effect.succeed({ type: "completed", frame })
+    if (event.type === "response.incomplete") return Effect.succeed({ type: "incomplete", frame })
+    if (event.type === "error" || event.type === "response.failed")
+      return Effect.succeed({
+        type: "provider-failure",
+        error: new AIError({
+          module: "test",
+          method: "stream",
+          reason: new TransportReason({
+            message: "provider rejected request",
+            transport: "websocket",
+            operation: "read",
+            phase: "receive",
+          }),
+        }),
+      })
+    return Effect.succeed({ type: "frame", frame })
+  },
+})
+
+const continuationDriver = (request: Readonly<Record<string, unknown>>) => {
+  const message = ProviderShared.encodeJson(request)
+  return OpenAIResponsesChannel.driver({
+    id: "openai-responses",
+    name: "OpenAI Responses",
+    request,
+    message,
+    base: baseChannelDriver(message),
+  })
+}
+
+const checkpoint = (observation: ChannelObservation) => {
+  if (observation.type !== "completed" || !observation.checkpoint) throw new Error("Expected checkpoint")
+  return observation.checkpoint
+}
 
 const request = LLM.request({
   id: "req_1",
@@ -341,6 +390,189 @@ describe("OpenAI Responses route", () => {
       expect(errors.map((error) => error.reason._tag)).toEqual(["InvalidProviderOutput", "InvalidProviderOutput"])
       expect(errors[0]?.message).toContain("before response.created")
       expect(errors[1]?.message).toContain("response ID changed")
+    }),
+  )
+
+  it.effect("continues a tool call with only the new tool output", () =>
+    Effect.gen(function* () {
+      const firstRequest = {
+        type: "response.create",
+        model: "gpt-5.2",
+        store: false,
+        input: [{ role: "user", content: [{ type: "input_text", text: "Weather?" }] }],
+      }
+      const first = continuationDriver(firstRequest)
+      const firstCreate = yield* first.create(undefined)
+      yield* first.observe(
+        firstCreate,
+        ProviderShared.encodeJson({
+          type: "response.output_item.done",
+          item: {
+            type: "function_call",
+            id: "fc_1",
+            status: "completed",
+            call_id: "call_1",
+            name: "weather",
+            arguments: '{"city":"Paris"}',
+          },
+        }),
+      )
+      const saved = checkpoint(
+        yield* first.observe(
+          firstCreate,
+          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_1" } }),
+        ),
+      )
+      const second = continuationDriver({
+        ...firstRequest,
+        input: [
+          ...firstRequest.input,
+          { type: "function_call", call_id: "call_1", name: "weather", arguments: '{"city":"Paris"}' },
+          { type: "function_call_output", call_id: "call_1", output: '{"temperature":22}' },
+        ],
+      })
+
+      const create = yield* second.create(saved)
+
+      expect(create.mode).toBe("incremental")
+      expect(ProviderShared.decodeJson(create.message)).toMatchObject({
+        previous_response_id: "resp_1",
+        input: [{ type: "function_call_output", call_id: "call_1", output: '{"temperature":22}' }],
+      })
+    }),
+  )
+
+  it.effect("continues a promoted steer after the completed assistant output", () =>
+    Effect.gen(function* () {
+      const firstInput = [{ role: "user", content: [{ type: "input_text", text: "First" }] }]
+      const first = continuationDriver({ type: "response.create", model: "gpt-5.2", store: false, input: firstInput })
+      const create = yield* first.create(undefined)
+      yield* first.observe(
+        create,
+        ProviderShared.encodeJson({
+          type: "response.output_item.done",
+          item: {
+            type: "message",
+            id: "msg_1",
+            status: "completed",
+            role: "assistant",
+            content: [{ type: "output_text", text: "Hello" }],
+          },
+        }),
+      )
+      const saved = checkpoint(
+        yield* first.observe(
+          create,
+          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_1" } }),
+        ),
+      )
+      const steer = { role: "user", content: [{ type: "input_text", text: "Actually, be brief" }] }
+      const next = continuationDriver({
+        type: "response.create",
+        model: "gpt-5.2",
+        store: false,
+        input: [...firstInput, { role: "assistant", content: [{ type: "output_text", text: "Hello" }] }, steer],
+      })
+
+      const continued = yield* next.create(saved)
+
+      expect(continued.mode).toBe("incremental")
+      expect(ProviderShared.decodeJson(continued.message)).toMatchObject({
+        previous_response_id: "resp_1",
+        input: [steer],
+      })
+    }),
+  )
+
+  it.effect("uses a full request when any non-input invariant changes", () =>
+    Effect.gen(function* () {
+      const request = {
+        type: "response.create",
+        model: "gpt-5.2",
+        store: false,
+        metadata: { source: "one" },
+        input: [{ role: "user", content: [{ type: "input_text", text: "First" }] }],
+      }
+      const first = continuationDriver(request)
+      const create = yield* first.create(undefined)
+      const saved = checkpoint(
+        yield* first.observe(
+          create,
+          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_1" } }),
+        ),
+      )
+      const appended = [...request.input, { role: "user", content: [{ type: "input_text", text: "Second" }] }]
+      const changes = [
+        { ...request, model: "gpt-5.3", input: appended },
+        { ...request, instructions: "Changed", input: appended },
+        { ...request, tools: [{ type: "function", name: "other" }], input: appended },
+        { ...request, temperature: 0.5, input: appended },
+        { ...request, metadata: { source: "two" }, input: appended },
+        {
+          ...request,
+          input: [{ role: "user", content: [{ type: "input_text", text: "Rewritten history" }] }, appended[1]],
+        },
+      ]
+
+      const creates = yield* Effect.forEach(changes, (changed) => continuationDriver(changed).create(saved))
+
+      expect(creates.map((item) => item.mode)).toEqual(changes.map(() => "full"))
+      expect(
+        creates
+          .map((item) => ProviderShared.decodeJson(item.message))
+          .every((item) => ProviderShared.isRecord(item) && !("previous_response_id" in item)),
+      ).toBe(true)
+    }),
+  )
+
+  it.effect("stages no checkpoint for incomplete or ID-less completion", () =>
+    Effect.gen(function* () {
+      const driver = continuationDriver({ type: "response.create", model: "gpt-5.2", input: [] })
+      const create = yield* driver.create(undefined)
+
+      const completed = yield* driver.observe(
+        create,
+        ProviderShared.encodeJson({ type: "response.completed", response: {} }),
+      )
+      expect(completed).toMatchObject({ type: "completed" })
+      expect(completed).not.toHaveProperty("checkpoint")
+      expect(
+        yield* driver.observe(create, ProviderShared.encodeJson({ type: "response.incomplete", response: {} })),
+      ).toMatchObject({ type: "incomplete" })
+    }),
+  )
+
+  it.effect("classifies explicit continuation rejection for runner-owned recovery", () =>
+    Effect.gen(function* () {
+      const driver = continuationDriver({ type: "response.create", model: "gpt-5.2", input: [] })
+      const create = yield* driver.create(undefined)
+      const missing = yield* driver.observe(
+        create,
+        ProviderShared.encodeJson({
+          type: "error",
+          error: { code: "previous_response_not_found", message: "Missing response" },
+        }),
+      )
+      const limit = yield* driver.observe(
+        create,
+        ProviderShared.encodeJson({
+          type: "error",
+          error: { code: "websocket_connection_limit_reached", message: "Rotate" },
+        }),
+      )
+
+      expect(missing).toMatchObject({
+        type: "rejected",
+        recovery: "retry-full",
+        error: { reason: { _tag: "Transport", delivery: "rejected", recovery: "retry-full" } },
+      })
+      expect(limit).toMatchObject({
+        type: "rejected",
+        recovery: "rotate-and-retry-full",
+        error: {
+          reason: { _tag: "Transport", delivery: "rejected", recovery: "rotate-and-retry-full" },
+        },
+      })
     }),
   )
 

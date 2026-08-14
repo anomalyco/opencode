@@ -3,6 +3,7 @@ export * as SessionModelTransport from "./model-transport.js"
 import {
   WebSocketTransport,
   type ChannelObservation,
+  type ChannelCheckpoint,
   type WebSocketChannelExchange,
   type WebSocketChannelExecution,
   type WebSocketChannelExecutor,
@@ -35,6 +36,8 @@ interface Channel {
   active?: Active
   closing: boolean
   poisoned: boolean
+  checkpoint?: ChannelCheckpoint
+  pending?: { readonly token: object; readonly checkpoint: ChannelCheckpoint }
   reader?: Fiber.Fiber<unknown, unknown>
 }
 
@@ -301,10 +304,16 @@ export const makeLayer = (connector: WebSocketConnector) =>
         if (!channel) return fallback(exchange)
         lifecycle.delivery = "ready"
 
-        const create = yield* exchange.driver.create(undefined).pipe(
+        if (channel.pending) {
+          channel.pending = undefined
+          channel.checkpoint = undefined
+        }
+
+        const create = yield* exchange.driver.create(channel.checkpoint).pipe(
           Effect.tapError(() => closeChannel(owner, channel)),
           Effect.onInterrupt(() => closeChannel(owner, channel)),
         )
+        if (create.mode === "full") channel.checkpoint = undefined
         const active: Active = { queue: yield* Queue.bounded<string, AIError>(INBOUND_CAPACITY), lifecycle }
         channel.active = active
         lifecycle.delivery = "send-attempted"
@@ -320,7 +329,9 @@ export const makeLayer = (connector: WebSocketConnector) =>
           return yield* annotate(failure, { phase: "send", delivery: "ambiguous" })
         }
 
-        let terminal = false
+        let terminal: ChannelObservation | undefined
+        const token = {}
+        let staged: ChannelCheckpoint | undefined
         const frames = Stream.fromQueue(active.queue).pipe(
           Stream.timeoutOrElse({
             duration: IDLE_TIMEOUT,
@@ -339,8 +350,10 @@ export const makeLayer = (connector: WebSocketConnector) =>
           Stream.tap((observation) =>
             Effect.sync(() => {
               if (!observationTerminal(observation)) return
-              terminal = true
+              terminal = observation
               lifecycle.delivery = "terminal"
+              staged = observation.type === "completed" ? observation.checkpoint : undefined
+              if (observation.type !== "completed" || !staged) channel.checkpoint = undefined
             }),
           ),
           Stream.takeUntil(observationTerminal),
@@ -350,7 +363,14 @@ export const makeLayer = (connector: WebSocketConnector) =>
               if (channel.active === active) channel.active = undefined
               const pending = yield* Queue.size(active.queue)
               yield* Queue.shutdown(active.queue)
-              if (terminal && pending === 0) return
+              if (terminal && pending === 0) {
+                if (staged) channel.pending = { token, checkpoint: staged }
+                if (terminal.type === "rejected" && terminal.recovery === "rotate-and-retry-full")
+                  yield* closeChannel(owner, channel)
+                return
+              }
+              channel.checkpoint = undefined
+              channel.pending = undefined
               const error = terminal
                 ? transportError("receive", "WebSocket data arrived after the terminal event", {
                     url: exchange.connect.url,
@@ -370,21 +390,32 @@ export const makeLayer = (connector: WebSocketConnector) =>
             }),
           ),
         )
-        return { frames, complete: Effect.void }
+        const complete = Effect.sync(() => {
+          if (owner.channel !== channel || channel.pending?.token !== token) return
+          channel.checkpoint = channel.pending.checkpoint
+          channel.pending = undefined
+        })
+        return { frames, complete }
       })
 
       const bind = (sessionID: SessionSchema.ID): WebSocketChannelExecutor => ({
         execute: (exchange) => {
           const owner = state(sessionID)
           const lifecycle = { delivery: "queued" as Delivery }
+          let complete = Effect.void
           return Effect.succeed({
             frames: Stream.unwrap(
               Effect.acquireRelease(owner.lock.take(1), () => owner.lock.release(1), { interruptible: true }).pipe(
                 Effect.andThen(start(owner, exchange, lifecycle)),
+                Effect.tap((execution) =>
+                  Effect.sync(() => {
+                    complete = execution.complete
+                  }),
+                ),
                 Effect.map((execution) => execution.frames),
               ),
             ),
-            complete: Effect.void,
+            complete: Effect.suspend(() => complete),
           })
         },
       })
