@@ -119,17 +119,18 @@ not included in model context.
 ## Compaction advances the instruction epoch
 
 Conversation compaction and instruction synchronization are separate. Before
-promoting pending input, V2 compares live instruction sources with the latest
-admitted values. Ordinary changes become durable value deltas; their
-model-facing System messages are derived during request assembly rather than
-persisted.
+each physical model attempt, V2 compares live instruction sources with the
+latest admitted values, before delivering pending input for that attempt.
+Ordinary changes become durable value deltas. Later changes freeze their
+model-facing text when admitted and project it as chronological System messages;
+request assembly renders only the epoch baseline from stored values.
 
 Completed compaction advances the instruction epoch at the exact ended-event
 sequence and makes the currently admitted values initial. It does not reread
-sources or publish an instruction event. Session movement and committed revert
-clear the instruction fold so the next safe boundary requires one complete
-source read. See [Instructions](/instructions) for source ordering and update
-behavior.
+sources or publish an instruction event. Session movement retains instruction
+state so destination changes become chronological updates. Committed revert
+clears instruction state so the next model attempt requires one complete source
+read. See [Instructions](/instructions) for source ordering and update behavior.
 
 ## Current limitations
 

@@ -27,8 +27,9 @@ exits before expensive server boot. The design does not require clients to
 agree on a single initiator.
 
 This proposal does not introduce a supervisor process, warm candidate server,
-protocol negotiation, idle background restart, or general execution-recovery
-framework.
+protocol negotiation, idle background restart, or clustered or exactly-once
+execution recovery. Session execution separately provides bounded local recovery
+through durable write-ahead claims.
 
 ## Architecture at a Glance
 
@@ -176,9 +177,9 @@ This design gives each concept one authority.
 - Adding a permanent steward, proxy, or supervisor process.
 - Zero-downtime worker handoff or automatic rollback.
 - Application protocol negotiation or automatic TUI self-restart.
-- General hard-crash recovery for active Sessions.
-- Defining recovery semantics for provider attempts, tools, shells, sub-agents,
-  permissions, questions, or background jobs.
+- Exactly-once recovery for provider attempts, tools, shells, sub-agents,
+  permissions, questions, or background jobs. Top-level Session continuation
+  after process death is handled separately through durable execution claims.
 - Automatically killing a frozen owner.
 - Bounding concurrent location cold boots after clients reconnect.
 - Multi-machine or clustered service placement.
@@ -202,9 +203,10 @@ This design gives each concept one authority.
    diagnosed, non-retryable cause.
 8. **Clients do not kill an unresponsive owner automatically.** Destructive
    recovery requires the explicit `service restart` command.
-9. **Lifecycle does not promise execution semantics.** Graceful replacement
-   invokes Session suspension and resumption hooks, but tool-level continuity
-   belongs to a separate design.
+9. **Lifecycle does not promise exactly-once execution.** A successor invokes
+   the Session execution-claim sweep, which resumes from durable history.
+   Provider-attempt identity and tool-side-effect fencing belong to separate
+   designs.
 
 ## System Model
 
@@ -485,23 +487,20 @@ The UI derives text from status:
 | `failed`                 | Actionable failure message          |
 | `ready`                  | Normal TUI                          |
 
-## Graceful Session Continuity
+## Session Continuity
 
-Version-mismatch replacement uses the existing graceful Session suspension and
-resumption hooks:
+Every process-local Session busy period writes a durable execution claim before
+its runner starts. Success, failure, and user interruption release the claim;
+shutdown interruption and process death leave it intact. The
+successor sweeps claimed top-level Sessions, durably counts a recovery attempt,
+appends a continuation instruction, and resumes from projected history. The same
+mechanism covers graceful replacement, crash, SIGKILL, and runtime eviction.
 
-1. The old server snapshots active Session IDs during graceful teardown.
-2. The successor schedules those Sessions for continuation.
-3. The runner reloads durable Session history before continuing.
-
-This lifecycle design does not define what an interrupted physical provider
-attempt or tool invocation means. It does not promise that external side effects
-did not occur, replay the exact interrupted tool, preserve an in-memory form, or
-recover process-local background work.
-
-Those concerns require a separate execution-continuity design covering tools,
-shells, sub-agents, permissions, questions, provider attempts, and hard-crash
-recovery.
+Recovery fails stale running tool projections before further model work, but it
+does not prove whether an interrupted provider request or external operation
+already took effect. It does not replay the exact interrupted tool, preserve an
+in-memory form, recover process-local background work, or guarantee exactly-once
+provider or tool behavior.
 
 ## Unresponsive Owner
 
@@ -531,13 +530,15 @@ Automatic frozen-owner recovery is deferred.
 
 1. The old service installs vNext but keeps running.
 2. A fresh vNext TUI finds the healthy vOld service and requests graceful stop.
-3. The old service reports `stopping`, suspends active Sessions, and exits.
+3. The old service reports `stopping` and exits. Shutdown interruption preserves
+   the execution claims already written by active Sessions.
 4. Open TUIs enter their indefinite status loops.
 5. One or more clients spawn contenders.
 6. One contender acquires the service lock. Losers exit before heavy boot.
 7. The winner binds and registers the lifecycle shell as `starting`.
 8. Clients stop spawning and wait on the observable winner.
-9. The winner initializes the application and reports `ready`.
+9. The winner initializes the application, sweeps orphaned execution claims,
+   and reports `ready`.
 10. TUIs rebuild clients, reconcile state, and resume.
 
 ### Server crashes while ready
@@ -546,7 +547,9 @@ Automatic frozen-owner recovery is deferred.
 2. Clients call `ensureRunning`.
 3. Process death has released the service lock.
 4. One contender wins, replaces registration, and starts normally.
-5. Detailed active-execution recovery is outside this design.
+5. Application startup sweeps orphaned top-level execution claims and resumes
+   them with bounded attempt accounting. External side effects remain
+   potentially ambiguous.
 
 ### Winner crashes during startup
 
@@ -650,8 +653,9 @@ was the observed incident cost.
    `packages/client` with `bun run generate`.
 6. **Codify launch versus reconnect.** Fresh launch enforces installed version;
    reconnect never activates replacement.
-7. **Integrate graceful replacement.** Preserve current background-install and
-   fresh-launch activation behavior while invoking Session continuity hooks.
+7. **Integrate Session continuity.** Preserve current background-install and
+   fresh-launch activation behavior while invoking startup execution-claim
+   recovery.
 8. **Harden explicit recovery.** Verify exact process identity during explicit
    `service restart`; never automatically kill an unresponsive owner.
 9. **Run the full multi-process suite.** Include repeated restart cycles and
@@ -677,7 +681,8 @@ was the observed incident cost.
 
 - Idle background update activation with an admission fence.
 - Application protocol compatibility and automatic local TUI re-exec.
-- Durable execution recovery for provider attempts and tools.
+- Stronger execution recovery with provider-attempt identity, tool-side-effect
+  idempotency or fencing, and clustered ownership.
 - Shell, sub-agent, permission, question, and background-job continuity.
 - Automatic recovery for a positively identified frozen owner.
 - Cold-boot concurrency limits and interaction-prioritized location loading.

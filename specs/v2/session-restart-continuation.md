@@ -2,12 +2,25 @@
 
 | Field          | Value                                                        |
 | -------------- | ------------------------------------------------------------ |
-| Status         | Accepted and implemented                                     |
+| Status         | Superseded by write-ahead execution claims                   |
 | Author         | Kit Langton                                                  |
 | Date           | 2026-07-08                                                   |
+| Superseded     | 2026-08-14                                                   |
 | Tracking issue | [#35646](https://github.com/anomalyco/opencode/issues/35646) |
 
-## Summary
+## Current Decision
+
+Session execution now writes a durable claim when a process-local busy period starts. Success, failure, and user interruption release the claim. Shutdown interruption and process death preserve it, so graceful restart, crash, SIGKILL, and runtime eviction have the same durable recovery signature.
+
+On startup, managed Node and fetch runtimes sweep claimed top-level Sessions. Recovery increments a durable attempt counter, appends a continuation instruction, and resumes from projected history. The claim remains until a terminal event releases it, so another process death remains recoverable. After ten automatic recovery attempts by default, the next sweep records terminal failure instead of creating a restart loop.
+
+The historical `time_suspended` column now stores this execution claim, and `resume_attempts` counts automatic recovery attempts against the runtime's configured budget. A claim is a recovery marker, not live status, a lock, clustered ownership, or an exactly-once guarantee. Recovery fails stale running tool projections before further model work, but it cannot prove whether an interrupted provider request or external side effect already took effect.
+
+See the current [Session contract](./session.md) and the implementation in `packages/core/src/session/execution.ts` and `packages/core/src/session/execution/restart.ts`.
+
+## Original Summary
+
+The remainder of this document records the graceful-only suspension design that first implemented issue #35646. It is retained as design history and does not describe the current recovery mechanism.
 
 When the managed OpenCode server shuts down gracefully, active Sessions continue automatically the next time the managed server starts.
 

@@ -1,8 +1,20 @@
 # Instruction Sync: V2 Architecture
 
-Status: implemented on `instruction-sync-v2` (2026-07-10).
+Status: **Superseded as a current architecture description.** Originally implemented on `instruction-sync-v2` (2026-07-10); replaced by the frozen-update and snapshot-fork behavior summarized below.
 
-## Principle
+## Current Architecture
+
+The current implementation retains content-addressed instruction values while freezing model-visible chronological updates:
+
+- `session.instructions.updated` stores changed source hashes and optional rendered `text`. Initial baseline events omit text; later non-empty updates render once at admission and persist that prose in the durable event.
+- The message projector turns frozen update text into chronological System messages. Request assembly renders only the epoch baseline from stored values; it reuses projected update messages verbatim.
+- `instruction_state` is the projected source of current and epoch-initial values during normal boundary processing. Missing state establishes a fresh baseline; request processing does not fold durable history on demand to repair it.
+- Completed compaction advances the epoch and makes current values initial. Session movement retains state so destination changes are chronological. Committed revert clears state so the next boundary establishes a fresh baseline.
+- A fork copies messages through its selected boundary but snapshots the parent's newest instruction values for the child's baseline. `session.forked` carries those optional values rather than a parent event sequence.
+
+See the current [Session contract](./session.md), `packages/core/src/session/instruction-state.ts`, and `packages/core/src/session/message-updater.ts`. The remainder of this document preserves the original proposal and is not authoritative for current behavior.
+
+## Original Principle
 
 The model is a replica that OpenCode can write but cannot read or edit. The transcript is the one-way channel. Instruction sync keeps mutable privileged context (`AGENTS.md`, guidance, API entries, date, and environment) current over that channel without rewriting text that was already sent.
 
