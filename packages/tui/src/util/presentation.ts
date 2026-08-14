@@ -1,7 +1,4 @@
-const logo = {
-  left: ["", "", "", ""],
-  right: ["                   ", "█▄_▄█ █▀▀█ █_▄▀ █▀▀▀", "█_▀_█ █__█ █_▀▄ ▀▀▀█", "▀___▀ ▀▀▀▀ ▀__▀ ▀▀▀▀"],
-}
+import { logo } from "../logo"
 
 const reset = "\x1b[0m"
 const bold = "\x1b[1m"

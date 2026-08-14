@@ -1,58 +1,43 @@
-import { RGBA, TextAttributes } from "@opentui/core"
-import { For, type JSX } from "solid-js"
-import { tint, useTheme } from "../context/theme"
+import { createSignal, For, onCleanup, onMount } from "solid-js"
+import { useTheme } from "../context/theme"
 import { logo } from "../logo"
+
+const LINES = logo.right
+const CELLS = LINES.map((line) => Array.from(line))
+const WIDTH = LINES[0]?.length ?? 0
+const PERIOD = 3600
+const STAGGER = 80
 
 export function Logo() {
   const { theme } = useTheme()
+  const [now, setNow] = createSignal(0)
 
-  const renderLine = (line: string, fg: RGBA, bold: boolean): JSX.Element[] => {
-    const shadow = tint(theme.background, fg, 0.25)
-    const attrs = bold ? TextAttributes.BOLD : undefined
-    return Array.from(line).map((char) => {
-      if (char === "_") {
-        return (
-          <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
-            {" "}
-          </text>
-        )
-      }
-      if (char === "^") {
-        return (
-          <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
-            ▀
-          </text>
-        )
-      }
-      if (char === "~") {
-        return (
-          <text fg={shadow} attributes={attrs} selectable={false}>
-            ▀
-          </text>
-        )
-      }
-      if (char === ",") {
-        return (
-          <text fg={shadow} attributes={attrs} selectable={false}>
-            ▄
-          </text>
-        )
-      }
-      return (
-        <text fg={fg} attributes={attrs} selectable={false}>
-          {char}
-        </text>
-      )
-    })
+  onMount(() => {
+    const origin = Date.now()
+    const timer = setInterval(() => setNow(Date.now() - origin), 33)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  const shown = (row: number) => {
+    const t = ((now() - row * STAGGER) % PERIOD) / PERIOD
+    if (t < 0) return 0
+    if (t < 0.25) return Math.floor((t / 0.25) * WIDTH)
+    if (t < 0.75) return WIDTH
+    return Math.max(0, Math.floor((1 - (t - 0.75) / 0.25) * WIDTH))
   }
 
   return (
     <box>
-      <For each={logo.left}>
-        {(line, index) => (
-          <box flexDirection="row" gap={1}>
-            <box flexDirection="row">{renderLine(line, theme.textMuted, false)}</box>
-            <box flexDirection="row">{renderLine(logo.right[index()], theme.text, true)}</box>
+      <For each={CELLS}>
+        {(line, row) => (
+          <box flexDirection="row">
+            <For each={line}>
+              {(char, col) => (
+                <text fg={theme.text} selectable={false}>
+                  {col() < shown(row()) ? char : " "}
+                </text>
+              )}
+            </For>
           </box>
         )}
       </For>
