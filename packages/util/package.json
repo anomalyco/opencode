@@ -52,8 +52,7 @@
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",
     "npm-package-arg": "13.0.2",
-    "resolve.exports": "catalog:",
-    "xdg-basedir": "5.1.0"
+    "resolve.exports": "catalog:"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
