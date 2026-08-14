@@ -5288,6 +5288,69 @@
         ]
       }
     },
+    "/provider/discover": {
+      "post": {
+        "tags": ["provider"],
+        "operationId": "provider.discover",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Discovered model IDs or error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoverModelsResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Probe an OpenAI-compatible endpoint at `{baseURL}/v1/models` and return the list of model IDs. Resolves env-var API keys on the server. Bypasses browser CORS.",
+        "summary": "Discover models from an OpenAI-compatible base URL",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoverModelsPayload"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.provider.discover({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/session": {
       "get": {
         "tags": ["session"],
@@ -23072,6 +23135,73 @@
         },
         "required": ["name", "data"],
         "additionalProperties": false
+      },
+      "DiscoverModelsPayload": {
+        "type": "object",
+        "properties": {
+          "baseURL": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string"
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "timeoutMs": {
+            "type": "string"
+          }
+        },
+        "required": ["baseURL"],
+        "additionalProperties": false
+      },
+      "DiscoverModelsOk": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["ok", "ids"],
+        "additionalProperties": false
+      },
+      "DiscoverModelsError": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [false]
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["invalidUrl", "unauthorized", "invalidFormat", "timeout", "failed"]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["ok", "kind"],
+        "additionalProperties": false
+      },
+      "DiscoverModelsResult": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/DiscoverModelsOk"
+          },
+          {
+            "$ref": "#/components/schemas/DiscoverModelsError"
+          }
+        ]
       },
       "NotFoundError": {
         "type": "object",
