@@ -308,6 +308,33 @@ it.instance("skips migration when tui.json already exists", () =>
   ),
 )
 
+it.instance("skips migration when tui.jsonc already exists", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const test = yield* TestInstance
+      yield* fs.writeJson(path.join(test.directory, "opencode.json"), { theme: "legacy" })
+      yield* fs.writeFileString(
+        path.join(test.directory, "tui.jsonc"),
+        `{
+  // user keeps comments in jsonc
+  "diff_style": "stacked"
+}`,
+      )
+
+      const config = yield* getTuiConfig(test.directory)
+      expect(config.diff_style).toBe("stacked")
+      expect(config.theme).toBeUndefined()
+
+      // A user-managed tui.jsonc must not trigger a competing tui.json.
+      expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(false)
+      const server = JSON.parse(yield* fs.readFileString(path.join(test.directory, "opencode.json")))
+      expect(server.theme).toBe("legacy")
+      expect(yield* fs.existsSafe(path.join(test.directory, "opencode.json.tui-migration.bak"))).toBe(false)
+    }),
+  ),
+)
+
 it.instance("continues loading tui config when legacy source cannot be stripped", () =>
   withCleanState(
     Effect.gen(function* () {
