@@ -1658,4 +1658,37 @@ describe("session.message-v2.latest", () => {
     expect(state.tasks).toHaveLength(1)
     expect(state.tasks[0]).toMatchObject({ type: "compaction", auto: true })
   })
+
+  // Regression for ID wraparound (#42639). Identifier.ascending() IDs are not
+  // monotonic once Date.now()*0x1000 overflows the 48-bit timestamp field, so
+  // a fresh "msg_000..." can sort before older "msg_0a8a..." by string. Before
+  // the fix, latest() compared ids as strings and picked the stale user,
+  // causing runLoop to exit before processing the new input.
+  test("latest picks the newest by time.created even when ids wrap around", () => {
+    const OLD_USER = MessageID.make("msg_0a8a0a8a0a8a0a8a")
+    const OLD_ASSISTANT = MessageID.make("msg_0a8b0a8b0a8b0a8b")
+    const NEW_USER = MessageID.make("msg_0000000000000000")
+
+    const oldUser: SessionV1.WithParts = {
+      info: { ...userInfo(OLD_USER), time: { created: 1000 } } as SessionV1.User,
+      parts: [{ ...basePart(OLD_USER, "p1"), type: "text", text: "old" }] as SessionV1.Part[],
+    }
+    const oldAssistant: SessionV1.WithParts = {
+      info: {
+        ...assistantInfo(OLD_ASSISTANT, OLD_USER),
+        finish: "stop",
+        time: { created: 1001 },
+      } as SessionV1.Assistant,
+      parts: [],
+    }
+    const newUser: SessionV1.WithParts = {
+      info: { ...userInfo(NEW_USER), time: { created: 2000 } } as SessionV1.User,
+      parts: [{ ...basePart(NEW_USER, "p1"), type: "text", text: "new" }] as SessionV1.Part[],
+    }
+
+    const state = MessageV2.latest([oldUser, oldAssistant, newUser])
+
+    expect(state.user?.id).toBe(NEW_USER)
+    expect(state.finished?.id).toBe(OLD_ASSISTANT)
+  })
 })
