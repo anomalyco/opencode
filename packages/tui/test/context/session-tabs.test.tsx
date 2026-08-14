@@ -18,10 +18,10 @@ import { TestTuiContexts } from "../fixture/tui-environment"
 import { tmpdir } from "../fixture/fixture"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
-async function wait(fn: () => boolean | Promise<boolean>, timeout = 2_000) {
+async function wait(fn: () => boolean | Promise<boolean>, timeout = 2_000, label = "condition") {
   const start = Date.now()
   while (!(await fn())) {
-    if (Date.now() - start > timeout) throw new Error("timed out waiting for condition")
+    if (Date.now() - start > timeout) throw new Error(`timed out waiting for ${label}`)
     await Bun.sleep(10)
   }
 }
@@ -223,7 +223,7 @@ test("only the foreground TUI mutates unread state", async () => {
     background = await renderSessionTabs("second", { state: temporary.path })
     foreground.focus()
     background.blur()
-    await wait(() => foreground?.tabs.tabs().length === 2 && background?.tabs.tabs().length === 2)
+    await wait(() => foreground?.tabs.tabs().length === 2 && background?.tabs.tabs().length === 2, 2_000, "shared tabs")
 
     const firstDone = executionSucceeded("first")
     foreground.emit(firstDone)
@@ -240,6 +240,7 @@ test("only the foreground TUI mutates unread state", async () => {
         foreground?.tabs.status("second").unread === "activity" &&
         background?.tabs.status("second").unread === "activity",
       10_000,
+      "shared unread activity",
     )
 
     foreground.tabs.select("second")
@@ -248,6 +249,7 @@ test("only the foreground TUI mutates unread state", async () => {
         foreground?.tabs.status("second").unread === undefined &&
         background?.tabs.status("second").unread === undefined,
       10_000,
+      "shared unread clearing",
     )
   } finally {
     if (foreground) await foreground.destroy()
