@@ -7,6 +7,18 @@ const positiveInteger = (name: string) =>
     Config.map((value) => (Number.isInteger(value) && value > 0 ? value : undefined)),
     Config.orElse(() => Config.succeed(undefined)),
   )
+const instanceIdleTimeout = Config.string("OPENCODE_EXPERIMENTAL_INSTANCE_IDLE_TIMEOUT_MS").pipe(
+  Config.option,
+  Config.map((input) => {
+    if (Option.isNone(input)) return { value: undefined, warning: undefined }
+    const value = Number(input.value)
+    if (Number.isInteger(value) && value >= 60 * 60 * 1000) return { value, warning: undefined }
+    return {
+      value: undefined,
+      warning: "ignoring OPENCODE_EXPERIMENTAL_INSTANCE_IDLE_TIMEOUT_MS: expected an integer of at least 3600000 ms",
+    }
+  }),
+)
 const experimental = bool("OPENCODE_EXPERIMENTAL")
 const enabledByExperimental = (name: string) =>
   Config.all({ experimental, enabled: Config.boolean(name).pipe(Config.option) }).pipe(
@@ -51,6 +63,8 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   experimentalIconDiscovery: enabledByExperimental("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY"),
   outputTokenMax: positiveInteger("OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX"),
   bashDefaultTimeoutMs: positiveInteger("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS"),
+  instanceIdleTimeoutMs: instanceIdleTimeout.pipe(Config.map((input) => input.value)),
+  instanceIdleTimeoutWarning: instanceIdleTimeout.pipe(Config.map((input) => input.warning)),
   experimentalNativeLlm: bool("OPENCODE_EXPERIMENTAL_NATIVE_LLM"),
   experimentalWebSockets: bool("OPENCODE_EXPERIMENTAL_WEBSOCKETS"),
   client: Config.string("OPENCODE_CLIENT").pipe(Config.withDefault("cli")),
