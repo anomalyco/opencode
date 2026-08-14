@@ -3,6 +3,8 @@ import { $ } from "bun"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
+import { Hash } from "@opencode-ai/core/util/hash"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Layer } from "effect"
@@ -10,6 +12,7 @@ import { Snapshot } from "../../src/snapshot"
 import {
   disposeAllInstances,
   provideInstance,
+  requireInstance,
   testInstanceStoreLayer,
   TestInstance,
   tmpdirScoped,
@@ -645,6 +648,26 @@ it.instance(
     )
   }),
   { git: true },
+)
+
+it.instance(
+  "git info exclude write failure keeps tracking alive",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+    // Make the snapshot exclude write fail: a directory can never be overwritten by a file.
+    const ctx = yield* requireInstance
+    const gitdir = path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree))
+    yield* rm(path.join(gitdir, "info", "exclude"))
+    yield* mkdirp(path.join(gitdir, "info", "exclude"))
+    yield* write(`${tmp.path}/after.txt`, "after content")
+    const after = yield* snapshot.track()
+    expect(after).toBeTruthy()
+  }),
+  { git: true },
+  { timeout: 60000 },
 )
 
 it.instance(
