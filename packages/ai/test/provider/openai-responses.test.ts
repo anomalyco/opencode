@@ -261,7 +261,7 @@ describe("OpenAI Responses route", () => {
                   protocol: input.headers["openai-beta"],
                 })
                 sent.push(message)
-            }),
+              }),
             messages: Stream.fromArray([
               ProviderShared.encodeJson({ type: "response.created", response: { id: "resp_ws" } }),
               ProviderShared.encodeJson({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),
@@ -547,9 +547,9 @@ describe("OpenAI Responses route", () => {
       })
       const streams = [
         Stream.fail(failure),
-        Stream.make(
-          ProviderShared.encodeJson({ type: "response.created", response: { id: "resp_observed" } }),
-        ).pipe(Stream.concat(Stream.fail(failure))),
+        Stream.make(ProviderShared.encodeJson({ type: "response.created", response: { id: "resp_observed" } })).pipe(
+          Stream.concat(Stream.fail(failure)),
+        ),
       ]
       const deps = Layer.succeed(
         RequestExecutor.Service,

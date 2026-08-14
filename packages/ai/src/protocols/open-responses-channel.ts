@@ -56,7 +56,9 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
     observe: (_create, frame) =>
       Effect.gen(function* () {
         const event = yield* decodeEvent(frame).pipe(
-          Effect.mapError(() => ProviderShared.eventError(options.id, `Invalid ${options.name} WebSocket event`, frame)),
+          Effect.mapError(() =>
+            ProviderShared.eventError(options.id, `Invalid ${options.name} WebSocket event`, frame),
+          ),
         )
         if (terminal)
           return yield* ProviderShared.eventError(
@@ -79,7 +81,11 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
         if (event.type === "response.failed") {
           terminal = true
           if (responseID && event.response?.id && event.response.id !== responseID)
-            return yield* ProviderShared.eventError(options.id, `${options.name} response ID changed during execution`, frame)
+            return yield* ProviderShared.eventError(
+              options.id,
+              `${options.name} response ID changed during execution`,
+              frame,
+            )
           return {
             type: "provider-failure",
             error: OpenResponses.providerFailure(options.id, event, `${options.name} response failed`),
@@ -88,9 +94,17 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
         if (event.type === "response.created") {
           const created = event.response?.id
           if (responseID)
-            return yield* ProviderShared.eventError(options.id, `${options.name} emitted duplicate response.created`, frame)
+            return yield* ProviderShared.eventError(
+              options.id,
+              `${options.name} emitted duplicate response.created`,
+              frame,
+            )
           if (!created)
-            return yield* ProviderShared.eventError(options.id, `${options.name} response.created is missing response.id`, frame)
+            return yield* ProviderShared.eventError(
+              options.id,
+              `${options.name} response.created is missing response.id`,
+              frame,
+            )
           responseID = created
           return { type: "frame", frame }
         }
@@ -101,7 +115,11 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
             frame,
           )
         if (event.response?.id && event.response.id !== responseID)
-          return yield* ProviderShared.eventError(options.id, `${options.name} response ID changed during execution`, frame)
+          return yield* ProviderShared.eventError(
+            options.id,
+            `${options.name} response ID changed during execution`,
+            frame,
+          )
         if (event.type === "response.completed") {
           terminal = true
           return { type: "completed", frame }
