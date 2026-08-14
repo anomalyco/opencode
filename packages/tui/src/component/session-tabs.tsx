@@ -11,7 +11,7 @@ import {
   onCleanup,
   untrack,
 } from "solid-js"
-import { useTerminalDimensions } from "@opentui/solid"
+import { Portal, useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
 import { useData } from "../context/data"
@@ -37,8 +37,6 @@ import { projectName } from "../util/project"
 import { marqueeCycleWidth, marqueeOverflows, marqueeText } from "../util/marquee"
 import { useDialog } from "../ui/dialog"
 import { DialogSessionRename } from "./dialog-session-rename"
-import { Keymap } from "../context/keymap"
-import { moveSelection } from "../ui/select-controller"
 
 // A long title fades out over its last cells instead of cutting hard.
 const FADE_WIDTH = 4
@@ -189,7 +187,6 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
   const dimensions = useTerminalDimensions()
   const theme = useTheme("elevated")
   const dialog = useDialog()
-  const keymap = Keymap.use()
   const actions = createMemo(() => {
     const sessionID = props.state.sessionID
     return [
@@ -205,73 +202,69 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
         : []),
     ]
   })
-  const [selected, setSelected] = createSignal(0)
+  const [selected, setSelected] = createSignal<number>()
   const top = () => Math.max(0, Math.min(props.state.y + 1, dimensions().height - actions().length))
   const left = () => Math.max(0, Math.min(props.state.x, dimensions().width - CONTEXT_MENU_WIDTH))
   const run = (index: number) => {
+    const action = actions()[index]
     props.onClose()
-    actions()[index]?.run()
+    action?.run()
   }
 
-  createEffect(() => {
-    const popMode = keymap.mode.push("modal")
-    onCleanup(popMode)
-  })
-  Keymap.createLayer(() => ({
-    mode: "modal",
-    commands: [
-      { bind: "escape", title: "Close tab menu", group: "Tabs", run: props.onClose },
-      {
-        bind: "up",
-        title: "Previous tab menu item",
-        group: "Tabs",
-        run: () => setSelected(moveSelection(selected(), { count: actions().length, delta: -1, policy: "wrap" })),
-      },
-      {
-        bind: "down",
-        title: "Next tab menu item",
-        group: "Tabs",
-        run: () => setSelected(moveSelection(selected(), { count: actions().length, delta: 1, policy: "wrap" })),
-      },
-      { bind: "return", title: "Select tab menu item", group: "Tabs", run: () => run(selected()) },
-    ],
-  }))
   return (
-    <box
-      position="absolute"
-      left={left()}
-      top={top()}
-      height={actions().length}
-      width={CONTEXT_MENU_WIDTH}
-      zIndex={2500}
-      flexDirection="column"
-      backgroundColor={theme.background.default}
-      onMouseDown={(event) => {
-        event.preventDefault()
-        event.stopPropagation()
-      }}
-    >
-      <For each={actions()}>
-        {(action, index) => (
-          <box
-            width="100%"
-            paddingLeft={1}
-            paddingRight={1}
-            backgroundColor={selected() === index() ? theme.background.action.primary.hovered : undefined}
-            onMouseOver={() => setSelected(index())}
-            onMouseUp={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              run(index())
-            }}
-          >
-            <text fg={theme.text.default} selectable={false}>
-              {action.title}
-            </text>
-          </box>
-        )}
-      </For>
-    </box>
+    <Portal>
+      <box
+        position="absolute"
+        left={0}
+        top={0}
+        width={dimensions().width}
+        height={dimensions().height}
+        zIndex={2500}
+        onMouseDown={(event) => {
+          props.onClose()
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+      >
+        <box
+          position="absolute"
+          left={left()}
+          top={top()}
+          height={actions().length}
+          width={CONTEXT_MENU_WIDTH}
+          flexDirection="column"
+          backgroundColor={theme.background.default}
+          onMouseDown={(event) => {
+            if (event.button === RIGHT_MOUSE_BUTTON) props.onClose()
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+        >
+          <For each={actions()}>
+            {(action, index) => (
+              <box
+                width="100%"
+                paddingLeft={1}
+                paddingRight={1}
+                backgroundColor={selected() === index() ? theme.background.action.primary.hovered : undefined}
+                onMouseOver={() => setSelected(index())}
+                onMouseOut={() => setSelected(undefined)}
+                onMouseUp={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  if (event.button === RIGHT_MOUSE_BUTTON) return
+                  run(index())
+                }}
+              >
+                <text fg={theme.text.default} selectable={false}>
+                  {action.title}
+                </text>
+              </box>
+            )}
+          </For>
+        </box>
+      </box>
+    </Portal>
   )
 }
 
@@ -520,8 +513,8 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       setDragging(undefined)
                       if (!rail) return
                       setContextMenu({
-                        x: event.x - rail.screenX,
-                        y: event.y - rail.screenY,
+                        x: event.x,
+                        y: event.y,
                         sessionID: tab.sessionID,
                         title: tab.title,
                       })
@@ -712,7 +705,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               onMouseDown={(event: MouseEvent) => {
                 if (event.button !== RIGHT_MOUSE_BUTTON) return
                 if (!rail) return
-                setContextMenu({ x: event.x - rail.screenX, y: event.y - rail.screenY })
+                setContextMenu({ x: event.x, y: event.y })
                 event.preventDefault()
                 event.stopPropagation()
               }}
@@ -1037,8 +1030,8 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                 if (event.button === RIGHT_MOUSE_BUTTON) {
                   setDragging(undefined)
                   setContextMenu({
-                    x: event.x - (strip?.screenX ?? 0),
-                    y: event.y - (strip?.screenY ?? 0),
+                    x: event.x,
+                    y: event.y,
                     sessionID: tab === NEW_SESSION_TAB ? undefined : tab.sessionID,
                     title: tab === NEW_SESSION_TAB ? undefined : tab.title,
                   })
@@ -1134,7 +1127,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           onMouseOut={() => setAddHovered(false)}
           onMouseDown={(event) => {
             if (event.button !== RIGHT_MOUSE_BUTTON) return
-            setContextMenu({ x: event.x - (strip?.screenX ?? 0), y: event.y - (strip?.screenY ?? 0) })
+            setContextMenu({ x: event.x, y: event.y })
             event.preventDefault()
             event.stopPropagation()
           }}
