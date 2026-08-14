@@ -30,7 +30,7 @@ jobs:
 
       - name: Run harness tests
         run: |
-          bun --cwd packages/opencode test
+          bun --cwd packages/moks test
           bun --cwd packages/core test
           bun --cwd packages/tui test
           bun --cwd packages/llm test

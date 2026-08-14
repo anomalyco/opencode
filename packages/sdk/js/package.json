@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/sdk",
+  "name": "@moks/sdk",
   "version": "1.18.16",
   "type": "module",
   "license": "MIT",

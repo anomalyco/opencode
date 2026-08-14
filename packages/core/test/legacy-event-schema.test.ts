@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { SessionV1 as Wire } from "@opencode-ai/schema/session-v1"
+import { SessionV1 as Wire } from "@moks/schema/session-v1"
 import { SessionV1 } from "../src/v1/session"
 
 describe("legacy event schema compatibility", () => {

@@ -1,5 +1,5 @@
-import { OpenAIResponsesLanguageModel } from "@opencode-ai/core/github-copilot/responses/openai-responses-language-model"
-import { convertToOpenAIResponsesInput } from "@opencode-ai/core/github-copilot/responses/convert-to-openai-responses-input"
+import { OpenAIResponsesLanguageModel } from "@moks/core/github-copilot/responses/openai-responses-language-model"
+import { convertToOpenAIResponsesInput } from "@moks/core/github-copilot/responses/convert-to-openai-responses-input"
 import { describe, test, expect, mock } from "bun:test"
 import type { LanguageModelV3Prompt } from "@ai-sdk/provider"
 

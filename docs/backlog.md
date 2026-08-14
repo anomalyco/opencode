@@ -9,7 +9,7 @@ Strategy: `docs/gtm.html`. Ontology: `AGENTS.md`.
 1. Take the next **open** item in the current wave. Do not skip ahead into a later wave unless the current wave is blocked.
 2. Read **Keep** before you touch anything. If the change would delete that analog, stop and split the item.
 3. Ship the **Change** only. Leave follow-ups as their own items.
-4. Verify on a dedicated req folder (`packages/opencode/src/product/fixtures/hiring` or a throwaway req), not this monorepo root.
+4. Verify on a dedicated req folder (`packages/moks/src/product/fixtures/hiring` or a throwaway req), not this monorepo root.
 5. Mark the item `done` in this file in the same PR.
 
 ### Rules
@@ -18,8 +18,7 @@ Strategy: `docs/gtm.html`. Ontology: `AGENTS.md`.
 - Keep the session runner, permissions, MCP host, skill loader, multi-provider, plan-mode machinery, and diff plumbing.
 - One cwd, one req. Do not invent `.moks/reqs/`, a multi-req book, or `@slug` focus.
 - People are not files. Cards stay markdown working copies. Do not build a cloud ATS UI.
-- `build` stays a hidden escape hatch. Do not delete it; do not let its prompts leak onto recruit.
-- Do not rename `packages/opencode` or `@opencode-ai/*`.
+- There is no coding agent. Do not re-add `build` or `/init-code`.
 
 ### Analog map (do not break)
 
@@ -63,9 +62,9 @@ Safe, local, no ontology change. Clear product landmines first.
 - **Status:** done
 - **Outcome:** A TA user cannot tab-complete into GitHub PR checkout.
 - **Keep:** `/review` as the review verb. `gh` remains available to `build`.
-- **Change:** Unregister `PrCommand` from `packages/opencode/src/index.ts`. Prefer delete `cli/cmd/pr.ts` if nothing imports it. If something still needs it, `describe: false` is not enough — it is already hidden from help and still invokable.
+- **Change:** Unregister `PrCommand` from `packages/moks/src/index.ts`. Prefer delete `cli/cmd/pr.ts` if nothing imports it. If something still needs it, `describe: false` is not enough — it is already hidden from help and still invokable.
 - **Don't:** Rework `/review`. Touch GitHub MCP. Invent an ATS “PR.”
-- **Touch:** `packages/opencode/src/index.ts`, `packages/opencode/src/cli/cmd/pr.ts`
+- **Touch:** `packages/moks/src/index.ts`, `packages/moks/src/cli/cmd/pr.ts`
 - **Verify:** `moks pr --help` is unknown. `/review` still runs packet review.
 
 ### H02 — Stop `moks uninstall` from uninstalling OpenCode
@@ -75,7 +74,7 @@ Safe, local, no ontology change. Clear product landmines first.
 - **Keep:** An uninstall command.
 - **Change:** Rewrite package names, brew/npm/choco identifiers, and rc-file scrubbing so they target moks only. Do not touch `opencode-ai`, `brew uninstall opencode`, or `.opencode/bin`.
 - **Don't:** Delete uninstall. Migrate OpenCode user configs.
-- **Touch:** `packages/opencode/src/cli/cmd/uninstall.ts`
+- **Touch:** `packages/moks/src/cli/cmd/uninstall.ts`
 - **Verify:** Read the command. Confirm it never prints or runs an OpenCode package name.
 
 ### H03 — Quarantine the GitHub Action agent
@@ -85,8 +84,8 @@ Safe, local, no ontology change. Clear product landmines first.
 - **Keep:** MCP host. Future Ashby/GitHub-as-source integrations can come back as their own items.
 - **Change:** `GithubCommand` is already unregistered. Move `cli/cmd/github.ts` + `github.handler.ts` out of the product CLI tree or delete if unused. Remove stale help snapshots that document `moks github`.
 - **Don't:** Build an Ashby GitHub app. Wire it back “just in case.”
-- **Touch:** `packages/opencode/src/cli/cmd/github.ts`, `packages/opencode/src/cli/cmd/github.handler.ts`, related snapshots
-- **Verify:** `rg "GithubCommand|moks github" packages/opencode/src` has no CLI registration.
+- **Touch:** `packages/moks/src/cli/cmd/github.ts`, `packages/moks/src/cli/cmd/github.handler.ts`, related snapshots
+- **Verify:** `rg "GithubCommand|moks github" packages/moks/src` has no CLI registration.
 
 ### H04 — Keep `/init-code` hidden; stop advertising it
 
@@ -95,7 +94,7 @@ Safe, local, no ontology change. Clear product landmines first.
 - **Keep:** `/init-code` as a typed-if-you-know-it hatch, hidden from `/` autocomplete.
 - **Change:** Strip hatch narration from `command/template/initialize.txt` and `packages/core/src/plugin/command/initialize.txt`. Fix OpenAPI `session.init` description (still says “create an AGENTS.md”). Align core `/init-code` description with “escape hatch,” not a featured setup.
 - **Don't:** Delete `/init-code`. Change scaffold behavior.
-- **Touch:** `packages/opencode/src/command/template/initialize.txt`, `packages/core/src/plugin/command.ts`, `packages/opencode/src/server/routes/instance/httpapi/groups/session.ts`
+- **Touch:** `packages/moks/src/command/template/initialize.txt`, `packages/core/src/plugin/command.ts`, `packages/moks/src/server/routes/instance/httpapi/groups/session.ts`
 - **Verify:** `/init` prompt never contains `AGENTS.md` or `/init-code`. Scaffold still writes `HIRING.md`.
 
 ---
@@ -111,8 +110,8 @@ These strings go to the default doer every turn. Small diffs, high leverage. Do 
 - **Keep:** Bash. Restricted git read (`status` / `diff` / `log`). `moks *` allow. `git push` deny.
 - **Change:** Replace `gh pr create` examples and “git/PR work” policy with `moks commit` / `moks status` / `moks push` recipes. Keep the “only when asked” guard, pointed at decision verbs.
 - **Don't:** Remove bash. Add a native commit tool here (that is H18).
-- **Touch:** `packages/opencode/src/tool/shell/shell.txt`, `packages/opencode/src/tool/shell/prompt.ts`
-- **Verify:** `rg "gh pr" packages/opencode/src/tool/shell` is empty or build-only.
+- **Touch:** `packages/moks/src/tool/shell/shell.txt`, `packages/moks/src/tool/shell/prompt.ts`
+- **Verify:** `rg "gh pr" packages/moks/src/tool/shell` is empty or build-only.
 
 ### H06 — Grep / glob examples are packet-shaped
 
@@ -121,7 +120,7 @@ These strings go to the default doer every turn. Small diffs, high leverage. Do 
 - **Keep:** Grep and glob. They are how you search a packet.
 - **Change:** Swap coding examples in the tool descriptions. One hiring example each is enough.
 - **Don't:** Add a new search tool. Restrict grep to markdown.
-- **Touch:** `packages/opencode/src/tool/grep.txt`, `packages/opencode/src/tool/glob.txt`
+- **Touch:** `packages/moks/src/tool/grep.txt`, `packages/moks/src/tool/glob.txt`
 - **Verify:** Open those files. No `*.js` / `src/**` as the lead example.
 
 ### H07 — Session titles from hiring work, not tickets
@@ -131,7 +130,7 @@ These strings go to the default doer every turn. Small diffs, high leverage. Do 
 - **Keep:** The title agent and the existing hiring examples.
 - **Change:** Replace the coding examples in `title.txt`. Add 2–3 more hiring ones if needed (reject, outreach, onsite).
 - **Don't:** Change how titles are generated or stored.
-- **Touch:** `packages/opencode/src/agent/prompt/title.txt`
+- **Touch:** `packages/moks/src/agent/prompt/title.txt`
 - **Verify:** Prompt a score / outreach / reject. Titles read like a req thread.
 
 ### H08 — `moks agent create` designs hiring agents
@@ -141,7 +140,7 @@ These strings go to the default doer every turn. Small diffs, high leverage. Do 
 - **Keep:** `moks agent create` and the generate flow.
 - **Change:** Rewrite `generate.txt` examples and the CLAUDE.md / prime-number bits.
 - **Don't:** Remove agent create. Auto-generate a cast of new built-ins.
-- **Touch:** `packages/opencode/src/agent/generate.txt`
+- **Touch:** `packages/moks/src/agent/generate.txt`
 - **Verify:** Read the prompt. No `code-reviewer` / `test-generator` / prime-number task.
 
 ---
@@ -157,7 +156,7 @@ Recruit already replaces provider prompts. The leftover OS must not leak onto pr
 - **Keep:** Provider-specific coding prompts for `build` (see H10). The recruit/plan/explore prompts as-is.
 - **Change:** Rewrite the body of `default.txt` to match the lede: hiring/TA tasks, packet files, `moks commit`/`push`, no lint/typecheck/`AGENTS.md` loop. Drop “URLs are for programming” and the “write tests for new feature” example.
 - **Don't:** Merge this into `recruit.txt`. Don’t touch anthropic/gpt/codex in the same PR.
-- **Touch:** `packages/opencode/src/session/prompt/default.txt`
+- **Touch:** `packages/moks/src/session/prompt/default.txt`
 - **Verify:** File never tells the model to run tests, lint, or write `AGENTS.md`.
 
 ### H10 — Provider coding prompts are build-only
@@ -169,7 +168,7 @@ Recruit already replaces provider prompts. The leftover OS must not leak onto pr
   1. Preferred: only call `SystemPrompt.provider()` when `agent.name === "build"` (or `hidden` coding hatch). Promptless custom agents get `default.txt` (H09).
   2. Or: give `build` an explicit prompt and point every other fallback at `default.txt`.
 - **Don't:** Rewrite every `anthropic.txt` / `gpt.txt` into a recruiter. Don’t delete `build`.
-- **Touch:** `packages/opencode/src/session/llm/request.ts`, maybe `packages/opencode/src/agent/agent.ts`
+- **Touch:** `packages/moks/src/session/llm/request.ts`, maybe `packages/moks/src/agent/agent.ts`
 - **Verify:** Recruit unchanged. `--agent build` still codes. A promptless custom agent does not say “best coding agent on the planet.”
 
 ### H11 — Drop “fork of OpenCode / implement a hook” product answers
@@ -179,8 +178,8 @@ Recruit already replaces provider prompts. The leftover OS must not leak onto pr
 - **Keep:** Lineage comments in repo docs. MIT / copyright. Upgrade warnings that tell people not to install `opencode-ai`.
 - **Change:** After H09/H10, grep provider + default prompts for “fork of OpenCode”, “software engineering”, “implement a hook”, “write a slash command.” Remove from any prompt that can fire off `build`.
 - **Don't:** Rewrite `docs/gtm.html` or AGENTS.md in this item.
-- **Touch:** `packages/opencode/src/session/prompt/*.txt` that still leak after H09/H10
-- **Verify:** `rg "fork of OpenCode|software engineering tasks" packages/opencode/src/session/prompt` only hits build-only files.
+- **Touch:** `packages/moks/src/session/prompt/*.txt` that still leak after H09/H10
+- **Verify:** `rg "fork of OpenCode|software engineering tasks" packages/moks/src/session/prompt` only hits build-only files.
 
 ### H12 — Footer / comments stop saying the default is `build`
 
@@ -189,7 +188,7 @@ Recruit already replaces provider prompts. The leftover OS must not leak onto pr
 - **Keep:** Ability to pass `--agent build`.
 - **Change:** `runtime.lifecycle.ts` fallback label `"build"` → `"recruit"`. Stale github.handler comment if that file still exists after H03.
 - **Don't:** Change agent resolution logic (it already defaults to recruit).
-- **Touch:** `packages/opencode/src/cli/cmd/run/runtime.lifecycle.ts`
+- **Touch:** `packages/moks/src/cli/cmd/run/runtime.lifecycle.ts`
 - **Verify:** `moks run` footer without `--agent` says Recruit.
 
 ---
@@ -296,7 +295,7 @@ Same machinery. Point it at the packet. One item per surface.
 - **Keep:** Review template, Fit / Evidence / Outreach / Disposition / Risks shape, `subtask` machinery.
 - **Change (this item is copy + hatch only):** Tighten `review.txt` so a recruit session cannot be steered into git/gh. Do not build a review pane here.
 - **Don't:** Spawn a `gh pr` path. Redesign review as a new TUI route in this item (that is H27, later, optional).
-- **Touch:** `packages/opencode/src/command/template/review.txt`
+- **Touch:** `packages/moks/src/command/template/review.txt`
 - **Verify:** `/review` on recruit never mentions `gh pr` as a next step.
 
 ---
@@ -312,7 +311,7 @@ This is the SWE analog of “the file tree is the repo.” Still files. Just vis
 - **Keep:** Cards as markdown. No new format.
 - **Change:** Extend `ReqWorkspace.isReqMaterial` (and any twin) to include `candidates/*`. Use it anywhere the code currently special-cases only `HIRING.md` for “is this a req file.”
 - **Don't:** Change scaffold layout. Load every card into the system prompt in this item.
-- **Touch:** `packages/opencode/src/product/req-workspace.ts` and its test
+- **Touch:** `packages/moks/src/product/req-workspace.ts` and its test
 - **Verify:** Existing scaffold test still asserts no `.moks/reqs/`. New assertion: a card path is req material.
 
 ### H23 — Slate in context: list candidate cards without a Glob
@@ -322,7 +321,7 @@ This is the SWE analog of “the file tree is the repo.” Still files. Just vis
 - **Keep:** Cards on disk. `@jordan-lee` attach. Skills that write onto the card. No multi-req index.
 - **Change (pick the smaller analog):** Inject a short slate block into system context (id / stage / score / path), generated from `CandidateCard` list. Cap it. Full card body still requires Read / `@`.
 - **Don't:** Auto-load full resumes. Build a sidebar yet (H26). Add a new database.
-- **Touch:** `packages/opencode/src/session/system.ts` or instruction assembly; `packages/opencode/src/product/candidate-card.ts`
+- **Touch:** `packages/moks/src/session/system.ts` or instruction assembly; `packages/moks/src/product/candidate-card.ts`
 - **Verify:** New session in the hiring fixture mentions Jordan Lee’s stage/score before any tool call. Card bodies are not dumped.
 
 ### H24 — Native `commit` / `status` / `push` tools
@@ -333,7 +332,7 @@ This is the SWE analog of “the file tree is the repo.” Still files. Just vis
 - **Change:** Thin tools that call the same functions as the CLI (`decision/verbs.ts`). Recruit permission: allow these tools; keep `git commit` as ask and `git push` as deny. Update `commit-disposition` to prefer the tools.
 - **Don't:** Reimplement git. Auto-push. Let the tool take arbitrary paths. Remove bash.
 - **Depends:** H05 so the shell prompt doesn’t fight the tools.
-- **Touch:** new tool module under `packages/opencode/src/tool/`, `packages/opencode/src/tool/registry.ts`, `packages/opencode/src/agent/agent.ts`, `packages/opencode/src/product/skills/commit-disposition/SKILL.md`
+- **Touch:** new tool module under `packages/moks/src/tool/`, `packages/moks/src/tool/registry.ts`, `packages/moks/src/agent/agent.ts`, `packages/moks/src/product/skills/commit-disposition/SKILL.md`
 - **Verify:** Score → tool commit → `moks status` shows the commit. Push tool dry-runs unless execute+confirm.
 
 ### H25 — Env / workspace prompt says this directory is the req
@@ -343,7 +342,7 @@ This is the SWE analog of “the file tree is the repo.” Still files. Just vis
 - **Keep:** cwd, platform, date. Git remains how `moks commit` audits.
 - **Change:** Relabel the env block in `session/system.ts` (and core builtin twin if it still says “Workspace root folder”). Mention `HIRING.md` + `candidates/` as the working set when present.
 - **Don't:** Change `Project.resolve` here (H28). Don’t hide git from `moks commit`.
-- **Touch:** `packages/opencode/src/session/system.ts`, `packages/core/src/system-context/builtins.ts`
+- **Touch:** `packages/moks/src/session/system.ts`, `packages/core/src/system-context/builtins.ts`
 - **Verify:** First turn system context in the fixture reads as a req, not a software workspace.
 
 ---
@@ -380,9 +379,9 @@ Structural. Smallest change that stops hiring work from attaching to a parent so
 - **Keep:** Git as the audit log *inside* the req. `moks commit` still creates commits. Nested engineering checkouts still work for `--agent build`.
 - **Change (tactical, not a Project rewrite):** If cwd contains `HIRING.md`, treat cwd as the project directory even when a parent git repo exists. `moks commit` must `git init` in that cwd rather than commit hiring files into the parent product repo. Do not change identity hashing for non-req directories in the same PR if that ripples through Instance/Session — split if so.
 - **Don't:** Delete git. Make every folder a fake repo. Invent a parallel project store. Walk up for `HIRING.md` and then use *that* parent as cwd (that reintroduces multi-dir reqs).
-- **Depends:** H25 so copy and runtime agree. Decision git: `packages/opencode/src/decision/git.ts`, `decision/verbs.ts`.
+- **Depends:** H25 so copy and runtime agree. Decision git: `packages/moks/src/decision/git.ts`, `decision/verbs.ts`.
 - **Touch:** `packages/core/src/project.ts` *or* a req-aware wrapper used by Instance + DecisionGit — prefer the wrapper if `Project.resolve` is too load-bearing.
-- **Verify:** `moks commit` inside `packages/opencode/src/product/fixtures/hiring` does **not** create a commit on this monorepo. It inits or uses a git repo local to that folder. `moks` at repo root without treating the monorepo as a req still behaves as an engineering checkout.
+- **Verify:** `moks commit` inside `packages/moks/src/product/fixtures/hiring` does **not** create a commit on this monorepo. It inits or uses a git repo local to that folder. `moks` at repo root without treating the monorepo as a req still behaves as an engineering checkout.
 
 ### H29 — Stop walking up out of the req for `HIRING.md`
 
@@ -392,7 +391,7 @@ Structural. Smallest change that stops hiring work from attaching to a parent so
 - **Change:** Instruction walk stops at the req cwd (the H28 project directory), not the parent git worktree. `ReqWorkspace.resolve` should not promote a parent `HIRING.md` when cwd is the workspace.
 - **Don't:** Load `candidates/` as constitution. Remove global HIRING.md.
 - **Depends:** H28.
-- **Touch:** `packages/opencode/src/session/instruction.ts`, `packages/core/src/instruction-context.ts`, `packages/opencode/src/product/req-workspace.ts`
+- **Touch:** `packages/moks/src/session/instruction.ts`, `packages/core/src/instruction-context.ts`, `packages/moks/src/product/req-workspace.ts`
 - **Verify:** Nested cwd under the fixture still uses the fixture `HIRING.md` only if you decide nested *inside a req* is allowed — document the choice in the PR. A tmp dir inside this monorepo does not load a parent hiring file that isn’t in cwd.
 
 ---
@@ -403,10 +402,10 @@ Structural. Smallest change that stops hiring work from attaching to a parent so
 
 - **Status:** open
 - **Outcome:** If/when core Session V2 is the runtime, recruit still has path-scoped edit, bash policy, and `lsp: deny`.
-- **Keep:** Dual stack until V2 is default. V1 overlay in `packages/opencode/src/agent/agent.ts` as the spec.
+- **Keep:** Dual stack until V2 is default. V1 overlay in `packages/moks/src/agent/agent.ts` as the spec.
 - **Change:** Port the recruit permission overlay (and plan/explore) onto `packages/core/src/plugin/agent.ts`. Do not invent a new policy language.
 - **Don't:** “Port LSP” because the core builtin TODO says so. Expand core builtins to apply_patch for recruit.
-- **Touch:** `packages/core/src/plugin/agent.ts`, compare `packages/opencode/src/agent/agent.ts`
+- **Touch:** `packages/core/src/plugin/agent.ts`, compare `packages/moks/src/agent/agent.ts`
 - **Verify:** Side-by-side permission tables match for recruit/plan/explore. Tests if core has an agent-permission suite.
 
 ### H31 — Core V2 `/init` + recruit prompt stay in sync with v1
@@ -426,7 +425,7 @@ Structural. Smallest change that stops hiring work from attaching to a parent so
 - **Keep:** Project-local skills under the req if someone adds them. Built-in four + `customize-moks`.
 - **Change:** Stop discovering `~/.claude/skills` and `~/.agents/skills` in the product skill loader, or namespace them behind `build`. Product should read moks skill paths.
 - **Don't:** Delete the skill loader. Block MCP.
-- **Touch:** `packages/opencode/src/skill/index.ts`
+- **Touch:** `packages/moks/src/skill/index.ts`
 - **Verify:** With a dummy `~/.claude/skills/foo`, `/skills` still only lists hiring skills (plus customize-moks).
 
 ---

@@ -1,4 +1,4 @@
-import { define } from "@opencode-ai/plugin/v2/promise"
+import { define } from "@moks/plugin/v2/promise"
 
 export default define({
   id: "config-promise-plugin",

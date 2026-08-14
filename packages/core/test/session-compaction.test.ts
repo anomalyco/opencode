@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { SessionCompaction } from "@opencode-ai/core/session/compaction"
+import { SessionCompaction } from "@moks/core/session/compaction"
 
 test("compaction prompt preserves detailed work state and relevant files", () => {
   const prompt = SessionCompaction.buildPrompt({ context: ["conversation history"] })

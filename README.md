@@ -29,10 +29,10 @@ bun install
 bun dev
 ```
 
-`bun dev` starts the TUI from `packages/opencode`. From that package you can also run:
+`bun dev` starts the TUI from `packages/moks`. From that package you can also run:
 
 ```bash
-cd packages/opencode
+cd packages/moks
 bun dev
 # or
 bun run --conditions=browser src/index.ts
@@ -52,7 +52,7 @@ bun dev
 Headless fixture run (no ATS required):
 
 ```bash
-cd packages/opencode
+cd packages/moks
 
 FIXTURES=src/product/fixtures/hiring
 
@@ -62,7 +62,7 @@ bun run --conditions=browser src/index.ts run --agent recruit \
 ```
 
 Built-in skills: `req-context`, `score-candidate`, `draft-outreach`, `commit-disposition`.  
-Fixtures: [`packages/opencode/src/product/fixtures/hiring/README.md`](packages/opencode/src/product/fixtures/hiring/README.md).
+Fixtures: [`packages/moks/src/product/fixtures/hiring/README.md`](packages/moks/src/product/fixtures/hiring/README.md).
 
 Record a disposition (git commit is the audit; `push --execute` writes the mock ATS):
 
@@ -76,7 +76,7 @@ bun run --conditions=browser src/index.ts activity --days 7
 
 ### Scriptable / headless
 
-Same verbs; add `--json` for machine-readable stdout. Full contract: [`packages/opencode/src/product/headless.md`](packages/opencode/src/product/headless.md).
+Same verbs; add `--json` for machine-readable stdout. Full contract: [`packages/moks/src/product/headless.md`](packages/moks/src/product/headless.md).
 
 ```bash
 moks commit --action note --target-id jordan-lee --json

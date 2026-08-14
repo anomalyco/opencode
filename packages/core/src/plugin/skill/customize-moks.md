@@ -1,6 +1,6 @@
 <!--
   Built-in skill. Name and description are registered in code at
-  packages/core/src/plugin/skill.ts and packages/opencode/src/skill/index.ts.
+  packages/core/src/plugin/skill.ts and packages/moks/src/skill/index.ts.
   The body below becomes the skill's content.
 -->
 

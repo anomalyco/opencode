@@ -1,10 +1,10 @@
 # Schema Package Guide
 
-`@opencode-ai/schema` owns browser-safe wire and storage contracts shared by protocol, server, core, and generated SDKs. Keep runtime behavior, service layers, side effects, and host-local implementation details in the domain package that owns them.
+`@moks/schema` owns browser-safe wire and storage contracts shared by protocol, server, core, and generated SDKs. Keep runtime behavior, service layers, side effects, and host-local implementation details in the domain package that owns them.
 
 ## Package Boundary
 
-- Preserve the dependency direction: `@opencode-ai/schema <- @opencode-ai/protocol <- @opencode-ai/server`.
+- Preserve the dependency direction: `@moks/schema <- @moks/protocol <- @moks/server`.
 - Schema values should be serializable contract definitions, not service implementations or runtime registries.
 - A domain may keep a minimal public wire contract here when SDK generation needs it, but do not move the broader runtime model into Schema just because an event is public. `plugin.added` is the current example: Schema may own the minimum browser-safe event payload, while plugin runtime behavior stays outside Schema.
 - The root barrel exports canonical current domain contracts. Specialized event modules, manifests, infrastructure modules, and V1 contracts use direct entrypoints instead of becoming first-class root exports.
@@ -16,7 +16,7 @@
 - Do not preserve `V2` as the permanent name for the replacement architecture. Remove `V2` from current namespaces, brands, and identifiers as the contracts are normalized.
 - Retained V1 contracts should live under a dedicated `src/v1/` subtree once the V1 isolation PR runs. New/current code must not depend on that subtree.
 - V1 coexistence is temporary. Keep compatibility entrypoints only where migration requires them, and delete the V1 subtree when the legacy runtime is retired.
-- `@opencode-ai/protocol` and `@opencode-ai/sdk-next` are current `/api/...` surfaces.
+- `@moks/protocol` and `@moks/sdk-next` are current `/api/...` surfaces.
 
 ## Events
 

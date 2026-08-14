@@ -1,4 +1,4 @@
-import type { LocationRef } from "@opencode-ai/sdk/v2"
+import type { LocationRef } from "@moks/sdk/v2"
 import { createContext, useContext, type Accessor, type ParentProps } from "solid-js"
 
 const context = createContext<Accessor<LocationRef | undefined>>()

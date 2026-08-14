@@ -1,6 +1,6 @@
 # CodeMode Design and Status
 
-This is the living design and status document for `@opencode-ai/codemode` and its existing V2 OpenCode adapter.
+This is the living design and status document for `@moks/codemode` and its existing V2 OpenCode adapter.
 It records current behavior, intentional boundaries, durable rationale, and material remaining work.
 
 Completed implementation history, branch names, test counts, and closed findings belong in git, not here. Remove
@@ -86,7 +86,7 @@ attach them to the outer result, but the program receives only the structured to
 ### V2 OpenCode adapter
 
 This section describes the `v2` branch integration. On `dev`, CodeMode is integrated through
-`packages/opencode/src/tool/code-mode.ts`, where nested MCP calls run the `tool.execute.before` and
+`packages/moks/src/tool/code-mode.ts`, where nested MCP calls run the `tool.execute.before` and
 `tool.execute.after` plugin hooks.
 
 CodeMode is integrated into V2 through `packages/core/src/tool/registry.ts` and

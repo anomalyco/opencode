@@ -2,8 +2,8 @@ export * as PluginV2 from "./plugin"
 
 import { makeLocationNode } from "./effect/app-node"
 import { Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
-import type { Plugin as PluginRuntime } from "@opencode-ai/plugin/v2/effect"
-import { Plugin } from "@opencode-ai/schema/plugin"
+import type { Plugin as PluginRuntime } from "@moks/plugin/v2/effect"
+import { Plugin } from "@moks/schema/plugin"
 import { AgentV2 } from "./agent"
 import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
@@ -26,7 +26,7 @@ export interface Interface {
   readonly wait: (id: ID) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Plugin") {}
+export class Service extends Context.Service<Service, Interface>()("@moks/v2/Plugin") {}
 
 const layer = Layer.effect(
   Service,

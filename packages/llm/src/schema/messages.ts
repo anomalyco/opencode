@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { ToolContent, ToolFileContent, ToolTextContent } from "@opencode-ai/schema/llm"
+import { ToolContent, ToolFileContent, ToolTextContent } from "@moks/schema/llm"
 import { JsonSchema, MessageRole, ProviderMetadata } from "./ids"
 import { CacheHint, CachePolicy, GenerationOptions, HttpOptions, ModelSchema, ProviderOptions } from "./options"
 import { isRecord } from "../utils/record"

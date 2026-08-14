@@ -1,4 +1,4 @@
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "@moks/plugin/v2/effect"
 import { Effect } from "effect"
 
 export default define({

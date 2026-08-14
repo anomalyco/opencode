@@ -64,7 +64,7 @@ export interface Interface {
   readonly remove: (input: RemoveInput) => Effect.Effect<RemoveResult, FSUtil.Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileMutation") {}
+export class Service extends Context.Service<Service, Interface>()("@moks/v2/FileMutation") {}
 
 /**
  * Serialize file changes by canonical target. Conditional writes compare and

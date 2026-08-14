@@ -20,7 +20,7 @@ async function bundleInputs() {
   const entrypoint = join(temporary, "index.ts")
   const metafile = join(temporary, "meta.json")
   try {
-    await Bun.write(entrypoint, 'export * from "@opencode-ai/sdk-next"')
+    await Bun.write(entrypoint, 'export * from "@moks/sdk-next"')
     const child = Bun.spawn(
       [
         process.execPath,

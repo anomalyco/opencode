@@ -1,14 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "moks",
+  "name": "moks-monorepo",
   "description": "moks — TUI-first agent harness for engineering TAs (OpenCode fork)",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.14",
   "scripts": {
-    "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
+    "dev": "bun run --cwd packages/moks --conditions=browser src/index.ts",
     "lint": "oxlint",
-    "typecheck": "bun turbo typecheck --filter=opencode... --filter=@opencode-ai/core...",
+    "typecheck": "bun turbo typecheck --filter=moks... --filter=@moks/core...",
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
     "prepare": "husky",
@@ -99,9 +99,9 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
+    "@moks/plugin": "workspace:*",
+    "@moks/script": "workspace:*",
+    "@moks/sdk": "workspace:*",
     "heap-snapshot-toolkit": "1.1.3",
     "typescript": "catalog:"
   },

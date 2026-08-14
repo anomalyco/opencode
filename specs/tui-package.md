@@ -3,28 +3,28 @@
 ## Goal
 
 Move the canonical OpenCode terminal application from
-`packages/opencode/src/cli/cmd/tui` into a self-contained workspace package while
+`packages/moks/src/cli/cmd/tui` into a self-contained workspace package while
 the legacy CLI and the new CLI continue to use the same implementation.
 
 Target package:
 
 ```text
 packages/tui
-name: @opencode-ai/tui
+name: @moks/tui
 ```
 
 Target dependency graph:
 
 ```text
-packages/opencode ---\
-                      > @opencode-ai/tui -> @opencode-ai/sdk
+packages/moks ---\
+                      > @moks/tui -> @moks/sdk
 packages/cli --------/
 ```
 
 The TUI may directly depend on terminal and UI infrastructure such as
 `@opentui/core`, `@opentui/solid`, `@opentui/keymap`, `solid-js`, Effect, and
-generic presentation libraries. It must not depend on `packages/opencode`,
-`packages/cli`, or `@opencode-ai/core`.
+generic presentation libraries. It must not depend on `packages/moks`,
+`packages/cli`, or `@moks/core`.
 
 The SDK is the TUI's OpenCode boundary. Missing backend data or operations must
 be added to the server API and generated SDK rather than imported from backend
@@ -42,18 +42,18 @@ implementation modules.
 - Use temporary compatibility re-exports only when they materially reduce the
   size or conflict risk of a section. Mark them for removal in a later section.
 - Do not preserve private imports by creating aliases from `packages/tui` back
-  into `packages/opencode`.
-- Do not replace private `packages/opencode` imports with `@opencode-ai/core`
+  into `packages/moks`.
+- Do not replace private `packages/moks` imports with `@moks/core`
   imports merely to make the package compile.
 - Keep tool rendering tolerant of unknown tools and wire-format changes. Local
   checks over `unknown` input and metadata are acceptable; importing backend
   tool implementations for type safety is not.
 - Keep legacy CLI command parsing, server startup, worker management,
-  authentication, and config discovery outside `@opencode-ai/tui`.
+  authentication, and config discovery outside `@moks/tui`.
 
 ## Ownership Boundary
 
-### `@opencode-ai/tui` Owns
+### `@moks/tui` Owns
 
 - OpenTUI renderer lifecycle shared by both CLI hosts
 - Solid application composition
@@ -94,11 +94,11 @@ implementation modules.
 The canonical implementation currently lives under:
 
 ```text
-packages/opencode/src/cli/cmd/tui
+packages/moks/src/cli/cmd/tui
 ```
 
-Its private dependency on `packages/opencode` is primarily expressed through
-the `@/*` TypeScript alias, which resolves to `packages/opencode/src/*`.
+Its private dependency on `packages/moks` is primarily expressed through
+the `@/*` TypeScript alias, which resolves to `packages/moks/src/*`.
 `@tui/*` imports are internal to the TUI and are not themselves a package
 boundary problem.
 
@@ -118,7 +118,7 @@ the application root.
 
 ## Section 1: Create The Package Skeleton
 
-Status: Completed. The private `@opencode-ai/tui` workspace package now has an
+Status: Completed. The private `@moks/tui` workspace package now has an
 independent OpenTUI Solid JSX configuration, narrow root export, package-local
 alias, and in-memory render smoke test. Neither CLI consumes the package yet.
 
@@ -126,7 +126,7 @@ Create `packages/tui` without moving the application root yet.
 
 Tasks:
 
-- Add `packages/tui/package.json` with the name `@opencode-ai/tui`.
+- Add `packages/tui/package.json` with the name `@moks/tui`.
 - Add a package `tsconfig.json` configured for OpenTUI Solid JSX.
 - Add `bunfig.toml` with the OpenTUI Solid preload for package-local development
   and tests.
@@ -144,8 +144,8 @@ Exit criteria:
 
 - `packages/tui` typechecks independently.
 - Its test command runs from `packages/tui`.
-- The package has no dependency on `opencode`, `@opencode-ai/cli`, or
-  `@opencode-ai/core`.
+- The package has no dependency on `opencode`, `@moks/cli`, or
+  `@moks/core`.
 
 Checkpoint commit:
 
@@ -157,7 +157,7 @@ feat(tui): add standalone package skeleton
 
 Status: Completed. Presentation utilities, bundled themes and their pure theme
 engine, keybinding/keymap mechanics, and low-coupling border, link, and spinner
-primitives now live in `@opencode-ai/tui`. The legacy host consumes explicit
+primitives now live in `@moks/tui`. The legacy host consumes explicit
 package exports and retains only integration wrappers or compatibility
 re-exports where backend and process concerns have not moved yet.
 
@@ -235,7 +235,7 @@ refactor(tui): decouple tool rendering from backend tools
 
 Status: Completed for the shared runtime contract and legacy host. The TUI now
 receives immutable launch-directory, path, capability, terminal/editor, startup,
-and build inputs through `@opencode-ai/tui/runtime`. Movable app, component,
+and build inputs through `@moks/tui/runtime`. Movable app, component,
 route, and feature-plugin code no longer reads OpenCode globals or process state;
 command, config, plugin-loading, custom-theme discovery, editor/clipboard, and
 Windows lifecycle adapters remain host-owned. `packages/cli` does not consume
@@ -277,7 +277,7 @@ Tasks:
   contexts.
 - Pass build/version information explicitly.
 - Keep environment reads needed by legacy command or worker startup in
-  `packages/opencode` adapters.
+  `packages/moks` adapters.
 - Give `packages/tui` sensible host-neutral defaults only when behavior is truly
   local to a terminal client.
 - Move contexts and components after their global dependencies are removed.
@@ -298,7 +298,7 @@ refactor(tui): make runtime capabilities explicit
 ## Section 5: Separate Resolved TUI Config From Host Config Loading
 
 Status: Completed for the package config contract and legacy host adapter.
-`@opencode-ai/tui/config` now owns schemas, defaults, keybind resolution, the
+`@moks/tui/config` now owns schemas, defaults, keybind resolution, the
 resolved config type, and the Solid config provider. The legacy host retains
 file discovery, precedence, JSONC parsing, substitutions, migration,
 source-relative sound paths, plugin origins, dependency installation, and
@@ -313,14 +313,14 @@ Tasks:
   `packages/tui`.
 - Define the resolved config accepted by the public TUI entrypoint.
 - Keep config path discovery, project/global precedence, migration, variable
-  expansion, and plugin package installation in `packages/opencode` initially.
+  expansion, and plugin package installation in `packages/moks` initially.
 - Make the legacy host produce the same resolved config shape.
 - Add a new CLI adapter that can initially provide defaults or its own resolved
   configuration.
 - Update schema-generation imports to use the package's explicit config export
   if schema generation still needs TUI schemas.
 - Move pure config tests; retain discovery and migration integration tests in
-  `packages/opencode`.
+  `packages/moks`.
 
 Exit criteria:
 
@@ -338,7 +338,7 @@ refactor(tui): separate config resolution from loading
 
 Status: Completed for the SDK/domain boundary. SDK, project, event, legacy sync,
 V2 sync, local model state, prompt persistence, and pure prompt helpers are now
-canonical in `@opencode-ai/tui`. Configured references resolve through the new
+canonical in `@moks/tui`. Configured references resolve through the new
 generated `reference.list` SDK operation; prompt payloads rely on optional
 server-assigned IDs; local attachment reads use the package platform contract.
 Legacy route files remain in place until the plugin slot boundary and app-root
@@ -368,7 +368,7 @@ Tasks:
 Exit criteria:
 
 - Domain-facing TUI code imports OpenCode data and operations only from
-  `@opencode-ai/sdk`.
+  `@moks/sdk`.
 - No TUI source imports private session, provider, reference, LSP, server, or
   core domain implementations.
 - SDK generation is clean after any API changes.
@@ -394,7 +394,7 @@ refactor(tui): move sdk state and routes into package
 
 Status: Completed. Plugin slots, route registration, TUI-facing APIs, runtime
 presentation state, and built-in feature plugins now live in
-`@opencode-ai/tui`. The legacy host injects a narrow plugin host that retains
+`@moks/tui`. The legacy host injects a narrow plugin host that retains
 discovery, installation, manifest/config mutation, external module execution,
 pure-mode filtering, and cleanup ownership. Missing or failing plugin hosts
 degrade to the base TUI without blocking startup.
@@ -413,7 +413,7 @@ Tasks:
   remote server.
 - Make plugin absence or incompatibility degrade gracefully.
 - Move plugin rendering tests to `packages/tui`; retain installation/loading
-  integration tests in `packages/opencode`.
+  integration tests in `packages/moks`.
 
 Exit criteria:
 
@@ -471,8 +471,8 @@ export function createRenderer(config: TuiConfig.Resolved): Promise<CliRenderer>
 Exit criteria:
 
 - `packages/tui` contains the canonical application root.
-- The package has no imports from `packages/opencode`, `packages/cli`, or
-  `@opencode-ai/core`.
+- The package has no imports from `packages/moks`, `packages/cli`, or
+  `@moks/core`.
 - The package public API is sufficient for both old and new CLI adapters.
 
 Checkpoint commit:
@@ -484,7 +484,7 @@ refactor(tui): move application root into package
 ## Section 9: Convert Both CLIs To Thin Adapters
 
 Status: Completed. The legacy thread and attach commands now lazily invoke the
-public `@opencode-ai/tui` root while retaining worker/server/config/plugin and
+public `@moks/tui` root while retaining worker/server/config/plugin and
 process adapters. The new CLI default command launches the same package against
 its authenticated daemon transport with a minimal local platform/host. Missing
 legacy provider/config APIs currently degrade to the shared provider-connect
@@ -496,10 +496,10 @@ Make both executable packages consume the same TUI package.
 Tasks:
 
 - Keep the legacy yargs commands corresponding to current `thread.ts` and
-  `attach.ts` in `packages/opencode`.
-- Keep the legacy embedded worker and server startup in `packages/opencode`.
+  `attach.ts` in `packages/moks`.
+- Keep the legacy embedded worker and server startup in `packages/moks`.
 - Change those adapters to load config, create transport inputs, and call the
-  public `@opencode-ai/tui` API.
+  public `@moks/tui` API.
 - Change `packages/cli`'s default command handler to call the same public API.
 - Remove the temporary `packages/cli/src/tui` shell after the shared package is
   integrated.
@@ -534,12 +534,12 @@ Delete migration scaffolding only after both hosts consume the package.
 Tasks:
 
 - Remove old TUI compatibility re-exports and the obsolete directory tree under
-  `packages/opencode/src/cli/cmd/tui`.
+  `packages/moks/src/cli/cmd/tui`.
 - Retain and relocate only true host adapters such as legacy commands, worker,
   transport setup, and config loading.
-- Remove obsolete `@tui/*` path mappings from `packages/opencode`.
+- Remove obsolete `@tui/*` path mappings from `packages/moks`.
 - Remove stale test fixtures and update all imports to package exports.
-- Narrow `@opencode-ai/tui` exports to intentional public entrypoints.
+- Narrow `@moks/tui` exports to intentional public entrypoints.
 - Verify package manifests list every direct dependency and no accidental
   dependency is supplied only by workspace hoisting.
 - Update repository documentation describing TUI ownership and development.
@@ -547,7 +547,7 @@ Tasks:
 Exit criteria:
 
 - No production import references the old TUI source location.
-- No source under `packages/tui` imports `@/...`, `@opencode-ai/core`, or either
+- No source under `packages/tui` imports `@/...`, `@moks/core`, or either
   executable package.
 - The old TUI directory contains no canonical implementation files.
 - The dependency graph has no cycle.
@@ -587,7 +587,7 @@ Package checks:
 ```text
 cd packages/tui && bun typecheck
 cd packages/tui && bun test
-cd packages/opencode && bun typecheck
+cd packages/moks && bun typecheck
 cd packages/cli && bun typecheck
 ```
 
@@ -595,8 +595,8 @@ Dependency checks:
 
 ```text
 rg "from ['\"]@/" packages/tui/src
-rg '@opencode-ai/core|packages/opencode|packages/cli' packages/tui
-rg 'src/cli/cmd/tui|@tui/' packages/opencode/src packages/opencode/test
+rg '@moks/core|packages/moks|packages/cli' packages/tui
+rg 'src/cli/cmd/tui|@tui/' packages/moks/src packages/moks/test
 ```
 
 SDK checks when server APIs change:
@@ -618,7 +618,7 @@ and cleaned up reliably:
 
 Compiled checks:
 
-- Build the current-platform `packages/opencode` binary.
+- Build the current-platform `packages/moks` binary.
 - Build the current-platform `packages/cli` binary.
 - Run TUI and non-TUI smoke checks against both compiled binaries.
 - Verify theme JSON, audio assets, OpenTUI parser worker, and retained backend

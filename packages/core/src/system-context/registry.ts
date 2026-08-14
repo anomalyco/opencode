@@ -14,7 +14,7 @@ export interface Interface {
   readonly load: () => Effect.Effect<SystemContext.SystemContext>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SystemContextRegistry") {}
+export class Service extends Context.Service<Service, Interface>()("@moks/v2/SystemContextRegistry") {}
 
 const layer = Layer.effect(
   Service,

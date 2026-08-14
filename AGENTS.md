@@ -54,9 +54,9 @@ We do **not** use product moks to code this repo. Day-to-day engineering is the 
 
 ## Product path
 
-Work lives in `packages/opencode` (CLI / TUI / server), `packages/core`, and `packages/tui`, plus what those import (`plugin`, `protocol`, `schema`, `server`, `sdk/js`, `llm`).
+Work lives in `packages/moks` (CLI / TUI / server), `packages/core`, and `packages/tui`, plus what those import (`plugin`, `protocol`, `schema`, `server`, `sdk/js`, `llm`).
 
-Folder names like `packages/opencode` and npm names like `@opencode-ai/*` are leftover package IDs. They are not the product and not the installed coding agent. Do not rename them unless asked.
+Folder `packages/moks` and npm names `@moks/*` are the product. Monorepo `.opencode/` is the installed coding agent that edits this repo — not product code.
 
 Do not bring back pruned company surfaces (desktop, console, web, app, SST). Do not ship under OpenCode install names. MIT stays; keep existing copyright notices; add moks copyright only on new work.
 
@@ -138,7 +138,7 @@ const { a, b } = obj
 
 - Never alias imports. Do not use `import { foo as bar } from "..."` or renamed imports like `resolve as pathResolve`.
 - Never use star imports. Do not use `import * as Foo from "..."` or `import type * as Foo from "..."`.
-- If a namespace-style value is needed, import the module's own exported namespace by name, for example `import { Project } from "@opencode-ai/core/project"`, then reference `Project.ID`.
+- If a namespace-style value is needed, import the module's own exported namespace by name, for example `import { Project } from "@moks/core/project"`, then reference `Project.ID`.
 - Prefer dynamic imports for heavy modules that are only needed in selected code paths, especially in startup-sensitive entrypoints. Destructure dynamic import bindings near the top of the narrowest scope that needs them so they read like normal imports. Avoid inline chains such as `await import("./module").then((mod) => mod.value())` or `(await import("./module")).value()`. Keep branch-specific imports inside the branch that needs them to preserve lazy loading.
 
 ### Variables
@@ -220,11 +220,11 @@ const table = sqliteTable("session", {
 
 - Avoid mocks as much as possible, you shouldn't be using globalThis.\* at all unless it's the only option.
 - Test actual implementation, do not duplicate logic into tests
-- Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/opencode`.
+- Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/moks`.
 
 ## Type Checking
 
-- Always run `bun typecheck` from package directories (e.g., `packages/opencode`), never `tsc` directly.
+- Always run `bun typecheck` from package directories (e.g., `packages/moks`), never `tsc` directly.
 
 ## V2 Session Core
 

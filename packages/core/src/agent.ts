@@ -2,7 +2,7 @@ export * as AgentV2 from "./agent"
 
 import { makeLocationNode } from "./effect/app-node"
 import { Array, Context, Effect, Layer, Types } from "effect"
-import { Agent } from "@opencode-ai/schema/agent"
+import { Agent } from "@moks/schema/agent"
 import { State } from "./state"
 
 export const ID = Agent.ID
@@ -40,7 +40,7 @@ export interface Interface extends State.Transformable<Draft> {
   readonly all: () => Effect.Effect<Info[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Agent") {}
+export class Service extends Context.Service<Service, Interface>()("@moks/v2/Agent") {}
 
 const layer = Layer.effect(
   Service,

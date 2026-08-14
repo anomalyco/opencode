@@ -2,8 +2,8 @@ export * as Credential from "./credential"
 
 import { asc, eq } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Credential } from "@opencode-ai/schema/credential"
-import { Integration } from "@opencode-ai/schema/integration"
+import { Credential } from "@moks/schema/credential"
+import { Integration } from "@moks/schema/integration"
 import { Database } from "./database/database"
 import { makeGlobalNode } from "./effect/app-node"
 import { CredentialTable } from "./credential/sql"
@@ -46,7 +46,7 @@ export interface Interface {
   readonly remove: (id: ID) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Credential") {}
+export class Service extends Context.Service<Service, Interface>()("@moks/v2/Credential") {}
 
 const layer = Layer.effect(
   Service,

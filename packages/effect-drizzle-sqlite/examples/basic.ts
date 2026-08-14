@@ -19,7 +19,7 @@ type DatabaseShape = Effect.Success<typeof makeDatabase>
 
 const sqliteLayer = SqliteClient.layer({ filename: ":memory:", disableWAL: true })
 
-class Database extends Context.Service<Database, DatabaseShape>()("@opencode/example/Database") {
+class Database extends Context.Service<Database, DatabaseShape>()("@moks/example/Database") {
   static layer = Layer.effect(Database, makeDatabase).pipe(Layer.provide(sqliteLayer))
 }
 
@@ -37,7 +37,7 @@ interface UserStoreShape {
   list(): Effect.Effect<User[], UserStoreError>
 }
 
-class UserStore extends Context.Service<UserStore, UserStoreShape>()("@opencode/example/UserStore") {
+class UserStore extends Context.Service<UserStore, UserStoreShape>()("@moks/example/UserStore") {
   static layer = Layer.effect(
     UserStore,
     Effect.gen(function* () {

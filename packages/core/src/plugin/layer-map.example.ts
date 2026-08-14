@@ -38,7 +38,7 @@ export type RequestContext = {
 }
 
 export class RequestContextRef extends Context.Service<RequestContextRef, RequestContext>()(
-  "@opencode/example/RequestContextRef",
+  "@moks/example/RequestContextRef",
 ) {}
 
 export interface ConfigServiceShape {
@@ -49,7 +49,7 @@ export interface ConfigServiceShape {
 }
 
 export class ConfigService extends Context.Service<ConfigService, ConfigServiceShape>()(
-  "@opencode/example/ConfigService",
+  "@moks/example/ConfigService",
 ) {}
 
 const configServiceLayer = Layer.effect(
@@ -69,7 +69,7 @@ const configServiceLayer = Layer.effect(
   }),
 )
 
-export class ConfigServiceMap extends LayerMap.Service<ConfigServiceMap>()("@opencode/example/ConfigServiceMap", {
+export class ConfigServiceMap extends LayerMap.Service<ConfigServiceMap>()("@moks/example/ConfigServiceMap", {
   lookup: (context: RequestContext) =>
     configServiceLayer.pipe(Layer.provide(Layer.succeed(RequestContextRef, RequestContextRef.of(context)))),
   idleTimeToLive: "5 minutes",

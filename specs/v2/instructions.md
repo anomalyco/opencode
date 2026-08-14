@@ -11,7 +11,7 @@ The target shape is:
 - `packages/core` contains domain schemas, typed errors, state containers, events, and plugin hook contracts.
 - Plugins implement provider-specific, config-specific, auth-specific, model-discovery, and generation behavior.
 - Services are hot-reloadable by design: updates are granular, observable, and do not require tearing down the whole process.
-- `packages/opencode` becomes thinner over time: UI, server routes, CLI, storage glue, and legacy compatibility should call the core services instead of owning domain logic directly.
+- `packages/moks` becomes thinner over time: UI, server routes, CLI, storage glue, and legacy compatibility should call the core services instead of owning domain logic directly.
 
 ## Service Shape
 
@@ -72,7 +72,7 @@ Keep boot as composition only. It should not contain provider, account, agent, o
 
 ## Boundaries
 
-Core should not import from `packages/opencode`. If a type or concept is needed by core, move or remodel the domain shape in core first.
+Core should not import from `packages/moks`. If a type or concept is needed by core, move or remodel the domain shape in core first.
 
 Avoid moving legacy services over wholesale. Port the domain shape and the container API, then leave specific behavior behind hooks for plugins to implement.
 

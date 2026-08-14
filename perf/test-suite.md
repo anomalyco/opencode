@@ -2,11 +2,11 @@
 
 ## Goal
 
-Speed up the `packages/opencode` test suite without reducing coverage or hiding failures.
+Speed up the `packages/moks` test suite without reducing coverage or hiding failures.
 
 ## Benchmark Command
 
-Run from `packages/opencode`:
+Run from `packages/moks`:
 
 ```sh
 bun run bench:test
@@ -43,7 +43,7 @@ For profiling: `slowest_test_file_seconds` and the slowest file list.
 
 ## Files In Scope
 
-`packages/opencode/test/**`, test fixtures, package test scripts, and implementation setup paths only when a benchmarked bottleneck points there.
+`packages/moks/test/**`, test fixtures, package test scripts, and implementation setup paths only when a benchmarked bottleneck points there.
 
 ## Signals To Watch
 

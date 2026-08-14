@@ -162,7 +162,7 @@ Affected schema:
 
 - Core-owned typed tool registry contract.
 - Canonical tool output content and structured settlement schemas.
-- Canonical tagged tool file sources in `@opencode-ai/llm`.
+- Canonical tagged tool file sources in `@moks/llm`.
 - Durable tool called, progress, success, and failure events and projected assistant-tool states.
 
 Change:

@@ -1,4 +1,4 @@
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPluginApi } from "@moks/plugin/tui"
 import { createMemo, For, type Accessor } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useCommandShortcut } from "../../keymap"

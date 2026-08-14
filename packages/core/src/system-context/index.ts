@@ -25,7 +25,7 @@ export const Key = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9._-]*\/
 export type Key = typeof Key.Type
 
 /** Indicates that a source could not be observed without treating it as removed. */
-export const unavailable = Symbol.for("@opencode/SystemContext.Unavailable")
+export const unavailable = Symbol.for("@moks/SystemContext.Unavailable")
 export type Unavailable = typeof unavailable
 
 /** Defines one typed source before its value type is hidden by `make`. */
@@ -38,7 +38,7 @@ export interface Source<A> {
   readonly removed?: (previous: A) => string
 }
 
-const ContextTypeId: unique symbol = Symbol.for("@opencode/SystemContext")
+const ContextTypeId: unique symbol = Symbol.for("@moks/SystemContext")
 
 /** Opaque carrier for composable system context sources. */
 export interface SystemContext {

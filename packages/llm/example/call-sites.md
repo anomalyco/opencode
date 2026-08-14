@@ -561,7 +561,7 @@ App boundary = explicit durable-config -> typed-provider call
 - [ ] Decide whether a tiny `Provider.define(...)` helper is warranted after two
       or three provider conversions; start with plain objects if duplication is not
       yet painful.
-- [x] Update `packages/opencode/src/session/llm/native-request.ts` to construct
+- [x] Update `packages/moks/src/session/llm/native-request.ts` to construct
       executable models at the session boundary with explicit provider facade
       calls, mapping catalog metadata such as `endpoint.websocket` to the correct
       named route selector.

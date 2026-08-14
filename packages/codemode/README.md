@@ -1,4 +1,4 @@
-# @opencode-ai/codemode
+# @moks/codemode
 
 Effect-native confined code execution over explicit, schema-described tools.
 
@@ -22,7 +22,7 @@ Within this workspace:
 ```json
 {
   "dependencies": {
-    "@opencode-ai/codemode": "workspace:*"
+    "@moks/codemode": "workspace:*"
   }
 }
 ```
@@ -34,7 +34,7 @@ Hosts interact with CodeMode through `effect` (tool `run` implementations, `Effe
 Define tools with Effect Schema, then place them in the object tree exposed to programs as `tools`:
 
 ```ts
-import { CodeMode, Tool } from "@opencode-ai/codemode"
+import { CodeMode, Tool } from "@moks/codemode"
 import { Effect, Schema } from "effect"
 
 const lookupOrder = Tool.make({
@@ -157,7 +157,7 @@ interface Failure {
 `OpenAPI.fromSpec` turns an OpenAPI 3.x document into a tool subtree - one tool per operation. Dotted `operationId` values form namespaces such as `v2.session.get`. Missing IDs receive a flat method/path fallback such as `getUsersById`; names are sanitized and deduplicated. The host places the subtree under a key in its `tools` tree; that key is the model-visible namespace.
 
 ```ts
-import { CodeMode, OpenAPI } from "@opencode-ai/codemode"
+import { CodeMode, OpenAPI } from "@moks/codemode"
 import { Effect } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 
@@ -307,7 +307,7 @@ Failures are data:
 Unknown host failures, defects, invalid outputs, and copying failures are sanitized. To return a safe operational refusal, fail with `toolError`:
 
 ```ts
-import { toolError } from "@opencode-ai/codemode"
+import { toolError } from "@moks/codemode"
 
 run: ({ id }) => (authorized(id) ? loadOrder(id) : Effect.fail(toolError("Order is unavailable")))
 ```

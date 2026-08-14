@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { generate } from "../packages/opencode/src/cli/cmd/generate"
+import { generate } from "../packages/moks/src/cli/cmd/generate"
 
 await $`bun ./packages/sdk/js/script/build.ts`
 

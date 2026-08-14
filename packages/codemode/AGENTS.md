@@ -1,4 +1,4 @@
-# @opencode-ai/codemode
+# @moks/codemode
 
 - This local package owns confined execution over explicit schema-described tools. Applications own authorization, persistence, external authority, and tool-specific delivery semantics.
 - Do not add a speculative generic permission or approval policy. A host omits tools it does not expose and enforces domain authorization inside each provided tool.

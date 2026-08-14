@@ -2,7 +2,7 @@ export * as Reference from "./reference"
 
 import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Scope, Types } from "effect"
-import { Reference } from "@opencode-ai/schema/reference"
+import { Reference } from "@moks/schema/reference"
 import { Global } from "./global"
 import { EventV2 } from "./event"
 import { Repository } from "./repository"
@@ -38,7 +38,7 @@ export interface Interface extends State.Transformable<Draft> {
   readonly list: () => Effect.Effect<Info[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Reference") {}
+export class Service extends Context.Service<Service, Interface>()("@moks/v2/Reference") {}
 
 const layer = Layer.effect(
   Service,

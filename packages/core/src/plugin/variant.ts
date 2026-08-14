@@ -1,6 +1,6 @@
 export * as VariantPlugin from "./variant"
 
-import type { ModelV2Info } from "@opencode-ai/sdk/v2/types"
+import type { ModelV2Info } from "@moks/sdk/v2/types"
 import { Effect } from "effect"
 import { define } from "./internal"
 

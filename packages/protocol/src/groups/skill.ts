@@ -1,5 +1,5 @@
-import { Skill } from "@opencode-ai/schema/skill"
-import { Location } from "@opencode-ai/schema/location"
+import { Skill } from "@moks/schema/skill"
+import { Location } from "@moks/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location"

@@ -1,7 +1,7 @@
 export * as ConfigExternalPlugin from "./external"
 
-import type { Plugin as EffectPlugin } from "@opencode-ai/plugin/v2/effect"
-import type { Plugin as PromisePlugin } from "@opencode-ai/plugin/v2/promise"
+import type { Plugin as EffectPlugin } from "@moks/plugin/v2/effect"
+import type { Plugin as PromisePlugin } from "@moks/plugin/v2/promise"
 import { Effect, Schema } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"

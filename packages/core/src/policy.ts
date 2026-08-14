@@ -20,7 +20,7 @@ export interface Interface {
   readonly hasStatements: () => boolean
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Policy") {}
+export class Service extends Context.Service<Service, Interface>()("@moks/v2/Policy") {}
 
 const layer = Layer.effect(
   Service,

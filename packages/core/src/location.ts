@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect"
-import { Info, Ref, response } from "@opencode-ai/schema/location"
+import { Info, Ref, response } from "@moks/schema/location"
 import { Project } from "./project"
 import { LayerNode } from "./effect/layer-node"
 import { makeLocationNode, tags } from "./effect/app-node"
@@ -12,7 +12,7 @@ export interface Interface extends Info {
   readonly vcs?: Project.Vcs
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Location") {}
+export class Service extends Context.Service<Service, Interface>()("@moks/Location") {}
 
 export const node = LayerNode.unbound(Service, tags.values.location)
 

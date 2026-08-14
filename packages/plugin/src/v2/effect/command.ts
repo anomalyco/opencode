@@ -1,4 +1,4 @@
-import type { CommandV2Info } from "@opencode-ai/sdk/v2/types"
+import type { CommandV2Info } from "@moks/sdk/v2/types"
 import type { Hooks } from "./registration.js"
 
 export interface CommandDraft {

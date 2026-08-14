@@ -1,4 +1,4 @@
-import type { AgentV2Info } from "@opencode-ai/sdk/v2/types"
+import type { AgentV2Info } from "@moks/sdk/v2/types"
 import type { Hooks } from "./registration.js"
 
 export interface AgentDraft {

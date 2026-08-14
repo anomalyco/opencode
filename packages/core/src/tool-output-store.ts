@@ -8,7 +8,7 @@ import { Global } from "./global"
 import { makeGlobalNode, makeLocationNode } from "./effect/app-node"
 import { SessionSchema } from "./session/schema"
 import { Identifier } from "./util/identifier"
-import type { ToolOutput } from "@opencode-ai/llm"
+import type { ToolOutput } from "@moks/llm"
 
 export const MAX_LINES = 2_000
 export const MAX_BYTES = 50 * 1024
@@ -45,7 +45,7 @@ export interface Interface {
   readonly cleanup: () => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ToolOutputStore") {}
+export class Service extends Context.Service<Service, Interface>()("@moks/v2/ToolOutputStore") {}
 
 const takePrefix = (input: string, maximumBytes: number) => {
   let bytes = 0

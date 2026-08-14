@@ -18,7 +18,7 @@ export interface Interface {
 }
 
 /** Routes execution from a Session ID to the runner owned by that Session's Location. */
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionExecution") {}
+export class Service extends Context.Service<Service, Interface>()("@moks/v2/SessionExecution") {}
 
 export const node = LayerNode.unbound(Service, Node.tags.values.global)
 

@@ -4,7 +4,7 @@ moks is a hard fork of OpenCode. It is not affiliated with OpenCode.
 
 - Runtime: Bun (`bun install`, `bun dev`)
 - Default branch: `dev`
-- Product lives in `packages/opencode` (plus `packages/core` and TUI)
+- Product lives in `packages/moks` (plus `packages/core` and TUI)
 - Open PRs against [artemysone/moks](https://github.com/artemysone/moks)
 
 See `AGENTS.md`. Strategy: `docs/gtm.html`.
