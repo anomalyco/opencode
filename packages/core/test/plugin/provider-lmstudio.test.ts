@@ -1,4 +1,5 @@
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Integration } from "@opencode-ai/core/integration"
 import { Model } from "@opencode-ai/core/model"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
@@ -91,7 +92,7 @@ describe("LMStudioPlugin", () => {
             id: providerID,
             name: "LM Studio",
             package: "@opencode-ai/ai/providers/openai-compatible",
-            settings: { baseURL: `${server.url.origin}/v1`, provider: "lmstudio" },
+            settings: { baseURL: `${server.url.origin}/v1`, provider: "lmstudio", apiKey: "" },
           })
           expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
           expect(gemma).toMatchObject({
@@ -184,6 +185,76 @@ describe("LMStudioPlugin", () => {
             (model) => model !== undefined,
           )
           expect(requests.count).toBe(1)
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("replaces the credential-gated Models.dev catalog when discovery succeeds", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const models = [
+          {
+            type: "llm",
+            key: "discovered-model",
+            display_name: "Discovered Model",
+            loaded_instances: [],
+            max_context_length: 32_768,
+          },
+        ]
+        return { models, server: Bun.serve({ port: 0, fetch: () => Response.json({ models }) }) }
+      }),
+      ({ models, server }) =>
+        Effect.gen(function* () {
+          const catalog = yield* Catalog.Service
+          const integrations = yield* Integration.Service
+          const providerID = Provider.ID.make("lmstudio")
+          yield* integrations.transform((draft) => {
+            draft.update(Integration.ID.make("lmstudio"), (integration) => {
+              integration.name = "LMStudio"
+            })
+            draft.method.update({
+              integrationID: Integration.ID.make("lmstudio"),
+              method: { type: "env", names: ["LMSTUDIO_API_KEY"] },
+            })
+          })
+          yield* catalog.transform((draft) => {
+            draft.provider.update(providerID, (provider) => {
+              provider.name = "LMStudio"
+              provider.package = "aisdk:@ai-sdk/openai-compatible"
+              provider.integrationID = Integration.ID.make("lmstudio")
+            })
+            draft.model.update(providerID, Model.ID.make("static-model"), () => {})
+          })
+
+          expect((yield* catalog.provider.available()).map((provider) => provider.id)).not.toContain(providerID)
+          yield* addPlugin(server.url.origin, "5 millis")
+          yield* eventually(
+            catalog.model.get(providerID, Model.ID.make("discovered-model")),
+            (model) => model !== undefined,
+          )
+
+          expect(yield* integrations.get(Integration.ID.make("lmstudio"))).toBeUndefined()
+          expect((yield* catalog.provider.get(providerID))?.integrationID).toBeUndefined()
+          expect(yield* catalog.model.get(providerID, Model.ID.make("static-model"))).toBeUndefined()
+          expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
+
+          yield* integrations.transform((draft) => {
+            draft.update(Integration.ID.make("lmstudio"), (integration) => {
+              integration.name = "Configured LM Studio"
+            })
+            draft.method.update({ integrationID: Integration.ID.make("lmstudio"), method: { type: "key" } })
+          })
+          expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
+
+          models.splice(0)
+          yield* eventually(
+            catalog.model.get(providerID, Model.ID.make("static-model")),
+            (model) => model !== undefined,
+          )
+          expect(yield* catalog.model.get(providerID, Model.ID.make("discovered-model"))).toBeUndefined()
+          expect(yield* integrations.get(Integration.ID.make("lmstudio"))).toBeDefined()
+          expect((yield* catalog.provider.get(providerID))?.integrationID).toBe(Integration.ID.make("lmstudio"))
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),

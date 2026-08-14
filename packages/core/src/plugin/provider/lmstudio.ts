@@ -36,12 +36,21 @@ export function make(origin = "http://127.0.0.1:1234", interval: Duration.Input 
       const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
       const loaded = { models: [] as (typeof RemoteModel.Type)[], hash: "[]" }
 
+      yield* ctx.integration.transform((integrations) => {
+        if (loaded.models.length === 0) return
+        integrations.remove(providerID)
+      })
+
       yield* ctx.catalog.transform((catalog) => {
         if (loaded.models.length === 0) return
+        for (const model of catalog.provider.get(providerID)?.models.values() ?? []) {
+          catalog.model.remove(providerID, model.id)
+        }
         catalog.provider.update(providerID, (provider) => {
           provider.name = "LM Studio"
           provider.package = "@opencode-ai/ai/providers/openai-compatible"
-          provider.settings = { baseURL, provider: providerID }
+          provider.settings = { baseURL, provider: providerID, apiKey: "" }
+          provider.integrationID = undefined
         })
         for (const item of loaded.models) {
           catalog.model.update(providerID, item.key, (model) => {
@@ -89,6 +98,7 @@ export function make(origin = "http://127.0.0.1:1234", interval: Duration.Input 
         if (hash === loaded.hash) return
         loaded.models = models
         loaded.hash = hash
+        yield* ctx.integration.reload()
         yield* ctx.catalog.reload()
       })
 
