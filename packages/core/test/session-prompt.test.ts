@@ -767,7 +767,7 @@ describe("Session.prompt", () => {
         .where(eq(SessionMessageTable.session_id, sessionID))
         .run()
         .pipe(Effect.orDie)
-      yield* bus.replayAll(
+      yield* Effect.forEach(
         recorded.map((event) => ({
           id: event.id,
           created: DateTime.makeUnsafe(event.created),
@@ -776,6 +776,8 @@ describe("Session.prompt", () => {
           type: event.type,
           data: event.data,
         })),
+        (event) => bus.replay(event),
+        { discard: true },
       )
 
       expect(yield* admitted(messageID)).toMatchObject({

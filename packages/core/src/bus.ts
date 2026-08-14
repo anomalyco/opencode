@@ -158,10 +158,6 @@ export interface Interface {
     event: SerializedEvent,
     options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean },
   ) => Effect.Effect<void>
-  readonly replayAll: (
-    events: SerializedEvent[],
-    options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean },
-  ) => Effect.Effect<string | undefined>
   readonly remove: (aggregateID: string) => Effect.Effect<void>
   readonly claim: (aggregateID: string, ownerID: string) => Effect.Effect<void>
 }
@@ -648,28 +644,6 @@ export function configured(options?: Options) {
           })
         }
 
-        function replayAll(
-          events: SerializedEvent[],
-          options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean },
-        ) {
-          return Effect.gen(function* () {
-            const source = events[0]?.aggregateID
-            if (!source) return undefined
-            if (events.some((event) => event.aggregateID !== source)) {
-              yield* Effect.die(
-                new InvalidDurableEventError({
-                  type: events[0]?.type ?? "unknown",
-                  message: "Replay events must belong to the same aggregate",
-                }),
-              )
-            }
-            for (const event of events) {
-              yield* replay(event, options)
-            }
-            return source
-          })
-        }
-
         function remove(aggregateID: string) {
           return db
             .transaction(() =>
@@ -866,7 +840,6 @@ export function configured(options?: Options) {
           listen,
           project,
           replay,
-          replayAll,
           remove,
           claim,
         })

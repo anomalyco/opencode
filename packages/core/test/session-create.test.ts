@@ -629,7 +629,7 @@ describe("Session.create", () => {
           .pipe(Effect.orDie)
 
         expect(yield* store.get(created.id)).toBeUndefined()
-        expect(yield* bus.replayAll(serialized.slice(0, 2))).toBe(created.id)
+        yield* Effect.forEach(serialized.slice(0, 2), (event) => bus.replay(event), { discard: true })
         expect(yield* SessionInbox.find(db, admitted.id)).toMatchObject({
           id: admitted.id,
           sessionID: created.id,
@@ -639,7 +639,7 @@ describe("Session.create", () => {
         })
         expect(yield* store.context(created.id)).toEqual([])
 
-        expect(yield* bus.replayAll(serialized.slice(2))).toBe(created.id)
+        yield* Effect.forEach(serialized.slice(2), (event) => bus.replay(event), { discard: true })
         expect(yield* SessionInbox.find(db, admitted.id)).toBeUndefined()
         expect(yield* store.context(created.id)).toMatchObject([
           { id: admitted.id, type: "user", text: "Replay lifecycle" },
