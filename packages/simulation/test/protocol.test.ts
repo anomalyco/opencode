@@ -1,6 +1,110 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { Backend, Frontend, Handshake } from "../src/protocol"
+import { Backend, BackendRpcs, Frontend, Handshake, JsonRpc, UiRpcs } from "../src/protocol"
+
+const uiCapability: Frontend.Capability = "ui.state"
+// @ts-expect-error capability literals must remain narrow for consumers
+const invalidUiCapability: Frontend.Capability = "ui.future"
+const successResponse: Schema.Schema.Type<typeof JsonRpc.Response> = { jsonrpc: "2.0", id: 1, result: null }
+// @ts-expect-error responses require one outcome
+const missingResponse: Schema.Schema.Type<typeof JsonRpc.Response> = { jsonrpc: "2.0", id: 1 }
+// @ts-expect-error responses cannot contain both outcomes
+const invalidResponse: Schema.Schema.Type<typeof JsonRpc.Response> = {
+  jsonrpc: "2.0",
+  id: 1,
+  result: null,
+  error: { code: -32600, message: "Invalid request" },
+}
+void [uiCapability, invalidUiCapability, successResponse, missingResponse, invalidResponse]
+
+test("preserves capability order and keeps request capabilities aligned with RPC groups", () => {
+  expect(Frontend.Capabilities).toEqual([
+    "ui.type",
+    "ui.press",
+    "ui.enter",
+    "ui.arrow",
+    "ui.focus",
+    "ui.click",
+    "ui.click.semantic",
+    "ui.resize",
+    "ui.matches",
+    "ui.state",
+    "ui.snapshot",
+    "ui.capture",
+    "ui.recording.finish",
+  ])
+  expect(Backend.Capabilities).toEqual([
+    "llm.attach",
+    "llm.chunk",
+    "llm.finish",
+    "llm.disconnect",
+    "llm.pending",
+    "llm.request",
+    "llm.tool-input-delta",
+    "tool.attach",
+    "tool.update",
+    "tool.finish",
+    "tool.fail",
+    "tool.invocation",
+    "tool.cancel",
+  ])
+  expect(new Set<string>(Frontend.Capabilities.filter((capability) => capability !== "ui.click.semantic"))).toEqual(
+    new Set(Array.from(UiRpcs.requests.keys()).filter((method) => method !== "simulation.handshake")),
+  )
+  expect(
+    new Set<string>(
+      Backend.Capabilities.filter(
+        (capability) => !["llm.request", "llm.tool-input-delta", "tool.invocation", "tool.cancel"].includes(capability),
+      ),
+    ),
+  ).toEqual(new Set(Array.from(BackendRpcs.requests.keys()).filter((method) => method !== "simulation.handshake")))
+})
+
+test("normalizes an omitted finish reason", () => {
+  expect(Backend.decodeRequest({ jsonrpc: "2.0", id: 1, method: "llm.finish", params: { id: "inv_1" } })).toMatchObject(
+    { params: { id: "inv_1", reason: "stop" } },
+  )
+})
+
+test("decodes typed backend notifications", () => {
+  expect(
+    Backend.decodeNotification({
+      jsonrpc: "2.0",
+      method: "tool.cancel",
+      params: { id: "tool_1", reason: "interrupted" },
+    }),
+  ).toEqual({
+    jsonrpc: "2.0",
+    method: "tool.cancel",
+    params: { id: "tool_1", reason: "interrupted" },
+  })
+  expect(() =>
+    Backend.decodeNotification({
+      jsonrpc: "2.0",
+      method: "tool.cancel",
+      params: { id: "tool_1", reason: "unknown" },
+    }),
+  ).toThrow()
+})
+
+test("requires exactly one JSON-RPC response outcome", () => {
+  const decode = Schema.decodeUnknownSync(JsonRpc.Response)
+  expect(decode({ jsonrpc: "2.0", id: 1, result: null })).toEqual({ jsonrpc: "2.0", id: 1, result: null })
+  expect(decode({ jsonrpc: "2.0", id: 1, error: { code: -32600, message: "Invalid request" } })).toEqual({
+    jsonrpc: "2.0",
+    id: 1,
+    error: { code: -32600, message: "Invalid request" },
+  })
+  expect(() => decode({ jsonrpc: "2.0", id: 1 })).toThrow()
+  expect(() =>
+    decode({
+      jsonrpc: "2.0",
+      id: 1,
+      result: null,
+      error: { code: -32600, message: "Invalid request" },
+    }),
+  ).toThrow()
+})
 
 test("decodes ui.matches text params", () => {
   expect(

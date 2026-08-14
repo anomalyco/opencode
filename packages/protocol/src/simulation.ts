@@ -4,6 +4,10 @@ import { Rpc, RpcGroup } from "effect/unstable/rpc"
 const JsonRpcID = Schema.Union([Schema.String, Schema.Number, Schema.Null])
 const decodeJson = Schema.decodeUnknownSync(Schema.Json)
 
+// Generated schema unions lose mapped tuple types even though both come from the same operation tuple.
+// eslint-disable-next-line typescript-eslint/no-unsafe-type-assertion, typescript-eslint/no-unnecessary-type-parameters
+const decoded = <Type>(value: unknown) => value as Type
+
 export namespace JsonRpc {
   export const RequestFields = {
     jsonrpc: Schema.Literal("2.0"),
@@ -22,13 +26,33 @@ export namespace JsonRpc {
     data: Schema.optional(Schema.Json),
   })
 
-  export const Response = Schema.Struct({
-    jsonrpc: Schema.Literal("2.0"),
-    id: JsonRpcID,
-    result: Schema.optional(Schema.Json),
-    error: Schema.optional(ErrorObject),
-  })
-  export interface Response extends Schema.Schema.Type<typeof Response> {}
+  export type Response =
+    | {
+        readonly jsonrpc: "2.0"
+        readonly id: string | number | null
+        readonly result: Schema.Schema.Type<typeof Schema.Json>
+        readonly error?: never
+      }
+    | {
+        readonly jsonrpc: "2.0"
+        readonly id: string | number | null
+        readonly error: Schema.Schema.Type<typeof ErrorObject>
+        readonly result?: never
+      }
+  export const Response = decoded<Schema.Decoder<Response>>(
+    Schema.Struct({
+      jsonrpc: Schema.Literal("2.0"),
+      id: JsonRpcID,
+      result: Schema.optionalKey(Schema.Json),
+      error: Schema.optionalKey(ErrorObject),
+    }).check(
+      Schema.makeFilter((response) =>
+        "result" in response === "error" in response
+          ? "JSON-RPC responses must contain exactly one of result or error"
+          : undefined,
+      ),
+    ),
+  )
 
   export const decodeRequest = Schema.decodeUnknownSync(Request)
 
@@ -46,6 +70,161 @@ export namespace JsonRpc {
         message: error instanceof Error ? error.message : String(error),
       },
     }
+  }
+}
+
+export class SimulationRequestError extends Schema.TaggedErrorClass<SimulationRequestError>()(
+  "SimulationRequestError",
+  {
+    method: Schema.String,
+    code: Schema.Number,
+    message: Schema.String,
+    data: Schema.optionalKey(Schema.Json),
+  },
+) {}
+
+const request = <
+  const Tag extends string,
+  Payload extends Schema.Top | Schema.Struct.Fields = typeof Schema.Void,
+  Success extends Schema.Top = typeof Schema.Void,
+>(
+  tag: Tag,
+  options?: {
+    readonly payload?: Payload
+    readonly success?: Success
+  },
+) => Rpc.make(tag, { ...options, error: SimulationRequestError })
+
+function operation<const Tag extends string, Success extends Schema.Decoder<unknown>>(method: Tag, success: Success) {
+  return {
+    method,
+    success,
+    request: Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal(method) }),
+    rpc: request(method, { success }),
+  }
+}
+
+function operationWithPayload<
+  const Tag extends string,
+  Payload extends Schema.Decoder<unknown>,
+  Success extends Schema.Decoder<unknown>,
+>(method: Tag, payload: Payload, success: Success) {
+  return {
+    method,
+    payload,
+    success,
+    request: Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal(method), params: payload }),
+    rpc: request(method, { payload, success }),
+  }
+}
+
+function operationWithRpcPayload<
+  const Tag extends string,
+  Payload extends Schema.Decoder<unknown>,
+  RpcPayload extends Schema.Decoder<unknown>,
+  Success extends Schema.Decoder<unknown>,
+>(method: Tag, payload: Payload, rpcPayload: RpcPayload, success: Success) {
+  return {
+    method,
+    payload,
+    success,
+    request: Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal(method), params: payload }),
+    rpc: request(method, { payload: rpcPayload, success }),
+  }
+}
+
+function notification<const Method extends string, Payload extends Schema.Decoder<unknown>>(
+  method: Method,
+  payload: Payload,
+) {
+  return {
+    method,
+    payload,
+    schema: Schema.Struct({
+      jsonrpc: Schema.Literal("2.0"),
+      method: Schema.Literal(method),
+      params: payload,
+    }),
+  }
+}
+
+type OperationRequest<Operation> = Operation extends {
+  readonly method: infer Method extends string
+  readonly payload: infer Payload extends Schema.Top
+}
+  ? Omit<JsonRpc.Request, "method" | "params"> & {
+      readonly method: Method
+      readonly params: Schema.Schema.Type<Payload>
+    }
+  : Operation extends { readonly method: infer Method extends string }
+    ? Omit<JsonRpc.Request, "method" | "params"> & { readonly method: Method }
+    : never
+
+type EndpointRequest<Operations extends ReadonlyArray<{ readonly method: string }>> =
+  | Handshake.Request
+  | OperationRequest<Operations[number]>
+
+type EndpointNotification<Notifications extends ReadonlyArray<{ readonly schema: Schema.Top }>> = Schema.Schema.Type<
+  Notifications[number]["schema"]
+>
+
+function endpoint<
+  const Operations extends ReadonlyArray<{
+    readonly method: string
+    readonly success: Schema.Top
+    readonly rpc: Rpc.Any
+    readonly request: Schema.Decoder<unknown>
+    readonly payload?: Schema.Decoder<unknown>
+  }>,
+  const Notifications extends ReadonlyArray<{
+    readonly method: string
+    readonly payload: Schema.Decoder<unknown>
+    readonly schema: Schema.Decoder<unknown>
+  }>,
+  const Capabilities extends ReadonlyArray<Handshake.Capability>,
+>(
+  operations: Operations,
+  notifications: Notifications,
+  features: ReadonlyArray<Handshake.Capability>,
+  Capabilities: Capabilities,
+) {
+  const requests: ReadonlyArray<Schema.Decoder<unknown>> = [
+    Handshake.Request,
+    ...operations.map((operation) => operation.request),
+  ]
+  const Request = Schema.Union(requests)
+  const Notification =
+    notifications.length === 0 ? Schema.Never : Schema.Union(notifications.map((notification) => notification.schema))
+  const decodeRequest = Schema.decodeUnknownSync(Request)
+  const decodeRequestEffect = Schema.decodeUnknownEffect(Schema.fromJsonString(Request))
+  const decodeNotification = Schema.decodeUnknownSync(Notification)
+  const decodeNotificationEffect = Schema.decodeUnknownEffect(Schema.fromJsonString(Notification))
+  const handshake = request("simulation.handshake", { payload: Handshake.Params, success: Handshake.Response })
+  const rpcs = RpcGroup.make(handshake, ...operations.map((operation) => operation.rpc)) as RpcGroup.RpcGroup<
+    typeof handshake | Operations[number]["rpc"]
+  >
+  const derived = [
+    ...operations.map((operation) => operation.method),
+    ...notifications.map((notification) => notification.method),
+    ...features,
+  ]
+  if (
+    new Set(Capabilities).size !== Capabilities.length ||
+    derived.length !== Capabilities.length ||
+    derived.some((capability) => !Capabilities.includes(capability))
+  )
+    throw new Error("Simulation capabilities must exactly match endpoint operations")
+  return {
+    Capabilities,
+    Request: decoded<Schema.Decoder<EndpointRequest<Operations>>>(Request),
+    Notification: decoded<Schema.Decoder<EndpointNotification<Notifications>>>(Notification),
+    decodeRequest: (input: unknown) => decoded<EndpointRequest<Operations>>(decodeRequest(input)),
+    decodeRequestEffect: (input: string) =>
+      decodeRequestEffect(input).pipe(Effect.map(decoded<EndpointRequest<Operations>>)),
+    decodeNotification: (input: unknown) => decoded<EndpointNotification<Notifications>>(decodeNotification(input)),
+    decodeNotificationEffect: (input: string) =>
+      decodeNotificationEffect(input).pipe(Effect.map(decoded<EndpointNotification<Notifications>>)),
+    rpcs,
   }
 }
 
@@ -81,7 +260,7 @@ export namespace Handshake {
     protocolVersion: ProtocolVersion,
     role: EndpointRole,
     server: Identity,
-    capabilities: Schema.Array(Capability),
+    capabilities: Schema.Array(Capability).check(Schema.isUnique()),
   })
   export interface Response extends Schema.Schema.Type<typeof Response> {}
 
@@ -165,23 +344,6 @@ export namespace Handshake {
 }
 
 export namespace Frontend {
-  export const Capabilities = [
-    "ui.type",
-    "ui.press",
-    "ui.enter",
-    "ui.arrow",
-    "ui.focus",
-    "ui.click",
-    "ui.click.semantic",
-    "ui.resize",
-    "ui.matches",
-    "ui.state",
-    "ui.snapshot",
-    "ui.capture",
-    "ui.recording.finish",
-  ] as const satisfies ReadonlyArray<Handshake.Capability>
-  export type Capability = (typeof Capabilities)[number]
-
   export const KeyModifiers = Schema.Struct({
     ctrl: Schema.optional(Schema.Boolean),
     shift: Schema.optional(Schema.Boolean),
@@ -337,44 +499,51 @@ export namespace Frontend {
 
   export const ResizeParams = Schema.Struct({ cols: Schema.Number, rows: Schema.Number })
   export interface ResizeParams extends Schema.Schema.Type<typeof ResizeParams> {}
+}
 
-  export const Request = Schema.Union([
-    Handshake.Request,
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.type"), params: TypeParams }),
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.press"), params: PressParams }),
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.arrow"), params: ArrowParams }),
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.focus"), params: FocusParams }),
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.click"), params: ClickParams }),
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.resize"), params: ResizeParams }),
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.matches"), params: MatchesParams }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literals(["ui.enter", "ui.state", "ui.snapshot", "ui.recording.finish"]),
-    }),
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.capture") }),
-  ])
-  export type Request = Schema.Schema.Type<typeof Request>
-  export const decodeRequest = Schema.decodeUnknownSync(Request)
-  export const decodeRequestEffect = Schema.decodeUnknownEffect(Schema.fromJsonString(Request))
+const FrontendOperations = [
+  operation("ui.state", Frontend.State),
+  operation("ui.snapshot", Frontend.SemanticSnapshot),
+  operation("ui.capture", Frontend.CapturedFrame),
+  operationWithPayload("ui.matches", Frontend.MatchesParams, Frontend.Matches),
+  operation("ui.recording.finish", Frontend.RecordingFinish),
+  operationWithPayload("ui.type", Frontend.TypeParams, Frontend.State),
+  operationWithPayload("ui.press", Frontend.PressParams, Frontend.State),
+  operation("ui.enter", Frontend.State),
+  operationWithPayload("ui.arrow", Frontend.ArrowParams, Frontend.State),
+  operationWithPayload("ui.focus", Frontend.FocusParams, Frontend.State),
+  operationWithPayload("ui.click", Frontend.ClickParams, Frontend.State),
+  operationWithPayload("ui.resize", Frontend.ResizeParams, Frontend.State),
+] as const
+const FrontendCapabilities = [
+  "ui.type",
+  "ui.press",
+  "ui.enter",
+  "ui.arrow",
+  "ui.focus",
+  "ui.click",
+  "ui.click.semantic",
+  "ui.resize",
+  "ui.matches",
+  "ui.state",
+  "ui.snapshot",
+  "ui.capture",
+  "ui.recording.finish",
+] as const
+const FrontendEndpoint = endpoint(FrontendOperations, [], ["ui.click.semantic"], FrontendCapabilities)
+type FrontendRequest = EndpointRequest<typeof FrontendOperations>
+
+export namespace Frontend {
+  export const Capabilities: typeof FrontendCapabilities = FrontendEndpoint.Capabilities
+  export type Capability = (typeof Capabilities)[number]
+  export const Request: Schema.Decoder<FrontendRequest> = FrontendEndpoint.Request
+  export type Request = FrontendRequest
+  export const decodeRequest: (input: unknown) => Request = FrontendEndpoint.decodeRequest
+  export const decodeRequestEffect: (input: string) => Effect.Effect<Request, Schema.SchemaError> =
+    FrontendEndpoint.decodeRequestEffect
 }
 
 export namespace Backend {
-  export const Capabilities = [
-    "llm.attach",
-    "llm.chunk",
-    "llm.finish",
-    "llm.disconnect",
-    "llm.pending",
-    "llm.request",
-    "llm.tool-input-delta",
-    "tool.attach",
-    "tool.update",
-    "tool.finish",
-    "tool.fail",
-    "tool.invocation",
-    "tool.cancel",
-  ] as const satisfies ReadonlyArray<Handshake.Capability>
-
   export const Item = Schema.Union([
     Schema.Struct({ type: Schema.Literal("textDelta"), text: Schema.String }),
     Schema.Struct({ type: Schema.Literal("reasoningDelta"), text: Schema.String }),
@@ -533,24 +702,6 @@ export namespace Backend {
   export const DisconnectParams = Schema.Struct({ id: Schema.String })
   export interface DisconnectParams extends Schema.Schema.Type<typeof DisconnectParams> {}
 
-  export const Request = Schema.Union([
-    Handshake.Request,
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.chunk"), params: ChunkParams }),
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.finish"), params: FinishParams }),
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("llm.disconnect"), params: DisconnectParams }),
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("tool.attach"), params: ToolAttachParams }),
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("tool.update"), params: ToolUpdateParams }),
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("tool.finish"), params: ToolFinishParams }),
-    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("tool.fail"), params: ToolFailParams }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literals(["llm.attach", "llm.pending"]),
-    }),
-  ])
-  export type Request = Schema.Schema.Type<typeof Request>
-  export const decodeRequest = Schema.decodeUnknownSync(Request)
-  export const decodeRequestEffect = Schema.decodeUnknownEffect(Schema.fromJsonString(Request))
-
   export const ProviderInvocation = Schema.Struct({ id: Schema.String, url: Schema.String, body: Schema.Json })
   export interface ProviderInvocation extends Schema.Schema.Type<typeof ProviderInvocation> {}
 
@@ -566,53 +717,54 @@ export namespace Backend {
   export interface NetworkLogEntry extends Schema.Schema.Type<typeof NetworkLogEntry> {}
 }
 
-export class SimulationRequestError extends Schema.TaggedErrorClass<SimulationRequestError>()(
-  "SimulationRequestError",
-  {
-    method: Schema.String,
-    code: Schema.Number,
-    message: Schema.String,
-    data: Schema.optionalKey(Schema.Json),
-  },
-) {}
+const BackendOperations = [
+  operation("llm.attach", Backend.Attached),
+  operation("llm.pending", Backend.Pending),
+  operationWithPayload("llm.chunk", Backend.ChunkParams, Backend.Ok),
+  operationWithRpcPayload("llm.finish", Backend.FinishParams, Backend.FinishPayload, Backend.Ok),
+  operationWithPayload("llm.disconnect", Backend.DisconnectParams, Backend.Ok),
+  operationWithPayload("tool.attach", Backend.ToolAttachParams, Backend.Attached),
+  operationWithPayload("tool.update", Backend.ToolUpdateParams, Backend.Ok),
+  operationWithPayload("tool.finish", Backend.ToolFinishParams, Backend.Ok),
+  operationWithPayload("tool.fail", Backend.ToolFailParams, Backend.Ok),
+] as const
+const BackendNotifications = [
+  notification("llm.request", Backend.ProviderInvocation),
+  notification("tool.invocation", Backend.ToolInvocation),
+  notification("tool.cancel", Backend.ToolCancellation),
+] as const
+const BackendCapabilities = [
+  "llm.attach",
+  "llm.chunk",
+  "llm.finish",
+  "llm.disconnect",
+  "llm.pending",
+  "llm.request",
+  "llm.tool-input-delta",
+  "tool.attach",
+  "tool.update",
+  "tool.finish",
+  "tool.fail",
+  "tool.invocation",
+  "tool.cancel",
+] as const
+const BackendEndpoint = endpoint(BackendOperations, BackendNotifications, ["llm.tool-input-delta"], BackendCapabilities)
+type BackendRequest = EndpointRequest<typeof BackendOperations>
+type BackendNotification = EndpointNotification<typeof BackendNotifications>
 
-const request = <
-  const Tag extends string,
-  Payload extends Schema.Top | Schema.Struct.Fields = typeof Schema.Void,
-  Success extends Schema.Top = typeof Schema.Void,
->(
-  tag: Tag,
-  options?: {
-    readonly payload?: Payload
-    readonly success?: Success
-  },
-) => Rpc.make(tag, { ...options, error: SimulationRequestError })
+export namespace Backend {
+  export const Capabilities: typeof BackendCapabilities = BackendEndpoint.Capabilities
+  export const Request: Schema.Decoder<BackendRequest> = BackendEndpoint.Request
+  export type Request = BackendRequest
+  export const decodeRequest: (input: unknown) => Request = BackendEndpoint.decodeRequest
+  export const decodeRequestEffect: (input: string) => Effect.Effect<Request, Schema.SchemaError> =
+    BackendEndpoint.decodeRequestEffect
+  export const Notification: Schema.Decoder<BackendNotification> = BackendEndpoint.Notification
+  export type Notification = BackendNotification
+  export const decodeNotification: (input: unknown) => Notification = BackendEndpoint.decodeNotification
+  export const decodeNotificationEffect: (input: string) => Effect.Effect<Notification, Schema.SchemaError> =
+    BackendEndpoint.decodeNotificationEffect
+}
 
-export const UiRpcs = RpcGroup.make(
-  request("simulation.handshake", { payload: Handshake.Params, success: Handshake.Response }),
-  request("ui.state", { success: Frontend.State }),
-  request("ui.snapshot", { success: Frontend.SemanticSnapshot }),
-  request("ui.capture", { success: Frontend.CapturedFrame }),
-  request("ui.matches", { payload: Frontend.MatchesParams, success: Frontend.Matches }),
-  request("ui.recording.finish", { success: Frontend.RecordingFinish }),
-  request("ui.type", { payload: Frontend.TypeParams, success: Frontend.State }),
-  request("ui.press", { payload: Frontend.PressParams, success: Frontend.State }),
-  request("ui.enter", { success: Frontend.State }),
-  request("ui.arrow", { payload: Frontend.ArrowParams, success: Frontend.State }),
-  request("ui.focus", { payload: Frontend.FocusParams, success: Frontend.State }),
-  request("ui.click", { payload: Frontend.ClickParams, success: Frontend.State }),
-  request("ui.resize", { payload: Frontend.ResizeParams, success: Frontend.State }),
-)
-
-export const BackendRpcs = RpcGroup.make(
-  request("simulation.handshake", { payload: Handshake.Params, success: Handshake.Response }),
-  request("llm.attach", { success: Backend.Attached }),
-  request("llm.pending", { success: Backend.Pending }),
-  request("llm.chunk", { payload: Backend.ChunkParams, success: Backend.Ok }),
-  request("llm.finish", { payload: Backend.FinishPayload, success: Backend.Ok }),
-  request("llm.disconnect", { payload: Backend.DisconnectParams, success: Backend.Ok }),
-  request("tool.attach", { payload: Backend.ToolAttachParams, success: Backend.Attached }),
-  request("tool.update", { payload: Backend.ToolUpdateParams, success: Backend.Ok }),
-  request("tool.finish", { payload: Backend.ToolFinishParams, success: Backend.Ok }),
-  request("tool.fail", { payload: Backend.ToolFailParams, success: Backend.Ok }),
-)
+export const UiRpcs = FrontendEndpoint.rpcs
+export const BackendRpcs = BackendEndpoint.rpcs

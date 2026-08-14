@@ -83,7 +83,7 @@ test("streams a Drive-controlled provider response and removes the finished invo
           jsonrpc: "2.0",
           id: 3,
           method: "llm.finish",
-          params: { id: params.id, reason: "stop" },
+          params: { id: params.id },
         }),
       )
       expect(yield* Queue.take(messages)).toMatchObject({ id: 3, result: { ok: true } })
