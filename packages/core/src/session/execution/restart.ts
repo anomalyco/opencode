@@ -73,10 +73,11 @@ export const layer = (options?: Options) =>
         if (attempts > maxAttempts) {
           // Terminalize instead: the release hook clears the claim and resets the
           // counter atomically with the terminal event.
+          const session = yield* store.get(sessionID)
           yield* bus.publish(
             SessionEvent.Execution.Failed,
             { sessionID, error: RESUME_EXHAUSTED },
-            { commit: () => store.release(sessionID) },
+            { commit: () => store.release(sessionID), ...(session ? { location: session.location } : {}) },
           )
           return
         }

@@ -490,6 +490,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   }
 
   async function bootstrapInstance(directory: string) {
+    if (directory === "global") return
     const key = directoryKey(directory)
     if (!key) return
     const pending = booting.get(key)

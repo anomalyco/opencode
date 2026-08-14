@@ -133,6 +133,34 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
+  it.effect("execution lifecycle events carry the Session location", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_lifecycle_location")
+      yield* seedSessions(database, [sessionID])
+
+      const started = yield* Deferred.make<SessionEvent.Execution.Started>()
+      const succeeded = yield* Deferred.make<SessionEvent.Execution.Succeeded>()
+      yield* bus.project(SessionEvent.Execution.Started, (event) => Deferred.succeed(started, event))
+      yield* bus.project(SessionEvent.Execution.Succeeded, (event) => Deferred.succeed(succeeded, event))
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.void)
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* execution.resume(sessionID)
+      yield* execution.awaitIdle(sessionID)
+
+      const start = yield* Deferred.await(started)
+      const done = yield* Deferred.await(succeeded)
+      expect(start.location).toEqual({ directory: AbsolutePath.make("/project") })
+      expect(done.location).toEqual({ directory: AbsolutePath.make("/project") })
+      expect(start.data.sessionID).toBe(sessionID)
+      expect(done.data.sessionID).toBe(sessionID)
+    }),
+  )
+
   it.effect("starts every claimed execution without waiting for earlier drains to finish", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -224,6 +252,7 @@ describe("SessionExecution lifecycle", () => {
       yield* restart.resumeSuspendedSessions
       expect(drained).toEqual([])
       expect(failures.map((event) => event.data.error.type)).toEqual(["aborted"])
+      expect(failures[0].location).toEqual({ directory: AbsolutePath.make("/project") })
       // The terminal released the claim and reset the counter atomically.
       expect(yield* claims(database)).toEqual({ [sessionID]: false })
       expect(yield* attempts(database, sessionID)).toBe(0)

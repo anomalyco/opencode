@@ -199,6 +199,13 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
 
   const lookup = async (directory: string, sessionID?: string) => {
     if (!sessionID) return undefined
+    // Location-less bus events are keyed as "global"; that sentinel is not a
+    // filesystem path and must not bootstrap a directory store.
+    if (directory === "global") {
+      const session = input.sync.session.get(sessionID)
+      if (session) return session
+      return input.sync.session.resolve(sessionID).catch(() => undefined)
+    }
     const sync = input.sync.ensureDirSyncContext(directory)
     const session = sync.session.get(sessionID)
     if (session) return session

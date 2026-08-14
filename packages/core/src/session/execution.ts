@@ -67,6 +67,12 @@ export const layer = Layer.effect(
     const releaseOnCommit = (sessionID: SessionSchema.ID) => ({
       commit: () => store.release(sessionID),
     })
+    // SessionExecution is process-global and not Location-scoped, so lifecycle
+    // publishes must carry the Session's location explicitly. Without it the web
+    // client maps the event to the "global" sentinel and bootstraps that string
+    // as a filesystem directory.
+    const lifecycleLocation = (sessionID: SessionSchema.ID) =>
+      store.get(sessionID).pipe(Effect.map((session) => session?.location))
     function drain(
       sessionID: SessionSchema.ID,
       force: boolean,
@@ -93,7 +99,13 @@ export const layer = Layer.effect(
       started: (sessionID) =>
         reportLifecycle(
           sessionID,
-          bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
+          Effect.gen(function* () {
+            const location = yield* lifecycleLocation(sessionID)
+            yield* bus.publish(SessionEvent.Execution.Started, { sessionID }, {
+              ...claimOnCommit(sessionID),
+              ...(location ? { location } : {}),
+            })
+          }),
         ),
       drain: (sessionID, force) => drain(sessionID, force),
       // One terminal observation per busy period, covering every coalesced drain.
@@ -101,9 +113,14 @@ export const layer = Layer.effect(
         reportLifecycle(
           sessionID,
           Effect.gen(function* () {
+            const location = yield* lifecycleLocation(sessionID)
+            const withLocation = location ? { location } : {}
             const outcome = terminal(exit, reason)
             if (outcome.type === "succeeded") {
-              yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, releaseOnCommit(sessionID))
+              yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, {
+                ...releaseOnCommit(sessionID),
+                ...withLocation,
+              })
               return
             }
             if (outcome.type === "interrupted") {
@@ -112,7 +129,7 @@ export const layer = Layer.effect(
               yield* bus.publish(
                 SessionEvent.Execution.Interrupted,
                 { sessionID, reason: outcome.reason },
-                outcome.reason === "shutdown" ? undefined : releaseOnCommit(sessionID),
+                outcome.reason === "shutdown" ? withLocation : { ...releaseOnCommit(sessionID), ...withLocation },
               )
               return
             }
@@ -122,7 +139,7 @@ export const layer = Layer.effect(
                 sessionID,
                 error: outcome.error,
               },
-              releaseOnCommit(sessionID),
+              { ...releaseOnCommit(sessionID), ...withLocation },
             )
           }),
         ),
