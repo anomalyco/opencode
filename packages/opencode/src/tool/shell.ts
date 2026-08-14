@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Exit, Fiber, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -25,6 +25,7 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
+const POST_EXIT_OUTPUT_GRACE_MS = 500
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -446,6 +447,7 @@ export const ShellTool = Tool.define(
       let cut = false
       let expired = false
       let aborted = false
+      let incomplete = false
 
       const closeSink = Effect.fnUntraced(function* () {
         const stream = sink
@@ -483,7 +485,7 @@ export const ShellTool = Tool.define(
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
-          yield* Effect.forkScoped(
+          const output = yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
               const size = Buffer.byteLength(chunk, "utf-8")
               list.push({ text: chunk, size })
@@ -554,6 +556,15 @@ export const ShellTool = Tool.define(
             yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
           }
 
+          const outputComplete = yield* Fiber.await(output).pipe(
+            Effect.map(Exit.isSuccess),
+            Effect.timeoutOrElse({
+              duration: `${POST_EXIT_OUTPUT_GRACE_MS} millis`,
+              orElse: () => Effect.succeed(false),
+            }),
+          )
+          if (!outputComplete) incomplete = true
+
           return exit.kind === "exit" ? exit.code : null
         }),
       ).pipe(Effect.orDie)
@@ -565,6 +576,10 @@ export const ShellTool = Tool.define(
         )
       }
       if (aborted) meta.push("User aborted the command")
+      if (incomplete)
+        meta.push(
+          `shell process exited, but stdout/stderr did not reach EOF within ${POST_EXIT_OUTPUT_GRACE_MS} ms; a descendant process may still hold inherited pipe handles open`,
+        )
       const raw = list.map((item) => item.text).join("")
       const end = tail(raw, limits.maxLines, limits.maxBytes)
       if (end.cut) cut = true
@@ -588,6 +603,7 @@ export const ShellTool = Tool.define(
           output: last || preview(output),
           exit: code,
           truncated: cut,
+          ...(incomplete ? { outputIncomplete: true } : {}),
           ...(cut && file ? { outputPath: file } : {}),
         },
         output,

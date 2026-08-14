@@ -285,6 +285,46 @@ describe("cross-spawn spawner", () => {
         expect(running).toBe(false)
       }),
     )
+
+    fx.effect(
+      "resolves exit before inherited output pipes close",
+      Effect.gen(function* () {
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const file = path.join(tmp.path, "child.pid")
+        const child = "setInterval(() => {}, 10_000)"
+        const handle = yield* ChildProcess.make(process.execPath, [
+          "-e",
+          [
+            'const { spawn } = require("node:child_process")',
+            'const { writeFileSync } = require("node:fs")',
+            `const child = spawn(process.execPath, ["-e", ${JSON.stringify(child)}], { detached: true, stdio: "inherit" })`,
+            "child.unref()",
+            `writeFileSync(${JSON.stringify(file)}, String(child.pid))`,
+          ].join("\n"),
+        ])
+        yield* Effect.addFinalizer(() =>
+          Effect.promise(async () => {
+            const pid = Number(await fs.readFile(file, "utf8").catch(() => ""))
+            if (!pid) return
+            try {
+              process.kill(pid, "SIGKILL")
+            } catch {}
+          }),
+        )
+        const code = yield* handle.exitCode.pipe(
+          Effect.timeoutOrElse({
+            duration: "2 seconds",
+            orElse: () => Effect.die("exitCode waited for inherited output pipes"),
+          }),
+        )
+
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+        expect(yield* handle.isRunning).toBe(false)
+      }),
+    )
   })
 
   describe("error handling", () => {

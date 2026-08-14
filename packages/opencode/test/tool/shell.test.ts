@@ -152,6 +152,15 @@ const withShell = <A, E, R>(item: { label: string; shell: string }, self: Effect
       }),
   )
 
+const kill = (file: string) =>
+  Effect.promise(async () => {
+    const pid = Number(await Bun.file(file).text().catch(() => ""))
+    if (!pid) return
+    try {
+      process.kill(pid, "SIGKILL")
+    } catch {}
+  })
+
 const each = (
   name: string,
   fn: (item: { label: string; shell: string }) => Effect.Effect<void, unknown, ShellTestServices>,
@@ -1074,6 +1083,44 @@ describe("tool.shell abort", () => {
           expect(result.output).toContain("exceeding timeout 500 ms")
         }),
       ).pipe(Effect.provide(RuntimeFlags.layer({ bashDefaultTimeoutMs: 500 }))),
+    15_000,
+  )
+
+  it.live(
+    "stops waiting when a descendant retains the output pipe",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        const file = path.join(tmp, "parent.js")
+        const pid = path.join(tmp, "child.pid")
+        const child = 'setInterval(() => process.stdout.write("tick\\n"), 20)'
+        yield* Effect.promise(() =>
+          Bun.write(
+            file,
+            [
+              'const { spawn } = require("node:child_process")',
+              'const { writeFileSync } = require("node:fs")',
+              `const child = spawn(process.execPath, ["-e", ${JSON.stringify(child)}], { detached: true, stdio: "inherit" })`,
+              "child.unref()",
+              `writeFileSync(${JSON.stringify(pid)}, String(child.pid))`,
+              'console.log("parent done")',
+            ].join("\n"),
+          ),
+        )
+        const command = `${bin} ${quote(file.replaceAll("\\", "/"))}`
+        const started = Date.now()
+        const result = yield* runIn(
+          tmp,
+          run({ command: PS.has(sh()) ? `& ${command}` : command, timeout: 5_000 }),
+        ).pipe(Effect.ensuring(kill(pid)))
+
+        expect(Date.now() - started).toBeLessThan(3_000)
+        expect(result.output).toContain("parent done")
+        expect(result.output).toContain(
+          "shell process exited, but stdout/stderr did not reach EOF within 500 ms; a descendant process may still hold inherited pipe handles open",
+        )
+        expect(result.metadata.outputIncomplete).toBe(true)
+      }),
     15_000,
   )
 
