@@ -4,7 +4,7 @@ import { Permission } from "@opencode-ai/schema/permission"
 import { PermissionSaved } from "@opencode-ai/schema/permission-saved"
 import { Project } from "@opencode-ai/schema/project"
 import { Session } from "@opencode-ai/schema/session"
-import { Context, Schema, Struct } from "effect"
+import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { PermissionNotFoundError, SessionNotFoundError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
@@ -64,7 +64,11 @@ export const makePermissionGroup = <
         params: { sessionID: Session.ID },
         payload: Schema.Struct({
           id: Permission.ID.pipe(Schema.optional),
-          ...Struct.omit(Permission.Request.fields, ["id", "sessionID"]),
+          action: Permission.Request.fields.action,
+          resources: Permission.Request.fields.resources,
+          save: Permission.Request.fields.save,
+          metadata: Permission.Request.fields.metadata,
+          source: Permission.Request.fields.source,
           agent: Agent.ID.pipe(Schema.optional),
         }),
         success: Schema.Struct({

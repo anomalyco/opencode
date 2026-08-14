@@ -1530,9 +1530,13 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
       return name === "shell" || name === "subagent"
     })
     if (!current || !part) return
-    return `${current.id}:${part.id}`
+    return { key: `${current.id}:${part.id}`, started: part.time.ran ?? part.time.created }
   })
-  const visible = createDelayedPresence(running, BACKGROUND_TOOL_HINT_DELAY)
+  const visible = createDelayedPresence(
+    running,
+    (tool) => Math.max(0, BACKGROUND_TOOL_HINT_DELAY - (Date.now() - tool.started)),
+    (previous, next) => previous.key === next.key && previous.started === next.started,
+  )
   return (
     <Show when={visible() && shortcut()}>
       {(value) => (

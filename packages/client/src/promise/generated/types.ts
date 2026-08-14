@@ -1362,7 +1362,6 @@ export type PermissionRequest = {
   action: string
   resources: Array<string>
   save?: Array<string>
-  opaque?: boolean
   metadata?: { [x: string]: JsonValue }
   source?: PermissionSource
 }
@@ -1379,7 +1378,6 @@ export type PermissionAsked = {
     action: string
     resources: Array<string>
     save?: Array<string>
-    opaque?: boolean
     metadata?: { [x: string]: any }
     source?: PermissionSource
   }
@@ -5178,7 +5176,6 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5188,7 +5185,6 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5198,7 +5194,6 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5208,27 +5203,15 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
   }["save"]
-  readonly opaque?: {
-    readonly id?: string | null
-    readonly action: string
-    readonly resources: ReadonlyArray<string>
-    readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
-    readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
-    readonly agent?: string | null
-  }["opaque"]
   readonly metadata?: {
     readonly id?: string | null
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5238,7 +5221,6 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5248,7 +5230,6 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null

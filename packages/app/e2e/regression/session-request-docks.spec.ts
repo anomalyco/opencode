@@ -87,7 +87,7 @@ test("shows a pending permission dock", async ({ page }) => {
         permission: "bash",
         patterns: ["git status", "git diff"],
         metadata: {},
-        always: ["git *"],
+        always: [],
       },
     ],
   })

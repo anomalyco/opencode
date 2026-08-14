@@ -53,6 +53,12 @@
       "node": "./src/image/photon-wasm.node.ts",
       "default": "./src/image/photon-wasm.bun.ts"
     },
+    "#shell-parser-wasm": {
+      "workerd": "./src/shell/parser-wasm.workerd.ts",
+      "bun": "./src/shell/parser-wasm.bun.ts",
+      "node": "./src/shell/parser-wasm.node.ts",
+      "default": "./src/shell/parser-wasm.bun.ts"
+    },
     "#process-lock-ffi": {
       "workerd": "./src/util/process-lock-ffi.workerd.ts",
       "bun": "./src/util/process-lock-ffi.bun.ts",
@@ -74,7 +80,6 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/which": "3.0.4",
-    "@opencode-ai/shell-scan": "workspace:*",
     "@parcel/watcher-darwin-arm64": "2.5.1",
     "@parcel/watcher-darwin-x64": "2.5.1",
     "@parcel/watcher-linux-arm64-glibc": "2.5.1",
@@ -131,7 +136,10 @@
     "ignore": "7.0.5",
     "jsonc-parser": "3.3.1",
     "mime-types": "3.0.2",
+    "tree-sitter-bash": "0.25.0",
+    "tree-sitter-powershell": "0.25.10",
     "venice-ai-sdk-provider": "2.1.1",
+    "web-tree-sitter": "0.25.10",
     "which": "6.0.1",
     "zod": "catalog:"
   }

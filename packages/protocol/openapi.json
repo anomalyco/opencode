@@ -7933,9 +7933,6 @@
                       "type": "string"
                     }
                   },
-                  "opaque": {
-                    "type": "boolean"
-                  },
                   "metadata": {
                     "type": "object"
                   },
@@ -19879,9 +19876,6 @@
               "type": "string"
             }
           },
-          "opaque": {
-            "type": "boolean"
-          },
           "metadata": {
             "type": "object"
           },
@@ -20659,9 +20653,6 @@
                 "items": {
                   "type": "string"
                 }
-              },
-              "opaque": {
-                "type": "boolean"
               },
               "metadata": {
                 "type": "object"
