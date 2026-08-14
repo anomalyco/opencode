@@ -239,10 +239,10 @@ export const layer = Layer.effect(
       const http = webSocketEligible
         ? undefined
         : SessionModelHttp.middleware(hooks, {
-              sessionID: session.id,
-              agent: agent.id,
-              model: resolved.ref,
-            })
+            sessionID: session.id,
+            agent: agent.id,
+            model: resolved.ref,
+          })
       const options: StreamOptions = {
         ...(http ? { http } : {}),
         ...(webSocket &&

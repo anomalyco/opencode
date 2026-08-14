@@ -53,7 +53,11 @@ const runWithTestClock = <A, E>(
   effect: Effect.Effect<A, E, SessionModelTransport.Service>,
 ) =>
   Effect.runPromise(
-    effect.pipe(Effect.provide(SessionModelTransport.makeLayer(connector)), Effect.scoped, Effect.provide(TestClock.layer())),
+    effect.pipe(
+      Effect.provide(SessionModelTransport.makeLayer(connector)),
+      Effect.scoped,
+      Effect.provide(TestClock.layer()),
+    ),
   )
 
 const collect = (executor: ReturnType<SessionModelTransport.Interface["bind"]>, item: WebSocketChannelExchange) =>
