@@ -269,6 +269,60 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("preserves gateway headers without native provider auth for an explicit empty API key", () =>
+    withEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined, XAI_API_KEY: undefined }, () =>
+      Effect.gen(function* () {
+        const models = yield* Effect.forEach(["@ai-sdk/google", "@ai-sdk/xai"], (packageName) =>
+          ModelResolver.fromCatalogModel(
+            model(Provider.aisdk(packageName), {
+              settings: { apiKey: "", baseURL: "https://gateway.example.com/v1" },
+              headers: { "cf-access-token": "access-token" },
+            }),
+          ),
+        )
+
+        const headers = yield* Effect.forEach(models, (resolved) =>
+          resolved.route.auth.apply({
+            request: LLM.request({ model: resolved, prompt: "Hello" }),
+            method: "POST",
+            url: "https://gateway.example.com/v1",
+            body: "{}",
+            headers: Headers.fromInput({ "cf-access-token": "access-token" }),
+          }),
+        )
+
+        expect(headers.map((value) => value["cf-access-token"])).toEqual(["access-token", "access-token"])
+        headers.forEach((value) => {
+          expect(value.authorization).toBeUndefined()
+          expect(value["x-goog-api-key"]).toBeUndefined()
+        })
+      }),
+    ),
+  )
+
+  it.effect("keeps native provider environment auth strict when no API key is configured", () =>
+    withEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined }, () =>
+      Effect.gen(function* () {
+        const resolved = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/google"), {
+            settings: { baseURL: "https://google.example.com/v1" },
+          }),
+        )
+        const exit = yield* Effect.exit(
+          resolved.route.auth.apply({
+            request: LLM.request({ model: resolved, prompt: "Hello" }),
+            method: "POST",
+            url: "https://google.example.com/v1",
+            body: "{}",
+            headers: Headers.empty,
+          }),
+        )
+
+        expect(exit._tag).toBe("Failure")
+      }),
+    ),
+  )
+
   it.effect("uses merged API settings for OpenAI-compatible auth and request defaults", () =>
     Effect.gen(function* () {
       const resolved = yield* ModelResolver.fromCatalogModel(

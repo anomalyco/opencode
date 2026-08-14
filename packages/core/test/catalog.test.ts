@@ -102,6 +102,35 @@ describe("Catalog", () => {
     }).pipe(Effect.provide(localCatalogLayer))
   })
 
+  it.effect("requires an explicit empty API key for a credentialless gateway", () => {
+    const integrationID = Integration.ID.make("gateway")
+    const providerID = Provider.ID.make("remote")
+    const localCatalogLayer = Layer.fresh(
+      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
+        [Location.node, locationLayer],
+      ]),
+    )
+
+    return Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.integrationID = integrationID
+          provider.settings = { baseURL: "https://gateway.example.com/v1" }
+        }),
+      )
+      expect(yield* catalog.provider.available()).toEqual([])
+
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.settings = { ...provider.settings, apiKey: "" }
+        }),
+      )
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])
+    }).pipe(Effect.provide(localCatalogLayer))
+  })
+
   it.effect("projects environment connections without a catalog plugin", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
