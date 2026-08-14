@@ -3,6 +3,7 @@ export * as Group from "./group.js"
 import { Group } from "@opencode-ai/schema/group"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema, Semaphore } from "effect"
+import { Bus } from "../bus.js"
 import { KV } from "../kv.js"
 
 export const ID = Group.ID
@@ -11,6 +12,7 @@ export const Item = Group.Item
 export type Item = Group.Item
 export const Info = Group.Info
 export type Info = Group.Info
+export const Event = Group.Event
 
 export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
@@ -29,6 +31,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const kv = yield* KV.Service
+    const bus = yield* Bus.Service
     const lock = Semaphore.makeUnsafe(1)
 
     const list = Effect.fn("Group.list")(function* () {
@@ -59,15 +62,29 @@ const layer = Layer.effect(
               key,
               index === -1 ? groups.concat(group) : groups.map((item) => (item.id === group.id ? group : item)),
             )
+            const previous = groups[index]
+            if (!previous) return
+            yield* Effect.forEach(
+              previous.items.filter(
+                (item) => !group.items.some((next) => next.type === item.type && next.id === item.id),
+              ),
+              (item) => bus.publish(Event.ItemRemoved, { groupID: group.id, item }),
+              { discard: true },
+            )
           }),
         )
       }),
       remove: Effect.fn("Group.remove")(function* (id) {
         yield* lock.withPermit(
           Effect.gen(function* () {
-            yield* kv.set(
-              key,
-              (yield* list()).filter((group) => group.id !== id),
+            const groups = yield* list()
+            const group = groups.find((group) => group.id === id)
+            yield* kv.set(key, groups.filter((group) => group.id !== id))
+            if (!group) return
+            yield* Effect.forEach(
+              group.items,
+              (item) => bus.publish(Event.ItemRemoved, { groupID: id, item }),
+              { discard: true },
             )
           }),
         )
@@ -76,4 +93,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [KV.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [KV.node, Bus.node] })

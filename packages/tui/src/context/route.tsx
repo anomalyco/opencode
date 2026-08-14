@@ -17,6 +17,11 @@ export type SessionRoute = {
   prompt?: PromptInfo
 }
 
+export type WorkspaceRoute = {
+  type: "workspace"
+  groupID: string
+}
+
 export type PluginRoute = {
   type: "plugin"
   id: string
@@ -24,7 +29,7 @@ export type PluginRoute = {
   data?: Record<string, unknown>
 }
 
-export type Route = HomeRoute | SessionRoute | PluginRoute
+export type Route = HomeRoute | SessionRoute | WorkspaceRoute | PluginRoute
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
@@ -50,6 +55,9 @@ function initialRoute(value: unknown): Route | undefined {
   if (value.type === "home") return { type: "home" }
   if (value.type === "session" && "sessionID" in value && typeof value.sessionID === "string") {
     return { type: "session", sessionID: value.sessionID }
+  }
+  if (value.type === "workspace" && "groupID" in value && typeof value.groupID === "string") {
+    return { type: "workspace", groupID: value.groupID }
   }
   if (
     value.type === "plugin" &&

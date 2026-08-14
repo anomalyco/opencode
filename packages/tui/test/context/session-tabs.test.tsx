@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import type { OpenCodeEvent } from "@opencode-ai/client"
+import type { GroupItem, OpenCodeEvent, PersistentPtyInfo } from "@opencode-ai/client"
 import { testRender } from "@opentui/solid"
 import { mkdirSync, watch } from "fs"
 import path from "path"
@@ -36,6 +36,8 @@ async function renderSessionTabs(
     sessionGate?: Promise<void>
     sessionDirectories?: Record<string, string>
     newLocation?: "launch" | "inherit"
+    groups?: Record<string, GroupItem[]>
+    terminals?: Record<string, PersistentPtyInfo[]>
   },
 ) {
   const temporary = options?.state ? undefined : await tmpdir()
@@ -55,7 +57,9 @@ async function renderSessionTabs(
   const sessions: string[] = []
   const locations: string[] = []
   const vcsLocations: string[] = []
-  const calls = createFetch(async (url) => {
+  const removedGroups: string[] = []
+  const removedTerminals: string[] = []
+  const calls = createFetch(async (url, request) => {
     if (url.pathname === "/api/location") {
       const requested = url.searchParams.get("location[directory]") ?? directory
       locations.push(requested)
@@ -71,6 +75,19 @@ async function renderSessionTabs(
         location: { directory: requested },
         data: { branch: { current: "main", default: "main" } },
       })
+    }
+    const terminalGroupID = url.pathname.match(/^\/api\/pty-group\/([^/]+)\/terminal$/)?.[1]
+    if (terminalGroupID && request.method === "GET") return json({ data: options?.terminals?.[terminalGroupID] ?? [] })
+    const groupID = url.pathname.match(/^\/api\/pty-group\/([^/]+)$/)?.[1]
+    if (groupID && request.method === "GET") return json({ data: { id: groupID, items: options?.groups?.[groupID] ?? [] } })
+    if (groupID && request.method === "DELETE") {
+      removedGroups.push(groupID)
+      return new Response(null, { status: 204 })
+    }
+    const ptyID = url.pathname.match(/^\/api\/persistent-pty\/([^/]+)$/)?.[1]
+    if (ptyID && request.method === "DELETE") {
+      removedTerminals.push(ptyID)
+      return new Response(null, { status: 204 })
     }
     const sessionID = url.pathname.match(/^\/api\/session\/([^/]+)$/)?.[1]
     if (!sessionID) return undefined
@@ -140,6 +157,8 @@ async function renderSessionTabs(
     sessions,
     locations,
     vcsLocations,
+    removedGroups,
+    removedTerminals,
     state,
     emit: (event: OpenCodeEvent) => events.emit({ ...event, location: { directory } }),
     focus: () => app.renderer.emit("focus"),
@@ -405,6 +424,59 @@ test("add inherits the current session location when configured", async () => {
     await wait(() => setup.tabs.current() === "first" && setup.data.session.get("first") !== undefined)
     setup.tabs.add()
     expect(setup.route.data).toEqual({ type: "home", location: { directory: worktree } })
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("closing a terminal-only workspace tab terminates its terminals and removes its group", async () => {
+  const groupID = "grp_terminal"
+  const terminal = {
+    id: "pty_terminal",
+    title: "Terminal",
+    command: "/bin/sh",
+    args: [],
+    cwd: directory,
+    status: "running" as const,
+    pid: 123,
+    groupID,
+    output: { head: 0, tail: 0 },
+  }
+  const setup = await renderSessionTabs("first", {
+    home: true,
+    groups: { [groupID]: [{ type: "terminal", id: terminal.id }] },
+    terminals: { [groupID]: [terminal] },
+  })
+
+  try {
+    setup.tabs.openWorkspace(groupID, directory)
+    await wait(() => setup.tabs.current() === groupID && setup.tabs.tabs().some((tab) => tab.groupID === groupID))
+    setup.tabs.close(groupID)
+    await wait(() => setup.removedGroups.includes(groupID) && !setup.tabs.tabs().some((tab) => tab.groupID === groupID))
+
+    expect(setup.removedTerminals).toEqual([terminal.id])
+    expect(setup.route.data).toEqual({ type: "home" })
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("closing a workspace tab with a session only detaches it", async () => {
+  const groupID = "grp_session"
+  const setup = await renderSessionTabs("first", {
+    home: true,
+    groups: { [groupID]: [{ type: "session", id: "ses_one" }] },
+  })
+
+  try {
+    setup.tabs.openWorkspace(groupID, directory)
+    await wait(() => setup.tabs.current() === groupID && setup.tabs.tabs().some((tab) => tab.groupID === groupID))
+    setup.tabs.close(groupID)
+    await wait(() => !setup.tabs.tabs().some((tab) => tab.groupID === groupID))
+
+    expect(setup.removedGroups).toEqual([])
+    expect(setup.removedTerminals).toEqual([])
+    expect(setup.route.data).toEqual({ type: "home" })
   } finally {
     await setup.destroy()
   }

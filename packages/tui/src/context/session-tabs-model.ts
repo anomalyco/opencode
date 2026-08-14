@@ -1,6 +1,8 @@
 export type SessionTab = {
   sessionID: string
   title?: string
+  groupID?: string
+  directory?: string
 }
 
 export type SessionTabUnread = "activity" | "error"

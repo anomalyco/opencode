@@ -1,6 +1,7 @@
 export * as Group from "./group.js"
 
 import { Schema } from "effect"
+import { ephemeral, inventory } from "./event.js"
 import { ascending } from "./identifier.js"
 import { Pty } from "./pty.js"
 import { statics } from "./schema.js"
@@ -36,3 +37,6 @@ export const Info = Schema.Struct({
   items: Schema.Array(Item),
 }).annotate({ identifier: "Group.Info" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
+
+const ItemRemoved = ephemeral({ type: "group.item.removed", schema: { groupID: ID, item: Item } })
+export const Event = { ItemRemoved, Definitions: inventory(ItemRemoved) }

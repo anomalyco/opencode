@@ -328,6 +328,8 @@ export type FormMetadata1 = { [x: string]: any }
 
 export type FormWhen1 = { key: string; op: "eq" | "neq"; value: string | number | boolean }
 
+export type GroupItem = { type: "session"; id: string } | { type: "terminal"; id: string }
+
 export type SessionStatus =
   | { type: "idle" }
   | {
@@ -338,8 +340,6 @@ export type SessionStatus =
       next: number
     }
   | { type: "busy" }
-
-export type GroupItem = { type: "session"; id: string } | { type: "terminal"; id: string }
 
 export type PersistentPtyInfo = {
   id: string
@@ -1492,6 +1492,17 @@ export type FormMultiselectField1 = {
   default?: Array<string>
 }
 
+export type GroupItemRemoved = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "group.item.removed"
+  location?: LocationRef
+  data: { groupID: string; item: GroupItem }
+}
+
+export type GroupInfo = { id: string; items: Array<GroupItem> }
+
 export type SessionStatus2 = {
   id: string
   created: number
@@ -1500,8 +1511,6 @@ export type SessionStatus2 = {
   location?: LocationRef
   data: { sessionID: string; status: SessionStatus }
 }
-
-export type GroupInfo = { id: string; items: Array<GroupItem> }
 
 export type PersistentPtySnapshot = {
   info: PersistentPtyInfo
@@ -2101,6 +2110,7 @@ export type V2Event =
   | FormCreated
   | FormReplied
   | FormCancelled
+  | GroupItemRemoved
   | WebsearchUpdated
   | SessionStatus2
   | SessionIdle

@@ -13,7 +13,7 @@ import { Group } from "./group.js"
 import { Database } from "../database/database.js"
 import { Pty } from "@opencode-ai/schema/pty"
 
-const ProtocolVersion = 1
+const ProtocolVersion = 2
 const MaxFrameBytes = 8 * 1024 * 1024
 
 const Lifecycle = Schema.Union([
@@ -72,12 +72,6 @@ const Response = Schema.Union([
     end_offset: Schema.Number,
     truncated: Schema.Boolean,
     replay_base64: Schema.String,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("output"),
-    start: Schema.Number,
-    end: Schema.Number,
-    data_base64: Schema.String,
   }),
   Schema.Struct({
     type: Schema.Literal("resized"),
@@ -198,7 +192,10 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const groups = yield* Group.Service
     const database = yield* Database.Service
+    const context = yield* Effect.context()
+    const runFork = Effect.runForkWith(context)
     const client = new Client(runtimeDirectory(databasePath(database.db)))
+    const removing = new Set<Pty.ID>()
 
     const list = Effect.fn("PersistentPty.list")(function* (groupID?: Group.ID) {
       const response = yield* optionalRequest(client, { op: "list" })
@@ -312,6 +309,21 @@ export const layer = Layer.effect(
       return undefined
     })
 
+    const removeVisibleExit = (id: Pty.ID) => {
+      if (removing.has(id)) return
+      removing.add(id)
+      runFork(
+        remove(id).pipe(
+          Effect.catchTags({
+            "PersistentPty.NotFoundError": () => Effect.void,
+            "PersistentPty.UnavailableError": (error) =>
+              Effect.logWarning("failed to remove visible exited terminal", { id, error: error.message }),
+          }),
+          Effect.ensuring(Effect.sync(() => removing.delete(id))),
+        ),
+      )
+    }
+
     const attach = Effect.fn("PersistentPty.attach")(function* (
       id: Pty.ID,
       input: {
@@ -325,7 +337,14 @@ export const layer = Layer.effect(
     ) {
       yield* get(id)
       return yield* Effect.tryPromise({
-        try: () => client.subscribe(fromID(id), input),
+        try: () =>
+          client.subscribe(fromID(id), {
+            ...input,
+            onEvent: (event) => {
+              if (event.type === "exited") removeVisibleExit(id)
+              input.onEvent(event)
+            },
+          }),
         catch: (error) => unavailable(error),
       })
     })
@@ -386,14 +405,17 @@ class Client {
     const pump = async () => {
       try {
         for await (const frame of frames) {
-          const event = decode(frame)
-          if (event.type === "output")
+          if (frame[0] === 0) {
+            if (frame.length < 17) throw new Error("invalid opencode-pty output frame")
             input.onEvent({
               type: "output",
-              start: event.start,
-              end: event.end,
-              data: Buffer.from(event.data_base64, "base64"),
+              start: Number(frame.readBigUInt64BE(1)),
+              end: Number(frame.readBigUInt64BE(9)),
+              data: frame.subarray(17),
             })
+            continue
+          }
+          const event = decode(frame)
           if (event.type === "resized")
             input.onEvent({
               type: "resized",
@@ -494,11 +516,18 @@ const registrationPath = (directory: string) => path.join(directory, "service.js
 async function ensure(directory: string) {
   const found = await discover(directory).catch(() => undefined)
   if (found) return found
-  spawn(process.env.OPENCODE_PTY_BIN || "opencode-pty", ["daemon"], {
-    detached: true,
-    stdio: "ignore",
-    env: { ...process.env, OPENCODE_PTY_RUNTIME_DIR: directory },
-  }).unref()
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(process.env.OPENCODE_PTY_BIN || "opencode-pty", ["daemon"], {
+      detached: true,
+      stdio: "ignore",
+      env: { ...process.env, OPENCODE_PTY_RUNTIME_DIR: directory },
+    })
+    child.once("spawn", () => {
+      child.unref()
+      resolve()
+    })
+    child.once("error", reject)
+  })
   const deadline = Date.now() + 5_000
   let last: unknown
   while (Date.now() < deadline) {

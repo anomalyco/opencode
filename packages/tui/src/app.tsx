@@ -31,7 +31,6 @@ import {
   batch,
   Show,
 } from "solid-js"
-import { createStore } from "solid-js/store"
 import {
   TuiLifecycleProvider,
   TuiAppProvider,
@@ -76,7 +75,6 @@ import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH 
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { createThemeSource, ThemeProvider, useTheme, useThemes } from "./context/theme"
 import { Home } from "./routes/home"
-import { Session } from "./routes/session"
 import { PromptHistoryProvider } from "./prompt/history"
 import { FrecencyProvider } from "./prompt/frecency"
 import { PromptStashProvider } from "./prompt/stash"
@@ -100,6 +98,8 @@ import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
+import { PaneLayoutProvider } from "./context/pane-layout"
+import { PaneWorkspace } from "./component/pane-workspace"
 import { createTuiClipboard } from "./clipboard"
 
 registerOpencodeSpinner()
@@ -217,7 +217,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         reconnect: async (signal: AbortSignal) => {
           const endpoint = await managed.reconnect(signal)
           const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint) }
-          return { api: OpenCode.make(next) }
+          return { api: OpenCode.make(next), endpoint }
         },
         restart: managed.restart,
       }
@@ -372,48 +372,50 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                 : undefined
                                             }
                                           >
-                                            <ClientProvider api={api} service={service}>
+                                            <ClientProvider api={api} endpoint={input.server.endpoint} service={service}>
                                               <PermissionProvider>
                                                 <DataProvider>
                                                   <LocationProvider>
                                                     <SessionTabsProvider>
-                                                      <ThemeProvider
-                                                        mode={mode}
-                                                        source={createThemeSource(global.config)}
-                                                      >
-                                                        <ThemeErrorToast />
-                                                        <LocalProvider>
-                                                          <PromptStashProvider>
-                                                            <DialogProvider>
-                                                              <FrecencyProvider>
-                                                                <PromptHistoryProvider>
-                                                                  <PromptRefProvider>
-                                                                    <EditorContextProvider>
-                                                                      <AttentionProvider>
-                                                                        <PluginProvider
-                                                                          packages={input.packages}
-                                                                          directories={pluginDirectories}
-                                                                        >
-                                                                          <App
-                                                                            pair={
-                                                                              input.server.endpoint.auth
-                                                                                ? input.server.endpoint.auth
-                                                                                : {
-                                                                                    username: "opencode",
-                                                                                    password: "",
-                                                                                  }
-                                                                            }
-                                                                          />
-                                                                        </PluginProvider>
-                                                                      </AttentionProvider>
-                                                                    </EditorContextProvider>
-                                                                  </PromptRefProvider>
-                                                                </PromptHistoryProvider>
-                                                              </FrecencyProvider>
-                                                            </DialogProvider>
-                                                          </PromptStashProvider>
-                                                        </LocalProvider>
-                                                      </ThemeProvider>
+                                                      <PaneLayoutProvider>
+                                                        <ThemeProvider
+                                                          mode={mode}
+                                                          source={createThemeSource(global.config)}
+                                                        >
+                                                          <ThemeErrorToast />
+                                                          <LocalProvider>
+                                                            <PromptStashProvider>
+                                                              <DialogProvider>
+                                                                <FrecencyProvider>
+                                                                  <PromptHistoryProvider>
+                                                                    <PromptRefProvider>
+                                                                      <EditorContextProvider>
+                                                                        <AttentionProvider>
+                                                                          <PluginProvider
+                                                                            packages={input.packages}
+                                                                            directories={pluginDirectories}
+                                                                          >
+                                                                            <App
+                                                                              pair={
+                                                                                input.server.endpoint.auth
+                                                                                  ? input.server.endpoint.auth
+                                                                                  : {
+                                                                                      username: "opencode",
+                                                                                      password: "",
+                                                                                    }
+                                                                              }
+                                                                            />
+                                                                          </PluginProvider>
+                                                                        </AttentionProvider>
+                                                                      </EditorContextProvider>
+                                                                    </PromptRefProvider>
+                                                                  </PromptHistoryProvider>
+                                                                </FrecencyProvider>
+                                                              </DialogProvider>
+                                                            </PromptStashProvider>
+                                                          </LocalProvider>
+                                                        </ThemeProvider>
+                                                      </PaneLayoutProvider>
                                                     </SessionTabsProvider>
                                                   </LocationProvider>
                                                 </DataProvider>
@@ -603,6 +605,11 @@ function App(props: { pair?: DialogPairCredentials }) {
       }
 
       renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "..." : title}`)
+      return
+    }
+
+    if (route.data.type === "workspace") {
+      renderer.setTerminalTitle("OC | Terminal")
       return
     }
 
@@ -1302,7 +1309,22 @@ function App(props: { pair?: DialogPairCredentials }) {
                 </Match>
                 <Match when={route.data.type === "session"}>
                   <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
-                    {(_) => <Session verticalTabsWidth={verticalTabsVisible() ? verticalTabsWidth() : 0} />}
+                    {(sessionID) => (
+                      <PaneWorkspace
+                        sessionID={sessionID}
+                        verticalTabsWidth={verticalTabsVisible() ? verticalTabsWidth() : 0}
+                      />
+                    )}
+                  </Show>
+                </Match>
+                <Match when={route.data.type === "workspace"}>
+                  <Show when={route.data.type === "workspace" ? route.data.groupID : undefined} keyed>
+                    {(groupID) => (
+                      <PaneWorkspace
+                        groupID={groupID}
+                        verticalTabsWidth={verticalTabsVisible() ? verticalTabsWidth() : 0}
+                      />
+                    )}
                   </Show>
                 </Match>
                 <Match when={route.data.type === "plugin"}>
