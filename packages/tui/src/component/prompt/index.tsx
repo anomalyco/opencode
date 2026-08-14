@@ -1564,6 +1564,7 @@ export function Prompt(props: PromptProps) {
     dialog.replace(() => (
       <DialogSelect
         title="Working directory"
+        renderFilter={false}
         options={[
           {
             title: "Copy path",
