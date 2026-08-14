@@ -44,6 +44,4 @@ export const node = makeGlobalNode({
   deps: [SessionStore.node, LocationServiceMap.node],
 })
 
-export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(SessionStore.defaultLayer), Layer.provide(LocationServiceMap.defaultLayer)))
-
 export * as SessionExecutionLocal from "./local"
