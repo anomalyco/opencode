@@ -42,6 +42,12 @@ export interface Resolved {
   readonly id: ID
   readonly directory: AbsolutePath
   readonly vcs?: Vcs
+  /**
+   * Repo-level grouping key shared by all clones of the same repository,
+   * derived with the legacy identity algorithm (normalized remote hash,
+   * falling back to root commit). Informational only — never identity.
+   */
+  readonly repoHash?: string
 }
 
 export interface Interface {
@@ -58,7 +64,7 @@ export interface Interface {
    * once project persistence moves into core, this separate bridge method can
    * go away.
    */
-  readonly commit: (input: { store: AbsolutePath; id: ID }) => Effect.Effect<boolean>
+  readonly commit: (input: { store: AbsolutePath; id: ID; repoHash?: string }) => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ProjectV2") {}
@@ -74,14 +80,16 @@ const layer = Layer.effect(
       return yield* projectDirectories.list(input.projectID)
     })
 
-    const parse = (content: string): { repoID?: ID; legacy?: ID } => {
+    const parse = (content: string): { repoID?: ID; legacy?: ID; repoHash?: string } => {
       try {
         const parsed: unknown = JSON.parse(content)
         if (parsed && typeof parsed === "object") {
           const repoID = "repoID" in parsed ? parsed.repoID : undefined
+          const repoHash = "repoHash" in parsed ? parsed.repoHash : undefined
+          const stored = typeof repoHash === "string" && repoHash ? repoHash : undefined
           // Forward-compatible read: honor the repoID of any structured
           // version, ignore structured content we do not understand.
-          if (typeof repoID === "string" && isStableID(repoID)) return { repoID: ID.make(repoID) }
+          if (typeof repoID === "string" && isStableID(repoID)) return { repoID: ID.make(repoID), repoHash: stored }
           return {}
         }
       } catch {}
@@ -94,7 +102,7 @@ const layer = Layer.effect(
         Effect.map((value) => value.trim()),
         Effect.catch(() => Effect.succeed(undefined)),
       )
-      if (!content) return { repoID: undefined, legacy: undefined }
+      if (!content) return { repoID: undefined, legacy: undefined, repoHash: undefined }
       return parse(content)
     })
 
@@ -145,7 +153,14 @@ const layer = Layer.effect(
       // authoritative: it is what keeps independent clones of the same
       // remote distinct while linked worktrees (shared common dir) and
       // renamed checkouts keep resolving to the same project.
-      if (stored.repoID) return { id: stored.repoID, directory: repo.worktree, vcs }
+      if (stored.repoID) {
+        // The repo-level grouping key uses the legacy identity derivation, so
+        // it stays byte-identical to pre-versioned ids: remote hash first
+        // (recomputed so a remote change is picked up), then the stored key,
+        // then the root commit (only computed when nothing is stored).
+        const repoHash = (yield* remote(repo)) ?? stored.repoHash ?? (yield* root(repo))
+        return { id: stored.repoID, directory: repo.worktree, vcs, repoHash }
+      }
 
       const previous = stored.legacy
       const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
@@ -154,12 +169,18 @@ const layer = Layer.effect(
         id: id ?? ID.global,
         directory: repo.worktree,
         vcs,
+        // On the legacy path the derived id is exactly the repo-level key.
+        repoHash: id,
       }
     })
 
-    const commit = Effect.fn("Project.commit")(function* (input: { store: AbsolutePath; id: ID }) {
+    const commit = Effect.fn("Project.commit")(function* (input: { store: AbsolutePath; id: ID; repoHash?: string }) {
       return yield* fs
-        .writeFileString(path.join(input.store, "opencode"), JSON.stringify({ version: 1, repoID: input.id }) + "\n")
+        .writeFileString(
+          path.join(input.store, "opencode"),
+          JSON.stringify({ version: 1, repoID: input.id, ...(input.repoHash ? { repoHash: input.repoHash } : {}) }) +
+            "\n",
+        )
         .pipe(
           Effect.map(() => true),
           Effect.catch(() => Effect.succeed(false)),

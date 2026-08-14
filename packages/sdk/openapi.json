@@ -20024,6 +20024,10 @@
                         "items": {
                           "type": "string"
                         }
+                      },
+                      "repoHash": {
+                        "type": "string",
+                        "description": "Repo-level grouping key shared by all clones of the same repository (legacy identity derivation: normalized remote hash, falling back to root commit). Informational only — never used as identity."
                       }
                     },
                     "required": ["id", "worktree", "time", "sandboxes"],
@@ -20820,28 +20824,15 @@
                 "interleaved": {
                   "anyOf": [
                     {
-                      "type": "boolean"
-                    },
-                    {
-                      "type": "string",
-                      "enum": ["reasoning", "reasoning_content", "reasoning_text"]
-                    },
-                    {
-                      "type": "string"
+                      "type": "boolean",
+                      "enum": [true]
                     },
                     {
                       "type": "object",
                       "properties": {
                         "field": {
-                          "anyOf": [
-                            {
-                              "type": "string",
-                              "enum": ["reasoning", "reasoning_content", "reasoning_text"]
-                            },
-                            {
-                              "type": "string"
-                            }
-                          ]
+                          "type": "string",
+                          "enum": ["reasoning", "reasoning_content", "reasoning_details"]
                         }
                       },
                       "required": ["field"],
@@ -21276,10 +21267,6 @@
           "default_agent": {
             "type": "string"
           },
-          "subagent_depth": {
-            "type": "integer",
-            "minimum": 0
-          },
           "username": {
             "type": "string"
           },
@@ -21654,15 +21641,8 @@
                     "type": "object",
                     "properties": {
                       "field": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "enum": ["reasoning", "reasoning_content", "reasoning_text"]
-                          },
-                          {
-                            "type": "string"
-                          }
-                        ]
+                        "type": "string",
+                        "enum": ["reasoning", "reasoning_content", "reasoning_details"]
                       }
                     },
                     "required": ["field"],
@@ -22742,6 +22722,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "repoHash": {
+            "type": "string",
+            "description": "Repo-level grouping key shared by all clones of the same repository (legacy identity derivation: normalized remote hash, falling back to root commit). Informational only — never used as identity."
           }
         },
         "required": ["id", "worktree", "time", "sandboxes"],
@@ -33162,6 +33146,10 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "repoHash": {
+                "type": "string",
+                "description": "Repo-level grouping key shared by all clones of the same repository (legacy identity derivation: normalized remote hash, falling back to root commit). Informational only — never used as identity."
               }
             },
             "required": ["id", "worktree", "time", "sandboxes"],
@@ -36289,6 +36277,10 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "repoHash": {
+                "type": "string",
+                "description": "Repo-level grouping key shared by all clones of the same repository (legacy identity derivation: normalized remote hash, falling back to root commit). Informational only — never used as identity."
               }
             },
             "required": ["id", "worktree", "time", "sandboxes"],

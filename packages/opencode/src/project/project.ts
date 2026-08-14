@@ -57,6 +57,7 @@ export function fromRow(row: Row): Info {
     },
     sandboxes: row.sandboxes,
     commands: row.commands ?? undefined,
+    repoHash: row.repo_hash ?? undefined,
   }
 }
 
@@ -336,7 +337,7 @@ const layer = Layer.effect(
         // adopt the minted id once it is durably written so a read-only .git
         // does not fragment identity on every boot.
         const minted = ProjectV2.ID.make(crypto.randomUUID())
-        const persisted = yield* projectV2.commit({ store: data.vcs.store, id: minted })
+        const persisted = yield* projectV2.commit({ store: data.vcs.store, id: minted, repoHash: data.repoHash })
         if (persisted) {
           // Re-resolve so concurrent mints for the same repo (e.g. a clone
           // and its linked worktree booting together) converge on whichever
@@ -349,11 +350,7 @@ const layer = Layer.effect(
       if (projectID === resolvedID) {
         // Not minted (already stable, global, or the identity write failed):
         // preserve the legacy cached-id migration.
-        yield* migrateProjectId(
-          data.previous ? ProjectV2.ID.make(data.previous) : undefined,
-          projectID,
-          data.directory,
-        )
+        yield* migrateProjectId(data.previous ? ProjectV2.ID.make(data.previous) : undefined, projectID, data.directory)
       } else if (data.previous && data.previous !== resolvedID) {
         // Stale cached ids from older schemes follow the mint as well.
         yield* migrateProjectId(ProjectV2.ID.make(data.previous), projectID, mainRoot)
@@ -376,6 +373,20 @@ const layer = Layer.effect(
         worktree: projectID === ProjectV2.ID.global ? worktree : existing.worktree,
         vcs: data.vcs?.type ?? fakeVcs,
         time: { ...existing.time, updated: Date.now() },
+        repoHash: data.repoHash ?? existing.repoHash,
+      }
+      if (
+        projectID === resolvedID &&
+        projectID !== ProjectV2.ID.global &&
+        ProjectV2.isStableID(projectID) &&
+        data.vcs?.type === "git" &&
+        data.repoHash &&
+        row?.repo_hash !== data.repoHash
+      ) {
+        // Keep the repo-local file's grouping key in sync when it is missing
+        // or the derivation changed (e.g. a remote was added later). Mint
+        // writes it already; this covers already-minted identities.
+        yield* projectV2.commit({ store: data.vcs.store, id: projectID, repoHash: data.repoHash })
       }
       if (projectID !== ProjectV2.ID.global && result.worktree !== data.directory) {
         // A renamed or moved clone keeps its identity through the repo-local
@@ -420,6 +431,7 @@ const layer = Layer.effect(
           time_initialized: result.time.initialized,
           sandboxes: result.sandboxes.map((sandbox) => AbsolutePath.make(sandbox)),
           commands: result.commands,
+          repo_hash: result.repoHash,
         })
         .onConflictDoUpdate({
           target: ProjectTable.id,
@@ -434,6 +446,7 @@ const layer = Layer.effect(
             time_initialized: result.time.initialized,
             sandboxes: result.sandboxes.map((sandbox) => AbsolutePath.make(sandbox)),
             commands: result.commands,
+            repo_hash: result.repoHash,
           },
         })
         .run()

@@ -38,7 +38,7 @@ function writeLegacyFile(dir: string, id: string) {
 
 function readIdentityFile(dir: string) {
   return Effect.promise(() => Bun.file(path.join(dir, ".git", "opencode")).text()).pipe(
-    Effect.map((content) => JSON.parse(content) as { version: number; repoID: string }),
+    Effect.map((content) => JSON.parse(content) as { version: number; repoID: string; repoHash?: string }),
   )
 }
 
@@ -143,7 +143,10 @@ describe("Project identity minting", () => {
       expect(first.project.worktree).toBe(tmp)
 
       const file = yield* readIdentityFile(tmp)
-      expect(file).toEqual({ version: 1, repoID: first.project.id })
+      // The repo-level key is stored beside the identity, byte-identical to
+      // the pre-fix derived id so old and new formats agree.
+      expect(file).toEqual({ version: 1, repoID: first.project.id, repoHash: legacyRemoteID })
+      expect(first.project.repoHash).toBe(legacyRemoteID)
 
       const second = yield* project.fromDirectory(tmp)
       expect(second.project.id).toBe(first.project.id)
@@ -170,8 +173,14 @@ describe("Project identity minting", () => {
       expect(first.project.worktree).toBe(a)
       expect(second.project.worktree).toBe(b)
 
+      // Distinct identities, same repo-level grouping key: this is what lets
+      // a UI unify clones of one repository.
+      expect(first.project.repoHash).toBe(legacyRemoteID)
+      expect(second.project.repoHash).toBe(legacyRemoteID)
+
       const firstRow = yield* projectRow(first.project.id)
       expect(firstRow?.sandboxes).not.toContain(b)
+      expect(firstRow?.repo_hash).toBe(legacyRemoteID)
       expect(yield* projectCount()).toBe(2)
     }),
   )
@@ -183,7 +192,12 @@ describe("Project identity minting", () => {
       yield* addRemote(tmp)
       const worktreePath = path.join(tmp, "..", path.basename(tmp) + "-wt")
       yield* Effect.addFinalizer(() =>
-        Effect.promise(() => $`git worktree remove --force ${worktreePath}`.cwd(tmp).quiet().catch(() => {})),
+        Effect.promise(() =>
+          $`git worktree remove --force ${worktreePath}`
+            .cwd(tmp)
+            .quiet()
+            .catch(() => {}),
+        ),
       )
       yield* Effect.promise(() => $`git worktree add ${worktreePath} -b test-branch-${Date.now()}`.cwd(tmp).quiet())
 
@@ -225,7 +239,12 @@ describe("Project identity minting", () => {
       yield* addRemote(tmp)
       const worktreePath = path.join(tmp, "..", path.basename(tmp) + "-first-wt")
       yield* Effect.addFinalizer(() =>
-        Effect.promise(() => $`git worktree remove --force ${worktreePath}`.cwd(tmp).quiet().catch(() => {})),
+        Effect.promise(() =>
+          $`git worktree remove --force ${worktreePath}`
+            .cwd(tmp)
+            .quiet()
+            .catch(() => {}),
+        ),
       )
       yield* Effect.promise(() => $`git worktree add ${worktreePath} -b first-contact-${Date.now()}`.cwd(tmp).quiet())
 
@@ -293,7 +312,9 @@ describe("Project identity migration", () => {
       )
       expect(managed?.directory).toBe(path.join(Global.Path.data, "worktree", result.project.id, "wt1"))
       const file = yield* readIdentityFile(tmp)
-      expect(file).toEqual({ version: 1, repoID: result.project.id })
+      // The legacy id in the migrated file is reused as the repo-level key.
+      expect(file).toEqual({ version: 1, repoID: result.project.id, repoHash: legacyRemoteID })
+      expect(result.project.repoHash).toBe(legacyRemoteID)
 
       const again = yield* project.fromDirectory(tmp)
       expect(again.project.id).toBe(result.project.id)
@@ -377,9 +398,7 @@ describe("Project identity migration", () => {
       const tmp = yield* tmpdirScoped({ git: true })
       yield* addRemote(tmp)
       const renamed = tmp + "-renamed"
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(() => $`rm -rf ${renamed}`.quiet().nothrow()).pipe(Effect.ignore),
-      )
+      yield* Effect.addFinalizer(() => Effect.promise(() => $`rm -rf ${renamed}`.quiet().nothrow()).pipe(Effect.ignore))
 
       const before = yield* project.fromDirectory(tmp)
       const sessionID = crypto.randomUUID() as SessionID

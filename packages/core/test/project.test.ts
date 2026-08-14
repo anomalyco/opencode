@@ -305,9 +305,7 @@ describe("ProjectV2 versioned identity file", () => {
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
       const renamed = `${tmp.path}-renamed`
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(() => $`rm -rf ${renamed}`.quiet().nothrow()).pipe(Effect.ignore),
-      )
+      yield* Effect.addFinalizer(() => Effect.promise(() => $`rm -rf ${renamed}`.quiet().nothrow()).pipe(Effect.ignore))
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
       yield* Effect.promise(() =>
         Bun.write(path.join(tmp.path, ".git", "opencode"), JSON.stringify({ version: 1, repoID: uuid })),
@@ -378,6 +376,89 @@ describe("ProjectV2 versioned identity file", () => {
       const result = yield* project.resolve(abs(tmp.path))
       expect(result.id).toBe(ProjectV2.ID.make(uuid))
       expect(result.previous).toBeUndefined()
+    }),
+  )
+
+  it.live("legacy path reports the derived id as the repo hash, byte-identical to the old scheme", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.repoHash).toBe(remoteID("github.com/owner/repo"))
+      expect(result.repoHash).toBe(Hash.fast("git-remote:github.com/owner/repo"))
+    }),
+  )
+
+  it.live("repo hash falls back to the root commit for remote-less repos", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
+      const project = yield* ProjectV2.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.repoHash).toBe(yield* Effect.promise(() => rootCommit(tmp.path)))
+    }),
+  )
+
+  it.live("steady state prefers the recomputed remote hash and keeps the stored one otherwise", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tmp.path, ".git", "opencode"),
+          JSON.stringify({ version: 1, repoID: uuid, repoHash: "stored-value" }),
+        ),
+      )
+      const project = yield* ProjectV2.Service
+
+      // No remote: the stored key wins without recomputing the root commit.
+      const before = yield* project.resolve(abs(tmp.path))
+      expect(before.id).toBe(ProjectV2.ID.make(uuid))
+      expect(before.repoHash).toBe("stored-value")
+
+      // A remote appears: the recomputed remote hash supersedes the stored
+      // key, exactly as the legacy precedence did.
+      yield* Effect.promise(() => $`git remote add origin git@github.com:owner/repo.git`.cwd(tmp.path).quiet())
+      const after = yield* project.resolve(abs(tmp.path))
+      expect(after.id).toBe(ProjectV2.ID.make(uuid))
+      expect(after.repoHash).toBe(remoteID("github.com/owner/repo"))
+    }),
+  )
+
+  it.live("commit stores the repo hash beside the identity and resolve reads it back", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
+      const project = yield* ProjectV2.Service
+
+      yield* project.commit({
+        store: abs(path.join(tmp.path, ".git")),
+        id: ProjectV2.ID.make(uuid),
+        repoHash: "abc123",
+      })
+
+      const content = yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "opencode")).text())
+      expect(JSON.parse(content)).toEqual({ version: 1, repoID: uuid, repoHash: "abc123" })
+
+      const result = yield* project.resolve(abs(tmp.path))
+      expect(result.repoHash).toBe("abc123")
     }),
   )
 })
