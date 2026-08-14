@@ -796,7 +796,17 @@ export function FormPrompt(props: {
                 selectTabFromMouse()
               }}
             >
-              <text fg={confirm() ? theme.text.formfield.selected : theme.text.formfield.default}>Confirm</text>
+              <text
+                fg={
+                  confirm()
+                    ? theme.text.formfield.selected
+                    : tabHover() === "confirm"
+                      ? theme.text.formfield.focused
+                      : theme.text.subdued
+                }
+              >
+                Confirm
+              </text>
             </box>
           </box>
         </Show>
@@ -989,7 +999,7 @@ export function FormPrompt(props: {
                             }}
                             initialValue={input()}
                             placeholder="Type your own answer"
-                            placeholderColor={other() ? theme.text.formfield.focused : theme.text.subdued}
+                            placeholderColor={theme.text.subdued}
                             minHeight={1}
                             maxHeight={6}
                             textColor={theme.text.formfield.focused}
