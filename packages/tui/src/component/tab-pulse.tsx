@@ -47,6 +47,9 @@ const GLOW_IGNITION_DURATION = 600
 const GLOW_IGNITION_PEAK = 1.5
 const GLOW_IGNITION_ATTACK = 0.3
 const GLOW_FADE_OUT = 200
+const GLOW_RELEASE_DURATION = 900
+const GLOW_RELEASE_ATTACK = 0.12
+const GLOW_RELEASE_PEAK = 1.25
 const GLOW_TAIL = 12
 const GLOW_OPACITY = 0.16
 const DEFAULT_FOREGROUND = RGBA.defaultForeground()
@@ -75,6 +78,8 @@ export const unreadGlowIntensity = (index: number, width: number, maximumTail = 
   const tail = Math.min(maximumTail, Math.max(1, width - 2))
   return glowIntensityAt(index, tail)
 }
+/** How far a resolving glow has diffused: the resting tail spreads across the full width as it thins away. */
+const glowReleaseSpread = (progress: number, tail: number, width: number) => tail + smootherstep(progress) * width
 export function blendTabPulseColor(
   output: RGBA,
   background: RGBA,
@@ -148,6 +153,10 @@ class Envelope {
     return this.clock !== undefined
   }
 
+  get progress() {
+    return this.clock === undefined ? undefined : this.clock / this.duration
+  }
+
   level() {
     return this.clock === undefined ? 0 : this.scale * this.shape(this.clock / this.duration)
   }
@@ -178,7 +187,19 @@ class PulseState {
   private edgeFlash = new Envelope(EDGE_FLASH_DURATION, (progress) => attackDecay(progress, EDGE_FLASH_ATTACK, 1, 0))
   private ignition = new Envelope(GLOW_IGNITION_DURATION, glowIgnitionLevel)
   private glowOff = new Envelope(GLOW_FADE_OUT, fadeOut)
-  private envelopes = [this.runAttack, this.runFade, this.completionPulse, this.edgeFlash, this.ignition, this.glowOff]
+  // A resolving glow's send-off: a gentle swell that decays while the spatial profile diffuses outward.
+  private release = new Envelope(GLOW_RELEASE_DURATION, (progress) =>
+    attackDecay(progress, GLOW_RELEASE_ATTACK, GLOW_RELEASE_PEAK, 0),
+  )
+  private envelopes = [
+    this.runAttack,
+    this.runFade,
+    this.completionPulse,
+    this.edgeFlash,
+    this.ignition,
+    this.glowOff,
+    this.release,
+  ]
 
   constructor(options: PulseStateOptions) {
     this.enabled = options.enabled
@@ -209,6 +230,14 @@ class PulseState {
   get glowLevel() {
     if (!this.glow) return this.glowOff.level()
     return this.ignition.active ? this.ignition.level() : 1
+  }
+
+  get releaseLevel() {
+    return this.release.level()
+  }
+
+  get releaseProgress() {
+    return this.release.progress
   }
 
   setEnabled(value: boolean) {
@@ -266,11 +295,16 @@ class PulseState {
 
   setGlow(value: boolean) {
     if (value === this.glow) return false
-    if (this.enabled && !value) this.glowOff.start(this.glowLevel)
+    if (this.enabled && !value) {
+      // Resolving the glow sends it off: residual glow drains while the release diffuses outward.
+      this.glowOff.start(this.glowLevel)
+      this.release.restart(Math.max(1, this.glowLevel))
+    }
     this.glow = value
     this.ignition.stop()
     if (this.enabled && value) {
       this.glowOff.stop()
+      this.release.stop()
       this.ignition.start()
     }
     return true
@@ -523,16 +557,20 @@ class TabPulseRenderable extends Renderable {
     const completion = this.inner.completion
     const flash = this.inner.flash
     const glowLevel = this.inner.glowLevel
+    const releaseLevel = this.inner.releaseLevel
     const outerRunning = this.outer.running
     const outerCompletion = this.outer.completion
     const outerFlash = this.outer.flash
     const outerGlowLevel = this.outer.glowLevel
+    const outerReleaseLevel = this.outer.releaseLevel
     if (
       glowLevel === 0 &&
+      releaseLevel === 0 &&
       running === 0 &&
       completion === 0 &&
       flash === 0 &&
       outerGlowLevel === 0 &&
+      outerReleaseLevel === 0 &&
       outerRunning === 0 &&
       outerCompletion === 0 &&
       outerFlash === 0
@@ -551,6 +589,8 @@ class TabPulseRenderable extends Renderable {
       )
     const glowTail = Math.min(this._glowTail, Math.max(1, this.width - 2))
     const outerGlowTail = Math.min(this._outerGlowTail, Math.max(1, this.width - 2))
+    const releaseSpread = glowReleaseSpread(this.inner.releaseProgress ?? 0, glowTail, this.width)
+    const outerReleaseSpread = glowReleaseSpread(this.outer.releaseProgress ?? 0, outerGlowTail, this.width)
     const flashTail = this._flashTail === undefined ? undefined : Math.min(this._flashTail, Math.max(1, this.width - 2))
     const outerFlashTail =
       this._outerFlashTail === undefined ? undefined : Math.min(this._outerFlashTail, Math.max(1, this.width - 2))
@@ -581,7 +621,10 @@ class TabPulseRenderable extends Renderable {
         this._color,
         this._flashColor,
         this._completionColor,
-        glowLevel === 0 ? 0 : glowIntensityAt(index, glowTail) * GLOW_OPACITY * glowLevel,
+        Math.max(
+          glowLevel === 0 ? 0 : glowIntensityAt(index, glowTail) * GLOW_OPACITY * glowLevel,
+          releaseLevel === 0 ? 0 : glowIntensityAt(index, releaseSpread) * GLOW_OPACITY * releaseLevel,
+        ),
         sweep,
         flashTail === undefined ? flash : flash * tabFlashIntensity(index, flashTail),
         completion,
@@ -597,7 +640,10 @@ class TabPulseRenderable extends Renderable {
         this._outerColor,
         this._outerFlashColor,
         this._outerCompletionColor,
-        outerGlowLevel === 0 ? 0 : glowIntensityAt(index, outerGlowTail) * GLOW_OPACITY * outerGlowLevel,
+        Math.max(
+          outerGlowLevel === 0 ? 0 : glowIntensityAt(index, outerGlowTail) * GLOW_OPACITY * outerGlowLevel,
+          outerReleaseLevel === 0 ? 0 : glowIntensityAt(index, outerReleaseSpread) * GLOW_OPACITY * outerReleaseLevel,
+        ),
         outerSweep,
         outerFlashTail === undefined ? outerFlash : outerFlash * tabFlashIntensity(index, outerFlashTail),
         outerCompletion,
