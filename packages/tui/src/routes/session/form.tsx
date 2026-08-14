@@ -888,6 +888,7 @@ export function FormPrompt(props: {
                           <box
                             backgroundColor={active() ? theme.background.formfield.focused : theme.background.default}
                             flexDirection="row"
+                            gap={1}
                           >
                             <Show when={multi()}>
                               <text
@@ -899,7 +900,7 @@ export function FormPrompt(props: {
                                       : theme.text.formfield.default
                                 }
                               >
-                                [{picked() ? "✓" : " "}]{" "}
+                                [{picked() ? "✓" : " "}]
                               </text>
                             </Show>
                             <text fg={active() ? theme.text.formfield.focused : theme.text.formfield.default}>
