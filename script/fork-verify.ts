@@ -39,18 +39,39 @@ const missingOwned: string[] = []
 const missingMarker: string[] = []
 const knownRegressed: string[] = []
 
+// Both the working tree AND the committed state are checked. A marker present
+// in the worktree but missing from HEAD is exactly how the fork loses features
+// in practice — a stray `git checkout <ref> -- file` stages upstream's copy and
+// the next commit takes it along, leaving a checkout that looks correct while
+// what gets pushed does not. The pre-push hook would otherwise wave that
+// through. Passing --worktree-only skips the HEAD half (useful mid-edit).
+const worktreeOnly = Bun.argv.includes("--worktree-only")
+const head = (rel: string) => {
+  const proc = Bun.spawnSync(["git", "show", `HEAD:${rel}`], { cwd: root })
+  return proc.exitCode === 0 ? proc.stdout.toString() : undefined
+}
+
 for (const rel of manifest.owned) {
   if (!fs.existsSync(path.join(root, rel))) missingOwned.push(rel)
+  else if (!worktreeOnly && head(rel) === undefined) missingOwned.push(`${rel}  (present in worktree, MISSING FROM HEAD)`)
 }
 
 for (const p of manifest.patched) {
   const abs = path.join(root, p.file)
   const exists = fs.existsSync(abs)
-  const hasMarker = exists && fs.readFileSync(abs, "utf8").includes(p.marker)
+  const inWorktree = exists && fs.readFileSync(abs, "utf8").includes(p.marker)
+  const committed = worktreeOnly ? undefined : head(p.file)
+  const inHead = worktreeOnly || (committed !== undefined && committed.includes(p.marker))
+  const hasMarker = inWorktree && inHead
   const isKnownRegression = typeof p.status === "string" && p.status.startsWith("REGRESSED")
   if (hasMarker) continue
   if (isKnownRegression) knownRegressed.push(`${p.file}  (marker "${p.marker}")`)
-  else missingMarker.push(`${p.file}  (marker "${p.marker}"${exists ? "" : ", FILE MISSING"})`)
+  else
+    missingMarker.push(
+      `${p.file}  (marker "${p.marker}"${exists ? "" : ", FILE MISSING"}${
+        inWorktree && !inHead ? ", present in worktree but MISSING FROM HEAD" : ""
+      })`,
+    )
 }
 
 // --- divergence gate -------------------------------------------------------
