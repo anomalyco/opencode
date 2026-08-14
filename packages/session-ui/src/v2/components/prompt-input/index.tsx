@@ -55,7 +55,10 @@ export function PromptInputV2(props: PromptInputV2Props) {
   let localInput = false
   const updateCursor = (event: KeyboardEvent | PointerEvent) => {
     if (!editor || !window.getSelection()?.isCollapsed) return
-    if (event instanceof KeyboardEvent && !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key))
+    if (
+      event instanceof KeyboardEvent &&
+      !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)
+    )
       return
     props.controller.onCursor(parsePromptInputV2Editor(editor).cursor)
   }
