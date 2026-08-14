@@ -270,25 +270,21 @@ export function fromPromise(plugin: Plugin) {
               register(host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))))),
             create: (input) =>
               run(
-                host.session.create(
-                  input === undefined
-                    ? undefined
-                    : {
-                        id: input.id == null ? undefined : Session.ID.make(input.id),
-                        agent: input.agent == null ? undefined : Agent.ID.make(input.agent),
-                        model: input.model == null ? undefined : model(input.model),
-                        location:
-                          input.location == null
-                            ? undefined
-                            : Location.Ref.make({
-                                directory: AbsolutePath.make(input.location.directory),
-                                workspaceID:
-                                  input.location.workspaceID === undefined
-                                    ? undefined
-                                    : Workspace.ID.make(input.location.workspaceID),
-                              }),
-                      },
-                ),
+                host.session.create({
+                  id: input.id == null ? undefined : Session.ID.make(input.id),
+                  agent: Agent.ID.make(input.agent),
+                  model: model(input.model),
+                  location:
+                    input.location == null
+                      ? undefined
+                      : Location.Ref.make({
+                          directory: AbsolutePath.make(input.location.directory),
+                          workspaceID:
+                            input.location.workspaceID === undefined
+                              ? undefined
+                              : Workspace.ID.make(input.location.workspaceID),
+                        }),
+                }),
               ),
             get: (input) => run(host.session.get({ sessionID: Session.ID.make(input.sessionID) })),
             prompt: (input) =>

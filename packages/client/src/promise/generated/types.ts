@@ -2420,36 +2420,36 @@ export type SessionCreateInput = {
   readonly id?: {
     readonly id?: string | null
     readonly title?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly agent: string
+    readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["id"]
   readonly title?: {
     readonly id?: string | null
     readonly title?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly agent: string
+    readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["title"]
-  readonly agent?: {
+  readonly agent: {
     readonly id?: string | null
     readonly title?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly agent: string
+    readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["agent"]
-  readonly model?: {
+  readonly model: {
     readonly id?: string | null
     readonly title?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly agent: string
+    readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["model"]
   readonly location?: {
     readonly id?: string | null
     readonly title?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly agent: string
+    readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
   }["location"]
 }

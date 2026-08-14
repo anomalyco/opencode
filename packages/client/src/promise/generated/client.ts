@@ -462,17 +462,17 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      create: (input?: SessionCreateInput, requestOptions?: RequestOptions) =>
+      create: (input: SessionCreateInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionCreateOutput }>(
           {
             method: "POST",
             path: `/api/session`,
             body: {
-              id: input?.["id"],
-              title: input?.["title"],
-              agent: input?.["agent"],
-              model: input?.["model"],
-              location: input?.["location"],
+              id: input["id"],
+              title: input["title"],
+              agent: input["agent"],
+              model: input["model"],
+              location: input["location"],
             },
             successStatus: 200,
             declaredStatuses: [401, 400],

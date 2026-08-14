@@ -341,12 +341,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
       hook: (name, callback) => hooks.register("session", name, callback),
       create: (input) =>
         runtime.session.create({
-          id: input?.id,
-          title: input?.title,
-          agent: input?.agent,
-          model: input?.model,
+          id: input.id,
+          title: input.title,
+          agent: input.agent,
+          model: input.model,
           location:
-            input?.location ?? Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
+            input.location ?? Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
         }),
       get: (input) => runtime.session.get(input.sessionID),
       prompt: runtime.session.prompt,

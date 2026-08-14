@@ -303,15 +303,15 @@ const Endpoint5_0 = (raw: RawClient["server.session"]) => (input?: Endpoint5_0In
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const Endpoint5_1 = (raw: RawClient["server.session"]) => (input?: Endpoint5_1Input) =>
+const Endpoint5_1 = (raw: RawClient["server.session"]) => (input: Endpoint5_1Input) =>
   preserveEffect<Endpoint5_1Output>()(
     raw["session.create"]({
       payload: {
-        id: input?.["id"],
-        title: input?.["title"],
-        agent: input?.["agent"],
-        model: input?.["model"],
-        location: input?.["location"],
+        id: input["id"],
+        title: input["title"],
+        agent: input["agent"],
+        model: input["model"],
+        location: input["location"],
       },
     }).pipe(
       Effect.mapError(mapClientError),

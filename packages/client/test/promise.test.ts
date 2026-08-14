@@ -539,7 +539,11 @@ test("session methods use the public HTTP contract", async () => {
 
   const page = await client.session.list({ limit: 10, order: "desc", parentID: null })
   const active = await client.session.active()
-  const created = await client.session.create({ location: { directory: "/tmp/project" } })
+  const created = await client.session.create({
+    agent: "build",
+    model: { id: "claude", providerID: "anthropic" },
+    location: { directory: "/tmp/project" },
+  })
   await client.session.switchAgent({ sessionID: "ses_test", agent: "build" })
   await client.session.switchModel({
     sessionID: "ses_test",
@@ -613,7 +617,7 @@ test("middleware errors remain declared client errors", async () => {
   })
 
   try {
-    await client.session.create({})
+    await client.session.create({ agent: "build", model: { id: "claude", providerID: "anthropic" } })
     throw new Error("Expected request to fail")
   } catch (error) {
     expect(isUnauthorizedError(error)).toBe(true)

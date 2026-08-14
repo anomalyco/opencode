@@ -56,13 +56,16 @@ export async function resolveSessionTarget(input: {
     agent: input.agent ?? selected?.agent,
     signal: input.signal,
   })
+  if (!selected && (!prepared.agent || !prepared.model)) {
+    throw new SessionTargetMutationError(new Error("Creating a session requires an agent and model"))
+  }
   const session =
     selected ??
     (await input.client.session
       .create(
         {
-          agent: prepared.agent,
-          model: prepared.model,
+          agent: prepared.agent!,
+          model: prepared.model!,
           location: { directory: location.directory, workspaceID: location.workspaceID },
         },
         ...requestOptions(input.signal),

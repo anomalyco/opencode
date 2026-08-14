@@ -61,7 +61,11 @@ describe("session target resolver", () => {
     spyOn(client.location, "get").mockResolvedValue(location("/server", "work_1"))
     const create = spyOn(client.session, "create").mockImplementation(async (input) => {
       order.push("create")
-      expect(input).toMatchObject({ agent: "prepared", location: { directory: "/server", workspaceID: "work_1" } })
+      expect(input).toMatchObject({
+        agent: "prepared",
+        model: { providerID: "openai", id: "gpt-5" },
+        location: { directory: "/server", workspaceID: "work_1" },
+      })
       return session("ses_fresh", "/server", "work_1")
     })
 
@@ -71,20 +75,22 @@ describe("session target resolver", () => {
       prepare: async (input) => {
         order.push("prepare")
         expect(input.location.workspaceID).toBe("work_1")
-        return { model: input.model, agent: "prepared" }
+        return { model: { providerID: "openai", id: "gpt-5" }, agent: "prepared" }
       },
     })
     expect(create).toHaveBeenCalledTimes(1)
     expect(order).toEqual(["prepare", "create"])
   })
 
-  test("uses the agent resolved by the server for a fresh Session", async () => {
+  test("requires an explicit agent and model for a fresh Session", async () => {
     const client = OpenCode.make({ baseUrl: "https://opencode.test" })
     spyOn(client.location, "get").mockResolvedValue(location("/project"))
-    spyOn(client.session, "create").mockResolvedValue({ ...session("ses_fresh", "/project"), agent: "review" })
+    const create = spyOn(client.session, "create")
 
-    const target = await resolveSessionTarget({ client, prepare })
-    expect(target.agent).toBe("review")
+    await expect(resolveSessionTarget({ client, prepare })).rejects.toThrow(
+      "Creating a session requires an agent and model",
+    )
+    expect(create).not.toHaveBeenCalled()
   })
 
   test("does not retry an ambiguous Session creation", async () => {

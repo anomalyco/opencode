@@ -151,8 +151,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         payload: Schema.Struct({
           id: Session.ID.pipe(Schema.optional),
           title: Schema.String.pipe(Schema.optional),
-          agent: Agent.ID.pipe(Schema.optional),
-          model: Model.Ref.pipe(Schema.optional),
+          agent: Agent.ID,
+          model: Model.Ref,
           location: Location.Ref.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: Session.Info }),
@@ -160,7 +160,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         OpenApi.annotations({
           identifier: "v2.session.create",
           summary: "Create session",
-          description: "Create a session at the requested location.",
+          description: "Create a session with an explicit agent and model at the requested location.",
         }),
       ),
     )

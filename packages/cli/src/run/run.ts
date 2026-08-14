@@ -94,11 +94,9 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     prepare: async (next) => {
       const selected =
         next.model ??
-        (options.variant
-          ? await client.model
-              .default({ location: { directory: next.location.directory, workspace: next.location.workspaceID } })
-              .then((result) => result.data)
-          : undefined)
+        (await client.model
+          .default({ location: { directory: next.location.directory, workspace: next.location.workspaceID } })
+          .then((result) => result.data))
       const model = selected
         ? {
             providerID: selected.providerID,
@@ -108,7 +106,12 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
         : undefined
       if ((options.variant ?? explicit?.variant) && !model)
         throw new RunTargetError("Cannot select a variant before selecting a model", next.session?.id)
-      return { model, agent: next.agent }
+      const agent =
+        next.agent ??
+        (await client.agent
+          .list({ location: { directory: next.location.directory, workspace: next.location.workspaceID } })
+          .then((result) => result.data.find((item) => item.mode !== "subagent" && !item.hidden)?.id))
+      return { model, agent }
     },
   }).catch((error) => {
     if (!(error instanceof RunTargetError)) throw error
