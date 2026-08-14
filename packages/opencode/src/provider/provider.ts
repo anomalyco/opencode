@@ -389,6 +389,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const defaultRegion = configRegion ?? envRegion ?? "us-east-1"
 
       // Profile: config file takes precedence over env var
+      // An API key configured in opencode.json is a valid Bedrock credential on
+      // its own — without it in the guard below the provider stays disabled no
+      // matter what the user configured.
+      const configApiKey = providerConfig?.options?.apiKey
       const configProfile = providerConfig?.options?.profile
       const envProfile = env["AWS_PROFILE"]
       const profile = configProfile ?? envProfile
@@ -413,7 +417,14 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
       )
 
-      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
+      if (
+        !profile &&
+        !awsAccessKeyId &&
+        !awsBearerToken &&
+        !configApiKey &&
+        !awsWebIdentityTokenFile &&
+        !containerCreds
+      )
         return { autoload: false }
 
       const { fromNodeProviderChain } = yield* Effect.promise(() => import("@aws-sdk/credential-providers"))
@@ -424,7 +435,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       // Only use credential chain if no bearer token exists
       // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
-      if (!awsBearerToken) {
+      if (!awsBearerToken && !configApiKey) {
         // Build credential provider options (only pass profile if specified)
         const credentialProviderOptions = profile ? { profile } : {}
 
@@ -440,6 +451,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: true,
         options: providerOptions,
+        // The mantle endpoint builds its URL from AWS_REGION, so the configured
+        // region has to be exported as a var — without this the host comes out
+        // as "bedrock-mantle..api.aws".
+        vars(options: Record<string, any>) {
+          return { AWS_REGION: options.region ?? defaultRegion }
+        },
         async getModel(sdk: any, modelID: string, options?: Record<string, any>, model?: Model) {
           // The mantle endpoint speaks the OpenAI Responses API for most models
           // and Chat Completions for the gpt-oss safeguard pair — it is not a
