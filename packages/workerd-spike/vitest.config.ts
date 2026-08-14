@@ -52,7 +52,7 @@ export default defineWorkersConfig({
       // lookup surface but back it with a static shim.
       { find: /^mime-types$/, replacement: new URL("./test/shims/mime-types.mjs", import.meta.url).pathname },
       // Plugin installs never happen in the workerd profile (plugin discovery
-      // is precompiled-only), so mock the package installation toolchain.
+      // is precompiled-only), so mock package installation when it is loaded.
       { find: /^@npmcli\/arborist(\/.*)?$/, replacement: mockProxy },
       { find: /^pacote(\/.*)?$/, replacement: mockProxy },
     ],

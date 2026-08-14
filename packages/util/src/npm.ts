@@ -1,7 +1,6 @@
 export * as Npm from "./npm.js"
 
 import path from "path"
-import npa from "npm-package-arg"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
 import { FSUtil } from "./fs-util.js"
@@ -111,6 +110,7 @@ const layer = Layer.effect(
       )
 
     const add = Effect.fn("Npm.add")(function* (pkg: string, options?: { readonly subpaths?: readonly string[] }) {
+      const { default: npa } = yield* Effect.promise(() => import("npm-package-arg"))
       const dir = directory(pkg)
       const name = (() => {
         try {
