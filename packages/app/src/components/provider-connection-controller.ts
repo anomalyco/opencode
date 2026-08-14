@@ -238,6 +238,7 @@ export function createProviderConnectionController(options: {
 
   return {
     loading: () => integration.loading,
+    integration: () => integration.latest,
     methods,
     currentMethod,
     methodIndex: () => store.methodIndex,

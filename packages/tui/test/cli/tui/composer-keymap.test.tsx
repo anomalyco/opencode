@@ -23,7 +23,11 @@ const sessions = {
 
 const shells = [shell("sh-a", "bun test"), shell("sh-b", "bun dev")]
 
-async function renderComposer(defaultTab: "subagents" | "shell", keybinds: Partial<TuiKeybind.Keybinds>) {
+async function renderComposer(
+  defaultTab: "subagents" | "shell",
+  keybinds: Partial<TuiKeybind.Keybinds>,
+  focusedTextarea = false,
+) {
   const events = createEventStream()
   const interrupted: string[] = []
   const removed: string[] = []
@@ -69,7 +73,21 @@ async function renderComposer(defaultTab: "subagents" | "shell", keybinds: Parti
         .then(() => wait(() => data.session.status("child-a") === "running"))
         .then(() => ready.resolve(), ready.reject)
     })
-    return <Composer sessionID="parent" open={true} defaultTab={defaultTab} onClose={() => closed++} />
+    return (
+      <>
+        {focusedTextarea && <textarea focused={true} initialValue="draft" />}
+        <Composer sessionID="parent" open={true} defaultTab={defaultTab} onClose={() => closed++} />
+      </>
+    )
+  }
+
+  function AppExit() {
+    Keymap.createLayer(() => ({
+      mode: "global",
+      commands: [{ id: "app.exit", title: "Exit", group: "System", run: () => {} }],
+    }))
+    Keymap.createLayer(() => ({ bindings: ["app.exit"] }))
+    return null
   }
 
   const app = await testRender(
@@ -88,6 +106,7 @@ async function renderComposer(defaultTab: "subagents" | "shell", keybinds: Parti
                 </LocationProvider>
               </DataProvider>
             </ClientProvider>
+            <AppExit />
           </Keymap.Provider>
         </ConfigProvider>
       </TestTuiContexts>
@@ -147,6 +166,20 @@ test("disabled shell bindings have no component fallbacks", async () => {
 
     composer.app.mockInput.pressArrow("down")
     composer.dispatch("composer.shell.kill")
+    await wait(() => composer.removed.length === 1)
+    expect(composer.removed).toEqual(["sh-a"])
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("configured composer bindings work with a focused textarea", async () => {
+  const composer = await renderComposer("subagents", { "composer.shell.kill": "ctrl+u" }, true)
+  try {
+    composer.app.mockInput.pressArrow("right")
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("bun test")
+    composer.app.mockInput.pressKey("u", { ctrl: true })
     await wait(() => composer.removed.length === 1)
     expect(composer.removed).toEqual(["sh-a"])
   } finally {

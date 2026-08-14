@@ -27,9 +27,11 @@ function common(one: string, other: string) {
 export function AnimatedCountLabel(props: { count: number; plural: UiI18nPluralKey; class?: string }) {
   const i18n = useI18n()
   const category = createMemo(() => pluralCategory(i18n.locale(), Math.round(props.count)))
-  const one = createMemo(() => split(i18n.t(pluralKey(props.plural, "one"))))
-  const other = createMemo(() => split(i18n.t(pluralKey(props.plural, "other"))))
-  const active = createMemo(() => split(i18n.t(pluralKey(props.plural, category()))))
+  const form = (category: ReturnType<typeof pluralCategory>) =>
+    i18n.pluralForm?.(props.plural, category) ?? (i18n.t as (key: string) => string)(pluralKey(props.plural, category))
+  const one = createMemo(() => split(form("one")))
+  const other = createMemo(() => split(form("other")))
+  const active = createMemo(() => split(form(category())))
   const suffix = createMemo(() => common(one().after, other().after))
   const splitSuffix = createMemo(
     () =>

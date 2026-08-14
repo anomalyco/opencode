@@ -1,6 +1,7 @@
 import "@/index.css"
 import * as Sentry from "@sentry/solid"
 import { I18nProvider } from "@opencode-ai/ui/context"
+import type { UiI18n } from "@opencode-ai/ui/context/i18n"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { File } from "@opencode-ai/session-ui/file"
@@ -127,7 +128,13 @@ function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
   return (
     <I18nProvider
-      value={{ locale: language.intl, layoutLocale: language.layoutLocale, t: language.t, plural: language.plural }}
+      value={{
+        locale: language.intl,
+        layoutLocale: language.layoutLocale,
+        t: language.t as UiI18n["t"],
+        plural: language.plural,
+        pluralForm: language.pluralForm,
+      }}
     >
       {props.children}
     </I18nProvider>
@@ -172,10 +179,6 @@ function BodyDesignClass() {
 
 // Server-agnostic providers shared across every route. These live in the shared
 // shell (router root) so they stay mounted regardless of the active server/route.
-function SharedProviders(props: ParentProps) {
-  return <></>
-}
-
 function DesktopCommands() {
   const command = useCommand()
   const language = useLanguage()
@@ -269,20 +272,16 @@ export function AppInterface(props: {
   // route changes. Draft and session routes override only their server-bound data
   // providers beneath it.
   const Root = (rootProps: ParentProps) => (
-    <SettingsProvider>
-      <GlobalProvider>
-        <TabsProvider>
-          <BodyDesignClass />
-          <CommandProvider>
-            <DesktopCommands />
-            <HighlightsProvider>
-              {props.children}
-              {rootProps.children}
-            </HighlightsProvider>
-          </CommandProvider>
-        </TabsProvider>
-      </GlobalProvider>
-    </SettingsProvider>
+    <TabsProvider>
+      <BodyDesignClass />
+      <CommandProvider>
+        <DesktopCommands />
+        <HighlightsProvider>
+          {props.children}
+          {rootProps.children}
+        </HighlightsProvider>
+      </CommandProvider>
+    </TabsProvider>
   )
 
   return (
@@ -291,27 +290,31 @@ export function AppInterface(props: {
       canonicalLocalServer={props.canonicalLocalServer}
       servers={props.servers}
     >
-      <Dynamic component={props.router ?? Router} root={Root}>
-        {/* Proper Routes */}
-        <Route component={AppLayout}>
-          <Route path="/" component={Home} />
-          <Route
-            path="/server/:serverKey/session/:id"
-            component={() => (
-              <TargetServerRoute>
-                <TargetSessionRouteContent />
-              </TargetServerRoute>
-            )}
-          />
-          <Route path="/new-session" component={DraftRoute} />
-        </Route>
-        {/* Legacy Routes */}
-        <Route>
-          <Route path="/:dir" component={DirectoryDraftRedirect} />
-          <Route path="/:dir/session" component={DirectoryDraftRedirect} />
-          <Route path="/:dir/session/:id" component={LegacySessionRedirect} />
-        </Route>
-      </Dynamic>
+      <SettingsProvider>
+        <GlobalProvider>
+          <Dynamic component={props.router ?? Router} root={Root}>
+            {/* Proper Routes */}
+            <Route component={AppLayout}>
+              <Route path="/" component={Home} />
+              <Route
+                path="/server/:serverKey/session/:id"
+                component={() => (
+                  <TargetServerRoute>
+                    <TargetSessionRouteContent />
+                  </TargetServerRoute>
+                )}
+              />
+              <Route path="/new-session" component={DraftRoute} />
+            </Route>
+            {/* Legacy Routes */}
+            <Route>
+              <Route path="/:dir" component={DirectoryDraftRedirect} />
+              <Route path="/:dir/session" component={DirectoryDraftRedirect} />
+              <Route path="/:dir/session/:id" component={LegacySessionRedirect} />
+            </Route>
+          </Dynamic>
+        </GlobalProvider>
+      </SettingsProvider>
     </ServersProvider>
   )
 }

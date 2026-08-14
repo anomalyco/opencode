@@ -15,8 +15,5 @@ export const ProjectHandler = HttpApiBuilder.group(Api, "server.project", (handl
           canonical: location.project.canonical,
         }),
       ),
-    )
-    .handle("project.directories", (ctx) =>
-      Project.Service.use((project) => project.directories({ projectID: ctx.params.projectID })),
     ),
 )

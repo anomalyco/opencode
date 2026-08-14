@@ -35,7 +35,7 @@ export type SessionRow =
   | { type: "assistant-footer"; messageID: string }
   | { type: "turn-usage"; messageIDs: string[]; previousCache?: CacheUsage }
 
-export function createSessionRows(sessionID: Accessor<string>) {
+export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
   const data = useData()
   const client = useClient()
   const config = useConfig()
@@ -95,6 +95,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
         () => {
           if (sessionID() !== id) return
           setRows(reconcile(reduce()))
+          onSynced?.(id)
         },
         () => undefined,
       )

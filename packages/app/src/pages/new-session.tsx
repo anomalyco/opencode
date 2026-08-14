@@ -1,7 +1,10 @@
 import { createPromptProjectController } from "@/components/prompt-project-selector"
+import { useSettingsDialog } from "@/components/settings-dialog"
 import { useTitlebarRightMount } from "@/components/titlebar"
 import { useSettings } from "@/context/settings"
-import { createEffect, createResource } from "solid-js"
+import { useTabs, type DraftTab } from "@/context/tabs"
+import { useSearchParams } from "@solidjs/router"
+import { createEffect, createMemo, createResource } from "solid-js"
 import { createNewSessionDraftController } from "./new-session/new-session-draft-controller"
 import { NewSessionStatus, NewSessionView } from "./new-session/new-session-view"
 import { createNewSessionWorkspaceController } from "./new-session/new-session-workspace-controller"
@@ -11,11 +14,24 @@ import { useNewSessionCommands } from "./new-session/use-new-session-commands"
 export default function NewSessionPage(props: { draftId: string }) {
   const settings = useSettings()
   const rightMount = useTitlebarRightMount()
-  const workspace = createNewSessionWorkspaceController()
+  const [search] = useSearchParams<{ draftId?: string }>()
+  const tabs = useTabs()
+  const openWorkspaces = useSettingsDialog("workspaces")
+  const draftTab = createMemo(() =>
+    tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId),
+  )
+  const workspace = createNewSessionWorkspaceController({
+    selected: () => draftTab()?.worktree,
+    setSelected: (worktree) => {
+      if (search.draftId) tabs.updateDraft(search.draftId, { worktree })
+    },
+    onViewAll: openWorkspaces,
+  })
   const draft = createNewSessionDraftController({
     worktree: workspace.selection.value,
     resetWorktree: workspace.selection.reset,
     draftId: props.draftId,
+    onSubmit: workspace.selection.remember,
   })
   const project = createPromptProjectController({
     controls: draft.project.controls,

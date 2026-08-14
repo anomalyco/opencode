@@ -291,8 +291,6 @@ export type ProjectTime = { created: number; updated: number; initialized?: numb
 
 export type ProjectCurrent = { id: string; directory: string; canonical: string }
 
-export type ProjectDirectory = { directory: string; strategy?: string }
-
 export type FormMetadata = { [x: string]: JsonValue }
 
 export type FormValue = string | number | boolean | Array<string>
@@ -370,7 +368,9 @@ export type ReferenceGitSource = {
   hidden?: boolean
 }
 
-export type ProjectCopyCopy = { directory: string }
+export type WorktreeDirectory = { directory: string; strategy?: string }
+
+export type WorktreeInfo = { directory: string }
 
 export type VcsBranch = { current?: string; default?: string }
 
@@ -828,20 +828,20 @@ export type PluginUpdated = {
   data: {}
 }
 
-export type ProjectDirectoriesUpdated = {
+export type WorktreeUpdated = {
   id: string
   created: number
   metadata?: { [x: string]: any }
-  type: "project.directories.updated"
+  type: "worktree.updated"
   location?: LocationRef
   data: { projectID: string }
 }
 
-export type ProjectDirectoryResolved = {
+export type WorktreeResolved = {
   id: string
   created: number
   metadata?: { [x: string]: any }
-  type: "project.directory.resolved"
+  type: "worktree.resolved"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
   data: { projectID: string; directory: string; previous: string }
@@ -1369,8 +1369,6 @@ export type Project = {
   sandboxes: Array<string>
 }
 
-export type ProjectDirectories = Array<ProjectDirectory>
-
 export type FormAnswer = { [x: string]: FormValue }
 
 export type PermissionRequest = {
@@ -1379,6 +1377,7 @@ export type PermissionRequest = {
   action: string
   resources: Array<string>
   save?: Array<string>
+  opaque?: boolean
   metadata?: { [x: string]: JsonValue }
   source?: PermissionSource
 }
@@ -1395,6 +1394,7 @@ export type PermissionAsked = {
     action: string
     resources: Array<string>
     save?: Array<string>
+    opaque?: boolean
     metadata?: { [x: string]: any }
     source?: PermissionSource
   }
@@ -1519,6 +1519,8 @@ export type SessionStatus2 = {
 }
 
 export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
+
+export type WorktreeList = Array<WorktreeDirectory>
 
 export type VcsInfo = { branch: VcsBranch }
 
@@ -2102,8 +2104,8 @@ export type V2Event =
   | PermissionReplied
   | PluginAdded
   | PluginUpdated
-  | ProjectDirectoriesUpdated
-  | ProjectDirectoryResolved
+  | WorktreeUpdated
+  | WorktreeResolved
   | CommandUpdated
   | ConfigUpdated
   | SkillUpdated
@@ -2304,12 +2306,12 @@ export type QuestionNotFoundError = {
 export const isQuestionNotFoundError = (value: unknown): value is QuestionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "QuestionNotFoundError"
 
-export type ProjectCopyError = {
-  readonly name: "ProjectCopyError"
+export type WorktreeError = {
+  readonly name: "WorktreeError"
   readonly data: { readonly message: string; readonly forceRequired?: boolean | undefined }
 }
-export const isProjectCopyError = (value: unknown): value is ProjectCopyError =>
-  typeof value === "object" && value !== null && "name" in value && value["name"] === "ProjectCopyError"
+export const isWorktreeError = (value: unknown): value is WorktreeError =>
+  typeof value === "object" && value !== null && "name" in value && value["name"] === "WorktreeError"
 
 export type HealthGetOutput = ServiceHealth
 
@@ -4348,15 +4350,6 @@ export type ProjectCurrentInput = {
 
 export type ProjectCurrentOutput = ProjectCurrent
 
-export type ProjectDirectoriesInput = {
-  readonly projectID: { readonly projectID: string }["projectID"]
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type ProjectDirectoriesOutput = ProjectDirectories
-
 export type FormRequestListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
@@ -5239,6 +5232,7 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
+    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5248,6 +5242,7 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
+    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5257,6 +5252,7 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
+    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5266,15 +5262,27 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
+    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
   }["save"]
+  readonly opaque?: {
+    readonly id?: string | null
+    readonly action: string
+    readonly resources: ReadonlyArray<string>
+    readonly save?: ReadonlyArray<string>
+    readonly opaque?: boolean
+    readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
+    readonly agent?: string | null
+  }["opaque"]
   readonly metadata?: {
     readonly id?: string | null
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
+    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5284,6 +5292,7 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
+    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5293,6 +5302,7 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
+    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5642,37 +5652,51 @@ export type ReferenceListOutput = {
   data: Array<ReferenceInfo>
 }
 
-export type ProjectCopyCreateInput = {
+export type WorktreeListInput = { readonly projectID: { readonly projectID: string }["projectID"] }
+
+export type WorktreeListOutput = WorktreeList
+
+export type WorktreeCreateInput = {
   readonly projectID: { readonly projectID: string }["projectID"]
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-  readonly strategy: { readonly strategy: string; readonly directory: string; readonly name?: string }["strategy"]
-  readonly directory: { readonly strategy: string; readonly directory: string; readonly name?: string }["directory"]
-  readonly name?: { readonly strategy: string; readonly directory: string; readonly name?: string }["name"]
+  readonly strategy: {
+    readonly strategy: string
+    readonly from?: string
+    readonly directory: string
+    readonly name?: string
+  }["strategy"]
+  readonly from?: {
+    readonly strategy: string
+    readonly from?: string
+    readonly directory: string
+    readonly name?: string
+  }["from"]
+  readonly directory: {
+    readonly strategy: string
+    readonly from?: string
+    readonly directory: string
+    readonly name?: string
+  }["directory"]
+  readonly name?: {
+    readonly strategy: string
+    readonly from?: string
+    readonly directory: string
+    readonly name?: string
+  }["name"]
 }
 
-export type ProjectCopyCreateOutput = ProjectCopyCopy
+export type WorktreeCreateOutput = WorktreeInfo
 
-export type ProjectCopyRemoveInput = {
+export type WorktreeRemoveInput = {
   readonly projectID: { readonly projectID: string }["projectID"]
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
   readonly directory: { readonly directory: string; readonly force: boolean }["directory"]
   readonly force: { readonly directory: string; readonly force: boolean }["force"]
 }
 
-export type ProjectCopyRemoveOutput = void
+export type WorktreeRemoveOutput = void
 
-export type ProjectCopyRefreshInput = {
-  readonly projectID: { readonly projectID: string }["projectID"]
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
+export type WorktreeRefreshInput = { readonly projectID: { readonly projectID: string }["projectID"] }
 
-export type ProjectCopyRefreshOutput = void
+export type WorktreeRefreshOutput = void
 
 export type VcsGetInput = {
   readonly location?: {

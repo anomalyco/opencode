@@ -28,7 +28,15 @@ async function wait(fn: () => boolean | Promise<boolean>, timeout = 2_000) {
 
 async function renderSessionTabs(
   initialSessionID: string,
-  options?: { state?: string; title?: string; home?: boolean; persisted?: string[]; sessionGate?: Promise<void> },
+  options?: {
+    state?: string
+    title?: string
+    home?: boolean
+    persisted?: string[]
+    sessionGate?: Promise<void>
+    sessionDirectories?: Record<string, string>
+    newLocation?: "launch" | "inherit"
+  },
 ) {
   const temporary = options?.state ? undefined : await tmpdir()
   const state = options?.state ?? temporary!.path
@@ -45,7 +53,25 @@ async function renderSessionTabs(
   }
   const events = createEventStream()
   const sessions: string[] = []
+  const locations: string[] = []
+  const vcsLocations: string[] = []
   const calls = createFetch(async (url) => {
+    if (url.pathname === "/api/location") {
+      const requested = url.searchParams.get("location[directory]") ?? directory
+      locations.push(requested)
+      return json({
+        directory: requested,
+        project: { id: "project", directory: requested, canonical: directory },
+      })
+    }
+    if (url.pathname === "/api/vcs") {
+      const requested = url.searchParams.get("location[directory]") ?? directory
+      vcsLocations.push(requested)
+      return json({
+        location: { directory: requested },
+        data: { branch: { current: "main", default: "main" } },
+      })
+    }
     const sessionID = url.pathname.match(/^\/api\/session\/([^/]+)$/)?.[1]
     if (!sessionID) return undefined
     sessions.push(sessionID)
@@ -55,7 +81,7 @@ async function renderSessionTabs(
         id: sessionID,
         title: sessionID === initialSessionID ? options?.title : undefined,
         projectID: "project",
-        location: { directory },
+        location: { directory: options?.sessionDirectories?.[sessionID] ?? directory },
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
         time: { created: 0, updated: 0 },
@@ -81,7 +107,12 @@ async function renderSessionTabs(
     <TestTuiContexts paths={{ state }}>
       <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
         <StorageProvider>
-          <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
+          <ConfigProvider
+            config={createTuiResolvedConfig({
+              tabs: { enabled: true },
+              session: { new_location: options?.newLocation ?? "launch" },
+            })}
+          >
             <RouteProvider
               initialRoute={options?.home ? { type: "home" } : { type: "session", sessionID: initialSessionID }}
             >
@@ -107,8 +138,13 @@ async function renderSessionTabs(
     route,
     data,
     sessions,
+    locations,
+    vcsLocations,
     state,
     emit: (event: OpenCodeEvent) => events.emit({ ...event, location: { directory } }),
+    focus: () => app.renderer.emit("focus"),
+    blur: () => app.renderer.emit("blur"),
+    flush: () => storage.flush(),
     async destroy() {
       app.renderer.destroy()
       await storage.flush()
@@ -116,6 +152,14 @@ async function renderSessionTabs(
     },
   }
 }
+
+const executionSucceeded = (sessionID: string): OpenCodeEvent => ({
+  id: `evt_done_${sessionID}`,
+  created: Date.now(),
+  type: "session.execution.succeeded",
+  durable: { aggregateID: sessionID, seq: 1, version: 1 },
+  data: { sessionID },
+})
 
 test("loads persisted tab metadata concurrently on connect", async () => {
   let release!: () => void
@@ -137,6 +181,22 @@ test("loads persisted tab metadata concurrently on connect", async () => {
   }
 })
 
+test("loads VCS metadata for each persisted tab location", async () => {
+  const other = `${directory}/other-worktree`
+  const setup = await renderSessionTabs("first", {
+    home: true,
+    persisted: ["first", "second"],
+    sessionDirectories: { second: other },
+  })
+
+  try {
+    await wait(() => setup.locations.includes(other))
+    await wait(() => setup.vcsLocations.includes(other))
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("stores session tabs for the current working directory by default", async () => {
   const setup = await renderSessionTabs("first")
 
@@ -150,6 +210,46 @@ test("stores session tabs for the current working directory by default", async (
     expect(stored.cwd[directory].unread).toEqual({})
   } finally {
     await setup.destroy()
+  }
+})
+
+test("only the foreground TUI mutates unread state", async () => {
+  await using temporary = await tmpdir()
+  let foreground: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
+  let background: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
+
+  try {
+    foreground = await renderSessionTabs("first", { state: temporary.path })
+    background = await renderSessionTabs("second", { state: temporary.path })
+    foreground.focus()
+    background.blur()
+    await wait(() => foreground?.tabs.tabs().length === 2 && background?.tabs.tabs().length === 2)
+
+    const firstDone = executionSucceeded("first")
+    foreground.emit(firstDone)
+    background.emit(firstDone)
+    await Promise.all([foreground.flush(), background.flush()])
+    expect(foreground.tabs.status("first").unread).toBeUndefined()
+    expect(background.tabs.status("first").unread).toBeUndefined()
+
+    const secondDone = executionSucceeded("second")
+    foreground.emit(secondDone)
+    background.emit(secondDone)
+    await wait(
+      () =>
+        foreground?.tabs.status("second").unread === "activity" &&
+        background?.tabs.status("second").unread === "activity",
+    )
+
+    foreground.tabs.select("second")
+    await wait(
+      () =>
+        foreground?.tabs.status("second").unread === undefined &&
+        background?.tabs.status("second").unread === undefined,
+    )
+  } finally {
+    if (foreground) await foreground.destroy()
+    if (background) await background.destroy()
   }
 })
 
@@ -276,8 +376,8 @@ test("tracks a temporary new session tab across close and creation", async () =>
   }
 })
 
-test("add opens the new session tab carrying the current session's location", async () => {
-  const setup = await renderSessionTabs("first")
+test("add opens the new session tab in the launch directory by default", async () => {
+  const setup = await renderSessionTabs("first", { sessionDirectories: { first: `${directory}/worktree` } })
 
   try {
     await wait(() => setup.tabs.current() === "first" && setup.data.session.get("first") !== undefined)
@@ -285,6 +385,22 @@ test("add opens the new session tab carrying the current session's location", as
     expect(setup.route.data).toEqual({ type: "home", location: { directory } })
     await wait(() => setup.tabs.newTab())
     expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first"])
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("add inherits the current session location when configured", async () => {
+  const worktree = `${directory}/worktree`
+  const setup = await renderSessionTabs("first", {
+    newLocation: "inherit",
+    sessionDirectories: { first: worktree },
+  })
+
+  try {
+    await wait(() => setup.tabs.current() === "first" && setup.data.session.get("first") !== undefined)
+    setup.tabs.add()
+    expect(setup.route.data).toEqual({ type: "home", location: { directory: worktree } })
   } finally {
     await setup.destroy()
   }

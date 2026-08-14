@@ -115,7 +115,7 @@ export const Plugin = {
             sessionID,
             text: `<shell id="${id}" state="${state}" command="${command}">\n${text}\n</shell>`,
             description: command,
-            metadata: { source: "shell", state },
+            metadata: { source: "shell", jobID: id, state },
           })
         }),
         Effect.forkIn(scope, { startImmediately: true }),
@@ -183,11 +183,21 @@ export const Plugin = {
                           agent: context.agent,
                           source,
                         })
+                      if ("directoryUnknown" in parsed && parsed.directoryUnknown)
+                        yield* permission.assert({
+                          action: "external_directory",
+                          resources: ["*"],
+                          opaque: true,
+                          sessionID: context.sessionID,
+                          agent: context.agent,
+                          source,
+                        })
                       if (parsed.commands.length > 0)
                         yield* permission.assert({
                           action: name,
                           resources: parsed.commands.map((command) => command.resource),
-                          save: parsed.commands.map((command) => command.save),
+                          save: parsed.commands.flatMap((command) => ("save" in command ? [command.save] : [])),
+                          opaque: parsed.opaque,
                           sessionID: context.sessionID,
                           agent: context.agent,
                           source,
@@ -300,6 +310,7 @@ export const Plugin = {
                   output,
                   content,
                   metadata: {
+                    status: output.status,
                     truncated: output.truncated,
                     ...("exit" in output && output.exit !== undefined ? { exit: output.exit } : {}),
                     ...("shellID" in output && output.shellID !== undefined ? { shellID: output.shellID } : {}),

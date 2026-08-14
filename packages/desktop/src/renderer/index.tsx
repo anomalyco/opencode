@@ -1,5 +1,6 @@
 // @refresh reload
 
+import "./diagnostics"
 import {
   ACCEPTED_FILE_EXTENSIONS,
   AppBaseProviders,

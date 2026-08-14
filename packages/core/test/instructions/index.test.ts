@@ -125,9 +125,6 @@ describe("Instructions", () => {
       expect(
         Instructions.renderUpdate(instructions, { "api/value": "previous" }, { "api/value": Option.some(null) }),
       ).toBe("null")
-      expect(Instructions.applyDelta({ "api/value": "previous" }, { "api/value": Option.some(null) })).toEqual({
-        "api/value": null,
-      })
     }),
   )
 

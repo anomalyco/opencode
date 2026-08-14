@@ -50,6 +50,7 @@ export function ShellTab(props: { sessionID: string }) {
   Keymap.createLayer(() => ({
     mode: "composer",
     enabled: () => composer.active("shell"),
+    priority: 1,
     commands: [
       {
         id: "composer.shell.up",

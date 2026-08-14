@@ -6949,97 +6949,6 @@
         "summary": "Get current project"
       }
     },
-    "/api/project/{projectID}/directories": {
-      "get": {
-        "tags": ["project"],
-        "operationId": "v2.project.directories",
-        "parameters": [
-          {
-            "name": "projectID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Project.Directories",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Project.Directories"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedError"
-                }
-              }
-            }
-          }
-        },
-        "description": "List known local absolute directories for a project.",
-        "summary": "List project directories"
-      }
-    },
     "/api/form/request": {
       "get": {
         "tags": ["form"],
@@ -8023,6 +7932,9 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "opaque": {
+                    "type": "boolean"
                   },
                   "metadata": {
                     "type": "object"
@@ -10978,10 +10890,10 @@
         "summary": "List references"
       }
     },
-    "/api/experimental/project/{projectID}/copy": {
-      "post": {
-        "tags": ["projectCopy"],
-        "operationId": "v2.projectCopy.create",
+    "/api/experimental/project/{projectID}/worktree": {
+      "get": {
+        "tags": ["worktree"],
+        "operationId": "v2.worktree.list",
         "parameters": [
           {
             "name": "projectID",
@@ -10990,68 +10902,77 @@
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
           }
         ],
         "security": [],
         "responses": {
           "200": {
-            "description": "ProjectCopy.Copy",
+            "description": "Worktree.List",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectCopy.Copy"
+                  "$ref": "#/components/schemas/Worktree.List"
                 }
               }
             }
           },
           "400": {
-            "description": "ProjectCopyError | InvalidRequestError",
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List known local worktrees for a project.",
+        "summary": "List worktrees"
+      },
+      "post": {
+        "tags": ["worktree"],
+        "operationId": "v2.worktree.create",
+        "parameters": [
+          {
+            "name": "projectID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Worktree.Info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Worktree.Info"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "WorktreeError | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ProjectCopyError"
+                      "$ref": "#/components/schemas/WorktreeError"
                     },
                     {
                       "$ref": "#/components/schemas/InvalidRequestError"
@@ -11072,6 +10993,8 @@
             }
           }
         },
+        "description": "Create a worktree for a project.",
+        "summary": "Create worktree",
         "requestBody": {
           "content": {
             "application/json": {
@@ -11079,6 +11002,9 @@
                 "type": "object",
                 "properties": {
                   "strategy": {
+                    "type": "string"
+                  },
+                  "from": {
                     "type": "string"
                   },
                   "directory": {
@@ -11097,8 +11023,8 @@
         }
       },
       "delete": {
-        "tags": ["projectCopy"],
-        "operationId": "v2.projectCopy.remove",
+        "tags": ["worktree"],
+        "operationId": "v2.worktree.remove",
         "parameters": [
           {
             "name": "projectID",
@@ -11107,46 +11033,6 @@
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
           }
         ],
         "security": [],
@@ -11155,13 +11041,13 @@
             "description": "<No Content>"
           },
           "400": {
-            "description": "ProjectCopyError | InvalidRequestError",
+            "description": "WorktreeError | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ProjectCopyError"
+                      "$ref": "#/components/schemas/WorktreeError"
                     },
                     {
                       "$ref": "#/components/schemas/InvalidRequestError"
@@ -11182,6 +11068,8 @@
             }
           }
         },
+        "description": "Remove a managed worktree from a project.",
+        "summary": "Remove worktree",
         "requestBody": {
           "content": {
             "application/json": {
@@ -11204,10 +11092,10 @@
         }
       }
     },
-    "/api/experimental/project/{projectID}/copy/refresh": {
+    "/api/experimental/project/{projectID}/worktree/refresh": {
       "post": {
-        "tags": ["projectCopy"],
-        "operationId": "v2.projectCopy.refresh",
+        "tags": ["worktree"],
+        "operationId": "v2.worktree.refresh",
         "parameters": [
           {
             "name": "projectID",
@@ -11216,46 +11104,6 @@
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
           }
         ],
         "security": [],
@@ -11264,13 +11112,13 @@
             "description": "<No Content>"
           },
           "400": {
-            "description": "ProjectCopyError | InvalidRequestError",
+            "description": "WorktreeError | InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
                     {
-                      "$ref": "#/components/schemas/ProjectCopyError"
+                      "$ref": "#/components/schemas/WorktreeError"
                     },
                     {
                       "$ref": "#/components/schemas/InvalidRequestError"
@@ -11290,7 +11138,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Reconcile stored worktrees with the project repositories.",
+        "summary": "Refresh worktrees"
       }
     },
     "/api/vcs": {
@@ -20165,25 +20015,6 @@
         "required": ["id", "directory", "canonical"],
         "additionalProperties": false
       },
-      "Project.Directory": {
-        "type": "object",
-        "properties": {
-          "directory": {
-            "type": "string"
-          },
-          "strategy": {
-            "type": "string"
-          }
-        },
-        "required": ["directory"],
-        "additionalProperties": false
-      },
-      "Project.Directories": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/Project.Directory"
-        }
-      },
       "Form.Metadata": {
         "type": "object"
       },
@@ -20400,6 +20231,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "opaque": {
+            "type": "boolean"
           },
           "metadata": {
             "type": "object"
@@ -21179,6 +21013,9 @@
                   "type": "string"
                 }
               },
+              "opaque": {
+                "type": "boolean"
+              },
               "metadata": {
                 "type": "object"
               },
@@ -21323,7 +21160,7 @@
         "required": ["id", "created", "type", "data"],
         "additionalProperties": false
       },
-      "project.directories.updated": {
+      "worktree.updated": {
         "type": "object",
         "properties": {
           "id": {
@@ -21342,7 +21179,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["project.directories.updated"]
+            "enum": ["worktree.updated"]
           },
           "location": {
             "$ref": "#/components/schemas/Location.Ref"
@@ -21361,7 +21198,7 @@
         "required": ["id", "created", "type", "data"],
         "additionalProperties": false
       },
-      "project.directory.resolved": {
+      "worktree.resolved": {
         "type": "object",
         "properties": {
           "id": {
@@ -21380,7 +21217,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["project.directory.resolved"]
+            "enum": ["worktree.resolved"]
           },
           "durable": {
             "type": "object",
@@ -23558,10 +23395,10 @@
             "$ref": "#/components/schemas/plugin.updated"
           },
           {
-            "$ref": "#/components/schemas/project.directories.updated"
+            "$ref": "#/components/schemas/worktree.updated"
           },
           {
-            "$ref": "#/components/schemas/project.directory.resolved"
+            "$ref": "#/components/schemas/worktree.resolved"
           },
           {
             "$ref": "#/components/schemas/command.updated"
@@ -23922,7 +23759,26 @@
         "required": ["name", "path", "source"],
         "additionalProperties": false
       },
-      "ProjectCopy.Copy": {
+      "Worktree.Directory": {
+        "type": "object",
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          }
+        },
+        "required": ["directory"],
+        "additionalProperties": false
+      },
+      "Worktree.List": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Worktree.Directory"
+        }
+      },
+      "Worktree.Info": {
         "type": "object",
         "properties": {
           "directory": {
@@ -23932,12 +23788,12 @@
         "required": ["directory"],
         "additionalProperties": false
       },
-      "ProjectCopyError": {
+      "WorktreeError": {
         "type": "object",
         "properties": {
           "name": {
             "type": "string",
-            "enum": ["ProjectCopyError"]
+            "enum": ["WorktreeError"]
           },
           "data": {
             "type": "object",
@@ -25067,7 +24923,7 @@
     },
     {
       "name": "project",
-      "description": "Location-scoped project routes."
+      "description": "Project routes."
     },
     {
       "name": "form",
@@ -25110,8 +24966,8 @@
       "description": "Location-scoped project references."
     },
     {
-      "name": "projectCopy",
-      "description": "Project copy management routes."
+      "name": "worktree",
+      "description": "Project worktree management routes."
     },
     {
       "name": "vcs",

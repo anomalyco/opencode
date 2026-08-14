@@ -211,6 +211,58 @@ describe("v2 session reducer", () => {
     expect(result).toMatchObject({ sessionID: "ses_1", missing: "msg_user", touched: [] })
   })
 
+  test("projects rendered instruction updates", () => {
+    const reducer = createV2SessionReducer()
+    const result = reducer.reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_instructions",
+        type: "session.instructions.updated",
+        data: { sessionID: "ses_1", delta: { agents: "hash" }, text: "Changed instructions" },
+      }),
+    )
+
+    expect(result?.messages).toEqual([
+      {
+        id: "msg_instructions",
+        type: "system",
+        text: "Changed instructions",
+        description: "Instructions updated: agents",
+        metadata: undefined,
+        time: { created: 1 },
+      },
+    ])
+  })
+
+  test("projects session movement with the previous location", () => {
+    const result = createV2SessionReducer().reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_moved",
+        type: "session.moved",
+        data: {
+          sessionID: "ses_1",
+          projectID: "project_2",
+          location: { directory: "/repo-2" },
+          subpath: "packages/app",
+        },
+      }),
+      { projectID: "project_1", location: { directory: "/repo-1" } },
+    )
+
+    expect(result?.messages).toMatchObject([
+      {
+        id: "msg_moved",
+        type: "location-switched",
+        projectID: "project_2",
+        location: { directory: "/repo-2" },
+        previous: { projectID: "project_1", location: { directory: "/repo-1" } },
+      },
+    ])
+  })
+
   test("removes cancelled input from the pending promotion fold", () => {
     const reducer = createV2SessionReducer()
     reducer.reduce(

@@ -24,7 +24,6 @@
     "@cloudflare/workers-types": "^4.20250808.0",
     "vitest": "3.2.7",
     "wrangler": "4.28.0",
-    "xdg-basedir": "5.1.0",
     "unenv": "2.0.0-rc.24",
     "@effect/platform-node": "catalog:"
   }

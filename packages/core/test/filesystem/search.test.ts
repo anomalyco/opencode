@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import os from "os"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Layer } from "effect"
+import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Protected } from "@opencode-ai/core/filesystem/protected"
@@ -54,6 +55,72 @@ describe("FileSystemSearch", () => {
           RelativePath.make(`src${path.sep}`),
         )
       }).pipe(Effect.provide(layer), Effect.scoped),
+    )
+  })
+
+  test("refreshes a stale ripgrep index atomically without blocking search", async () => {
+    let scans = 0
+    const initial = Effect.runSync(Deferred.make<void>())
+    const started = Effect.runSync(Deferred.make<void>())
+    const release = Effect.runSync(Deferred.make<void>())
+    const layer = AppNodeBuilder.build(FileSystemSearch.node, [
+      [
+        Location.node,
+        Layer.succeed(
+          Location.Service,
+          Location.Service.of(
+            location({ directory: AbsolutePath.make(path.join(os.tmpdir(), "opencode-search-atomic")) }),
+          ),
+        ),
+      ],
+      [
+        Ripgrep.node,
+        Layer.succeed(
+          Ripgrep.Service,
+          Ripgrep.Service.of({
+            find: (input) =>
+              Effect.gen(function* () {
+                scans++
+                if (scans > 1) {
+                  yield* Deferred.succeed(started, undefined)
+                  yield* Deferred.await(release)
+                }
+                const entry = FileSystem.Entry.make({
+                  path: RelativePath.make(scans === 1 ? "src/old.ts" : "src/new.ts"),
+                  type: "file",
+                })
+                if (input.onEntry) yield* input.onEntry(entry)
+                if (scans === 1) yield* Deferred.succeed(initial, undefined)
+                return [entry]
+              }),
+            glob: () => Effect.succeed([]),
+            grep: () => Effect.succeed([]),
+          }),
+        ),
+      ],
+    ])
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        yield* Deferred.await(initial)
+        expect((yield* search.find({ query: "old", type: "file" }))[0]?.path).toBe(RelativePath.make("src/old.ts"))
+        expect(scans).toBe(1)
+
+        yield* TestClock.adjust("10 seconds")
+        yield* search.find({ query: "old", type: "file" })
+        yield* Deferred.await(started)
+
+        expect((yield* search.find({ query: "old", type: "file" }))[0]?.path).toBe(RelativePath.make("src/old.ts"))
+        expect(scans).toBe(2)
+        yield* Deferred.succeed(release, undefined)
+        const refreshed = yield* Effect.gen(function* () {
+          yield* Effect.yieldNow
+          return yield* search.find({ query: "new", type: "file" })
+        }).pipe(Effect.repeat({ until: (entries) => entries.length > 0 }))
+        expect(refreshed[0]?.path).toBe(RelativePath.make("src/new.ts"))
+        expect(scans).toBe(2)
+      }).pipe(Effect.provide(layer), Effect.provide(TestClock.layer()), Effect.scoped),
     )
   })
 })

@@ -65,21 +65,21 @@ export function createHomeSessionsController(home: HomeController) {
     const cache = homeSessions()
     return {
       queryKey: cache?.indexKey ?? (["home", "session-index", "unselected"] as const),
-      enabled: !!home.server.focusedContext(),
-      queryFn: cache
-        ? async ({ signal }) => {
-            const ctx = home.server.focusedContext()
-            if (!ctx) return { sessions: [], eventSequence: 0 }
-            const eventSequence = cache.eventSequence()
-            const index = await loadHomeSessionIndex(
-              (input, options) => ctx.sdk.api.session.list(input, options),
-              eventSequence,
-              signal,
-            )
-            cache.complete(eventSequence)
-            return index
-          }
-        : skipToken,
+      enabled: !!cache && home.server.focusedContext()?.sdk.connection.status() === "connected",
+      queryFn:
+        cache && home.server.focusedContext()
+          ? async ({ signal }) => {
+              const ctx = home.server.focusedContext()!
+              const eventSequence = cache.eventSequence()
+              const index = await loadHomeSessionIndex(
+                (input, options) => ctx.sdk.api.session.list(input, options),
+                eventSequence,
+                signal,
+              )
+              cache.complete(eventSequence)
+              return index
+            }
+          : skipToken,
       retry: false,
       staleTime: 30_000,
       refetchOnMount: true,

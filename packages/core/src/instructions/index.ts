@@ -195,18 +195,6 @@ export function hash(value: Schema.Json) {
   return Hash.make(createHash("sha256").update(canonical(value)).digest("hex"))
 }
 
-export function applyDelta(
-  values: Readonly<Record<string, Schema.Json>>,
-  delta: Readonly<Record<string, Option.Option<Schema.Json>>>,
-): Readonly<Record<string, Schema.Json>> {
-  const result: Record<string, Schema.Json> = { ...values }
-  for (const [key, value] of Object.entries(delta)) {
-    if (Option.isNone(value)) delete result[key]
-    else result[key] = value.value
-  }
-  return result
-}
-
 export function applyHashDelta(values: Values, delta: Delta): Values {
   const result: Record<string, Hash> = { ...values }
   for (const [key, value] of Object.entries(delta)) {

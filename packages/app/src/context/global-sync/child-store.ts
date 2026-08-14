@@ -1,4 +1,4 @@
-import { createRoot, createSignal, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
+import { createRoot, createSignal, getOwner, onCleanup, runWithOwner, type Accessor, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import type { VcsInfo } from "@/types"
@@ -22,6 +22,7 @@ import type { ServerScope } from "@/utils/server-scope"
 
 export function createChildStoreManager(input: {
   owner: Owner
+  connected: Accessor<boolean>
   scope: ServerScope
   persist: typeof persisted
   isBooting: (directory: string) => boolean
@@ -188,17 +189,29 @@ export function createChildStoreManager(input: {
           const [mcpEnabled, setMcpEnabled] = createSignal(false)
           const [instanceQueriesEnabled, setInstanceQueriesEnabled] = createSignal(false)
 
-          const pathQuery = useQuery(() => ({ ...input.queryOptions.path(key), enabled: instanceQueriesEnabled() }))
-          const mcpQuery = useQuery(() => ({ ...input.queryOptions.mcp(key), enabled: mcpEnabled() }))
-          const mcpResourceQuery = useQuery(() => ({ ...input.queryOptions.mcpResources(key), enabled: mcpEnabled() }))
-          const lspQuery = useQuery(() => ({ ...input.queryOptions.lsp(key), enabled: instanceQueriesEnabled() }))
+          const pathQuery = useQuery(() => ({
+            ...input.queryOptions.path(key),
+            enabled: input.connected() && instanceQueriesEnabled(),
+          }))
+          const mcpQuery = useQuery(() => ({
+            ...input.queryOptions.mcp(key),
+            enabled: input.connected() && mcpEnabled(),
+          }))
+          const mcpResourceQuery = useQuery(() => ({
+            ...input.queryOptions.mcpResources(key),
+            enabled: input.connected() && mcpEnabled(),
+          }))
+          const lspQuery = useQuery(() => ({
+            ...input.queryOptions.lsp(key),
+            enabled: input.connected() && instanceQueriesEnabled(),
+          }))
           const providerQuery = useQuery(() => ({
             ...input.queryOptions.providers(key),
-            enabled: instanceQueriesEnabled(),
+            enabled: input.connected() && instanceQueriesEnabled(),
           }))
           const referenceQuery = useQuery(() => ({
             ...input.queryOptions.references(key),
-            enabled: instanceQueriesEnabled(),
+            enabled: input.connected() && instanceQueriesEnabled(),
           }))
 
           const child = createStore<State>({
@@ -206,13 +219,14 @@ export function createChildStoreManager(input: {
             projectMeta: initialMeta,
             icon: initialIcon,
             get provider_ready() {
-              return instanceQueriesEnabled() && !providerQuery.isLoading
+              return instanceQueriesEnabled() && (providerQuery.isSuccess || providerQuery.isRefetchError)
             },
             get provider() {
               const EMPTY = { all: new Map(), connected: [], default: {} }
-              if (providerQuery.isLoading) return EMPTY
-              if (providerQuery.data?.all.size === 0 && input.global.provider.all.size > 0) return input.global.provider
-              return providerQuery.data ?? EMPTY
+              if (!providerQuery.isSuccess && !providerQuery.isRefetchError) return EMPTY
+              const provider = providerQuery.data
+              if (provider.all.size === 0 && input.global.provider.all.size > 0) return input.global.provider
+              return provider
             },
             config: {},
             get path() {
@@ -373,6 +387,15 @@ export function createChildStoreManager(input: {
     setStore("icon", value)
   }
 
+  function vcs(directory: string, value: VcsInfo) {
+    const key = directoryKey(directory)
+    const child = ensureChild(directory)
+    const cached = vcsCache.get(key)
+    if (!cached) return
+    cached.setStore("value", value)
+    child[1]("vcs", value)
+  }
+
   return {
     children,
     ensureChild,
@@ -380,6 +403,7 @@ export function createChildStoreManager(input: {
     peek,
     projectMeta,
     projectIcon,
+    vcs,
     mark,
     pin,
     unpin,

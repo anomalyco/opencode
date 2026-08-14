@@ -111,6 +111,50 @@ describe("InstructionDiscovery", () => {
       ).toBe(false)
     }).pipe(Effect.provide(AppNodeBuilder.build(LayerNode.group([InstructionDiscovery.node, Bus.node])))),
   )
+
+  it.effect("renders granular instruction updates", () =>
+    Effect.gen(function* () {
+      const discovery = yield* InstructionDiscovery.Service
+      yield* discovery.transform((draft) => {
+        draft.add(file("/global/AGENTS.md", "global"))
+        draft.add(
+          file("/repo/AGENTS.md", ["old", ...Array.from({ length: 20 }, (_, index) => `keep ${index}`)].join("\n")),
+        )
+      })
+      const initial = yield* readInitial(yield* discovery.load())
+
+      yield* discovery.transform((draft) => {
+        draft.update("/repo/AGENTS.md", (current) => {
+          current.content = ["new", ...Array.from({ length: 20 }, (_, index) => `keep ${index}`)].join("\n")
+        })
+      })
+      const modified = (yield* readUpdate(yield* discovery.load(), initial)).text
+      expect(modified).toContain("The instructions from /repo/AGENTS.md changed. Here's the diff:")
+      expect(modified).toContain("-old\n+new")
+      expect(modified).not.toContain("global")
+
+      const rewritten = state({
+        "core/instructions": [{ path: "/repo/AGENTS.md", content: "old one\nold two\nold three\nold four" }],
+      })
+      yield* discovery.transform((draft) => {
+        draft.remove("/global/AGENTS.md")
+        draft.update("/repo/AGENTS.md", (current) => {
+          current.content = "new"
+        })
+      })
+      expect((yield* readUpdate(yield* discovery.load(), rewritten)).text).toBe(
+        "The instructions changed:\nInstructions from: /repo/AGENTS.md\nnew",
+      )
+
+      yield* discovery.transform((draft) => {
+        draft.add(file("/repo/packages/AGENTS.md", "package"))
+      })
+      const structural = (yield* readUpdate(yield* discovery.load(), initial)).text
+      expect(structural).toContain("The instructions from /global/AGENTS.md no longer apply.")
+      expect(structural).toContain("New instructions apply from:\nInstructions from: /repo/packages/AGENTS.md\npackage")
+      expect(structural).not.toContain("Instructions from: /global/AGENTS.md\nglobal")
+    }).pipe(Effect.provide(AppNodeBuilder.build(LayerNode.group([InstructionDiscovery.node, Bus.node])))),
+  )
 })
 
 describe("ConfigInstructionPlugin.Plugin", () => {
@@ -168,20 +212,15 @@ describe("ConfigInstructionPlugin.Plugin", () => {
 
           yield* Effect.promise(() => fs.writeFile(packageFile, "changed"))
           yield* emitAndWait({ type: "update", path: packageFile })
-          expect((yield* readUpdate(yield* discovery.load(), initialized)).text).toContain(
-            `Instructions from: ${packageFile}\nchanged`,
-          )
+          const changed = (yield* readUpdate(yield* discovery.load(), initialized)).text
+          expect(changed).toContain(`The instructions changed:\nInstructions from: ${packageFile}\nchanged`)
+          expect(changed).not.toContain(`Instructions from: ${globalFile}\nglobal`)
 
           yield* Effect.promise(() => fs.rm(packageFile))
           yield* emitAndWait({ type: "delete", path: packageFile })
-          expect((yield* readUpdate(yield* discovery.load(), initialized)).text).toBe(
-            [
-              "These instructions replace all previously loaded ambient instructions.",
-              `Instructions from: ${globalFile}\nglobal`,
-              `Instructions from: ${projectFile}\nproject`,
-              `Instructions from: ${sharedFile}\nshared`,
-            ].join("\n\n"),
-          )
+          const removed = (yield* readUpdate(yield* discovery.load(), initialized)).text
+          expect(removed).toContain(`The instructions from ${packageFile} no longer apply.`)
+          expect(removed).not.toContain(`Instructions from: ${globalFile}\nglobal`)
 
           yield* Effect.promise(() => fs.rm(globalFile))
           yield* emitAndWait({ type: "delete", path: globalFile })

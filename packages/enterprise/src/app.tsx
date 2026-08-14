@@ -5,7 +5,14 @@ import { MetaProvider } from "@solidjs/meta"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { I18nProvider } from "@opencode-ai/ui/context"
-import { pluralCategory, pluralKey, type UiI18nParams, type UiI18nPluralKey } from "@opencode-ai/ui/context/i18n"
+import {
+  pluralCategory,
+  pluralKey,
+  type UiI18nParams,
+  type UiI18nPluralKey,
+  type UiPluralCategory,
+  type UiTranslate,
+} from "@opencode-ai/ui/context/i18n"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
 import { createEffect, createMemo, Suspense, type ParentProps } from "solid-js"
@@ -58,20 +65,30 @@ function detectLocale() {
 function UiI18nBridge(props: ParentProps) {
   const locale = createMemo(() => detectLocale())
   const zh = uiZh as Partial<Record<string, string>>
-  const t = (key: keyof typeof uiEn, params?: UiI18nParams) => {
+  const translate = (key: keyof typeof uiEn, params?: UiI18nParams) => {
     const value = locale() === "zh" ? (zh[key] ?? uiEn[key]) : uiEn[key]
     const text = value ?? String(key)
     return resolveTemplate(text, params)
   }
+  const t = translate as UiTranslate
+  const pluralForm = (key: UiI18nPluralKey, category: UiPluralCategory, params?: UiI18nParams) => {
+    const candidate = pluralKey(key, category)
+    const fallback = pluralKey(key, "other")
+    const value =
+      locale() === "zh"
+        ? (zh[candidate] ?? zh[fallback] ?? uiEn[candidate] ?? uiEn[fallback])
+        : (uiEn[candidate] ?? uiEn[fallback])
+    return resolveTemplate(value ?? fallback, params)
+  }
   const plural = (key: UiI18nPluralKey, count: number, params?: UiI18nParams) =>
-    t(pluralKey(key, pluralCategory(locale(), count)), { ...params, count })
+    pluralForm(key, pluralCategory(locale(), count), { ...params, count })
 
   createEffect(() => {
     if (typeof document !== "object") return
     document.documentElement.lang = locale()
   })
 
-  return <I18nProvider value={{ locale, t, plural }}>{props.children}</I18nProvider>
+  return <I18nProvider value={{ locale, t, plural, pluralForm }}>{props.children}</I18nProvider>
 }
 
 export default function App() {

@@ -1,7 +1,7 @@
 export * as Permission from "./permission.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Context, Deferred, Effect, Layer, Schema } from "effect"
+import { Context, Deferred, Effect, Layer, Schema, Struct } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
@@ -23,15 +23,6 @@ export type ID = typeof ID.Type
 export const Source = Permission.Source
 export type Source = typeof Source.Type
 
-const RequestFields = {
-  sessionID: Permission.Request.fields.sessionID,
-  action: Permission.Request.fields.action,
-  resources: Permission.Request.fields.resources,
-  save: Permission.Request.fields.save,
-  metadata: Permission.Request.fields.metadata,
-  source: Permission.Request.fields.source,
-}
-
 export const Request = Permission.Request
 export type Request = typeof Request.Type
 
@@ -40,7 +31,7 @@ export type Reply = typeof Reply.Type
 
 export const AssertInput = Schema.Struct({
   id: ID.pipe(Schema.optional),
-  ...RequestFields,
+  ...Struct.omit(Permission.Request.fields, ["id"]),
   agent: Agent.ID.pipe(Schema.optional),
 }).annotate({ identifier: "Permission.AssertInput" })
 export type AssertInput = typeof AssertInput.Type
@@ -87,6 +78,16 @@ export function evaluate(action: string, resource: string, ...rulesets: Permissi
     rulesets
       .flat()
       .findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource)) ?? {
+      action,
+      resource: "*",
+      effect: "ask",
+    }
+  )
+}
+
+function evaluateOpaque(action: string, rules: Permission.Ruleset): Permission.Rule {
+  return (
+    rules.findLast((rule) => Wildcard.match(action, rule.action) && rule.resource === "*") ?? {
       action,
       resource: "*",
       effect: "ask",
@@ -178,6 +179,13 @@ const layer = Layer.effect(
     })
 
     function denied(input: AssertInput, rules: Permission.Ruleset) {
+      if (input.opaque)
+        return rules.some(
+          (rule) =>
+            rule.effect === "deny" &&
+            Wildcard.match(input.action, rule.action) &&
+            input.resources.some((resource) => resource === "*" || Wildcard.match(resource, rule.resource)),
+        )
       return input.resources.some((resource) => evaluate(input.action, resource, rules).effect === "deny")
     }
 
@@ -187,9 +195,27 @@ const layer = Layer.effect(
 
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID, input.agent)
+      if (input.resources.length === 0) return { effect: "deny" as const, rules }
       if (denied(input, rules)) return { effect: "deny" as const, rules }
-      const all = [...rules, ...(yield* savedRules())]
-      const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
+      if (
+        input.opaque &&
+        rules.some(
+          (rule) => rule.effect !== "allow" && rule.resource !== "*" && Wildcard.match(input.action, rule.action),
+        )
+      )
+        return { effect: "ask" as const, rules }
+      const saved = yield* savedRules()
+      if (
+        input.opaque &&
+        input.resources.every((resource) =>
+          saved.some((rule) => Wildcard.match(input.action, rule.action) && rule.resource === resource),
+        )
+      )
+        return { effect: "allow" as const, rules: [...rules, ...saved] }
+      const all = [...rules, ...saved]
+      const effects = input.opaque
+        ? [evaluateOpaque(input.action, all).effect]
+        : input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Permission.Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
       return { effect, rules: all }
     })
@@ -200,7 +226,8 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         action: input.action,
         resources: input.resources,
-        save: input.save,
+        save: input.opaque ? input.resources : input.save,
+        opaque: input.opaque,
         metadata: input.metadata,
         source: input.source,
       }
@@ -299,21 +326,11 @@ const layer = Layer.effect(
           pending.delete(input.requestID)
           if (input.reply !== "always" || !existing.request.save?.length) return
 
-          const rememberedRules = yield* savedRules()
           for (const [id, item] of pending) {
-            const input = { ...item.request }
-            const rules = yield* configured(item.request.sessionID, item.agent).pipe(
+            const result = yield* evaluateInput({ ...item.request, agent: item.agent }).pipe(
               Effect.catchTag("Session.NotFoundError", () => Effect.succeed(undefined)),
             )
-            if (!rules) continue
-            if (denied(input, rules)) continue
-            const effective = [...rules, ...rememberedRules]
-            if (
-              !item.request.resources.every(
-                (resource) => evaluate(item.request.action, resource, effective).effect === "allow",
-              )
-            )
-              continue
+            if (!result || result.effect !== "allow") continue
             yield* bus.publish(Permission.Event.Replied, {
               sessionID: item.request.sessionID,
               requestID: item.request.id,

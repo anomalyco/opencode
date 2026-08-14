@@ -3,7 +3,7 @@ import { copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { getNodeAssets } from "@opentui/core/node-assets"
-import { attentionSoundAssets, type NodeTarget, photonWasmAsset, shellParserWasmAssets } from "../src/node/target"
+import { attentionSoundAssets, type NodeTarget, photonWasmAsset } from "../src/node/target"
 
 const dir = path.resolve(import.meta.dirname, "..")
 
@@ -43,10 +43,6 @@ export async function collectNodeAssets(target: NodeTarget) {
       key: photonWasmAsset,
       source: fileURLToPath(import.meta.resolve(photonWasmAsset)),
     },
-    ...Object.values(shellParserWasmAssets).map((key) => ({
-      key,
-      source: fileURLToPath(import.meta.resolve(key)),
-    })),
     ...attentionSoundAssets.map((key) => ({
       key,
       source: path.resolve(dir, "../ui/src/assets/audio", path.basename(key)),

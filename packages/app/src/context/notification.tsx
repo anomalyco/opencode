@@ -1,6 +1,5 @@
 import { createStore, reconcile } from "solid-js/store"
 import { type Accessor, batch, createEffect, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
-import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { ServerSDK } from "./server-sdk"
 import type { ServerSync } from "./server-sync"
@@ -15,9 +14,8 @@ import { playSoundById } from "@/utils/sound"
 import { useGlobal } from "./global"
 import { ServerConnection, useServers } from "./servers"
 import { type DraftTab, useTabs } from "./tabs"
-import { requireServerKey } from "@/utils/session-route"
+import { requireServerKey, sessionHref } from "@/utils/session-route"
 import type { ServerScope } from "@/utils/server-scope"
-import { useCurrentRoute } from "./layout"
 import { useServer } from "./server"
 
 type NotificationBase = {
@@ -115,11 +113,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
   const platform = usePlatform()
   const settings = useSettings()
   const language = useLanguage()
-  const navigate = useNavigate()
-
   const empty: Notification[] = []
-
-  const route = useCurrentRoute()
 
   const [store, setStore, _, ready] = persisted(
     Persist.serverGlobal(input.sdk.scope, "notification", ["notification.v1"]),
@@ -215,8 +209,12 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
   }
 
   const viewedInCurrentSession = (sessionID: string) => {
-    const currentRoute = route()
-    return currentRoute.type === "session" && currentRoute.server === input.key && currentRoute.sessionId === sessionID
+    return typeof location !== "undefined" && location.pathname === sessionHref(input.key, sessionID)
+  }
+
+  const navigate = (href: string) => {
+    history.pushState(null, "", href)
+    dispatchEvent(new PopStateEvent("popstate"))
   }
 
   const handleSessionIdle = (directory: string, event: { properties: { sessionID: string } }, time: number) => {
@@ -238,7 +236,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
         session: sessionID,
       })
 
-      const href = `/server/${input.key}/session/${sessionID}`
+      const href = sessionHref(input.key, sessionID)
       if (settings.notifications.agent()) {
         void platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
           navigate(href),
@@ -273,7 +271,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
       const description =
         session?.title ??
         (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
-      const href = `/server/${input.key}/session/${sessionID}`
+      const href = sessionHref(input.key, sessionID ?? "global")
       if (settings.notifications.errors()) {
         void platform.notify(language.t("notification.session.error.title"), description, () => navigate(href))
       }
@@ -282,15 +280,20 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
 
   const unsub = input.sdk.event.listen((e) => {
     const event = e.details
-    if (event.type !== "session.idle" && event.type !== "session.execution.failed") return
+    if (
+      event.type !== "session.execution.succeeded" &&
+      event.type !== "session.execution.interrupted" &&
+      event.type !== "session.execution.failed"
+    )
+      return
 
     const directory = e.name
     const time = Date.now()
-    if (event.type === "session.idle") {
-      handleSessionIdle(directory, event, time)
+    if (event.type === "session.execution.failed") {
+      handleSessionError(directory, event, time)
       return
     }
-    handleSessionError(directory, event, time)
+    handleSessionIdle(directory, event, time)
   })
   onCleanup(() => {
     meta.disposed = true

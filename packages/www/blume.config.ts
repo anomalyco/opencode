@@ -23,7 +23,7 @@ export default defineConfig({
     dir: "packages/www",
   },
   theme: {
-    background: "#131010",
+    background: { dark: "#131010" },
     fonts: {
       body: "ibm-plex-mono",
       display: "ibm-plex-mono",

@@ -108,6 +108,7 @@ import { createSingleFlight } from "../../util/single-flight"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { generateThinkingSyntax } from "./thinking-syntax"
 import { createDelayedPresence } from "../../util/delayed-presence"
+import { SessionLocationMissing } from "./location-missing"
 
 addDefaultParsers(parsers.parsers)
 
@@ -115,12 +116,9 @@ addDefaultParsers(parsers.parsers)
 const NAVIGATION_SLACK_ID = "session-navigation-slack"
 const BACKGROUND_TOOL_HINT_DELAY = 1_000
 
-// Tail-first transcript mounting: rows mounted with the session, then backfill cadence.
-// The tail comfortably overfills a tall viewport; backfill drains a 200-message transcript
-// in a few hundred milliseconds without a perceptible pause.
+// The tail comfortably overfills a tall viewport; older rows mount as the reader approaches them.
 const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
-const TRANSCRIPT_BACKFILL_DELAY = 120
 type PendingAction = "steer" | "queue" | "cancel"
 
 const context = createContext<{
@@ -151,6 +149,7 @@ export function Session() {
     await writeFile(file, content)
   }
   const route = useRouteData("session")
+  const sessionID = route.sessionID
   const { navigate } = useRoute()
   const data = useData()
   const local = useLocal()
@@ -268,12 +267,21 @@ export function Session() {
     })
   })
   const editor = useEditorContext()
-  const rows = createSessionRows(() => route.sessionID)
+  const [rowsSynced, setRowsSynced] = createSignal(false)
+  const rows = createSessionRows(
+    () => route.sessionID,
+    (id) => {
+      if (id === sessionID) setRowsSynced(true)
+    },
+  )
   const boundaries = createMemo(() => messageBoundaryIDs(rows, messages()))
+  const boundaryIDs = createMemo(() => new Set(boundaries().filter((id) => id !== undefined)))
   const [navigationMessage, setNavigationMessage] = createSignal<string>()
   const [navigationSlack, setNavigationSlack] = createSignal(0)
   const [synced, setSynced] = createSignal(false)
   const sessionTabs = useSessionTabs()
+  const [awayFromBottom, setAwayFromBottom] = createSignal(false)
+  const [latestHovered, setLatestHovered] = createSignal(false)
 
   const clearMessageNavigation = () => {
     setNavigationSlack(0)
@@ -319,7 +327,6 @@ export function Session() {
         return
       }
       editor.reconnect(info.location.directory)
-      if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
       setSynced(true)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
@@ -334,7 +341,19 @@ export function Session() {
 
   let seeded = false
   let sent = false
+  let restored = false
   let scroll: ScrollBoxRenderable
+  createEffect(() => {
+    if (restored || !synced() || !rowsSynced() || !scroll || scroll.isDestroyed) return
+    restored = true
+    restoreScrollPosition()
+  })
+  let awayTimer: ReturnType<typeof setTimeout> | undefined
+  onCleanup(() => {
+    if (awayTimer) clearTimeout(awayTimer)
+    if (!scroll || scroll.isDestroyed) return
+    saveScrollAnchor()
+  })
   const [prompt, setPrompt] = createSignal<PromptRef>()
   const bind = (r: PromptRef | undefined) => {
     setPrompt(r)
@@ -354,37 +373,131 @@ export function Session() {
     })
   }
 
-  // Tail-first transcript mounting: only the newest rows mount when the session opens, and the
-  // rest backfill in chunks shortly after, so switching to a long session costs the visible tail
-  // instead of the whole transcript. Until backfill pins the count, the hidden span derives from
-  // the row count, so it needs no effect ordering; the clamp keeps at least a tail visible when a
-  // re-reduce shrinks the transcript. Streaming appends land at the end of the visible slice.
+  // Tail-first transcript mounting: only the newest rows mount when the session opens. Older rows
+  // mount on demand near the top, keeping inactive tabs cheap to tear down. Until the first chunk
+  // pins the count, the hidden span derives from the row count, so streaming appends remain visible.
   const [hiddenRows, setHiddenRows] = createSignal<number>()
+  const [visibleRowsEnd, setVisibleRowsEnd] = createSignal<number>()
   const hidden = createMemo(() => Math.max(0, Math.min(hiddenRows() ?? Infinity, rows.length - TRANSCRIPT_TAIL_ROWS)))
-  const visibleRows = createMemo(() => (hidden() === 0 ? rows : rows.slice(hidden())))
-  createEffect(() => {
+  const visibleEnd = createMemo(() => Math.max(hidden(), Math.min(visibleRowsEnd() ?? rows.length, rows.length)))
+  const visibleRows = createMemo(() => rows.slice(hidden(), visibleEnd()))
+  let revealingOlderRows = false
+  const revealOlderRows = (scrollBy = 0) => {
     const current = hidden()
-    if (current === 0) return
-    // Until the first chunk pins hiddenRows, appends change hidden() and reset this timer, so
-    // backfill waits for a pause in streaming before starting. Once pinned, it drains on a fixed
-    // cadence undisturbed by appends.
-    const timer = setTimeout(() => {
-      const before = scroll && !scroll.isDestroyed ? scroll.scrollHeight : undefined
-      const viewportBottom = before === undefined ? 0 : scroll.scrollTop + scroll.viewport.height
-      setHiddenRows(Math.max(0, current - TRANSCRIPT_BACKFILL_CHUNK))
-      if (before === undefined) return
-      // Sticky scroll holds bottom-anchored readers through the mount; compensation is only for
-      // readers who have scrolled up.
-      if (viewportBottom >= before - 1) return
-      afterLayout(() => scroll.scrollBy(scroll.scrollHeight - before))
-    }, TRANSCRIPT_BACKFILL_DELAY)
-    onCleanup(() => clearTimeout(timer))
-  })
+    if (
+      revealingOlderRows ||
+      current === 0 ||
+      !scroll ||
+      scroll.isDestroyed ||
+      scroll.scrollTop > scroll.viewport.height
+    )
+      return false
+    revealingOlderRows = true
+    const before = scroll.scrollHeight
+    setHiddenRows(Math.max(0, current - TRANSCRIPT_BACKFILL_CHUNK))
+    afterLayout(() => {
+      revealingOlderRows = false
+      scroll.scrollBy(scroll.scrollHeight - before + scrollBy)
+      updateAwayFromBottom()
+    })
+    return true
+  }
+  let revealingNewerRows = false
+  const revealNewerRows = (scrollBy = 0) => {
+    const current = visibleEnd()
+    if (
+      revealingNewerRows ||
+      current === rows.length ||
+      !scroll ||
+      scroll.isDestroyed ||
+      scroll.scrollTop + scroll.viewport.height < scroll.scrollHeight - scroll.viewport.height
+    )
+      return false
+    revealingNewerRows = true
+    const next = Math.min(rows.length, current + TRANSCRIPT_BACKFILL_CHUNK)
+    setVisibleRowsEnd(next === rows.length ? undefined : next)
+    afterLayout(() => {
+      revealingNewerRows = false
+      scroll.scrollBy(scrollBy)
+      updateAwayFromBottom()
+    })
+    return true
+  }
   /** Message navigation needs the full transcript mounted before walking or jumping. */
   const ensureAllRows = (continuation: () => void) => {
-    if (hidden() === 0) return continuation()
+    if (hidden() === 0 && visibleEnd() === rows.length) return continuation()
     setHiddenRows(0)
+    setVisibleRowsEnd(undefined)
     afterLayout(continuation)
+  }
+
+  function isAwayFromBottom() {
+    if (visibleEnd() < rows.length) return true
+    return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height) - 1
+  }
+  function updateAwayFromBottom() {
+    if (config.experimental?.tab_scroll !== true) return
+    if (awayTimer) clearTimeout(awayTimer)
+    awayTimer = setTimeout(() => {
+      awayTimer = undefined
+      if (!scroll || scroll.isDestroyed) return
+      const away = isAwayFromBottom()
+      setAwayFromBottom(away)
+      saveScrollAnchor()
+    })
+  }
+  function saveScrollAnchor() {
+    if (config.experimental?.tab_scroll !== true || !isAwayFromBottom()) {
+      sessionTabs.setScrollAnchor(sessionID, undefined)
+      return
+    }
+    let first: { messageID: string; screenY: number } | undefined
+    let anchor: { messageID: string; screenY: number } | undefined
+    for (const child of scroll.getChildren()) {
+      if (!child.id || !boundaryIDs().has(child.id)) continue
+      const item = { messageID: child.id, screenY: child.y - scroll.viewport.y }
+      first ??= item
+      if (item.screenY <= 0) anchor = item
+    }
+    anchor ??= first
+    if (anchor) sessionTabs.setScrollAnchor(sessionID, anchor)
+    else sessionTabs.setScrollAnchor(sessionID, undefined)
+  }
+  function restoreScrollPosition() {
+    const anchor = config.experimental?.tab_scroll === true ? sessionTabs.scrollAnchor(sessionID) : undefined
+    const index = anchor ? boundaries().indexOf(anchor.messageID) : -1
+    if (!anchor || index === -1) {
+      scroll.scrollTo(scroll.scrollHeight)
+      setAwayFromBottom(false)
+      return
+    }
+    setHiddenRows(Math.max(0, index - TRANSCRIPT_BACKFILL_CHUNK))
+    const end = Math.min(rows.length, index + TRANSCRIPT_BACKFILL_CHUNK)
+    setVisibleRowsEnd(end === rows.length ? undefined : end)
+    scroll.stickyScroll = false
+    const restore = () =>
+      afterLayout(() => {
+        const boundary = scroll.getRenderable(anchor.messageID)
+        if (!boundary) {
+          sessionTabs.setScrollAnchor(sessionID, undefined)
+          scroll.stickyScroll = true
+          scroll.scrollTo(scroll.scrollHeight)
+          setAwayFromBottom(false)
+          return
+        }
+        const contentY = scroll.scrollTop + boundary.y - scroll.viewport.y
+        const target = contentY - anchor.screenY
+        const maximum = Math.max(0, scroll.scrollHeight - scroll.viewport.height)
+        if (target > maximum && visibleEnd() < rows.length) {
+          const next = Math.min(rows.length, visibleEnd() + TRANSCRIPT_BACKFILL_CHUNK)
+          setVisibleRowsEnd(next === rows.length ? undefined : next)
+          restore()
+          return
+        }
+        scroll.scrollTo(target)
+        updateAwayFromBottom()
+      })
+    restore()
   }
 
   createEffect(() => {
@@ -495,10 +608,32 @@ export function Session() {
 
   function toBottom() {
     clearMessageNavigation()
+    if (awayTimer) clearTimeout(awayTimer)
+    awayTimer = undefined
+    setAwayFromBottom(false)
+    sessionTabs.setScrollAnchor(route.sessionID, undefined)
+    setHiddenRows(undefined)
+    setVisibleRowsEnd(undefined)
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
+      scroll.stickyScroll = true
       scroll.scrollTo(scroll.scrollHeight)
     }, 50)
+  }
+
+  function moveTranscript(delta: number) {
+    clearMessageNavigation()
+    if (delta < 0 && revealOlderRows(delta)) {
+      dialog.clear()
+      return
+    }
+    if (delta > 0 && revealNewerRows(delta)) {
+      dialog.clear()
+      return
+    }
+    scroll.scrollBy(delta)
+    updateAwayFromBottom()
+    dialog.clear()
   }
 
   const globalCommands = [
@@ -507,66 +642,42 @@ export function Session() {
       title: "Page up",
       group: "Session",
       palette: undefined,
-      run: () => {
-        clearMessageNavigation()
-        scroll.scrollBy(-scroll.height / 2)
-        dialog.clear()
-      },
+      run: () => moveTranscript(-scroll.height / 2),
     },
     {
       id: "session.page.down",
       title: "Page down",
       group: "Session",
       palette: undefined,
-      run: () => {
-        clearMessageNavigation()
-        scroll.scrollBy(scroll.height / 2)
-        dialog.clear()
-      },
+      run: () => moveTranscript(scroll.height / 2),
     },
     {
       id: "session.line.up",
       title: "Line up",
       group: "Session",
       palette: undefined,
-      run: () => {
-        clearMessageNavigation()
-        scroll.scrollBy(-1)
-        dialog.clear()
-      },
+      run: () => moveTranscript(-1),
     },
     {
       id: "session.line.down",
       title: "Line down",
       group: "Session",
       palette: undefined,
-      run: () => {
-        clearMessageNavigation()
-        scroll.scrollBy(1)
-        dialog.clear()
-      },
+      run: () => moveTranscript(1),
     },
     {
       id: "session.half.page.up",
       title: "Half page up",
       group: "Session",
       palette: undefined,
-      run: () => {
-        clearMessageNavigation()
-        scroll.scrollBy(-scroll.height / 4)
-        dialog.clear()
-      },
+      run: () => moveTranscript(-scroll.height / 4),
     },
     {
       id: "session.half.page.down",
       title: "Half page down",
       group: "Session",
       palette: undefined,
-      run: () => {
-        clearMessageNavigation()
-        scroll.scrollBy(scroll.height / 4)
-        dialog.clear()
-      },
+      run: () => moveTranscript(scroll.height / 4),
     },
   ]
 
@@ -578,7 +689,10 @@ export function Session() {
       palette: undefined,
       run: () => {
         clearMessageNavigation()
-        scroll.scrollTo(0)
+        ensureAllRows(() => {
+          scroll.scrollTo(0)
+          updateAwayFromBottom()
+        })
         dialog.clear()
       },
     },
@@ -588,8 +702,7 @@ export function Session() {
       group: "Session",
       palette: undefined,
       run: () => {
-        clearMessageNavigation()
-        scroll.scrollTo(scroll.scrollHeight)
+        toBottom()
         dialog.clear()
       },
     },
@@ -1006,8 +1119,6 @@ export function Session() {
     bindings: [...baseAndUnfocusedCommands, ...baseCommands()].map((command) => command.id),
   }))
 
-  // snap to bottom when session changes
-  createEffect(on(() => route.sessionID, toBottom))
   createEffect(
     on(
       () => route.sessionID,
@@ -1043,47 +1154,65 @@ export function Session() {
           paddingBottom={1}
           paddingLeft={dimensions().width < 44 ? 1 : 2}
           paddingRight={dimensions().width < 44 ? 1 : 2}
-          gap={1}
         >
           <Show when={session()}>
-            <scrollbox
-              ref={(r) => (scroll = r)}
-              viewportOptions={{
-                paddingRight: showScrollbar() ? 1 : 0,
-              }}
-              verticalScrollbarOptions={{
-                paddingLeft: 1,
-                visible: showScrollbar(),
-                trackOptions: {
-                  backgroundColor: theme.raise(theme.background.surface.offset),
-                  foregroundColor: theme.border.default,
-                },
-              }}
-              stickyScroll={!navigationMessage()}
-              stickyStart="bottom"
-              flexGrow={1}
-              scrollAcceleration={scrollAcceleration()}
-            >
-              <For each={visibleRows()}>
-                {(row, index) => (
-                  <SessionRowView
-                    row={row}
-                    message={(messageID) => data.session.message.get(route.sessionID, messageID)}
-                    boundaryID={boundaries()[index() + hidden()]}
+            <box flexGrow={1} minHeight={0} position="relative">
+              <scrollbox
+                ref={(r) => (scroll = r)}
+                viewportOptions={{
+                  paddingRight: showScrollbar() ? 1 : 0,
+                }}
+                verticalScrollbarOptions={{
+                  paddingLeft: 1,
+                  visible: showScrollbar(),
+                  trackOptions: {
+                    backgroundColor: theme.raise(theme.background.surface.offset),
+                    foregroundColor: theme.border.default,
+                  },
+                }}
+                stickyScroll={!navigationMessage()}
+                stickyStart="bottom"
+                flexGrow={1}
+                scrollAcceleration={scrollAcceleration()}
+                onMouseScroll={(event) => {
+                  if (event.scroll?.direction === "up" && revealOlderRows()) return
+                  if (event.scroll?.direction === "down" && revealNewerRows()) return
+                  updateAwayFromBottom()
+                }}
+              >
+                <For each={visibleRows()}>
+                  {(row, index) => (
+                    <SessionRowView
+                      row={row}
+                      message={(messageID) => data.session.message.get(route.sessionID, messageID)}
+                      boundaryID={boundaries()[index() + hidden()]}
+                    />
+                  )}
+                </For>
+                <BackgroundToolHint messages={messages()} />
+                <Show when={session()?.revert?.messageID}>
+                  <RevertMessage
+                    count={messagesFromRevert().filter((message) => message.type === "user").length}
+                    files={session()!.revert!.files ?? []}
                   />
-                )}
-              </For>
-              <BackgroundToolHint messages={messages()} />
-              <Show when={session()?.revert?.messageID}>
-                <RevertMessage
-                  count={messagesFromRevert().filter((message) => message.type === "user").length}
-                  files={session()!.revert!.files ?? []}
-                />
+                </Show>
+                <Show when={navigationSlack()}>
+                  {(height) => <box id={NAVIGATION_SLACK_ID} height={height()} flexShrink={0} />}
+                </Show>
+              </scrollbox>
+            </box>
+            <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
+              <Show when={config.experimental?.tab_scroll === true && awayFromBottom()}>
+                <text
+                  fg={latestHovered() ? theme.text.default : theme.text.subdued}
+                  onMouseOver={() => setLatestHovered(true)}
+                  onMouseOut={() => setLatestHovered(false)}
+                  onMouseUp={toBottom}
+                >
+                  Latest ↓
+                </text>
               </Show>
-              <Show when={navigationSlack()}>
-                {(height) => <box id={NAVIGATION_SLACK_ID} height={height()} flexShrink={0} />}
-              </Show>
-            </scrollbox>
+            </box>
             <box flexShrink={0}>
               <Show when={!composer.open && !disabled() && queuedPrompts().length > 0}>
                 <QueuedPromptDock prompts={queuedPrompts()} onOpen={openQueuedPrompts} />
@@ -1114,6 +1243,19 @@ export function Session() {
                       return form ? <FormPrompt form={form} /> : null
                     }}
                   </Show>
+                </Match>
+                <Match
+                  when={
+                    session() &&
+                    currentLocation.error?.location.directory === session()!.location.directory &&
+                    currentLocation.error?.location.workspaceID === session()!.location.workspaceID
+                  }
+                >
+                  <SessionLocationMissing
+                    directory={session()!.location.directory}
+                    projectID={session()!.projectID}
+                    sessionID={route.sessionID}
+                  />
                 </Match>
                 <Match when={!disabled()}>
                   <Prompt
@@ -2872,16 +3014,8 @@ function Shell(props: ToolProps) {
   })
   const maxLines = 10
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
-  const prompt = createMemo(() => (workdir() && workdir() !== "." ? `${workdir()}$` : "$"))
-  const input = createMemo(() => {
-    const cmd = command()
-    if (!cmd) return ""
-    // While running, the workdir prompt shares the spinner's text column; when
-    // settled, the prompt renders as its own column so wrapped command lines
-    // keep a stable hanging indent instead of jumping to the card inset.
-    if (isRunning() && prompt() !== "$") return `${prompt()} ${cmd}`
-    return cmd
-  })
+  const prefix = createMemo(() => (workdir() && workdir() !== "." ? `cd ${workdir()} && ` : ""))
+  const input = createMemo(() => (command() ? `${isRunning() ? "" : "$ "}${prefix()}${command()}` : ""))
   const content = createMemo(() => [input(), output()].filter(Boolean).join("\n\n"))
   const collapsed = createMemo(() => collapseToolOutput(content(), maxLines, maxChars()))
   const limited = createMemo(() => {
@@ -2910,15 +3044,7 @@ function Shell(props: ToolProps) {
             )
           }
         >
-          <Show
-            when={isRunning()}
-            fallback={
-              <box flexDirection="row" gap={1}>
-                <text fg={theme.text.default}>{prompt()}</text>
-                <text fg={theme.text.default}>{limitedInput()}</text>
-              </box>
-            }
-          >
+          <Show when={isRunning()} fallback={<text fg={theme.text.default}>{limitedInput()}</text>}>
             <Spinner color={color()}>{limitedInput()}</Spinner>
           </Show>
           <Show when={limitedOutput()}>

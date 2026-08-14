@@ -1,17 +1,11 @@
 import type { Todo } from "@/types"
 import { AnimatedNumber } from "@opencode-ai/ui/animated-number"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
-import { DockTray } from "@opencode-ai/ui/dock-surface"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Index, Match, Switch, createEffect, createMemo } from "solid-js"
-import { Dynamic } from "solid-js/web"
+import { Index, Match, Switch, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
-import { useSettings } from "@/context/settings"
+import { SessionComposerPullout } from "./session-composer-pullout"
 
 const doneToken = "\u0000done\u0000"
 const totalToken = "\u0000total\u0000"
@@ -50,10 +44,6 @@ export function SessionTodoDock(props: {
   dockProgress: number
 }) {
   const language = useLanguage()
-  const settings = useSettings()
-  const [store, setStore] = createStore({
-    height: 78,
-  })
 
   const total = createMemo(() => props.todos.length)
   const done = createMemo(() => props.todos.filter((todo) => todo.status === "completed").length)
@@ -73,147 +63,33 @@ export function SessionTodoDock(props: {
   )
 
   const preview = createMemo(() => active()?.content ?? "")
-  const collapse = useSpring(() => (props.collapsed ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
-  const dock = createMemo(() => Math.max(0, Math.min(1, props.dockProgress)))
-  const shut = createMemo(() => 1 - dock())
-  const value = createMemo(() => Math.max(0, Math.min(1, collapse())))
-  const hide = createMemo(() => Math.max(value(), shut()))
-  const off = createMemo(() => hide() > 0.98)
-  const turn = createMemo(() => Math.max(0, Math.min(1, value())))
-  const full = createMemo(() => Math.max(78, store.height))
-  let contentRef: HTMLDivElement | undefined
-
-  createEffect(() => {
-    const el = contentRef
-    if (!el) return
-    const update = () => {
-      setStore("height", (height) => Math.max(height, el.scrollHeight))
-    }
-    update()
-    createResizeObserver(el, update)
-  })
-
   return (
-    <Dynamic
-      component={settings.general.newLayoutDesigns() ? "div" : DockTray}
-      data-component="session-todo-dock"
-      classList={{
-        "w-full overflow-hidden rounded-xl border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-01":
-          settings.general.newLayoutDesigns(),
-      }}
-      style={{
-        "overflow-x": "visible",
-        "overflow-y": "hidden",
-        "max-height": `${Math.max(78, full() - value() * (full() - 78))}px`,
-      }}
+    <SessionComposerPullout
+      name="todo"
+      label={
+        <Index each={progress()}>
+          {(item) => (
+            <Switch fallback={<span>{item()}</span>}>
+              <Match when={item() === doneToken}>
+                <AnimatedNumber value={done()} />
+              </Match>
+              <Match when={item() === totalToken}>
+                <AnimatedNumber value={total()} />
+              </Match>
+            </Switch>
+          )}
+        </Index>
+      }
+      ariaLabel={label()}
+      preview={props.collapsed ? preview() : undefined}
+      collapsed={props.collapsed}
+      onToggle={props.onToggle}
+      collapseLabel={props.collapseLabel}
+      expandLabel={props.expandLabel}
+      dockProgress={props.dockProgress}
     >
-      <div ref={contentRef}>
-        <div
-          data-action="session-todo-toggle"
-          classList={{
-            "flex items-center gap-2 overflow-visible": true,
-            "h-[42px] pl-4 pr-2": settings.general.newLayoutDesigns(),
-            "pl-3 pr-2 py-2": !settings.general.newLayoutDesigns(),
-          }}
-          role="button"
-          tabIndex={0}
-          onClick={props.onToggle}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" && event.key !== " ") return
-            event.preventDefault()
-            props.onToggle()
-          }}
-        >
-          <span
-            classList={{
-              "cursor-default inline-flex items-baseline shrink-0 overflow-visible": true,
-              "font-[440] text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-muted":
-                settings.general.newLayoutDesigns(),
-              "text-14-regular text-text-strong": !settings.general.newLayoutDesigns(),
-            }}
-            aria-label={label()}
-            style={{
-              "--tool-motion-odometer-ms": "600ms",
-              "--tool-motion-mask": "18%",
-              "--tool-motion-mask-height": "0px",
-              "--tool-motion-spring-ms": "560ms",
-              "white-space": "pre",
-              opacity: `${Math.max(0, Math.min(1, 1 - shut()))}`,
-            }}
-          >
-            <Index each={progress()}>
-              {(item) => (
-                <Switch fallback={<span>{item()}</span>}>
-                  <Match when={item() === doneToken}>
-                    <AnimatedNumber value={done()} />
-                  </Match>
-                  <Match when={item() === totalToken}>
-                    <AnimatedNumber value={total()} />
-                  </Match>
-                </Switch>
-              )}
-            </Index>
-          </span>
-          <div
-            data-slot="session-todo-preview"
-            class="ml-1 min-w-0 overflow-hidden"
-            style={{
-              flex: "1 1 auto",
-              "max-width": "100%",
-            }}
-          >
-            <TextReveal
-              class={
-                settings.general.newLayoutDesigns()
-                  ? "cursor-default text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint"
-                  : "text-14-regular text-text-base cursor-default"
-              }
-              text={props.collapsed ? preview() : undefined}
-              duration={600}
-              travel={25}
-              edge={17}
-              spring="cubic-bezier(0.34, 1, 0.64, 1)"
-              springSoft="cubic-bezier(0.34, 1, 0.64, 1)"
-              growOnly
-              truncate
-            />
-          </div>
-          <div class="ml-auto">
-            <IconButton
-              data-action="session-todo-toggle-button"
-              data-collapsed={props.collapsed ? "true" : "false"}
-              icon="chevron-down"
-              size="normal"
-              variant="ghost"
-              style={{ transform: `rotate(${turn() * 180}deg)` }}
-              onMouseDown={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-              }}
-              onClick={(event) => {
-                event.stopPropagation()
-                props.onToggle()
-              }}
-              aria-label={props.collapsed ? props.expandLabel : props.collapseLabel}
-            />
-          </div>
-        </div>
-
-        <div
-          data-slot="session-todo-list"
-          aria-hidden={props.collapsed || off()}
-          classList={{
-            "pointer-events-none": hide() > 0.1,
-          }}
-          style={{
-            visibility: off() ? "hidden" : "visible",
-            opacity: `${Math.max(0, Math.min(1, 1 - hide()))}`,
-          }}
-        >
-          <TodoList todos={props.todos} />
-        </div>
-      </div>
-    </Dynamic>
+      <TodoList todos={props.todos} />
+    </SessionComposerPullout>
   )
 }
 

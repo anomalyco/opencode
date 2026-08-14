@@ -635,7 +635,7 @@ const replaySessionProjection = (id: Session.ID) =>
     yield* db.delete(InstructionStateTable).where(eq(InstructionStateTable.session_id, id)).run().pipe(Effect.orDie)
     yield* db.delete(SessionInboxTable).where(eq(SessionInboxTable.session_id, id)).run().pipe(Effect.orDie)
     yield* db.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, id)).run().pipe(Effect.orDie)
-    yield* bus.replayAll(
+    yield* Effect.forEach(
       recorded.map((event) => ({
         id: event.id,
         created: DateTime.makeUnsafe(event.created),
@@ -644,6 +644,8 @@ const replaySessionProjection = (id: Session.ID) =>
         type: event.type,
         data: event.data,
       })),
+      (event) => bus.replay(event),
+      { discard: true },
     )
   })
 
@@ -1204,12 +1206,17 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("interrupts a source Location runner after a Session moves", () =>
+  it.effect("preserves instruction state and interrupts the source Location runner after a Session moves", () =>
     Effect.gen(function* () {
       const session = yield* setup
       const bus = yield* Bus.Service
       const { db } = yield* Database.Service
       yield* runPrompt(session, "First")
+      const instructionState = yield* db
+        .select()
+        .from(InstructionStateTable)
+        .where(eq(InstructionStateTable.session_id, sessionID))
+        .get()
 
       yield* bus.publish(SessionEvent.Moved, {
         sessionID,
@@ -1218,7 +1225,7 @@ describe("SessionRunnerLLM", () => {
       })
       expect(
         yield* db.select().from(InstructionStateTable).where(eq(InstructionStateTable.session_id, sessionID)).get(),
-      ).toBeUndefined()
+      ).toEqual(instructionState)
 
       yield* admit(session, "Second")
       const exit = yield* session.resume(sessionID).pipe(Effect.exit)
@@ -1338,7 +1345,7 @@ describe("SessionRunnerLLM", () => {
         .all()
       yield* bus.remove(forked.id)
       yield* db.delete(SessionTable).where(eq(SessionTable.id, forked.id)).run()
-      yield* bus.replayAll(
+      yield* Effect.forEach(
         recorded.map((event) => ({
           id: event.id,
           created: DateTime.makeUnsafe(event.created),
@@ -1347,6 +1354,8 @@ describe("SessionRunnerLLM", () => {
           type: event.type,
           data: event.data,
         })),
+        (event) => bus.replay(event),
+        { discard: true },
       )
       expect(
         yield* db.select().from(InstructionStateTable).where(eq(InstructionStateTable.session_id, forked.id)).get(),

@@ -14,6 +14,18 @@ test("matches literal screen text", () => {
   expect(matches(harness, "opencode")).toBe(false)
 })
 
+test("omits an absent focused renderable from state", () => {
+  const harness = {
+    renderer: {
+      root: { getChildren: () => [] },
+      currentFocusedRenderable: undefined,
+      currentFocusedEditor: undefined,
+    },
+  } as unknown as Harness
+
+  expect(state(harness)).toEqual({ focused: { editor: false }, elements: [] })
+})
+
 test("normalizes named keys for OpenTUI", async () => {
   const pressed: Array<readonly [string, object | undefined]> = []
   const harness = {

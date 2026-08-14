@@ -1382,6 +1382,11 @@ body[data-new-layout] [data-component="user-message"] {
   background: var(--v2-background-bg-layer-02);
 }
 
+body[data-new-layout] [data-workspace-session] [data-component="user-message"] [data-slot="user-message-text"] {
+  background: var(--v2-background-bg-accent);
+  color: var(--v2-text-text-contrast);
+}
+
 body:not([data-new-layout]) {
   [data-component="user-message"] {
     color: var(--text-strong);

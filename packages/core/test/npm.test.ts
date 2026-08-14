@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { Effect, Option } from "effect"
+import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/util/global"
 import { Npm } from "@opencode-ai/util/npm"
@@ -36,6 +36,48 @@ describe("Npm.sanitize", () => {
 })
 
 describe("Npm.add", () => {
+  test("resolves cached scoped package specs without reifying", async () => {
+    await using tmp = await tmpdir()
+    const spec = "@fixture/provider@1.0.0"
+    const directory = path.join(
+      tmp.path,
+      "cache",
+      "packages",
+      Npm.sanitize(spec),
+      "node_modules",
+      "@fixture",
+      "provider",
+    )
+    await fs.mkdir(directory, { recursive: true })
+    await writePackage(directory, { name: "@fixture/provider", exports: "./index.js" })
+    await Bun.write(path.join(directory, "index.js"), "export const fixture = true\n")
+
+    const entry = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+
+    expect(entry.directory).toBe(directory)
+    expect(entry.entrypoint).toEndWith("/index.js")
+  })
+
+  test("falls back to the original spec when parsing fails", async () => {
+    await using tmp = await tmpdir()
+    const spec = "fixture provider"
+    const directory = path.join(tmp.path, "cache", "packages", Npm.sanitize(spec), "node_modules", spec)
+    await fs.mkdir(directory, { recursive: true })
+    await writePackage(directory, { name: spec, exports: "./index.js" })
+    await Bun.write(path.join(directory, "index.js"), "export const fixture = true\n")
+
+    const entry = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+
+    expect(entry.directory).toBe(directory)
+    expect(entry.entrypoint).toEndWith("/index.js")
+  })
+
   test("reifies when package cache directory exists without the package installed", async () => {
     await using tmp = await tmpdir()
     await fs.mkdir(path.join(tmp.path, "fixture-provider"))

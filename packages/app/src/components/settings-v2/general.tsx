@@ -7,7 +7,7 @@ import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useUpdaterAction } from "../updater-action"
-import { useSettings } from "@/context/settings"
+import { type WorkspaceDefaultDestination, useSettings } from "@/context/settings"
 import { ExternalLink } from "../external-link"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
@@ -82,6 +82,34 @@ const PermissionScopeSetting: Component<{ controller: PermissionScopeController 
           onChange={props.controller.set}
         />
       </div>
+    </SettingsRowV2>
+  )
+}
+
+const WorkspaceDestinationSetting: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const options = createMemo((): { value: WorkspaceDefaultDestination; label: string }[] => [
+    { value: "last-used", label: language.t("settings.workspaces.default.lastUsed") },
+    { value: "local", label: language.t("settings.workspaces.default.local") },
+    { value: "new", label: language.t("settings.workspaces.default.new") },
+  ])
+
+  return (
+    <SettingsRowV2
+      title={language.t("settings.workspaces.default.title")}
+      description={language.t("settings.workspaces.default.description")}
+    >
+      <SelectV2
+        appearance="inline"
+        options={options()}
+        current={options().find((option) => option.value === settings.workspaces.defaultDestination())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        placement="bottom-end"
+        gutter={6}
+        onSelect={(option) => option && settings.workspaces.setDefaultDestination(option.value)}
+      />
     </SettingsRowV2>
   )
 }
@@ -284,8 +312,6 @@ export const SettingsGeneral: Component<{
     () => props.sessionID,
   )
   const shell = createShellSettingsController(() => props.server)
-  const appearance = createAppearanceSettingsController()
-  const sounds = createSoundSettingsController()
   const desktop = createMemo(() => platform.platform === "desktop")
 
   const [pinchZoom, { mutate: setPinchZoom }] = createResource(
@@ -303,9 +329,11 @@ export const SettingsGeneral: Component<{
 
   const GeneralSection = () => (
     <div class="settings-v2-section">
+      <h3 class="settings-v2-section-title">{language.t("settings.general.section.general")}</h3>
       <SettingsListV2>
         <LanguageSetting />
 
+        <WorkspaceDestinationSetting />
         <PermissionScopeSetting controller={permissionScope} />
 
         <ShellSetting controller={shell} />
@@ -368,18 +396,6 @@ export const SettingsGeneral: Component<{
       <h3 class="settings-v2-section-title">{language.t("settings.general.section.advanced")}</h3>
 
       <SettingsListV2>
-        <SettingsRowV2
-          title={language.t("settings.general.row.showFileTree.title")}
-          description={language.t("settings.general.row.showFileTree.description")}
-        >
-          <div data-action="settings-show-file-tree">
-            <Switch
-              checked={settings.general.showFileTree()}
-              onChange={(checked) => settings.general.setShowFileTree(checked)}
-            />
-          </div>
-        </SettingsRowV2>
-
         <SettingsRowV2
           title={language.t("settings.general.row.showSearch.title")}
           description={language.t("settings.general.row.showSearch.description")}
@@ -515,16 +531,17 @@ export const SettingsGeneral: Component<{
   return (
     <>
       <div class="settings-v2-tab-header">
-        <h2 class="settings-v2-tab-title">{language.t("settings.tab.general")}</h2>
+        <div class="settings-v2-tab-header-row">
+          <div class="flex flex-col gap-1">
+            <h2 class="settings-v2-tab-title">{language.t("settings.tab.preferences")}</h2>
+            <span class="text-11-regular text-v2-text-text-muted">
+              {language.t("settings.preferences.description")}
+            </span>
+          </div>
+        </div>
       </div>
       <div class="settings-v2-tab-body">
         <GeneralSection />
-
-        <AppearanceSection controller={appearance} />
-
-        <NotificationsSection />
-
-        <SoundsSection controller={sounds} />
 
         <Show when={desktop()}>
           <UpdatesSection />

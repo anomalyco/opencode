@@ -122,7 +122,10 @@ const layer = Layer.effect(
         return { id: info?.id ?? defaultID, info }
       }),
       list: Effect.fn("Agent.list")(function* () {
-        return Array.fromIterable(state.get().agents.values())
+        const agents = Array.fromIterable(state.get().agents.values())
+        const selected = selectedDefault()
+        if (!selected) return agents
+        return [selected, ...agents.filter((agent) => agent.id !== selected.id)]
       }),
     })
   }),

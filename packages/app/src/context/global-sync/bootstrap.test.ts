@@ -14,6 +14,7 @@ import { ServerScope } from "@/utils/server-scope"
 import type { ServerApi } from "@/utils/server"
 
 type ProjectApi = ServerApi["project"]
+type WorktreeApi = ServerApi["worktree"]
 
 describe("query keys", () => {
   test("partitions identical directories by server scope", () => {
@@ -106,16 +107,58 @@ describe("query keys", () => {
   })
 
   test("loads projects from the current endpoint", async () => {
-    const api = {
+    const calls: string[] = []
+    const projects = {
       list: async () => [
-        { id: "b", worktree: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
-        { id: "a", worktree: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
+        { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
+        { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
       ],
     } as unknown as ProjectApi
+    const worktrees = {
+      list: async ({ projectID }: { projectID: string }) => {
+        calls.push(projectID)
+        return [
+          { directory: `/${projectID}` },
+          { directory: `/${projectID}/clone` },
+          { directory: `/${projectID}/copy`, strategy: "git" },
+        ]
+      },
+    } as unknown as WorktreeApi
 
-    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, api))
+    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, projects, worktrees))
 
     expect(result.map((project) => project.id)).toEqual(["a", "b"])
+    expect(result.map((project) => project.sandboxes)).toEqual([
+      ["/a/clone", "/a/copy"],
+      ["/b/clone", "/b/copy"],
+    ])
+    expect(result.map((project) => project.worktrees)).toEqual([
+      [{ directory: "/a" }, { directory: "/a/clone" }, { directory: "/a/copy", strategy: "git" }],
+      [{ directory: "/b" }, { directory: "/b/clone" }, { directory: "/b/copy", strategy: "git" }],
+    ])
+    expect(calls.toSorted()).toEqual(["a", "b"])
+  })
+
+  test("keeps projects whose directory inventory cannot load", async () => {
+    const projects = {
+      list: async () => [
+        { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
+        { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
+      ],
+    } as unknown as ProjectApi
+    const worktrees = {
+      list: async ({ projectID }: { projectID: string }) => {
+        if (projectID === "b") throw new Error("unavailable")
+        return [{ directory: "/a/copy", strategy: "git" as const }]
+      },
+    } as unknown as WorktreeApi
+
+    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, projects, worktrees))
+
+    expect(result.map((project) => ({ id: project.id, sandboxes: project.sandboxes }))).toEqual([
+      { id: "a", sandboxes: ["/a/copy"] },
+      { id: "b", sandboxes: [] },
+    ])
   })
 
   test("loads references from the current location-scoped endpoint", async () => {

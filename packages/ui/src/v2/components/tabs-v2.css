@@ -175,7 +175,7 @@
   border: 0.5px solid var(--v2-border-border-muted);
 }
 
-[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-list"] {
+[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] > [data-slot="tabs-v2-list"] {
   flex-direction: column;
   width: 240px;
   min-width: 200px;
@@ -186,7 +186,9 @@
   border-inline-end: 1px solid var(--v2-border-border-base);
 }
 
-[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-section-title"] {
+[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
+  > [data-slot="tabs-v2-list"]
+  [data-slot="tabs-v2-section-title"] {
   width: 100%;
   padding-inline-start: 4px;
   color: var(--v2-text-text-muted);
@@ -195,7 +197,9 @@
   user-select: none;
 }
 
-[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-trigger-wrapper"] {
+[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
+  > [data-slot="tabs-v2-list"]
+  [data-slot="tabs-v2-trigger-wrapper"] {
   width: 100%;
   height: 28px;
   border-radius: 4px;
@@ -203,7 +207,9 @@
   color: var(--v2-text-text-muted);
 }
 
-[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] [data-slot="tabs-v2-trigger"] {
+[data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
+  > [data-slot="tabs-v2-list"]
+  [data-slot="tabs-v2-trigger"] {
   width: 100%;
   height: 100%;
   justify-content: flex-start;
@@ -212,12 +218,14 @@
 }
 
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
+  > [data-slot="tabs-v2-list"]
   [data-slot="tabs-v2-trigger-wrapper"]:hover:not(:disabled):not(:has([data-selected])) {
   background-color: var(--v2-background-bg-layer-03);
   color: var(--v2-text-text-base);
 }
 
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"]
+  > [data-slot="tabs-v2-list"]
   [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
   background-color: var(--v2-background-bg-layer-03);
   color: var(--v2-text-text-base);

@@ -6,7 +6,7 @@ import { Location } from "@opencode-ai/schema/location"
 import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "@opencode-ai/schema/provider"
 import { Project } from "@opencode-ai/schema/project"
-import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
+import { Worktree } from "@opencode-ai/schema/worktree"
 import { PermissionV1 } from "@opencode-ai/schema/permission-v1"
 import { Prompt } from "@opencode-ai/schema/prompt"
 import { SessionInbox } from "@opencode-ai/schema/session-inbox"
@@ -39,7 +39,7 @@ test("Core reuses the canonical shared schemas", async () => {
     coreModel,
     corePermission,
     corePermissionV1,
-    coreProjectCopy,
+    coreWorktree,
     corePty,
     coreProject,
     coreProvider,
@@ -60,7 +60,7 @@ test("Core reuses the canonical shared schemas", async () => {
     import("@opencode-ai/core/model"),
     import("@opencode-ai/core/permission"),
     import("@opencode-ai/core/v1/permission"),
-    import("@opencode-ai/core/project/copy"),
+    import("@opencode-ai/core/worktree"),
     import("@opencode-ai/core/pty"),
     import("@opencode-ai/core/project/schema"),
     import("@opencode-ai/core/provider"),
@@ -112,14 +112,16 @@ test("Core reuses the canonical shared schemas", async () => {
     [corePermission.Rule, Permission.Rule],
     [corePermission.Ruleset, Permission.Ruleset],
     [corePermissionV1.Event, PermissionV1.Event],
-    [coreProjectCopy.Event, ProjectDirectories.Event],
+    [coreWorktree.CreateInput, Worktree.CreateInput],
+    [coreWorktree.RemoveInput, Worktree.RemoveInput],
+    [coreWorktree.Info, Worktree.Info],
+    [coreWorktree.ListInput, Worktree.ListInput],
+    [coreWorktree.List, Worktree.List],
+    [coreWorktree.Event, Worktree.Event],
     [corePty.Info, Pty.Info],
     [corePty.Event, Pty.Event],
     [coreProject.ID, Project.ID],
     [coreProject.Current, Project.Current],
-    [coreProject.Directory, Project.Directory],
-    [coreProject.DirectoriesInput, Project.DirectoriesInput],
-    [coreProject.Directories, Project.Directories],
     [coreReference.LocalSource, Reference.LocalSource],
     [coreReference.GitSource, Reference.GitSource],
     [coreReference.Source, Reference.Source],

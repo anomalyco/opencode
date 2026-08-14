@@ -34,7 +34,11 @@ export const readUpdate = (instructions: Instructions.List, previous: State) =>
         hash === "removed" ? Option.none() : Option.some(admission.blobs[hash]),
       ]),
     ) as Readonly<Record<string, Option.Option<Schema.Json>>>
-    const values = Instructions.applyDelta(previous.values, delta)
+    const values: Record<string, Schema.Json> = { ...previous.values }
+    for (const [key, value] of Object.entries(delta)) {
+      if (Option.isNone(value)) delete values[key]
+      else values[key] = value.value
+    }
     return {
       values,
       text: Instructions.renderUpdate(instructions, previous.values, delta),

@@ -1,6 +1,6 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { Icon } from "@opencode-ai/ui/v2/icon"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { WordmarkV2 } from "@opencode-ai/ui/v2/wordmark-v2"
 import { Show, createMemo, createSignal } from "solid-js"
@@ -31,6 +31,15 @@ export function NewSessionView(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
 }) {
+  const [onboarding, setOnboarding, , onboardingReady] = persisted(
+    Persist.global("workspace-onboarding"),
+    createStore({ used: false }),
+  )
+  const select = (value: string) => {
+    props.workspace.selection.set(value)
+    if (value !== "main") setOnboarding("used", true)
+  }
+
   return (
     <div class="@container relative flex flex-col min-h-0 h-full flex-1">
       <div
@@ -41,7 +50,7 @@ export function NewSessionView(props: {
           <div class={NEW_SESSION_CONTENT_WIDTH}>
             <WordmarkV2 class="h-auto w-full text-v2-background-bg-inverse" />
             <div class="mt-8 flex flex-col gap-8">
-              <PromptInputV2Composer controller={props.input} />
+              <PromptInputV2Composer controller={props.input} accentSubmit={props.workspace.selection.workspace()} />
               <Show when={props.project.empty()}>
                 <PromptProjectAddButton controller={props.project} />
               </Show>
@@ -59,8 +68,10 @@ export function NewSessionView(props: {
                       projectRoot={props.workspace.project.root()}
                       workspaces={props.workspace.project.workspaces()}
                       branch={props.workspace.bar.branch()}
-                      onChange={props.workspace.selection.set}
+                      onboarding={onboardingReady() && !onboarding.used}
+                      onChange={select}
                       onDone={props.input.restoreFocus}
+                      onViewAll={props.workspace.project.openAll}
                     />
                   </Show>
                 </div>
@@ -137,7 +148,7 @@ function ProviderTip() {
           >
             <span class="truncate">{language.t("home.providerTip")}</span>
             <span class="flex size-6 shrink-0 items-center justify-center" aria-hidden="true">
-              <IconV2 name="chevron-down" size="small" class="-rotate-90" />
+              <Icon name="chevron-down" size="small" class="-rotate-90" />
             </span>
           </button>
           <TooltipV2
@@ -152,7 +163,7 @@ function ProviderTip() {
               aria-label={language.t("common.dismiss")}
               onClick={() => setPersistedState("dismissedAt", Date.now())}
             >
-              <IconV2 name="xmark-small" />
+              <Icon name="xmark-small" />
             </button>
           </TooltipV2>
         </div>

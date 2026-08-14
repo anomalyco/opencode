@@ -515,11 +515,10 @@ export function getToolInfo(
         title: webSearchProviderLabel(metadata?.provider, i18n),
         subtitle: input.query,
       }
-    case "task": {
-      const type =
-        typeof input.subagent_type === "string" && input.subagent_type
-          ? input.subagent_type[0]!.toUpperCase() + input.subagent_type.slice(1)
-          : undefined
+    case "task":
+    case "subagent": {
+      const raw = input.agent ?? input.subagent_type
+      const type = typeof raw === "string" && raw ? raw[0]!.toUpperCase() + raw.slice(1) : undefined
       return {
         icon: "task",
         title: agentTitle(i18n, type),
@@ -551,7 +550,7 @@ export function getToolInfo(
         icon: "code-lines",
         title: i18n.t("ui.tool.patch"),
         subtitle: input.files?.length
-          ? `${input.files.length} ${i18n.t(input.files.length > 1 ? "ui.common.file.other" : "ui.common.file.one")}`
+          ? `${input.files.length} ${i18n.plural("ui.common.file", input.files.length)}`
           : undefined,
       }
     case "todowrite":
@@ -594,19 +593,12 @@ function sessionLink(id: string | undefined, href?: (id: string) => string | und
   return href?.(id)
 }
 
-function taskSession(
-  input: Record<string, any>,
-  parentID: string | undefined,
-  sessions: SessionSummary[] | undefined,
-  agents?: readonly { name: string; color?: string }[],
-) {
+function taskSession(input: Record<string, any>, parentID: string | undefined, sessions: SessionSummary[] | undefined) {
   if (!parentID) return
   const description = typeof input.description === "string" ? input.description : ""
-  const agent = taskAgent(input.subagent_type, agents).name
   return (sessions ?? [])
     .filter((session) => session.parentID === parentID && !session.time?.archived)
     .filter((session) => (description ? session.title?.startsWith(description) : true))
-    .filter((session) => (agent ? session.title?.includes(`@${agent}`) : true))
     .sort((a, b) => (b.time.created ?? 0) - (a.time.created ?? 0))[0]?.id
 }
 
@@ -1553,16 +1545,16 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   // @ts-expect-error
   const partMetadata = () => part().state?.metadata ?? emptyMetadata
   const taskId = createMemo(() => {
-    if (part().tool !== "task") return
-    const value = partMetadata().sessionId
+    if (part().tool !== "task" && part().tool !== "subagent") return
+    const value = partMetadata().sessionID ?? partMetadata().sessionId
     if (typeof value === "string" && value) return value
   })
   const taskHref = createMemo(() => {
-    if (part().tool !== "task") return
+    if (part().tool !== "task" && part().tool !== "subagent") return
     return sessionLink(taskId(), data.sessionHref)
   })
   const taskSubtitle = createMemo(() => {
-    if (part().tool !== "task") return undefined
+    if (part().tool !== "task" && part().tool !== "subagent") return undefined
     const value = input().description
     if (typeof value === "string" && value) return value
     return taskId()
@@ -1979,18 +1971,17 @@ ToolRegistry.register({
     )
   },
 })
-
 ToolRegistry.register({
   name: "task",
   render(props) {
     const data = useData()
     const i18n = useI18n()
     const childSessionId = createMemo(() => {
-      const value = props.metadata.sessionId
+      const value = props.metadata.sessionID ?? props.metadata.sessionId
       if (typeof value === "string" && value) return value
-      return taskSession(props.input, data.sessionID, data.store.session, data.store.agent)
+      return taskSession(props.input, data.sessionID, data.store.session)
     })
-    const agent = createMemo(() => taskAgent(props.input.subagent_type, data.store.agent))
+    const agent = createMemo(() => taskAgent(props.input.agent ?? props.input.subagent_type, data.store.agent))
     const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
     const tone = createMemo(() => agent().color)
     const v2Tone = createMemo(() => agent().v2Color)
@@ -2000,7 +1991,8 @@ ToolRegistry.register({
           ? props.input.description
           : childSessionId()
       if (!value) return value
-      if (props.metadata.background === true) return `${value} (background)`
+      if (props.input.background === true || props.metadata.background === true || props.metadata.status === "running")
+        return `${value} (background)`
       return value
     })
     const running = createMemo(() => props.status === "pending" || props.status === "running")
@@ -2087,11 +2079,14 @@ ToolRegistry.register({
   },
 })
 
+ToolRegistry.register({ name: "subagent", render: ToolRegistry.render("task") })
+
 ToolRegistry.register({
   name: "shell",
   render(props) {
     const i18n = useI18n()
-    const pending = () => props.status === "pending" || props.status === "running"
+    const pending = () =>
+      props.status === "pending" || props.status === "running" || props.metadata.status === "running"
     const sawPending = pending()
     const text = createMemo(() => {
       const cmd = props.input.command ?? props.metadata.command ?? ""
@@ -2349,7 +2344,7 @@ ToolRegistry.register({
     const subtitle = createMemo(() => {
       const count = files().length
       if (count === 0) return ""
-      return `${count} ${i18n.t(count > 1 ? "ui.common.file.other" : "ui.common.file.one")}`
+      return `${count} ${i18n.plural("ui.common.file", count)}`
     })
 
     return (
@@ -2590,7 +2585,7 @@ ToolRegistry.register({
       const count = questions().length
       if (count === 0) return ""
       if (completed()) return i18n.t("ui.question.subtitle.answered", { count })
-      return `${count} ${i18n.t(count > 1 ? "ui.common.question.other" : "ui.common.question.one")}`
+      return `${count} ${i18n.plural("ui.common.question", count)}`
     })
 
     return (

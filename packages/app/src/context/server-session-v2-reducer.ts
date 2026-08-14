@@ -1,4 +1,4 @@
-import type { OpenCodeEvent, SessionInboxItem, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent, SessionInboxItem, SessionInfo, SessionMessageInfo } from "@opencode-ai/client/promise"
 
 type Assistant = Extract<SessionMessageInfo, { type: "assistant" }>
 type Compaction = Extract<SessionMessageInfo, { type: "compaction" }>
@@ -8,13 +8,18 @@ export type V2SessionReduction = {
   sessionID: string
   messages: SessionMessageInfo[]
   touched: string[]
+  removed?: string[]
   missing?: string
 }
 
 export function createV2SessionReducer() {
   const pending = new Map<string, SessionInboxItem>()
 
-  const reduce = (source: readonly SessionMessageInfo[], event: OpenCodeEvent): V2SessionReduction | undefined => {
+  const reduce = (
+    source: readonly SessionMessageInfo[],
+    event: OpenCodeEvent,
+    session?: Pick<SessionInfo, "location" | "projectID" | "subpath">,
+  ): V2SessionReduction | undefined => {
     if (!("data" in event) || !("sessionID" in event.data) || typeof event.data.sessionID !== "string") return
     const sessionID = event.data.sessionID
     const result = (messages: SessionMessageInfo[], touched: string[] = []): V2SessionReduction => ({
@@ -28,13 +33,39 @@ export function createV2SessionReducer() {
     switch (event.type) {
       case "session.inbox.enqueued":
         pending.set(key(sessionID, event.data.inboxID), event.data.item)
-        return result([...source])
+        if (event.data.item.type === "user")
+          return append({
+            id: event.data.inboxID,
+            type: "user",
+            metadata: event.data.item.payload.metadata,
+            text: event.data.item.payload.text,
+            files: event.data.item.payload.files,
+            agents: event.data.item.payload.agents,
+            time: { created: event.created },
+          })
+        if (event.data.item.type !== "synthetic") return result([...source])
+        return append({
+          id: event.data.inboxID,
+          type: "synthetic",
+          metadata: event.data.item.payload.metadata,
+          text: event.data.item.payload.text,
+          description: event.data.item.payload.description,
+          time: { created: event.created },
+        })
       case "session.inbox.cancelled":
         pending.delete(key(sessionID, event.data.inboxID))
-        return
+        return {
+          ...result(source.filter((item) => item.id !== event.data.inboxID)),
+          removed: source.some((item) => item.id === event.data.inboxID) ? [event.data.inboxID] : [],
+        }
       case "session.inbox.delivered": {
         const input = pending.get(key(sessionID, event.data.inboxID))
         pending.delete(key(sessionID, event.data.inboxID))
+        const existing = source.find((item) => item.id === event.data.inboxID)
+        if (existing) {
+          const promoted = { ...existing, time: { ...existing.time, created: event.created } }
+          return result([...source.filter((item) => item.id !== existing.id), promoted], [existing.id])
+        }
         if (!input) return { ...result([...source]), missing: event.data.inboxID }
         if (input.type === "user")
           return append({
@@ -82,6 +113,32 @@ export function createV2SessionReducer() {
               (item): item is Extract<SessionMessageInfo, { type: "model-switched" | "assistant" }> =>
                 item.type === "model-switched" || item.type === "assistant",
             )?.model,
+          time: { created: event.created },
+        })
+      case "session.moved":
+        if (!session) return
+        return append({
+          id: messageID(event.id),
+          type: "location-switched",
+          metadata: event.metadata,
+          location: event.data.location,
+          projectID: event.data.projectID,
+          subpath: event.data.subpath,
+          previous: {
+            location: session.location,
+            projectID: session.projectID,
+            subpath: session.subpath,
+          },
+          time: { created: event.created },
+        })
+      case "session.instructions.updated":
+        if (event.data.text === undefined) return
+        return append({
+          id: messageID(event.id),
+          type: "system",
+          text: event.data.text,
+          description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
+          metadata: event.metadata,
           time: { created: event.created },
         })
       case "session.synthetic":
@@ -403,8 +460,11 @@ export function createV2SessionReducer() {
           type: "compaction",
           status: "failed",
           metadata: current?.metadata ?? event.metadata,
-          reason: event.data.reason,
-          error: event.data.error,
+          reason: event.data.reason ?? "manual",
+          error: event.data.error ?? {
+            type: "compaction.failed",
+            message: "Compaction failed before recording an error",
+          },
           time: current?.time ?? { created: event.created },
         }
         if (!current) return append(failed)

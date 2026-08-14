@@ -782,10 +782,7 @@ export function SessionSidePanel(props: {
                           when={settings.general.newLayoutDesigns()}
                           fallback={
                             <>
-                              {props.reviewCount}{" "}
-                              {language.t(
-                                props.reviewCount === 1 ? "session.review.change.one" : "session.review.change.other",
-                              )}
+                              {props.reviewCount} {language.plural("session.review.change", props.reviewCount)}
                             </>
                           }
                         >

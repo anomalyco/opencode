@@ -141,7 +141,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
   return (
     <Switch>
       <Match when={store.stage === "always"}>
-        <Prompt
+        <SessionQuestion
           title="Always allow"
           semanticLabel={`Always allow ${props.request.action}`}
           instance={props.request.id}
@@ -235,7 +235,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           )
 
           const body = (
-            <Prompt
+            <SessionQuestion
               title="Permission required"
               semanticLabel={permissionSemanticLabel(props.request.action, current.title)}
               instance={props.request.id}
@@ -411,10 +411,13 @@ function RejectPrompt(props: {
   )
 }
 
-function Prompt<const T extends Record<string, string>>(props: {
+export function SessionQuestion<const T extends Record<string, string>>(props: {
   title: string
   semanticLabel?: string
   instance: string
+  id?: string
+  group?: string
+  choicesLabel?: string
   header?: JSX.Element
   body: JSX.Element
   options: T
@@ -431,85 +434,64 @@ function Prompt<const T extends Record<string, string>>(props: {
   })
   const narrow = createMemo(() => dimensions().width < 80)
   const shortcuts = Keymap.useShortcuts()
+  const id = () => props.id ?? "session.permission"
+  const group = () => props.group ?? "Permission"
 
   Keymap.createLayer(() => ({
     mode: "base",
     commands: [
-      {
-        id: "app.exit",
-        title: "Reject permission",
-        group: "Permission",
-        bind: false,
-        run() {
-          if (!props.escapeKey) return
-          props.onSelect(props.escapeKey)
-        },
-      },
-      {
-        id: "permission.prompt.fullscreen",
-        title: "Toggle permission fullscreen",
-        group: "Permission",
-        bind: false,
-        run() {
-          if (!props.fullscreen) return
-          setStore("expanded", (v) => !v)
-        },
-      },
-      {
-        bind: "left",
-        title: "Previous permission option",
-        group: "Permission",
-        run: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx - 1 + keys.length) % keys.length]
-          setStore("selected", next)
-        },
-      },
-      {
-        bind: "h",
-        title: "Previous permission option",
-        group: "Permission",
-        run: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx - 1 + keys.length) % keys.length]
-          setStore("selected", next)
-        },
-      },
-      {
-        bind: "right",
-        title: "Next permission option",
-        group: "Permission",
-        run: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx + 1) % keys.length]
-          setStore("selected", next)
-        },
-      },
-      {
-        bind: "l",
-        title: "Next permission option",
-        group: "Permission",
-        run: () => {
-          const idx = keys.indexOf(store.selected)
-          const next = keys[(idx + 1) % keys.length]
-          setStore("selected", next)
-        },
-      },
-      {
-        bind: "return",
-        title: "Select permission option",
-        group: "Permission",
-        run: () => props.onSelect(store.selected),
-      },
       ...(props.escapeKey
         ? [
             {
-              bind: "escape",
+              id: "app.exit",
               title: "Reject permission",
-              group: "Permission",
+              group: group(),
+              bind: false as const,
               run: () => props.onSelect(props.escapeKey!),
             },
           ]
+        : []),
+      ...(props.fullscreen
+        ? [
+            {
+              id: "permission.prompt.fullscreen",
+              title: "Toggle permission fullscreen",
+              group: group(),
+              bind: false as const,
+              run: () => setStore("expanded", (value) => !value),
+            },
+          ]
+        : []),
+      ...(keys.length > 1
+        ? [
+            {
+              bind: "left,h",
+              title: "Previous option",
+              group: group(),
+              run: () => {
+                const index = keys.indexOf(store.selected)
+                setStore("selected", keys[(index - 1 + keys.length) % keys.length])
+              },
+            },
+            {
+              bind: "right,l",
+              title: "Next option",
+              group: group(),
+              run: () => {
+                const index = keys.indexOf(store.selected)
+                setStore("selected", keys[(index + 1) % keys.length])
+              },
+            },
+          ]
+        : []),
+      {
+        bind: "return",
+        title: "Select option",
+        group: group(),
+        run: () => props.onSelect(store.selected),
+      },
+      ...(props.escapeKey
+        ? [{ bind: "escape", title: "Reject permission", group: group(), run: () => props.onSelect(props.escapeKey!) }]
         : []),
     ],
     bindings: [...(props.escapeKey ? ["app.exit"] : []), ...(props.fullscreen ? ["permission.prompt.fullscreen"] : [])],
@@ -520,7 +502,7 @@ function Prompt<const T extends Record<string, string>>(props: {
 
   const content = () => (
     <box
-      id="session.permission"
+      id={id()}
       ref={SimulationSemantics.bind(() => ({
         instance: props.instance,
         role: "dialog",
@@ -571,11 +553,11 @@ function Prompt<const T extends Record<string, string>>(props: {
         alignItems={narrow() ? "flex-start" : "center"}
       >
         <box
-          id="session.permission.actions"
+          id={`${id()}.actions`}
           ref={SimulationSemantics.bind(() => ({
             instance: props.instance,
             role: "listbox",
-            label: "Permission choices",
+            label: props.choicesLabel ?? "Permission choices",
           }))}
           flexDirection="row"
           gap={1}
@@ -584,7 +566,7 @@ function Prompt<const T extends Record<string, string>>(props: {
           <For each={keys}>
             {(option) => (
               <box
-                id={`session.permission.action.${String(option)}`}
+                id={`${id()}.action.${String(option)}`}
                 ref={SimulationSemantics.bind(() => ({
                   instance: props.instance,
                   role: "option",
@@ -621,9 +603,11 @@ function Prompt<const T extends Record<string, string>>(props: {
               {shortcuts.get("permission.prompt.fullscreen")} <span style={{ fg: theme.text.subdued }}>{hint()}</span>
             </text>
           </Show>
-          <text fg={theme.text.default}>
-            {"⇆"} <span style={{ fg: theme.text.subdued }}>select</span>
-          </text>
+          <Show when={keys.length > 1}>
+            <text fg={theme.text.default}>
+              {"⇆"} <span style={{ fg: theme.text.subdued }}>select</span>
+            </text>
+          </Show>
           <text fg={theme.text.default}>
             enter <span style={{ fg: theme.text.subdued }}>confirm</span>
           </text>

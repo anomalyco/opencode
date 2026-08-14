@@ -89,7 +89,6 @@ export type BackgroundAllInput = {
 }
 
 export interface Interface {
-  readonly list: () => Effect.Effect<Info[]>
   readonly get: (id: string) => Effect.Effect<Info | undefined>
   readonly start: (input: StartInput) => Effect.Effect<Info>
   readonly wait: (input: WaitInput) => Effect.Effect<WaitResult>
@@ -185,12 +184,6 @@ export const make = Effect.gen(function* () {
       Effect.asVoid,
       Effect.forkIn(scope, { startImmediately: true }),
     )
-  })
-
-  const list: Interface["list"] = Effect.fn("Job.list")(function* () {
-    return Array.from((yield* SynchronizedRef.get(state.jobs)).values())
-      .map(snapshot)
-      .toSorted((a, b) => a.started_at - b.started_at)
   })
 
   const get: Interface["get"] = Effect.fn("Job.get")(function* (id) {
@@ -360,7 +353,7 @@ export const make = Effect.gen(function* () {
     return result.info
   })
 
-  return Service.of({ list, get, start, wait, block, background, backgroundAll, cancel })
+  return Service.of({ get, start, wait, block, background, backgroundAll, cancel })
 })
 
 const layer = Layer.effect(Service, make)

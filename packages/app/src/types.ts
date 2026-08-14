@@ -1,7 +1,15 @@
-import type { EventSubscribeOutput, FileDiffInfo, ProjectListOutput } from "@opencode-ai/client/promise"
+import type {
+  EventSubscribeOutput,
+  FileDiffInfo,
+  ProjectListOutput,
+  WorktreeDirectory,
+} from "@opencode-ai/client/promise"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 
-export type Project = Omit<ProjectListOutput[number], "canonical"> & { worktree: string }
+export type Project = Omit<ProjectListOutput[number], "canonical"> & {
+  worktree: string
+  worktrees: WorktreeDirectory[]
+}
 
 type CurrentEvent = EventSubscribeOutput extends infer Item
   ? Item extends { type: infer Type extends string; data: infer Data }

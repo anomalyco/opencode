@@ -39,6 +39,7 @@ import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-b
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
 import { checksum } from "@opencode-ai/core/util/encode"
+import { isWorkspaceDirectory } from "@/utils/workspace"
 import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { ErrorPage } from "@/pages/error"
@@ -460,6 +461,8 @@ export default function Page() {
     if (!controller.layout.view().reviewPanel.opened()) controller.layout.view().reviewPanel.open()
   }
 
+  const sessionDirectory = createMemo(() => controller.data.info()?.location.directory ?? sdk().directory)
+  const workspaceSession = createMemo(() => isWorkspaceDirectory(sync().project, sessionDirectory()))
   const timeline = createTimelineModel({ session: controller })
   const historyLoading = timeline.history.loading
   const historyMore = timeline.history.more
@@ -514,6 +517,7 @@ export default function Page() {
   const [store, setStore] = createStore({
     ...sessionViewState(),
     newSessionWorktree: "main",
+    sessionDetailsOpen: false,
     deferRender: false,
   })
 
@@ -593,11 +597,17 @@ export default function Page() {
   })
   const vcsKey = createMemo(
     () =>
-      ["session-vcs", sdk().directory, sync().data.vcs?.branch ?? "", sync().data.vcs?.default_branch ?? ""] as const,
+      [
+        serverSDK.scope,
+        "session-vcs",
+        sdk().directory,
+        sync().data.vcs?.branch ?? "",
+        sync().data.vcs?.default_branch ?? "",
+      ] as const,
   )
   const vcsQuery = createQuery(() => {
     const mode = vcsMode()
-    const enabled = wantsReview() && sync().project?.vcs === "git"
+    const enabled = serverSDK.connection.status() === "connected" && wantsReview() && sync().project?.vcs === "git"
 
     return {
       queryKey: [...vcsKey(), mode] as const,
@@ -609,14 +619,31 @@ export default function Page() {
             sdk()
               .api.vcs.diff({ location: { directory: sdk().directory }, mode: mode === "git" ? "working" : mode })
               .then((result) => result.data)
-              .catch((error) => {
-                console.debug("[session-review] failed to load vcs diff", { mode, error })
-                return []
-              })
         : skipToken,
     }
   })
-  const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
+  const sessionDetailsQuery = createQuery(() => ({
+    queryKey: [serverSDK.scope, "session-details", sessionDirectory()] as const,
+    enabled: store.sessionDetailsOpen && serverSDK.connection.status() === "connected" && sync().project?.vcs === "git",
+    queryFn: () =>
+      sdk()
+        .api.vcs.diff({ location: { directory: sessionDirectory() }, mode: "working" })
+        .then((result) => result.data)
+        .catch((error) => {
+          console.debug("[session-review] failed to load session details diff", { error })
+          return []
+        }),
+  }))
+  const sessionDetailsDiffs = () => (sessionDetailsQuery.isFetched ? (sessionDetailsQuery.data ?? []) : undefined)
+  const refreshVcs = debounce(() => {
+    void queryClient.invalidateQueries({ queryKey: vcsKey() })
+    void queryClient.invalidateQueries({ queryKey: [serverSDK.scope, "session-details", sessionDirectory()] })
+  }, 100)
+  onCleanup(
+    sdk().event.listen((event) => {
+      if (event.details.type === "filesystem.changed") refreshVcs()
+    }),
+  )
   createEffect(
     on(
       () => desktopReviewOpen() || mobileChanges(),
@@ -1050,6 +1077,10 @@ export default function Page() {
   useComposerCommands()
   useSessionCommands({
     session: controller,
+    background: {
+      blocking: () => composer.background.blocking().length > 0,
+      move: composer.background.move,
+    },
     navigateMessageByOffset,
     setActiveMessage,
     focusInput,
@@ -1411,6 +1442,8 @@ export default function Page() {
     working: () => true,
     overflowAnchor: "none",
   })
+  const shouldAnchorBottom = () =>
+    !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
   createEffect(
     on(
       () => controller.identity.params.id,
@@ -1614,7 +1647,6 @@ export default function Page() {
   }
 
   const busy = (sessionID: string) => sync().data.session_working(sessionID)
-
   const queuedFollowups = createMemo(() => {
     const id = controller.identity.params.id
     if (!id) return emptyFollowups
@@ -1625,6 +1657,12 @@ export default function Page() {
     const id = controller.identity.params.id
     if (!id) return
     return followup.edit[id]
+  })
+
+  const workspaceMoveEligible = createMemo(() => {
+    const id = controller.identity.params.id
+    if (!id) return false
+    return (followup.items[id]?.length ?? 0) === 0 && !followup.failed[id] && !followup.paused[id] && !followup.edit[id]
   })
 
   const followupMutation = useMutation(() => ({
@@ -1963,7 +2001,7 @@ export default function Page() {
         >
           {hasReview()
             ? language.t("session.review.filesChanged", { count: reviewCount() })
-            : language.t("session.review.change.other")}
+            : language.plural("session.review.change", 0)}
         </Tabs.Trigger>
       </Tabs.List>
     </Tabs>
@@ -2019,9 +2057,7 @@ export default function Page() {
                   onUserScroll={markUserScroll}
                   onHistoryScroll={onHistoryScroll}
                   onAutoScrollInteraction={autoScroll.handleInteraction}
-                  shouldAnchorBottom={
-                    !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
-                  }
+                  shouldAnchorBottom={shouldAnchorBottom()}
                   centered={centered()}
                   setContentRef={(el) => {
                     content = el
@@ -2031,6 +2067,10 @@ export default function Page() {
                     if (root) scheduleScrollState(root)
                   }}
                   userMessages={visibleUserMessages()}
+                  diffs={sessionDetailsDiffs}
+                  onReview={openReviewPanel}
+                  workspaceMoveEligible={workspaceMoveEligible()}
+                  onSummaryOpenChange={(open) => setStore("sessionDetailsOpen", open)}
                   setHistoryAnchor={(handlers) => {
                     captureHistoryAnchor = handlers.capture
                     restoreHistoryAnchor = handlers.restore
@@ -2158,7 +2198,13 @@ export default function Page() {
                         setFollowup("paused", id, true)
                       },
                     })
-                    return <PromptInputV2Composer controller={promptInputController} borderUnderlay />
+                    return (
+                      <PromptInputV2Composer
+                        controller={promptInputController}
+                        borderUnderlay
+                        accentSubmit={workspaceSession()}
+                      />
+                    )
                   }}
                 </Show>
               }

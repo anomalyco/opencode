@@ -136,6 +136,7 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const dirBase64 = parts[0]
   const dir = decode64(dirBase64)
   if (!dir) return { type: "home" }
+  if (parts[1] === "session") return { type: "home" }
 
   throw new Error("Unrecognised route!")
 }

@@ -7,7 +7,6 @@ import { useServerHealth } from "@/utils/server-health"
 import { createServerSdkContext } from "./server-sdk"
 import { createServerSyncContext } from "./server-sync"
 import { getOwner } from "solid-js/web"
-import { QueryClient } from "@tanstack/solid-query"
 import type { ServerScope } from "@/utils/server-scope"
 import { createServerPermissionState } from "./permission"
 import { createServerNotificationState } from "./notification"
@@ -99,16 +98,6 @@ function createServerController(
   projects: ReturnType<typeof createServerProjects>,
 ) {
   const connKey = ServerConnection.key(conn)
-
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        refetchOnReconnect: false,
-        refetchOnWindowFocus: false,
-        refetchOnMount: false,
-      },
-    },
-  })
   const sdk = createServerSdkContext(conn, scope)
   const sync = createServerSyncContext(sdk)
   const permission = createServerPermissionState({ sdk, sync })
@@ -145,7 +134,6 @@ function createServerController(
     (conn?.type === "sidecar" && conn.variant === "base") || (conn?.type === "http" && isLocalHost(conn.http.url))
 
   return {
-    queryClient,
     sdk,
     sync,
     isLocal,

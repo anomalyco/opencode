@@ -5,12 +5,12 @@ import { ToolFailure } from "@opencode-ai/ai"
 import { Duration, Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
-import TurndownService from "turndown"
 import { Permission } from "../../permission.js"
+import { convertHTMLToMarkdown, MAX_MARKDOWN_BYTES } from "../html-markdown.js"
 import { collectBoundedResponseBody } from "../http-body.js"
 
 export const name = "webfetch"
-export const MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+export const MAX_RESPONSE_BYTES = MAX_MARKDOWN_BYTES
 export const DEFAULT_TIMEOUT_SECONDS = 30
 export const MAX_TIMEOUT_SECONDS = 120
 
@@ -196,14 +196,4 @@ export function extractTextFromHTML(html: string) {
   return text.trim()
 }
 
-export function convertHTMLToMarkdown(html: string) {
-  const turndown = new TurndownService({
-    headingStyle: "atx",
-    hr: "---",
-    bulletListMarker: "-",
-    codeBlockStyle: "fenced",
-    emDelimiter: "*",
-  })
-  turndown.remove(["script", "style", "meta", "link"])
-  return turndown.turndown(html)
-}
+export { convertHTMLToMarkdown }

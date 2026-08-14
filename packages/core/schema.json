@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "5c1aa56b-c3ee-4283-9a84-c0bf626dc604",
-  "prevIds": ["00924d88-1842-4d71-ac74-5682ddc47e1c"],
+  "id": "dcde8e6b-4bf4-4f6b-b2be-4030c2c3e936",
+  "prevIds": ["5c1aa56b-c3ee-4283-9a84-c0bf626dc604"],
   "ddl": [
     {
       "name": "account_state",
@@ -74,6 +74,10 @@
     },
     {
       "name": "workspace",
+      "entityType": "tables"
+    },
+    {
+      "name": "worktree",
       "entityType": "tables"
     },
     {
@@ -1437,6 +1441,46 @@
       "table": "workspace"
     },
     {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "worktree"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "directory",
+      "entityType": "columns",
+      "table": "worktree"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "strategy",
+      "entityType": "columns",
+      "table": "worktree"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "worktree"
+    },
+    {
       "columns": ["active_account_id"],
       "tableTo": "account",
       "columnsTo": ["id"],
@@ -1547,6 +1591,17 @@
       "table": "session_v2"
     },
     {
+      "columns": ["project_id"],
+      "tableTo": "project",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_worktree_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "worktree"
+    },
+    {
       "columns": ["email", "url"],
       "nameExplicit": false,
       "name": "control_account_pk",
@@ -1566,6 +1621,13 @@
       "name": "instruction_entry_pk",
       "entityType": "pks",
       "table": "instruction_entry"
+    },
+    {
+      "columns": ["project_id", "directory"],
+      "nameExplicit": false,
+      "name": "worktree_pk",
+      "entityType": "pks",
+      "table": "worktree"
     },
     {
       "columns": ["id"],

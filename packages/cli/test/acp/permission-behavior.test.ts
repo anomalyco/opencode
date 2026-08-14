@@ -49,6 +49,7 @@ describe("acp permission behavior", () => {
         send(
           permissionAsked("ses_allow", "perm_always", {
             action: "read",
+            save: ["/workspace/file.ts"],
             metadata: { path: "/workspace/file.ts" },
             source: { type: "tool", messageID: "msg_allow", id: "call_always" },
           }),
@@ -84,10 +85,10 @@ describe("acp permission behavior", () => {
         },
         options: [
           { optionId: "once", kind: "allow_once", name: "Allow once" },
-          { optionId: "always", kind: "allow_always", name: "Always allow" },
           { optionId: "reject", kind: "reject_once", name: "Reject" },
         ],
       })
+      expect(permissionRequests[0]?.options.map((option) => option.optionId)).toEqual(["once", "reject"])
       expect(permissionRequests[1]).toMatchObject({
         sessionId: "ses_allow",
         toolCall: {
@@ -557,6 +558,7 @@ function permissionAsked(
   input: {
     readonly action?: string
     readonly metadata?: Record<string, unknown>
+    readonly save?: string[]
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
   } = {},
 ) {
@@ -565,6 +567,7 @@ function permissionAsked(
     sessionID,
     action: input.action ?? "shell",
     resources: ["*"],
+    ...(input.save ? { save: input.save } : {}),
     metadata: input.metadata ?? { command: "printf hello" },
     ...(input.source ? { source: input.source } : {}),
   })

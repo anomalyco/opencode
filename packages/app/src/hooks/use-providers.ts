@@ -27,6 +27,7 @@ export function useProviders(directory: Accessor<string | undefined>) {
   const providers = () => (!providersQuery.isSuccess ? emptyProviderCatalog : providersQuery.data)
 
   return {
+    ready: () => providersQuery.isSuccess,
     all: () => providers().all,
     default: () => providers().default,
     popular: () =>

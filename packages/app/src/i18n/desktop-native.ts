@@ -202,7 +202,7 @@ export function detectDesktopNativeLocale(languages: readonly string[]): Desktop
     if (["no", "nb", "nn"].includes(source.language)) return "no"
     const match = DESKTOP_NATIVE_LOCALES.find((candidate) => {
       const target = locale(DESKTOP_NATIVE_LOCALE_TAGS[candidate])
-      return target?.language === source.language && target.script === source.script
+      return target?.language === source.language && normalizeScript(target.script) === normalizeScript(source.script)
     })
     if (match) return match
   }
@@ -220,6 +220,9 @@ function locale(value: string) {
     return undefined
   }
 }
+
+// Bun's ICU currently reports Punjabi's Arabic script as the invalid "Aran" code.
+const normalizeScript = (script?: string) => (script === "Aran" ? "Arab" : script)
 
 export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.menu.app": "OpenCode",

@@ -1,8 +1,9 @@
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { useRenderer } from "@opentui/solid"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
-import { useData } from "./data"
+import { locationKey, useData } from "./data"
 import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
@@ -10,6 +11,7 @@ import { useConfig } from "../config"
 import { useLocation } from "./location"
 import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
+import { newSessionLocation } from "../config/new-session-location"
 import {
   closeSessionTab,
   cycleSessionTab,
@@ -36,6 +38,11 @@ type PersistedState = {
   cwd: Record<string, TabsState>
 }
 
+type ScrollAnchor = {
+  messageID: string
+  screenY: number
+}
+
 const empty = (): TabsState => ({ tabs: [], unread: {} })
 
 // Deliberately after connect settles: the visible session's mount syncs win the first slots.
@@ -51,7 +58,10 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const config = useConfig().data
     const location = useLocation()
     const paths = useTuiPaths()
+    const renderer = useRenderer()
     const enabled = () => config.tabs.enabled
+    // Focus reporting emits transitions, so an interactive launch owns unread state until its first blur.
+    const [focused, setFocused] = createSignal(true)
     // Keyed reconcile keeps tab object identity across reorders, so strip rows move instead of
     // mutating in place, which per-row animations and drag state depend on.
     const [store, updateStore] = useStorage().store<PersistedState>("tabs", {
@@ -66,6 +76,21 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     let history: SessionTabHistory = { entries: [], index: -1 }
     // User-closed tabs eligible for reopening; in-memory like history, deleted sessions pruned.
     let closedTabs: ClosedSessionTab[] = []
+    const scrollAnchors = new Map<string, ScrollAnchor>()
+
+    const onFocus = () => setFocused(true)
+    const onBlur = () => setFocused(false)
+    renderer.on("focus", onFocus)
+    renderer.on("blur", onBlur)
+    onCleanup(() => {
+      renderer.off("focus", onFocus)
+      renderer.off("blur", onBlur)
+    })
+
+    createEffect(() => {
+      if (config.experimental?.tab_scroll === true) return
+      scrollAnchors.clear()
+    })
 
     function state() {
       if (config.tabs.scope === "cwd") return store.cwd[paths.cwd] ?? fallback
@@ -118,7 +143,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     }
 
     function markUnread(sessionID: string, unread: SessionTabUnread) {
-      if (!enabled()) return
+      if (!enabled() || !focused()) return
       const session = root(sessionID)
       if (current() === session || !state().tabs.some((tab) => tab.sessionID === session)) return
       if (state().unread[session] === unread) return
@@ -138,12 +163,21 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         sessionID,
         title: title(sessionID, state().tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
       })
-      if (tabs === state().tabs && !state().unread[sessionID]) return
+      if (tabs === state().tabs) return
       update((draft) => {
         draft.tabs = openSessionTab(draft.tabs, {
           sessionID,
           title: title(sessionID, draft.tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
         })
+      })
+    })
+
+    createEffect(() => {
+      if (!enabled() || !focused()) return
+      if (route.data.type !== "session" || route.data.sessionID === "dummy") return
+      const sessionID = root(route.data.sessionID)
+      if (!state().unread[sessionID]) return
+      update((draft) => {
         delete draft.unread[sessionID]
       })
     })
@@ -159,9 +193,9 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       })
     })
 
-    // Load lightweight session metadata concurrently so persisted tabs can resolve their project
-    // labels immediately. Delay the heavier per-tab data so the visible session keeps the first
-    // connection slots and switches still render from a warm cache.
+    // Load lightweight session and location metadata concurrently so persisted tabs can resolve
+    // their project and branch labels. Delay the heavier per-tab data so the visible session keeps
+    // the first connection slots and switches still render from a warm cache.
     const openTabSessions = createMemo(() =>
       state()
         .tabs.map((tab) => tab.sessionID)
@@ -171,10 +205,25 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     createEffect(() => {
       if (!enabled()) return
       if (client.connection.status() !== "connected") return
-      const sessionIDs = openTabSessions()
-      if (sessionIDs === "") return
-      void Promise.allSettled(sessionIDs.split("\n").map((sessionID) => data.session.sync(sessionID)))
+      const signature = openTabSessions()
+      if (signature === "") return
+      const sessionIDs = signature.split("\n")
       let stale = false
+      void (async () => {
+        await Promise.allSettled(sessionIDs.map((sessionID) => data.session.sync(sessionID)))
+        if (stale) return
+        const locations = new Map(
+          sessionIDs
+            .map((sessionID) => data.session.get(sessionID)?.location)
+            .filter((location) => location !== undefined)
+            .map((location) => [locationKey(location), location]),
+        )
+        await Promise.allSettled(
+          Array.from(locations.values(), (location) =>
+            Promise.all([data.location.syncInfo(location), data.location.vcs.sync(location)]),
+          ),
+        )
+      })()
       const timer = setTimeout(async () => {
         const sessions = state()
           .tabs.map((tab) => tab.sessionID)
@@ -216,6 +265,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
 
     function remove(sessionID: string, navigate: boolean) {
       const target = root(sessionID)
+      scrollAnchors.delete(target)
       const closed = closeSessionTab(state().tabs, target)
       const selected = navigate && current() === target
       if (closed.tabs === state().tabs && !selected) return
@@ -247,6 +297,21 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       },
       current,
       status,
+      scrollAnchor(sessionID: string) {
+        const target = root(sessionID)
+        if (!state().tabs.some((tab) => tab.sessionID === target)) return
+        return scrollAnchors.get(target)
+      },
+      setScrollAnchor(sessionID: string, anchor: ScrollAnchor | undefined) {
+        const target = root(sessionID)
+        if (anchor === undefined || !state().tabs.some((tab) => tab.sessionID === target)) {
+          scrollAnchors.delete(target)
+          return
+        }
+        const current = scrollAnchors.get(target)
+        if (current?.messageID === anchor.messageID && current.screenY === anchor.screenY) return
+        scrollAnchors.set(target, anchor)
+      },
       select(sessionID: string) {
         if (!enabled()) return
         route.navigate({ type: "session", sessionID: root(sessionID) })
@@ -254,9 +319,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       add() {
         if (!enabled()) return
         const sessionID = current()
+        const currentLocation = (sessionID ? data.session.get(sessionID)?.location : undefined) ?? location.ref
         route.navigate({
           type: "home",
-          location: (sessionID ? data.session.get(sessionID)?.location : undefined) ?? location.ref,
+          location: newSessionLocation(
+            config.session.new_location,
+            paths.cwd,
+            currentLocation,
+            location.error?.location,
+          ),
         })
       },
       close(sessionID?: string) {

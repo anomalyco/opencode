@@ -14,6 +14,7 @@ export function createNewSessionDraftController(props: {
   worktree: () => string
   resetWorktree: () => void
   draftId: string
+  onSubmit: () => void
 }) {
   const prompt = usePrompt()
   const serverSync = useServerSync()
@@ -42,7 +43,10 @@ export function createNewSessionDraftController(props: {
       return props.worktree()
     },
     onNewSessionWorktreeReset: props.resetWorktree,
-    onSubmit: comments.clear,
+    onSubmit: () => {
+      props.onSubmit()
+      comments.clear()
+    },
   })
 
   createEffect(() => {

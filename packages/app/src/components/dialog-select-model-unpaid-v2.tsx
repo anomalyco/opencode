@@ -7,7 +7,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme } from "@opencode-ai/ui/theme"
 import { createMemo, onCleanup, onMount, type Component, For, Show } from "solid-js"
 import { useLocal } from "@/context/local"
-import { useProviders } from "@/hooks/use-providers"
+import { useIntegrations } from "@/hooks/use-integrations"
 import { decode64 } from "@/utils/base64"
 import { useLanguage } from "@/context/language"
 import { ModelTooltip } from "./model-tooltip"
@@ -22,7 +22,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
   const dialog = useDialog()
   const theme = useTheme()
   const directory = () => decode64(local.slug())
-  const providers = useProviders(directory)
+  const integrations = useIntegrations(directory)
   const language = useLanguage()
   const modelKey = (item: ReturnType<ModelState["list"]>[number]) => `${item.provider.id}:${item.id}`
   const currentKey = createMemo(() => {
@@ -127,7 +127,8 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
               </div>
               <div class="grid w-full grid-cols-1 gap-y-1.5 gap-x-2 sm:grid-cols-2">
                 <For
-                  each={[...providers.popular()]
+                  each={integrations
+                    .list()
                     .filter((provider) => featuredProviders.includes(provider.id))
                     .sort((a, b) => featuredProviders.indexOf(a.id) - featuredProviders.indexOf(b.id))}
                 >
