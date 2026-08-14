@@ -197,7 +197,7 @@ You can also access Go models through the following API endpoints.
 
 | Model             | Model ID          | Endpoint                                         | AI SDK Package              |
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
-| Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna      | gpt-5.6-luna      | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -252,13 +252,13 @@ https://opencode.ai/zen/go/v1/models
 | Qwen3.6 Plus      | Not used       | 0 days         |
 | MiniMax M3        | Not used       | 0 days         |
 | MiniMax M2.7      | Not used       | 0 days         |
-| DeepSeek V4 Pro   | Not used       | 0 days         |
-| DeepSeek V4 Flash | Not used       | 0 days         |
+| DeepSeek V4 Pro   | Not used       | 0 days\*       |
+| DeepSeek V4 Flash | Not used       | 0 days\*       |
 | Hy3               | Not used       | 0 days         |
 
 - **Grok 4.5:** ZDR disables important API features that depend on stored data, including the stateful Responses API, Files and Collections, and the Batch API. [Learn more](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 5.6 Luna:** Abuse monitoring logs are generated for all API feature usage and retained for up to 30 days. [Learn more](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
-- **DeepSeek V4 Flash:** ZDR agreement is renewed monthly. The current agreement is valid through August 31, 2026.
+- **DeepSeek:** ZDR agreement is renewed monthly. The current agreement is valid through August 31, 2026.
 
 ---
 
