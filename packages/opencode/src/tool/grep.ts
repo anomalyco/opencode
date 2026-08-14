@@ -42,8 +42,8 @@ export const GrepTool = Tool.define(
             always: ["*"],
             metadata: {
               pattern: params.pattern,
-              path: params.path,
-              include: params.include,
+              ...(params.path !== undefined && { path: params.path }),
+              ...(params.include !== undefined && { include: params.include }),
             },
           })
 

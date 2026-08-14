@@ -1,7 +1,7 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { test, expect } from "bun:test"
 import os from "os"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Permission } from "../../src/permission"
@@ -1172,3 +1172,61 @@ it.instance(
     }),
   { git: true },
 )
+
+it.instance(
+  "ask - omits undefined metadata fields for glob and grep permission requests and successfully encodes permission list",
+  () =>
+    Effect.gen(function* () {
+      const sessionID = SessionID.make("session_meta_test")
+
+      yield* ask({
+        id: PermissionV1.ID.make("per_glob_1"),
+        sessionID,
+        permission: "glob",
+        patterns: ["**/*.txt"],
+        metadata: { pattern: "**/*.txt", path: undefined },
+        always: ["*"],
+        ruleset: [{ permission: "glob", pattern: "*", action: "ask" }],
+      }).pipe(Effect.forkScoped)
+
+      yield* ask({
+        id: PermissionV1.ID.make("per_grep_1"),
+        sessionID,
+        permission: "grep",
+        patterns: ["needle"],
+        metadata: { pattern: "needle", path: undefined, include: undefined },
+        always: ["*"],
+        ruleset: [{ permission: "grep", pattern: "*", action: "ask" }],
+      }).pipe(Effect.forkScoped)
+
+      yield* ask({
+        id: PermissionV1.ID.make("per_grep_2"),
+        sessionID,
+        permission: "grep",
+        patterns: ["needle"],
+        metadata: { pattern: "needle", path: "src", include: "*.ts" },
+        always: ["*"],
+        ruleset: [{ permission: "grep", pattern: "*", action: "ask" }],
+      }).pipe(Effect.forkScoped)
+
+      const pending = yield* waitForPending(3)
+      expect(pending).toHaveLength(3)
+
+      const globReq = pending.find((r) => r.id === "per_glob_1")!
+      expect(globReq.metadata).toEqual({ pattern: "**/*.txt" })
+      expect("path" in globReq.metadata).toBe(false)
+
+      const grepReq = pending.find((r) => r.id === "per_grep_1")!
+      expect(grepReq.metadata).toEqual({ pattern: "needle" })
+      expect("path" in grepReq.metadata).toBe(false)
+      expect("include" in grepReq.metadata).toBe(false)
+
+      const grepWithOptsReq = pending.find((r) => r.id === "per_grep_2")!
+      expect(grepWithOptsReq.metadata).toEqual({ pattern: "needle", path: "src", include: "*.ts" })
+
+      const encoded = yield* Schema.encode(Schema.Array(PermissionV1.Request))(pending)
+      expect(encoded).toHaveLength(3)
+    }),
+  { git: true },
+)
+

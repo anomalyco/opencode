@@ -41,6 +41,20 @@ const ctx = {
   ask: () => Effect.void,
 }
 
+const asks = () => {
+  const items: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+  return {
+    items,
+    next: {
+      ...ctx,
+      ask: (req: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">) =>
+        Effect.sync(() => {
+          items.push(req)
+        }),
+    } satisfies Tool.Context,
+  }
+}
+
 const root = path.join(__dirname, "../..")
 const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 
@@ -220,4 +234,31 @@ describe("tool.grep", () => {
       expect(requests.find((req) => req.permission === "external_directory")).toBeUndefined()
     }),
   )
+
+  it.instance("permission metadata omits optional path and include when not provided", () =>
+    Effect.gen(function* () {
+      yield* TestInstance
+      const askData = asks()
+      const info = yield* GrepTool
+      const grep = yield* info.init()
+      yield* grep.execute({ pattern: "needle" }, askData.next)
+      expect(askData.items).toHaveLength(1)
+      expect(askData.items[0].metadata).toEqual({ pattern: "needle" })
+      expect("path" in askData.items[0].metadata).toBe(false)
+      expect("include" in askData.items[0].metadata).toBe(false)
+    }),
+  )
+
+  it.instance("permission metadata includes path and include when provided", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const askData = asks()
+      const info = yield* GrepTool
+      const grep = yield* info.init()
+      yield* grep.execute({ pattern: "needle", path: test.directory, include: "*.ts" }, askData.next)
+      expect(askData.items).toHaveLength(1)
+      expect(askData.items[0].metadata).toEqual({ pattern: "needle", path: test.directory, include: "*.ts" })
+    }),
+  )
 })
+

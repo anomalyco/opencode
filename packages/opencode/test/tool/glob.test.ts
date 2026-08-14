@@ -129,4 +129,30 @@ describe("tool.glob", () => {
       }
     }),
   )
+
+  it.instance("permission metadata omits optional path when not provided", () =>
+    Effect.gen(function* () {
+      yield* TestInstance
+      const askData = asks()
+      const info = yield* GlobTool
+      const glob = yield* info.init()
+      yield* glob.execute({ pattern: "*.ts" }, askData.next)
+      expect(askData.items).toHaveLength(1)
+      expect(askData.items[0].metadata).toEqual({ pattern: "*.ts" })
+      expect("path" in askData.items[0].metadata).toBe(false)
+    }),
+  )
+
+  it.instance("permission metadata includes path when provided", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const askData = asks()
+      const info = yield* GlobTool
+      const glob = yield* info.init()
+      yield* glob.execute({ pattern: "*.ts", path: test.directory }, askData.next)
+      expect(askData.items).toHaveLength(1)
+      expect(askData.items[0].metadata).toEqual({ pattern: "*.ts", path: test.directory })
+    }),
+  )
 })
+
