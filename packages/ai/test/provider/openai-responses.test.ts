@@ -261,8 +261,9 @@ describe("OpenAI Responses route", () => {
                   protocol: input.headers["openai-beta"],
                 })
                 sent.push(message)
-              }),
+            }),
             messages: Stream.fromArray([
+              ProviderShared.encodeJson({ type: "response.created", response: { id: "resp_ws" } }),
               ProviderShared.encodeJson({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),
               ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_ws" } }),
             ]),
@@ -299,6 +300,47 @@ describe("OpenAI Responses route", () => {
         input: [{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
         store: false,
       })
+    }),
+  )
+
+  it.effect("rejects out-of-order and mismatched WebSocket response events", () =>
+    Effect.gen(function* () {
+      const streams = [
+        Stream.fromArray([
+          ProviderShared.encodeJson({ type: "response.output_text.delta", item_id: "late", delta: "Late" }),
+          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_old" } }),
+        ]),
+        Stream.fromArray([
+          ProviderShared.encodeJson({ type: "response.created", response: { id: "resp_new" } }),
+          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_old" } }),
+        ]),
+      ]
+      const webSocket = WebSocketTransport.makeDirect({
+        open: () =>
+          Effect.succeed({
+            sendText: () => Effect.void,
+            messages: streams.shift() ?? Stream.die("unexpected WebSocket open"),
+            close: Effect.void,
+          }),
+      })
+      const deps = Layer.succeed(
+        RequestExecutor.Service,
+        RequestExecutor.Service.of({ execute: () => Effect.die("unexpected HTTP request") }),
+      )
+      const model = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses(
+        "gpt-4.1-mini",
+      )
+
+      const errors = yield* Effect.forEach(["late", "mismatch"], (prompt) =>
+        LLMClient.generate(LLM.request({ model, prompt }), { webSocket }).pipe(
+          Effect.provide(LLMClient.layer.pipe(Layer.provide(deps))),
+          Effect.flip,
+        ),
+      )
+
+      expect(errors.map((error) => error.reason._tag)).toEqual(["InvalidProviderOutput", "InvalidProviderOutput"])
+      expect(errors[0]?.message).toContain("before response.created")
+      expect(errors[1]?.message).toContain("response ID changed")
     }),
   )
 
@@ -399,6 +441,7 @@ describe("OpenAI Responses route", () => {
           Effect.succeed({
             sendText: () => Effect.void,
             messages: Stream.fromArray([
+              ProviderShared.encodeJson({ type: "response.created", response: { id: "resp_ws" } }),
               ProviderShared.encodeJson({ type: "response.output_text.delta", item_id: "msg_1", delta: "Hi" }),
               ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_ws" } }),
             ]),
@@ -495,11 +538,18 @@ describe("OpenAI Responses route", () => {
       const failure = new AIError({
         module: "test",
         method: "receive",
-        reason: new TransportReason({ message: "socket closed", phase: "close" }),
+        reason: new TransportReason({
+          message: "socket closed",
+          transport: "websocket",
+          operation: "read",
+          phase: "close",
+        }),
       })
       const streams = [
         Stream.fail(failure),
-        Stream.make(ProviderShared.encodeJson({ type: "response.created" })).pipe(Stream.concat(Stream.fail(failure))),
+        Stream.make(
+          ProviderShared.encodeJson({ type: "response.created", response: { id: "resp_observed" } }),
+        ).pipe(Stream.concat(Stream.fail(failure))),
       ]
       const deps = Layer.succeed(
         RequestExecutor.Service,
@@ -573,7 +623,7 @@ describe("OpenAI Responses route", () => {
       yield* LLMClient.generate(
         LLMRequest.update(request, {
           model: Azure.configure({
-            baseURL: "https://opencode-test.openai.azure.com/openai/v1/",
+            baseURL: "https://opencode-test.openai.azure.com/openai/",
             apiKey: "azure-key",
             headers: { authorization: "Bearer stale" },
           }).responses("gpt-4.1-mini"),

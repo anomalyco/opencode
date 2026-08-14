@@ -43,34 +43,77 @@ const message = (body: unknown) =>
     return encodeMessage(yield* decodeMessage({ ...request, type: "response.create" }))
   })
 
-const driver = (options: Options, body: string): WebSocketChannelDriver => ({
-  create: () => Effect.succeed({ message: body, mode: "full" }),
-  observe: (_create, frame) =>
-    Effect.gen(function* () {
-      const event = yield* decodeEvent(frame).pipe(
-        Effect.mapError(() => ProviderShared.eventError(options.id, `Invalid ${options.name} WebSocket event`, frame)),
-      )
-      if (event.type === "response.completed") return { type: "completed", frame }
-      if (event.type === "response.incomplete") return { type: "incomplete", frame }
-      if (event.type === "response.failed")
-        return {
-          type: "provider-failure",
-          error: OpenResponses.providerFailure(options.id, event, `${options.name} response failed`),
-        }
-      if (event.type === "error") {
-        yield* OpenResponses.decodeKnownErrorEvent(event).pipe(
-          Effect.mapError(() =>
-            ProviderShared.eventError(options.id, `${options.name} returned a malformed error event`, frame),
-          ),
+const driver = (options: Options, body: string): WebSocketChannelDriver => {
+  let responseID: string | undefined
+  let terminal = false
+  return {
+    create: () =>
+      Effect.sync(() => {
+        responseID = undefined
+        terminal = false
+        return { message: body, mode: "full" }
+      }),
+    observe: (_create, frame) =>
+      Effect.gen(function* () {
+        const event = yield* decodeEvent(frame).pipe(
+          Effect.mapError(() => ProviderShared.eventError(options.id, `Invalid ${options.name} WebSocket event`, frame)),
         )
-        return {
-          type: "provider-failure",
-          error: OpenResponses.providerFailure(options.id, event, `${options.name} stream error`),
+        if (terminal)
+          return yield* ProviderShared.eventError(
+            options.id,
+            `${options.name} emitted ${event.type} after a terminal event`,
+            frame,
+          )
+        if (event.type === "error") {
+          terminal = true
+          yield* OpenResponses.decodeKnownErrorEvent(event).pipe(
+            Effect.mapError(() =>
+              ProviderShared.eventError(options.id, `${options.name} returned a malformed error event`, frame),
+            ),
+          )
+          return {
+            type: "provider-failure",
+            error: OpenResponses.providerFailure(options.id, event, `${options.name} stream error`),
+          }
         }
-      }
-      return { type: "frame", frame }
-    }),
-})
+        if (event.type === "response.failed") {
+          terminal = true
+          if (responseID && event.response?.id && event.response.id !== responseID)
+            return yield* ProviderShared.eventError(options.id, `${options.name} response ID changed during execution`, frame)
+          return {
+            type: "provider-failure",
+            error: OpenResponses.providerFailure(options.id, event, `${options.name} response failed`),
+          }
+        }
+        if (event.type === "response.created") {
+          const created = event.response?.id
+          if (responseID)
+            return yield* ProviderShared.eventError(options.id, `${options.name} emitted duplicate response.created`, frame)
+          if (!created)
+            return yield* ProviderShared.eventError(options.id, `${options.name} response.created is missing response.id`, frame)
+          responseID = created
+          return { type: "frame", frame }
+        }
+        if (!responseID)
+          return yield* ProviderShared.eventError(
+            options.id,
+            `${options.name} emitted ${event.type} before response.created`,
+            frame,
+          )
+        if (event.response?.id && event.response.id !== responseID)
+          return yield* ProviderShared.eventError(options.id, `${options.name} response ID changed during execution`, frame)
+        if (event.type === "response.completed") {
+          terminal = true
+          return { type: "completed", frame }
+        }
+        if (event.type === "response.incomplete") {
+          terminal = true
+          return { type: "incomplete", frame }
+        }
+        return { type: "frame", frame }
+      }),
+  }
+}
 
 export const transport = <Body>(options: Options): Transport<Body, Prepared, string> => {
   const http = HttpTransport.sseJson.with<Body>()
