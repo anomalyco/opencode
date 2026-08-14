@@ -229,7 +229,6 @@ export function convertHTMLToMarkdown(html: string) {
     block()
     const prefix = `${fence}${code.language ?? ""}\n`
     const quote = quoteDepth > 0 ? `${"> ".repeat(Math.min(8, quoteDepth))}` : ""
-    const closing = `${code.text.endsWith("\n") ? "" : "\n"}${fence}`
     let payload = code.text
     for (;;) {
       const candidate = `${prefix}${payload}${payload.endsWith("\n") ? "" : "\n"}${fence}`
