@@ -70,6 +70,8 @@ import {
 import { DialogImagePreview } from "../dialog-image-preview"
 import { useDirectoryRecents } from "../../prompt/directory-recents"
 import { directoryRecentValue } from "../../prompt/directory-completion"
+import { DialogSelect } from "../../ui/dialog-select"
+import open from "open"
 
 export type PromptProps = {
   sessionID?: string
@@ -1518,6 +1520,7 @@ export function Prompt(props: PromptProps) {
 
   const agentMetaAlpha = createFadeIn(() => store.mode === "shell" || !!local.agent.current(), animationsEnabled)
   const modelMetaAlpha = createFadeIn(() => !!local.agent.current() && store.mode === "normal", animationsEnabled)
+  const [locationHover, setLocationHover] = createSignal(false)
   const variantMetaAlpha = createFadeIn(
     () => !!local.agent.current() && store.mode === "normal" && showVariant(),
     animationsEnabled,
@@ -1539,21 +1542,59 @@ export function Prompt(props: PromptProps) {
     const width = dimensions().width < 44 ? dimensions().width - 5 : Math.min(75, dimensions().width - 4) - 5
     return Locale.takeWidth(value, Math.max(1, width)).trimEnd()
   })
-  const locationLabel = createMemo(() => {
+  const footerLocation = createMemo(() => {
     if (!props.sessionID) {
       // No session yet: show where the next session will be created.
-      const location = currentLocation.ref ?? data.location.default()
-      const directory = abbreviateHome(location.directory, paths.home)
-      const branch = data.location.vcs.info(location)?.branch.current
-      return branch ? `${directory}:${branch}` : directory
+      return currentLocation.ref ?? data.location.default()
     }
     if (status() !== "idle") return
-    const location = data.session.get(props.sessionID)?.location
+    return data.session.get(props.sessionID)?.location
+  })
+  const locationLabel = createMemo(() => {
+    const location = footerLocation()
     if (!location) return
     const directory = abbreviateHome(location.directory, paths.home)
     const branch = data.location.vcs.info(location)?.branch.current
     return branch ? `${directory}:${branch}` : directory
   })
+
+  function openLocationMenu() {
+    const location = footerLocation()
+    if (!location) return
+    dialog.replace(() => (
+      <DialogSelect
+        title="Working directory"
+        options={[
+          {
+            title: "Copy path",
+            value: "location.copy",
+            description: location.directory,
+            onSelect: (dialog) => {
+              void clipboard.write(location.directory).then(() => {
+                dialog.clear()
+                toast.show({ message: "Path copied to clipboard", variant: "info" })
+              }, toast.error)
+            },
+          },
+          {
+            title: "Open folder",
+            value: "location.open",
+            description: "in system file manager",
+            onSelect: (dialog) => {
+              dialog.clear()
+              void open(location.directory).catch(toast.error)
+            },
+          },
+          {
+            title: "Move session",
+            value: "session.move",
+            description: "to another working directory",
+            onSelect: () => void move.open(),
+          },
+        ]}
+      />
+    ))
+  }
 
   const spinnerDef = createMemo(() => {
     const agent = status() === "running" ? local.agent.current() : local.agent.current()
@@ -1874,7 +1915,20 @@ export function Prompt(props: PromptProps) {
                   <Match when={true}>
                     <Show when={!props.hint && locationLabel()} fallback={props.hint ?? <text />}>
                       {(location) => (
-                        <text fg={theme.text.subdued} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
+                        <text
+                          id="prompt.footer.location"
+                          fg={locationHover() ? theme.text.default : theme.text.subdued}
+                          wrapMode="none"
+                          truncate
+                          flexGrow={1}
+                          flexShrink={1}
+                          onMouseOver={() => setLocationHover(true)}
+                          onMouseOut={() => setLocationHover(false)}
+                          onMouseUp={() => {
+                            if (renderer.getSelection()?.getSelectedText()) return
+                            openLocationMenu()
+                          }}
+                        >
                           {location()}
                         </text>
                       )}
