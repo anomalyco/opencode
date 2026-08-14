@@ -413,7 +413,7 @@ describe("OpenAI Responses route", () => {
             status: "completed",
             call_id: "call_1",
             name: "weather",
-            arguments: '{"city":"Paris"}',
+            arguments: '{ "city": "Paris" }',
           },
         }),
       )
@@ -480,6 +480,53 @@ describe("OpenAI Responses route", () => {
       expect(ProviderShared.decodeJson(continued.message)).toMatchObject({
         previous_response_id: "resp_1",
         input: [steer],
+      })
+    }),
+  )
+
+  it.effect("continues store-false reasoning without replaying the output-only item ID", () =>
+    Effect.gen(function* () {
+      const firstInput = [{ role: "user", content: [{ type: "input_text", text: "Think" }] }]
+      const request = { type: "response.create", model: "gpt-5.2", store: false, input: firstInput }
+      const first = continuationDriver(request)
+      const create = yield* first.create(undefined)
+      yield* first.observe(
+        create,
+        ProviderShared.encodeJson({
+          type: "response.output_item.done",
+          item: {
+            type: "reasoning",
+            id: "rs_1",
+            summary: [{ type: "summary_text", text: "Thought" }],
+            encrypted_content: "encrypted",
+          },
+        }),
+      )
+      const saved = checkpoint(
+        yield* first.observe(
+          create,
+          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_1" } }),
+        ),
+      )
+      const next = continuationDriver({
+        ...request,
+        input: [
+          ...firstInput,
+          {
+            type: "reasoning",
+            summary: [{ type: "summary_text", text: "Thought" }],
+            encrypted_content: "encrypted",
+          },
+          { role: "user", content: [{ type: "input_text", text: "Continue" }] },
+        ],
+      })
+
+      const continued = yield* next.create(saved)
+
+      expect(continued.mode).toBe("incremental")
+      expect(ProviderShared.decodeJson(continued.message)).toMatchObject({
+        previous_response_id: "resp_1",
+        input: [{ role: "user", content: [{ type: "input_text", text: "Continue" }] }],
       })
     }),
   )

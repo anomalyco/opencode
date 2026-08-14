@@ -95,6 +95,26 @@ models, and connection continue to apply:
 
 `settings` is package-specific. A field only has an effect when the selected package supports it.
 
+### Experimental OpenAI Responses WebSocket
+
+OpenAI Responses can reuse one Session-bound WebSocket connection across sequential model calls. This transport is
+experimental and disabled by default. To test it, set the flag before starting or restarting the OpenCode service:
+
+```bash
+export OPENCODE_EXPERIMENTAL_OPENAI_RESPONSES_WEBSOCKET=true
+opencode2 service restart
+```
+
+The flag applies only to the `openai` provider using the native `openai-responses` route. Azure, xAI,
+OpenAI-compatible providers, and other protocols continue to use HTTP. A Session HTTP plugin hook also forces HTTP so
+the hook is never bypassed.
+
+OpenCode reuses a connection only while its endpoint and effective handshake headers remain unchanged. It rotates
+connections before the provider lifetime limit and never replays a request after ambiguous delivery. HTTP fallback is
+limited to failures proven to occur before the provider received the request.
+
+Unset the variable or set it to `false`, then restart the service, to return to HTTP-only execution.
+
 ### Headers and body
 
 Headers and body fields can be set at provider, model, or variant scope:

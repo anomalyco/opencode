@@ -8,7 +8,7 @@ import type {
 } from "@opencode-ai/ai/route"
 import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
 import { Session } from "@opencode-ai/schema/session"
-import { Deferred, Effect, Fiber, Queue, Stream } from "effect"
+import { Deferred, Effect, Fiber, Metric, Queue, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Headers } from "effect/unstable/http"
 
@@ -716,5 +716,29 @@ describe("SessionModelTransport", () => {
     )
 
     expect(fixture.connections[0]?.closed).toBe(1)
+  })
+
+  test("records metadata-only lifecycle metrics", async () => {
+    const fixture = automatic()
+
+    await run(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        yield* collect(executor, exchange("first", { headers: { authorization: "secret-one" } }))
+        yield* collect(executor, exchange("second", { headers: { authorization: "secret-one" } }))
+        yield* collect(executor, exchange("third", { headers: { authorization: "secret-two" } }))
+
+        const snapshots = yield* Metric.snapshot
+        const lifecycle = snapshots.filter((item) => item.id === "opencode_session_websocket_events_total")
+        const names = new Set(lifecycle.map((item) => item.attributes?.event))
+        expect(Array.from(names)).toEqual(
+          expect.arrayContaining(["connect", "reuse", "rotation", "reconnect", "send", "terminal"]),
+        )
+        expect(JSON.stringify(lifecycle)).not.toContain("secret-one")
+        expect(JSON.stringify(lifecycle)).not.toContain("secret-two")
+      }),
+    )
   })
 })

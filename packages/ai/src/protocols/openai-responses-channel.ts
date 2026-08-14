@@ -1,6 +1,6 @@
 import { AIError, TransportReason } from "../schema/index.js"
 import type { ChannelCheckpoint, ChannelObservation, WebSocketChannelDriver } from "../route/transport/index.js"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import * as ProviderShared from "./shared.js"
 import { OpenResponses } from "./open-responses.js"
 
@@ -47,6 +47,11 @@ const canonical = (value: unknown): string => {
     .join(",")}}`
 }
 
+const json = (value: unknown) => {
+  if (typeof value !== "string") return value
+  return Option.getOrElse(Schema.decodeUnknownOption(ProviderShared.Json)(value), () => value)
+}
+
 const comparable = (value: unknown) => {
   if (!ProviderShared.isRecord(value)) return value
   if (value.type === "message" && value.role === "assistant")
@@ -60,12 +65,11 @@ const comparable = (value: unknown) => {
       type: value.type,
       call_id: value.call_id,
       name: value.name,
-      arguments: value.arguments,
+      arguments: json(value.arguments),
     }
   if (value.type === "reasoning")
     return {
       type: value.type,
-      ...(value.id === undefined ? {} : { id: value.id }),
       summary: value.summary,
       encrypted_content: value.encrypted_content,
     }
@@ -87,7 +91,8 @@ const incremental = (
   if (canonical(invariant(request)) !== canonical(invariant(checkpoint.request))) return undefined
   const baseline = [...previousInput, ...checkpoint.output]
   if (input.length <= baseline.length) return undefined
-  if (!baseline.every((item, index) => canonical(comparable(item)) === canonical(input[index]))) return undefined
+  if (!baseline.every((item, index) => canonical(comparable(item)) === canonical(comparable(input[index]))))
+    return undefined
   return input.slice(baseline.length)
 }
 
