@@ -74,6 +74,7 @@ describe("SessionModelTransport local WebSocket server", () => {
           const index = requests.length
           const id = `msg_${index}`
           const text = index === 1 ? "Hello" : "Brief"
+          socket.send(JSON.stringify({ type: "response.created", response: { id: `resp_${index}` } }))
           socket.send(JSON.stringify({ type: "response.output_item.added", item: { type: "message", id } }))
           socket.send(JSON.stringify({ type: "response.output_text.delta", item_id: id, delta: text }))
           socket.send(JSON.stringify({ type: "response.output_text.done", item_id: id, text }))
@@ -154,6 +155,7 @@ describe("SessionModelTransport local WebSocket server", () => {
           }
           const id = `msg_${index}`
           const text = index === 1 ? "Hello" : "Recovered"
+          socket.send(JSON.stringify({ type: "response.created", response: { id: `resp_${index}` } }))
           socket.send(JSON.stringify({ type: "response.output_item.added", item: { type: "message", id } }))
           socket.send(JSON.stringify({ type: "response.output_text.delta", item_id: id, delta: text }))
           socket.send(JSON.stringify({ type: "response.output_text.done", item_id: id, text }))
@@ -270,6 +272,22 @@ describe("SessionModelTransport local WebSocket server", () => {
         expect(result).toMatchObject({
           _tag: "Failure",
           failure: { reason: { _tag: "Transport", code: "message", delivery: "accepted" } },
+        })
+      }),
+    )
+  })
+
+  test("closes a real connection after an oversized frame", async () => {
+    await withServer({ message: (socket) => socket.send("x".repeat(16 * 1024 * 1024 + 1)) }, (server) =>
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+
+        const result = yield* Effect.result(collect(transport, exchange(server, "oversized")))
+        yield* waitFor(() => server.state.closes === 1)
+
+        expect(result).toMatchObject({
+          _tag: "Failure",
+          failure: { reason: { _tag: "Transport", code: "message-too-large", delivery: "ambiguous" } },
         })
       }),
     )

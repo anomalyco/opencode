@@ -32,8 +32,10 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { SessionEvent } from "@opencode-ai/core/session/event"
+import { SessionContext } from "@opencode-ai/core/session/context"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
 import { Money } from "@opencode-ai/schema/money"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -60,6 +62,7 @@ import {
   SessionTable,
 } from "@opencode-ai/core/session/sql"
 import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
+import { InstructionState } from "@opencode-ai/core/session/instruction-state"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Instructions } from "@opencode-ai/core/instructions/index"
 import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
@@ -72,6 +75,7 @@ import { Location } from "@opencode-ai/core/location"
 import { Provider } from "@opencode-ai/core/provider"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
+import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { asc, desc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
@@ -426,6 +430,8 @@ const it = testEffect(
       ReferenceInstructions.node,
       Config.node,
       Snapshot.node,
+      SessionContext.node,
+      SessionModelRequest.node,
       SessionRunnerLLM.node,
       SessionExecution.node,
       Session.node,
@@ -958,6 +964,51 @@ describe("SessionRunnerLLM", () => {
           ],
         },
       ])
+    }),
+  )
+
+  it.effect("forces HTTP and triggers active request and response hooks once", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const hooks = yield* PluginHooks.Service
+      let requestTriggers = 0
+      let responseTriggers = 0
+      yield* hooks.register("session", "http.request", (event) =>
+        Effect.sync(() => {
+          requestTriggers++
+          event.request.headers.set("x-request-hook", "active")
+        }),
+      )
+      yield* hooks.register("session", "http.response", (event) =>
+        Effect.sync(() => {
+          responseTriggers++
+          event.response.headers.set("x-response-hook", "active")
+        }),
+      )
+      const context = yield* SessionContext.Service
+      const modelRequests = yield* SessionModelRequest.Service
+      const selected = yield* context.select(sessionID)
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      yield* InstructionState.prepare(database.db, bus, selected.instructions, sessionID)
+      const prepared = yield* modelRequests.prepare({
+        context: yield* context.load(selected),
+        step: 1,
+      })
+      if (!prepared.options.http) return yield* Effect.die("Expected Session HTTP middleware")
+
+      const response = yield* prepared.options.http(
+        HttpClientRequest.post("https://provider.test/responses"),
+        (request) => {
+          expect(request.headers["x-request-hook"]).toBe("active")
+          return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("network")))
+        },
+      )
+
+      expect(prepared.webSocketEligible).toBe(false)
+      expect(response.headers["x-response-hook"]).toBe("active")
+      expect(requestTriggers).toBe(1)
+      expect(responseTriggers).toBe(1)
     }),
   )
 
