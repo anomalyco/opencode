@@ -1008,7 +1008,7 @@ describe("SessionRunnerLLM", () => {
         context: yield* context.load(selected),
         step: 1,
       })
-      if (!prepared.options.http) return yield* Effect.die("Expected Session HTTP middleware")
+      if (!prepared.options.http) yield* Effect.die("Expected Session HTTP middleware")
 
       const response = yield* prepared.options.http(
         HttpClientRequest.post("https://provider.test/responses"),
