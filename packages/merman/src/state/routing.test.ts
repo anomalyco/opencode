@@ -243,6 +243,28 @@ describe("createStateTransitionRenderPlans", () => {
       ).toBe(false)
     }
   })
+
+  test("keeps routes to offset end markers continuous", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  [*] --> Pending
+  Pending --> Running
+  Running --> Idle
+  Running --> Interrupted
+  Interrupted --> [*]`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 12 })
+    const plan = createStateTransitionRenderPlans(diagram, layout.bounds, 30).find(
+      (plan) => plan.route.transition.to === "__end",
+    )!
+
+    expect(
+      plan.path.slice(1).every(([x, y], index) => {
+        const previous = plan.path[index]!
+        return Math.abs(x - previous[0]) + Math.abs(y - previous[1]) === 1
+      }),
+    ).toBe(true)
+  })
 })
 
 describe("createStateTransitionJunctionPlans", () => {
