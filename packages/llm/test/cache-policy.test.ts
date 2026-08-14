@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
-import { CacheHint, LLM, Message } from "../src"
+import { Effect, Schema } from "effect"
+import { CacheHint, CachePolicy, LLM, Message } from "../src"
 import { Auth, LLMClient } from "../src/route"
 import { AmazonBedrock } from "../src/providers"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
@@ -233,6 +233,61 @@ describe("applyCachePolicy", () => {
       expect(body.messages[3]?.content[0]?.cache_control).toEqual({ type: "ephemeral" })
     }),
   )
+
+  it.effect("messages: { tail: 0 } marks no message boundaries", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model: anthropicModel,
+          messages: [Message.user("u1"), Message.assistant("a1")],
+          cache: { messages: { tail: 0 } },
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        messages: [
+          { content: [{ cache_control: undefined }] },
+          { content: [{ cache_control: undefined }] },
+        ],
+      })
+    }),
+  )
+
+  it.effect("messages: { tail: 1 } marks only the last message boundary", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model: anthropicModel,
+          messages: [Message.user("u1"), Message.assistant("a1")],
+          cache: { messages: { tail: 1 } },
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        messages: [
+          { content: [{ cache_control: undefined }] },
+          { content: [{ cache_control: { type: "ephemeral" } }] },
+        ],
+      })
+    }),
+  )
+
+  test("message tail accepts only non-negative integers", () => {
+    const decode = Schema.decodeUnknownSync(CachePolicy)
+    expect(() => decode({ messages: { tail: 1.5 } })).toThrow()
+    expect(() => decode({ messages: { tail: -1 } })).toThrow()
+    expect(decode({ messages: { tail: 0 } })).toEqual({ messages: { tail: 0 } })
+  })
+
+  test("request construction rejects an invalid message tail", () => {
+    expect(() =>
+      LLM.request({
+        model: anthropicModel,
+        messages: [Message.user("u1"), Message.assistant("a1")],
+        cache: { messages: { tail: 1.5 } },
+      }),
+    ).toThrow()
+  })
 
   it.effect("'latest-assistant' marks the last assistant message", () =>
     Effect.gen(function* () {
