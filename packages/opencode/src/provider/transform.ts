@@ -1274,6 +1274,15 @@ export function options(input: {
     }
   }
 
+  // `~anthropic/*` are catalog aliases for the same models.
+  if (
+    input.model.api.npm === "@openrouter/ai-sdk-provider" &&
+    input.model.api.id.replace(/^~/, "").startsWith("anthropic/")
+  ) {
+    result["cache_control"] = { type: "ephemeral" }
+    if (input.providerOptions?.setCacheKey !== false) result["session_id"] = input.sessionID
+  }
+
   if (input.model.api.npm === "@ai-sdk/gateway") {
     result["gateway"] = { caching: "auto" }
   }

@@ -25,6 +25,7 @@ describe("OpenRouter", () => {
         messages: [{ role: "user", content: "Say hello." }],
         stream: true,
       })
+      expect(prepared.body).not.toHaveProperty("cache_control")
     }),
   )
 
@@ -39,6 +40,7 @@ describe("OpenRouter", () => {
                 usage: true,
                 reasoning: { effort: "high" },
                 promptCacheKey: "session_123",
+                cacheControl: { type: "ephemeral", ttl: "1h" },
               },
             },
           }).model("anthropic/claude-3.7-sonnet:thinking"),
@@ -50,6 +52,55 @@ describe("OpenRouter", () => {
         usage: { include: true },
         reasoning: { effort: "high" },
         prompt_cache_key: "session_123",
+        cache_control: { type: "ephemeral", ttl: "1h" },
+      })
+    }),
+  )
+
+  it.effect("enables automatic prompt caching for Anthropic models", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-opus-4.8"),
+          prompt: "Say hello.",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        cache_control: { type: "ephemeral" },
+      })
+
+      const disabled = yield* LLMClient.prepare(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-opus-4.8"),
+          prompt: "Say hello.",
+          cache: "none",
+        }),
+      )
+      expect(disabled.body).not.toHaveProperty("cache_control")
+
+      const hourly = yield* LLMClient.prepare(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-opus-4.8"),
+          prompt: "Say hello.",
+          cache: { system: true, ttlSeconds: 3600 },
+        }),
+      )
+      expect(hourly.body).toMatchObject({ cache_control: { type: "ephemeral", ttl: "1h" } })
+    }),
+  )
+
+  it.effect("enables automatic prompt caching for tilde-prefixed Anthropic aliases", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("~anthropic/claude-opus-latest"),
+          prompt: "Say hello.",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        cache_control: { type: "ephemeral" },
       })
     }),
   )
