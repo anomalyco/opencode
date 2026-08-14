@@ -1015,7 +1015,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
             theme.background.default.r,
             theme.background.default.g,
             theme.background.default.b,
-            mode() === "light" ? 0.14 : 0.28,
+            theme.background.default.a * (mode() === "light" ? 0.14 : 0.28),
           ),
         )
       }}
