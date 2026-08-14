@@ -23,6 +23,7 @@ export function webSearchProviderLabel(provider: unknown) {
   if (provider === "parallel") return "Parallel Web Search"
   if (provider === "exa") return "Exa Web Search"
   if (provider === "firecrawl") return "Firecrawl Web Search"
+  if (provider === "tavily") return "Tavily Web Search"
   return "Web Search"
 }
 
