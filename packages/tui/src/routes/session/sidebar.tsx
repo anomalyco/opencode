@@ -57,7 +57,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         </scrollbox>
 
         <box flexShrink={0} gap={1} paddingTop={1}>
-          <Slot path="sidebar.footer" />
+          <Slot path="sidebar.footer" input={{ sessionID: props.sessionID }} />
         </box>
       </box>
     </Show>
