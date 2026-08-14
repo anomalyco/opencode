@@ -54,7 +54,7 @@
     {
       "file": "packages/tui/src/context/theme.tsx",
       "marker": "ThemeState.set",
-      "note": "createEffect writing ThemeState.set(store.active) — the writer half of the local-backend themed-loading-screen feature (reader is provider.ts ThemeState.get). theme-state.ts now lives in packages/core/src/local so both the TUI (writer) and the opencode provider (reader) can share the singleton across the package boundary."
+      "note": "createEffect writing ThemeState.set(store.active) \u2014 the writer half of the local-backend themed-loading-screen feature (reader is provider.ts ThemeState.get). theme-state.ts now lives in packages/core/src/local so both the TUI (writer) and the opencode provider (reader) can share the singleton across the package boundary."
     },
     {
       "file": "packages/opencode/src/effect/app-runtime.ts",
@@ -74,11 +74,16 @@
     {
       "file": "packages/core/src/git.ts",
       "marker": "LC_ALL",
-      "note": "Pins LC_ALL=C on git spawns. This code matches git's human-readable output by text (forceRequired), and git localises it — on a non-English machine those checks silently read false."
+      "note": "Pins LC_ALL=C on git spawns. This code matches git's human-readable output by text (forceRequired), and git localises it \u2014 on a non-English machine those checks silently read false."
+    },
+    {
+      "file": "packages/opencode/test/fixture/fixture.ts",
+      "marker": "disposeDirectory",
+      "note": "Disposes each test's instance when the test ends. InstanceStore otherwise holds every instance the suite creates \u2014 each with its own :memory: SQLite and slice of the app graph \u2014 until the process exits, which measured as the bulk of the suite's memory (provider dir: 3004 -> 2577 MB)."
     }
   ],
   "divergence": {
-    "note": "Ratchet for the failure this fork keeps hitting: a merge silently deleting a fork feature (see the self-healing compaction entry). Any file under `scope` that differs from baseline.upstreamRef and is neither owned/patched nor listed in `accepted` fails fork:verify. `accepted` is the divergence that already existed when the gate was added — classify those as feature or drift over time; new files must be classified immediately. Re-baseline deliberately with `bun run fork:verify --accept-divergence`.",
+    "note": "Ratchet for the failure this fork keeps hitting: a merge silently deleting a fork feature (see the self-healing compaction entry). Any file under `scope` that differs from baseline.upstreamRef and is neither owned/patched nor listed in `accepted` fails fork:verify. `accepted` is the divergence that already existed when the gate was added \u2014 classify those as feature or drift over time; new files must be classified immediately. Re-baseline deliberately with `bun run fork:verify --accept-divergence`.",
     "scope": [
       "^packages/[^/]+/(src|test)/"
     ],
