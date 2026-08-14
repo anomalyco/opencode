@@ -11,7 +11,8 @@ import {
   baselineOffset,
   drawBlockGlyph,
 } from "../frame/index.js"
-import type { CapturedFrame, Color } from "./types.js"
+import type { Frontend } from "../client/protocol.js"
+import type { CapturedFrame } from "./types.js"
 
 export { CellHeight, CellWidth } from "../frame/index.js"
 
@@ -47,7 +48,7 @@ for (const [file, family] of [
   if (!GlobalFonts.registerFromPath(path, family)) throw new Error(`Failed to register capture symbol font: ${path}`)
 }
 
-function color(value: Color, opacity = 1) {
+function color(value: number | Frontend.Color, opacity = 1) {
   if (typeof value === "number")
     return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${opacity})`
   return `rgba(${value[0]}, ${value[1]}, ${value[2]}, ${(value[3] / 255) * opacity})`
@@ -59,7 +60,7 @@ export interface RenderFrameOptions {
   readonly header?: string
 }
 
-export function renderFrame(frame: CapturedFrame, options: RenderFrameOptions = {}): Buffer {
+export function renderFrame(frame: CapturedFrame | Frontend.CapturedFrame, options: RenderFrameOptions = {}): Buffer {
   const cols = Math.max(frame.cols, options.cols ?? frame.cols)
   const rows = Math.max(frame.rows, options.rows ?? frame.rows)
   const headerHeight = options.header ? 40 : 0

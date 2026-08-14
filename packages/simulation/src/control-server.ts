@@ -126,7 +126,14 @@ export function start<RequestType extends Request, Error, Services>(options: {
                       })
                     },
                     catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
-                  }).pipe(Effect.catchCause((cause) => Effect.logWarning(`${options.label}: send failed`, cause))),
+                  }).pipe(
+                    Effect.tapError(() =>
+                      Effect.sync(() => {
+                        connection.terminate()
+                      }),
+                    ),
+                    Effect.orDie,
+                  ),
               }
               const close = () => {
                 socket.data.closed = true

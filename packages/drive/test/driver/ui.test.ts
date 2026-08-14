@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, type Types } from "effect"
 import * as OpenCodeUi from "../../src/driver/ui.js"
 import * as SimulationConnector from "../../src/simulation/connector.js"
 import { sendError, sendResult, startTransportPeer } from "../simulation/transport-peer.js"
@@ -61,6 +61,15 @@ const frame = {
     },
   ],
 }
+
+type ScreenshotFailure = Effect.Effect.Error<ReturnType<OpenCodeUi.Ui["screenshot"]>>
+const operationErrorExcludesScreenshotError: Types.Equals<
+  Extract<OpenCodeUi.OperationError, OpenCodeUi.UiScreenshotError>,
+  never
+> = true
+const screenshotErrorIsSpecific: Types.Equals<ScreenshotFailure, OpenCodeUi.ScreenshotError> = true
+void operationErrorExcludesScreenshotError
+void screenshotErrorIsSpecific
 
 describe("OpenCodeUi", () => {
   it.live("captures a normalized terminal frame", () => {

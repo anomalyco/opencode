@@ -89,7 +89,8 @@ const RequestTimeout = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
 
 export type WaitError = UiTimeoutError | UiWaitOptionsError
 type RpcError = SimulationRequestError | RpcClientError.RpcClientError
-export type OperationError = RpcError | UiTimeoutError | UiScreenshotError
+export type OperationError = RpcError | UiTimeoutError
+export type ScreenshotError = OperationError | UiScreenshotError
 export type SemanticOperationError = OperationError | UiCapabilityError
 
 export interface Ui {
@@ -97,7 +98,7 @@ export interface Ui {
   readonly snapshot: () => Effect.Effect<Frontend.SemanticSnapshot, SemanticOperationError>
   readonly capture: () => Effect.Effect<Frontend.CapturedFrame, OperationError>
   readonly matches: (text: string) => Effect.Effect<boolean, OperationError>
-  readonly screenshot: (name?: string) => Effect.Effect<string, OperationError>
+  readonly screenshot: (name?: string) => Effect.Effect<string, ScreenshotError>
   readonly type: (text: string) => Effect.Effect<Frontend.State, OperationError>
   readonly press: (key: string, modifiers?: Frontend.KeyModifiers) => Effect.Effect<Frontend.State, OperationError>
   readonly enter: () => Effect.Effect<Frontend.State, OperationError>

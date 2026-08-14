@@ -1,5 +1,6 @@
-import { readdir, stat } from "node:fs/promises"
+import { stat } from "node:fs/promises"
 import path from "node:path"
+import { collectFiles } from "./files"
 
 const forbidden = [
   "@napi-rs/canvas",
@@ -45,15 +46,7 @@ export function verifySimulationGraph(inputs: Iterable<string>) {
 
 async function artifactFiles(target: string): Promise<string[]> {
   if ((await stat(target)).isFile()) return [target]
-  const entries = await readdir(target, { withFileTypes: true })
-  return (
-    await Promise.all(
-      entries.map((entry) => {
-        const file = path.join(target, entry.name)
-        return entry.isDirectory() ? artifactFiles(file) : Promise.resolve(entry.isFile() ? [file] : [])
-      }),
-    )
-  ).flat()
+  return (await collectFiles(target)).map((file) => path.join(target, file))
 }
 
 async function scan(file: string) {

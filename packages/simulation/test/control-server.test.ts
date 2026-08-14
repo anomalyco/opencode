@@ -62,3 +62,40 @@ test("continues serving after a response targets a closed socket", async () => {
     ),
   )
 })
+
+test("disconnects and cleans up when an outbound message exceeds the queue bound", async () => {
+  const endpoint = availableEndpoint()
+  let cleaned = false
+  let delivered = false
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* SimulationControlServer.start({
+          endpoint,
+          label: "control server test",
+          data: () => ({}),
+          decode: Schema.decodeUnknownEffect(Schema.fromJsonString(Request)),
+          handle: (socket) =>
+            Effect.gen(function* () {
+              yield* socket.send("x".repeat(64 * 1024 * 1024 + 1))
+              delivered = true
+              return { ok: true }
+            }),
+          close: () => Effect.sync(() => void (cleaned = true)),
+        })
+        const socket = yield* connect(endpoint)
+        const closed = yield* Queue.unbounded<void>()
+        const messages: string[] = []
+        socket.addEventListener("close", () => Queue.offerUnsafe(closed, undefined))
+        socket.addEventListener("message", (event) => messages.push(String(event.data)))
+        socket.send(JSON.stringify({ id: 1 }))
+        yield* Queue.take(closed).pipe(Effect.timeout("5 seconds"))
+
+        expect(cleaned).toBe(true)
+        expect(delivered).toBe(false)
+        expect(messages).toEqual([])
+      }),
+    ),
+  )
+})
