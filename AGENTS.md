@@ -10,18 +10,33 @@ Strategy: `docs/gtm.html`.
 
 ## Ontology (locked)
 
-A requisition is the working directory.
+The company folder is the workspace (the repo). A req is a subdirectory you focus (a package). Cards stay markdown working copies. People are not files.
+
+```
+<company>/                    ← workspace root
+  HIRING.md                   ← company constitution
+  <req>/                      ← a requisition
+    HIRING.md                 ← req constitution
+    candidates/<id>.md        ← working copies
+  .moks/                      ← cache only (plans, ats.json)
+```
 
 | Piece | Role |
 |-------|------|
-| cwd | the req |
-| `HIRING.md` | constitution (must-haves, scorecard, process) |
-| `candidates/<id>.md` | working copies (score, outreach, notes) |
+| workspace root | the company |
+| company `HIRING.md` | company constitution |
+| `<req>/` | a requisition |
+| `<req>/HIRING.md` | req constitution (scorecard, must-haves, process) |
+| `<req>/candidates/<id>.md` | working copies (score, outreach, notes) |
+| focus (`@<req>` or last-focused req) | working set this turn |
 | `moks commit` | git audit of a decision |
 | `moks push` | the write (local/mock ATS now; remote later) |
-| `.moks/` | cache only (plans, ats.json). Not a hiring book |
+| `.moks/` | cache at company root. Not a hiring book |
+| `~/.config/moks/HIRING.md` | this recruiter’s global constitution |
 
-Do not invent `.moks/reqs/<slug>/`, a multi-req “book,” or `@slug` focus. One cwd, one req.
+`/init` at the company root scaffolds a req directory. A root that itself has `HIRING.md` + `candidates/` is a single-req workspace (fixture / one-req company).
+
+The filesystem is the book. Do not invent `.moks/reqs/`. Do not build a cloud req picker. Do not treat a parent software repo as the company.
 
 ## Porting rule
 
@@ -33,10 +48,10 @@ Change: prominence, defaults, copy, agent wiring, workspace paths.
 
 | OpenCode | moks | Wrong port |
 |----------|------|------------|
-| Repo / project | This cwd is the req | One git remote per req; branch = stage |
-| `AGENTS.md` | `HIRING.md` | `/init` still writes coding AGENTS.md |
+| Repo / project | Company folder is the workspace | One git remote per req; cwd-only req |
+| `AGENTS.md` | `HIRING.md` at company + per req | `/init` still writes coding AGENTS.md |
 | GitHub | ATS (Ashby later) | GitHub recruiting as the product |
-| Working tree | `HIRING.md` + `candidates/` | Cloud ATS with no local drafts |
+| Working tree | company + focused req packet | Cloud ATS with no local drafts |
 | Diff | Local hiring file deltas | Delete diff, or only show remote ATS |
 | `git commit` | `moks commit` | Raw `git commit`; commit with no push path |
 | `git push` | `moks push` | Silent ATS writes from the agent |
@@ -46,7 +61,7 @@ Change: prominence, defaults, copy, agent wiring, workspace paths.
 | Explore codebase | Explore HIRING.md / cards / notes | Explore → OSINT-only agent |
 | LSP / formatters | Not a TA surface (defaults off) | TA-LSP metaphor, or delete the subsystem |
 
-Default loop: `/init` → load `HIRING.md` → score onto the card → draft outreach → `/review` → `moks commit` → `moks push`.
+Default loop: open company → `/init` a req → focus it → load that `HIRING.md` → score onto the card → draft outreach → `/review` → `moks commit` → `moks push`.
 
 Cast: `recruit` is the doer. Plan stays and exits to `recruit`. There is no coding agent. Skills: `req-context`, `score-candidate`, `draft-outreach`, `commit-disposition`.
 
