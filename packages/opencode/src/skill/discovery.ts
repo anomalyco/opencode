@@ -137,4 +137,6 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | HttpClient
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node, path, httpClient] })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(LayerNode.compile(path)), Layer.provide(LayerNode.compile(httpClient))))
+
 export * as Discovery from "./discovery"

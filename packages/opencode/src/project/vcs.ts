@@ -420,4 +420,6 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [Git.node, EventV2Bridge.node] })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Git.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer)))
+
 export * as Vcs from "./vcs"

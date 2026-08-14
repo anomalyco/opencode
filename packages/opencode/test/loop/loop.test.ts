@@ -48,6 +48,7 @@ import { TestInstance } from "../fixture/fixture"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 
 const summary = Layer.succeed(
   SessionSummary.Service,

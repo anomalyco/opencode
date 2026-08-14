@@ -168,4 +168,6 @@ const layer = Layer.effect(
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [Database.node] })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Database.defaultLayer)))
+
 export * as AccountRepo from "./repo"

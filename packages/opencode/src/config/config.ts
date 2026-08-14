@@ -738,4 +738,6 @@ export const node = LayerNode.make({
   deps: [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(Auth.defaultLayer), Layer.provide(Account.defaultLayer), Layer.provide(Env.defaultLayer), Layer.provide(Npm.defaultLayer), Layer.provide(LayerNode.compile(httpClient))))
+
 export * as Config from "./config"

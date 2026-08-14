@@ -313,4 +313,6 @@ export const node = LayerNode.make({
   deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(Config.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer)))
+
 export * as Plugin from "."

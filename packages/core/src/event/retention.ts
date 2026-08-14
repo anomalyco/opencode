@@ -3,6 +3,7 @@ export * as EventRetention from "./retention"
 import { Clock, Context, Duration, Effect, Layer, Option, Schedule } from "effect"
 import { and, asc, eq, inArray, isNotNull, like, lt, sql } from "drizzle-orm"
 import { Config } from "../config"
+import { LayerNode } from "../effect/layer-node"
 import { makeGlobalNode } from "../effect/app-node"
 import { Database } from "../database/database"
 import { SessionTable } from "../session/sql"
@@ -221,6 +222,8 @@ export const layer = Layer.effect(
 )
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node] })
+
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Database.defaultLayer)))
 
 /** Runs the journal sweep once at startup and hourly after, once globally rather than once per active Location. */
 export const sweepLayer = Layer.effectDiscard(

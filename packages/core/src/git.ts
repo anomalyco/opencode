@@ -7,6 +7,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { AbsolutePath, RelativePath } from "./schema"
 import { FSUtil } from "./fs-util"
 import { AppProcess } from "./process"
+import { LayerNode } from "./effect/layer-node"
 import { makeGlobalNode } from "./effect/app-node"
 import { File } from "./file"
 import { KeyedMutex } from "./effect/keyed-mutex"
@@ -952,6 +953,8 @@ const layer = Layer.effect(
 )
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [FSUtil.node, AppProcess.node] })
+
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(AppProcess.defaultLayer)))
 
 interface Result {
   readonly exitCode: number

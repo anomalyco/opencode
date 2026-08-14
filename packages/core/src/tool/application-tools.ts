@@ -3,6 +3,7 @@ export * as ApplicationTools from "./application-tools"
 import { Context, Effect, Layer, Scope } from "effect"
 import { State } from "../state"
 import { Tool } from "./tool"
+import { LayerNode } from "../effect/layer-node"
 import { makeGlobalNode } from "../effect/app-node"
 
 type Data = {
@@ -55,3 +56,5 @@ const layer = Layer.effect(
 )
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [] })
+
+export const defaultLayer = Layer.suspend(() => layer)

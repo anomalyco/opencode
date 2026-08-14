@@ -184,4 +184,6 @@ const layer = Layer.effect(
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [Config.node, MCP.node, Skill.node] })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(MCP.defaultLayer), Layer.provide(Skill.defaultLayer)))
+
 export * as Command from "."

@@ -5,6 +5,7 @@ import { Context, Effect, Layer, Schedule, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
+import { LayerNode } from "../effect/layer-node"
 import { makeGlobalNode } from "../effect/app-node"
 import { httpClient } from "../effect/app-node-platform"
 import { AbsolutePath } from "../schema"
@@ -211,3 +212,5 @@ const layer = Layer.effect(
 )
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [httpClient, FSUtil.node, Global.node] })
+
+export const defaultLayer = Layer.suspend(() => LayerNode.compile(node))

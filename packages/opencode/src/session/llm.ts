@@ -384,7 +384,7 @@ const live: Layer.Layer<
             // any event resets it — so slow-but-live streams are unaffected.
             // 0 disables. Applied at this seam so both runtimes are covered.
             const cfg = yield* config.get()
-            const configured = cfg.experimental?.stream_inactivity_seconds ?? 300
+            const configured = cfg.experimental?.stream_inactivity_seconds ?? 600
             // A model placed hybrid GPU + system-RAM is legitimately silent
             // for far longer than a flat deadline allows: measured on z4, 254s
             // passed before the FIRST token of any kind (faulting ~50 GB of
@@ -469,5 +469,7 @@ export const node = LayerNode.make({
     RuntimeFlags.node,
   ],
 })
+
+export const defaultLayer = Layer.suspend(() => live.pipe(Layer.provide(Auth.defaultLayer), Layer.provide(Config.defaultLayer), Layer.provide(Provider.defaultLayer), Layer.provide(Plugin.defaultLayer), Layer.provide(Permission.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(LayerNode.compile(llmClient)), Layer.provide(RuntimeFlags.defaultLayer)))
 
 export * as LLM from "./llm"

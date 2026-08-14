@@ -190,4 +190,6 @@ export const node = LayerNode.make({
   deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Session.defaultLayer), Layer.provide(Snapshot.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(Config.defaultLayer)))
+
 export * as SessionSummary from "./summary"

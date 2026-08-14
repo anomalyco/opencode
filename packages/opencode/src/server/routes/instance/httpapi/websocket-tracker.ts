@@ -47,6 +47,8 @@ const layer = Layer.sync(Service)(() => {
 
 export const node = LayerNode.make({ service: Service, layer, deps: [] })
 
+export const defaultLayer = Layer.suspend(() => layer)
+
 export const register = (close: Close) =>
   Effect.gen(function* () {
     const tracker = yield* Effect.serviceOption(Service)

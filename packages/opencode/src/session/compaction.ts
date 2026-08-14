@@ -188,7 +188,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 export const use = serviceUse(Service)
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
@@ -657,5 +657,7 @@ export const node = LayerNode.make({
     RuntimeFlags.node,
   ],
 })
+
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Session.defaultLayer), Layer.provide(Agent.defaultLayer), Layer.provide(Plugin.defaultLayer), Layer.provide(SessionProcessor.defaultLayer), Layer.provide(Provider.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer)))
 
 export * as SessionCompaction from "./compaction"

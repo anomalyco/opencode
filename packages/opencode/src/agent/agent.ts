@@ -456,4 +456,6 @@ export const node = LayerNode.make({
   deps: [Config.node, Auth.node, Plugin.node, Skill.node, Provider.node, locationServiceMapNode],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Auth.defaultLayer), Layer.provide(Plugin.defaultLayer), Layer.provide(Skill.defaultLayer), Layer.provide(Provider.defaultLayer), Layer.provide(LayerNode.compile(locationServiceMapNode))))
+
 export * as Agent from "./agent"

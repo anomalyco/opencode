@@ -350,6 +350,8 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [httpClient, AppProcess.node] })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(LayerNode.compile(httpClient)), Layer.provide(AppProcess.defaultLayer)))
+
 const { runPromise } = makeRuntime(Service, AppNodeBuilder.build(node))
 
 export const latest = (...args: Parameters<Interface["latest"]>) => runPromise((s) => s.latest(...args))

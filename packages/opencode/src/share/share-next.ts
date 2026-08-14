@@ -368,4 +368,6 @@ export const node = LayerNode.make({
   deps: [Account.node, EventV2Bridge.node, Config.node, Database.node, httpClient, Provider.node, Session.node],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Account.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(Config.defaultLayer), Layer.provide(Database.defaultLayer), Layer.provide(LayerNode.compile(httpClient)), Layer.provide(Provider.defaultLayer), Layer.provide(Session.defaultLayer)))
+
 export * as ShareNext from "./share-next"

@@ -270,6 +270,8 @@ export const node = makeGlobalNode({
   deps: [FSUtil.node, Global.node, filesystem, EffectFlock.node],
 })
 
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(Global.defaultLayer), Layer.provide(LayerNode.compile(filesystem)), Layer.provide(EffectFlock.defaultLayer)))
+
 const { runPromise } = makeRuntime(Service, LayerNode.compile(node))
 
 export async function install(...args: Parameters<Interface["install"]>) {
