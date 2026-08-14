@@ -92,12 +92,6 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
         $disabled: textMuted,
         $selected: primary,
       },
-      formfieldIndicator: {
-        default: textMuted,
-        $focused: primary,
-        $disabled: textMuted,
-        $selected: primary,
-      },
       feedback: {
         error: { default: color("error") },
         warning: { default: color("warning") },

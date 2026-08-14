@@ -47,7 +47,6 @@ function expandText(definition: TextDefinition | undefined): TextDefinition | un
     subdued: definition.subdued ?? (definition.default ? "$text.default" : undefined),
     action: expandActions(definition.action, "text.action"),
     formfield: expandFormfield(definition.formfield, "text.formfield"),
-    formfieldIndicator: expandFormfield(definition.formfieldIndicator, "text.formfieldIndicator"),
     feedback: definition.feedback
       ? Object.fromEntries(
           Object.entries(definition.feedback).map(([kind, feedback]) => {

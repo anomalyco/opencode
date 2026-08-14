@@ -893,10 +893,7 @@ export function FormPrompt(props: {
                             paddingRight={1}
                           >
                             <text
-                              attributes={TextAttributes.DIM}
-                              fg={
-                                active() ? theme.text.formfieldIndicator.focused : theme.text.formfieldIndicator.default
-                              }
+                              fg={active() ? theme.text.formfield.focused : theme.text.subdued}
                             >{`${i() + 1}.`}</text>
                           </box>
                           <box
@@ -907,13 +904,12 @@ export function FormPrompt(props: {
                               <text
                                 width={4}
                                 flexShrink={0}
-                                attributes={TextAttributes.DIM}
                                 fg={
                                   active()
-                                    ? theme.text.formfieldIndicator.focused
+                                    ? theme.text.formfield.focused
                                     : picked()
-                                      ? theme.text.formfieldIndicator.selected
-                                      : theme.text.formfieldIndicator.default
+                                      ? theme.text.formfield.selected
+                                      : theme.text.subdued
                                 }
                               >
                                 [{picked() ? "✓" : " "}]
@@ -924,9 +920,7 @@ export function FormPrompt(props: {
                             </text>
                           </box>
                           <Show when={!multi()}>
-                            <text attributes={TextAttributes.DIM} fg={theme.text.formfieldIndicator.selected}>
-                              {picked() ? " ✓" : ""}
-                            </text>
+                            <text fg={theme.text.formfield.selected}>{picked() ? " ✓" : ""}</text>
                           </Show>
                         </box>
                         <Show when={row.description}>
@@ -952,10 +946,7 @@ export function FormPrompt(props: {
                         backgroundColor={other() ? theme.background.formfield.focused : theme.background.default}
                         paddingRight={1}
                       >
-                        <text
-                          attributes={TextAttributes.DIM}
-                          fg={other() ? theme.text.formfieldIndicator.focused : theme.text.formfieldIndicator.default}
-                        >
+                        <text fg={other() ? theme.text.formfield.focused : theme.text.subdued}>
                           {`${rows().length + 1}.`}
                         </text>
                       </box>
@@ -968,13 +959,12 @@ export function FormPrompt(props: {
                           <text
                             width={4}
                             flexShrink={0}
-                            attributes={TextAttributes.DIM}
                             fg={
                               other()
-                                ? theme.text.formfieldIndicator.focused
+                                ? theme.text.formfield.focused
                                 : customChecked()
-                                  ? theme.text.formfieldIndicator.selected
-                                  : theme.text.formfieldIndicator.default
+                                  ? theme.text.formfield.selected
+                                  : theme.text.subdued
                             }
                           >
                             [{customChecked() ? "✓" : " "}]
@@ -988,9 +978,7 @@ export function FormPrompt(props: {
                                 {input() || "Type your own answer"}
                               </text>
                               <Show when={!multi() && customPicked()}>
-                                <text attributes={TextAttributes.DIM} fg={theme.text.formfieldIndicator.selected}>
-                                  ✓
-                                </text>
+                                <text fg={theme.text.formfield.selected}>✓</text>
                               </Show>
                             </>
                           }

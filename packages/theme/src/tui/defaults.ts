@@ -120,12 +120,6 @@ export const DEFAULT_THEME = {
         $disabled: "$hue.neutral.500",
         $selected: "$hue.interactive.700",
       },
-      formfieldIndicator: {
-        default: "$text.subdued",
-        $focused: "$hue.interactive.600",
-        $disabled: "$text.formfield.$disabled",
-        $selected: "$hue.interactive.600",
-      },
       feedback: {
         error: { default: "$hue.red.700", subdued: "$hue.red.600" },
         warning: { default: "$hue.yellow.800", subdued: "$hue.yellow.700" },
@@ -338,12 +332,6 @@ export const DEFAULT_THEME = {
         $pressed: "$hue.neutral.200",
         $disabled: "$hue.neutral.500",
         $selected: "$hue.interactive.500",
-      },
-      formfieldIndicator: {
-        default: "$text.subdued",
-        $focused: "$hue.interactive.600",
-        $disabled: "$text.formfield.$disabled",
-        $selected: "$hue.interactive.600",
       },
       feedback: {
         error: { default: "$hue.red.300", subdued: "$hue.red.400" },

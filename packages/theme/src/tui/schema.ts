@@ -107,7 +107,6 @@ const TextDefinition = Schema.Struct({
   subdued: Schema.optional(ColorValue),
   action: Schema.optional(ActionColorDefinition),
   formfield: Schema.optional(StatefulColorDefinition),
-  formfieldIndicator: Schema.optional(StatefulColorDefinition),
   feedback: Schema.optional(
     Schema.Struct({
       error: Schema.optional(TextFeedbackDefinition),

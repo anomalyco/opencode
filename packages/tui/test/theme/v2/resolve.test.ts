@@ -24,12 +24,6 @@ test("resolves one-mode documents with defaults for the available mode", () => {
 
   expect(resolvedLight.background.default.equals(resolveTheme(light).background.default)).toBeTrue()
   expect(resolvedDark.background.default.equals(resolveTheme(dark).background.default)).toBeTrue()
-  expect(
-    resolvedLight.text.formfieldIndicator.selected.equals(resolveTheme(light).text.formfieldIndicator.selected),
-  ).toBeTrue()
-  expect(
-    resolvedDark.text.formfieldIndicator.selected.equals(resolveTheme(dark).text.formfieldIndicator.selected),
-  ).toBeTrue()
   expect(resolvedLight.categorical.length).toBeGreaterThan(0)
   expect(resolvedDark.categorical.length).toBeGreaterThan(0)
 })
@@ -197,10 +191,8 @@ test("standalone themes skip OpenCode defaults and use the red core fallback", (
   const darkTheme = resolveSource(document, "dark")
 
   expect(lightTheme.text.default.toInts()).toEqual([255, 0, 0, 255])
-  expect(lightTheme.text.formfieldIndicator.selected.toInts()).toEqual([255, 0, 0, 255])
   expect(lightTheme.background.default.toInts()).toEqual([255, 0, 0, 255])
   expect(darkTheme.text.default.toInts()).toEqual([255, 0, 0, 255])
-  expect(darkTheme.text.formfieldIndicator.selected.toInts()).toEqual([255, 0, 0, 255])
   expect(darkTheme.background.default.toInts()).toEqual([255, 0, 0, 255])
 })
 
@@ -227,9 +219,6 @@ test("resolves matched action variants and states", () => {
   expect(theme.background.action.primary.selected).toBeInstanceOf(RGBA)
   expect(theme.background.action.destructive.disabled).toBeInstanceOf(RGBA)
   expect(theme.background.formfield.hovered).toBeInstanceOf(RGBA)
-  expect(theme.text.formfieldIndicator.default).toBeInstanceOf(RGBA)
-  expect(theme.text.formfieldIndicator.focused).toBeInstanceOf(RGBA)
-  expect(theme.text.formfieldIndicator.selected).toBeInstanceOf(RGBA)
 })
 
 test("resolves elevated hover surfaces from direct colors", () => {
