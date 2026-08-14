@@ -1,4 +1,4 @@
-import { createEffect, Suspense, type ParentProps } from "solid-js"
+import { onMount, Show, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DebugBar } from "@/components/debug-bar"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
@@ -9,15 +9,17 @@ export default function Layout(props: ParentProps) {
   const platform = usePlatform()
   const [state, setState] = createStore({ debugTools: true })
 
-  createEffect(() => setV2Toast(true))
+  onMount(() => setV2Toast(true))
 
   const update: TitlebarUpdate = {
-    version: () => {
+    get version() {
       const state = platform.updater?.state()
-      if (state?.status !== "ready") return
+      if (state?.status !== "ready") return undefined
       return state.version
     },
-    installing: () => platform.updater?.state().status === "installing",
+    get installing() {
+      return platform.updater?.state().status === "installing"
+    },
     install: () => void platform.updater?.install(),
   }
 
@@ -40,7 +42,9 @@ export default function Layout(props: ParentProps) {
       <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
         <Suspense>{props.children}</Suspense>
       </main>
-      {import.meta.env.DEV && state.debugTools && <DebugBar inline />}
+      <Show when={import.meta.env.DEV && state.debugTools}>
+        <DebugBar inline />
+      </Show>
       <ToastRegion v2 />
     </div>
   )

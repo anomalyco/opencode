@@ -5,12 +5,12 @@ import { type Accessor, createMemo } from "solid-js"
 import type { PromptInputControls } from "@/components/prompt-input/contracts"
 import type { PromptProjectControls } from "@/components/prompt-project-selector"
 import { useDirectoryPicker } from "@/components/directory-picker"
-import { useGlobal } from "@/context/global"
+import { useGlobal, useServerCtx } from "@/context/global"
 import { useLayout } from "@/context/layout"
 import { useLocal, type ModelSelection } from "@/context/local"
 import type { QueryOptionsApi } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
-import { serverName, ServerConnection, useServer } from "@/context/server"
+import { serverName, ServerConnection, useServers } from "@/context/servers"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
@@ -20,7 +20,7 @@ import { pathKey } from "@/utils/path-key"
 export function createPromptInputController(input: {
   sessionKey: Accessor<string>
   sessionID: Accessor<string | undefined>
-  queryOptions: Pick<QueryOptionsApi, "agents" | "providers">
+  queryOptions: Pick<QueryOptionsApi, "agents">
   model?: ModelSelection
 }) {
   const layout = useLayout()
@@ -30,8 +30,6 @@ export function createPromptInputController(input: {
   const providers = useProviders(() => sdk().directory)
   const view = layout.view(input.sessionKey)
   const agentsQuery = createQuery(() => input.queryOptions.agents(pathKey(sdk().directory)))
-  const globalProvidersQuery = createQuery(() => input.queryOptions.providers(null))
-  const providersQuery = createQuery(() => input.queryOptions.providers(pathKey(sdk().directory)))
 
   return createMemo<PromptInputControls>(() => {
     return {
@@ -46,10 +44,7 @@ export function createPromptInputController(input: {
       model: {
         selection: input.model ?? local.model,
         paid: providers.paid().length > 0,
-        loading:
-          (local.agent.visible() && agentsQuery.isLoading) ||
-          providersQuery.isLoading ||
-          globalProvidersQuery.isLoading,
+        loading: (local.agent.visible() && agentsQuery.isLoading) || !providers.ready(),
       },
       session: {
         id: input.sessionID(),
@@ -60,21 +55,18 @@ export function createPromptInputController(input: {
   })
 }
 
-export function createPromptProjectControls() {
-  const navigate = useNavigate()
-  const layout = useLayout()
-  const server = useServer()
+export function createPromptProjectControls(props: { draftId: string }) {
+  const server = useServers()
   const serverSDK = useServerSDK()
   const sdk = useSDK()
   const tabs = useTabs()
   const global = useGlobal()
   const pickDirectory = useDirectoryPicker()
-  const [search] = useSearchParams<{ draftId?: string }>()
-  const projectServer = () => serverSDK().server
-  const projectServerCtx = createMemo(() => global.ensureServerCtx(projectServer()))
+  const projectServer = () => serverSDK.server
+  const projectServerCtx = useServerCtx(projectServer)
   const projects = createMemo(() => {
     if (server.list.length <= 1) {
-      return search.draftId ? projectServerCtx().projects.list() : layout.projects.list()
+      return projectServerCtx().projects.list()
     }
     return server.list.flatMap((conn) => {
       const item = { key: ServerConnection.key(conn), name: serverName(conn) }
@@ -86,28 +78,12 @@ export function createPromptProjectControls() {
   })
   const selectProject = (worktree: string, serverKey?: string) => {
     const conn = serverKey ? server.list.find((conn) => ServerConnection.key(conn) === serverKey) : projectServer()
-    if (search.draftId) {
-      if (!conn) return
-      const target = global.ensureServerCtx(conn)
-      target.projects.open(worktree)
-      target.projects.touch(worktree)
-      tabs.updateDraft(search.draftId, { server: ServerConnection.key(conn), directory: worktree })
-      return
-    }
-
-    if (!serverKey) {
-      layout.projects.open(worktree)
-      server.projects.touch(worktree)
-      navigate(`/${base64Encode(worktree)}/session`)
-      return
-    }
-
     if (!conn) return
+
     const target = global.ensureServerCtx(conn)
     target.projects.open(worktree)
     target.projects.touch(worktree)
-    server.setActive(ServerConnection.key(conn))
-    navigate(`/${base64Encode(worktree)}/session`)
+    tabs.updateDraft(props.draftId, { server: ServerConnection.key(conn), directory: worktree, worktree: undefined })
   }
 
   const addProject = (title: string, serverKey?: string) => {

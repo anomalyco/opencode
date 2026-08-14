@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { currentSession } from "../utils/mock-server"
+import { installSseTransport } from "../utils/sse-transport"
 
 const serverA = "http://127.0.0.1:4096"
 const serverB = "http://127.0.0.1:4097"
@@ -78,6 +79,8 @@ function session(id: string, directory: string, title: string) {
 }
 
 async function mockServers(page: Page, requests: string[]) {
+  await installSseTransport(page, { server: serverA })
+  await installSseTransport(page, { server: serverB })
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
     if (url.origin !== serverA && url.origin !== serverB) return route.fallback()
@@ -85,7 +88,6 @@ async function mockServers(page: Page, requests: string[]) {
     const current = url.origin === serverA ? sessionA : sessionB
     const directory = url.searchParams.get("directory")
     if (directory && directory !== current.directory) return json(route, { name: "InvalidDirectory" }, 500)
-    if (url.pathname === "/api/event") return sse(route)
     if (url.pathname === "/api/health") return json(route, { pid: 1 })
     if (url.pathname === "/api/session") return json(route, { data: [currentSession(current)], cursor: {} })
     if (url.pathname === "/api/session/active") return json(route, { data: {} })
@@ -141,8 +143,4 @@ function json(route: Route, body: unknown, status = 200) {
     headers: { "access-control-allow-origin": "*" },
     body: JSON.stringify(body),
   })
-}
-
-function sse(route: Route) {
-  return route.fulfill({ status: 200, contentType: "text/event-stream", body: ": ok\n\n" })
 }

@@ -1,8 +1,8 @@
 import type { HttpRecorder } from "@opencode-ai/http-recorder"
 import { test, type TestOptions } from "bun:test"
 import { Effect, type Layer } from "effect"
-import { testEffect } from "./lib/effect"
-import { cassetteName, classifiedTags, matchesSelected, missingEnv, unique } from "./recorded-utils"
+import { testEffect } from "./lib/effect.js"
+import { cassetteName, classifiedTags, matchesSelected, missingEnv, unique } from "./recorded-utils.js"
 
 export type RecordedBody<A, E, R> = Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>)
 

@@ -2,22 +2,22 @@ import { DataProvider } from "@opencode-ai/session-ui/context"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { type Accessor, createEffect, createMemo, createResource, onCleanup, type ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, createResource, onCleanup, type ParentProps, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { decode64 } from "@/utils/base64"
 import { Schema } from "effect"
-import type { ServerConnection } from "@/context/server"
+import type { ServerConnection } from "@/context/servers"
 import { sessionHref } from "@/utils/session-route"
 import { useServerSync } from "@/context/server-sync"
 
 export function DirectoryDataProvider(
   props: ParentProps<{
-    directory: string | Accessor<string>
+    directory: string
     draftID?: string
-    server?: Accessor<ServerConnection.Key | undefined>
+    server?: ServerConnection.Key
   }>,
 ) {
   const location = useLocation()
@@ -25,17 +25,22 @@ export function DirectoryDataProvider(
   const params = useParams()
   const sync = useSync()
   const serverSync = useServerSync()
-  const directory = () => (typeof props.directory === "function" ? props.directory() : props.directory)
+  const language = useLanguage()
+  const directory = () => props.directory
   const slug = createMemo(() => base64Encode(directory()))
   const href = (sessionID: string) => {
-    const server = props.server?.()
-    if (server) return sessionHref(server, sessionID)
+    if (props.server) return sessionHref(props.server, sessionID)
     return `/${slug()}/session/${sessionID}`
+  }
+  const navigateToSession = async (sessionID: string) => {
+    const session = serverSync.session
+    await Promise.allSettled([session.lineage.resolve(sessionID), session.sync(sessionID)])
+    navigate(href(sessionID))
   }
 
   createEffect(() => {
     // A draft lives at /new-session?draftId=… and has no directory segment to normalize.
-    if (props.draftID || props.server?.()) return
+    if (props.draftID || props.server) return
     const next = sync().data.path.directory
     if (!next || next === directory()) return
     const path = location.pathname.slice(slug().length + 1)
@@ -44,17 +49,14 @@ export function DirectoryDataProvider(
 
   createResource(
     () => params.id,
-    (id) =>
-      sync()
-        .session.sync(id)
-        .catch(() => {}),
+    (id) => serverSync.session.hydrate(id).catch(() => {}),
   )
 
   createEffect(() => {
     const sessionID = params.id
     if (!sessionID) return
-    serverSync().session.pin(sessionID)
-    onCleanup(() => serverSync().session.unpin(sessionID))
+    serverSync.session.pin(sessionID)
+    onCleanup(() => serverSync.session.unpin(sessionID))
   })
 
   return (
@@ -64,7 +66,7 @@ export function DirectoryDataProvider(
           data={sync().data}
           directory={directory}
           sessionID={params.id}
-          onNavigateToSession={(sessionID: string) => navigate(href(sessionID))}
+          onNavigateToSession={navigateToSession}
           onSessionHref={href}
         >
           <LocalProvider>{props.children}</LocalProvider>

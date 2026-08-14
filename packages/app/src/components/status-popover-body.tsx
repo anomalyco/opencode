@@ -1,25 +1,17 @@
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { showToast } from "@/utils/toast"
-import {
-  type Accessor,
-  createEffect,
-  createMemo,
-  createResource,
-  For,
-  type JSXElement,
-  onCleanup,
-  Show,
-} from "solid-js"
+import { createEffect, createMemo, createResource, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { ServerConnection, useServer } from "@/context/server"
+import { ServerConnection, useServers } from "@/context/servers"
 import { useSync } from "@/context/sync"
 import { type ServerHealth } from "@/utils/server-health"
 import { useGlobal } from "@/context/global"
 import { useMcpToggle } from "@/context/mcp"
 import { useSDK } from "@/context/sdk"
+import { useServer } from "@/context/server"
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -109,12 +101,9 @@ type ServerStatusItem = {
   onSelect: () => void
 }
 
-export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
+export function StatusPopoverBody(props: { shown: boolean }) {
   const sync = useSync()
   const sdk = useSDK()
-  const global = useGlobal()
-  const server = useServer()
-  const platform = usePlatform()
   const language = useLanguage()
 
   const fail = (err: unknown) => {
@@ -125,29 +114,18 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     })
   }
 
-  createEffect(() => {
-    if (!props.shown()) return
-  })
-
   let dialogRun = 0
-  let dialogDead = false
   onCleanup(() => {
-    dialogDead = true
     dialogRun += 1
   })
-  const sortedServers = createMemo(() => {
-    const list = global.servers.list()
-    return listServersByHealth(list, server.key, global.servers.health)
-  })
   const toggleMcp = useMcpToggle()
-  const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const mcpNames = createMemo(() => Object.keys(sync().data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync().data.mcp?.[name]?.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
   const lspItems = createMemo(() => sync().data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
   const [pluginList] = createResource(
-    () => (props.shown() ? sdk().directory : undefined),
+    () => (props.shown ? sdk().directory : undefined),
     (directory) =>
       sdk()
         .api.plugin.list({ location: { directory } })

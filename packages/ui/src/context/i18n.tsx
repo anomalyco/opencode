@@ -1,26 +1,24 @@
 import { createContext, useContext, type Accessor, type ParentProps } from "solid-js"
 import { I18nProvider } from "@kobalte/core/i18n"
 import { dict as en } from "../i18n/en"
+import type { Key, LocaleKey, PluralCategory, PluralKey, PluralLookupKey } from "../i18n/en"
 
-export type UiI18nKey = keyof typeof en
-
-export const UI_PLURAL_KEYS = [
-  "ui.sessionTurn.diffs.changed",
-  "ui.messagePart.context.read",
-  "ui.messagePart.context.search",
-  "ui.messagePart.context.list",
-] as const
-export type UiI18nPluralKey = (typeof UI_PLURAL_KEYS)[number]
-export type UiPluralCategory = "zero" | "one" | "two" | "few" | "many" | "other"
-export type UiI18nPluralLookupKey = `${UiI18nPluralKey}.${UiPluralCategory}`
+export type UiI18nKey = Key
+export type UiI18nPluralKey = PluralKey
+export type UiPluralCategory = PluralCategory
+export type UiI18nPluralLookupKey = PluralLookupKey
+export type UiI18nLocaleKey = LocaleKey
+type UiTranslationKey<Value extends string> = Value extends UiI18nPluralLookupKey ? never : Value
 
 export type UiI18nParams = Record<string, string | number | boolean>
+export type UiTranslate = <Value extends string>(key: UiTranslationKey<Value>, params?: UiI18nParams) => string
 
 export type UiI18n = {
   locale: Accessor<string>
   layoutLocale?: Accessor<string>
-  t: (key: UiI18nKey, params?: UiI18nParams) => string
+  t: UiTranslate
   plural: (key: UiI18nPluralKey, count: number, params?: UiI18nParams) => string
+  pluralForm?: (key: UiI18nPluralKey, category: UiPluralCategory, params?: UiI18nParams) => string
 }
 
 const rules = new Map<string, Intl.PluralRules>()
@@ -50,11 +48,16 @@ function resolveTemplate(text: string, params?: UiI18nParams) {
 const fallback: UiI18n = {
   locale: () => "en",
   t: (key, params) => {
-    const value = en[key] ?? String(key)
+    const value = en[key as UiI18nKey] ?? String(key)
     return resolveTemplate(value, params)
   },
   plural: (key, count, params) =>
-    fallback.t(pluralKey(key, pluralCategory(fallback.locale(), count)), { ...params, count }),
+    fallback.pluralForm!(key, pluralCategory(fallback.locale(), count), { ...params, count }),
+  pluralForm: (key, category, params) => {
+    const values = en as Partial<Record<UiI18nLocaleKey, string>>
+    const value = values[pluralKey(key, category)] ?? values[`${key}.other`] ?? `${key}.other`
+    return resolveTemplate(value, params)
+  },
 }
 
 const Context = createContext<UiI18n>(fallback)

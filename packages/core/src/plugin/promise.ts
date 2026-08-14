@@ -1,4 +1,4 @@
-export * as PluginPromise from "./promise"
+export * as PluginPromise from "./promise.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import type { Context, Plugin } from "@opencode-ai/plugin/promise/plugin"
@@ -15,7 +15,7 @@ import { Skill } from "@opencode-ai/schema/skill"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { WebSearch } from "@opencode-ai/schema/websearch"
 import { DateTime, Effect, Scope, Stream } from "effect"
-import { Tool } from "../tool"
+import { Tool } from "../tool.js"
 
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
 type Registration = { readonly dispose: () => Promise<void> }

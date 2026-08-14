@@ -1,9 +1,9 @@
-export * as ReferenceInstructions from "./instructions"
+export * as ReferenceInstructions from "./instructions.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Reference } from "../reference"
-import { Instructions } from "../instructions/index"
+import { Reference } from "../reference.js"
+import { Instructions } from "../instructions/index.js"
 
 const Summary = Schema.Struct({
   name: Schema.String,

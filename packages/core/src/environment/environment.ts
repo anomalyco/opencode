@@ -2,11 +2,11 @@ import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
-import type { Files } from "./files"
-import { makeFiles } from "./index"
-import { makeLocalDriver } from "./local"
-import { Location } from "../location"
-import { Workspace } from "../workspace"
+import type { Files } from "./files.js"
+import { makeFiles } from "./index.js"
+import { makeLocalDriver } from "./local.js"
+import { Location } from "../location.js"
+import { Workspace } from "../workspace.js"
 
 export interface Interface {
   readonly files: Files
@@ -40,4 +40,4 @@ export const node = makeLocationNode({
   deps: [CrossSpawnSpawner.node, Location.node, Workspace.node],
 })
 
-export * as EnvironmentService from "./environment"
+export * as EnvironmentService from "./environment.js"

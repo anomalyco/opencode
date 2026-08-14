@@ -7,7 +7,7 @@ describe("file watcher invalidation", () => {
     const refresh: string[] = []
     invalidateFromWatcher(
       {
-        type: "file.watcher.updated",
+        type: "filesystem.changed",
         properties: {
           file: "src/new.ts",
           event: "add",
@@ -32,7 +32,7 @@ describe("file watcher invalidation", () => {
 
     invalidateFromWatcher(
       {
-        type: "file.watcher.updated",
+        type: "filesystem.changed",
         properties: {
           file: "src/open.ts",
           event: "change",
@@ -63,7 +63,7 @@ describe("file watcher invalidation", () => {
 
     invalidateFromWatcher(
       {
-        type: "file.watcher.updated",
+        type: "filesystem.changed",
         properties: {
           file: "src",
           event: "change",
@@ -81,7 +81,7 @@ describe("file watcher invalidation", () => {
 
     invalidateFromWatcher(
       {
-        type: "file.watcher.updated",
+        type: "filesystem.changed",
         properties: {
           file: "src/file.ts",
           event: "change",
@@ -111,7 +111,7 @@ describe("file watcher invalidation", () => {
 
     invalidateFromWatcher(
       {
-        type: "file.watcher.updated",
+        type: "filesystem.changed",
         properties: {
           file: ".git/index.lock",
           event: "change",

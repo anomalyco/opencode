@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
-import type { MediaPart } from "../../schema"
-import { ProviderShared } from "../shared"
+import type { MediaPart } from "../../schema/index.js"
+import { ProviderShared } from "../shared.js"
 
 // Bedrock Converse accepts image `format` as the file extension and
 // `source.bytes` as base64 in the JSON wire format.
@@ -89,4 +89,4 @@ export const lower = Effect.fn("BedrockMedia.lower")(function* (part: MediaPart)
   return yield* ProviderShared.invalidRequest(`Bedrock Converse does not support media type ${part.mediaType}`)
 })
 
-export * as BedrockMedia from "./bedrock-media"
+export * as BedrockMedia from "./bedrock-media.js"

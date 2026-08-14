@@ -110,10 +110,19 @@ function createStorage(root: string, channel: string) {
     },
   }
 
-  const watcher = watch(directory, () => entries.forEach((entry) => entry.reload()))
+  let reload: ReturnType<typeof setTimeout> | undefined
+  const watcher = watch(directory, () => {
+    clearTimeout(reload)
+    // Atomic writes notify for the temporary file before its final rename, and some
+    // platforms coalesce the rename event. Reload after the event burst has settled.
+    reload = setTimeout(() => entries.forEach((entry) => entry.reload()), 50)
+  })
   return {
     storage,
-    close: () => watcher.close(),
+    close: () => {
+      clearTimeout(reload)
+      watcher.close()
+    },
   }
 }
 

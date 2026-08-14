@@ -5,12 +5,10 @@ import { Context, Duration, Effect, FileSystem, Layer } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
-import semver from "semver"
+import { action, type Policy } from "./updater-action"
 
 declare const OPENCODE_CLI_NAME: string | undefined
 
-export type Policy = boolean | "notify"
-export type Action = "none" | "upgrade"
 type Method = "npm" | "pnpm" | "bun" | "yarn"
 
 const packageName =
@@ -32,14 +30,6 @@ export function decodePolicy(text: string): Policy | undefined {
   if (errors.length || typeof input !== "object" || input === null || !("autoupdate" in input)) return
   const value = input.autoupdate
   if (typeof value === "boolean" || value === "notify") return value
-}
-
-export function action(current: string, latest: string, policy: Policy): Action {
-  if (policy === false) return "none"
-  if (!semver.valid(current) || !semver.valid(latest) || semver.eq(latest, current)) return "none"
-  // Major upgrades are never installed automatically.
-  if (semver.major(latest) !== semver.major(current)) return "none"
-  return "upgrade"
 }
 
 export const layer = Layer.effect(
@@ -166,3 +156,4 @@ export const layer = Layer.effect(
 )
 
 export * as Updater from "./updater"
+export { action, type Action, type Policy } from "./updater-action"

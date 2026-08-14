@@ -4,7 +4,7 @@ import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { type Component, Show } from "solid-js"
 import type { ServerActionsController } from "@/components/server/server-management-controller"
 import { useLanguage } from "@/context/language"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 
 export const ServerRowMenu: Component<{
   server: ServerConnection.Any

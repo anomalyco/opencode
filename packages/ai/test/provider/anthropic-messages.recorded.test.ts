@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, AIError, Message, ToolCallPart } from "../../src"
-import { LLMClient } from "../../src/route"
-import * as Anthropic from "../../src/providers/anthropic"
-import { weatherToolName } from "../recorded-scenarios"
-import { recordedTests } from "../recorded-test"
+import { LLM, AIError, Message, ToolCallPart } from "../../src/index.js"
+import { LLMClient } from "../../src/route.js"
+import * as Anthropic from "../../src/providers/anthropic.js"
+import { weatherToolName } from "../recorded-scenarios.js"
+import { recordedTests } from "../recorded-test.js"
 
 const model = Anthropic.configure({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",

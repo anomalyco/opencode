@@ -1,6 +1,6 @@
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import type { WorkspaceDriver } from "./driver"
+import type { WorkspaceDriver } from "./driver.js"
 
 export const WorkspaceTable = sqliteTable("workspace", {
   id: text().$type<Workspace.ID>().primaryKey(),

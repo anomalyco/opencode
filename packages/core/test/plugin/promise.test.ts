@@ -11,7 +11,7 @@ import { PluginPromise } from "@opencode-ai/core/plugin/promise"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionPending } from "@opencode-ai/core/session/pending"
+import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { Tool } from "@opencode-ai/core/tool"
 import { Provider } from "@opencode-ai/core/provider"
 import { define } from "@opencode-ai/plugin/promise/plugin"
@@ -61,12 +61,12 @@ describe("fromPromise", () => {
           synthetic: (value) => {
             seen = value
             return Effect.succeed(
-              SessionPending.Synthetic.make({
+              SessionInbox.Synthetic.make({
                 id: SessionMessage.ID.make(input.id),
                 sessionID: Session.ID.make(input.sessionID),
                 timeCreated: DateTime.makeUnsafe(0),
                 type: "synthetic",
-                data: {
+                payload: {
                   text: input.text,
                   metadata: input.metadata,
                 },
@@ -391,6 +391,47 @@ describe("fromPromise", () => {
         content: [{ type: "text", text: "Hello, world!" }],
       })
       expect(progress).toEqual([{ phase: "greeting" }])
+    }),
+  )
+
+  it.effect("returns content-only plugin results through Code Mode", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const registry = yield* Tool.Service
+      const host = yield* PluginHost.make(plugins)
+      const promisePlugin = define({
+        id: "content-only-tool",
+        setup: async (ctx) => {
+          await ctx.tool.transform((tools) => {
+            tools.add({
+              name: "demo_status",
+              description: "Returns a status string",
+              input: Schema.Struct({}),
+              execute: async () => ({ content: [{ type: "text", text: "hello" }] }),
+              options: { codemode: true },
+            })
+          })
+        },
+      })
+
+      yield* PluginPromise.fromPromise(promisePlugin).effect(host)
+
+      const toolSet = yield* registry.snapshot()
+      const throughCodeMode = yield* toolSet.execute({
+        sessionID: Session.ID.make("ses_content_only_tool"),
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_content_only_tool"),
+        call: {
+          type: "tool-call",
+          id: "call_content_only_tool",
+          name: "execute",
+          input: { code: "return await tools.demo_status({})" },
+        },
+      })
+      expect(throughCodeMode).toMatchObject({
+        output: { output: "hello", toolCalls: [{ tool: "demo_status", status: "completed" }] },
+        content: [{ type: "text", text: "hello" }],
+      })
     }),
   )
 })

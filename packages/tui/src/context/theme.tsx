@@ -28,7 +28,6 @@ import { createEffect, createMemo, onCleanup, onMount, type Accessor, type Paren
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useConfig } from "../config"
-import { Global } from "@opencode-ai/util/global"
 import { DevTools } from "../devtools"
 import { configDirectories } from "../util/config-directories"
 
@@ -69,15 +68,15 @@ export type ThemeSource = Readonly<{
   subscribeRefresh?(refresh: () => void): () => void
 }>
 
-const themeSource: ThemeSource = {
+export const createThemeSource = (config: string): ThemeSource => ({
   async discover() {
-    return discoverThemes(configDirectories(Global.Path.config, process.cwd()))
+    return discoverThemes(configDirectories(config, process.cwd()))
   },
   subscribeRefresh(refresh) {
     process.on("SIGUSR2", refresh)
     return () => process.off("SIGUSR2", refresh)
   },
-}
+})
 
 export { discoverThemes } from "../theme/discovery"
 
@@ -139,11 +138,11 @@ subscribeThemes((themes) => setStore("themes", themes))
 
 const themeContext = createSimpleContext({
   name: "Theme",
-  init: (props: { mode: "dark" | "light"; source?: ThemeSource }): ThemeContextValue => {
+  init: (props: { mode: "dark" | "light"; source: ThemeSource }): ThemeContextValue => {
     const renderer = useRenderer()
     const configState = useConfig()
     const config = configState.data
-    const themes = props.source ?? themeSource
+    const themes = props.source
     const pick = (value: unknown) => {
       if (value === "dark" || value === "light") return value
       return

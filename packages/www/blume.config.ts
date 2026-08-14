@@ -19,8 +19,17 @@ export default defineConfig({
   github: {
     owner: "anomalyco",
     repo: "opencode",
-    branch: "dev",
+    branch: "v2",
     dir: "packages/www",
+  },
+  theme: {
+    background: { dark: "#131010" },
+    fonts: {
+      body: "ibm-plex-mono",
+      display: "ibm-plex-mono",
+      mono: "ibm-plex-mono",
+    },
+    mode: "dark",
   },
   navigation: {
     tabs: [
@@ -33,6 +42,19 @@ export default defineConfig({
     enabled: true,
     route: "/api",
     spec: "./openapi.json",
+  },
+  seo: {
+    og: {
+      fonts: [{ name: "IBM Plex Mono", weight: [400, 600] }],
+      logo: "public/assets/logo-dark.svg",
+      palette: {
+        accent: "#b7b1b1",
+        background: "#131010",
+        border: "#343030",
+        foreground: "#f1ecec",
+        muted: "#b7b1b1",
+      },
+    },
   },
   deployment: {
     adapter: "cloudflare",

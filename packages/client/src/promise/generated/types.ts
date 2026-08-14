@@ -41,6 +41,7 @@ export type SessionMessageAgentSelected = {
   time: { created: number }
   type: "agent-switched"
   agent: string
+  previous?: string
 }
 
 export type PromptBase64 = string
@@ -64,6 +65,7 @@ export type SessionMessageSystem = {
   time: { created: number }
   type: "system"
   text: string
+  description?: string
 }
 
 export type SessionMessageSkill = {
@@ -128,15 +130,17 @@ export type SessionMessageCompactionCompleted = {
 
 export type SessionActive = { type: "running" }
 
-export type SessionPendingSyntheticData = { text: string; description?: string; metadata?: { [x: string]: JsonValue } }
+export type SessionInboxDelivery = "steer" | "queue"
 
-export type SessionPendingCompaction = { id: string; sessionID: string; timeCreated: number; type: "compaction" }
+export type SessionInboxSyntheticPayload = { text: string; description?: string; metadata?: { [x: string]: JsonValue } }
+
+export type SessionInboxCompactionPayload = {}
 
 export type InstructionEntryKey = string
 
 export type SessionGenerateResponse = { data: { text: string } }
 
-export type SessionPendingSyntheticData1 = { text: string; description?: string; metadata?: { [x: string]: any } }
+export type SessionInboxSyntheticPayload1 = { text: string; description?: string; metadata?: { [x: string]: any } }
 
 export type ShellInfo = {
   id: string
@@ -287,8 +291,6 @@ export type ProjectTime = { created: number; updated: number; initialized?: numb
 
 export type ProjectCurrent = { id: string; directory: string; canonical: string }
 
-export type ProjectDirectory = { directory: string; strategy?: string }
-
 export type FormMetadata = { [x: string]: JsonValue }
 
 export type FormValue = string | number | boolean | Array<string>
@@ -366,7 +368,9 @@ export type ReferenceGitSource = {
   hidden?: boolean
 }
 
-export type ProjectCopyCopy = { directory: string }
+export type WorktreeDirectory = { directory: string; strategy?: string }
+
+export type WorktreeInfo = { directory: string }
 
 export type VcsBranch = { current?: string; default?: string }
 
@@ -407,6 +411,19 @@ export type ProviderRequest = {
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
+export type SessionMessageLocationSwitched = {
+  id: string
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  type: "location-switched"
+  location: LocationRef
+  projectID?: string
+  subpath?: string
+  previous?: { location: LocationRef; projectID?: string; subpath?: string }
+}
+
+export type SessionInboxMovePayload = { location: LocationRef; projectID: string; subpath?: string }
+
 export type SessionCreated = {
   id: string
   created: number
@@ -435,7 +452,7 @@ export type SessionAgentSelected = {
   type: "session.agent.selected"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; agent: string }
+  data: { sessionID: string; agent: string; previous?: string }
 }
 
 export type SessionModelSelected = {
@@ -445,7 +462,7 @@ export type SessionModelSelected = {
   type: "session.model.selected"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; model: ModelRef }
+  data: { sessionID: string; model: ModelRef; previous?: ModelRef }
 }
 
 export type SessionMoved = {
@@ -455,7 +472,7 @@ export type SessionMoved = {
   type: "session.moved"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; location: LocationRef; projectID?: string; subpath?: string }
+  data: { sessionID: string; location: LocationRef; projectID: string; subpath?: string }
 }
 
 export type SessionRenamed = {
@@ -488,44 +505,24 @@ export type SessionForked = {
   data: { sessionID: string; parentID: string; boundary: SessionForkBoundary; instructions?: { [x: string]: string } }
 }
 
-export type SessionInputPromoted = {
+export type SessionInboxDelivered = {
   id: string
   created: number
   metadata?: { [x: string]: any }
-  type: "session.input.promoted"
+  type: "session.inbox.delivered"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; inputID: string }
+  data: { sessionID: string; inboxID: string }
 }
 
-export type SessionInputCancelled = {
+export type SessionInboxCancelled = {
   id: string
   created: number
   metadata?: { [x: string]: any }
-  type: "session.input.cancelled"
+  type: "session.inbox.cancelled"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; inputID: string }
-}
-
-export type SessionInputSteered = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.input.steered"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; inputID: string }
-}
-
-export type SessionInputQueued = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.input.queued"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; inputID: string }
+  data: { sessionID: string; inboxID: string }
 }
 
 export type SessionExecutionStarted = {
@@ -644,16 +641,6 @@ export type SessionToolInputEnded = {
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
   data: { sessionID: string; assistantMessageID: string; id: string; text: string }
-}
-
-export type SessionCompactionAdmitted = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.compaction.admitted"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; inputID: string }
 }
 
 export type SessionCompactionStarted = {
@@ -841,13 +828,23 @@ export type PluginUpdated = {
   data: {}
 }
 
-export type ProjectDirectoriesUpdated = {
+export type WorktreeUpdated = {
   id: string
   created: number
   metadata?: { [x: string]: any }
-  type: "project.directories.updated"
+  type: "worktree.updated"
   location?: LocationRef
   data: { projectID: string }
+}
+
+export type WorktreeResolved = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "worktree.resolved"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { projectID: string; directory: string; previous: string }
 }
 
 export type CommandUpdated = {
@@ -1149,22 +1146,35 @@ export type SessionCompactionFailed = {
   data: { sessionID: string; reason: "auto" | "manual"; error: SessionStructuredError; inputID?: string }
 }
 
-export type SessionPendingSynthetic = {
+export type SessionInboxDeliveryChanged = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.inbox.delivery.changed"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; inboxID: string; delivery: SessionInboxDelivery }
+}
+
+export type SessionInboxSynthetic = {
   id: string
   sessionID: string
   timeCreated: number
   type: "synthetic"
-  data: SessionPendingSyntheticData
-  delivery: "steer" | "queue"
+  payload: SessionInboxSyntheticPayload
+  delivery: SessionInboxDelivery
+}
+
+export type SessionInboxCompaction = {
+  id: string
+  sessionID: string
+  timeCreated: number
+  type: "compaction"
+  payload: SessionInboxCompactionPayload
+  delivery: SessionInboxDelivery
 }
 
 export type InstructionEntryInfo = { key: InstructionEntryKey; value: JsonValue }
-
-export type SessionPendingSyntheticMessage = {
-  type: "synthetic"
-  data: SessionPendingSyntheticData1
-  delivery: "steer" | "queue"
-}
 
 export type SessionShellStarted = {
   id: string
@@ -1359,8 +1369,6 @@ export type Project = {
   sandboxes: Array<string>
 }
 
-export type ProjectDirectories = Array<ProjectDirectory>
-
 export type FormAnswer = { [x: string]: FormValue }
 
 export type PermissionRequest = {
@@ -1510,9 +1518,20 @@ export type SessionStatus2 = {
 
 export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
 
+export type WorktreeList = Array<WorktreeDirectory>
+
 export type VcsInfo = { branch: VcsBranch }
 
 export type PermissionRuleset = Array<PermissionRule>
+
+export type SessionInboxMove = {
+  id: string
+  sessionID: string
+  timeCreated: number
+  type: "move"
+  payload: SessionInboxMovePayload
+  delivery: SessionInboxDelivery
+}
 
 export type SessionInfo = {
   id: string
@@ -1551,7 +1570,7 @@ export type SessionMessageUser = {
   type: "user"
 }
 
-export type SessionPendingUserData = {
+export type SessionInboxUserPayload = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
@@ -1559,7 +1578,7 @@ export type SessionPendingUserData = {
   metadata?: { [x: string]: JsonValue }
 }
 
-export type SessionPendingUserData1 = {
+export type SessionInboxUserPayload1 = {
   text: string
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
@@ -1871,16 +1890,20 @@ export type ConfigEntry =
 
 export type SessionsResponse = { data: Array<SessionInfo>; cursor: { previous?: string | null; next?: string | null } }
 
-export type SessionPendingUser = {
+export type SessionInboxUser = {
   id: string
   sessionID: string
   timeCreated: number
   type: "user"
-  data: SessionPendingUserData
-  delivery: "steer" | "queue"
+  payload: SessionInboxUserPayload
+  delivery: SessionInboxDelivery
 }
 
-export type SessionPendingUserMessage = { type: "user"; data: SessionPendingUserData1; delivery: "steer" | "queue" }
+export type SessionInboxItem =
+  | { type: "user"; payload: SessionInboxUserPayload1; delivery: SessionInboxDelivery }
+  | { type: "synthetic"; payload: SessionInboxSyntheticPayload1; delivery: SessionInboxDelivery }
+  | { type: "compaction"; payload: SessionInboxCompactionPayload; delivery: SessionInboxDelivery }
+  | { type: "move"; payload: SessionInboxMovePayload; delivery: SessionInboxDelivery }
 
 export type SessionMessageAssistantTool = {
   type: "tool"
@@ -1901,9 +1924,17 @@ export type FormFields = [FormField, ...Array<FormField>]
 
 export type FormFields3 = [FormField1, ...Array<FormField1>]
 
-export type SessionPendingInfo = SessionPendingUser | SessionPendingSynthetic | SessionPendingCompaction
+export type SessionInboxInfo = SessionInboxUser | SessionInboxSynthetic | SessionInboxCompaction | SessionInboxMove
 
-export type SessionPendingMessage = SessionPendingUserMessage | SessionPendingSyntheticMessage
+export type SessionInboxEnqueued = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.inbox.enqueued"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; inboxID: string; item: SessionInboxItem }
+}
 
 export type SessionMessageAssistant = {
   id: string
@@ -1929,19 +1960,52 @@ export type FormInfo = { id: string; sessionID: string; title: string; metadata?
 
 export type FormInfo1 = { id: string; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields3 }
 
-export type SessionInputAdmitted = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.input.admitted"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; inputID: string; input: SessionPendingMessage }
-}
+export type SessionEventDurable =
+  | SessionCreated
+  | SessionAgentSelected
+  | SessionModelSelected
+  | SessionMoved
+  | SessionRenamed
+  | SessionDeleted
+  | SessionForked
+  | SessionInboxDelivered
+  | SessionInboxEnqueued
+  | SessionInboxCancelled
+  | SessionInboxDeliveryChanged
+  | SessionExecutionStarted
+  | SessionExecutionSucceeded
+  | SessionExecutionFailed
+  | SessionExecutionInterrupted
+  | SessionInstructionsUpdated
+  | SessionSynthetic
+  | SessionSkillActivated
+  | SessionShellStarted
+  | SessionShellEnded
+  | SessionStepStarted
+  | SessionStepEnded
+  | SessionStepFailed
+  | SessionTextStarted
+  | SessionTextEnded
+  | SessionReasoningStarted
+  | SessionReasoningEnded
+  | SessionToolInputStarted
+  | SessionToolInputEnded
+  | SessionToolCalled
+  | SessionToolSuccess
+  | SessionToolFailed
+  | SessionRetryScheduled
+  | SessionCompactionStarted
+  | SessionCompactionEnded
+  | SessionCompactionFailed
+  | SessionRevertStaged
+  | SessionRevertCleared
+  | SessionRevertCommitted
+  | SessionUsageRecorded
 
 export type SessionMessageInfo =
   | SessionMessageAgentSelected
   | SessionMessageModelSelected
+  | SessionMessageLocationSwitched
   | SessionMessageUser
   | SessionMessageSynthetic
   | SessionMessageSystem
@@ -1965,49 +2029,7 @@ export type FormCreated = {
   data: { form: FormInfo1 }
 }
 
-export type SessionEventDurable =
-  | SessionCreated
-  | SessionAgentSelected
-  | SessionModelSelected
-  | SessionMoved
-  | SessionRenamed
-  | SessionDeleted
-  | SessionForked
-  | SessionInputPromoted
-  | SessionInputAdmitted
-  | SessionInputCancelled
-  | SessionInputSteered
-  | SessionInputQueued
-  | SessionExecutionStarted
-  | SessionExecutionSucceeded
-  | SessionExecutionFailed
-  | SessionExecutionInterrupted
-  | SessionInstructionsUpdated
-  | SessionSynthetic
-  | SessionSkillActivated
-  | SessionShellStarted
-  | SessionShellEnded
-  | SessionStepStarted
-  | SessionStepEnded
-  | SessionStepFailed
-  | SessionTextStarted
-  | SessionTextEnded
-  | SessionReasoningStarted
-  | SessionReasoningEnded
-  | SessionToolInputStarted
-  | SessionToolInputEnded
-  | SessionToolCalled
-  | SessionToolSuccess
-  | SessionToolFailed
-  | SessionRetryScheduled
-  | SessionCompactionAdmitted
-  | SessionCompactionStarted
-  | SessionCompactionEnded
-  | SessionCompactionFailed
-  | SessionRevertStaged
-  | SessionRevertCleared
-  | SessionRevertCommitted
-  | SessionUsageRecorded
+export type SessionLogItem = SessionEventDurable | EventLogSynced
 
 export type SessionTransferData = { info: SessionInfo; messages: Array<SessionMessageInfo> }
 
@@ -2037,11 +2059,10 @@ export type V2Event =
   | SessionUsageUpdated
   | SessionDeleted
   | SessionForked
-  | SessionInputPromoted
-  | SessionInputAdmitted
-  | SessionInputCancelled
-  | SessionInputSteered
-  | SessionInputQueued
+  | SessionInboxDelivered
+  | SessionInboxEnqueued
+  | SessionInboxCancelled
+  | SessionInboxDeliveryChanged
   | SessionExecutionStarted
   | SessionExecutionSucceeded
   | SessionExecutionFailed
@@ -2068,7 +2089,6 @@ export type V2Event =
   | SessionToolSuccess
   | SessionToolFailed
   | SessionRetryScheduled
-  | SessionCompactionAdmitted
   | SessionCompactionStarted
   | SessionCompactionDelta
   | SessionCompactionEnded
@@ -2082,7 +2102,8 @@ export type V2Event =
   | PermissionReplied
   | PluginAdded
   | PluginUpdated
-  | ProjectDirectoriesUpdated
+  | WorktreeUpdated
+  | WorktreeResolved
   | CommandUpdated
   | ConfigUpdated
   | SkillUpdated
@@ -2112,8 +2133,6 @@ export type V2Event =
   | McpStatusChanged
   | McpResourcesChanged
   | V2EventServerConnected
-
-export type SessionLogItem = SessionEventDurable | EventLogSynced
 
 export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly message: string }
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
@@ -2285,12 +2304,12 @@ export type QuestionNotFoundError = {
 export const isQuestionNotFoundError = (value: unknown): value is QuestionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "QuestionNotFoundError"
 
-export type ProjectCopyError = {
-  readonly name: "ProjectCopyError"
+export type WorktreeError = {
+  readonly name: "WorktreeError"
   readonly data: { readonly message: string; readonly forceRequired?: boolean | undefined }
 }
-export const isProjectCopyError = (value: unknown): value is ProjectCopyError =>
-  typeof value === "object" && value !== null && "name" in value && value["name"] === "ProjectCopyError"
+export const isWorktreeError = (value: unknown): value is WorktreeError =>
+  typeof value === "object" && value !== null && "name" in value && value["name"] === "WorktreeError"
 
 export type HealthGetOutput = ServiceHealth
 
@@ -2535,6 +2554,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "agent-switched"
           readonly agent: string
+          readonly previous?: string
         }
       | {
           readonly id: string
@@ -2543,6 +2563,20 @@ export type SessionImportInput = {
           readonly type: "model-switched"
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
           readonly previous?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+        }
+      | {
+          readonly id: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly time: { readonly created: number }
+          readonly type: "location-switched"
+          readonly location: { readonly directory: string; readonly workspaceID?: string }
+          readonly projectID?: string
+          readonly subpath?: string
+          readonly previous?: {
+            readonly location: { readonly directory: string; readonly workspaceID?: string }
+            readonly projectID?: string
+            readonly subpath?: string
+          }
         }
       | {
           readonly id: string
@@ -2583,6 +2617,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "system"
           readonly text: string
+          readonly description?: string
         }
       | {
           readonly id: string
@@ -2786,6 +2821,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "agent-switched"
           readonly agent: string
+          readonly previous?: string
         }
       | {
           readonly id: string
@@ -2794,6 +2830,20 @@ export type SessionImportInput = {
           readonly type: "model-switched"
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
           readonly previous?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+        }
+      | {
+          readonly id: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly time: { readonly created: number }
+          readonly type: "location-switched"
+          readonly location: { readonly directory: string; readonly workspaceID?: string }
+          readonly projectID?: string
+          readonly subpath?: string
+          readonly previous?: {
+            readonly location: { readonly directory: string; readonly workspaceID?: string }
+            readonly projectID?: string
+            readonly subpath?: string
+          }
         }
       | {
           readonly id: string
@@ -2834,6 +2884,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "system"
           readonly text: string
+          readonly description?: string
         }
       | {
           readonly id: string
@@ -3037,6 +3088,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "agent-switched"
           readonly agent: string
+          readonly previous?: string
         }
       | {
           readonly id: string
@@ -3045,6 +3097,20 @@ export type SessionImportInput = {
           readonly type: "model-switched"
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
           readonly previous?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+        }
+      | {
+          readonly id: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly time: { readonly created: number }
+          readonly type: "location-switched"
+          readonly location: { readonly directory: string; readonly workspaceID?: string }
+          readonly projectID?: string
+          readonly subpath?: string
+          readonly previous?: {
+            readonly location: { readonly directory: string; readonly workspaceID?: string }
+            readonly projectID?: string
+            readonly subpath?: string
+          }
         }
       | {
           readonly id: string
@@ -3085,6 +3151,7 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "system"
           readonly text: string
+          readonly description?: string
         }
       | {
           readonly id: string
@@ -3299,8 +3366,21 @@ export type SessionRenameOutput = void
 
 export type SessionMoveInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly directory: { readonly directory: string; readonly workspaceID?: string }["directory"]
-  readonly workspaceID?: { readonly directory: string; readonly workspaceID?: string }["workspaceID"]
+  readonly directory: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly delivery?: ("steer" | "queue") | null
+  }["directory"]
+  readonly workspaceID?: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly delivery?: ("steer" | "queue") | null
+  }["workspaceID"]
+  readonly delivery?: {
+    readonly directory: string
+    readonly workspaceID?: string
+    readonly delivery?: ("steer" | "queue") | null
+  }["delivery"]
 }
 
 export type SessionMoveOutput = void
@@ -3325,7 +3405,7 @@ export type SessionPromptInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["id"]
   readonly text: {
@@ -3346,7 +3426,7 @@ export type SessionPromptInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["text"]
   readonly files?: {
@@ -3367,7 +3447,7 @@ export type SessionPromptInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["files"]
   readonly agents?: {
@@ -3388,7 +3468,7 @@ export type SessionPromptInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["agents"]
   readonly skills?: {
@@ -3409,7 +3489,7 @@ export type SessionPromptInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["skills"]
   readonly metadata?: {
@@ -3430,7 +3510,7 @@ export type SessionPromptInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["metadata"]
   readonly delivery?: {
@@ -3451,7 +3531,7 @@ export type SessionPromptInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["delivery"]
   readonly resume?: {
@@ -3472,12 +3552,12 @@ export type SessionPromptInput = {
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["resume"]
 }
 
-export type SessionPromptOutput = { data: SessionPendingUser }["data"]
+export type SessionPromptOutput = { data: SessionInboxUser }["data"]
 
 export type SessionCommandInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
@@ -3501,7 +3581,7 @@ export type SessionCommandInput = {
       readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["id"]
   readonly command: {
@@ -3524,7 +3604,7 @@ export type SessionCommandInput = {
       readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["command"]
   readonly arguments?: {
@@ -3547,7 +3627,7 @@ export type SessionCommandInput = {
       readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["arguments"]
   readonly agent?: {
@@ -3570,7 +3650,7 @@ export type SessionCommandInput = {
       readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["agent"]
   readonly model?: {
@@ -3593,7 +3673,7 @@ export type SessionCommandInput = {
       readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["model"]
   readonly files?: {
@@ -3616,7 +3696,7 @@ export type SessionCommandInput = {
       readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["files"]
   readonly agents?: {
@@ -3639,7 +3719,7 @@ export type SessionCommandInput = {
       readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["agents"]
   readonly skills?: {
@@ -3662,7 +3742,7 @@ export type SessionCommandInput = {
       readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["skills"]
   readonly delivery?: {
@@ -3685,7 +3765,7 @@ export type SessionCommandInput = {
       readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["delivery"]
   readonly resume?: {
@@ -3708,12 +3788,12 @@ export type SessionCommandInput = {
       readonly id: string
       readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
     }>
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["resume"]
 }
 
-export type SessionCommandOutput = { data: SessionPendingUser }["data"]
+export type SessionCommandOutput = { data: SessionInboxUser }["data"]
 
 export type SessionSkillInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
@@ -3743,7 +3823,7 @@ export type SessionSyntheticInput = {
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["id"]
   readonly text: {
@@ -3751,7 +3831,7 @@ export type SessionSyntheticInput = {
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["text"]
   readonly description?: {
@@ -3759,7 +3839,7 @@ export type SessionSyntheticInput = {
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["description"]
   readonly metadata?: {
@@ -3767,7 +3847,7 @@ export type SessionSyntheticInput = {
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["metadata"]
   readonly delivery?: {
@@ -3775,7 +3855,7 @@ export type SessionSyntheticInput = {
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["delivery"]
   readonly resume?: {
@@ -3783,12 +3863,12 @@ export type SessionSyntheticInput = {
     readonly text: string
     readonly description?: string | null
     readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly delivery?: "steer" | "queue" | null
+    readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["resume"]
 }
 
-export type SessionSyntheticOutput = { data: SessionPendingSynthetic }["data"]
+export type SessionSyntheticOutput = { data: SessionInboxSynthetic }["data"]
 
 export type SessionShellInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
@@ -3800,10 +3880,14 @@ export type SessionShellOutput = void
 
 export type SessionCompactInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly id?: { readonly id?: string | undefined }["id"]
+  readonly id?: { readonly id?: string | undefined; readonly delivery?: ("steer" | "queue") | undefined }["id"]
+  readonly delivery?: {
+    readonly id?: string | undefined
+    readonly delivery?: ("steer" | "queue") | undefined
+  }["delivery"]
 }
 
-export type SessionCompactOutput = { data: SessionPendingCompaction }["data"]
+export type SessionCompactOutput = { data: SessionInboxCompaction }["data"]
 
 export type SessionWaitInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
@@ -3829,30 +3913,30 @@ export type SessionContextInput = { readonly sessionID: { readonly sessionID: st
 
 export type SessionContextOutput = { data: Array<SessionMessageInfo> }["data"]
 
-export type SessionPendingListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionInboxListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
-export type SessionPendingListOutput = { data: Array<SessionPendingInfo> }["data"]
+export type SessionInboxListOutput = { data: Array<SessionInboxInfo> }["data"]
 
-export type SessionPendingCancelInput = {
-  readonly sessionID: { readonly sessionID: string; readonly inputID: string }["sessionID"]
-  readonly inputID: { readonly sessionID: string; readonly inputID: string }["inputID"]
+export type SessionInboxCancelInput = {
+  readonly sessionID: { readonly sessionID: string; readonly inboxID: string }["sessionID"]
+  readonly inboxID: { readonly sessionID: string; readonly inboxID: string }["inboxID"]
 }
 
-export type SessionPendingCancelOutput = void
+export type SessionInboxCancelOutput = void
 
-export type SessionPendingSteerInput = {
-  readonly sessionID: { readonly sessionID: string; readonly inputID: string }["sessionID"]
-  readonly inputID: { readonly sessionID: string; readonly inputID: string }["inputID"]
+export type SessionInboxSteerInput = {
+  readonly sessionID: { readonly sessionID: string; readonly inboxID: string }["sessionID"]
+  readonly inboxID: { readonly sessionID: string; readonly inboxID: string }["inboxID"]
 }
 
-export type SessionPendingSteerOutput = void
+export type SessionInboxSteerOutput = void
 
-export type SessionPendingQueueInput = {
-  readonly sessionID: { readonly sessionID: string; readonly inputID: string }["sessionID"]
-  readonly inputID: { readonly sessionID: string; readonly inputID: string }["inputID"]
+export type SessionInboxQueueInput = {
+  readonly sessionID: { readonly sessionID: string; readonly inboxID: string }["sessionID"]
+  readonly inboxID: { readonly sessionID: string; readonly inboxID: string }["inboxID"]
 }
 
-export type SessionPendingQueueOutput = void
+export type SessionInboxQueueOutput = void
 
 export type SessionInstructionsEntryListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
@@ -3888,7 +3972,10 @@ export type SessionLogInput = {
 
 export type SessionLogOutput = SessionLogItem
 
-export type SessionInterruptInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+export type SessionInterruptInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly continue?: { readonly continue?: boolean | undefined }["continue"]
+}
 
 export type SessionInterruptOutput = void
 
@@ -4260,15 +4347,6 @@ export type ProjectCurrentInput = {
 }
 
 export type ProjectCurrentOutput = ProjectCurrent
-
-export type ProjectDirectoriesInput = {
-  readonly projectID: { readonly projectID: string }["projectID"]
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type ProjectDirectoriesOutput = ProjectDirectories
 
 export type FormRequestListInput = {
   readonly location?: {
@@ -5555,37 +5633,51 @@ export type ReferenceListOutput = {
   data: Array<ReferenceInfo>
 }
 
-export type ProjectCopyCreateInput = {
+export type WorktreeListInput = { readonly projectID: { readonly projectID: string }["projectID"] }
+
+export type WorktreeListOutput = WorktreeList
+
+export type WorktreeCreateInput = {
   readonly projectID: { readonly projectID: string }["projectID"]
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-  readonly strategy: { readonly strategy: string; readonly directory: string; readonly name?: string }["strategy"]
-  readonly directory: { readonly strategy: string; readonly directory: string; readonly name?: string }["directory"]
-  readonly name?: { readonly strategy: string; readonly directory: string; readonly name?: string }["name"]
+  readonly strategy: {
+    readonly strategy: string
+    readonly from?: string
+    readonly directory: string
+    readonly name?: string
+  }["strategy"]
+  readonly from?: {
+    readonly strategy: string
+    readonly from?: string
+    readonly directory: string
+    readonly name?: string
+  }["from"]
+  readonly directory: {
+    readonly strategy: string
+    readonly from?: string
+    readonly directory: string
+    readonly name?: string
+  }["directory"]
+  readonly name?: {
+    readonly strategy: string
+    readonly from?: string
+    readonly directory: string
+    readonly name?: string
+  }["name"]
 }
 
-export type ProjectCopyCreateOutput = ProjectCopyCopy
+export type WorktreeCreateOutput = WorktreeInfo
 
-export type ProjectCopyRemoveInput = {
+export type WorktreeRemoveInput = {
   readonly projectID: { readonly projectID: string }["projectID"]
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
   readonly directory: { readonly directory: string; readonly force: boolean }["directory"]
   readonly force: { readonly directory: string; readonly force: boolean }["force"]
 }
 
-export type ProjectCopyRemoveOutput = void
+export type WorktreeRemoveOutput = void
 
-export type ProjectCopyRefreshInput = {
-  readonly projectID: { readonly projectID: string }["projectID"]
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
+export type WorktreeRefreshInput = { readonly projectID: { readonly projectID: string }["projectID"] }
 
-export type ProjectCopyRefreshOutput = void
+export type WorktreeRefreshOutput = void
 
 export type VcsGetInput = {
   readonly location?: {

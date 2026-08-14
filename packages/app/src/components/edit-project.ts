@@ -6,7 +6,7 @@ import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobal } from "@/context/global"
 import { type LocalProject } from "@/context/layout"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 
 export function createEditProjectModel(props: { project: LocalProject; server: ServerConnection.Any }) {
   const supported = !props.project.id || props.project.id === "global"

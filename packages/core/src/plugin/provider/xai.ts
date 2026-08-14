@@ -1,9 +1,9 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Clock, Effect, Option, Schema } from "effect"
-import { App } from "../../app"
-import { Credential } from "../../credential"
-import { Integration } from "../../integration"
+import { App } from "../../app.js"
+import { Credential } from "../../credential.js"
+import { Integration } from "../../integration.js"
 
 const clientID = "b1a00492-073a-47ea-816f-4c329264a828"
 const issuer = "https://auth.x.ai/oauth2"

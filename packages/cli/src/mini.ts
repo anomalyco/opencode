@@ -22,6 +22,7 @@ export type MiniCommandInput = {
   demo?: boolean
   tuiConfig?: MiniFrontendInput["tuiConfig"]
   config?: MiniFrontendInput["config"]
+  paths: { home: string; state: string; log: string }
 }
 
 type Model = MiniFrontendInput["model"]
@@ -104,7 +105,7 @@ export async function runMini(input: MiniCommandInput) {
         }))
       const frontend = await frontendTask
       return frontend.runMiniFrontend({
-        host: createMiniHost({ terminal, directory }),
+        host: createMiniHost({ terminal, directory, paths: input.paths }),
         sdk,
         directory,
         target: resolveTarget,

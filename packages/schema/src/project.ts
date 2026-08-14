@@ -15,17 +15,6 @@ export const Current = Schema.Struct({
   canonical: AbsolutePath,
 }).annotate({ identifier: "Project.Current" })
 export interface Current extends Schema.Schema.Type<typeof Current> {}
-export const Directory = Schema.Struct({
-  directory: AbsolutePath,
-  strategy: optional(Schema.String),
-}).annotate({ identifier: "Project.Directory" })
-export interface Directory extends Schema.Schema.Type<typeof Directory> {}
-export const DirectoriesInput = Schema.Struct({
-  projectID: ID,
-}).annotate({ identifier: "Project.DirectoriesInput" })
-export interface DirectoriesInput extends Schema.Schema.Type<typeof DirectoriesInput> {}
-export const Directories = Schema.Array(Directory).annotate({ identifier: "Project.Directories" })
-export type Directories = typeof Directories.Type
 export const Icon = Schema.Struct({
   url: optional(Schema.String),
   override: optional(Schema.String),

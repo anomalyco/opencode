@@ -1,8 +1,8 @@
 import path from "node:path"
 import { Effect, PlatformError } from "effect"
 import { make } from "effect/unstable/process/ChildProcessSpawner"
-import type { Driver } from "./driver"
-import { Failed, NotFound, WrongKind, type FileInfo, type FilesImpl, type FileType } from "./files"
+import type { Driver } from "./driver.js"
+import { Failed, NotFound, WrongKind, type FileInfo, type FilesImpl, type FileType } from "./files.js"
 
 type Node =
   | { readonly type: "file"; readonly bytes: Uint8Array; readonly mtimeMs: number }
@@ -165,4 +165,4 @@ export const makeMemoryDriver = (): MemoryDriver => {
   }
 }
 
-export * as EnvironmentMemory from "./memory"
+export * as EnvironmentMemory from "./memory.js"

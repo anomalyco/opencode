@@ -1,6 +1,5 @@
 import type { MiniFrontendInput } from "@opencode-ai/tui/mini"
 import { createModelPreferenceRepository } from "@opencode-ai/tui/model-preference"
-import { Global } from "@opencode-ai/util/global"
 import fs from "node:fs"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
@@ -129,13 +128,9 @@ export async function usingInteractiveStdin<T>(
 export function createMiniHost(input: {
   terminal: InteractiveStdin
   directory: string
-  paths?: { home: string; state: string; log: string }
+  paths: { home: string; state: string; log: string }
 }): MiniHost {
-  const paths = input.paths ?? {
-    home: Global.Path.home,
-    state: Global.Path.state,
-    log: Global.Path.log,
-  }
+  const paths = input.paths
   const diagnostics = {
     pid: process.pid,
     cwd: input.directory,

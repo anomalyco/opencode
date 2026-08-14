@@ -1,19 +1,16 @@
 import path from "path"
-import fs from "fs/promises"
-import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
+import fs from "fs"
 import os from "os"
 import { Context, Effect, Layer } from "effect"
+// XDG on runtimes with a home directory; one tmp-rooted directory on workerd.
+// The variants resolve through the `workerd` bundle condition, like the
+// native-module stubs, so no runtime sniffing happens here.
+import { roots } from "#global-roots"
 import { Flock } from "./flock.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 
 const app = "opencode"
-const data = path.join(xdgData!, app)
-const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
-const state = path.join(xdgState!, app)
-const tmp = path.join(os.tmpdir(), app)
-
-await fs.mkdir(tmp, { recursive: true })
+const { data, cache, config, state, tmp } = roots(app)
 
 const paths = {
   get home() {
@@ -26,21 +23,12 @@ const paths = {
   cache,
   config,
   state,
-  tmp: await fs.realpath(tmp),
+  tmp,
 }
 
 export const Path = paths
 
 Flock.setGlobal({ state })
-
-await Promise.all([
-  fs.mkdir(Path.data, { recursive: true }),
-  fs.mkdir(Path.config, { recursive: true }),
-  fs.mkdir(Path.state, { recursive: true }),
-  fs.mkdir(Path.log, { recursive: true }),
-  fs.mkdir(Path.bin, { recursive: true }),
-  fs.mkdir(Path.repos, { recursive: true }),
-])
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Global") {}
 
@@ -57,13 +45,14 @@ export interface Interface {
 }
 
 export function make(input: Partial<Interface> = {}): Interface {
+  // The acquired service canonicalizes default tmp; use it instead of Path.tmp for path comparisons.
   return {
     home: Path.home,
     data: Path.data,
     cache: Path.cache,
     config: Path.config,
     state: Path.state,
-    tmp: Path.tmp,
+    tmp: input.tmp ?? Path.tmp,
     bin: Path.bin,
     log: Path.log,
     repos: Path.repos,
@@ -71,17 +60,27 @@ export function make(input: Partial<Interface> = {}): Interface {
   }
 }
 
+const acquire = (input: Partial<Interface>) =>
+  Effect.gen(function* () {
+    const service = Service.of(make(input))
+    yield* Effect.promise(() =>
+      Promise.all(
+        [service.data, service.config, service.state, service.log, service.bin, service.repos, service.tmp].map(
+          (directory) => fs.promises.mkdir(directory, { recursive: true }),
+        ),
+      ),
+    )
+    const canonicalTmp = yield* Effect.promise(() => fs.promises.realpath(service.tmp))
+    return Service.of({ ...service, tmp: input.tmp ?? canonicalTmp })
+  })
+
 const layer = Layer.effect(
   Service,
-  Effect.sync(() => Service.of(make({ config: process.env.OPENCODE_CONFIG_DIR ?? Path.config }))),
+  Effect.suspend(() => acquire({ config: process.env.OPENCODE_CONFIG_DIR ?? Path.config })),
 )
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [] })
 
-export const layerWith = (input: Partial<Interface>) =>
-  Layer.effect(
-    Service,
-    Effect.sync(() => Service.of(make(input))),
-  )
+export const layerWith = (input: Partial<Interface>) => Layer.effect(Service, acquire(input))
 
 export * as Global from "./global.js"

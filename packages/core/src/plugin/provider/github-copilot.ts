@@ -1,15 +1,16 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { Effect, Option, Schema, Semaphore, Stream } from "effect"
-import { Catalog } from "../../catalog"
-import { Credential } from "../../credential"
-import { Bus } from "../../bus"
-import { CopilotModels } from "../../github-copilot/models"
-import { App } from "../../app"
-import { Integration } from "../../integration"
-import { Model } from "../../model"
+import { Catalog } from "../../catalog.js"
+import { Credential } from "../../credential.js"
+import { Bus } from "../../bus.js"
+import { CopilotModels } from "../../github-copilot/models.js"
+import { App } from "../../app.js"
+import { Agent } from "../../agent.js"
+import { Integration } from "../../integration.js"
+import { Model } from "../../model.js"
 import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Provider } from "../../provider"
-import type { PluginInternal } from "../internal"
+import { Provider } from "../../provider.js"
+import type { PluginInternal } from "../internal.js"
 
 const clientID = "Ov23li8tweQw6odWQebz"
 const apiVersion = "2026-06-01"
@@ -203,10 +204,11 @@ export const GithubCopilotPlugin = define({
         for (const [id, model] of loaded.models) {
           evt.model.update(item.provider.id, id, (draft) => Object.assign(draft, structuredClone(model)))
         }
-      } else if (loaded.baseURL) {
+      } else {
         for (const id of item.models.keys()) {
           evt.model.update(item.provider.id, id, (model) => {
-            model.settings = Provider.mergeOverlay(model.settings, { baseURL: loaded.baseURL })
+            model.package = "@ai-sdk/github-copilot"
+            if (loaded.baseURL) model.settings = Provider.mergeOverlay(model.settings, { baseURL: loaded.baseURL })
           })
         }
       }
@@ -235,13 +237,17 @@ export const GithubCopilotPlugin = define({
           evt.options.fetch,
           ctx.app,
         )
-        const mod = yield* Effect.promise(() => import("../../github-copilot/copilot-provider"))
+        const mod = yield* Effect.promise(() => import("../../github-copilot/copilot-provider.js"))
         evt.sdk = mod.createOpenaiCompatible(evt.options)
       }),
     )
     yield* ctx.session.hook("http.request", (evt) =>
       Effect.gen(function* () {
         if (evt.model.providerID !== Provider.ID.githubCopilot) return
+        if (evt.agent === Agent.ID.make("title"))
+          evt.request.headers.set("X-Interaction-Type", "conversation-background")
+        if (evt.agent === Agent.ID.make("compaction"))
+          evt.request.headers.set("X-Interaction-Type", "conversation-compaction")
         const token = evt.request.headers.get("x-api-key")
         if (!token) return
         const text = yield* Effect.promise(() => evt.request.clone().text())

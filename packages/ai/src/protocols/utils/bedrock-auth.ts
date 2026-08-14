@@ -1,8 +1,8 @@
 import { AwsV4Signer } from "aws4fetch"
 import { Effect } from "effect"
 import { Headers } from "effect/unstable/http"
-import { Auth, type AuthInput } from "../../route/auth"
-import { ProviderShared } from "../shared"
+import { Auth, type AuthInput } from "../../route/auth.js"
+import { ProviderShared } from "../shared.js"
 
 /**
  * AWS credentials for SigV4 signing. Bedrock also supports Bearer API key auth,
@@ -74,4 +74,4 @@ export const sigV4 = (
 /** Bedrock route auth defaults to SigV4 and expects credentials from route configuration. */
 export const auth = sigV4(undefined)
 
-export * as BedrockAuth from "./bedrock-auth"
+export * as BedrockAuth from "./bedrock-auth.js"

@@ -1,11 +1,11 @@
-export * as QuestionTool from "./question"
+export * as QuestionTool from "./question.js"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
-import { Form } from "../../form"
-import { Permission } from "../../permission"
-import { Question } from "../../question"
+import { Form } from "../../form.js"
+import { Permission } from "../../permission.js"
+import { Question } from "../../question.js"
 
 export const name = "question"
 
@@ -21,7 +21,7 @@ Usage notes:
 - If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label`
 
 export const Input = Schema.Struct({
-  questions: Schema.NonEmptyArray(Question.Prompt).annotate({ description: "Questions to ask" }),
+  questions: Schema.Array(Question.Prompt).check(Schema.isNonEmpty()).annotate({ description: "Questions to ask" }),
 })
 
 export const Output = Schema.Struct({

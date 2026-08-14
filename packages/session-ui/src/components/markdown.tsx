@@ -2,7 +2,6 @@ import { useI18n } from "@opencode-ai/ui/context/i18n"
 import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/core/util/encode"
 import {
-  type Accessor,
   type ComponentProps,
   createEffect,
   createResource,
@@ -123,15 +122,15 @@ function createCopyButton(labels: CopyLabels) {
     const [copied, setCopied] = createSignal(false)
     state.setLabels = setLabels
     state.setCopied = setCopied
-    return <MarkdownCopyButton labels={labelState} copied={copied} />
+    return <MarkdownCopyButton labels={labelState()} copied={copied()} />
   }, host)
   state.dispose = dispose
   copyButtonState.set(host, state as CopyButtonState)
   return host
 }
 
-function MarkdownCopyButton(props: { labels: Accessor<CopyLabels>; copied: Accessor<boolean> }) {
-  const label = () => (props.copied() ? props.labels().copied : props.labels().copy)
+function MarkdownCopyButton(props: { labels: CopyLabels; copied: boolean }) {
+  const label = () => (props.copied ? props.labels.copied : props.labels.copy)
   return (
     <TooltipV2 placement="top" value={label()}>
       <IconButtonV2

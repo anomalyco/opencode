@@ -9,7 +9,14 @@ import type {
 import { QueryClient } from "@tanstack/solid-query"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
 import { estimateRootSessionTotal, loadRootSessions } from "./global-sync/session-load"
-import { loadActiveSessionsQuery, loadMcpQuery, loadMcpResourcesQuery, seedActiveSessionStatuses } from "./server-sync"
+import {
+  loadActiveSessionsQuery,
+  loadMcpQuery,
+  loadMcpResourcesQuery,
+  reconcileActiveSessionStatuses,
+  seedActiveSessionStatuses,
+  shouldRefreshWorkspaceSessions,
+} from "./server-sync"
 import { ServerScope } from "@/utils/server-scope"
 import { createServerSession } from "./server-session"
 import type { ServerApi } from "@/utils/server"
@@ -99,6 +106,17 @@ describe("active session query", () => {
       next: 10,
     })
   })
+
+  test("replaces stale active statuses after reconnect", () => {
+    const session = createServerSession({} as ServerApi["session"], {} as ServerApi["message"])
+    session.set("session_status", "ses_stale", { type: "busy" })
+    session.set("session_status", "ses_active", { type: "idle" })
+
+    reconcileActiveSessionStatuses(session, { ses_active: { type: "running" } })
+
+    expect(session.data.session_status.ses_stale).toEqual({ type: "idle" })
+    expect(session.data.session_status.ses_active).toEqual({ type: "busy" })
+  })
 })
 
 describe("pickDirectoriesToEvict", () => {
@@ -182,6 +200,19 @@ describe("estimateRootSessionTotal", () => {
 
   test("keeps exact total when limited fetch is under limit", () => {
     expect(estimateRootSessionTotal({ count: 9, limit: 10, limited: true })).toBe(9)
+  })
+})
+
+describe("workspace session inventory", () => {
+  test("refreshes for session identity and location changes", () => {
+    const event = (type: string, current?: string) =>
+      ({ type, current: current ? { type: current } : undefined }) as Parameters<
+        typeof shouldRefreshWorkspaceSessions
+      >[0]
+
+    expect(shouldRefreshWorkspaceSessions(event("session.created"))).toBe(true)
+    expect(shouldRefreshWorkspaceSessions(event("session.updated", "session.moved"))).toBe(true)
+    expect(shouldRefreshWorkspaceSessions(event("message.updated"))).toBe(false)
   })
 })
 

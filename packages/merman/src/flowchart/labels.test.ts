@@ -67,6 +67,22 @@ describe("flowchart edge labels", () => {
     ).toEqual({ x: 151, y: 7 })
   })
 
+  test("keeps side-route labels on the vertical bus when horizontal arms grow", () => {
+    expect(
+      flowchartEdgeLabelLayout(
+        [
+          { x: 5, y: 2 },
+          { x: 30, y: 2 },
+          { x: 30, y: 10 },
+          { x: 5, y: 10 },
+        ],
+        "parallel label",
+        measure,
+        "y",
+      ).point,
+    ).toEqual({ x: 31, y: 6 })
+  })
+
   test("measures br-delimited edge label lines as a block", () => {
     const layout = flowchartEdgeLabelLayout(
       [

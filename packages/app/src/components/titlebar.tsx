@@ -32,8 +32,8 @@ import { TitlebarTabStrip } from "@/components/titlebar-tab-strip"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
-import { useGlobal } from "@/context/global"
-import { ServerConnection, useServer } from "@/context/server"
+import { useGlobal, useServerCtx } from "@/context/global"
+import { ServerConnection, useServers } from "@/context/servers"
 import { tabKey, useTabs } from "@/context/tabs"
 import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
@@ -46,8 +46,8 @@ const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px
 const macTrafficLightsBaseWidth = 84
 
 export type TitlebarUpdate = {
-  version: () => string | undefined
-  installing: () => boolean
+  version: string | undefined
+  installing: boolean
   install: () => void
 }
 
@@ -61,15 +61,13 @@ export function useTitlebarRightMount() {
 }
 
 export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visible: boolean; toggle: () => void } }) {
-  const layout = useLayout()
   const platform = usePlatform()
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
-  const server = useServer()
+  const servers = useServers()
   const navigate = useNavigate()
   const location = useLocation()
-  const params = useParams()
   const useV2Titlebar = createMemo(() => settings.general.newLayoutDesigns())
   const mobile = createMediaQuery("(max-width: 767px)")
   const bottom = createMemo(() => useV2Titlebar() && mobile() && settings.general.mobileTitlebarPosition() === "bottom")
@@ -77,11 +75,9 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
-  const web = createMemo(() => platform.platform === "web")
   const macTrafficLights = createMemo(() => mac() && !platform.windowFullscreen?.())
   const zoom = () => platform.webviewZoom?.() ?? 1
   const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
-  const counterZoom = () => (windows() && titlebarZoom() < 1 ? 1 / titlebarZoom() : 1)
   const minHeight = () => {
     const height = useV2Titlebar() ? v2TitlebarHeight : legacyTitlebarHeight
     if (mac()) return `${height / zoom()}px`
@@ -97,14 +93,6 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   })
 
   const path = () => `${location.pathname}${location.search}${location.hash}`
-  const creating = createMemo(() => {
-    const route = layout.route()
-    if (route.type === "draft" || route.type === "dir-new-sesssion") return true
-    if (!params.dir) return false
-    if (params.id) return false
-    const parts = location.pathname.replace(/\/+$/, "").split("/")
-    return parts.at(-1) === "session"
-  })
 
   createEffect(() => {
     const current = path()
@@ -116,13 +104,9 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
     })
   })
 
-  const canBack = createMemo(() => history.index > 0)
-  const canForward = createMemo(() => history.index < history.stack.length - 1)
-  const hasProjects = createMemo(() => layout.projects.list().length > 0)
-  const nav = createMemo(() => (useV2Titlebar() ? settings.general.showNavigation() : true))
   const updateState = createMemo<TitlebarUpdatePillState>(() => {
-    const installing = props.update?.installing() ?? false
-    const version = props.update?.version()
+    const installing = props.update?.installing ?? false
+    const version = props.update?.version
     return {
       visible: version !== undefined || installing,
       installing,
@@ -188,7 +172,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
       data-tauri-drag-region
     >
       <Switch>
-        <Match when={useV2Titlebar()}>
+        <Match when>
           {(_) => {
             const layout = useLayout()
             const global = useGlobal()
@@ -200,9 +184,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               () => {
                 const route = layout.route()
                 if (route.type !== "session") return undefined
-                const conn = global.servers
-                  .list()
-                  .find((item) => ServerConnection.key(item) === (route.server ?? server.key))
+                const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
                 return conn ? { route, sdk: global.ensureServerCtx(conn).sdk } : undefined
               },
               ({ route, sdk }) => sdk.api.session.get({ sessionID: route.sessionId }).catch(() => {}),
@@ -245,7 +227,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 const s = session()
                 if (!s) return
                 const sessionId = s.parentID ?? s.id
-                const next = { server: route.server ?? server.key, sessionId }
+                const next = { server: route.server, sessionId }
                 tabsStoreActions.addSessionTab(next)
               }
             })
@@ -258,53 +240,43 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
 
             const openNewTab = () => {
               const route = layout.route()
-              const activeSession = session()
-              if (route.type === "session" && activeSession) {
-                const sessionTab = {
-                  type: "session" as const,
-                  server: route.server ?? server.key,
-                  sessionId: activeSession.id,
-                }
-                const model = tabs.stateValue<PromptSession>(sessionTab, "prompt")?.model.current()
-                tabs.newDraft({ server: sessionTab.server, directory: activeSession.location.directory }, "", model)
-                return
-              }
+              switch (route.type) {
+                case "session": {
+                  const activeSession = session()
+                  if (!activeSession) return
 
-              const activeTab = currentTab()
-              if (activeTab?.type === "draft") {
-                const model = tabs.stateValue<PromptSession>(activeTab, "prompt")?.model.current()
-                tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "", model)
-                return
-              }
-
-              if (route.type === "home") {
-                const selection = layout.home.selection()
-                const conn = global.servers.list().find((item) => ServerConnection.key(item) === selection.server)
-                const project = conn
-                  ? global
-                      .ensureServerCtx(conn)
-                      .projects.list()
-                      .find((item) => item.worktree === selection.directory)
-                  : undefined
-                if (conn && project) {
-                  tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+                  const sessionTab = {
+                    type: "session" as const,
+                    server: route.server,
+                    sessionId: activeSession.id,
+                  }
+                  const model = tabs.stateValue<PromptSession>(sessionTab, "prompt")?.model.current()
+                  tabs.newDraft({ server: sessionTab.server, directory: activeSession.location.directory }, "", model)
                   return
                 }
+                case "draft": {
+                  const activeTab = currentTab()
+                  if (activeTab?.type !== "draft") return
+
+                  const model = tabs.stateValue<PromptSession>(activeTab, "prompt")?.model.current()
+                  tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "", model)
+                  return
+                }
+                case "home": {
+                  const selection = layout.home.selection()
+                  const conn = global.servers.list().find((item) => ServerConnection.key(item) === selection.server)
+                  const project = conn
+                    ? global
+                        .ensureServerCtx(conn)
+                        .projects.list()
+                        .find((item) => item.worktree === selection.directory)
+                    : undefined
+                  if (conn && project) {
+                    tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+                    return
+                  }
+                }
               }
-
-              const current = layout.projects.list()[0]
-              if (current) {
-                tabs.newDraft({ server: server.key, directory: current.worktree }, "")
-                return
-              }
-
-              const fallback = global.servers.list().flatMap((conn) => {
-                const project = global.ensureServerCtx(conn).projects.list()[0]
-                return project ? [{ server: ServerConnection.key(conn), project }] : []
-              })[0]
-              if (!fallback) return
-
-              tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
             }
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
 
@@ -392,7 +364,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
 
                 <TitlebarTabStrip
                   tabs={tabsStore}
-                  currentTab={currentTab}
+                  currentTab={currentTab()}
                   forceTruncate={tabsAreOverflowing()}
                   onOverflowChange={setTabsAreOverflowing}
                   onNavigate={(tab, el) => {
@@ -429,158 +401,6 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               </div>
             )
           }}
-        </Match>
-        <Match when>
-          <div
-            class="grid h-full min-h-full w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
-            style={{ zoom: counterZoom() }}
-          >
-            <div
-              classList={{
-                "flex items-center min-w-0": true,
-                "pl-2": !macTrafficLights(),
-              }}
-            >
-              <Show when={windows() || linux()}>
-                <WindowsAppMenu command={command} platform={platform} />
-              </Show>
-              <Show when={mac()}>
-                <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">
-                  <IconButton
-                    icon="menu"
-                    variant="ghost"
-                    class="titlebar-icon rounded-md"
-                    onClick={layout.mobileSidebar.toggle}
-                    aria-label={language.t("sidebar.menu.toggle")}
-                    aria-expanded={layout.mobileSidebar.opened()}
-                  />
-                </div>
-              </Show>
-              <Show when={!mac()}>
-                <div class="xl:hidden w-[48px] shrink-0 flex items-center justify-center">
-                  <IconButton
-                    icon="menu"
-                    variant="ghost"
-                    class="titlebar-icon rounded-md"
-                    onClick={layout.mobileSidebar.toggle}
-                    aria-label={language.t("sidebar.menu.toggle")}
-                    aria-expanded={layout.mobileSidebar.opened()}
-                  />
-                </div>
-              </Show>
-              <div class="flex items-center gap-1 shrink-0">
-                <TooltipKeybind
-                  class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0 ml-2"}
-                  placement="bottom"
-                  title={language.t("command.sidebar.toggle")}
-                  keybind={command.keybind("sidebar.toggle")}
-                >
-                  <Button
-                    variant="ghost"
-                    class="group/sidebar-toggle titlebar-icon w-8 h-6 p-0 box-border"
-                    onClick={layout.sidebar.toggle}
-                    aria-label={language.t("command.sidebar.toggle")}
-                    aria-expanded={layout.sidebar.opened()}
-                  >
-                    <Icon size="small" name={layout.sidebar.opened() ? "sidebar-active" : "sidebar"} />
-                  </Button>
-                </TooltipKeybind>
-                <div class="hidden xl:flex items-center shrink-0">
-                  <Show when={params.dir}>
-                    <div
-                      class="flex items-center shrink-0 w-8 mr-1"
-                      aria-hidden={layout.sidebar.opened() ? "true" : undefined}
-                    >
-                      <div
-                        class="transition-opacity"
-                        classList={{
-                          "opacity-100 duration-120 ease-out": !layout.sidebar.opened(),
-                          "opacity-0 duration-120 ease-in delay-0 pointer-events-none": layout.sidebar.opened(),
-                        }}
-                      >
-                        <TooltipKeybind
-                          placement="bottom"
-                          title={language.t("command.session.new")}
-                          keybind={command.keybind("session.new")}
-                          openDelay={800}
-                        >
-                          <Button
-                            variant="ghost"
-                            class="titlebar-icon w-8 h-6 p-0 box-border"
-                            disabled={layout.sidebar.opened()}
-                            tabIndex={layout.sidebar.opened() ? -1 : undefined}
-                            onClick={() => {
-                              if (!params.dir) return
-                              navigate(`/${params.dir}/session`)
-                            }}
-                            aria-label={language.t("command.session.new")}
-                            aria-current={creating() ? "page" : undefined}
-                          >
-                            <IconV2 name="edit" size="small" />
-                          </Button>
-                        </TooltipKeybind>
-                      </div>
-                    </div>
-                  </Show>
-                  <div
-                    class="flex items-center shrink-0"
-                    classList={{
-                      "ltr:-translate-x-[36px] rtl:translate-x-[36px]": layout.sidebar.opened() && !!params.dir,
-                      "duration-180 ease-out": !layout.sidebar.opened(),
-                      "duration-180 ease-in": layout.sidebar.opened(),
-                    }}
-                  >
-                    <Show when={hasProjects() && nav()}>
-                      <div class="flex items-center gap-0 transition-transform">
-                        <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={800}>
-                          <Button
-                            variant="ghost"
-                            icon="chevron-left"
-                            class="titlebar-icon w-6 h-6 p-0 box-border"
-                            disabled={!canBack()}
-                            onClick={back}
-                            aria-label={language.t("common.goBack")}
-                          />
-                        </Tooltip>
-                        <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={800}>
-                          <Button
-                            variant="ghost"
-                            icon="chevron-right"
-                            class="titlebar-icon w-6 h-6 p-0 box-border"
-                            disabled={!canForward()}
-                            onClick={forward}
-                            aria-label={language.t("common.goForward")}
-                          />
-                        </Tooltip>
-                      </div>
-                    </Show>
-                    <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
-                  </div>
-                </div>
-                <ChannelIndicator debugTools={props.debugTools} />
-              </div>
-            </div>
-
-            <div class="min-w-0 flex items-center justify-center pointer-events-none">
-              <div
-                id="opencode-titlebar-center"
-                class="pointer-events-auto min-w-0 flex justify-center w-fit max-w-full"
-              />
-            </div>
-
-            <div
-              classList={{
-                "flex items-center min-w-0 justify-end": true,
-                "pr-2": !windows(),
-              }}
-              data-tauri-drag-region
-            >
-              <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
-              <Show when={windows()}>
-                <div class="shrink-0" style={{ width: windowsControlsWidth() }} />
-              </Show>
-            </div>
-          </div>
         </Match>
       </Switch>
     </header>
@@ -657,12 +477,10 @@ function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () =
   }
 
   return (
-    <>
-      {["beta", "dev"].includes(channel) && (
-        <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
-          {channel.toUpperCase()}
-        </div>
-      )}
-    </>
+    <Show when={["local", "beta", "dev"].includes(channel)}>
+      <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
+        {channel.toUpperCase()}
+      </div>
+    </Show>
   )
 }

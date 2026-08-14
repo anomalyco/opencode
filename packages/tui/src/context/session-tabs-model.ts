@@ -13,6 +13,16 @@ export function sessionTabShortcutLabel(index: number) {
   return "·"
 }
 
+export function sessionTabDetail(
+  project: string,
+  current: string | undefined,
+  defaultBranch: string | undefined,
+  worktree: boolean,
+) {
+  const branch = worktree && current !== defaultBranch ? current : undefined
+  return branch && project ? `${project} ⎇ ${branch}` : (branch ?? project)
+}
+
 export type SessionTabHistory = {
   entries: readonly string[]
   index: number

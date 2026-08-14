@@ -1,9 +1,9 @@
 import { Effect, Layer, Ref } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
-import type { Service as LLMClientService } from "../../src/route/client"
-import type { Service as RequestExecutorService } from "../../src/route/executor"
-import type { Service as WebSocketExecutorService } from "../../src/route/transport/websocket"
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route.js"
+import type { Service as LLMClientService } from "../../src/route/client.js"
+import type { Service as RequestExecutorService } from "../../src/route/executor.js"
+import type { Service as WebSocketExecutorService } from "../../src/route/transport/websocket.js"
 
 export type HandlerInput = {
   readonly request: HttpClientRequest.HttpClientRequest
@@ -14,7 +14,9 @@ export type HandlerInput = {
   ) => HttpClientResponse.HttpClientResponse
 }
 
-export type Handler = (input: HandlerInput) => Effect.Effect<HttpClientResponse.HttpClientResponse>
+export type Handler = (
+  input: HandlerInput,
+) => Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
 
 const handlerLayer = (handler: Handler): Layer.Layer<HttpClient.HttpClient> =>
   Layer.succeed(
@@ -33,6 +35,12 @@ const handlerLayer = (handler: Handler): Layer.Layer<HttpClient.HttpClient> =>
   )
 
 export type RuntimeEnv = RequestExecutorService | WebSocketExecutorService | LLMClientService
+
+export interface SystemError extends Error {
+  readonly code: string
+}
+
+export const systemError = (code: string, message: string): SystemError => Object.assign(new Error(message), { code })
 
 export const runtimeLayer = (layer: Layer.Layer<HttpClient.HttpClient>): Layer.Layer<RuntimeEnv> => {
   const requestExecutorLayer = RequestExecutor.layer.pipe(Layer.provide(layer))
@@ -63,14 +71,20 @@ export const dynamicResponse = (handler: Handler) => runtimeLayer(handlerLayer(h
  * Layer that emits the supplied SSE chunks and then aborts mid-stream. Used to
  * exercise transport errors that surface during parsing.
  */
-export const truncatedStream = (chunks: ReadonlyArray<string>) =>
+export const truncatedStream = (chunks: ReadonlyArray<string>, error: Error = new Error("connection reset")) =>
   dynamicResponse((input) =>
     Effect.sync(() => {
       const encoder = new TextEncoder()
+      let index = 0
       const stream = new ReadableStream({
-        start(controller) {
-          for (const chunk of chunks) controller.enqueue(encoder.encode(chunk))
-          controller.error(new Error("connection reset"))
+        pull(controller) {
+          const chunk = chunks[index]
+          if (chunk !== undefined) {
+            index++
+            controller.enqueue(encoder.encode(chunk))
+            return
+          }
+          controller.error(error)
         },
       })
       return input.respond(stream, { headers: SSE_HEADERS })

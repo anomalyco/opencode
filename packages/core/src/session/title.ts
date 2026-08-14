@@ -1,21 +1,24 @@
-export * as SessionTitle from "./title"
+export * as SessionTitle from "./title.js"
 
 import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
+import type { StreamOptions } from "@opencode-ai/ai/route"
 import { Context, DateTime, Effect, Layer, Stream } from "effect"
-import { Agent } from "../agent"
-import { Database } from "../database/database"
-import { Bus } from "../bus"
+import { Agent } from "../agent.js"
+import { Database } from "../database/database.js"
+import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { isExactRootFallback } from "@opencode-ai/util/session-title-fallback"
-import { App } from "../app"
-import { llmClient } from "../effect/app-node-platform"
-import { SessionEvent } from "./event"
-import { SessionHistory } from "./history"
-import { SessionModelHeaders } from "./model-headers"
-import { SessionRunnerModel } from "./runner/model"
-import { SessionSchema } from "./schema"
-import { SessionUsage } from "./usage"
-import { SessionStore } from "./store"
+import { App } from "../app.js"
+import { llmClient } from "../effect/app-node-platform.js"
+import { PluginHooks } from "../plugin/hooks.js"
+import { SessionEvent } from "./event.js"
+import { SessionHistory } from "./history.js"
+import { SessionModelHeaders } from "./model-headers.js"
+import { SessionModelHttp } from "./model-http.js"
+import { SessionRunnerModel } from "./runner/model.js"
+import { SessionSchema } from "./schema.js"
+import { SessionUsage } from "./usage.js"
+import { SessionStore } from "./store.js"
 
 const MAX_LENGTH = 100
 const titleChanged = Symbol("Session title changed")
@@ -24,11 +27,12 @@ type Dependencies = {
   readonly app: App.Info
   readonly bus: Bus.Interface
   readonly llm: {
-    readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, AIError>
+    readonly stream: (request: LLMRequest, options?: StreamOptions) => Stream.Stream<LLMEvent, AIError>
   }
   readonly agents: Agent.Interface
   readonly models: SessionRunnerModel.Interface
   readonly store: SessionStore.Interface
+  readonly hooks: PluginHooks.Interface
 }
 
 export interface Interface {
@@ -85,6 +89,13 @@ const make = (dependencies: Dependencies) => {
           messages: [Message.user(firstUser.text)],
           tools: [],
         }),
+        {
+          http: SessionModelHttp.middleware(dependencies.hooks, {
+            sessionID: session.id,
+            agent: agent.id,
+            model: resolved.ref,
+          }),
+        },
       )
       .pipe(
         Stream.runForEach((event) => {
@@ -135,7 +146,8 @@ export const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const database = yield* Database.Service
     const app = yield* App.Metadata
-    const title = make({ bus, llm, agents, models, store, app })
+    const hooks = yield* PluginHooks.Service
+    const title = make({ bus, llm, agents, models, store, app, hooks })
     return Service.of({
       generateForFirstPrompt: (sessionID) => title.generateForFirstPrompt(database.db, sessionID),
     })
@@ -145,5 +157,14 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, llmClient, Agent.node, SessionRunnerModel.node, SessionStore.node, Database.node, App.node],
+  deps: [
+    Bus.node,
+    llmClient,
+    Agent.node,
+    SessionRunnerModel.node,
+    SessionStore.node,
+    Database.node,
+    App.node,
+    PluginHooks.node,
+  ],
 })

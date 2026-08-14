@@ -12,7 +12,7 @@ import { FileVisual } from "./session-sortable-tab"
 
 export function SortableTabV2(props: {
   tab: string
-  index: () => number
+  index: number
   temporary?: boolean
   onTabClose: (tab: string) => void
   onTabDoubleClick?: (tab: string) => void
@@ -26,7 +26,7 @@ export function SortableTabV2(props: {
       return props.tab
     },
     get index() {
-      return props.index()
+      return props.index
     },
   })
   const path = createMemo(() => file.pathFromTab(props.tab))

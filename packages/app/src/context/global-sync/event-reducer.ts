@@ -1,4 +1,5 @@
 import { Binary } from "@opencode-ai/core/util/binary"
+import { Worktree } from "@opencode-ai/schema/worktree"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { Message, Part, Project, Todo } from "@/types"
 import type {
@@ -37,11 +38,10 @@ export function applyGlobalEvent(input: {
   setGlobalProject: (next: Project[] | ((draft: Project[]) => Project[])) => void
   refresh: () => void
 }) {
-  if (input.event.type === "global.disposed" || input.event.type === "server.connected") {
+  if (input.event.type === "global.disposed") {
     input.refresh()
     return
   }
-
   if (input.event.type !== "project.updated") return
   const properties = input.event.properties as Project
   const result = Binary.search(input.project, properties.id, (s) => s.id)
@@ -185,6 +185,18 @@ export function applyDirectoryEvent(input: {
       cleanupSessionCaches(input.setStore, sessionID, input.setSessionTodo)
       if (info?.parentID) break
       input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
+      break
+    }
+    case "worktree.resolved": {
+      const properties = event.properties as { projectID: string; directory: string; previous: string }
+      input.store.session.forEach((session, index) => {
+        const adopted = Worktree.adopt(
+          { projectID: session.projectID, directory: session.location.directory },
+          properties,
+        )
+        if (!adopted) return
+        input.setStore("session", index, (current) => ({ ...current, ...adopted }))
+      })
       break
     }
     case "session.renamed": {

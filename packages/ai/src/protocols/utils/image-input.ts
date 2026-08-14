@@ -1,6 +1,6 @@
 import { Effect, Encoding } from "effect"
-import type { ImageInput } from "../../image"
-import { InvalidRequestReason, AIError } from "../../schema"
+import type { ImageInput } from "../../image.js"
+import { InvalidRequestReason, AIError } from "../../schema/index.js"
 
 const invalid = (module: string, message: string) =>
   new AIError({

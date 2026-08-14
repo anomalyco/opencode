@@ -9,7 +9,6 @@ import { formatKeybind } from "@/context/command"
 import { useServerSDK } from "@/context/server-sdk"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useSettings } from "@/context/settings"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { decode64 } from "@/utils/base64"
 import { getRelativeTime } from "@/utils/time"
@@ -29,14 +28,13 @@ type DialogSelectFileMode = "all" | "files"
 
 export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFile?: (path: string) => void }) {
   const platform = usePlatform()
-  const settings = useSettings()
   const filesOnly = () => props.mode === "files"
 
-  if (!filesOnly() && settings.general.newLayoutDesigns()) {
+  if (!filesOnly()) {
     return <DialogCommandPaletteV2 onOpenFile={props.onOpenFile} />
   }
 
-  if (filesOnly() && platform.platform === "desktop" && settings.general.newLayoutDesigns()) {
+  if (filesOnly() && platform.platform === "desktop") {
     return <DialogSelectFileDesktopV2 onOpenFile={props.onOpenFile} />
   }
 
@@ -52,7 +50,7 @@ function DialogSelectFileDesktopV2(props: { onOpenFile?: (path: string) => void 
 
   return (
     <DialogSelectFileV2
-      server={serverSDK().server}
+      server={serverSDK.server}
       mode="file"
       start={projectDirectory()}
       title={language.t("session.header.searchFiles")}

@@ -1,9 +1,9 @@
-export * as Form from "./form"
+export * as Form from "./form.js"
 
 import { Form } from "@opencode-ai/schema/form"
 import { Cache, Context, Deferred, Duration, Effect, Exit, Layer, Option, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Bus } from "./bus"
+import { Bus } from "./bus.js"
 
 const RETENTION = Duration.minutes(10)
 
@@ -222,8 +222,6 @@ export const layer = Layer.effect(
     return Service.of({ create, ask, get, list, state, reply, cancel })
   }),
 )
-
-export const locationLayer = layer
 
 export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node] })
 

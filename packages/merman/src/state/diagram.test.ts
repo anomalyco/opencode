@@ -47,6 +47,17 @@ stateDiagram-v2
     })
   })
 
+  test("decodes HTML entities in state, transition, and note labels", () => {
+    const diagram = parseMermaidStateDiagram(`stateDiagram-v2
+  state "Ready &amp; waiting" as Ready
+  Ready --> Done: elapsed &lt;3s
+  note right of Done: result &#x2265; 1`)
+
+    expect(diagram.states.find((state) => state.id === "Ready")?.label).toBe("Ready & waiting")
+    expect(diagram.transitions[0]?.label).toBe("elapsed <3s")
+    expect(diagram.notes[0]?.lines).toEqual(["result ≥ 1"])
+  })
+
   test("parses choice pseudo-states", () => {
     const diagram = parseMermaidStateDiagram(`
 stateDiagram-v2
@@ -55,7 +66,7 @@ stateDiagram-v2
   Decision --> Accepted: yes
 `)
 
-    expect(diagram.states).toContainEqual({ id: "Decision", label: "┼", kind: "choice" })
+    expect(diagram.states).toContainEqual({ id: "Decision", label: "", kind: "choice" })
   })
 
   test("parses composite states and notes", () => {
@@ -188,7 +199,7 @@ stateDiagram-v2
       ●───────────────────────▶│ Running │
                                ╰──┬──────╯ 💥 sandbox dies BEFORE hook fires
                                 ▲ │   ▲    (crash, our bug, race)
-                       ╭────────┼─╰───┼───────╮
+                       ╭────────┼─┴───┼───────╮
                        ▼   ╭────┼─────╯       ▼
                     ╭──────┴──╮ │           ╭──────╮
                     │ Dormant │ │           │ Lost │
@@ -384,7 +395,7 @@ stateDiagram-v2
 
     expect(output).toMatchInlineSnapshot(`
       "              ╭─────────╮   submit          ok      ╭───────╮
-      ●────────────▶│ Editing ├─────────────┬────────────▶│ Saved │
+      ●────────────▶│ Editing ├────────────▶◆────────────▶│ Saved │
                     ╰──┬──────╯             │             ╰───────╯
                      ▲ │    ▲ type          │ fail
                      │ ╰────╯               │
@@ -411,7 +422,7 @@ stateDiagram-v2
   Decision --> Done
   Done --> [*]`)
 
-    expect(output).toContain("Upper ├─────────────┬────────────▶│ Done")
+    expect(output).toContain("Upper ├────────────▶◆────────────▶│ Done")
   })
 
   test("renders self transitions as loops in vertical diagrams", () => {
@@ -442,6 +453,65 @@ stateDiagram-v2
     expect(horizontal).toContain("second")
     expect(vertical).toContain("first")
     expect(vertical).toContain("second")
+  })
+
+  test("separates labels on four parallel vertical transitions", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction TB
+  A --> B: one
+  A --> B: two
+  A --> B: three
+  A --> B: four`)
+
+    expect(output).not.toContain("twothree")
+    for (const label of ["one", "two", "three", "four"]) {
+      expect(output.match(new RegExp(label, "g"))).toHaveLength(1)
+    }
+  })
+
+  test("keeps explicit choices visible in choice-only cycles", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction TB
+  state One <<choice>>
+  state Two <<choice>>
+  state Three <<choice>>
+  One --> Two: clockwise
+  Two --> Three: clockwise
+  Three --> One: clockwise`)
+
+    expect(output.match(/◆/g)).toHaveLength(3)
+  })
+
+  test("routes dense horizontal transitions around unrelated states", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction LR
+  A --> B: ab
+  A --> C: ac
+  A --> D: ad
+  B --> A: ba
+  B --> C: bc
+  B --> D: bd
+  C --> A: ca
+  C --> B: cb
+  C --> D: cd
+  D --> A: da
+  D --> B: db
+  D --> C: dc`)
+
+    for (const state of ["A", "B", "C", "D"]) expect(output.match(new RegExp(state, "g"))).toHaveLength(1)
+  })
+
+  test("routes parallel transitions around vertically offset states", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  A --> B: first<br/>line two
+  A --> B: second<br/>another line
+  B --> A: return<br/>with details`)
+
+    expect(output).toContain(" A ")
+    expect(output).toContain("│ B │")
+    expect(output).toContain("first")
+    expect(output).toContain("second")
+    expect(output).toContain("return")
   })
 
   test("keeps independent overlapping feedback labels and paths distinct", () => {
@@ -561,13 +631,44 @@ stateDiagram-v2
     })
     expect(output).toMatchInlineSnapshot(`
       "            ╭─ Authenticated ──────────────────╮
-                  │                                  │
-          login   │ ╭──────╮    open     ╭─────────╮ │  save
-      ●────────────▶│ Idle ├────────────▶│ Editing ├────────────▶◎
+                  │                                  │ save
+          login   │ ╭──────╮    open     ╭─────────╮ │ logout
+      ●───────────┼▶│ Idle ├────────────▶│ Editing ├─┼──────────▶◎
                   │ ╰──────╯             ╰─────────╯ │
                   │                                  │
                   ╰──────────────────────────────────╯"
     `)
+  })
+
+  test("keeps nested composite entry and exit routes within the outer frame height", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  state Session {
+    [*] --> Open
+    state Open {
+      [*] --> Clean
+      Clean --> Dirty: edit
+      Dirty --> Clean: save
+    }
+    note right of Open: document lifecycle
+    Open --> [*]: close
+  }
+  [*] --> Session
+    Session --> [*]`)
+    const lines = output.split("\n")
+    const outerFrameTop = lines.find((line) => line.includes("Session"))!
+    const frameLeft = outerFrameTop.indexOf("╭")
+    const frameRight = outerFrameTop.lastIndexOf("╮")
+    const outerFrameBottom = lines.findIndex((line) => line[frameLeft] === "╰" && line[frameRight] === "╯")
+    const startColumn = lines.find((line) => line.includes("●"))!.indexOf("●")
+    const endColumn = lines.find((line) => line.includes("◎"))!.indexOf("◎")
+
+    expect(outerFrameBottom).toBeGreaterThan(0)
+    expect(startColumn).toBeLessThan(frameLeft)
+    expect(endColumn).toBeGreaterThan(frameRight)
+    expect(lines.slice(outerFrameBottom + 1).every((line) => line.trim() === "")).toBe(true)
+    expect(output).toContain("Open")
+    expect(output).toContain("document lifecycle")
+    expect(output).toContain("close")
   })
 
   test("renders notes attached to states", () => {
@@ -600,6 +701,91 @@ stateDiagram-v2
   state Decision <<choice>>
   Decision --> [*]`)
 
-    expect(output).toContain("╰─────────────┬\n")
+    expect(output).toContain("╰─────────────▼")
+    expect(output).toContain("◆────────────▶◎")
+  })
+
+  test("keeps vertical branch labels from overwriting state labels", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  direction TB
+  state "Branch root" as Root
+  state "Upper branch" as Upper
+  state "Lower branch" as Lower
+  state "Merged branch" as Merge
+  Root --> Upper: branch-up
+  Root --> Lower: branch-down
+  Upper --> Merge: merge-up
+  Lower --> Merge: merge-down
+  Merge --> Root: branch-feedback`)
+
+    for (const text of [
+      "Branch root",
+      "Upper branch",
+      "Lower branch",
+      "Merged branch",
+      "branch-up",
+      "branch-down",
+      "merge-up",
+      "merge-down",
+      "branch-feedback",
+    ]) {
+      expect(output).toContain(text)
+    }
+  })
+
+  test("keeps lifecycle states intact around branches and feedback", () => {
+    const output = renderStateDiagram(`stateDiagram-v2
+  [*] --> Idle
+  Idle --> MailboxPending: enqueue + setAlarm
+  MailboxPending --> PromptSubmitted: drain mailbox
+  PromptSubmitted --> Polling: prompt admitted
+  Polling --> Polling: execution still active
+  Polling --> Completed: terminal log event
+  Polling --> Polling: retry after transient failure
+  Completed --> Idle: final Slack projection
+  Idle --> Expired: 30 days inactive
+  Expired --> [*]: delete SQLite state`)
+
+    for (const state of ["Idle", "MailboxPending", "PromptSubmitted", "Polling", "Completed", "Expired"]) {
+      expect(output.match(new RegExp(state, "g"))).toHaveLength(1)
+    }
+  })
+
+  test("keeps composite titles intact under reciprocal composite routes", () => {
+    const source = `stateDiagram-v2
+  direction LR
+  state FirstGroup {
+    [*] --> FirstInner
+    FirstInner --> [*]: first-out
+  }
+  state SecondGroup {
+    [*] --> SecondInner
+    SecondInner --> [*]: second-out
+  }
+  FirstGroup --> SecondGroup: group-next
+  SecondGroup --> FirstGroup: group-back`
+
+    for (const direction of ["LR", "TB"] as const) {
+      const lines = renderStateDiagram(source, { direction }).split("\n")
+      for (const title of ["FirstGroup", "SecondGroup"]) {
+        const top = lines.findIndex((line) => line.includes(title))
+        const left = lines[top]!.lastIndexOf("╭", lines[top]!.indexOf(title))
+        const right = lines[top]!.indexOf("╮", left)
+        const bottom = lines.findIndex((line, index) => index > top && line[left] === "╰" && line[right] === "╯")
+
+        expect(top).toBeGreaterThanOrEqual(0)
+        expect(left).toBeGreaterThanOrEqual(0)
+        expect(right).toBeGreaterThan(left)
+        expect(bottom).toBeGreaterThan(top)
+        expect(
+          lines.slice(top + 1, bottom).every((line) => "│├┤┼".includes(line[left]!) && "│├┤┼".includes(line[right]!)),
+        ).toBe(true)
+        expect(
+          lines[bottom]!.slice(left + 1, right)
+            .split("")
+            .every((char) => "─┬┴┼".includes(char)),
+        ).toBe(true)
+      }
+    }
   })
 })

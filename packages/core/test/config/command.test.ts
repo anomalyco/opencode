@@ -185,6 +185,7 @@ Review files`,
               },
             }),
           )
+          yield* Effect.yieldNow
           yield* Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review once"))
           yield* configTest.emitChange({ type: "create", path: path.join(directory, "review.md") })
           yield* configTest.emitChange({ type: "update", path: path.join(directory, "review.md") })

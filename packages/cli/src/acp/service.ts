@@ -422,8 +422,7 @@ async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog
         defaultModel: {
           providerID: defaultModel.providerID,
           id: defaultModel.id,
-          variant:
-            defaultModel.variants.find((variant) => variant.id === "default")?.id ?? defaultModel.variants[0]?.id,
+          variant: defaultModel.variants.find((variant) => variant.id === "default")?.id,
         },
         modes: agents.map((agent) => ({ id: agent.id, name: agent.name, description: agent.description })),
         defaultModeID: defaultAgent.id,

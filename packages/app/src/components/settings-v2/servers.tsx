@@ -9,7 +9,7 @@ import { createStore } from "solid-js/store"
 import { ServerRowMenu } from "@/components/server/server-row-menu"
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
-import { ServerConnection, serverName } from "@/context/server"
+import { ServerConnection, serverName } from "@/context/servers"
 import { useServerCollectionController } from "../server/server-management-controller"
 import { DialogServerV2 } from "./dialog-server-v2"
 import { SettingsListV2 } from "./parts/list"
@@ -53,7 +53,10 @@ export const SettingsServersV2: Component = () => {
         classList={{ "settings-v2-tab-header--stacked": showSearch() }}
       >
         <div class="settings-v2-tab-header-row">
-          <h2 class="settings-v2-tab-title">{language.t("status.popover.tab.servers")}</h2>
+          <div class="flex flex-col gap-1">
+            <h2 class="settings-v2-tab-title">{language.t("status.popover.tab.servers")}</h2>
+            <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.servers.description")}</span>
+          </div>
           <AddServerMenu onAddServer={openAdd} />
         </div>
         <Show when={showSearch()}>

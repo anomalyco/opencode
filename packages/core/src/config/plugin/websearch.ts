@@ -1,8 +1,8 @@
-export * as ConfigWebSearchPlugin from "./websearch"
+export * as ConfigWebSearchPlugin from "./websearch.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
-import { Config } from "../../config"
+import { Config } from "../../config.js"
 
 export const Plugin = define({
   id: "opencode.config.websearch",

@@ -366,7 +366,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
 
   function copyExternal() {
     const current = externalField()
-    if (!current || !clipboard.write) return
+    if (!current) return
     void clipboard
       .write(current.url)
       .then(() => {
@@ -996,7 +996,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
           >
             enter <span style={{ fg: theme.text.subdued }}>{actionLabel()}</span>
           </text>
-          <Show when={externalField() && clipboard.write}>
+          <Show when={externalField()}>
             <text fg={theme.text.default} onMouseUp={copyExternal}>
               c <span style={{ fg: theme.text.subdued }}>copy</span>
             </text>

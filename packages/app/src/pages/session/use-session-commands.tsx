@@ -13,10 +13,8 @@ import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
-import { findLast } from "@opencode-ai/core/util/array"
 import { extractPromptFromParts } from "@/utils/prompt"
 import type { UserMessage } from "@/types"
-import { useLocal } from "@/context/local"
 import type { SessionController } from "./session-controller"
 
 type SessionCommandSource = {
@@ -30,6 +28,10 @@ type SessionCommandSource = {
 
 export type SessionCommandContext = {
   session: SessionCommandSource
+  background: {
+    blocking: () => boolean
+    move: () => Promise<void>
+  }
   navigateMessageByOffset: (offset: number) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
@@ -54,7 +56,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const sync = useSync()
   const terminal = useTerminal()
   const layout = useLayout()
-  const local = useLocal()
   const navigate = useNavigate()
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
     const owner = actions.session.ownership.capture()
@@ -360,6 +361,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const fork = () => {
+    const sessionID = actions.session.identity.params.id
+    if (!sessionID) return
     void openDialog(
       () => import("@/components/dialog-fork"),
       (x) => dialog.show(() => <x.DialogFork />),
@@ -433,6 +436,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "compact",
       disabled: !actions.session.identity.params.id || actions.session.history.visibleUserMessages().length === 0,
       onSelect: compact,
+    }),
+    sessionCommand({
+      id: "session.background",
+      title: language.t("command.session.background"),
+      keybind: "ctrl+b",
+      disabled: !actions.background.blocking(),
+      onSelect: actions.background.move,
     }),
     sessionCommand({
       id: "session.fork",

@@ -27,6 +27,30 @@ test("navigates to a subagent child session missing from the session list", asyn
   await expect(titlebarRight.getByRole("button", { name: "Toggle review" })).toHaveCount(1)
 })
 
+test("keeps the parent visible while child lineage resolves", async ({ page }) => {
+  await setup(page)
+  const requested = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  await page.route(
+    (url) => url.pathname === `/api/session/${childID}` && url.port === (process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"),
+    async (route) => {
+      requested.resolve()
+      await release.promise
+      await route.fallback()
+    },
+  )
+  await page.goto(sessionHref(parentID))
+  await expectSessionTitle(page, parentTitle)
+
+  await page.locator(`a[href="${sessionHref(childID)}"]`).click()
+  await requested.promise
+  await Promise.all([expect(page).toHaveURL(sessionHref(parentID)), expectSessionTitle(page, parentTitle)]).finally(
+    () => release.resolve(),
+  )
+
+  await expectSessionTitle(page, taskDescription)
+})
+
 test("shows the not found fallback when the viewed session is deleted", async ({ page }) => {
   const events: EventPayload[] = []
   await setup(page, () => events.splice(0, 1))

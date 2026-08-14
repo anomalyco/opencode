@@ -1,7 +1,7 @@
 import nodePath from "path"
 import { customType } from "drizzle-orm/sqlite-core"
 import { Schema } from "effect"
-import { AbsolutePath } from "../schema"
+import { AbsolutePath } from "../schema.js"
 
 function storagePath(input: string) {
   if (process.platform !== "win32") return input

@@ -296,9 +296,11 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
             refs.textarea = el
           }}
           data-slot="line-comment-textarea"
+          dir="auto"
           rows={split.rows ?? 3}
           placeholder={split.placeholder ?? i18n.t("ui.lineComment.placeholder")}
           value={split.value}
+          style={{ "unicode-bidi": "plaintext", "text-align": "start" }}
           on:input={(e) => {
             const value = (e.currentTarget as HTMLTextAreaElement).value
             split.onInput(value)

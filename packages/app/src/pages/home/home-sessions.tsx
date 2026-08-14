@@ -11,17 +11,17 @@ export function HomeSessions(props: {
   return (
     <HomeSessionsView
       language={props.sessions.copy.language}
-      groups={props.sessions.data.groups}
-      showProjectName={props.sessions.session.showProjectName}
-      server={props.sessions.session.server}
-      canCreateSession={props.sessions.session.canCreate}
-      searchValue={props.search.query.value}
-      searchPlaceholder={props.search.query.placeholder}
-      searchOpen={props.search.query.open}
-      searchLoading={props.search.result.loading}
-      searchResults={props.search.result.list}
-      searchActive={props.search.result.active}
-      searchNoResultsLabel={props.search.result.noResultsLabel}
+      groups={props.sessions.data.groups()}
+      showProjectName={props.sessions.session.showProjectName()}
+      server={props.sessions.session.server()}
+      canCreateSession={props.sessions.session.canCreate()}
+      searchValue={props.search.query.value()}
+      searchPlaceholder={props.search.query.placeholder()}
+      searchOpen={props.search.query.open()}
+      searchLoading={props.search.result.loading()}
+      searchResults={props.search.result.list()}
+      searchActive={props.search.result.active()}
+      searchNoResultsLabel={props.search.result.noResultsLabel()}
       titleOpacity={props.scroll.header.titleOpacity}
       isOpenTab={props.sessions.tab.isOpen}
       onCreateSession={props.sessions.session.create}

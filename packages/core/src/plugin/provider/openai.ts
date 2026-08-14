@@ -1,15 +1,14 @@
-import { createServer } from "node:http"
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
-import { App } from "../../app"
-import { Credential } from "../../credential"
-import { Bus } from "../../bus"
-import { Integration } from "../../integration"
-import { Model } from "../../model"
-import { OauthCallbackPage } from "../../oauth/page"
-import { Provider } from "../../provider"
-import type { PluginInternal } from "../internal"
+import { App } from "../../app.js"
+import { Credential } from "../../credential.js"
+import { Bus } from "../../bus.js"
+import { Integration } from "../../integration.js"
+import { Model } from "../../model.js"
+import { OauthCallbackPage } from "../../oauth/page.js"
+import { Provider } from "../../provider.js"
+import type { PluginInternal } from "../internal.js"
 
 const clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const issuer = "https://auth.openai.com"
@@ -58,6 +57,8 @@ const browser = (app: App.Info) =>
         const state = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
         const code = yield* Deferred.make<string, Error>()
         const redirect = `http://localhost:${callbackPort}/auth/callback`
+        // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
+        const { createServer } = yield* Effect.promise(() => import("node:http"))
         const server = createServer((request, response) => {
           const url = new URL(request.url ?? "/", `http://localhost:${callbackPort}`)
           if (url.pathname !== "/auth/callback") {

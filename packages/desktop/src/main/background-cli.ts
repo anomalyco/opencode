@@ -1,60 +1,93 @@
+import { Service } from "@opencode-ai/client/service"
 import { execFile } from "node:child_process"
 import { existsSync } from "node:fs"
-import { chmod, copyFile, mkdir, rename, rm } from "node:fs/promises"
+import { chmod, copyFile, mkdir, readdir, rename, rm } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import { app } from "electron"
+import { parseCliVersion } from "./cli-version"
 
 const execFileAsync = promisify(execFile)
 const root = dirname(fileURLToPath(import.meta.url))
-const stateHome = process.env.XDG_STATE_HOME
-const desktopStateNames = ["ai.opencode.desktop.dev", "ai.opencode.desktop.beta", "ai.opencode.desktop"]
 
 type Logger = {
   log(message: string, meta?: Record<string, unknown>): void
   error(message: string, meta?: Record<string, unknown>): void
 }
 
-export async function startBackgroundCli(logger: Logger, shellStateHome?: string) {
+export async function startBackgroundCli(logger: Logger) {
+  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+  const development = !app.isPackaged && process.env.OPENCODE_DESKTOP_CLI_DEV
+  const developmentVersion = process.env.OPENCODE_VERSION ?? "local"
+  const cli = development
+    ? {
+        version: developmentVersion,
+        command: [
+          "bun",
+          "run",
+          "--cwd",
+          development,
+          `--define=OPENCODE_VERSION=${JSON.stringify(developmentVersion)}`,
+          "src/index.ts",
+        ],
+        binary: undefined,
+      }
+    : await resolveBundledCli(isolated, logger)
+  if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
+  const service = await Service.ensure({
+    file:
+      isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
+        ? join(app.getPath("userData"), "opencode", "service-local.json")
+        : undefined,
+    version: cli.version,
+    command: [...cli.command, "serve", "--service"],
+    onStart: (reason, previousVersion) => logger.log("v2 CLI background service starting", { reason, previousVersion }),
+  })
+  if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
+  logger.log("v2 CLI background service ready", {
+    username: service.auth.username,
+    version: cli.version,
+    ...endpoint(service.url),
+  })
+  if (isolated && cli.binary) await cleanCliStages(cli.binary, logger)
+  return {
+    url: service.url,
+    username: service.auth.username,
+    password: service.auth.password,
+    version: cli.version,
+    wslBuild:
+      app.isPackaged || !process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD || !process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT
+        ? undefined
+        : {
+            script: process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD,
+            output: process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT,
+          },
+  }
+}
+
+async function resolveBundledCli(isolated: boolean, logger: Logger) {
   const bundled = app.isPackaged
     ? join(process.resourcesPath, executableName())
-    : join(root, "../../resources", executableName())
+    : join(root, "../../resources", isolated ? developmentExecutableName() : executableName())
   logger.log("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
-  const version = await run(bundled, ["--version"], logger)
-  const binary = app.isPackaged ? await installCli(bundled, version, logger) : bundled
+  const version = parseCliVersion(await run(bundled, ["--version"], logger))
+  const binary = app.isPackaged || isolated ? await installCli(bundled, version, logger) : bundled
+  return { version, binary, command: [binary] }
+}
 
-  const candidates = [
-    ...new Set([stateHome, shellStateHome, ...desktopStateNames.map((name) => join(app.getPath("appData"), name))]),
-  ].filter((candidate) => candidate === undefined || existsSync(candidate))
-  const discovered = await Promise.all(
-    candidates.map(async (candidate) => ({
-      stateHome: candidate,
-      url: serviceUrl(await run(binary, ["service", "status"], logger, { stateHome: candidate })),
-    })),
+async function cleanCliStages(binary: string, logger: Logger) {
+  const current = dirname(binary)
+  const root = dirname(current)
+  await Promise.all(
+    (await readdir(root, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() && join(root, entry.name) !== current)
+      .map((entry) =>
+        rm(join(root, entry.name), { recursive: true, force: true }).catch((error) =>
+          logger.error("failed to clean staged v2 CLI", { path: join(root, entry.name), error }),
+        ),
+      ),
   )
-  const found = discovered.find((candidate) => candidate.url !== undefined)
-  logger.log("v2 CLI background instance checked", {
-    detected: Boolean(found),
-    ...endpoint(found?.url),
-  })
-
-  const daemonStateHome = found?.stateHome ?? stateHome
-  const url = await run(binary, ["service", "start"], logger, { stateHome: daemonStateHome })
-  const password = await run(binary, ["service", "get", "password"], logger, {
-    redact: true,
-    stateHome: daemonStateHome,
-  })
-  logger.log("v2 CLI background service ready", {
-    existing: Boolean(found),
-    username: "opencode",
-    ...endpoint(url),
-  })
-  return {
-    url,
-    username: "opencode",
-    password,
-  }
 }
 
 async function installCli(source: string, version: string, logger: Logger) {
@@ -77,21 +110,13 @@ async function installCli(source: string, version: string, logger: Logger) {
   return destination
 }
 
-async function run(
-  binary: string,
-  args: string[],
-  logger: Logger,
-  options: { redact?: boolean; stateHome?: string } = {},
-) {
+async function run(binary: string, args: string[], logger: Logger) {
   logger.log("v2 CLI command started", { binary, args })
-  const env = { ...process.env }
-  if (options.stateHome === undefined) delete env.XDG_STATE_HOME
-  else env.XDG_STATE_HOME = options.stateHome
-  return execFileAsync(binary, args, { env, windowsHide: true }).then(
+  return execFileAsync(binary, args, { windowsHide: true }).then(
     (result) => {
       const stdout = result.stdout.trim()
       const stderr = result.stderr.trim()
-      logger.log("v2 CLI command completed", { args, stdout: options.redact ? "[redacted]" : stdout, stderr })
+      logger.log("v2 CLI command completed", { args, stdout, stderr })
       return stdout
     },
     (error: unknown) => {
@@ -99,19 +124,12 @@ async function run(
       logger.error("v2 CLI command failed", {
         args,
         error: error instanceof Error ? error.message : String(error),
-        stdout: options.redact && output.stdout ? "[redacted]" : (output.stdout?.trim() ?? ""),
+        stdout: output.stdout?.trim() ?? "",
         stderr: output.stderr?.trim() ?? "",
       })
       throw error
     },
   )
-}
-
-function serviceUrl(status: string) {
-  if (URL.canParse(status)) return status
-  if (!status.startsWith("running ")) return
-  const url = status.slice("running ".length).trim()
-  return URL.canParse(url) ? url : undefined
 }
 
 function endpoint(url: string | undefined) {
@@ -122,4 +140,8 @@ function endpoint(url: string | undefined) {
 
 function executableName() {
   return process.platform === "win32" ? "opencode-cli.exe" : "opencode-cli"
+}
+
+function developmentExecutableName() {
+  return process.platform === "win32" ? "opencode-cli-dev.exe" : "opencode-cli-dev"
 }

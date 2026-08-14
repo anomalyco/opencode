@@ -1,4 +1,4 @@
-export * as WellKnown from "./wellknown"
+export * as WellKnown from "./wellknown.js"
 
 import { Integration } from "@opencode-ai/schema/integration"
 import { Context, Effect, Layer, Ref, Schema, Semaphore } from "effect"
@@ -6,8 +6,8 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstab
 import { isDeepStrictEqual } from "node:util"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
-import { Bus } from "./bus"
-import { KV } from "./kv"
+import { Bus } from "./bus.js"
+import { KV } from "./kv.js"
 
 export interface Auth extends Schema.Schema.Type<typeof Auth> {}
 export const Auth = Schema.Struct({

@@ -11,7 +11,7 @@ import type { ServerCollectionController } from "@/components/server/server-mana
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { showToast } from "@/utils/toast"
 import { DialogAddWslServer } from "./dialog-add-server"
 import { useWslServers } from "./context"

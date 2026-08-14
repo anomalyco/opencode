@@ -4,13 +4,10 @@ import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useServerSync } from "./server-sync"
-import { useServerSDK } from "./server-sdk"
-import { RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
+import { ServerConnection, useServers } from "./servers"
 import { usePlatform } from "./platform"
 import type { Project } from "@/types"
-import { normalizeProjectInfo } from "./global-sync/utils"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
-import { pathKey } from "@/utils/path-key"
 import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
@@ -19,7 +16,6 @@ import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
 import { requireServerKey } from "@/utils/session-route"
-import { type DraftTab, useTabs } from "./tabs"
 import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } from "./layout-tabs"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
@@ -75,13 +71,6 @@ type SessionView = {
   todoCollapsed?: boolean
 }
 
-type TabHandoff = {
-  scope: ServerScope
-  dir: string
-  id: string
-  at: number
-}
-
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 export type HomeProjectSelection = { server: ServerConnection.Key; directory?: string }
 
@@ -91,9 +80,8 @@ export type ReviewPanelSource = "context-button" | "other"
 
 export type LayoutRoute =
   | { type: "home" }
-  | { type: "draft"; draftID: string; server?: ServerConnection.Key }
-  | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
-  | { type: "session"; sessionId: string; server?: ServerConnection.Key }
+  | { type: "draft"; draftID: string }
+  | { type: "session"; sessionId: string; server: ServerConnection.Key }
 
 const sessionPath = (key: string) => {
   const dir = SessionStateKey.route(key).split("/")[0]
@@ -148,34 +136,23 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const dirBase64 = parts[0]
   const dir = decode64(dirBase64)
   if (!dir) return { type: "home" }
+  if (parts[1] === "session") return { type: "home" }
 
-  if (parts[1] !== "session") return { type: "home" }
+  throw new Error("Unrecognised route!")
+}
 
-  const id = parts[2]
-  if (id) return { type: "session", sessionId: id }
-  return { type: "dir-new-sesssion", dir, dirBase64 }
+export const useCurrentRoute = () => {
+  const location = useLocation()
+  return createMemo(() => currentRoute(location.pathname, location.search))
 }
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   gate: false,
   init: () => {
-    const serverSdk = useServerSDK()
-    const serverSync = useServerSync()
-    const server = useServer()
-    const tabs = useTabs()
+    // const serverSync = useServerSync()
+    const servers = useServers()
     const platform = usePlatform()
-    const location = useLocation()
-    const route = createMemo(() => {
-      const value = currentRoute(location.pathname, location.search)
-      if (value.type === "home") return value
-      if (value.server) return value
-      if (value.type === "draft") {
-        const draft = tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === value.draftID)
-        if (draft) return { ...value, server: draft.server }
-      }
-      return { ...value, server: server.key }
-    })
 
     const isRecord = (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null && !Array.isArray(value)
@@ -267,9 +244,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     }
 
-    const target = Persist.serverGlobal(serverSdk().scope, "layout", ["layout.v6"])
     const [store, setStore, _, ready] = persisted(
-      { ...target, migrate },
+      { ...Persist.global("layout", ["layout.v6"]), migrate },
       createStore({
         sidebar: {
           opened: false,
@@ -298,11 +274,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         sessionTabs: {} as Record<string, SessionTabs>,
         sessionView: {} as Record<string, SessionView>,
-        handoff: {
-          tabs: undefined as TabHandoff | undefined,
-        },
         home: {
-          selection: { server: server.key } as HomeProjectSelection,
+          selection: { server: ServerConnection.key(servers.list[0]) } as HomeProjectSelection,
         },
       }),
     )
@@ -442,238 +415,121 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return available[Math.floor(Math.random() * available.length)]
     }
 
-    function enrich(project: { worktree: string; expanded: boolean }) {
-      const [childStore] = serverSync().child(project.worktree, { bootstrap: false })
-      const projectID = childStore.project
-      const metadata = projectID
-        ? serverSync().data.project.find((x) => x.id === projectID)
-        : serverSync().data.project.find((x) => x.worktree === project.worktree)
+    // function enrich(project: { worktree: string; expanded: boolean }) {
+    //   const [childStore] = serverSync.child(project.worktree, { bootstrap: false })
+    //   const projectID = childStore.project
+    //   const metadata = projectID
+    //     ? serverSync.data.project.find((x) => x.id === projectID)
+    //     : serverSync.data.project.find((x) => x.worktree === project.worktree)
 
-      // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
-      // Without this, different subdirectories of the same git repo would share the same
-      // icon from the database instead of using their individual overrides.
-      const base = { ...metadata, ...project }
-      if (childStore.icon) {
-        return { ...base, icon: { ...base.icon, override: childStore.icon } }
-      }
-      return base
-    }
+    //   // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
+    //   // Without this, different subdirectories of the same git repo would share the same
+    //   // icon from the database instead of using their individual overrides.
+    //   const base = { ...metadata, ...project }
+    //   if (childStore.icon) {
+    //     return { ...base, icon: { ...base.icon, override: childStore.icon } }
+    //   }
+    //   return base
+    // }
 
-    const roots = createMemo(() => {
-      const map = new Map<string, string>()
-      for (const project of serverSync().data.project) {
-        const sandboxes = project.sandboxes ?? []
-        for (const sandbox of sandboxes) {
-          map.set(sandbox, project.worktree)
-        }
-      }
-      return map
-    })
+    // const roots = createMemo(() => {
+    //   const map = new Map<string, string>()
+    //   for (const project of serverSync.data.project) {
+    //     const sandboxes = project.sandboxes ?? []
+    //     for (const sandbox of sandboxes) {
+    //       map.set(sandbox, project.worktree)
+    //     }
+    //   }
+    //   return map
+    // })
 
-    const rootFor = (directory: string) => {
-      const map = roots()
-      if (map.size === 0) return directory
+    // const rootFor = (directory: string) => {
+    //   const map = roots()
+    //   if (map.size === 0) return directory
 
-      const visited = new Set<string>()
-      const chain = [directory]
+    //   const visited = new Set<string>()
+    //   const chain = [directory]
 
-      while (chain.length) {
-        const current = chain[chain.length - 1]
-        if (!current) return directory
+    //   while (chain.length) {
+    //     const current = chain[chain.length - 1]
+    //     if (!current) return directory
 
-        const next = map.get(current)
-        if (!next) return current
+    //     const next = map.get(current)
+    //     if (!next) return current
 
-        if (visited.has(next)) return directory
-        visited.add(next)
-        chain.push(next)
-      }
+    //     if (visited.has(next)) return directory
+    //     visited.add(next)
+    //     chain.push(next)
+    //   }
 
-      return directory
-    }
+    //   return directory
+    // }
 
-    createEffect(() => {
-      const projects = server.projects.list()
-      const seen = new Set(projects.map((project) => project.worktree))
+    const enriched = createMemo(() => [] /* servers.projects.list().map(enrich) */)
 
-      batch(() => {
-        for (const project of projects) {
-          const root = rootFor(project.worktree)
-          if (root === project.worktree) continue
+    // createEffect(() => {
+    //   const projects = enriched()
+    //   if (projects.length === 0) return
+    //   if (!serverSync.ready) return
 
-          server.projects.remove(project.worktree)
+    //   for (const project of projects) {
+    //     if (!project.id) continue
+    //     if (project.id === "global") continue
+    //     serverSync.project.icon(project.worktree, project.icon?.override)
+    //   }
+    // })
 
-          if (!seen.has(root)) {
-            server.projects.open(root)
-            seen.add(root)
-          }
+    // createEffect(() => {
+    //   const projects = enriched()
+    //   if (projects.length === 0) return
 
-          if (project.expanded) server.projects.expand(root)
-        }
-      })
-    })
+    //   for (const project of projects) {
+    //     if (project.icon?.color) colorRequested.delete(project.worktree)
+    //   }
 
-    const enriched = createMemo(() => server.projects.list().map(enrich))
-    const list = createMemo(() => {
-      const projects = enriched()
-      return projects.map((project) => {
-        const color = project.icon?.color ?? colors[project.worktree]
-        if (!color) return project
-        const icon = project.icon ? { ...project.icon, color } : { color }
-        return { ...project, icon }
-      })
-    })
+    //   const used = new Set<string>()
+    //   for (const project of projects) {
+    //     const color = project.icon?.color ?? colors[project.worktree]
+    //     if (color) used.add(color)
+    //   }
 
-    createEffect(() => {
-      const projects = enriched()
-      if (projects.length === 0) return
-      if (!serverSync().ready) return
+    //   for (const project of projects) {
+    //     if (project.icon?.color || project.icon?.override || project.icon?.url) continue
+    //     const worktree = project.worktree
+    //     const existing = colors[worktree]
+    //     const color = existing ?? pickAvailableColor(used)
+    //     if (!existing) {
+    //       used.add(color)
+    //       setColors(worktree, color)
+    //     }
+    //     if (!project.id) continue
 
-      for (const project of projects) {
-        if (!project.id) continue
-        if (project.id === "global") continue
-        serverSync().project.icon(project.worktree, project.icon?.override)
-      }
-    })
+    //     const requested = colorRequested.get(worktree)
+    //     if (requested === color) continue
+    //     colorRequested.set(worktree, color)
 
-    createEffect(() => {
-      const projects = enriched()
-      if (projects.length === 0) return
+    //     if (project.id === "global") {
+    //       serverSync.project.meta(worktree, { icon: { color } })
+    //       continue
+    //     }
 
-      for (const project of projects) {
-        if (project.icon?.color) colorRequested.delete(project.worktree)
-      }
-
-      const used = new Set<string>()
-      for (const project of projects) {
-        const color = project.icon?.color ?? colors[project.worktree]
-        if (color) used.add(color)
-      }
-
-      for (const project of projects) {
-        if (project.icon?.color || project.icon?.override || project.icon?.url) continue
-        const worktree = project.worktree
-        const existing = colors[worktree]
-        const color = existing ?? pickAvailableColor(used)
-        if (!existing) {
-          used.add(color)
-          setColors(worktree, color)
-        }
-        if (!project.id) continue
-
-        const requested = colorRequested.get(worktree)
-        if (requested === color) continue
-        colorRequested.set(worktree, color)
-
-        if (project.id === "global") {
-          serverSync().project.meta(worktree, { icon: { color } })
-          continue
-        }
-
-        const projectID = project.id
-        void (async () => {
-          // TODO: Restore project color updates when the V2 client exposes a project update API.
-          void projectID
-        })().catch(() => {
-          if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
-        })
-      }
-    })
-
-    let sessionFrame: number | undefined
-    let sessionTimer: number | undefined
-
-    onMount(() => {
-      sessionFrame = requestAnimationFrame(() => {
-        sessionFrame = undefined
-        sessionTimer = window.setTimeout(() => {
-          sessionTimer = undefined
-          void Promise.all(
-            server.projects.list().map((project) => {
-              return serverSync().project.loadSessions(project.worktree)
-            }),
-          )
-        }, 0)
-      })
-    })
-
-    onCleanup(() => {
-      if (sessionFrame !== undefined) cancelAnimationFrame(sessionFrame)
-      if (sessionTimer !== undefined) window.clearTimeout(sessionTimer)
-    })
+    //     const projectID = project.id
+    //     void (async () => {
+    //       // TODO: Restore project color updates when the V2 client exposes a project update API.
+    //       void projectID
+    //     })().catch(() => {
+    //       if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
+    //     })
+    //   }
+    // })
 
     return {
-      route,
+      route: useCurrentRoute(),
       ready,
       home: {
         selection: createMemo(() => store.home.selection),
         setSelection(selection: HomeProjectSelection) {
           setStore("home", "selection", reconcile(selection))
-        },
-      },
-      handoff: {
-        tabs: createMemo(() => store.handoff?.tabs),
-        setTabs(dir: string, id: string) {
-          setStore("handoff", "tabs", { scope: serverSdk().scope, dir, id, at: Date.now() })
-        },
-        clearTabs() {
-          if (!store.handoff?.tabs) return
-          setStore("handoff", "tabs", undefined)
-        },
-      },
-      projects: {
-        list,
-        recentlyClosed: createMemo(() => {
-          const known = new Set(serverSync().data.project.map((project) => pathKey(project.worktree)))
-          return server.projects
-            .recentlyClosed()
-            .filter((worktree) => known.has(pathKey(worktree)))
-            .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
-            .map((worktree) => enrich({ worktree, expanded: false }))
-        }),
-        open(directory: string) {
-          const root = rootFor(directory)
-          if (server.projects.list().find((x) => x.worktree === root)) return
-          void serverSync().project.loadSessions(root)
-          server.projects.open(root)
-        },
-        close(directory: string) {
-          server.projects.close(directory)
-        },
-        expand(directory: string) {
-          server.projects.expand(directory)
-        },
-        collapse(directory: string) {
-          server.projects.collapse(directory)
-        },
-        move(directory: string, toIndex: number) {
-          server.projects.move(directory, toIndex)
-        },
-      },
-      sidebar: {
-        opened: createMemo(() => store.sidebar.opened),
-        open() {
-          setStore("sidebar", "opened", true)
-        },
-        close() {
-          setStore("sidebar", "opened", false)
-        },
-        toggle() {
-          setStore("sidebar", "opened", (x) => !x)
-        },
-        width: createMemo(() => store.sidebar.width),
-        resize(width: number) {
-          setStore("sidebar", "width", width)
-        },
-        workspaces(directory: string) {
-          return () => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
-        },
-        setWorkspaces(directory: string, value: boolean) {
-          setStore("sidebar", "workspaces", directory, value)
-        },
-        toggleWorkspaces(directory: string) {
-          const current = store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
-          setStore("sidebar", "workspaces", directory, !current)
         },
       },
       terminal: {

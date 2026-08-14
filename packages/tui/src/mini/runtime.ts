@@ -11,6 +11,7 @@
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { LocationRef } from "@opencode-ai/client/promise"
 import type { Config } from "../config"
+import { newSessionLocation } from "../config/new-session-location"
 import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
 import {
   resolveMiniSettings,
@@ -48,6 +49,7 @@ type Reconnect = (signal: AbortSignal) => Promise<RunInput["sdk"]>
 
 type RunRuntimeInput = {
   host: MiniHost
+  directory: string
   boot: () => Promise<BootContext>
   resolveSession: (sdk: RunInput["sdk"], signal: AbortSignal) => Promise<ResolvedSession>
   createSession?: CreateSession
@@ -374,7 +376,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       void (
         state.stream
           ? state.stream.then((item) => item.handle.interruptActiveTurn())
-          : state.sdk.session.interrupt({ sessionID: state.sessionID })
+          : state.sdk.session.interrupt({ sessionID: state.sessionID, continue: true })
       )
         .catch(() => {})
         .finally(() => {
@@ -390,14 +392,14 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       log?.write("send.background", { sessionID: state.sessionID })
       void state.sdk.session.background({ sessionID: state.sessionID }).catch(() => {})
     },
-    onQueuedPromptAction: async (action, inputID) => {
+    onQueuedPromptAction: async (action, inboxID) => {
       if (!state.sessionID) return
-      log?.write(`send.pending.${action}`, { sessionID: state.sessionID, inputID })
+      log?.write(`send.pending.${action}`, { sessionID: state.sessionID, inboxID })
       if (action === "steer") {
-        await state.sdk.session.pending.steer({ sessionID: state.sessionID, inputID })
+        await state.sdk.session.inbox.steer({ sessionID: state.sessionID, inboxID })
         return
       }
-      await state.sdk.session.pending.cancel({ sessionID: state.sessionID, inputID })
+      await state.sdk.session.inbox.cancel({ sessionID: state.sessionID, inboxID })
     },
     onSubagentInterrupt: (sessionID) => {
       log?.write("send.subagent.interrupt", { sessionID })
@@ -941,7 +943,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
               const created = await createSession(
                 state.sdk,
                 {
-                  location: state.location,
+                  location: newSessionLocation(
+                    (await tuiConfigTask).session.new_location,
+                    input.directory,
+                    state.location,
+                  ),
                   agent: state.agent,
                   model: state.model,
                   variant: state.activeVariant,
@@ -1099,6 +1105,7 @@ export async function runInteractiveDeferredMode(input: RunDeferredInput, deps?:
   return runInteractiveRuntime(
     {
       host: input.host,
+      directory: input.directory,
       files: input.files,
       initialInput: input.initialInput,
       thinking: input.thinking,

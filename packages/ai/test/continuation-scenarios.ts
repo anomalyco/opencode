@@ -6,7 +6,7 @@ import {
   ToolResultPart,
   type ContentPart,
   type LanguageModel,
-} from "../src"
+} from "../src/index.js"
 
 export const basicContinuation = ["system", "user-text", "assistant-text", "user-follow-up"] as const
 export const toolContinuation = ["tool-call", "tool-result"] as const

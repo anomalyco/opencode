@@ -73,6 +73,9 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
 export default Plugin.define({
   id: "internal:sidebar-mcp",
   setup(context) {
-    context.ui.slot("sidebar.content", (props) => <View context={context} sessionID={props.sessionID} />)
+    context.ui.slot({
+      append: "sidebar.content",
+      render: (props) => <View context={context} sessionID={props.sessionID} />,
+    })
   },
 })

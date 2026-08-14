@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Environment } from "@opencode-ai/core/environment"
+import { Environment } from "@opencode-ai/core/environment/index"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"

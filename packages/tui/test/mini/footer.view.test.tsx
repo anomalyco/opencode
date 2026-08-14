@@ -129,7 +129,7 @@ async function renderFooter(
     onStatus?: (status: string) => void
     onMiniSettingChange?: (change: MiniSettingChange) => void
     queuedPrompts?: FooterQueuedPrompt[]
-    onQueuedPromptAction?: (action: "steer" | "cancel", inputID: string) => Promise<void>
+    onQueuedPromptAction?: (action: "steer" | "cancel", inboxID: string) => Promise<void>
   } = {},
 ) {
   const [view, setView] = createSignal<FooterView>(input.view ?? { type: "prompt" })
@@ -974,8 +974,8 @@ test("direct footer steers the oldest queued prompt from an empty composer", asy
       { messageID: "m-1", prompt: { text: "first", parts: [] }, delivery: "queue" },
       { messageID: "m-2", prompt: { text: "second", parts: [] }, delivery: "queue" },
     ],
-    onQueuedPromptAction: async (action, inputID) => {
-      if (action === "steer") steered.push(inputID)
+    onQueuedPromptAction: async (action, inboxID) => {
+      if (action === "steer") steered.push(inboxID)
     },
   })
 
@@ -1002,8 +1002,8 @@ test("direct footer does not steer queued work on a double submit", async () => 
       await Bun.sleep(10)
       return true
     },
-    onQueuedPromptAction: async (action, inputID) => {
-      if (action === "steer") steered.push(inputID)
+    onQueuedPromptAction: async (action, inboxID) => {
+      if (action === "steer") steered.push(inboxID)
     },
   })
 
@@ -1072,7 +1072,7 @@ test.skip("direct footer recreates the frame across command panel transitions", 
 test.skip("direct footer dispatches leader variant binding only when leader is registered", async () => {
   const calls: string[] = []
   const app = await renderFooter({
-    tuiConfig: createTuiResolvedConfig({ keybinds: { leader: "ctrl+x", variant_cycle: "<leader>t" } }),
+    tuiConfig: createTuiResolvedConfig({ keybinds: { leader: "ctrl+x", "variant.cycle": "<leader>t" } }),
     onCycle: () => calls.push("cycle"),
   })
 
@@ -1092,7 +1092,7 @@ test.skip("direct footer dispatches leader variant binding only when leader is r
 test("direct footer keeps leader variant binding inactive when leader is disabled", async () => {
   const calls: string[] = []
   const app = await renderFooter({
-    tuiConfig: createTuiResolvedConfig({ keybinds: { leader: "none", variant_cycle: "<leader>t" } }),
+    tuiConfig: createTuiResolvedConfig({ keybinds: { leader: "none", "variant.cycle": "<leader>t" } }),
     onCycle: () => calls.push("cycle"),
   })
 
@@ -1603,7 +1603,7 @@ test("direct footer keeps the command hint at its minimum width", async () => {
 
 test("direct footer keeps complete status text ahead of the spinner", async () => {
   const app = await renderFooter({
-    tuiConfig: createTuiResolvedConfig({ keybinds: { session_interrupt: "none" } }),
+    tuiConfig: createTuiResolvedConfig({ keybinds: { "session.interrupt": "none" } }),
     state: { phase: "running" },
     width: 22,
   })
@@ -1663,7 +1663,7 @@ test("direct footer hides the subagent hint when only completed subagents remain
 
 test("direct footer omits interrupt key hint when interrupt is unbound", async () => {
   const app = await renderFooter({
-    tuiConfig: createTuiResolvedConfig({ keybinds: { session_interrupt: "none", input_clear: "ctrl+l" } }),
+    tuiConfig: createTuiResolvedConfig({ keybinds: { "session.interrupt": "none", "prompt.clear": "ctrl+l" } }),
     state: { phase: "running" },
     mono: true,
   })

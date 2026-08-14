@@ -7,8 +7,8 @@ import {
   ToolResultValue,
   type ToolOutput as ToolOutputType,
   type ToolResultValue as ToolResultValueType,
-} from "./schema"
-import { type AnyTool, type Tools } from "./tool"
+} from "./schema/index.js"
+import { type AnyTool, type Tools } from "./tool.js"
 
 export interface ToolSettlement {
   readonly result: ToolResultValueType

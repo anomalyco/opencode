@@ -8,3 +8,4 @@ await $`bun ./scripts/copy-icons.ts ${channel}`
 await $`bun ./scripts/copy-metainfo.ts ${channel}`
 
 if (channel === "dev") await downloadCliToResources()
+if (channel === "beta") await downloadCliToResources("next")

@@ -307,7 +307,7 @@ describe("Config", () => {
     }),
   )
 
-  it.live("loads authenticated wellknown config before user configuration", () =>
+  it.live("tolerates unavailable authenticated wellknown config and reloads it later", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -322,6 +322,7 @@ describe("Config", () => {
           })
 
           const integrationID = Integration.ID.make("https://example.com")
+          let available = false
           let key = "secret"
           const credentialNode = makeGlobalNode({
             service: Credential.Service,
@@ -361,7 +362,10 @@ describe("Config", () => {
                 refresh: () => Effect.succeed(false),
                 add: () => Effect.die("unused Wellknown.add"),
                 remove: () => Effect.die("unused Wellknown.remove"),
-                resolve: (_entry, variables) => Effect.succeed([{ shell: variables.TOKEN }]),
+                resolve: (_entry, variables) =>
+                  available
+                    ? Effect.succeed([{ shell: variables.TOKEN }])
+                    : Effect.fail(new Error("expired credential")),
               }),
             ),
             deps: [],
@@ -374,11 +378,12 @@ describe("Config", () => {
             expect(Config.latest(initial, "shell")).toBe("project")
             expect(
               initial.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
-            ).toEqual(["secret", "global", "project"])
+            ).toEqual(["global", "project"])
             const updated = yield* bus
               .subscribe(Event.Updated)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
             yield* Effect.yieldNow
+            available = true
             key = "next"
             yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID })
             expect(yield* Fiber.join(updated)).toHaveLength(1)
@@ -1459,13 +1464,13 @@ describe("Config", () => {
             ])
             expect(entries.filter((entry) => entry.type === "agents").map((entry) => entry.path)).toEqual([
               AbsolutePath.make(globalAgents),
-              AbsolutePath.make(path.join(directory, ".agents")),
               AbsolutePath.make(path.join(root, ".agents")),
+              AbsolutePath.make(path.join(directory, ".agents")),
             ])
             expect(entries.filter((entry) => entry.type === "claude").map((entry) => entry.path)).toEqual([
               AbsolutePath.make(globalClaude),
-              AbsolutePath.make(path.join(directory, ".claude")),
               AbsolutePath.make(path.join(root, ".claude")),
+              AbsolutePath.make(path.join(directory, ".claude")),
             ])
             expect(documents.map((document) => document.info.$schema)).toEqual([
               "global",
@@ -1478,11 +1483,11 @@ describe("Config", () => {
             ])
             expect(entries.map((entry) => (entry.type === "document" ? entry.info.$schema : entry.path))).toEqual([
               AbsolutePath.make(globalClaude),
-              AbsolutePath.make(path.join(directory, ".claude")),
               AbsolutePath.make(path.join(root, ".claude")),
+              AbsolutePath.make(path.join(directory, ".claude")),
               AbsolutePath.make(globalAgents),
-              AbsolutePath.make(path.join(directory, ".agents")),
               AbsolutePath.make(path.join(root, ".agents")),
+              AbsolutePath.make(path.join(directory, ".agents")),
               "global",
               AbsolutePath.make(global),
               "outside",

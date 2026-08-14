@@ -1,5 +1,6 @@
 # Desktop package notes
 
+- Follow Solid best practices, leave a comment when violating this: https://www.brenelz.com/posts/solid-js-best-practices/
 - Renderer process should only call `window.api` from `src/preload`.
 - Main process should register IPC handlers in `src/main/ipc.ts`.
 - NEVER hardcode user-visible English strings in production code. ALWAYS use an i18n key for native menus, picker titles, dialogs, buttons, accessible labels, and displayed errors.

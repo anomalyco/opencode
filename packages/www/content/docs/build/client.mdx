@@ -94,13 +94,14 @@ const client = OpenCode.make({
 const health = await client.health.get()
 ```
 
-`Service.ensure()` accepts an optional registration file, required version,
-service command, and `onStart` callback:
+`Service.ensure()` accepts an optional registration file, version, service
+command, and `onStart` callback. `version` accepts either an exact value or a
+compatibility predicate:
 
 ```ts
 const endpoint = await Service.ensure({
   file: "/var/run/opencode/service.json",
-  version: "2.0.0",
+  version: (version) => version.startsWith("2."),
   command: ["opencode", "serve", "--service"],
   onStart(reason, previousVersion) {
     console.log(reason, previousVersion)

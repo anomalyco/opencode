@@ -41,4 +41,21 @@ describe("prompt history", () => {
     const b = entry("describe this", [{ name: "b.png", uri: "data:image/png;base64,BBB" }])
     expect(isDuplicateEntry(a, b)).toBe(false)
   })
+
+  test("preserves duplicate attachment mentions for prompt restoration", () => {
+    const value = entry("[Image 1] [Image 1]", [
+      {
+        name: "clipboard",
+        uri: "data:image/png;base64,AAA",
+        mention: { start: 0, end: 9, text: "[Image 1]" },
+      },
+      {
+        name: "clipboard",
+        uri: "data:image/png;base64,AAA",
+        mention: { start: 10, end: 19, text: "[Image 1]" },
+      },
+    ])
+
+    expect(parsePromptHistory(JSON.stringify(value))).toEqual([value])
+  })
 })

@@ -29,6 +29,7 @@ describe("desktop native translations", () => {
       "Українська",
       "Bosanski",
       "العربية",
+      "עברית",
       "Norsk",
       "Português (Brasil)",
       "ไทย",
@@ -132,6 +133,11 @@ describe("desktop native locale detection", () => {
     expect(detectDesktopNativeLocale(["no"])).toBe("no")
     expect(detectDesktopNativeLocale(["nb-NO"])).toBe("no")
     expect(detectDesktopNativeLocale(["nn-NO"])).toBe("no")
+  })
+
+  test("recognizes Hebrew language tags", () => {
+    expect(detectDesktopNativeLocale(["he"])).toBe("he")
+    expect(detectDesktopNativeLocale(["he-IL"])).toBe("he")
   })
 })
 

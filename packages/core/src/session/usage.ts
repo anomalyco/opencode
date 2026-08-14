@@ -1,9 +1,9 @@
-export * as SessionUsage from "./usage"
+export * as SessionUsage from "./usage.js"
 
 import type { Usage } from "@opencode-ai/ai"
 import { Money } from "@opencode-ai/schema/money"
 import type { TokenUsage } from "@opencode-ai/schema/token-usage"
-import type { Model } from "../model"
+import type { Model } from "../model.js"
 
 const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
 

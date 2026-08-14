@@ -2,7 +2,7 @@ export { AppBaseProviders, AppInterface } from "./app"
 export { useLayout } from "./context/layout"
 export { useServerSDK } from "./context/server-sdk"
 export { useServerSync } from "./context/server-sync"
-export { useServer } from "./context/server"
+export { useServers as useServers } from "./context/servers"
 export { useSettings } from "./context/settings"
 export { useTabs } from "./context/tabs"
 export { useProviders } from "./hooks/use-providers"
@@ -26,5 +26,5 @@ export {
   type WslServersPlatform,
   type WslServersState,
 } from "./wsl/types"
-export { ServerConnection } from "./context/server"
+export { ServerConnection } from "./context/servers"
 export { createDraftStore, type DraftStore } from "./utils/draft-store"

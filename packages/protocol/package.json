@@ -16,6 +16,7 @@
     "dist"
   ],
   "exports": {
+    "./simulation": "./src/simulation.ts",
     "./*": "./src/*.ts"
   },
   "scripts": {

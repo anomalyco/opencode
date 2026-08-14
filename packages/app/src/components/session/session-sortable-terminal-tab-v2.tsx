@@ -14,7 +14,7 @@ import { focusTerminalById } from "@/pages/session/helpers"
 
 export function SortableTerminalTabV2(props: {
   terminal: LocalPTY
-  index: () => number
+  index: number
   newLayout: boolean
   onClose?: () => void
 }): JSX.Element {
@@ -25,7 +25,7 @@ export function SortableTerminalTabV2(props: {
       return props.terminal.id
     },
     get index() {
-      return props.index()
+      return props.index
     },
   })
   const [store, setStore] = createStore({

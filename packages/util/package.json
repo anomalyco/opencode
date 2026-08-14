@@ -20,7 +20,12 @@
     "./*": "./src/*.ts"
   },
   "imports": {
+    "#global-roots": {
+      "workerd": "./src/global-roots.workerd.ts",
+      "default": "./src/global-roots.ts"
+    },
     "#runtime-import": {
+      "workerd": "./src/runtime/import.bun.ts",
       "bun": "./src/runtime/import.bun.ts",
       "node": "./src/runtime/import.node.ts",
       "default": "./src/runtime/import.bun.ts"
@@ -47,8 +52,7 @@
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",
     "npm-package-arg": "13.0.2",
-    "resolve.exports": "catalog:",
-    "xdg-basedir": "5.1.0"
+    "resolve.exports": "catalog:"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",

@@ -6,7 +6,7 @@ import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { showToast } from "@/utils/toast"
-import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/client/promise"
+import type { FormAnswer, FormInfo, FormMultiselectField, FormStringField } from "@opencode-ai/client/promise"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -14,7 +14,13 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useServerSDK } from "@/context/server-sdk"
 import { ScopedKey } from "@/utils/server-scope"
 
-const cache = new Map<string, { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[] }>()
+const cache = new Map<string, { tab: number; answers: string[][]; custom: string[]; customOn: boolean[] }>()
+
+type QuestionField = FormStringField | FormMultiselectField
+
+function questionField(field: FormInfo["fields"][number]): field is QuestionField {
+  return field.type === "string" || field.type === "multiselect"
+}
 
 function Mark(props: { multi: boolean; picked: boolean; onClick?: (event: MouseEvent) => void }) {
   return (
@@ -61,19 +67,27 @@ function Option(props: {
   )
 }
 
-export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
+export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () => void }> = (props) => {
   const sdk = useSDK()
   const serverSDK = useServerSDK()
   const language = useLanguage()
-  const cacheKey = ScopedKey.from(serverSDK().scope, props.request.id)
+  const cacheKey = ScopedKey.from(serverSDK.scope, props.request.id)
 
-  const questions = createMemo(() => props.request.questions)
+  const questions = createMemo(() =>
+    props.request.fields.filter(questionField).map((field) => ({
+      field,
+      header: field.title ?? "",
+      question: field.description ?? field.title ?? "",
+      options: field.type === "string" ? (field.options ?? []) : field.options,
+      multiple: field.type === "multiselect",
+    })),
+  )
   const total = createMemo(() => questions().length)
 
   const cached = cache.get(cacheKey)
   const [store, setStore] = createStore({
     tab: cached?.tab ?? 0,
-    answers: cached?.answers ?? ([] as QuestionAnswer[]),
+    answers: cached?.answers ?? ([] as string[][]),
     custom: cached?.custom ?? ([] as string[]),
     customOn: cached?.customOn ?? ([] as boolean[]),
     editing: false,
@@ -157,7 +171,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     if (store.customOn[tab] === true) return list.length
     return Math.max(
       0,
-      list.findIndex((item) => store.answers[tab]?.includes(item.label) ?? false),
+      list.findIndex((item) => store.answers[tab]?.includes(item.value) ?? false),
     )
   }
 
@@ -223,8 +237,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const replyMutation = useMutation(() => ({
-    mutationFn: (answers: QuestionAnswer[]) =>
-      sdk().api.question.reply({ sessionID: props.request.sessionID, requestID: props.request.id, answers }),
+    mutationFn: (answer: FormAnswer) =>
+      sdk().api.form.reply({ sessionID: props.request.sessionID, formID: props.request.id, answer }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -236,7 +250,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }))
 
   const rejectMutation = useMutation(() => ({
-    mutationFn: () => sdk().api.question.reject({ sessionID: props.request.sessionID, requestID: props.request.id }),
+    mutationFn: () => sdk().api.form.cancel({ sessionID: props.request.sessionID, formID: props.request.id }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -249,17 +263,26 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   const sending = createMemo(() => replyMutation.isPending || rejectMutation.isPending)
 
-  const reply = async (answers: QuestionAnswer[]) => {
+  const reply = (answer: FormAnswer) => {
     if (sending()) return
-    await replyMutation.mutateAsync(answers)
+    replyMutation.mutate(answer)
   }
 
-  const reject = async () => {
+  const reject = () => {
     if (sending()) return
-    await rejectMutation.mutateAsync()
+    rejectMutation.mutate()
   }
 
-  const submit = () => void reply(questions().map((_, i) => store.answers[i] ?? []))
+  const submit = () =>
+    reply(
+      Object.fromEntries(
+        questions().flatMap((question, index) => {
+          const answers = store.answers[index] ?? []
+          if (answers.length === 0) return []
+          return [[question.field.key, question.multiple ? answers : answers[0]]]
+        }),
+      ),
+    )
 
   const answered = (i: number) => {
     if ((store.answers[i]?.length ?? 0) > 0) return true
@@ -325,7 +348,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
     if (event.key === "Escape") {
       event.preventDefault()
-      void reject()
+      reject()
       return
     }
 
@@ -378,10 +401,10 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     if (!opt) return
     if (multi()) {
       setStore("editing", false)
-      toggle(opt.label)
+      toggle(opt.value)
       return
     }
-    pick(opt.label)
+    pick(opt.value)
   }
 
   const commitCustom = () => {
@@ -549,7 +572,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
             {(opt, i) => (
               <Option
                 multi={multi()}
-                picked={picked(opt.label)}
+                picked={picked(opt.value)}
                 label={opt.label}
                 description={opt.description}
                 disabled={sending()}
@@ -578,7 +601,9 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 <Mark multi={multi()} picked={on()} onClick={toggleCustomMark} />
                 <span data-slot="question-option-main">
                   <span data-slot="option-label">{customLabel()}</span>
-                  <span data-slot="option-description">{input() || customPlaceholder()}</span>
+                  <span data-slot="option-description" dir="auto">
+                    {input() || customPlaceholder()}
+                  </span>
                 </span>
               </button>
             }
@@ -609,10 +634,12 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 <textarea
                   ref={focusCustom}
                   data-slot="question-custom-input"
+                  dir="auto"
                   placeholder={customPlaceholder()}
                   value={input()}
                   rows={1}
                   disabled={sending()}
+                  style={{ "unicode-bidi": "plaintext", "text-align": "start" }}
                   onKeyDown={(e) => {
                     if (e.key === "Escape") {
                       e.preventDefault()

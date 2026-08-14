@@ -75,6 +75,7 @@ function init() {
     stack: [] as {
       element: JSX.Element
       onClose?: () => void
+      key?: unknown
     }[],
     size: "medium" as DialogSize,
     centered: false,
@@ -155,7 +156,7 @@ function init() {
       })
       refocus()
     },
-    replace(input: any, onClose?: () => void) {
+    replace(input: any, onClose?: () => void, options?: { key?: unknown; size?: DialogSize }) {
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
         focus?.blur()
@@ -163,14 +164,17 @@ function init() {
       for (const item of store.stack) {
         if (item.onClose) item.onClose()
       }
-      setStore("size", "medium")
-      setStore("centered", false)
-      setStore("stack", [
-        {
-          element: input,
-          onClose,
-        },
-      ])
+      batch(() => {
+        setStore("size", options?.size ?? "medium")
+        setStore("centered", false)
+        setStore("stack", [
+          {
+            element: input,
+            onClose,
+            key: options?.key,
+          },
+        ])
+      })
     },
     get stack() {
       return store.stack
@@ -180,6 +184,9 @@ function init() {
     },
     get centered() {
       return store.centered
+    },
+    get key() {
+      return store.stack.at(-1)?.key
     },
     setSize(size: "medium" | "large" | "xlarge") {
       setStore("size", size)
@@ -204,7 +211,7 @@ export function DialogProvider(props: ParentProps) {
 
   function copySelection() {
     const text = renderer.getSelection()?.getSelectedText()
-    if (!text || !clipboard.write) return false
+    if (!text) return false
     void clipboard.write(text).then(
       () => toast.show({ message: "Copied to clipboard", variant: "info" }),
       (error) => toast.error(error),

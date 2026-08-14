@@ -15,7 +15,7 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { SessionPending } from "@opencode-ai/core/session/pending"
+import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { Skill } from "@opencode-ai/core/skill"
 import { testEffect } from "./lib/effect"
 
@@ -71,7 +71,7 @@ describe("Session.skill", () => {
         skills: [{ id: Skill.ID.make("effect"), mention: { start: 20, end: 27, text: "/effect" } }],
         resume: false,
       })
-      yield* SessionPending.promote(database.db, bus, session.id, "steer")
+      yield* SessionInbox.promote(database.db, bus, session.id, "steer")
 
       expect(yield* sessions.messages({ sessionID: session.id })).toContainEqual(
         expect.objectContaining({

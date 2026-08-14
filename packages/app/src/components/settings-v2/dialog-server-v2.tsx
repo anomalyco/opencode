@@ -13,7 +13,7 @@ import {
 } from "@/components/server/server-management"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
-import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
+import { normalizeServerUrl, ServerConnection, useServers } from "@/context/servers"
 import { useTabs } from "@/context/tabs"
 import { useCheckServerHealth } from "@/utils/server-health"
 import "./settings-v2.css"
@@ -146,7 +146,7 @@ export const DialogServerV2: Component<{
 }
 
 function createFormController(options: { onSelect?: () => void } = {}) {
-  const server = useServer()
+  const server = useServers()
   const tabs = useTabs()
   const global = useGlobal()
   const language = useLanguage()
@@ -173,8 +173,7 @@ function createFormController(options: { onSelect?: () => void } = {}) {
     })
   }
   const allServers = () => {
-    if (!server.current || server.list.includes(server.current)) return server.list
-    return [server.current, ...server.list]
+    return server.list
   }
   const editing = createMemo(() =>
     allServers().find((item) => item.type === "http" && item.http.url === store.originalUrl),
@@ -182,10 +181,8 @@ function createFormController(options: { onSelect?: () => void } = {}) {
   const add = (connection: ServerConnection.Http) => server.add(connection)
   const replace = (originalKey: ServerConnection.Key, next: ServerConnection.Http) =>
     replaceServerConnection(originalKey, next, {
-      active: () => server.key,
       removeTabs: (key) => tabs.removeServer(key),
       add,
-      setActive: (key) => server.setActive(key),
       remove: (key) => server.remove(key),
     })
 

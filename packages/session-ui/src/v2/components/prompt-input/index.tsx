@@ -36,6 +36,7 @@ export type PromptInputV2Mode = "normal" | "shell"
 
 export type PromptInputV2Props = {
   controller: PromptInputV2Interaction
+  accentSubmit?: boolean
   disabled?: boolean
   readOnly?: boolean
   borderUnderlay?: boolean
@@ -154,6 +155,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             role="textbox"
             aria-multiline="true"
             aria-label={i18n.t("ui.promptInput.label")}
+            dir={state.mode === "normal" ? "auto" : "ltr"}
             contenteditable={!props.disabled && !props.readOnly}
             autocapitalize={state.mode === "normal" ? "sentences" : "off"}
             autocorrect={state.mode === "normal" ? "on" : "off"}
@@ -162,6 +164,10 @@ export function PromptInputV2(props: PromptInputV2Props) {
             autocomplete="off"
             class="relative z-10 block min-h-[60px] max-h-[180px] w-full overflow-y-auto whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none empty:before:content-['\200B'] [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
             classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
+            style={{
+              "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined,
+              "text-align": "start",
+            }}
             onInput={(event) => {
               const cursor = promptInputV2Cursor(event.currentTarget)
               const prompt = parsePromptInputV2Editor(event.currentTarget)
@@ -258,6 +264,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             mode={state.mode}
             stopping={view.submit.stopping()}
             disabled={!props.controller.canSubmit()}
+            accent={props.accentSubmit}
             sendLabel={i18n.t("ui.promptInput.send")}
             stopLabel={i18n.t("ui.promptInput.stop")}
             onSubmit={props.controller.submit}
@@ -673,6 +680,7 @@ export function PromptInputV2SubmitButton(props: {
   mode: PromptInputV2Mode
   stopping: boolean
   disabled: boolean
+  accent?: boolean
   sendLabel: string
   stopLabel: string
   onSubmit: () => void
@@ -691,10 +699,16 @@ export function PromptInputV2SubmitButton(props: {
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
         variant="primary"
-        class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
+        class="size-7 rounded-md p-[6px] shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
+        classList={{
+          "text-v2-text-text-contrast": !!props.accent && !props.stopping && !props.disabled,
+          "text-v2-icon-icon-muted": !props.accent || props.stopping || props.disabled,
+        }}
         style={{
           "background-image":
-            "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
+            props.accent && !props.stopping && !props.disabled
+              ? "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-accent) 0%,var(--v2-background-bg-accent) 100%)"
+              : "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
         }}
         aria-label={props.stopping ? props.stopLabel : props.sendLabel}
         onClick={(event) => {

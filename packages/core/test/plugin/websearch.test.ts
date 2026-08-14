@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { Integration } from "@opencode-ai/core/integration"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { WebSearchExa } from "@opencode-ai/core/plugin/websearch/exa"
+import { WebSearchFirecrawl } from "@opencode-ai/core/plugin/websearch/firecrawl"
 import { WebSearchParallel } from "@opencode-ai/core/plugin/websearch/parallel"
 import { host, integrationHost, webSearchHost } from "./host"
 import { requests, resetWebSearchFixture, webSearchIntegrationTest } from "./websearch-fixture"
@@ -49,6 +50,22 @@ describe("built-in web search providers", () => {
       expect(yield* websearch.providers()).not.toContainEqual({
         id: WebSearch.ID.make("test-websearch"),
         name: "Test Web Search",
+      })
+    }),
+  )
+
+  it.effect("registers Firecrawl with the standard key method", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchFirecrawl.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(yield* integrations.get(Integration.ID.make("firecrawl"))).toMatchObject({
+        id: "firecrawl",
+        name: "Firecrawl",
+        methods: [{ type: "key" }, { type: "env", names: ["FIRECRAWL_API_KEY"] }],
       })
     }),
   )
@@ -129,6 +146,9 @@ describe("built-in web search providers", () => {
       yield* WebSearchParallel.Plugin.effect(
         host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
       )
+      expect(yield* integrations.get(Integration.ID.make("parallel"))).toMatchObject({
+        methods: [{ type: "key" }, { type: "env", names: ["PARALLEL_API_KEY"] }],
+      })
       yield* integrations.connection.key({
         integrationID: Integration.ID.make("parallel"),
         key: "parallel-secret",

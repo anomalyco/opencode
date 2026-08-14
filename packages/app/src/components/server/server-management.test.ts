@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { createServerHealthPreview, replaceServerConnection, type ServerFormValues } from "./server-management"
 
 function deferred<T>() {
@@ -65,20 +65,17 @@ describe("replaceServerConnection", () => {
     const calls: string[] = []
 
     replaceServerConnection(ServerConnection.key(original), next, {
-      active: () => ServerConnection.key(original),
       removeTabs: (key) => calls.push(`tabs:${key}`),
       add: (server) => {
         calls.push(`add:${ServerConnection.key(server)}`)
         return server
       },
-      setActive: (key) => calls.push(`active:${key}`),
       remove: (key) => calls.push(`remove:${key}`),
     })
 
     expect(calls).toEqual([
       "tabs:https://old.example.com",
       "add:https://new.example.com",
-      "active:https://new.example.com",
       "remove:https://old.example.com",
     ])
   })
@@ -87,10 +84,8 @@ describe("replaceServerConnection", () => {
     const removed: ServerConnection.Key[] = []
 
     replaceServerConnection(ServerConnection.key(original), next, {
-      active: () => ServerConnection.key(original),
       removeTabs: () => {},
       add: () => undefined,
-      setActive: () => {},
       remove: (key) => removed.push(key),
     })
 

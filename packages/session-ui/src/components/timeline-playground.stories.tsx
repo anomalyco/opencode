@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createSignal, createMemo, createEffect, on, For, Show, batch } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import type {
   Message,
   UserMessage,
@@ -1166,7 +1166,7 @@ function Playground() {
     messages: [],
     parts: {},
   })
-  const [session, setSession] = createSignal({ ...DEFAULT_SESSION })
+  const [session, setSession] = createStore({ ...DEFAULT_SESSION })
   const [loaded, setLoaded] = createSignal("")
   const [issue, setIssue] = createSignal("")
 
@@ -1243,11 +1243,11 @@ function Playground() {
   const userMessages = createMemo(() => state.messages.filter((m): m is UserMessage => m.role === "user"))
 
   const data = createMemo(() => ({
-    session: [session()],
+    session: [session],
     agent: [{ name: "build" }, { name: "plan" }, { name: "explore" }, { name: "review" }],
     session_status: {},
     session_diff: {},
-    message: { [session().id]: state.messages },
+    message: { [session.id]: state.messages },
     part: state.parts,
     provider: {
       all: new Map([
@@ -1283,8 +1283,8 @@ function Playground() {
     const id = lastAssistantID()
     if (id) return id
     // Create a minimal placeholder turn
-    const user = mkUser("...", [], session().id)
-    const asst = mkAssistant(user.message.id, session().id)
+    const user = mkUser("...", [], session.id)
+    const asst = mkAssistant(user.message.id, session.id)
     setState(
       produce((draft) => {
         draft.messages.push(user.message)
@@ -1310,8 +1310,8 @@ function Playground() {
   // ---- User message helpers ----
   const addUser = (variant: keyof typeof USER_VARIANTS) => {
     const v = USER_VARIANTS[variant]
-    const user = mkUser(v.text, v.parts, session().id)
-    const asst = mkAssistant(user.message.id, session().id)
+    const user = mkUser(v.text, v.parts, session.id)
+    const asst = mkAssistant(user.message.id, session.id)
     setState(
       produce((draft) => {
         draft.messages.push(user.message)
@@ -1338,8 +1338,8 @@ function Playground() {
 
   // ---- Composite helpers (create full turns with user + assistant) ----
   const addFullTurn = (userText: string, parts: Part[]) => {
-    const user = mkUser(userText, [], session().id)
-    const asst = mkAssistant(user.message.id, session().id)
+    const user = mkUser(userText, [], session.id)
+    const asst = mkAssistant(user.message.id, session.id)
     setState(
       produce((draft) => {
         draft.messages.push(user.message)
@@ -1427,7 +1427,7 @@ function Playground() {
           return
         }
 
-        const asst = mkAssistant(user.id, session().id)
+        const asst = mkAssistant(user.id, session.id)
         asst.time = { created: now, completed: now }
         asst.error = { name: "MessageAbortedError", message: "Interrupted" }
         draft.messages.push(asst)
@@ -1458,12 +1458,14 @@ function Playground() {
     )
 
     batch(() => {
-      setSession({
-        ...DEFAULT_SESSION,
-        ...next.info,
-        id,
-        title: typeof next.info.title === "string" && next.info.title ? next.info.title : name,
-      })
+      setSession(
+        reconcile({
+          ...DEFAULT_SESSION,
+          ...next.info,
+          id,
+          title: typeof next.info.title === "string" && next.info.title ? next.info.title : name,
+        }),
+      )
       setState({ messages, parts })
       setLoaded(name)
       setIssue("")
@@ -1489,7 +1491,7 @@ function Playground() {
   const clearAll = () => {
     batch(() => {
       setState({ messages: [], parts: {} })
-      setSession({ ...DEFAULT_SESSION })
+      setSession(reconcile({ ...DEFAULT_SESSION }))
       setLoaded("")
       setIssue("")
       seq = 0
@@ -1686,7 +1688,7 @@ function Playground() {
               </div>
               <Show when={loaded()}>
                 <div style={{ "font-size": "10px", color: "var(--text-weaker)", "line-height": "1.4" }}>
-                  {loaded()} • {session().title || session().id} • {state.messages.length} message
+                  {loaded()} • {session.title || session.id} • {state.messages.length} message
                   {state.messages.length === 1 ? "" : "s"}
                 </div>
               </Show>
@@ -2048,7 +2050,7 @@ function Playground() {
                     {(msg) => (
                       <div style={{ width: "100%" }}>
                         <SessionTurn
-                          sessionID={session().id}
+                          sessionID={session.id}
                           messageID={msg.id}
                           messages={state.messages}
                           active={false}

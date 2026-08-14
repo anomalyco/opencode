@@ -8,11 +8,13 @@ import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
+import { useServerSDK } from "@/context/server-sdk"
 import { displayName } from "@/pages/layout/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileView } from "@/pages/session/file-tabs"
 import { applyFileListKeyDown, SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
 import { pathKey } from "@/utils/path-key"
+import { useServer } from "@/context/server"
 
 const emptyFiles: string[] = []
 
@@ -38,6 +40,8 @@ export function SessionFileBrowserTab(props: {
   const language = useLanguage()
   const layout = useLayout()
   const sdk = useSDK()
+  const server = useServer()
+  const serverSDK = useServerSDK()
   const { workspaceKey } = useSessionLayout()
   const resultsID = `session-file-browser-results-${createUniqueId()}`
   const [filter, setFilter] = createSignal("")
@@ -47,8 +51,8 @@ export function SessionFileBrowserTab(props: {
   const search = createQuery(() => {
     const value = query()
     return {
-      queryKey: ["session-open-file", workspaceKey(), value] as const,
-      enabled: value.length > 0,
+      queryKey: [serverSDK.scope, "session-open-file", workspaceKey(), value] as const,
+      enabled: serverSDK.connection.status() === "connected" && value.length > 0,
       queryFn: ({ signal }) => file.searchFiles(value, { limit: 200, signal }),
     }
   })
@@ -63,10 +67,11 @@ export function SessionFileBrowserTab(props: {
     if (explicit && values.includes(explicit)) return explicit
     return values[0]
   })
+
   const loading = createMemo(() => query().length > 0 && search.isPending)
   const project = createMemo(() => {
     const directory = pathKey(sdk().directory)
-    return layout.projects
+    return server.ctx.projects
       .list()
       .find(
         (item) =>

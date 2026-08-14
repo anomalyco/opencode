@@ -122,6 +122,7 @@ test("applies message latency after a list response gate is released", async () 
   const gate = Promise.withResolvers<void>()
   let handler: ((route: Route) => Promise<void>) | undefined
   const page = {
+    addInitScript: () => Promise.resolve(),
     route: (_url: string, callback: (route: Route) => Promise<void>) => {
       handler = callback
       return Promise.resolve()

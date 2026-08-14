@@ -27,7 +27,12 @@ export function firstMeaningfulMermaidLine(content: string): string | undefined 
 export function stripMermaidQuotes(value: string): string {
   const trimmed = value.trim()
   if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-    return trimmed.slice(1, -1)
+    return decodeMermaidText(trimmed.slice(1, -1))
   }
-  return trimmed
+  return decodeMermaidText(trimmed)
 }
+
+export function decodeMermaidText(value: string): string {
+  return decodeHTMLStrict(value)
+}
+import { decodeHTMLStrict } from "entities"

@@ -11,12 +11,13 @@ import { Pty } from "../src/pty.js"
 import { Question } from "../src/question.js"
 import { Session } from "../src/session.js"
 import { SessionMessage } from "../src/session-message.js"
-import { SessionPending } from "../src/session-pending.js"
+import { SessionInbox } from "../src/session-inbox.js"
 import { FileDiff } from "../src/file-diff.js"
 import { Money } from "../src/money.js"
 import { Skill } from "../src/skill.js"
 import { Shell } from "../src/shell.js"
 import { Vcs } from "../src/vcs.js"
+import { Worktree } from "../src/worktree.js"
 import { PersistedRevert } from "../src/session-revert.js"
 import { AbsolutePath, optional } from "../src/schema.js"
 
@@ -47,7 +48,7 @@ describe("contract hygiene", () => {
     expect(Schema.encodeSync(Value)({ value: 1 })).toEqual({ value: "1" })
     expect(Schema.encodeSync(Value)({ value: undefined })).toEqual({})
     expect(
-      Schema.encodeSync(SessionPending.SyntheticData)({
+      Schema.encodeSync(SessionInbox.SyntheticPayload)({
         text: "completed",
         description: undefined,
         metadata: undefined,
@@ -67,16 +68,16 @@ describe("contract hygiene", () => {
     ).not.toHaveProperty("title")
   })
 
-  test("pending session items omit the internal admission sequence", () => {
+  test("session inbox items omit the internal enqueue sequence", () => {
     expect(
-      Schema.encodeSync(SessionPending.Info)(
-        Schema.decodeUnknownSync(SessionPending.Info)({
+      Schema.encodeSync(SessionInbox.Info)(
+        Schema.decodeUnknownSync(SessionInbox.Info)({
           admittedSeq: 3,
           id: "msg_pending",
           sessionID: "ses_pending",
           timeCreated: 1,
           type: "user",
-          data: { text: "hello" },
+          payload: { text: "hello" },
           delivery: "steer",
         }),
       ),
@@ -85,7 +86,7 @@ describe("contract hygiene", () => {
       sessionID: "ses_pending",
       timeCreated: 1,
       type: "user",
-      data: { text: "hello" },
+      payload: { text: "hello" },
       delivery: "steer",
     })
   })
@@ -157,9 +158,9 @@ describe("contract hygiene", () => {
       Model.Cost,
       Model.Variant,
       Project.Current,
-      Project.Directory,
-      Project.DirectoriesInput,
-      Project.Directories,
+      Worktree.Directory,
+      Worktree.ListInput,
+      Worktree.List,
       Project.Icon,
       Project.Commands,
       Project.Time,
@@ -167,16 +168,38 @@ describe("contract hygiene", () => {
       Pty.Info,
       Session.ListAnchor,
       Session.Revert,
-      SessionPending.UserData,
-      SessionPending.SyntheticData,
-      SessionPending.User,
-      SessionPending.Synthetic,
+      SessionInbox.Delivery,
+      SessionInbox.UserPayload,
+      SessionInbox.SyntheticPayload,
+      SessionInbox.CompactionPayload,
+      SessionInbox.MovePayload,
+      SessionInbox.Item,
+      SessionInbox.User,
+      SessionInbox.Synthetic,
+      SessionInbox.Compaction,
+      SessionInbox.Move,
+      SessionInbox.Info,
       Vcs.Branch,
       Vcs.Info,
     ].map((schema) => schema.ast.annotations?.identifier)
 
     expect(identifiers.every((identifier) => typeof identifier === "string")).toBe(true)
     expect(new Set(identifiers).size).toBe(identifiers.length)
+  })
+
+  test("all session inbox item types accept both delivery modes", () => {
+    const decode = Schema.decodeUnknownSync(SessionInbox.Info)
+    const base = { id: "msg_inbox", sessionID: "ses_inbox", timeCreated: 1 }
+    const move = {
+      location: { directory: "/project" },
+      projectID: "global",
+    }
+    for (const delivery of ["steer", "queue"] as const) {
+      expect(decode({ ...base, type: "user", payload: { text: "hello" }, delivery }).delivery).toBe(delivery)
+      expect(decode({ ...base, type: "synthetic", payload: { text: "context" }, delivery }).delivery).toBe(delivery)
+      expect(decode({ ...base, type: "compaction", payload: {}, delivery }).delivery).toBe(delivery)
+      expect(decode({ ...base, type: "move", payload: move, delivery }).delivery).toBe(delivery)
+    }
   })
 
   test("current source limits Any to provider options and avoids mutable contract wrappers", async () => {
@@ -221,7 +244,7 @@ describe("contract hygiene", () => {
 
   test("reviewed session contracts use their canonical current shapes", () => {
     expect(SessionMessage.Info.ast.annotations?.identifier).toBe("Session.Message.Info")
-    expect(SessionPending.Info.ast.annotations?.identifier).toBe("SessionPending.Info")
+    expect(SessionInbox.Info.ast.annotations?.identifier).toBe("Session.Inbox.Info")
     expect(Money.USD).not.toBe(Money.USDPerMillionTokens)
     expect(
       FileDiff.Info.make({ file: "src/index.ts", patch: "@@", additions: 1, deletions: 0, status: "modified" }),

@@ -17,14 +17,6 @@ export const ResourcesChanged = Event.ephemeral({
   },
 })
 
-export const BrowserOpenFailed = Event.ephemeral({
-  type: "mcp.browser.open.failed",
-  schema: {
-    mcpName: Schema.String,
-    url: Schema.String,
-  },
-})
-
 // Emitted whenever a server's connection status settles (connected, failed, needs_auth, closed) so
 // observers can refresh status without polling.
 export const StatusChanged = Event.ephemeral({

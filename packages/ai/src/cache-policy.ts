@@ -10,8 +10,8 @@
 //
 // Manual `cache: CacheHint` placements on individual parts are preserved and
 // count against the four-breakpoint budget; auto only fills remaining slots.
-import { CacheHint, type CachePolicy, type CachePolicyObject } from "./schema/options"
-import { LLMRequest, Message, ToolDefinition, type ContentPart } from "./schema/messages"
+import { CacheHint, type CachePolicy, type CachePolicyObject } from "./schema/options.js"
+import { LLMRequest, Message, ToolDefinition, type ContentPart } from "./schema/messages.js"
 
 const AUTO: CachePolicyObject = {
   tools: true,

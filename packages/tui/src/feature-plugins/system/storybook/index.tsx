@@ -1,7 +1,9 @@
 import { Plugin } from "@opencode-ai/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createSignal, For, type JSX } from "solid-js"
+import { StoryFooter } from "./footer"
 import { sessionTabsStory } from "./session-tabs"
+import { sessionLocationMissingStory } from "./session-location-missing"
 
 /**
  * A story is a full-screen, fixture-driven simulation of a real production component. Stories own
@@ -13,7 +15,7 @@ export type Story = {
   render: (context: Plugin.Context) => JSX.Element
 }
 
-const stories: Story[] = [sessionTabsStory]
+const stories: Story[] = [sessionTabsStory, sessionLocationMissingStory]
 
 function Commands(props: { context: Plugin.Context }) {
   props.context.keymap.layer(() => ({
@@ -47,7 +49,6 @@ function Commands(props: { context: Plugin.Context }) {
 function StorybookIndex(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const theme = props.context.theme
-  const elevatedTheme = theme.contextual.elevated
   const [selected, setSelected] = createSignal(0)
   const open = (story: Story) =>
     props.context.ui.router.navigate({ type: "plugin", name: "storybook", data: { story: story.id } })
@@ -110,18 +111,15 @@ function StorybookIndex(props: { context: Plugin.Context }) {
         </For>
       </box>
       <box flexGrow={1} />
-      <box
-        height={1}
-        flexShrink={0}
-        backgroundColor={elevatedTheme.background.default}
-        paddingLeft={1}
-        paddingRight={1}
-        flexDirection="row"
-      >
-        <text fg={elevatedTheme.text.subdued}>storybook</text>
-        <box flexGrow={1} />
-        <text fg={elevatedTheme.text.subdued}>↑/↓ select | enter open | esc home</text>
-      </box>
+      <StoryFooter
+        context={props.context}
+        title="storybook"
+        controls={[
+          { shortcut: "↑/↓", label: "select" },
+          { shortcut: "enter", label: "open" },
+          { shortcut: "esc", label: "home" },
+        ]}
+      />
     </box>
   )
 }
@@ -137,6 +135,6 @@ export default Plugin.define({
         return <StorybookIndex context={context} />
       },
     })
-    context.ui.slot("app", () => <Commands context={context} />)
+    context.ui.slot({ append: "app", render: () => <Commands context={context} /> })
   },
 })

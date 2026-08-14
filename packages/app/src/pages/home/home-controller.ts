@@ -1,32 +1,25 @@
-import { useGlobal } from "@/context/global"
+import { useGlobal, useServerCtx } from "@/context/global"
 import { type HomeProjectSelection, useLayout } from "@/context/layout"
-import { ServerConnection, useServer } from "@/context/server"
-import { useServerSync } from "@/context/server-sync"
+import { ServerConnection } from "@/context/servers"
 import { useTabs } from "@/context/tabs"
 import { toggleHomeProjectSelection } from "@/pages/layout/helpers"
 import { createEffect, createMemo } from "solid-js"
 
 export function createHomeController() {
-  const sync = useServerSync()
   const layout = useLayout()
-  const server = useServer()
   const global = useGlobal()
   const tabs = useTabs()
   const selection = layout.home.selection
-  const focusedServer = createMemo(
-    () => global.servers.list().find((conn) => ServerConnection.key(conn) === selection().server) ?? server.current,
+  const focusedServer = createMemo<ServerConnection.Any | undefined>(
+    () =>
+      global.servers.list().find((conn) => ServerConnection.key(conn) === selection().server) ??
+      global.servers.list()[0],
   )
-  const focusedServerCtx = createMemo(() => {
-    const conn = focusedServer()
-    if (!conn) return undefined
-    return global.ensureServerCtx(conn)
-  })
-  const focusedSync = () => focusedServerCtx()?.sync ?? sync()
-  const projects = createMemo(() => focusedServerCtx()?.projects.list() ?? layout.projects.list())
-  const recentlyClosed = createMemo(
-    () => focusedServerCtx()?.projects.recentlyClosed() ?? layout.projects.recentlyClosed(),
-  )
-  const homedir = createMemo(() => focusedSync().data.path.home ?? "")
+  const focusedServerCtx = useServerCtx(focusedServer)
+  const focusedSync = () => focusedServerCtx()?.sync
+  const projects = createMemo(() => focusedServerCtx()?.projects.list() ?? [])
+  const recentlyClosed = createMemo(() => focusedServerCtx()?.projects.recentlyClosed() ?? [])
+  const homedir = createMemo(() => focusedSync()?.data.path.home ?? "")
   const selectedProject = createMemo(() => projects().find((project) => project.worktree === selection().directory))
   const newSessionProject = createMemo(
     () =>
@@ -38,7 +31,7 @@ export function createHomeController() {
   createEffect(() => {
     const list = global.servers.list()
     if (list.some((conn) => ServerConnection.key(conn) === selection().server)) return
-    const conn = list.find((conn) => ServerConnection.key(conn) === server.key) ?? list[0]
+    const conn = list[0]
     if (conn) setSelection({ server: ServerConnection.key(conn) })
   })
 

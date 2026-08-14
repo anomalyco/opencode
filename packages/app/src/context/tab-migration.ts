@@ -1,4 +1,4 @@
-import type { ServerConnection } from "./server"
+import type { ServerConnection } from "./servers"
 import type { Tab } from "./tabs"
 
 export function migrateTabs(value: unknown, fallback: ServerConnection.Key): Tab[] {

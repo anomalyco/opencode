@@ -1,9 +1,8 @@
 import type { SessionInfo } from "@opencode-ai/client/promise"
-import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useQuery } from "@tanstack/solid-query"
+import { skipToken, useQuery } from "@tanstack/solid-query"
 import { DateTime } from "luxon"
-import { type Accessor, createEffect, createMemo, createRoot, type JSX, startTransition } from "solid-js"
+import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
 import { produce } from "solid-js/store"
 import { useCommand } from "@/context/command"
 import {
@@ -13,7 +12,7 @@ import {
 } from "@/context/global-sync/home-session-index"
 import type { LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
 import { compareSessionTime, displayName, errorMessage, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
@@ -51,41 +50,46 @@ export function createHomeSessionsController(home: HomeController) {
   const projectByID = createMemo(
     () => new Map(home.project.list().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
   )
-  const homeSessions = () => home.server.focusedSync().homeSessions
-  const sessionEventLoad = useQuery(() => ({
-    queryKey: homeSessions().eventsKey,
-    queryFn: async (): Promise<HomeSessionEvents> => ({ sequence: 0, entries: [] }),
-    initialData: { sequence: 0, entries: [] } satisfies HomeSessionEvents,
-    enabled: false,
-  }))
-  const sessionLoad = useQuery(() => ({
-    queryKey: homeSessions().indexKey,
-    enabled: !!home.server.focusedContext(),
-    queryFn: async ({ signal }) => {
-      const ctx = home.server.focusedContext()
-      if (!ctx) return { sessions: [], eventSequence: 0 }
-      const cache = homeSessions()
-      const eventSequence = cache.eventSequence()
-      const index = await loadHomeSessionIndex(
-        (input, options) => ctx.sdk.api.session.list(input, options),
-        eventSequence,
-        signal,
-      )
-      cache.complete(eventSequence)
-      return index
-    },
-    retry: false,
-    staleTime: 30_000,
-    refetchOnMount: true,
-    refetchOnReconnect: true,
-  }))
-  const indexedSessions = createMemo(() =>
-    retainHomeSessions(
-      homeSessions().sessions(sessionLoad.data, sessionEventLoad.data),
-      HOME_SESSION_LIMIT,
-      Date.now(),
-    ),
-  )
+  const homeSessions = () => home.server.focusedSync()?.homeSessions
+  const sessionEventLoad = useQuery(() => {
+    const cache = homeSessions()
+    return {
+      queryKey: cache?.eventsKey ?? (["home", "session-events", "unselected"] as const),
+      queryFn: cache ? async (): Promise<HomeSessionEvents> => ({ sequence: 0, entries: [] }) : skipToken,
+      initialData: { sequence: 0, entries: [] } satisfies HomeSessionEvents,
+      enabled: false,
+    }
+  })
+  const sessionLoad = useQuery(() => {
+    const cache = homeSessions()
+    return {
+      queryKey: cache?.indexKey ?? (["home", "session-index", "unselected"] as const),
+      enabled: !!cache && home.server.focusedContext()?.sdk.connection.status() === "connected",
+      queryFn:
+        cache && home.server.focusedContext()
+          ? async ({ signal }) => {
+              const ctx = home.server.focusedContext()!
+              const eventSequence = cache.eventSequence()
+              const index = await loadHomeSessionIndex(
+                (input, options) => ctx.sdk.api.session.list(input, options),
+                eventSequence,
+                signal,
+              )
+              cache.complete(eventSequence)
+              return index
+            }
+          : skipToken,
+      retry: false,
+      staleTime: 30_000,
+      refetchOnMount: true,
+      refetchOnReconnect: true,
+    }
+  })
+  const indexedSessions = createMemo(() => {
+    const cache = homeSessions()
+    if (!cache) return []
+    return retainHomeSessions(cache.sessions(sessionLoad.data, sessionEventLoad.data), HOME_SESSION_LIMIT, Date.now())
+  })
   const allRecords = createMemo(() =>
     buildHomeSessionRecords({
       sessions: indexedSessions,
@@ -108,26 +112,7 @@ export function createHomeSessionsController(home: HomeController) {
         const key = `${ServerConnection.key(conn)}\0${record.session.id}`
         if (prefetched.has(key)) return
         prefetched.add(key)
-        createRoot((dispose) => {
-          try {
-            void ctx.sync.session
-              .sync(record.session.id)
-              .then(() =>
-                Promise.all(
-                  (ctx.sync.session.data.message[record.session.id] ?? []).flatMap((message) =>
-                    (ctx.sync.session.data.part[message.id] ?? []).flatMap((part) => {
-                      if (part.type !== "text" || !part.text) return []
-                      return preloadMarkdown(part.text, part.id)
-                    }),
-                  ),
-                ),
-              )
-              .catch(() => {})
-              .finally(dispose)
-          } catch {
-            dispose()
-          }
-        })
+        void untrack(() => ctx.sync.session.sync(record.session.id)).catch(() => {})
       })
   })
 
@@ -190,17 +175,19 @@ export function createHomeSessionsController(home: HomeController) {
             ) ?? projectForSession(session, home.project.list(), projectByID())
         const conn = home.server.focused()
         if (!conn) return
+        const connKey = ServerConnection.key(conn)
         const directory = project?.worktree ?? session.location.directory
         const ctx = home.server.focusedContext()
         if (!ctx) return
+        ctx.sync.session.remember(session)
         ctx.projects.open(directory)
         if (options?.background) {
-          tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
+          tabs.addSessionTab({ server: connKey, sessionId: session.id })
           return
         }
         ctx.projects.touch(directory)
         void startTransition(() => {
-          const tab = tabs.addSessionTab({ server: ServerConnection.key(conn), sessionId: session.id })
+          const tab = tabs.addSessionTab({ server: connKey, sessionId: session.id })
           tabs.select(tab)
         })
       },
@@ -295,13 +282,13 @@ function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof
 export type HomeSessionsController = ReturnType<typeof createHomeSessionsController>
 
 export function HomeSessionStatusController(props: {
-  server: Accessor<ServerConnection.Key>
+  server: ServerConnection.Key
   record: HomeSessionRecord
   isOpenTab: (record: HomeSessionRecord) => boolean
   render: (state: { unread: Accessor<boolean>; loading: Accessor<boolean>; open: Accessor<boolean> }) => JSX.Element
 }) {
   const avatar = useSessionTabAvatarState(
-    props.server,
+    () => props.server,
     () => props.record.session.location.directory,
     () => props.record.session.id,
   )

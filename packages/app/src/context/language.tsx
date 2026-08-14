@@ -2,7 +2,12 @@ import * as i18n from "@solid-primitives/i18n"
 import { createEffect, createMemo, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { pluralCategory, type UiI18nPluralKey } from "@opencode-ai/ui/context/i18n"
+import {
+  pluralCategory,
+  type UiI18nPluralLookupKey,
+  type UiI18nPluralKey,
+  type UiPluralCategory,
+} from "@opencode-ai/ui/context/i18n"
 import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
@@ -20,7 +25,7 @@ import {
 export type Locale = DesktopNativeLocale
 export type Direction = "ltr" | "rtl"
 
-const RTL_LOCALES: ReadonlySet<Locale> = new Set(["ar", "ur", "pa", "fa", "dv"])
+const RTL_LOCALES: ReadonlySet<Locale> = new Set(["ar", "he", "ur", "pa", "fa", "dv"])
 
 function localeDirection(locale: Locale): Direction {
   return RTL_LOCALES.has(locale) ? "rtl" : "ltr"
@@ -28,11 +33,17 @@ function localeDirection(locale: Locale): Direction {
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
-type PluralKey =
-  | UiI18nPluralKey
-  | "session.question.pending"
-  | "session.followupDock.summary"
-  | "session.revertDock.summary"
+type AppI18nKey = Extract<keyof typeof en, string>
+type AppI18nPluralKey = {
+  [Key in AppI18nKey]: Key extends `${infer Base}.other` ? (`${Base}.one` extends AppI18nKey ? Base : never) : never
+}[AppI18nKey]
+type PluralKey = AppI18nPluralKey | UiI18nPluralKey
+type AppI18nPluralLookupKey = `${AppI18nPluralKey}.${UiPluralCategory}`
+type TranslationKey<Key extends Extract<keyof Dictionary, string>> = Key extends
+  | AppI18nPluralLookupKey
+  | UiI18nPluralLookupKey
+  ? never
+  : Key
 type Source = { dict: Record<string, string> }
 
 function cookie(locale: Locale) {
@@ -62,6 +73,7 @@ const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
   ru: () => merge(import("@/i18n/ru"), import("@opencode-ai/ui/i18n/ru")),
   uk: () => merge(import("@/i18n/uk"), import("@opencode-ai/ui/i18n/uk")),
   ar: () => merge(import("@/i18n/ar"), import("@opencode-ai/ui/i18n/ar")),
+  he: () => merge(import("@/i18n/he"), import("@opencode-ai/ui/i18n/he")),
   no: () => merge(import("@/i18n/no"), import("@opencode-ai/ui/i18n/no")),
   br: () => merge(import("@/i18n/br"), import("@opencode-ai/ui/i18n/br")),
   th: () => merge(import("@/i18n/th"), import("@opencode-ai/ui/i18n/th")),
@@ -189,18 +201,25 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       initialValue: dicts.get(initial) ?? base,
     })
 
-    const t = i18n.translator(() => dict() ?? base, i18n.resolveTemplate) as (
-      key: keyof Dictionary,
+    const t = i18n.translator(() => dict() ?? base, i18n.resolveTemplate) as <
+      Key extends Extract<keyof Dictionary, string>,
+    >(
+      key: TranslationKey<Key>,
       params?: Record<string, string | number | boolean>,
     ) => string
 
-    const plural = (key: PluralKey, count: number, params?: Record<string, string | number | boolean>) => {
-      const category = pluralCategory(intl(), count)
+    const pluralForm = (
+      key: PluralKey,
+      category: UiPluralCategory,
+      params?: Record<string, string | number | boolean>,
+    ) => {
       const current = (dict.loading ? base : (dict() ?? base)) as Record<string, string>
       const candidate = `${key}.${category}`
       const fallback = `${key}.other`
-      return i18n.resolveTemplate(current[candidate] ?? current[fallback] ?? fallback, { ...params, count })
+      return i18n.resolveTemplate(current[candidate] ?? current[fallback] ?? fallback, params)
     }
+    const plural = (key: PluralKey, count: number, params?: Record<string, string | number | boolean>) =>
+      pluralForm(key, pluralCategory(intl(), count), { ...params, count })
 
     const label = (value: Locale) => DESKTOP_NATIVE_LABELS[value]
 
@@ -231,6 +250,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       label,
       t,
       plural,
+      pluralForm,
       setLocale(next: Locale) {
         setStore("locale", normalizeLocale(next))
       },

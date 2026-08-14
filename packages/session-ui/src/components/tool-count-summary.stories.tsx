@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { onCleanup } from "solid-js"
+import { onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { AnimatedCountList, type CountItem } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
@@ -122,7 +122,7 @@ export const Playground = {
 
     return (
       <div style={{ display: "grid", gap: "24px", padding: "20px", "max-width": "520px" }}>
-        {reducedMotion() && (
+        <Show when={reducedMotion()}>
           <style>
             {`[data-reduced-motion="true"] *,
               [data-reduced-motion="true"] *::before,
@@ -130,7 +130,7 @@ export const Playground = {
                 transition-duration: 0ms !important;
               }`}
           </style>
-        )}
+        </Show>
 
         {/* Matches context-tool-group-trigger layout from message-part.tsx */}
         <span

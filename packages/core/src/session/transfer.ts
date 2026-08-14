@@ -1,25 +1,25 @@
-export * as SessionTransfer from "./transfer"
+export * as SessionTransfer from "./transfer.js"
 
 import { SessionTransfer } from "@opencode-ai/schema/session-transfer"
 import { Tool } from "@opencode-ai/schema/tool"
 import { Skill } from "@opencode-ai/schema/skill"
-import { eq, isNotNull, isNull, ne, or } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import path from "path"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { App } from "../app"
-import { Bus } from "../bus"
-import { Database } from "../database/database"
-import { Location } from "../location"
-import { Project } from "../project"
-import { ProjectTable } from "../project/sql"
-import { AbsolutePath, RelativePath } from "../schema"
-import { Session } from "../session"
-import { Slug } from "../util/slug"
-import { SessionEvent } from "./event"
-import { SessionMessage } from "./message"
-import { SessionProjector } from "./projector"
-import { SessionMessageTable, SessionTable } from "./sql"
+import { App } from "../app.js"
+import { Bus } from "../bus.js"
+import { Database } from "../database/database.js"
+import { Location } from "../location.js"
+import { Project } from "../project.js"
+import { upsertProject } from "../project/sql.js"
+import { AbsolutePath, RelativePath } from "../schema.js"
+import { Session } from "../session.js"
+import { Slug } from "../util/slug.js"
+import { SessionEvent } from "./event.js"
+import { SessionMessage } from "./message.js"
+import { SessionProjector } from "./projector.js"
+import { SessionMessageTable, SessionTable } from "./sql.js"
 
 export const Data = SessionTransfer.Data
 export type Data = SessionTransfer.Data
@@ -49,22 +49,7 @@ const layer = Layer.effect(
     const sessions = yield* Session.Service
     const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 
-    const persistProject = (project: Project.Resolved) => {
-      const vcs = project.vcs?.type
-      return db
-        .insert(ProjectTable)
-        .values({ id: project.id, worktree: project.canonical, vcs, sandboxes: [] })
-        .onConflictDoUpdate({
-          target: ProjectTable.id,
-          set: { worktree: project.canonical, vcs: vcs ?? null },
-          setWhere: or(
-            ne(ProjectTable.worktree, project.canonical),
-            vcs ? or(isNull(ProjectTable.vcs), ne(ProjectTable.vcs, vcs)) : isNotNull(ProjectTable.vcs),
-          ),
-        })
-        .run()
-        .pipe(Effect.orDie)
-    }
+    const persistProject = (project: Project.Resolved) => upsertProject(db, project).pipe(Effect.orDie)
 
     return Service.of({
       export: Effect.fn("SessionTransfer.export")(function* (input) {

@@ -1,7 +1,7 @@
 import { beforeEach, expect } from "bun:test"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Database } from "@opencode-ai/core/database/database"
-import { makeMemoryDriver } from "@opencode-ai/core/environment"
+import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
 import { Workspace } from "@opencode-ai/core/workspace"
 import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { WorkspaceTable } from "@opencode-ai/core/workspace/sql"
@@ -47,6 +47,18 @@ beforeEach(() => {
   calls.splice(0)
   failConnect = false
 })
+
+it.effect("rejects unregistered workspace providers", () =>
+  Effect.gen(function* () {
+    const registry = WorkspaceDriver.registry({ fake: driver })
+
+    for (const provider of ["missing", "constructor", "toString", "__proto__"]) {
+      expect(yield* registry.get(provider).pipe(Effect.flip)).toEqual(
+        new WorkspaceDriver.ProviderNotFound({ provider }),
+      )
+    }
+  }),
+)
 
 it.effect("persists the workspace lifecycle and reconnects after idle suspension", () =>
   Effect.gen(function* () {

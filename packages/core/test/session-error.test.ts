@@ -19,6 +19,9 @@ import {
   HttpResponseDetails,
 } from "@opencode-ai/ai"
 import { Permission } from "@opencode-ai/core/permission"
+import { ID } from "@opencode-ai/core/model"
+import { ModelResolver } from "@opencode-ai/core/model-resolver"
+import { Provider } from "@opencode-ai/core/provider"
 import { Tool } from "@opencode-ai/schema/tool"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
@@ -36,7 +39,9 @@ describe("toSessionError", () => {
     )
     expect(toSessionError(llm(new QuotaExceededReason({ message: "quota" }))).type).toBe("provider.quota")
     expect(toSessionError(llm(new ContentPolicyReason({ message: "blocked" }))).type).toBe("provider.content-filter")
-    expect(toSessionError(llm(new TransportReason({ message: "transport" }))).type).toBe("provider.transport")
+    expect(
+      toSessionError(llm(new TransportReason({ message: "transport", transport: "http", operation: "request" }))).type,
+    ).toBe("provider.transport")
     expect(toSessionError(llm(new ProviderInternalReason({ message: "internal", status: 500 }))).type).toBe(
       "provider.internal",
     )
@@ -91,11 +96,24 @@ describe("toSessionError", () => {
     })
   })
 
+  test("preserves unresolved provider endpoint errors", () => {
+    const error = new ModelResolver.UnresolvedProviderVariablesError({
+      providerID: Provider.ID.make("cloudflare-workers-ai"),
+      modelID: ID.make("model"),
+      variables: ["CLOUDFLARE_ACCOUNT_ID"],
+    })
+    expect(toSessionError(error)).toEqual({
+      type: "provider.no-route",
+      message:
+        "Cannot initialize cloudflare-workers-ai/model: CLOUDFLARE_ACCOUNT_ID is required to resolve the provider endpoint",
+    })
+  })
+
   test("retries only rate limits, provider-internal failures, and transport failures", () => {
     const eligible = [
       llm(new RateLimitReason({ message: "rate" })),
       llm(new ProviderInternalReason({ message: "internal", status: 500 })),
-      llm(new TransportReason({ message: "transport" })),
+      llm(new TransportReason({ message: "transport", transport: "http", operation: "request" })),
     ]
     const ineligible = [
       llm(new AuthenticationReason({ message: "auth", kind: "invalid" })),

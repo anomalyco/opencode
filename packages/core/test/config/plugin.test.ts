@@ -5,8 +5,10 @@ import { describe, expect } from "bun:test"
 import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { ConfigPluginSource } from "@opencode-ai/core/config/plugin/source"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Global } from "@opencode-ai/util/global"
 import { Bus } from "@opencode-ai/core/bus"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
@@ -19,10 +21,19 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Effect, Fiber, Logger, Stream } from "effect"
 import { Database } from "../../src/database/database"
 import { tmpdir } from "../fixture/tmpdir"
+import { tempGlobalLayer } from "../fixture/global"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node])),
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
+    [Global.node, tempGlobalLayer],
+  ]),
+)
+const staticIt = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
+    [ConfigPluginSource.node, ConfigPluginSource.empty],
+    [Global.node, tempGlobalLayer],
+  ]),
 )
 
 describe("PluginSupervisor config", () => {
@@ -155,6 +166,98 @@ describe("PluginSupervisor config", () => {
       }),
       true,
     ),
+  )
+
+  it.live("loads auto-discovered plugin package entrypoints in order", () =>
+    withLocation(
+      undefined,
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* Plugin.Service
+        const ids = (yield* plugins.list()).map((plugin) => String(plugin.id))
+        expect(ids).toContain("package-exports")
+        expect(ids).toContain("package-module")
+        expect(ids).toContain("package-main")
+        expect(ids).toContain("package-index")
+      }),
+      false,
+      async (directory) => {
+        await Promise.all([
+          writeDiscoveredPackage(directory, "exports", { exports: "./entry.ts" }, { "entry.ts": "package-exports" }),
+          writeDiscoveredPackage(
+            directory,
+            "module",
+            { exports: "./missing.js", module: "./entry.js" },
+            { "entry.js": "package-module" },
+          ),
+          writeDiscoveredPackage(
+            directory,
+            "main",
+            { exports: { import: "./missing.js" }, module: "./missing.js", main: "./entry.js" },
+            { "entry.js": "package-main" },
+          ),
+          writeDiscoveredPackage(directory, "index", undefined, { "index.js": "package-index" }),
+        ])
+      },
+    ),
+  )
+
+  it.live("keeps auto-discovered package entrypoints inside the package directory", () =>
+    withLocation(
+      undefined,
+      Effect.gen(function* () {
+        yield* ready()
+        const plugins = yield* Plugin.Service
+        const ids = (yield* plugins.list()).map((plugin) => String(plugin.id))
+        expect(ids).toContain("contained-fallback")
+        expect(ids).toContain("symlink-fallback")
+        expect(ids).not.toContain("escaped-entrypoint")
+      }),
+      false,
+      async (directory) => {
+        await fs.mkdir(path.join(directory, ".opencode"), { recursive: true })
+        await fs.writeFile(path.join(directory, ".opencode", "escape.js"), discoveredPlugin("escaped-entrypoint"))
+        await writeDiscoveredPackage(
+          directory,
+          "contained",
+          { exports: "../../escape.js" },
+          { "index.js": "contained-fallback" },
+        )
+        await writeDiscoveredPackage(
+          directory,
+          "symlink",
+          { exports: "./entry.js" },
+          { "index.js": "symlink-fallback" },
+        )
+        await fs.symlink(
+          path.join(directory, ".opencode", "escape.js"),
+          path.join(directory, ".opencode", "plugins", "symlink", "entry.js"),
+        )
+      },
+    ),
+  )
+
+  staticIt.live("uses only internal and SDK plugins when the static source is wired", () =>
+    Effect.gen(function* () {
+      const sdk = yield* SdkPlugins.Service
+      yield* sdk.register(EffectPlugin.define({ id: "static-sdk", effect: () => Effect.void }))
+      yield* withLocation(
+        { plugins: ["-*", path.join(import.meta.dir, "../plugin/fixtures/config-promise-plugin.ts")] },
+        Effect.gen(function* () {
+          yield* ready()
+          const plugins = yield* Plugin.Service
+          const ids = (yield* plugins.list()).map((plugin) => String(plugin.id))
+          expect(ids).toContain("opencode.agent")
+          expect(ids).toContain("static-sdk")
+          expect(ids).not.toContain("config-promise-plugin")
+
+          const agents = yield* Agent.Service
+          expect(yield* agents.get(Agent.ID.make("directory"))).toBeUndefined()
+          expect(yield* agents.get(Agent.ID.make("configured"))).toBeUndefined()
+        }),
+        true,
+      )
+    }),
   )
 
   it.live("reloads an auto-discovered plugin when its file changes", () =>
@@ -354,4 +457,22 @@ export default Plugin.define({
   },
 })
 `
+}
+
+function discoveredPlugin(id: string) {
+  return `export default { id: ${JSON.stringify(id)}, setup() {} }`
+}
+
+async function writeDiscoveredPackage(
+  directory: string,
+  name: string,
+  manifest: Record<string, unknown> | undefined,
+  files: Record<string, string>,
+) {
+  const plugin = path.join(directory, ".opencode", "plugins", name)
+  await fs.mkdir(plugin, { recursive: true })
+  await Promise.all([
+    ...(manifest ? [fs.writeFile(path.join(plugin, "package.json"), JSON.stringify(manifest))] : []),
+    ...Object.entries(files).map(([file, id]) => fs.writeFile(path.join(plugin, file), discoveredPlugin(id))),
+  ])
 }

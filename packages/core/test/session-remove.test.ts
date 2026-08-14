@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
@@ -12,20 +12,13 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { testEffect } from "./lib/effect"
+import { globalProjectLayer } from "./lib/project"
 
-const projects = Layer.succeed(
-  Project.Service,
-  Project.Service.of({
-    list: () => Effect.succeed([]),
-    resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
-    directories: () => Effect.succeed([]),
-  }),
-)
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      [Project.node, projects],
+      [Project.node, globalProjectLayer],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),

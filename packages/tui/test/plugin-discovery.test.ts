@@ -1,7 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { expect, test } from "bun:test"
-import { discoverTuiPlugins, tuiPluginDirectories } from "../src/plugin/discovery"
+import { discoverTuiPlugins, freshSpecifier, tuiPluginDirectories } from "../src/plugin/discovery"
 import { localProjectDirectory } from "../src/util/config-directories"
 import { tmpdir } from "./fixture/fixture"
 
@@ -65,6 +66,14 @@ test("uses an Hg root for a missing project plugin directory", async () => {
   expect(await tuiPluginDirectories(cwd, path.join(tmp.path, "config"))).toContain(
     path.join(project, ".opencode", "plugins", "tui"),
   )
+})
+
+test("truncates fractional mtimes in fresh specifiers", () => {
+  // A dot in the query makes Bun's compiled binaries skip runtime plugin
+  // hooks for the import, breaking JSX/solid rewriting for external plugins.
+  const entrypoint = pathToFileURL(path.resolve("example.tsx")).href
+  const specifier = freshSpecifier(entrypoint, 1786494961337.0317)
+  expect(specifier.endsWith("example.tsx?mtime=1786494961337")).toBe(true)
 })
 
 test("propagates non-missing filesystem errors", async () => {

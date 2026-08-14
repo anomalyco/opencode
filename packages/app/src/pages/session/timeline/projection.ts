@@ -16,6 +16,9 @@ export function createTimelineProjection(input: {
   inlineComments: Accessor<boolean>
 }) {
   const messageByID = createMemo(() => new Map(input.messages().map((message) => [message.id, message] as const)))
+  const sessionMessageByID = createMemo(
+    () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
+  )
   const assistantMessagesByParent = createMemo(() => {
     const result = new Map<string, AssistantMessage[]>()
     input.messages().forEach((message) => {
@@ -77,5 +80,6 @@ export function createTimelineProjection(input: {
     messageLastRowIndex,
     rowByKey,
     rows,
+    sessionMessageByID,
   }
 }

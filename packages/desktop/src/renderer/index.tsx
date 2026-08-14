@@ -1,5 +1,6 @@
 // @refresh reload
 
+import "./diagnostics"
 import {
   ACCEPTED_FILE_EXTENSIONS,
   AppBaseProviders,
@@ -28,11 +29,13 @@ import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import { windowFullscreen } from "./window-fullscreen"
 import { availableStartupServer, readyWslConnections } from "./wsl/connections"
+import { MigrationStatus } from "./migration-status"
 import "./styles.css"
 import { Splash } from "@opencode-ai/ui/logo"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 
 const root = document.getElementById("root")
+const version = import.meta.env.OPENCODE_VERSION ?? pkg.version
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   throw new Error(t("desktop.error.dev.rootNotFound"))
 }
@@ -41,7 +44,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
     environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
-    release: import.meta.env.VITE_SENTRY_RELEASE ?? `desktop@${pkg.version}`,
+    release: import.meta.env.VITE_SENTRY_RELEASE ?? `desktop@${version}`,
     initialScope: {
       tags: {
         platform: "desktop",
@@ -168,7 +171,7 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
   return {
     platform: "desktop",
     os,
-    version: pkg.version,
+    version,
     windowID: windowState.id,
 
     async openDirectoryPickerDialog(opts) {
@@ -355,7 +358,7 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
   )
   const onboarding = Promise.withResolvers<void>()
 
-  function Inner() {
+  function DesktopEffects() {
     const cmd = useCommand()
     menuTrigger = (id) => cmd.trigger(id)
 
@@ -404,19 +407,16 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
       <Show when={ready()} fallback={<LoadingSplash />}>
         <Show when={effectiveDefaultServer()} keyed>
           {(key) => (
-            <AppInterface
-              defaultServer={key}
-              servers={servers()}
-              router={router}
-              startup={onboarding.promise}
-              serverScoped={
-                <DesktopFirstLaunchOnboarding
-                  initialUrl={getLastActiveUrl(platform.windowID ?? "browser")}
-                  onLoaded={onboarding.resolve}
-                />
-              }
-            >
-              <Inner />
+            <AppInterface defaultServer={key} servers={servers()} router={router} startup={onboarding.promise}>
+              <DesktopFirstLaunchOnboarding
+                initialUrl={getLastActiveUrl(platform.windowID ?? "browser")}
+                onLoaded={onboarding.resolve}
+                serverKey={key}
+              />
+              <DesktopEffects />
+              <Show when={initializationData(sidecar)} keyed>
+                {(server) => <MigrationStatus server={server} />}
+              </Show>
             </AppInterface>
           )}
         </Show>

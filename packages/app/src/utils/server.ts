@@ -1,5 +1,5 @@
 import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
-import type { ServerConnection } from "@/context/server"
+import type { ServerConnection } from "@/context/servers"
 import { decode64 } from "@/utils/base64"
 
 export function authTokenFromCredentials(input: { username?: string; password: string }) {

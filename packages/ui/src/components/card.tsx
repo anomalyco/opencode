@@ -1,4 +1,4 @@
-import { type ComponentProps, splitProps } from "solid-js"
+import { type ComponentProps, Show, splitProps } from "solid-js"
 import { Icon, type IconProps } from "./icon"
 
 type Variant = "normal" | "error" | "warning" | "success" | "info"
@@ -80,11 +80,11 @@ export function CardTitle(props: CardTitleProps) {
         [split.class ?? ""]: !!split.class,
       }}
     >
-      {show() ? (
+      <Show when={show()}>
         <span data-slot="card-title-icon" data-placeholder={placeholder() || undefined}>
           <Icon name={name() ?? "dash"} size="small" />
         </span>
-      ) : null}
+      </Show>
       {split.children}
     </div>
   )

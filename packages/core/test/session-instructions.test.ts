@@ -33,6 +33,8 @@ import { Tool } from "@opencode-ai/core/tool"
 import { tempLocationLayer } from "./fixture/location"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { testEffect } from "./lib/effect"
+import { permissionLayer } from "./lib/permission"
+import { globalProjectLayer } from "./lib/project"
 import { executeTool, registerToolPlugin } from "./lib/tool"
 
 const readToolNode = makeLocationNode({
@@ -50,25 +52,7 @@ const readToolNode = makeLocationNode({
   ],
 })
 
-const projects = Layer.succeed(
-  Project.Service,
-  Project.Service.of({
-    list: () => Effect.succeed([]),
-    resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
-    directories: () => Effect.succeed([]),
-  }),
-)
-const permission = Layer.succeed(
-  Permission.Service,
-  Permission.Service.of({
-    assert: () => Effect.void,
-    ask: () => Effect.die("unused"),
-    reply: () => Effect.die("unused"),
-    get: () => Effect.die("unused"),
-    forSession: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-  }),
-)
+const permission = permissionLayer({ assert: () => Effect.void })
 const config = Config.testLayer()
 const imageLayer = AppNodeBuilder.build(Image.node, [[Config.node, config]])
 
@@ -92,7 +76,7 @@ const testLayer = AppNodeBuilder.build(
     Image.node,
   ]),
   [
-    [Project.node, projects],
+    [Project.node, globalProjectLayer],
     [SessionExecution.node, SessionExecution.noopLayer],
     [Location.node, tempLocationLayer],
     [Permission.node, permission],

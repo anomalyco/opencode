@@ -23,7 +23,7 @@ import {
   toggleHomeProjectSelection,
 } from "./helpers"
 import { pathKey } from "@/utils/path-key"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 
 const serverKey = ServerConnection.Key.make
 

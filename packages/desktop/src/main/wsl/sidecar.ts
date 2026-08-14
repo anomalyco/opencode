@@ -3,12 +3,12 @@ import { randomUUID } from "node:crypto"
 import { createServer } from "node:net"
 import { app } from "electron"
 import { checkHealth } from "../server"
-import { type WslCommandLine, resolveWslOpencode, shellEscape, wslArgs } from "./runtime"
-import { pollWslHealth } from "./startup"
+import { type WslCommandLine, resolveWslCli, shellEscape, wslArgs } from "./runtime"
 import { nativeT } from "../native-translations"
 
 export type WslSidecar = {
-  listener: { stop: () => void; onExit: (cb: (code: number | null, signal: NodeJS.Signals | null) => void) => void }
+  stop: () => Promise<void>
+  onExit: (cb: (code: number | null, signal: NodeJS.Signals | null) => void) => void
   url: string
   username: string | null
   password: string
@@ -18,7 +18,7 @@ export async function spawnWslSidecar(
   distro: string,
   opts: { onLine?: (line: WslCommandLine) => void; healthTimeoutMs?: number } = {},
 ): Promise<WslSidecar> {
-  const opencode = await resolveWslOpencode(distro)
+  const opencode = await resolveWslCli(distro)
   if (!opencode) throw new Error(nativeT("desktop.wsl.error.opencodeNotInstalled", { distro }))
 
   const port = await allocatePort()
@@ -35,7 +35,7 @@ export async function spawnWslSidecar(
     `export OPENCODE_SERVER_USERNAME=${shellEscape(username)}`,
     `export OPENCODE_SERVER_PASSWORD=${shellEscape(password)}`,
     'export XDG_STATE_HOME="$HOME/.local/state"',
-    `exec ${shellEscape(opencode)} --print-logs --log-level ${app.isPackaged ? "WARN" : "INFO"} serve --hostname 0.0.0.0 --port ${port}`,
+    `exec ${shellEscape(opencode)} --log-level ${app.isPackaged ? "warn" : "info"} serve --hostname 0.0.0.0 --port ${port}`,
   ].join("\n")
   const child = spawn("wsl", wslArgs(["bash", "-se"], distro), {
     stdio: ["pipe", "pipe", "pipe"],
@@ -80,13 +80,24 @@ export async function spawnWslSidecar(
       startup.abort()
     })
   return {
-    listener: {
-      stop: () => child.kill(),
-      onExit: (cb) => child.once("exit", cb),
+    stop: async () => {
+      if (child.exitCode !== null || child.signalCode !== null) return
+      await new Promise<void>((resolve) => {
+        child.once("exit", () => resolve())
+        child.kill()
+      })
     },
+    onExit: (cb) => child.once("exit", cb),
     url,
     username,
     password,
+  }
+}
+
+async function pollWslHealth(check: () => Promise<boolean>, signal: AbortSignal) {
+  while (!signal.aborted) {
+    if (await check()) return
+    await new Promise((resolve) => setTimeout(resolve, 100))
   }
 }
 

@@ -18,18 +18,18 @@ describe("v2 session reducer", () => {
     apply({
       ...base,
       id: "evt_admitted",
-      type: "session.input.admitted",
+      type: "session.inbox.enqueued",
       data: {
         sessionID: "ses_1",
-        inputID: "msg_user",
-        input: { type: "user", delivery: "steer", data: { text: "hello" } },
+        inboxID: "msg_user",
+        item: { type: "user", delivery: "steer", payload: { text: "hello" } },
       },
     })
     apply({
       ...base,
       id: "evt_promoted",
-      type: "session.input.promoted",
-      data: { sessionID: "ses_1", inputID: "msg_user" },
+      type: "session.inbox.delivered",
+      data: { sessionID: "ses_1", inboxID: "msg_user" },
     })
     apply({
       ...base,
@@ -66,6 +66,63 @@ describe("v2 session reducer", () => {
       id: "msg_assistant",
       type: "assistant",
       content: [{ type: "text", text: "hello" }],
+    })
+  })
+
+  test("prefers durable selection predecessors and derives them for older events", () => {
+    const source: SessionMessageInfo[] = [
+      { id: "msg_previous_agent", type: "agent-switched", agent: "build", time: { created: 1 } },
+      {
+        id: "msg_previous_model",
+        type: "model-switched",
+        model: { id: "old", providerID: "provider" },
+        time: { created: 1 },
+      },
+    ]
+    const reducer = createV2SessionReducer()
+
+    const agent = reducer.reduce(
+      source,
+      event({
+        ...base,
+        id: "evt_agent",
+        type: "session.agent.selected",
+        data: { sessionID: "ses_1", agent: "plan", previous: "review" },
+      }),
+    )
+    const model = reducer.reduce(
+      source,
+      event({
+        ...base,
+        id: "evt_model",
+        type: "session.model.selected",
+        data: {
+          sessionID: "ses_1",
+          model: { id: "new", providerID: "provider" },
+          previous: { id: "durable", providerID: "provider" },
+        },
+      }),
+    )
+    const legacyAgent = reducer.reduce(
+      source,
+      event({
+        ...base,
+        id: "evt_legacy_agent",
+        type: "session.agent.selected",
+        data: { sessionID: "ses_1", agent: "plan" },
+      }),
+    )
+
+    expect(agent?.messages.at(-1)).toMatchObject({ type: "agent-switched", agent: "plan", previous: "review" })
+    expect(model?.messages.at(-1)).toMatchObject({
+      type: "model-switched",
+      model: { id: "new" },
+      previous: { id: "durable" },
+    })
+    expect(legacyAgent?.messages.at(-1)).toMatchObject({
+      type: "agent-switched",
+      agent: "plan",
+      previous: "build",
     })
   })
 
@@ -146,12 +203,64 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_promoted",
-        type: "session.input.promoted",
-        data: { sessionID: "ses_1", inputID: "msg_user" },
+        type: "session.inbox.delivered",
+        data: { sessionID: "ses_1", inboxID: "msg_user" },
       }),
     )
 
     expect(result).toMatchObject({ sessionID: "ses_1", missing: "msg_user", touched: [] })
+  })
+
+  test("projects rendered instruction updates", () => {
+    const reducer = createV2SessionReducer()
+    const result = reducer.reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_instructions",
+        type: "session.instructions.updated",
+        data: { sessionID: "ses_1", delta: { agents: "hash" }, text: "Changed instructions" },
+      }),
+    )
+
+    expect(result?.messages).toEqual([
+      {
+        id: "msg_instructions",
+        type: "system",
+        text: "Changed instructions",
+        description: "Instructions updated: agents",
+        metadata: undefined,
+        time: { created: 1 },
+      },
+    ])
+  })
+
+  test("projects session movement with the previous location", () => {
+    const result = createV2SessionReducer().reduce(
+      [],
+      event({
+        ...base,
+        id: "evt_moved",
+        type: "session.moved",
+        data: {
+          sessionID: "ses_1",
+          projectID: "project_2",
+          location: { directory: "/repo-2" },
+          subpath: "packages/app",
+        },
+      }),
+      { projectID: "project_1", location: { directory: "/repo-1" } },
+    )
+
+    expect(result?.messages).toMatchObject([
+      {
+        id: "msg_moved",
+        type: "location-switched",
+        projectID: "project_2",
+        location: { directory: "/repo-2" },
+        previous: { projectID: "project_1", location: { directory: "/repo-1" } },
+      },
+    ])
   })
 
   test("removes cancelled input from the pending promotion fold", () => {
@@ -161,11 +270,11 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_admitted",
-        type: "session.input.admitted",
+        type: "session.inbox.enqueued",
         data: {
           sessionID: "ses_1",
-          inputID: "msg_user",
-          input: { type: "user", delivery: "queue", data: { text: "cancel me" } },
+          inboxID: "msg_user",
+          item: { type: "user", delivery: "queue", payload: { text: "cancel me" } },
         },
       }),
     )
@@ -174,8 +283,8 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_cancelled",
-        type: "session.input.cancelled",
-        data: { sessionID: "ses_1", inputID: "msg_user" },
+        type: "session.inbox.cancelled",
+        data: { sessionID: "ses_1", inboxID: "msg_user" },
       }),
     )
     const result = reducer.reduce(
@@ -183,8 +292,8 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_promoted",
-        type: "session.input.promoted",
-        data: { sessionID: "ses_1", inputID: "msg_user" },
+        type: "session.inbox.delivered",
+        data: { sessionID: "ses_1", inboxID: "msg_user" },
       }),
     )
 
@@ -198,11 +307,11 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_admitted",
-        type: "session.input.admitted",
+        type: "session.inbox.enqueued",
         data: {
           sessionID: "ses_1",
-          inputID: "msg_user",
-          input: { type: "user", delivery: "queue", data: { text: "steer me" } },
+          inboxID: "msg_user",
+          item: { type: "user", delivery: "queue", payload: { text: "steer me" } },
         },
       }),
     )
@@ -211,8 +320,8 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_steered",
-        type: "session.input.steered",
-        data: { sessionID: "ses_1", inputID: "msg_user" },
+        type: "session.inbox.delivery.changed",
+        data: { sessionID: "ses_1", inboxID: "msg_user", delivery: "steer" },
       }),
     )
     reducer.reduce(
@@ -220,8 +329,8 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_queued",
-        type: "session.input.queued",
-        data: { sessionID: "ses_1", inputID: "msg_user" },
+        type: "session.inbox.delivery.changed",
+        data: { sessionID: "ses_1", inboxID: "msg_user", delivery: "queue" },
       }),
     )
 
@@ -230,8 +339,8 @@ describe("v2 session reducer", () => {
       event({
         ...base,
         id: "evt_promoted",
-        type: "session.input.promoted",
-        data: { sessionID: "ses_1", inputID: "msg_user" },
+        type: "session.inbox.delivered",
+        data: { sessionID: "ses_1", inboxID: "msg_user" },
       }),
     )
 

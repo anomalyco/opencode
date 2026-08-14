@@ -364,9 +364,6 @@ describe("Project.resolve", () => {
         sandboxes: [abs("/preserved-sandbox")],
         time: { created: 1, initialized: 2 },
       })
-      expect(
-        (yield* project.directories({ projectID: id })).toSorted((a, b) => a.directory.localeCompare(b.directory)),
-      ).toEqual([{ directory: yield* real(tmp.path) }, { directory: yield* real(worktree), strategy: "git_worktree" }])
     }),
   )
 })

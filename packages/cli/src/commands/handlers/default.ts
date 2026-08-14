@@ -15,8 +15,6 @@ export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
     if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
-    const updater = yield* Updater.Service
-    yield* updater.check().pipe(Effect.forkScoped)
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
     const server = yield* ServerConnection.resolve({
@@ -36,6 +34,8 @@ export default Runtime.handler(Commands, (input) =>
         Effect.promise(() => preflight.fail("OpenCode update could not start the new background service")),
       ),
     )
+    const updater = yield* Updater.Service
+    yield* updater.check().pipe(Effect.forkScoped)
     preflight.loading()
     const config = yield* Config.Service
     const npm = yield* Npm.Service

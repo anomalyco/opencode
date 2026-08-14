@@ -1,6 +1,6 @@
 import type { LocalProject } from "@/context/layout"
 import { getProjectAvatarVariant } from "@/context/layout"
-import type { ServerConnection } from "@/context/server"
+import type { ServerConnection } from "@/context/servers"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"

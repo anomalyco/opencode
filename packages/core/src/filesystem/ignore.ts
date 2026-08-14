@@ -45,4 +45,4 @@ const FILES = [
 
 export const PATTERNS = [...FILES, ...FOLDERS, `**/{${Array.from(FOLDERS).join(",")}}/**`]
 
-export * as Ignore from "./ignore"
+export * as Ignore from "./ignore.js"

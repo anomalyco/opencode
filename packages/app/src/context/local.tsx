@@ -73,7 +73,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const [saved, setSaved, , savedReady] = persisted(
       {
-        ...Persist.serverWorkspace(serverSDK().scope, sdk().directory, "model-selection", ["model-selection.v1"]),
+        ...Persist.serverWorkspace(serverSDK.scope, sdk().directory, "model-selection", ["model-selection.v1"]),
         migrate,
       },
       createStore<Saved>({
@@ -127,14 +127,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const scope = createMemo<State | undefined>(() => {
       const session = id()
       if (!session) return store.draft ?? store.promoting
-      return saved.session[session] ?? handoff.get(handoffKey(serverSDK().scope, sdk().directory, session))
+      return saved.session[session] ?? handoff.get(handoffKey(serverSDK.scope, sdk().directory, session))
     })
 
     createEffect(() => {
       const session = id()
       if (!session) return
 
-      const key = handoffKey(serverSDK().scope, sdk().directory, session)
+      const key = handoffKey(serverSDK.scope, sdk().directory, session)
       const next = handoff.get(key)
       if (!next) return
       if (saved.session[session] !== undefined) {
@@ -385,7 +385,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         promote(dir: string, session: string, state?: State) {
           const next = clone(state ?? snapshot())
           if (!next) return
-          const key = handoffKey(serverSDK().scope, dir, session)
+          const key = handoffKey(serverSDK.scope, dir, session)
           handoff.set(key, next)
 
           if (dir === sdk().directory) {
@@ -400,7 +400,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!session) return
           if (msg.sessionID !== session) return
           if (saved.session[session] !== undefined) return
-          if (handoff.has(handoffKey(serverSDK().scope, sdk().directory, session))) return
+          if (handoff.has(handoffKey(serverSDK.scope, sdk().directory, session))) return
 
           setSaved("session", session, {
             agent: msg.agent,

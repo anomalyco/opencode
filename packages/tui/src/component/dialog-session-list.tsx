@@ -2,6 +2,7 @@ import { createMemo, createResource, createSignal, onMount, Show } from "solid-j
 import path from "path"
 import type { SessionInfo } from "@opencode-ai/client"
 import { TextAttributes } from "@opentui/core"
+import type { RGBA } from "@opentui/core"
 import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
@@ -141,11 +142,11 @@ export function DialogSessionList() {
     const option = (session: SessionInfo, category: string) => {
       const directory = session.location.directory
       const project = data.project.get(session.projectID)
-      const relative = path.relative(project?.canonical ?? directory, directory)
-      const footer = allProjects()
-        ? Locale.truncate(projectName(project, directory) ?? "", 20)
-        : relative.startsWith("..") || path.isAbsolute(relative)
-          ? Locale.truncate(path.basename(directory), 20)
+      const root = session.subpath ? path.resolve(directory, ...session.subpath.split("/").map(() => "..")) : directory
+      const relative = path.relative(project?.canonical ?? root, root)
+      const footer =
+        relative.startsWith("..") || path.isAbsolute(relative)
+          ? Locale.truncate(path.basename(relative), 25)
           : undefined
       const slot = sessionTabs.enabled() ? undefined : slotByID.get(session.id)
       const deleting = toDelete() === session.id
@@ -161,7 +162,7 @@ export function DialogSessionList() {
         gutter:
           data.session.status(session.id) === "running" ||
           data.session.family(session.id).some((id) => data.session.status(id) === "running")
-            ? () => <Spinner />
+            ? (color: RGBA) => <Spinner color={color} />
             : slot === undefined
               ? undefined
               : () => <text fg={theme.hue.accent[mode() === "light" ? 800 : 200]}>{slot}</text>,

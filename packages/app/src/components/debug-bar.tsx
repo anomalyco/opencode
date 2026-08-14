@@ -1,5 +1,5 @@
 import { useIsRouting, useLocation } from "@solidjs/router"
-import { batch, createEffect, onCleanup, onMount } from "solid-js"
+import { batch, createEffect, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -571,7 +571,7 @@ export function DebugBar(props: { inline?: boolean } = {}) {
           value={language.t(`debugBar.direction.${language.direction()}`)}
           onClick={() => language.setDirection(language.direction() === "rtl" ? "ltr" : "rtl")}
         />
-        {platform.setForceFocus && (
+        <Show when={platform.setForceFocus}>
           <ToggleCell
             active={state.focus}
             inline={props.inline}
@@ -580,7 +580,7 @@ export function DebugBar(props: { inline?: boolean } = {}) {
             value={language.t(state.focus ? "debugBar.focus.on" : "debugBar.focus.off")}
             onClick={() => void toggleFocus()}
           />
-        )}
+        </Show>
       </div>
     </aside>
   )
