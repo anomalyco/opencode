@@ -5,4 +5,4 @@
 - [x] 3. Calibrate the similarity threshold and default noProgressLimit
 - [x] 4. Update the stall logic to be more robust
 - [x] 5. Add regression tests
-- [ ] 6. Verify with real /loop usage
+- [x] 6. Verify with real /loop usage
