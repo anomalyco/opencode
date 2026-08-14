@@ -287,9 +287,9 @@ test("typing on the highlighted custom option opens it without losing burst inpu
   ])
   try {
     prompt.app.mockInput.pressArrow("down")
-    await prompt.app.mockInput.typeText("production")
-    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "production")
-    await prompt.app.waitForFrame((frame) => frame.includes("[✓] production"))
+    await prompt.app.mockInput.typeText("production target")
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "production target")
+    await prompt.app.waitForFrame((frame) => frame.includes("[✓] production target"))
 
     expect(prompt.replies).toEqual([])
   } finally {

@@ -82,7 +82,6 @@ export function FormPrompt(props: {
   })
 
   let textarea: TextareaRenderable | undefined
-  let editingReady = false
   let review: ScrollBoxRenderable | undefined
   let measureReview: (() => void) | undefined
 
@@ -229,13 +228,13 @@ export function FormPrompt(props: {
   onCleanup(
     keymap.intercept("key", ({ event, consume }) => {
       if (keymap.mode.current() !== FORM_MODE) return
-      if (textual() || !other() || (store.editing && editingReady)) return
+      if (textual() || !other() || (store.editing && renderer.currentFocusedEditor === textarea)) return
       if (event.ctrl || event.meta || event.option || event.super || event.hyper) return
-      if (event.sequence === " " || !/^[^\p{C}\p{Zl}\p{Zp}]$/u.test(event.sequence)) return
+      if ((!store.editing && event.sequence === " ") || !/^[^\p{C}\p{Zl}\p{Zp}]$/u.test(event.sequence)) return
       const current = answerField()
       if (!current) return
       updateCustom(current, input() + event.sequence)
-      if (!store.editing) setEditing(true)
+      if (!store.editing) setStore("editing", true)
       consume()
     }),
   )
@@ -243,11 +242,6 @@ export function FormPrompt(props: {
   function answer(key: string, value: FormValue | undefined) {
     setStore("answers", key, value)
     setStore("error", "")
-  }
-
-  function setEditing(value: boolean) {
-    editingReady = false
-    setStore("editing", value)
   }
 
   function reply(answer: FormAnswer) {
@@ -317,14 +311,14 @@ export function FormPrompt(props: {
     const next = fields()[index]
     setStore("tab", index)
     setStore("selected", next && isFormAnswerField(next) ? formSelected(next, store.answers[next.key]) : 0)
-    setEditing(false)
+    setStore("editing", false)
     setStore("error", "")
   }
 
   function selectOption() {
     if (other()) {
       if (!multi()) {
-        setEditing(true)
+        setStore("editing", true)
         return
       }
       const value = input()
@@ -332,7 +326,7 @@ export function FormPrompt(props: {
         toggle(value)
         return
       }
-      setEditing(true)
+      setStore("editing", true)
       return
     }
     const row = rows()[store.selected]
@@ -351,7 +345,7 @@ export function FormPrompt(props: {
     event.preventDefault()
     setStore("selected", rows().length)
     updateCustom(current, input() + stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n"))
-    setEditing(true)
+    setStore("editing", true)
   })
 
   function commitInput(text: string) {
@@ -371,7 +365,7 @@ export function FormPrompt(props: {
       }
       answer(current.key, value)
       setStore("custom", current.key, "")
-      setEditing(false)
+      setStore("editing", false)
       return true
     }
 
@@ -409,7 +403,7 @@ export function FormPrompt(props: {
 
     const configured = current.type === "string" && current.options?.some((option) => option.value === text)
     setStore("custom", current.key, configured ? "" : text)
-    setEditing(false)
+    setStore("editing", false)
     return true
   }
 
@@ -518,7 +512,7 @@ export function FormPrompt(props: {
         run() {
           const text = textarea?.plainText ?? ""
           if (!text) {
-            setEditing(false)
+            setStore("editing", false)
             return
           }
           textarea?.setText("")
@@ -533,7 +527,7 @@ export function FormPrompt(props: {
             cancel()
             return
           }
-          setEditing(false)
+          setStore("editing", false)
         },
       },
       {
@@ -561,7 +555,7 @@ export function FormPrompt(props: {
         run: () => {
           if (textual() || !textarea || textarea.isDestroyed || store.selected === 0) return false
           if (textarea.scrollY + textarea.visualCursor.visualRow > 0) return false
-          setEditing(false)
+          setStore("editing", false)
           setStore("selected", store.selected - 1)
         },
       },
@@ -985,7 +979,6 @@ export function FormPrompt(props: {
                                 val.setText(input())
                                 val.focus()
                                 val.gotoLineEnd()
-                                editingReady = true
                               })
                             }}
                             initialValue={input()}
