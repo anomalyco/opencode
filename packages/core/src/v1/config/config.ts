@@ -111,7 +111,7 @@ export const Info = Schema.Struct({
     description: "Custom provider configurations and model overrides",
   }),
   mcp: Schema.optional(
-    Schema.Record(Schema.String, Schema.Union([ConfigMCPV1.Info, Schema.Struct({ enabled: Schema.Boolean })])),
+    Schema.Record(Schema.String, Schema.Union([ConfigMCPV1.Info, ConfigMCPV1.BareEnabled])),
   ).annotate({ description: "MCP (Model Context Protocol) server configurations" }),
   formatter: Schema.optional(ConfigFormatterV1.Info).annotate({
     description:

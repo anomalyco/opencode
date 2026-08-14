@@ -1400,6 +1400,78 @@ it.instance("project config can override MCP server enabled status", () =>
   }),
 )
 
+// MCP config validation
+
+it.instance("rejects MCP server entry missing the type field", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      mcp: {
+        broken: {
+          command: ["npx", "-y", "some-mcp"],
+        },
+      },
+    })
+    const exit = yield* Config.use.get().pipe(Effect.exit)
+    expect(Exit.isFailure(exit)).toBe(true)
+  }),
+)
+
+it.instance("rejects MCP server entry missing type but with enabled", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      mcp: {
+        datalens: {
+          command: ["npx", "-y", "@datalens-tech/mcp@latest"],
+          enabled: true,
+        },
+      },
+    })
+    const exit = yield* Config.use.get().pipe(Effect.exit)
+    expect(Exit.isFailure(exit)).toBe(true)
+    const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+    expect(NamedError.hasName(error, "ConfigInvalidError")).toBe(true)
+    const message = (error as { data?: { issues?: Array<{ message?: string }> } })
+      .data?.issues?.map((i) => i.message)
+      .join("\n")
+    expect(message ?? "").toContain('{ "enabled": boolean }')
+  }),
+)
+
+it.instance("rejects malformed MCP server entry with type but invalid fields", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      mcp: {
+        datalens: {
+          type: "local",
+          command: "npx",
+          args: ["-y", "@datalens-tech/mcp@latest"],
+          enabled: true,
+        },
+      },
+    })
+    const exit = yield* Config.use.get().pipe(Effect.exit)
+    expect(Exit.isFailure(exit)).toBe(true)
+  }),
+)
+
+it.instance("accepts a bare enabled entry to disable an MCP server defined elsewhere", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      mcp: { "some-server": { enabled: false } },
+    })
+    const config = yield* Config.use.get()
+    expect(config.mcp?.["some-server"]).toEqual({ enabled: false })
+  }),
+)
+
 it.instance("MCP config deep merges preserving base config properties", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
