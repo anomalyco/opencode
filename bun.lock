@@ -137,7 +137,6 @@
         "immer": "11.1.4",
         "jsonc-parser": "3.3.1",
         "open": "10.1.2",
-        "semver": "catalog:",
         "solid-js": "catalog:",
         "uqr": "0.1.3",
         "ws": "8.21.0",
@@ -163,7 +162,6 @@
         "@parcel/watcher-win32-x64": "2.5.1",
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
-        "@types/semver": "catalog:",
         "@typescript/native-preview": "catalog:",
         "@yuuang/ffi-rs-darwin-arm64": "1.3.2",
         "@yuuang/ffi-rs-linux-arm64-gnu": "1.3.2",
@@ -6428,8 +6426,6 @@
     "@openauthjs/openauth/@standard-schema/spec": ["@standard-schema/spec@1.0.0-beta.3", "", {}, "sha512-0ifF3BjA1E8SY9C+nUew8RefNOIq0cDlYALPty4rhUm8Rrl6tCM8hBT4bhGhx7I7iXD0uAgt50lgo8dD73ACMw=="],
 
     "@openauthjs/openauth/jose": ["jose@5.9.6", "", {}, "sha512-AMlnetc9+CV9asI19zHmrgS/WYsWUwCn2R7RzlbJWD7F9eWYUTGyBmU9o6PxngtLGOiDGPRu+Uc4fhKzbpteZQ=="],
-
-    "@opencode-ai/cli/semver": ["semver@7.7.4", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA=="],
 
     "@opencode-ai/console-app/@smithy/eventstream-codec": ["@smithy/eventstream-codec@4.2.7", "", { "dependencies": { "@aws-crypto/crc32": "5.2.0", "@smithy/types": "^4.11.0", "@smithy/util-hex-encoding": "^4.2.0", "tslib": "^2.6.2" } }, "sha512-DrpkEoM3j9cBBWhufqBwnbbn+3nf1N9FP6xuVJ+e220jbactKuQgaZwjwP5CP1t+O94brm2JgVMD2atMGX3xIQ=="],
 
