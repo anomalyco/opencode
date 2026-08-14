@@ -168,10 +168,6 @@ Use `opencode-drive check ./drive.ts` and `start --script` for the Effect-native
 
 ## OpenCode development
 
-Simulation is available only from an OpenCode development checkout after its
-normal workspace install. Published `opencode2` and `opencode2-node` binaries do
-not include the simulation runtime.
-
 Run this:
 
 ```sh

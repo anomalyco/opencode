@@ -136,6 +136,7 @@ export {
   UiElementAmbiguousError,
   UiNodeAmbiguousError,
   UiPredicateError,
+  UiScreenshotError,
   UiTimeoutError,
   UiWaitOptionsError,
 } from "./ui.js"

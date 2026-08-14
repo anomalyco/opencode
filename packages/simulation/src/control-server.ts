@@ -15,7 +15,10 @@ export interface SocketData {
   closed?: true
 }
 
-export type Socket = Bun.ServerWebSocket<SocketData>
+export interface Socket {
+  readonly data: SocketData
+  readonly send: (message: string) => void
+}
 
 export function start<RequestType extends Request, Error, Services>(options: {
   readonly endpoint: string
@@ -49,33 +52,39 @@ export function start<RequestType extends Request, Error, Services>(options: {
       Effect.forkScoped,
     )
     const url = yield* Effect.try({ try: () => new URL(options.endpoint), catch: (cause) => cause })
+    const websocket = yield* Effect.promise(() => import("ws"))
     yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        Bun.serve<SocketData>({
-          hostname: url.hostname,
-          port: Number(url.port),
-          fetch(request, server) {
-            if (server.upgrade(request, { data: options.data() })) return undefined
-            return new Response(options.label, { status: 426 })
-          },
-          websocket: {
-            close(socket) {
-              socket.data.closed = true
-              Queue.offerUnsafe(closures, socket)
-            },
-            message(socket, message) {
-              const input = typeof message === "string" ? message : message.toString()
-              if (Queue.offerUnsafe(messages, { socket, input })) return
-              socket.send(
-                JSON.stringify(
-                  SimulationProtocol.JsonRpc.failure(undefined, new Error("Simulation control queue is full")),
-                ),
-              )
-            },
-          },
-        }),
+      Effect.tryPromise(
+        () =>
+          new Promise<InstanceType<typeof websocket.WebSocketServer>>((resolve, reject) => {
+            const server = new websocket.WebSocketServer({ host: url.hostname, port: Number(url.port) })
+            server.once("listening", () => resolve(server))
+            server.once("error", reject)
+            server.on("connection", (connection) => {
+              const socket: Socket = {
+                data: options.data(),
+                send: (message) => connection.send(message),
+              }
+              connection.on("close", () => {
+                socket.data.closed = true
+                Queue.offerUnsafe(closures, socket)
+              })
+              connection.on("message", (message) => {
+                if (Queue.offerUnsafe(messages, { socket, input: message.toString() })) return
+                socket.send(
+                  JSON.stringify(
+                    SimulationProtocol.JsonRpc.failure(undefined, new Error("Simulation control queue is full")),
+                  ),
+                )
+              })
+            })
+          }),
       ),
-      (server) => Effect.promise(() => server.stop(true)),
+      (server) =>
+        Effect.sync(() => {
+          server.clients.forEach((client) => client.terminate())
+          server.close()
+        }),
     )
     return { url: options.endpoint } satisfies Server
   })

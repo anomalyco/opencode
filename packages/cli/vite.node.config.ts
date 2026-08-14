@@ -253,9 +253,9 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
       OPENCODE_VERSION: JSON.stringify(input.version),
       OPENCODE_CLI_NAME: JSON.stringify("opencode2-node"),
       OPENCODE_CHANNEL: JSON.stringify(input.channel),
-      OPENCODE_SIMULATION: "false",
       OPENCODE_LIBC: input.target.platform === "linux" ? JSON.stringify("glibc") : "undefined",
       FFF_LIBC: input.target.platform === "linux" ? JSON.stringify("gnu") : "undefined",
+      "process.env.WS_NO_BUFFER_UTIL": JSON.stringify("1"),
     },
     ssr: { noExternal: true },
     build: {
@@ -265,7 +265,6 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
       emptyOutDir: false,
       minify: true,
       rollupOptions: {
-        external: [/^@opencode-ai\/simulation(?:\/|$)/],
         output: output("opencode.mjs", nodePrelude(input)),
       },
     },

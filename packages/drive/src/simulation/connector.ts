@@ -155,7 +155,7 @@ export const ui = Effect.fn("SimulationConnector.ui")(function* (endpoint: strin
       expectedRole: "ui",
       offeredVersions: [1],
       requiredCapabilities: required,
-      optionalCapabilities: ["ui.snapshot", "ui.click.semantic"],
+      optionalCapabilities: ["ui.snapshot", "ui.click.semantic", "ui.screenshot"],
     }),
     options?.compatibility,
   )

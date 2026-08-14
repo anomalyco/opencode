@@ -45,8 +45,6 @@ import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
 
-declare const OPENCODE_SIMULATION: boolean
-
 const applicationServiceNodes = [
   Global.node,
   Database.node,
@@ -136,12 +134,6 @@ function makeRoutes<AuthError, AuthServices>(
   const serviceLayer = options.simulation
     ? Layer.unwrap(
         Effect.gen(function* () {
-          if (typeof OPENCODE_SIMULATION === "boolean" && !OPENCODE_SIMULATION)
-            return yield* Effect.fail(
-              new Error(
-                "Simulation is not included in production OpenCode builds. Use opencode-drive start --dev <checkout>.",
-              ),
-            )
           const { simulationReplacements } = yield* Effect.promise(() => import("@opencode-ai/simulation/backend"))
           const simulation = yield* simulationReplacements({ version: App.make(options.app).version })
           return AppNodeBuilder.build(embedded ? embeddedApplicationServices : applicationServices, [

@@ -101,8 +101,6 @@ import { AttentionProvider } from "./context/attention"
 import { StorageProvider } from "./context/storage"
 import { createTuiClipboard } from "./clipboard"
 
-declare const OPENCODE_SIMULATION: boolean
-
 registerOpencodeSpinner()
 
 const appGlobalBindingCommands = ["session.list", "session.new", "open.menu"] as const
@@ -247,14 +245,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
           )
         }
         if (process.env.OPENCODE_DRIVE) {
-          if (typeof OPENCODE_SIMULATION === "boolean" && !OPENCODE_SIMULATION)
-            return yield* Effect.fail(
-              new Error(
-                "Simulation is not included in production OpenCode builds. Use opencode-drive start --dev <checkout>.",
-              ),
-            )
-          const { create } = yield* Effect.promise(() => import("@opencode-ai/simulation/frontend"))
-          return yield* create(options, input.app.version)
+          const { Drive } = yield* Effect.promise(() => import("@opencode-ai/simulation/frontend"))
+          return yield* Drive.create(options, input.app.version)
         }
         return yield* Effect.acquireRelease(
           Effect.tryPromise({

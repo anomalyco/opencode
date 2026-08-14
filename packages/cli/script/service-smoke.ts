@@ -31,7 +31,6 @@ const processes: Array<ReturnType<typeof Bun.spawn>> = []
 const errors: Array<Promise<string>> = []
 let failure: unknown
 try {
-  await verifySimulationDiagnostic()
   await fs.mkdir(path.join(root, ".opencode"))
   spawnService()
   spawnService()
@@ -106,25 +105,6 @@ if (failure)
   throw new Error(output.filter(Boolean).join("\n") || "Compiled service lifecycle smoke test failed", {
     cause: failure,
   })
-
-async function verifySimulationDiagnostic() {
-  const process = Bun.spawn([binary, "--version"], {
-    env: { ...env, OPENCODE_DRIVE: "artifact-smoke" },
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-  const [exit, stdout, stderr] = await Promise.all([
-    process.exited,
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-  ])
-  if (exit === 0) throw new Error("Compiled CLI accepted a simulation request")
-  const output = stdout + stderr
-  if (!output.includes("Simulation is not included in production OpenCode builds"))
-    throw new Error(`Compiled CLI returned an opaque simulation error: ${output}`)
-  if (!output.includes("opencode-drive start --dev <checkout>"))
-    throw new Error(`Compiled CLI omitted the simulation migration command: ${output}`)
-}
 
 function spawnService() {
   const process = Bun.spawn([binary, "serve", "--service"], { env, stdout: "ignore", stderr: "pipe" })

@@ -1,25 +1,61 @@
+import { readdir, stat } from "node:fs/promises"
 import path from "node:path"
 
-export async function verifyArtifact(binary: string) {
-  const contents = Buffer.from(await Bun.file(binary).arrayBuffer())
-  const target = path.basename(path.dirname(path.dirname(binary)))
-  const platform = target.includes("darwin") ? "darwin" : target.includes("linux") ? "linux" : "win32"
-  const markers = [
-    "SimulationPng",
-    "Drive.create",
-    "@napi-rs/canvas",
-    "commit-mono-latin-400-normal",
-    "noto-sans-symbols-symbols-400-normal",
-    "noto-sans-math-math-400-normal",
-    "../simulation/src/",
-    `skia.${platform}-`,
-  ]
-  const found = markers.filter((marker) => contents.includes(marker))
-  if (found.length > 0) throw new Error(`Compiled CLI contains simulation artifacts: ${found.join(", ")}`)
+const required = ["OPENCODE_DRIVE", "simulation.handshake", "ui.capture"]
+const forbidden = [
+  "@napi-rs/canvas",
+  "@fontsource/commit-mono",
+  "@fontsource/noto-sans",
+  "SimulationPng",
+  "frontend/png",
+  "Failed to register screenshot font",
+  "commit-mono-latin-400-normal",
+  "noto-sans-symbols-symbols-400-normal",
+  "noto-sans-math-math-400-normal",
+  "skia.darwin-",
+  "skia.linux-",
+  "skia.win32-",
+]
+const overlap = Math.max(...required.map((value) => value.length), ...forbidden.map((value) => value.length)) - 1
+
+export async function verifyArtifact(target: string) {
+  const files = await artifactFiles(target)
+  if (files.length === 0) throw new Error(`Artifact contains no published files: ${target}`)
+  const found = new Set<string>()
+  for (const file of files) await scan(file, found)
+  const missing = required.filter((marker) => !found.has(marker))
+  if (missing.length > 0) throw new Error(`Artifact is missing simulation bridge markers: ${missing.join(", ")}`)
+}
+
+async function artifactFiles(target: string): Promise<string[]> {
+  if ((await stat(target)).isFile()) return [target]
+  const entries = await readdir(target, { withFileTypes: true })
+  return (
+    await Promise.all(
+      entries.map((entry) => {
+        const file = path.join(target, entry.name)
+        return entry.isDirectory() ? artifactFiles(file) : Promise.resolve(entry.isFile() ? [file] : [])
+      }),
+    )
+  ).flat()
+}
+
+async function scan(file: string, found: Set<string>) {
+  let trailing = ""
+  const reader = Bun.file(file).stream().getReader()
+  while (true) {
+    const chunk = await reader.read()
+    if (chunk.done) return
+    const text = trailing + Buffer.from(chunk.value).toString("latin1")
+    const leaked = forbidden.find((marker) => text.includes(marker))
+    if (leaked) throw new Error(`Artifact file ${file} contains forbidden simulation payload: ${leaked}`)
+    required.filter((marker) => text.includes(marker)).forEach((marker) => found.add(marker))
+    trailing = text.slice(-overlap)
+  }
 }
 
 if (import.meta.main) {
-  const binary = process.argv[2]
-  if (!binary) throw new Error("Usage: bun run script/verify-artifact.ts <binary>")
-  await verifyArtifact(binary)
+  const target = process.argv[2]
+  if (!target) throw new Error("Usage: bun run script/verify-artifact.ts <file-or-directory>")
+  await verifyArtifact(target)
 }

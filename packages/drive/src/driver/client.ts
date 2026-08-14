@@ -59,7 +59,7 @@ export const make = Effect.fn("OpenCodeTui.make")(function* (
     (client) => client.close.pipe(Effect.catchCause((cause) => Effect.logError("OpenCode TUI cleanup failed", cause))),
   )
   const connection = yield* connector.ui(launched.endpoint, { compatibility })
-  const ui = OpenCodeUi.make(connection)
+  const ui = OpenCodeUi.make(connection, { screenshotDirectory: launched.media })
   yield* ui.waitFor((state) => state.focused.editor, {
     timeout: 30_000,
     interval: 50,

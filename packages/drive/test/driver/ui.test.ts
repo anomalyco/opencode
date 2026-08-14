@@ -3,6 +3,9 @@ import { Effect } from "effect"
 import * as OpenCodeUi from "../../src/driver/ui.js"
 import * as SimulationConnector from "../../src/simulation/connector.js"
 import { sendError, sendResult, startTransportPeer } from "../simulation/transport-peer.js"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 const editor = {
   id: "prompt",
@@ -78,10 +81,6 @@ describe("OpenCodeUi", () => {
         sendResult(socket, request, matchCalls > 1)
         return
       }
-      if (request.method === "ui.screenshot") {
-        sendResult(socket, request, "/tmp/home.png")
-        return
-      }
       sendResult(socket, request, state)
     })
 
@@ -93,7 +92,6 @@ describe("OpenCodeUi", () => {
       expect(yield* ui.submit("hello")).toEqual(state)
       expect(yield* ui.press("escape", { ctrl: true })).toEqual(state)
       expect(yield* ui.click(3)).toEqual(state)
-      expect(yield* ui.screenshot("home")).toBe("/tmp/home.png")
       expect(yield* ui.waitFor("ready", { timeout: 1_000, interval: 1 })).toEqual(state)
       expect(yield* ui.getElement({ editor: true })).toEqual(editor)
 
@@ -121,8 +119,8 @@ describe("OpenCodeUi", () => {
         {
           jsonrpc: "2.0",
           id: 6,
-          method: "ui.screenshot",
-          params: { name: "home" },
+          method: "ui.matches",
+          params: { text: "ready" },
         },
         {
           jsonrpc: "2.0",
@@ -130,15 +128,46 @@ describe("OpenCodeUi", () => {
           method: "ui.matches",
           params: { text: "ready" },
         },
-        {
-          jsonrpc: "2.0",
-          id: 8,
-          method: "ui.matches",
-          params: { text: "ready" },
-        },
+        { jsonrpc: "2.0", id: 8, method: "ui.state" },
         { jsonrpc: "2.0", id: 9, method: "ui.state" },
-        { jsonrpc: "2.0", id: 10, method: "ui.state" },
       ])
+    })
+  })
+
+  it.live("renders negotiated screenshots from captured frames inside Drive", () => {
+    const peer = startTransportPeer(({ request, socket }) => sendResult(socket, request, frame))
+
+    return Effect.gen(function* () {
+      yield* Effect.addFinalizer(() => Effect.promise(() => peer.stop()))
+      const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "opencode-drive-screenshot-")))
+      yield* Effect.addFinalizer(() => Effect.promise(() => rm(directory, { recursive: true, force: true })))
+      const connection = yield* SimulationConnector.ui(peer.url)
+      const path = yield* OpenCodeUi.make(connection, { screenshotDirectory: directory }).screenshot("home")
+
+      expect(path).toBe(join(directory, "home.png"))
+      const bytes = yield* Effect.promise(() => Bun.file(path).arrayBuffer())
+      expect(Buffer.from(bytes).subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      expect(peer.received.map(({ request }) => request)).toEqual([{ jsonrpc: "2.0", id: 1, method: "ui.capture" }])
+    })
+  })
+
+  it.live("uses remote screenshots for legacy endpoints", () => {
+    const peer = startTransportPeer(
+      ({ request, socket }) => {
+        if (request.method === "simulation.handshake") {
+          sendError(socket, request, "method not found", -32601)
+          return
+        }
+        sendResult(socket, request, "/tmp/legacy.png")
+      },
+      { handshake: false },
+    )
+
+    return Effect.gen(function* () {
+      yield* Effect.addFinalizer(() => Effect.promise(() => peer.stop()))
+      const connection = yield* SimulationConnector.ui(peer.url)
+      expect(yield* OpenCodeUi.make(connection).screenshot("legacy")).toBe("/tmp/legacy.png")
+      expect(peer.received.map(({ request }) => request.method)).toEqual(["simulation.handshake", "ui.screenshot"])
     })
   })
 

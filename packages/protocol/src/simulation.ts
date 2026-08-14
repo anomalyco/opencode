@@ -175,7 +175,6 @@ export namespace Frontend {
     "ui.click.semantic",
     "ui.resize",
     "ui.matches",
-    "ui.screenshot",
     "ui.state",
     "ui.snapshot",
     "ui.capture",

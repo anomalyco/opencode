@@ -4,6 +4,7 @@ import * as Exit from "effect/Exit"
 import { Frontend } from "../client/protocol.js"
 import { recordLog } from "../log.js"
 import * as SimulationConnector from "../simulation/connector.js"
+import * as OpenCodeUi from "../driver/ui.js"
 import type { DriveCommand } from "./types.js"
 
 export const commandInfo = {
@@ -48,11 +49,11 @@ export const commandInfo = {
     description: "Finish recording and return the timeline path",
   },
 } as const satisfies Record<
-  Exclude<Frontend.Capability, "ui.click.semantic">,
+  DriveCommand["operation"],
   { readonly value: boolean | "optional"; readonly description: string }
 >
 
-type CommandName = Exclude<Frontend.Capability, "ui.click.semantic">
+type CommandName = DriveCommand["operation"]
 
 export function isCommandName(operation: string): operation is CommandName {
   return Object.hasOwn(commandInfo, operation)
@@ -91,8 +92,12 @@ export class CommandBatchError extends Error {
 
 const callTimeout = 30_000
 
-export async function executeCommands(endpoint: string, commands: ReadonlyArray<DriveCommand>) {
-  const exit = await Effect.runPromiseExit(Effect.scoped(executeBatch(endpoint, commands)))
+export async function executeCommands(
+  endpoint: string,
+  commands: ReadonlyArray<DriveCommand>,
+  options?: OpenCodeUi.Options,
+) {
+  const exit = await Effect.runPromiseExit(Effect.scoped(executeBatch(endpoint, commands, options)))
   if (Exit.isSuccess(exit)) return exit.value
   const reason = Cause.squash(exit.cause)
   throw reason instanceof CommandBatchError ? reason : new CommandBatchError([], reason)
@@ -101,6 +106,7 @@ export async function executeCommands(endpoint: string, commands: ReadonlyArray<
 const executeBatch = Effect.fn("DriveCli.executeBatch")(function* (
   endpoint: string,
   commands: ReadonlyArray<DriveCommand>,
+  options?: OpenCodeUi.Options,
 ) {
   const connection = yield* SimulationConnector.ui(endpoint, {
     connectTimeout: callTimeout,
@@ -111,7 +117,7 @@ const executeBatch = Effect.fn("DriveCli.executeBatch")(function* (
   )
   const results: Array<{ readonly command: string; readonly result: unknown }> = []
   for (const command of commands) {
-    const result = yield* execute(connection, command).pipe(
+    const result = yield* execute(connection, command, options).pipe(
       Effect.mapError((error) => new CommandBatchError(results, error)),
     )
     results.push({ command: command.operation, result })
@@ -122,10 +128,11 @@ const executeBatch = Effect.fn("DriveCli.executeBatch")(function* (
 const execute = (
   connection: SimulationConnector.UiConnection,
   command: DriveCommand,
+  options?: OpenCodeUi.Options,
 ): Effect.Effect<unknown, SimulationError> =>
   Effect.suspend(() => {
     recordLog("INFO", `ui command ${command.operation} params=${command.value ?? "undefined"}`)
-    return dispatch(connection, decodeCommand(command))
+    return dispatch(connection, decodeCommand(command), options)
   }).pipe(
     Effect.timeoutOrElse({
       duration: callTimeout,
@@ -158,6 +165,7 @@ function decodeCommand(command: DriveCommand): Frontend.Request {
 function dispatch(
   connection: SimulationConnector.UiConnection,
   request: Frontend.Request,
+  options?: OpenCodeUi.Options,
 ): Effect.Effect<unknown, unknown> {
   if (
     request.method === "ui.snapshot" &&
@@ -188,7 +196,7 @@ function dispatch(
     case "ui.resize":
       return connection.rpc["ui.resize"](request.params)
     case "ui.screenshot":
-      return connection.rpc["ui.screenshot"](request.params)
+      return OpenCodeUi.make(connection, options).screenshot(request.params?.name)
     case "ui.capture":
       return connection.rpc["ui.capture"]()
     case "ui.state":

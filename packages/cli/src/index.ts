@@ -12,12 +12,6 @@ import { Global } from "@opencode-ai/util/global"
 import { AppProcess } from "@opencode-ai/util/process"
 import { Config } from "./config"
 import { Npm } from "@opencode-ai/util/npm"
-import { SimulationBuild } from "./simulation"
-
-if (!SimulationBuild.enabled && (process.env.OPENCODE_DRIVE || process.env.OPENCODE_SIMULATE)) {
-  console.error(SimulationBuild.unavailable)
-  process.exit(1)
-}
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
