@@ -1,6 +1,7 @@
 import { RGBA, ScrollBoxRenderable, TextAttributes, type MouseEvent } from "@opentui/core"
 import {
   For,
+  Index,
   Match,
   Show,
   Switch,
@@ -34,7 +35,7 @@ import { TabPulse, unreadGlowIntensity } from "./tab-pulse"
 import { tint } from "../theme/color"
 import { SESSION_SIDEBAR_WIDTH } from "../ui/layout"
 import { projectName } from "../util/project"
-import { marqueeCycleWidth, marqueeOverflows, marqueeText, marqueeTextParts } from "../util/marquee"
+import { marqueeCycleWidth, marqueeOverflows, marqueeTextParts } from "../util/marquee"
 import { useDialog } from "../ui/dialog"
 import { DialogSessionRename } from "./dialog-session-rename"
 
@@ -43,7 +44,7 @@ const FADE_WIDTH = 4
 // The add button renders as " + " at the end of the strip, so the tab layout leaves it room.
 const ADD_TAB_WIDTH = 3
 const MARQUEE_DELAY = 600
-const MARQUEE_INTERVAL = 80
+const MARQUEE_INTERVAL = 70
 const CONTEXT_MENU_WIDTH = 16
 const RIGHT_MOUSE_BUTTON = 2
 
@@ -393,15 +394,18 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               const titleWidth = () => (hovered() === tab.sessionID ? hoveredTitleWidth() : restingTitleWidth())
               const title = () => tab.title ?? "Untitled session"
               const scrolling = () => marquee.active() === tab.sessionID
-              const visibleTitle = createMemo(() =>
-                scrolling()
-                  ? marqueeText(title(), titleWidth(), marquee.offset())
-                  : Locale.takeWidth(title(), titleWidth()),
-              )
               const visibleTitleParts = createMemo(() =>
                 scrolling()
                   ? marqueeTextParts(title(), titleWidth(), marquee.offset())
-                  : Locale.graphemes(visibleTitle()).map((value) => ({ value, separator: false })),
+                  : Locale.graphemes(Locale.takeWidth(title(), titleWidth())).map((value) => ({
+                      value,
+                      separator: false,
+                    })),
+              )
+              const visibleTitle = createMemo(() =>
+                visibleTitleParts()
+                  .map((part) => part.value)
+                  .join(""),
               )
               const titleFades = createMemo(() => marqueeOverflows(title(), titleWidth()) && titleWidth() > FADE_WIDTH)
               const detail = createMemo(() => {
@@ -656,11 +660,11 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                           when={scrolling() || titleGlow.value().level > 0 || titleFades()}
                           fallback={visibleTitle()}
                         >
-                          <For each={visibleTitleParts()}>
+                          <Index each={visibleTitleParts()}>
                             {(part, index) => (
-                              <span style={{ fg: titleColor(index(), part.separator) }}>{part.value}</span>
+                              <span style={{ fg: titleColor(index, part().separator) }}>{part().value}</span>
                             )}
-                          </For>
+                          </Index>
                         </Show>
                       </text>
                       <text
@@ -993,15 +997,18 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           const hoveredTitleWidth = () => Math.max(1, restingTitleWidth() - 2)
           const availableTitleWidth = () => (hovered() === tab.sessionID ? hoveredTitleWidth() : restingTitleWidth())
           const scrolling = () => marquee.active() === tab.sessionID
-          const visibleTitle = createMemo(() =>
-            scrolling()
-              ? marqueeText(title(), availableTitleWidth(), marquee.offset())
-              : Locale.takeWidth(title(), availableTitleWidth()),
-          )
           const visibleTitleParts = createMemo(() =>
             scrolling()
               ? marqueeTextParts(title(), availableTitleWidth(), marquee.offset())
-              : Locale.graphemes(visibleTitle()).map((value) => ({ value, separator: false })),
+              : Locale.graphemes(Locale.takeWidth(title(), availableTitleWidth())).map((value) => ({
+                  value,
+                  separator: false,
+                })),
+          )
+          const visibleTitle = createMemo(() =>
+            visibleTitleParts()
+              .map((part) => part.value)
+              .join(""),
           )
           const titleFades = createMemo(
             () => marqueeOverflows(title(), availableTitleWidth()) && availableTitleWidth() > FADE_WIDTH,
@@ -1116,11 +1123,11 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   attributes={bold()}
                 >
                   <Show when={scrolling() || glows() || titleFades()} fallback={visibleTitle()}>
-                    <For each={visibleTitleParts()}>
+                    <Index each={visibleTitleParts()}>
                       {(part, index) => (
-                        <span style={{ fg: characterColor(index(), part.separator) }}>{part.value}</span>
+                        <span style={{ fg: characterColor(index, part().separator) }}>{part().value}</span>
                       )}
-                    </For>
+                    </Index>
                   </Show>
                 </text>
                 <text

@@ -38,14 +38,14 @@ export function marqueeTextParts(value: string, width: number, offset: number): 
       state.width >= cursor ? state : { index: index + 1, width: state.width + stringWidth(part.value) },
     { index: 0, width: 0 },
   ).index
-  const visible = Locale.graphemes(
-    Locale.takeWidth(
-      parts
-        .slice(start)
-        .map((part) => part.value)
-        .join(""),
-      width,
-    ),
-  ).length
+  const visible = parts.slice(start).reduce(
+    (state, part) => {
+      if (state.done) return state
+      const next = stringWidth(part.value)
+      if (state.width + next > width) return { ...state, done: true }
+      return { count: state.count + 1, width: state.width + next, done: false }
+    },
+    { count: 0, width: 0, done: false },
+  ).count
   return parts.slice(start, start + visible)
 }
