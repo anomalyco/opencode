@@ -50,6 +50,7 @@ Her çalışma alanından yalnızca bir üye OpenCode Go'ya abone olabilir.
 Mevcut model listesi şunları içerir:
 
 - **Grok 4.5**
+- **GLM-5.3**
 - **GLM-5.2**
 - **GLM-5.1**
 - **GPT 5.6 Luna**
@@ -88,6 +89,7 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 | ----------------- | ------------------ | -------------- | ----------- |
 | Grok 4.5          | 120                | 300            | 600         |
 | GPT 5.6 Luna      | 2,050              | 5,100          | 10,250      |
+| GLM-5.3           | 220                | 540            | 1,080       |
 | GLM-5.2           | 880                | 2,150          | 4,300       |
 | GLM-5.1           | 880                | 2,150          | 4,300       |
 | Kimi K3           | 110                | 250            | 490         |
@@ -108,7 +110,7 @@ Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek say
 Tahminler, gözlemlenen istek modellerine dayanır:
 
 - Grok 4.5 — İstek başına 1.100 girdi, 71.500 önbelleğe alınmış, 220 çıktı token'ı
-- GLM-5.2/5.1 — İstek başına 700 girdi, 52.000 önbelleğe alınmış, 150 çıktı token'ı
+- GLM-5.3/5.2/5.1 — İstek başına 700 girdi, 52.000 önbelleğe alınmış, 150 çıktı token'ı
 - GPT 5.6 Luna — İstek başına 1.000 girdi, 50.000 önbelleğe alınmış, 220 çıktı token'ı
 - Kimi K3 — İstek başına 1.050 girdi, 76.500 önbelleğe alınmış, 300 çıktı token'ı
 - Kimi K2.7/K2.6 — İstek başına 870 girdi, 55.000 önbelleğe alınmış, 200 çıktı token'ı
@@ -131,6 +133,7 @@ Tahminler ayrıca 1M token başına aşağıdaki fiyatlara ve her modelle birlik
 | Grok 4.5                     | $2.00  | $6.00  | $0.30       | -            | $15      |
 | GPT 5.6 Luna (≤ 272K tokens) | $0.20  | $1.20  | $0.02       | $0.25        | $15      |
 | GPT 5.6 Luna (> 272K tokens) | $0.40  | $1.80  | $0.04       | $0.50        | $15      |
+| GLM-5.3                      | $1.40  | $4.40  | $0.26       | -            | $15      |
 | GLM-5.2                      | $1.40  | $4.40  | $0.26       | -            | $60      |
 | GLM-5.1                      | $1.40  | $4.40  | $0.26       | -            | $60      |
 | Kimi K3                      | $3.00  | $15.00 | $0.30       | -            | $15      |
@@ -187,6 +190,7 @@ Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsi
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
 | Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna      | gpt-5.6-luna      | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| GLM-5.3           | glm-5.3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K3           | kimi-k3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -225,6 +229,7 @@ https://opencode.ai/zen/go/v1/models
 | ----------------- | ------------- | ------------ |
 | Grok 4.5          | Kullanılmaz   | 30 gün       |
 | GPT 5.6 Luna      | Kullanılmaz   | 30 gün       |
+| GLM-5.3           | Kullanılmaz   | 0 gün        |
 | GLM-5.2           | Kullanılmaz   | 0 gün        |
 | GLM-5.1           | Kullanılmaz   | 0 gün        |
 | Kimi K3           | Kullanılmaz   | 0 gün        |

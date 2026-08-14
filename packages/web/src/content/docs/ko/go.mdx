@@ -50,6 +50,7 @@ workspace당 한 명의 멤버만 OpenCode Go를 구독할 수 있습니다.
 현재 모델 목록에는 다음이 포함됩니다.
 
 - **Grok 4.5**
+- **GLM-5.3**
 - **GLM-5.2**
 - **GLM-5.1**
 - **GPT 5.6 Luna**
@@ -88,6 +89,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | ----------------- | ----------------- | -------------- | -------------- |
 | Grok 4.5          | 120               | 300            | 600            |
 | GPT 5.6 Luna      | 2,050             | 5,100          | 10,250         |
+| GLM-5.3           | 220               | 540            | 1,080          |
 | GLM-5.2           | 880               | 2,150          | 4,300          |
 | GLM-5.1           | 880               | 2,150          | 4,300          |
 | Kimi K3           | 110               | 250            | 490            |
@@ -108,7 +110,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 이 예상치는 관찰된 요청 패턴을 기준으로 합니다.
 
 - Grok 4.5 — 요청당 입력 1,100, 캐시 71,500, 출력 토큰 220
-- GLM-5.2/5.1 — 요청당 입력 700, 캐시 52,000, 출력 토큰 150
+- GLM-5.3/5.2/5.1 — 요청당 입력 700, 캐시 52,000, 출력 토큰 150
 - GPT 5.6 Luna — 요청당 입력 토큰 1,000개, 캐시 토큰 50,000개, 출력 토큰 220개
 - Kimi K3 — 요청당 입력 1,050, 캐시 76,500, 출력 토큰 300
 - Kimi K2.7/K2.6 — 요청당 입력 870, 캐시 55,000, 출력 토큰 200
@@ -131,6 +133,7 @@ OpenCode Go에는 다음과 같은 한도가 포함됩니다.
 | Grok 4.5                     | $2.00  | $6.00  | $0.30       | -            | $15   |
 | GPT 5.6 Luna (≤ 272K tokens) | $0.20  | $1.20  | $0.02       | $0.25        | $15   |
 | GPT 5.6 Luna (> 272K tokens) | $0.40  | $1.80  | $0.04       | $0.50        | $15   |
+| GLM-5.3                      | $1.40  | $4.40  | $0.26       | -            | $15   |
 | GLM-5.2                      | $1.40  | $4.40  | $0.26       | -            | $60   |
 | GLM-5.1                      | $1.40  | $4.40  | $0.26       | -            | $60   |
 | Kimi K3                      | $3.00  | $15.00 | $0.30       | -            | $15   |
@@ -187,6 +190,7 @@ Go에서는 월 $10를 지불하며, 저희는 그 6배의 사용량을 제공�
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
 | Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna      | gpt-5.6-luna      | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| GLM-5.3           | glm-5.3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K3           | kimi-k3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -225,6 +229,7 @@ https://opencode.ai/zen/go/v1/models
 | ----------------- | ------------- | ----------- |
 | Grok 4.5          | 사용되지 않음 | 30일        |
 | GPT 5.6 Luna      | 사용되지 않음 | 30일        |
+| GLM-5.3           | 사용되지 않음 | 0일         |
 | GLM-5.2           | 사용되지 않음 | 0일         |
 | GLM-5.1           | 사용되지 않음 | 0일         |
 | Kimi K3           | 사용되지 않음 | 0일         |
