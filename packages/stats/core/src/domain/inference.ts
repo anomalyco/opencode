@@ -10,7 +10,14 @@ import {
   statProvider,
 } from "./model-normalization"
 import type { ProviderStatAggregate } from "./provider"
-import { normalizeCountry, normalizeTier, type StatBaseAggregate } from "./stat"
+import {
+  normalizeCountry,
+  normalizeTier,
+  periodKeyFor,
+  startOfIsoWeek,
+  startOfUtcDay,
+  type StatBaseAggregate,
+} from "./stat"
 
 export type StatDimension = "model" | "provider" | "geo" | "geo_model"
 export type StatsQuerySource = { namespace: string; table: string; dataset: string }
@@ -18,6 +25,10 @@ type StatsQueryFamily = "usage" | "geo"
 
 const DAY_MS = 86_400_000
 const WEEK_MS = 7 * DAY_MS
+// The typed production stream began before the legacy backfill's original end
+// boundary. Use one exclusive handoff so the overlapping rows are never counted
+// from both sources.
+const LIVE_SOURCE_START = "2026-08-11T10:57:48.186Z"
 
 // R2 SQL limits result sets to 10,000 rows and does not support OFFSET. Two
 // queries per day/week keep each result bounded and avoid combining the costly
@@ -123,6 +134,10 @@ WITH normalized AS (
   FROM ${sourceTable}
   WHERE event_type = 'generation.completed'
     AND source IN ('inference', 'inference-legacy')
+    AND (
+      (source = 'inference-legacy' AND started_at < ${sqlString(LIVE_SOURCE_START)})
+      OR (source = 'inference' AND started_at >= ${sqlString(LIVE_SOURCE_START)})
+    )
     AND product = 'go'
     AND model_requested IS NOT NULL
     AND model_requested <> ''
@@ -264,25 +279,17 @@ function sqlString(value: string) {
 
 function statPeriods(grain: "day" | "week", periodStart: Date, periodEnd: Date) {
   const interval = grain === "day" ? DAY_MS : WEEK_MS
-  const count = Math.max(0, Math.ceil((periodEnd.getTime() - periodStart.getTime()) / interval))
+  const first = grain === "day" ? startOfUtcDay(periodStart) : startOfIsoWeek(periodStart)
+  const count = Math.max(0, Math.ceil((periodEnd.getTime() - first.getTime()) / interval))
   return Array.from({ length: count }, (_, index) => {
-    const start = new Date(periodStart.getTime() + index * interval)
+    const start = new Date(first.getTime() + index * interval)
     return {
       grain,
-      key: grain === "day" ? start.toISOString().slice(0, 10) : isoWeekKey(start),
+      key: periodKeyFor(grain, start),
       start,
       end: new Date(Math.min(start.getTime() + interval, periodEnd.getTime())),
     }
   })
-}
-
-function isoWeekKey(date: Date) {
-  const thursday = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
-  const day = thursday.getUTCDay() || 7
-  thursday.setUTCDate(thursday.getUTCDate() + 4 - day)
-  const year = thursday.getUTCFullYear()
-  const week = Math.ceil((thursday.getTime() - Date.UTC(year, 0, 1) + DAY_MS) / WEEK_MS)
-  return `${year}-W${String(week).padStart(2, "0")}`
 }
 
 function statModelSql(model: string, providerModel: string) {

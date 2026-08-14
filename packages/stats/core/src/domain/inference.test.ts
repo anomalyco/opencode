@@ -103,6 +103,34 @@ describe("inference stat normalization", () => {
     expect(queries[1]).toContain("'geo_model' ELSE 'geo'")
     expect(queries[1]).toContain("0 AS sessions")
   })
+
+  test("aligns periods to UTC calendar boundaries", () => {
+    const queries = buildStatsQueries(new Date("2026-06-17T15:56:00.000Z"), new Date("2026-06-19T15:56:00.000Z"), {
+      namespace: "inference",
+      table: "generation",
+      dataset: "zen",
+    })
+
+    expect(queries).toHaveLength(8)
+    expect(queries[0]).toContain("'2026-W25' AS period_key")
+    expect(queries[0]).toContain("started_at >= '2026-06-15T00:00:00.000Z'")
+    expect(queries[2]).toContain("'2026-06-17' AS period_key")
+    expect(queries[2]).toContain("started_at >= '2026-06-17T00:00:00.000Z'")
+    expect(queries[2]).toContain("started_at < '2026-06-18T00:00:00.000Z'")
+    expect(queries[6]).toContain("'2026-06-19' AS period_key")
+    expect(queries[6]).toContain("started_at < '2026-06-19T15:56:00.000Z'")
+  })
+
+  test("uses an exclusive live and legacy source handoff", () => {
+    const [query] = buildStatsQueries(new Date("2026-08-11T00:00:00.000Z"), new Date("2026-08-12T00:00:00.000Z"), {
+      namespace: "inference",
+      table: "generation",
+      dataset: "zen",
+    })
+
+    expect(query).toContain("(source = 'inference-legacy' AND started_at < '2026-08-11T10:57:48.186Z')")
+    expect(query).toContain("(source = 'inference' AND started_at >= '2026-08-11T10:57:48.186Z')")
+  })
 })
 
 function aggregate(model: string, provider: string) {
