@@ -462,7 +462,7 @@ describe("code mode execute", () => {
     expect(called).toEqual(["b"])
   })
 
-  test("streams live per-call metadata as a call starts and finishes", async () => {
+  test("publishes completed metadata for a quick child call", async () => {
     const snapshots: Array<{ toolCalls: { tool: string; status: string; input?: Record<string, unknown> }[] }> = []
     const recordingCtx: Tool.Context = {
       ...ctx,
@@ -474,12 +474,130 @@ describe("code mode execute", () => {
       tool.execute({ code: "await tools.greeter.hello({ name: 'Ada' }); return 'done'" }, recordingCtx),
     )
 
-    expect(snapshots).toContainEqual({
-      toolCalls: [{ tool: "greeter.hello", status: "running", input: { name: "Ada" } }],
-    })
-    expect(snapshots).toContainEqual({
+    expect(snapshots.at(-1)).toEqual({
       toolCalls: [{ tool: "greeter.hello", status: "completed", input: { name: "Ada" } }],
     })
+    const count = snapshots.length
+    await Bun.sleep(150)
+    expect(snapshots).toHaveLength(count)
+  })
+
+  test("publishes running and completed metadata for a long child call", async () => {
+    const release = Promise.withResolvers<void>()
+    const running = Promise.withResolvers<void>()
+    const snapshots: Array<{ toolCalls: { tool: string; status: string }[] }> = []
+    const recordingCtx: Tool.Context = {
+      ...ctx,
+      metadata: (val: any) =>
+        Effect.sync(() => {
+          snapshots.push(val.metadata)
+          if (val.metadata.toolCalls.some((call: { status: string }) => call.status === "running")) running.resolve()
+        }),
+    }
+    const tool = await build({
+      greeter_hello: mcpTool("hello", async () => {
+        await release.promise
+        return { content: [{ type: "text", text: "hi" }] }
+      }),
+    })
+
+    const execution = Effect.runPromise(
+      tool.execute({ code: "await tools.greeter.hello({}); return 'done'" }, recordingCtx),
+    )
+    await running.promise
+    release.resolve()
+    await execution
+
+    expect(snapshots).toContainEqual({ toolCalls: [{ tool: "greeter.hello", status: "running" }] })
+    expect(snapshots.at(-1)).toEqual({ toolCalls: [{ tool: "greeter.hello", status: "completed" }] })
+  })
+
+  test("discards an in-flight progress publish before the final snapshot", async () => {
+    const childRelease = Promise.withResolvers<void>()
+    const publishStarted = Promise.withResolvers<void>()
+    const snapshots: Array<{ toolCalls: { tool: string; status: string }[] }> = []
+    let attempts = 0
+    const recordingCtx: Tool.Context = {
+      ...ctx,
+      metadata: (val: any) => {
+        attempts++
+        if (attempts > 1) return Effect.sync(() => void snapshots.push(val.metadata))
+        return Effect.sync(() => publishStarted.resolve()).pipe(Effect.andThen(Effect.never))
+      },
+    }
+    const tool = await build({
+      greeter_hello: mcpTool("hello", async () => {
+        await childRelease.promise
+        return { content: [{ type: "text", text: "hi" }] }
+      }),
+    })
+
+    const execution = Effect.runPromise(
+      tool.execute({ code: "await tools.greeter.hello({}); return 'done'" }, recordingCtx),
+    )
+    await publishStarted.promise
+    childRelease.resolve()
+    const result = await execution
+
+    expect(snapshots).toEqual([{ toolCalls: [{ tool: "greeter.hello", status: "completed" }] }])
+    expect(result.metadata.toolCalls).toEqual([{ tool: "greeter.hello", status: "completed" }])
+  })
+
+  test("coalesces metadata for a burst of child calls", async () => {
+    const snapshots: Array<{ toolCalls: { tool: string; status: string }[] }> = []
+    const recordingCtx: Tool.Context = {
+      ...ctx,
+      metadata: (val: any) => Effect.sync(() => void snapshots.push(val.metadata)),
+    }
+    const tool = await build({
+      greeter_hello: mcpTool("hello", () => ({ content: [{ type: "text", text: "hi" }] })),
+    })
+    const calls = Array.from({ length: 20 }, () => "tools.greeter.hello({})").join(",")
+
+    const result = await Effect.runPromise(
+      tool.execute({ code: `await Promise.all([${calls}]); return 'done'` }, recordingCtx),
+    )
+
+    expect(snapshots.length).toBeLessThan(40)
+    expect(snapshots.at(-1)?.toolCalls).toHaveLength(20)
+    expect(snapshots.at(-1)?.toolCalls.every((call) => call.status === "completed")).toBe(true)
+    expect(result.metadata.toolCalls).toHaveLength(20)
+    expect(result.metadata.toolCalls.every((call) => call.status === "completed")).toBe(true)
+  })
+
+  test("continues publishing after a transient metadata defect", async () => {
+    const running = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const snapshots: Array<{ toolCalls: { tool: string; status: string }[] }> = []
+    let attempts = 0
+    const recordingCtx: Tool.Context = {
+      ...ctx,
+      metadata: (val: any) => {
+        attempts++
+        if (attempts === 1) return Effect.die("transient metadata failure")
+        return Effect.sync(() => {
+          snapshots.push(val.metadata)
+          if (val.metadata.toolCalls.some((call: { status: string }) => call.status === "running")) running.resolve()
+        })
+      },
+    }
+    const tool = await build({
+      greeter_hello: mcpTool("hello", async () => {
+        await release.promise
+        return { content: [{ type: "text", text: "hi" }] }
+      }),
+    })
+
+    const execution = Effect.runPromise(
+      tool.execute({ code: "await tools.greeter.hello({}); return 'done'" }, recordingCtx),
+    )
+    await running.promise
+    release.resolve()
+    const result = await execution
+
+    expect(attempts).toBeGreaterThanOrEqual(3)
+    expect(snapshots.at(-1)).toEqual({ toolCalls: [{ tool: "greeter.hello", status: "completed" }] })
+    expect(result.metadata.toolCalls).toEqual([{ tool: "greeter.hello", status: "completed" }])
   })
 
   test("marks a failed child call as error in the live metadata", async () => {
@@ -603,6 +721,7 @@ describe("code mode execute", () => {
 
   test("cancelling via ctx.abort interrupts the running program", async () => {
     const controller = new AbortController()
+    const snapshots: Array<{ toolCalls: { tool: string; status: string }[] }> = []
     const tool = await build({
       host_trigger: mcpTool("trigger", () => {
         controller.abort()
@@ -612,12 +731,62 @@ describe("code mode execute", () => {
     const output = await Effect.runPromise(
       tool.execute(
         { code: "try { await tools.host.trigger({}) } catch {} while (true) {}" },
-        { ...ctx, abort: controller.signal },
+        {
+          ...ctx,
+          abort: controller.signal,
+          metadata: (val: any) => Effect.sync(() => void snapshots.push(val.metadata)),
+        },
       ),
     )
     expect(output.output).toBe("Execution cancelled.")
     expect(output.metadata.error).toBe(true)
     expect(output.metadata.toolCalls).toEqual([{ tool: "host.trigger", status: "running" }])
+    expect(snapshots.at(-1)).toEqual({ toolCalls: [{ tool: "host.trigger", status: "running" }] })
+  })
+
+  test("cancelling via ctx.abort does not wait indefinitely for final metadata", async () => {
+    const controller = new AbortController()
+    const tool = await build({
+      host_trigger: mcpTool("trigger", () => {
+        controller.abort()
+        return new Promise(() => {})
+      }),
+    })
+
+    const output = await Effect.runPromise(
+      tool.execute(
+        { code: "await tools.host.trigger({})" },
+        { ...ctx, abort: controller.signal, metadata: () => Effect.never },
+      ),
+    )
+
+    expect(output.output).toBe("Execution cancelled.")
+    expect(output.metadata).toMatchObject({ toolCalls: [{ tool: "host.trigger", status: "running" }], error: true })
+  })
+
+  test("a late ctx.abort interrupts a stalled final metadata publish", async () => {
+    const controller = new AbortController()
+    const publishStarted = Promise.withResolvers<void>()
+    const tool = await build({
+      host_complete: mcpTool("complete", () => ({ content: [{ type: "text", text: "done" }] })),
+    })
+
+    const execution = Effect.runPromise(
+      tool.execute(
+        { code: "return await tools.host.complete({})" },
+        {
+          ...ctx,
+          abort: controller.signal,
+          metadata: () => Effect.sync(() => publishStarted.resolve()).pipe(Effect.andThen(Effect.never)),
+        },
+      ),
+    )
+    await publishStarted.promise
+    controller.abort()
+    const output = await execution
+
+    expect(output.output).toBe("done")
+    expect(output.metadata.toolCalls).toEqual([{ tool: "host.complete", status: "completed" }])
   })
 
   test("a pre-aborted signal cancels before the program runs", async () => {
