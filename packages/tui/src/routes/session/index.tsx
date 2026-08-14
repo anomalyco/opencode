@@ -149,6 +149,7 @@ export function Session() {
     await writeFile(file, content)
   }
   const route = useRouteData("session")
+  const sessionID = route.sessionID
   const { navigate } = useRoute()
   const data = useData()
   const local = useLocal()
@@ -336,9 +337,11 @@ export function Session() {
   let scroll: ScrollBoxRenderable
   onCleanup(() => {
     if (!scroll || scroll.isDestroyed) return
-    sessionTabs.setScrollPosition(
-      route.sessionID,
-      config.experimental?.tab_scroll === true && isAwayFromBottom() ? scroll.scrollTop : undefined,
+    sessionTabs.setScrollOffset(
+      sessionID,
+      config.experimental?.tab_scroll === true && isAwayFromBottom()
+        ? scroll.scrollHeight - scroll.viewport.height - scroll.scrollTop
+        : undefined,
     )
   })
   const [prompt, setPrompt] = createSignal<PromptRef>()
@@ -403,18 +406,21 @@ export function Session() {
       if (!scroll || scroll.isDestroyed) return
       const away = isAwayFromBottom()
       setAwayFromBottom(away)
-      if (!away) sessionTabs.setScrollPosition(route.sessionID, undefined)
+      sessionTabs.setScrollOffset(
+        sessionID,
+        away ? scroll.scrollHeight - scroll.viewport.height - scroll.scrollTop : undefined,
+      )
     })
   }
   function restoreScrollPosition(sessionID: string) {
-    const position = config.experimental?.tab_scroll === true ? sessionTabs.scrollPosition(sessionID) : undefined
-    if (position === undefined) {
+    const offset = config.experimental?.tab_scroll === true ? sessionTabs.scrollOffset(sessionID) : undefined
+    if (offset === undefined) {
       scroll.scrollTo(scroll.scrollHeight)
       setAwayFromBottom(false)
       return
     }
     ensureAllRows(() => {
-      scroll.scrollTo(position)
+      scroll.scrollTo(scroll.scrollHeight - scroll.viewport.height - offset)
       updateAwayFromBottom()
     })
   }
@@ -528,7 +534,7 @@ export function Session() {
   function toBottom() {
     clearMessageNavigation()
     setAwayFromBottom(false)
-    sessionTabs.setScrollPosition(route.sessionID, undefined)
+    sessionTabs.setScrollOffset(route.sessionID, undefined)
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
       scroll.scrollTo(scroll.scrollHeight)

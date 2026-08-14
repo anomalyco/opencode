@@ -66,11 +66,11 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     let history: SessionTabHistory = { entries: [], index: -1 }
     // User-closed tabs eligible for reopening; in-memory like history, deleted sessions pruned.
     let closedTabs: ClosedSessionTab[] = []
-    const scrollPositions = new Map<string, number>()
+    const scrollOffsets = new Map<string, number>()
 
     createEffect(() => {
       if (config.experimental?.tab_scroll === true) return
-      scrollPositions.clear()
+      scrollOffsets.clear()
     })
 
     function state() {
@@ -237,7 +237,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
 
     function remove(sessionID: string, navigate: boolean) {
       const target = root(sessionID)
-      scrollPositions.delete(target)
+      scrollOffsets.delete(target)
       const closed = closeSessionTab(state().tabs, target)
       const selected = navigate && current() === target
       if (closed.tabs === state().tabs && !selected) return
@@ -269,18 +269,18 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       },
       current,
       status,
-      scrollPosition(sessionID: string) {
+      scrollOffset(sessionID: string) {
         const target = root(sessionID)
         if (!state().tabs.some((tab) => tab.sessionID === target)) return
-        return scrollPositions.get(target)
+        return scrollOffsets.get(target)
       },
-      setScrollPosition(sessionID: string, position: number | undefined) {
+      setScrollOffset(sessionID: string, offset: number | undefined) {
         const target = root(sessionID)
-        if (position === undefined || !state().tabs.some((tab) => tab.sessionID === target)) {
-          scrollPositions.delete(target)
+        if (offset === undefined || !state().tabs.some((tab) => tab.sessionID === target)) {
+          scrollOffsets.delete(target)
           return
         }
-        scrollPositions.set(target, position)
+        scrollOffsets.set(target, offset)
       },
       select(sessionID: string) {
         if (!enabled()) return
