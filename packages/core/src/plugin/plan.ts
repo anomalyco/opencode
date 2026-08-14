@@ -1,7 +1,7 @@
 export * as PlanPlugin from "./plan.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define, type Context } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Agent } from "../agent.js"
 import { SessionEvent } from "../session/event.js"
@@ -40,35 +40,47 @@ export const Plugin = define({
 
     yield* ctx.event.subscribe().pipe(
       Stream.filter(
-        (event): event is SessionEvent.Created | SessionEvent.AgentSelected =>
-          event.type === "session.created" || event.type === "session.agent.selected",
+        (event): event is SessionEvent.Created | SessionEvent.AgentSelected | SessionEvent.Compaction.Ended =>
+          event.type === "session.created" ||
+          event.type === "session.agent.selected" ||
+          event.type === "session.compaction.ended",
       ),
-      Stream.runForEach((event) => {
-        const text = reminder(event)
-        if (!text) return Effect.void
-        return ctx.session
-          .synthetic({
+      Stream.runForEach((event) =>
+        Effect.gen(function* () {
+          const text = yield* reminder(ctx.session, event)
+          if (!text) return
+          yield* ctx.session.synthetic({
             sessionID: event.data.sessionID,
             text,
             resume: false,
           })
-          .pipe(
-            Effect.catchCause((cause) =>
-              Effect.logWarning("failed to inject Plan mode reminder", { sessionID: event.data.sessionID, cause }),
-            ),
-          )
-      }),
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("failed to inject Plan mode reminder", { sessionID: event.data.sessionID, cause }),
+          ),
+        ),
+      ),
       Effect.forkScoped({ startImmediately: true }),
     )
   }),
 })
 
-function reminder(event: SessionEvent.Created | SessionEvent.AgentSelected) {
+const reminder = Effect.fnUntraced(function* (
+  session: Context["session"],
+  event: SessionEvent.Created | SessionEvent.AgentSelected | SessionEvent.Compaction.Ended,
+) {
   if (event.type === "session.created") {
     if (event.data.agent !== plan) return
+    return enter
+  }
+  if (event.type === "session.compaction.ended") {
+    // Compaction cuts the transcript at the checkpoint, dropping any earlier enter
+    // reminder, so re-assert Plan mode when the session is still on the plan agent.
+    const info = yield* session.get({ sessionID: event.data.sessionID })
+    if (info.agent !== plan) return
     return enter
   }
   if (event.data.agent === event.data.previous) return
   if (event.data.agent === plan) return enter
   if (event.data.previous === plan) return leave
-}
+})
