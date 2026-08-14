@@ -116,13 +116,13 @@ export function FormPrompt(props: {
     const width = fields().reduce((sum, item) => sum + truncate(formLabel(item), 24).length + 5, "Submit".length + 3)
     return width <= dimensions().width - 8
   })
-  const answered = createMemo(
-    () =>
-      fields().filter((item) => {
-        const value = store.answers[item.key]
-        return value !== undefined
-      }).length,
-  )
+  const completed = (item: FormField) => {
+    const value = store.answers[item.key]
+    if (value === undefined) return false
+    if (item.type === "external") return value === true
+    return formValidateValue(item, value) === undefined
+  }
+  const answered = createMemo(() => fields().filter(completed).length)
   const field = createMemo(() => fields()[store.tab])
   const answerField = createMemo(() => {
     const current = field()
@@ -528,7 +528,7 @@ export function FormPrompt(props: {
       },
       {
         bind: "escape",
-        title: "Cancel answer edit",
+        title: textual() ? "Dismiss form" : "Close answer edit",
         group: "Form",
         run: () => {
           if (textual()) {
@@ -749,7 +749,7 @@ export function FormPrompt(props: {
             <For each={fields()}>
               {(item, index) => {
                 const isTab = () => index() === store.tab
-                const isAnswered = () => store.answers[item.key] !== undefined
+                const isAnswered = () => completed(item)
                 const color = () =>
                   isTab()
                     ? theme.text.default
@@ -1075,7 +1075,7 @@ export function FormPrompt(props: {
               {"⇆"} <span style={{ fg: theme.text.subdued }}>tab</span>
             </text>
           </Show>
-          <Show when={!confirm() && !textual() && !externalField()}>
+          <Show when={!confirm() && !textual() && !externalField() && !store.editing}>
             <text fg={theme.text.default}>
               {"↑↓"} <span style={{ fg: theme.text.subdued }}>select</span>
             </text>
@@ -1101,7 +1101,7 @@ export function FormPrompt(props: {
             </text>
           </Show>
           <text fg={theme.text.default} onMouseUp={cancel}>
-            esc <span style={{ fg: theme.text.subdued }}>dismiss</span>
+            esc <span style={{ fg: theme.text.subdued }}>{store.editing && !textual() ? "close" : "dismiss"}</span>
           </text>
         </box>
         <Show when={store.error}>

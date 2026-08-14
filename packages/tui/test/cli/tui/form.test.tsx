@@ -316,6 +316,8 @@ test("enter on an empty custom multiselect option clearly enters editing", async
     prompt.app.mockInput.pressEnter()
     await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
     await prompt.app.waitForFrame((frame) => frame.includes("[✓] Type your own answer") && frame.includes("enter done"))
+    expect(prompt.app.captureCharFrame()).toContain("esc close")
+    expect(prompt.app.captureCharFrame()).not.toContain("↑↓ select")
 
     prompt.app.mockInput.pressEscape()
     await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor === null)
@@ -354,7 +356,7 @@ test("defers multiselect validation until submission", async () => {
     prompt.app.mockInput.pressEnter()
     prompt.app.mockInput.pressEnter()
     prompt.app.mockInput.pressArrow("right")
-    await prompt.app.waitForFrame((frame) => frame.includes("[ ] Now"))
+    await prompt.app.waitForFrame((frame) => frame.includes("□ targets") && frame.includes("[ ] Now"))
     expect(prompt.app.captureCharFrame()).not.toContain("Select at least")
 
     prompt.app.mockInput.pressArrow("right")
