@@ -3,10 +3,10 @@
   "upstreamRemote": "anomalyco/opencode",
   "note": "Machine-readable inventory of everything this fork adds on top of upstream. Drives `bun run fork:verify` (run after every sync to prove nothing was silently dropped) and `bun run sync:check` (detect when upstream has moved past our baseline). Update `baseline` after each successful sync. Keep the human-readable rationale in FORK_WORKFLOW.md in step with this file.",
   "baseline": {
-    "upstreamRef": "91df88323196b13b099911ad7f0660ed3310f527",
+    "upstreamRef": "4643e65ad6334de3e4e68dedc201d5fbb828c9fe",
     "upstreamBranch": "upstream/dev",
-    "syncedAt": "2026-08-13",
-    "forkTag": "fork/2026-08-13.1",
+    "syncedAt": "2026-08-14",
+    "forkTag": "fork/2026-08-14.1",
     "comment": "Last upstream commit fully merged into dev. sync:check compares upstream/dev against this ref. Bump it (and forkTag) after every sync."
   },
   "owned": [
@@ -162,15 +162,20 @@
     "packages/tui/test/ui/dialog-select-footer.test.ts"
   ],
   "_ownedRemoved_2026-08-14": {
-    "note": "packages/opencode/src/util/sync-log.ts was deleted in the origin/dev merge — confirmed intentional, not a merge regression. It was added by 21c1ac9dd6 to give non-Effect call sites (provider.ts, local/placement.ts) a TUI-safe logger after the core/util/log shim was deleted. The dev-side design solved the same problem differently: those helpers now return outcomes (PickOutcome, DiscoveryResult.warnings) and the Effect caller logs (tool/task.ts, provider.ts). That left zero call sites, so the file was removed rather than carried as dead code.",
-    "commits": ["21c1ac9dd6"]
+    "note": "packages/opencode/src/util/sync-log.ts was deleted in the origin/dev merge \u2014 confirmed intentional, not a merge regression. It was added by 21c1ac9dd6 to give non-Effect call sites (provider.ts, local/placement.ts) a TUI-safe logger after the core/util/log shim was deleted. The dev-side design solved the same problem differently: those helpers now return outcomes (PickOutcome, DiscoveryResult.warnings) and the Effect caller logs (tool/task.ts, provider.ts). That left zero call sites, so the file was removed rather than carried as dead code.",
+    "commits": [
+      "21c1ac9dd6"
+    ]
   },
   "_ownedRemoved_2026-08-13": {
-    "note": "packages/core/src/util/log.ts (the legacy-logger compatibility shim, upstream's own module removed in #31310) was deleted 2026-08-12 — confirmed intentional, not a merge regression: upstream now has its own logger, making the shim genuinely obsolete."
+    "note": "packages/core/src/util/log.ts (the legacy-logger compatibility shim, upstream's own module removed in #31310) was deleted 2026-08-12 \u2014 confirmed intentional, not a merge regression: upstream now has its own logger, making the shim genuinely obsolete."
   },
   "_ownedRemoved_2026-08-12": {
     "note": "auto-reply.ts, automation-features.ts, pattern-detection.ts (+ its two CLI commands), scheduler.ts, and hook.ts were deliberately deleted 2026-08-07 (commits 88731dfc6f, 0530944759) for being dead/broken code, not lost in a merge. fork:verify was reporting all 7 as regressions because this manifest was never updated at deletion time. Removed here, not re-added.",
-    "commits": ["88731dfc6f", "0530944759"]
+    "commits": [
+      "88731dfc6f",
+      "0530944759"
+    ]
   },
   "patched": [
     {
