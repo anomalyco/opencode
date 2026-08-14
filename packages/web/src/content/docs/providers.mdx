@@ -1610,6 +1610,49 @@ export NVIDIA_API_KEY=nvapi-your-key-here
 
 ---
 
+### Neon AI Gateway
+
+Neon AI Gateway provides access to models from OpenAI, Google, and other providers using a Neon credential.
+
+:::note
+Neon AI Gateway is currently in beta. It requires a paid Neon plan and a project in AWS US East (Ohio), `aws-us-east-2`.
+:::
+
+1. In the [Neon Console](https://console.neon.tech), select your branch, open **Credentials** under **APP BACKEND**, and create a credential with the `ai_gateway:invoke` scope.
+
+2. Copy the branch's AI Gateway base URL from the **AI Gateway** page and set it in your environment.
+
+   ```bash
+   export NEON_AI_GATEWAY_BASE_URL=https://br-your-branch-api.ai.c-2.us-east-2.aws.neon.tech
+   ```
+
+   The base URL is branch-specific and should not include `/v1`.
+
+3. Run the `/connect` command and search for **Neon**.
+
+   ```txt
+   /connect
+   ```
+
+4. Enter the Neon credential you created.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+See the [Neon AI Gateway docs](https://neon.com/docs/ai-gateway/overview) for more details.
+
+---
+
 ### Ollama
 
 You can configure opencode to use local models through Ollama.
