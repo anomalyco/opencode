@@ -48,6 +48,9 @@ export default defineWorkersConfig({
       // @effect/platform-node's barrel eagerly imports its undici HttpClient;
       // the workerd profile only ever uses FetchHttpClient.
       { find: /^undici$/, replacement: mockProxy },
+      // The same barrel can pull in its Redis implementation transitively;
+      // the workerd profile has no Redis services.
+      { find: /^ioredis$/, replacement: mockProxy },
       // mime-types requires mime-db's JSON database at require time; keep the
       // lookup surface but back it with a static shim.
       { find: /^mime-types$/, replacement: new URL("./test/shims/mime-types.mjs", import.meta.url).pathname },
