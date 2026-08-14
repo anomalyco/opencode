@@ -1359,6 +1359,12 @@ const layer = Layer.effect(
             if (!cause.reasons.some(Cause.isDieReason)) return Effect.failCause(cause)
             return Effect.gen(function* () {
               const error = new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject()
+              const assistant = yield* lastAssistant(input.sessionID)
+              if (assistant.info.role === "assistant") {
+                assistant.info.error = error
+                assistant.info.finish = "error"
+                yield* sessions.updateMessage(assistant.info)
+              }
               yield* Effect.logError("session run failed with defect", {
                 "session.id": input.sessionID,
                 cause,
