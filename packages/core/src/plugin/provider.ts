@@ -15,6 +15,7 @@ import { GoogleVertexPlugin } from "./provider/google-vertex.js"
 import { GroqPlugin } from "./provider/groq.js"
 import { KiloPlugin } from "./provider/kilo.js"
 import { LLMGatewayPlugin } from "./provider/llmgateway.js"
+import { LMStudioPlugin } from "./provider/lmstudio.js"
 import { MistralPlugin } from "./provider/mistral.js"
 import { NvidiaPlugin } from "./provider/nvidia.js"
 import { OpenAIPlugin } from "./provider/openai.js"
@@ -48,6 +49,7 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   GroqPlugin,
   KiloPlugin,
   LLMGatewayPlugin,
+  LMStudioPlugin,
   MistralPlugin,
   NvidiaPlugin,
   OpencodePlugin,

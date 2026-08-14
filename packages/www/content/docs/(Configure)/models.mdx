@@ -162,6 +162,20 @@ provider and model configuration. An unknown variant fails model resolution inst
 
 ### Local models
 
+OpenCode automatically discovers language models from an unauthenticated LM Studio server listening on its default
+address, `http://127.0.0.1:1234`. Discovered models use the `lmstudio` provider ID and LM Studio's model key:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-4-26b-a4b",
+}
+```
+
+OpenCode refreshes the inventory in the background and reads context, vision, and tool-use capabilities from LM
+Studio. Embedding models are excluded because they cannot drive a session. Disable discovery with
+`"plugins": ["-opencode.provider.lmstudio"]`.
+
 For an OpenAI-compatible server, define a provider package, endpoint, and at least one model:
 
 ```jsonc title="opencode.jsonc"
@@ -171,7 +185,7 @@ For an OpenAI-compatible server, define a provider package, endpoint, and at lea
   "providers": {
     "local": {
       "name": "Local server",
-      "package": "aisdk:@ai-sdk/openai-compatible",
+      "package": "@opencode-ai/ai/providers/openai-compatible",
       "settings": {
         "baseURL": "http://127.0.0.1:1234/v1",
       },
