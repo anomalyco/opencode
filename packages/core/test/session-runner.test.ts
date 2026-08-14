@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+﻿import { describe, expect, test } from "bun:test"
 import {
   AIError,
   LLMEvent,
@@ -3820,6 +3820,98 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+    it.effect("waits for unrelated database transactions before interrupted settlement", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const { db } = yield* Database.Service
+      const transactionStarted = yield* Deferred.make<void>()
+      const releaseTransaction = yield* Deferred.make<void>()
+      const interruptSettled = yield* Deferred.make<void>()
+      yield* admit(session, "Interrupt during database contention")
+      const stream = yield* TestLLM.gate
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* stream.started
+      const transaction = yield* db
+        .transaction(() =>
+          Deferred.succeed(transactionStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseTransaction))),
+        )
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(transactionStarted)
+      const interrupt = yield* session
+        .interrupt(sessionID)
+        .pipe(Effect.ensuring(Deferred.succeed(interruptSettled, undefined)), Effect.forkChild)
+      yield* Effect.yieldNow
+
+      expect(yield* Deferred.isDone(interruptSettled)).toBe(false)
+
+      yield* Deferred.succeed(releaseTransaction, undefined)
+      yield* Fiber.join(transaction)
+      yield* Fiber.join(interrupt)
+      expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+      expect(requireAssistant(yield* session.context(sessionID))).toMatchObject({
+        finish: "error",
+        error: { type: "aborted", message: "Step interrupted" },
+      })
+    }),
+  )
+
+  it.effect("queues interrupted settlement behind an unrelated transaction", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const { db } = yield* Database.Service
+      const transactionStarted = yield* Deferred.make<void>()
+      const interruptSettled = yield* Deferred.make<void>()
+      yield* admit(session, "Interrupt during long transaction")
+      const stream = yield* TestLLM.gate
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* stream.started
+      // An unrelated session's work holds the shared SQLite transaction permit for a
+      // deterministic amount of work; the interrupted step's terminal publications
+      // queue behind it instead of settling immediately.
+      const transaction = yield* db
+        .transaction(() =>
+          Effect.gen(function* () {
+            yield* Deferred.succeed(transactionStarted, undefined)
+            for (let index = 0; index < 3000; index++) {
+              const id = Session.ID.make(`ses_contention_${index}`)
+              yield* db
+                .insert(SessionTable)
+                .values({
+                  id,
+                  project_id: Project.ID.global,
+                  slug: id,
+                  directory: "/project",
+                  title: "test",
+                  version: "test",
+                })
+                .onConflictDoNothing()
+                .run()
+                .pipe(Effect.orDie)
+            }
+          }),
+        )
+        .pipe(Effect.forkChild)
+      yield* Deferred.await(transactionStarted)
+      const interrupt = yield* session
+        .interrupt(sessionID)
+        .pipe(Effect.ensuring(Deferred.succeed(interruptSettled, undefined)), Effect.forkChild)
+      yield* Effect.yieldNow
+
+      expect(yield* Deferred.isDone(interruptSettled)).toBe(false)
+
+      yield* Fiber.join(transaction)
+      yield* Fiber.join(interrupt)
+      expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+      expect(requireAssistant(yield* session.context(sessionID))).toMatchObject({
+        finish: "error",
+        error: { type: "aborted", message: "Step interrupted" },
+      })
+    }),
+  )
+
+
   it.effect("durably fails blocked local tools when interrupted while awaiting settlement", () =>
     Effect.gen(function* () {
       const session = yield* setup
@@ -5111,3 +5203,8 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 })
+
+
+
+
+

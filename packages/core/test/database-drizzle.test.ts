@@ -4,10 +4,11 @@ import { join } from "node:path"
 import { Database } from "bun:sqlite"
 import { expect, test } from "bun:test"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
+import { sqliteLayer } from "@opencode-ai/core/database/sqlite.bun"
 import { eq, sql } from "drizzle-orm"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { Effect } from "effect"
-import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
+import { Deferred, Effect, Fiber } from "effect"
+import { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
 import { isSqlError } from "effect/unstable/sql/SqlError"
 import { EffectDrizzleSqlite } from "@opencode-ai/core/database/drizzle"
 
@@ -122,6 +123,106 @@ test("preserves failed transaction begin errors", async () => {
         expect(error.reason._tag).toBe("LockTimeoutError")
         expect(error.reason.cause instanceof Error ? error.reason.cause.message : "").toContain("database is locked")
       }).pipe(Effect.provide(SqliteClient.layer({ filename, disableWAL: true })), Effect.scoped),
+    )
+  } finally {
+    if (holder.inTransaction) holder.run("rollback")
+    holder.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("retries locked writes cooperatively once the holding transaction releases", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "effect-drizzle-sqlite-"))
+  const filename = join(dir, "locked.db")
+  const holder = new Database(filename)
+
+  try {
+    holder.run("create table users (id integer primary key autoincrement, name text not null)")
+    holder.run("pragma busy_timeout = 0")
+    holder.run("begin immediate")
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const client = yield* SqlClientService
+        const done = yield* Deferred.make<void>()
+        const insert = yield* client
+          .unsafe("insert into users (name) values (?)", ["Ada"])
+          .values.pipe(Effect.ensuring(Deferred.succeed(done, undefined)), Effect.forkChild)
+        yield* Effect.yieldNow
+
+        // The write is blocked by the holder's write lock and must retry
+        // cooperatively instead of native busy waiting.
+        expect(yield* Deferred.isDone(done)).toBe(false)
+
+        holder.run("rollback")
+        yield* Fiber.join(insert)
+        expect(yield* client.unsafe("select * from users").values).toEqual([[1, "Ada"]])
+      }).pipe(Effect.provide(sqliteLayer({ filename, disableWAL: true })), Effect.scoped),
+    )
+  } finally {
+    if (holder.inTransaction) holder.run("rollback")
+    holder.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("retries locked transaction begins cooperatively once the holding transaction releases", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "effect-drizzle-sqlite-"))
+  const filename = join(dir, "locked.db")
+  const holder = new Database(filename)
+
+  try {
+    holder.run("create table users (id integer primary key autoincrement, name text not null)")
+    holder.run("pragma busy_timeout = 0")
+    holder.run("begin immediate")
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* EffectDrizzleSqlite.makeWithDefaults()
+        yield* db.run(sql`pragma busy_timeout = 0`)
+
+        const done = yield* Deferred.make<void>()
+        const transaction = yield* db
+          .transaction((tx) => tx.insert(users).values({ name: "Ada" }), { behavior: "immediate" })
+          .pipe(Effect.ensuring(Deferred.succeed(done, undefined)), Effect.forkChild)
+        yield* Effect.yieldNow
+
+        // The BEGIN IMMEDIATE fails fast and the statement-level retry re-runs
+        // it until the holder releases the write lock.
+        expect(yield* Deferred.isDone(done)).toBe(false)
+
+        holder.run("rollback")
+        yield* Fiber.join(transaction)
+        expect(yield* db.select().from(users)).toEqual([{ id: 1, name: "Ada" }])
+      }).pipe(Effect.provide(sqliteLayer({ filename, disableWAL: true })), Effect.scoped),
+    )
+  } finally {
+    if (holder.inTransaction) holder.run("rollback")
+    holder.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("reports LockTimeoutError once the bounded statement retry is exhausted", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "effect-drizzle-sqlite-"))
+  const filename = join(dir, "locked.db")
+  const holder = new Database(filename)
+
+  try {
+    holder.run("create table users (id integer primary key autoincrement, name text not null)")
+    holder.run("pragma busy_timeout = 0")
+    holder.run("begin immediate")
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const client = yield* SqlClientService
+        const error = yield* client
+          .unsafe("insert into users (name) values (?)", ["Blocked"])
+          .values.pipe(Effect.flip)
+
+        if (!isSqlError(error)) throw new Error("Expected SqlError")
+        expect(error.reason._tag).toBe("LockTimeoutError")
+      }).pipe(Effect.provide(sqliteLayer({ filename, disableWAL: true })), Effect.scoped),
     )
   } finally {
     if (holder.inTransaction) holder.run("rollback")

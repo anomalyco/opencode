@@ -1,4 +1,4 @@
-export * as Database from "./database.js"
+﻿export * as Database from "./database.js"
 
 import { EffectDrizzleSqlite } from "./drizzle.js"
 import { sqliteLayer, supportsForeignKeyToggle, supportsTuningPragmas } from "#sqlite"
@@ -31,7 +31,7 @@ const databaseLayer = Layer.effect(
     if (supportsTuningPragmas) {
       yield* db.run("PRAGMA journal_mode = WAL")
       yield* db.run("PRAGMA synchronous = NORMAL")
-      yield* db.run("PRAGMA busy_timeout = 5000")
+      yield* db.run("PRAGMA busy_timeout = 0")
       yield* db.run("PRAGMA cache_size = -64000")
       yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
     }
@@ -75,3 +75,4 @@ export function configuredClient(client: Layer.Layer<SqlClient.SqlClient>) {
 }
 
 export const node = configured({ path: ":memory:" })
+
