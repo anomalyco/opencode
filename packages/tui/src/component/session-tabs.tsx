@@ -1001,24 +1001,6 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
       }}
       onMouseDrag={drag}
       onMouseDragEnd={release}
-      renderAfter={function (buffer) {
-        const x = Math.max(0, this.screenX)
-        const y = this.screenY + this.height
-        const width = Math.min(this.width, buffer.width - x)
-        if (y < 0 || y >= buffer.height || width <= 0) return
-        buffer.fillRect(
-          x,
-          y,
-          width,
-          1,
-          RGBA.fromValues(
-            theme.background.default.r,
-            theme.background.default.g,
-            theme.background.default.b,
-            mode() === "light" ? 0.14 : 0.28,
-          ),
-        )
-      }}
     >
       <Show when={layout().before > 0}>
         <text width={sessionTabOverflowWidth(layout().before)} fg={theme.text.subdued} selectable={false}>
