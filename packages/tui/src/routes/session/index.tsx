@@ -338,12 +338,7 @@ export function Session() {
   let scroll: ScrollBoxRenderable
   onCleanup(() => {
     if (!scroll || scroll.isDestroyed) return
-    sessionTabs.setScrollOffset(
-      sessionID,
-      config.experimental?.tab_scroll === true && isAwayFromBottom()
-        ? scroll.scrollHeight - scroll.viewport.height - scroll.scrollTop
-        : undefined,
-    )
+    saveScrollAnchor()
   })
   const [prompt, setPrompt] = createSignal<PromptRef>()
   const bind = (r: PromptRef | undefined) => {
@@ -368,8 +363,10 @@ export function Session() {
   // mount on demand near the top, keeping inactive tabs cheap to tear down. Until the first chunk
   // pins the count, the hidden span derives from the row count, so streaming appends remain visible.
   const [hiddenRows, setHiddenRows] = createSignal<number>()
+  const [visibleRowsEnd, setVisibleRowsEnd] = createSignal<number>()
   const hidden = createMemo(() => Math.max(0, Math.min(hiddenRows() ?? Infinity, rows.length - TRANSCRIPT_TAIL_ROWS)))
-  const visibleRows = createMemo(() => (hidden() === 0 ? rows : rows.slice(hidden())))
+  const visibleEnd = createMemo(() => Math.max(hidden(), Math.min(visibleRowsEnd() ?? rows.length, rows.length)))
+  const visibleRows = createMemo(() => rows.slice(hidden(), visibleEnd()))
   let revealingOlderRows = false
   const revealOlderRows = (scrollBy = 0) => {
     const current = hidden()
@@ -391,14 +388,37 @@ export function Session() {
     })
     return true
   }
+  let revealingNewerRows = false
+  const revealNewerRows = (scrollBy = 0) => {
+    const current = visibleEnd()
+    if (
+      revealingNewerRows ||
+      current === rows.length ||
+      !scroll ||
+      scroll.isDestroyed ||
+      scroll.scrollTop + scroll.viewport.height < scroll.scrollHeight - scroll.viewport.height
+    )
+      return false
+    revealingNewerRows = true
+    const next = Math.min(rows.length, current + TRANSCRIPT_BACKFILL_CHUNK)
+    setVisibleRowsEnd(next === rows.length ? undefined : next)
+    afterLayout(() => {
+      revealingNewerRows = false
+      scroll.scrollBy(scrollBy)
+      updateAwayFromBottom()
+    })
+    return true
+  }
   /** Message navigation needs the full transcript mounted before walking or jumping. */
   const ensureAllRows = (continuation: () => void) => {
-    if (hidden() === 0) return continuation()
+    if (hidden() === 0 && visibleEnd() === rows.length) return continuation()
     setHiddenRows(0)
+    setVisibleRowsEnd(undefined)
     afterLayout(continuation)
   }
 
   function isAwayFromBottom() {
+    if (visibleEnd() < rows.length) return true
     return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height) - 1
   }
   function updateAwayFromBottom() {
@@ -407,23 +427,51 @@ export function Session() {
       if (!scroll || scroll.isDestroyed) return
       const away = isAwayFromBottom()
       setAwayFromBottom(away)
-      sessionTabs.setScrollOffset(
-        sessionID,
-        away ? scroll.scrollHeight - scroll.viewport.height - scroll.scrollTop : undefined,
-      )
+      saveScrollAnchor()
     })
   }
+  function saveScrollAnchor() {
+    if (config.experimental?.tab_scroll !== true || !isAwayFromBottom()) {
+      sessionTabs.setScrollAnchor(sessionID, undefined)
+      return
+    }
+    const boundaryIDs = new Set(boundaries().filter((id) => id !== undefined))
+    const visible = scroll
+      .getChildren()
+      .filter((child) => child.id && boundaryIDs.has(child.id))
+      .map((child) => ({ messageID: child.id!, screenY: child.y - scroll.viewport.y }))
+    const anchor = visible.findLast((item) => item.screenY <= 0) ?? visible[0]
+    if (anchor) sessionTabs.setScrollAnchor(sessionID, anchor)
+  }
   function restoreScrollPosition(sessionID: string) {
-    const offset = config.experimental?.tab_scroll === true ? sessionTabs.scrollOffset(sessionID) : undefined
-    if (offset === undefined) {
+    const anchor = config.experimental?.tab_scroll === true ? sessionTabs.scrollAnchor(sessionID) : undefined
+    const index = anchor ? boundaries().indexOf(anchor.messageID) : -1
+    if (!anchor || index === -1) {
       scroll.scrollTo(scroll.scrollHeight)
       setAwayFromBottom(false)
       return
     }
-    ensureAllRows(() => {
-      scroll.scrollTo(scroll.scrollHeight - scroll.viewport.height - offset)
-      updateAwayFromBottom()
-    })
+    setHiddenRows(Math.max(0, index - TRANSCRIPT_BACKFILL_CHUNK))
+    const end = Math.min(rows.length, index + TRANSCRIPT_BACKFILL_CHUNK)
+    setVisibleRowsEnd(end === rows.length ? undefined : end)
+    scroll.stickyScroll = false
+    const restore = () =>
+      afterLayout(() => {
+        const boundary = scroll.getRenderable(anchor.messageID)
+        if (!boundary) return
+        const contentY = scroll.scrollTop + boundary.y - scroll.viewport.y
+        const target = contentY - anchor.screenY
+        const maximum = Math.max(0, scroll.scrollHeight - scroll.viewport.height)
+        if (target > maximum && visibleEnd() < rows.length) {
+          const next = Math.min(rows.length, visibleEnd() + TRANSCRIPT_BACKFILL_CHUNK)
+          setVisibleRowsEnd(next === rows.length ? undefined : next)
+          restore()
+          return
+        }
+        scroll.scrollTo(target)
+        updateAwayFromBottom()
+      })
+    restore()
   }
 
   createEffect(() => {
@@ -535,19 +583,28 @@ export function Session() {
   function toBottom() {
     clearMessageNavigation()
     setAwayFromBottom(false)
-    sessionTabs.setScrollOffset(route.sessionID, undefined)
+    sessionTabs.setScrollAnchor(route.sessionID, undefined)
+    setHiddenRows(undefined)
+    setVisibleRowsEnd(undefined)
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
+      scroll.stickyScroll = true
       scroll.scrollTo(scroll.scrollHeight)
     }, 50)
   }
 
   function moveTranscript(delta: number) {
     clearMessageNavigation()
-    if (delta >= 0 || !revealOlderRows(delta)) {
-      scroll.scrollBy(delta)
-      updateAwayFromBottom()
+    if (delta < 0 && revealOlderRows(delta)) {
+      dialog.clear()
+      return
     }
+    if (delta > 0 && revealNewerRows(delta)) {
+      dialog.clear()
+      return
+    }
+    scroll.scrollBy(delta)
+    updateAwayFromBottom()
     dialog.clear()
   }
 
@@ -1091,6 +1148,7 @@ export function Session() {
                 scrollAcceleration={scrollAcceleration()}
                 onMouseScroll={(event) => {
                   if (event.scroll?.direction === "up" && revealOlderRows()) return
+                  if (event.scroll?.direction === "down" && revealNewerRows()) return
                   updateAwayFromBottom()
                 }}
               >

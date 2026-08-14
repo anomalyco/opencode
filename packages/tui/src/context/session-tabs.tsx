@@ -36,6 +36,11 @@ type PersistedState = {
   cwd: Record<string, TabsState>
 }
 
+type ScrollAnchor = {
+  messageID: string
+  screenY: number
+}
+
 const empty = (): TabsState => ({ tabs: [], unread: {} })
 
 // Deliberately after connect settles: the visible session's mount syncs win the first slots.
@@ -66,11 +71,11 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     let history: SessionTabHistory = { entries: [], index: -1 }
     // User-closed tabs eligible for reopening; in-memory like history, deleted sessions pruned.
     let closedTabs: ClosedSessionTab[] = []
-    const scrollOffsets = new Map<string, number>()
+    const scrollAnchors = new Map<string, ScrollAnchor>()
 
     createEffect(() => {
       if (config.experimental?.tab_scroll === true) return
-      scrollOffsets.clear()
+      scrollAnchors.clear()
     })
 
     function state() {
@@ -237,7 +242,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
 
     function remove(sessionID: string, navigate: boolean) {
       const target = root(sessionID)
-      scrollOffsets.delete(target)
+      scrollAnchors.delete(target)
       const closed = closeSessionTab(state().tabs, target)
       const selected = navigate && current() === target
       if (closed.tabs === state().tabs && !selected) return
@@ -269,18 +274,18 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       },
       current,
       status,
-      scrollOffset(sessionID: string) {
+      scrollAnchor(sessionID: string) {
         const target = root(sessionID)
         if (!state().tabs.some((tab) => tab.sessionID === target)) return
-        return scrollOffsets.get(target)
+        return scrollAnchors.get(target)
       },
-      setScrollOffset(sessionID: string, offset: number | undefined) {
+      setScrollAnchor(sessionID: string, anchor: ScrollAnchor | undefined) {
         const target = root(sessionID)
-        if (offset === undefined || !state().tabs.some((tab) => tab.sessionID === target)) {
-          scrollOffsets.delete(target)
+        if (anchor === undefined || !state().tabs.some((tab) => tab.sessionID === target)) {
+          scrollAnchors.delete(target)
           return
         }
-        scrollOffsets.set(target, offset)
+        scrollAnchors.set(target, anchor)
       },
       select(sessionID: string) {
         if (!enabled()) return
