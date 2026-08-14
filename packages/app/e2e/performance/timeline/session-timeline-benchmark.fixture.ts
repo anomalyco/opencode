@@ -10,7 +10,7 @@ const sessionID = "ses_timeline_state_regression"
 const userMessageID = "msg_user_regression"
 const assistantMessageID = "msg_assistant_regression"
 const editPartID = "prt_0001_edit"
-export const textPartID = "prt_9999_text"
+export const textPartID = `${assistantMessageID}:text:0`
 const title = "Timeline collapse state regression"
 const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
 
@@ -64,14 +64,6 @@ const editPart = {
     },
     time: { start: 1700000001000, end: 1700000002000 },
   },
-}
-
-const streamedTextPart = {
-  id: textPartID,
-  sessionID,
-  messageID: assistantMessageID,
-  type: "text",
-  text: "Streaming added a later assistant text part.",
 }
 
 const assistantMessage = {
@@ -187,30 +179,40 @@ export async function setupTimelineBenchmark(
   }
 }
 
-export function buildInitialStreamEvent(deltaCount: number): EventPayload {
-  return {
-    directory,
-    payload: {
-      type: "message.part.updated",
-      properties: {
-        part: {
-          ...streamedTextPart,
-          text: `Streaming${streamChunk(0, deltaCount + 1)}\n\n\`\`\`ts\nconst initial = true\n\`\`\``,
+export function buildInitialStreamEvent(deltaCount: number): EventPayload[] {
+  return [
+    {
+      directory,
+      payload: {
+        type: "session.text.started",
+        durable: { aggregateID: sessionID, seq: 1, version: 1 },
+        properties: { sessionID, assistantMessageID, ordinal: 0 },
+      },
+    },
+    {
+      directory,
+      payload: {
+        type: "session.text.delta",
+        properties: {
+          sessionID,
+          assistantMessageID,
+          ordinal: 0,
+          delta: `Streaming${streamChunk(0, deltaCount + 1)}\n\n\`\`\`ts\nconst initial = true\n\`\`\``,
         },
       },
     },
-  }
+  ]
 }
 
 export function buildStreamDeltaEvents(deltaCount: number): EventPayload[] {
   return Array.from({ length: deltaCount }, (_, index) => ({
     directory,
     payload: {
-      type: "message.part.delta",
+      type: "session.text.delta",
       properties: {
-        messageID: assistantMessageID,
-        partID: textPartID,
-        field: "text",
+        sessionID,
+        assistantMessageID,
+        ordinal: 0,
         delta: streamChunk(index + 1, deltaCount + 1),
       },
     },

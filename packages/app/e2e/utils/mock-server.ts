@@ -876,13 +876,14 @@ function currentEvent(input: unknown) {
   if (!input || typeof input !== "object" || !("payload" in input)) return input
   const envelope = input as { directory?: string; payload?: unknown }
   if (!envelope.payload || typeof envelope.payload !== "object") return input
-  const payload = envelope.payload as { id?: string; type?: string; properties?: unknown }
+  const payload = envelope.payload as { id?: string; type?: string; properties?: unknown; durable?: unknown }
   if (!payload.type) return input
   return {
     id: payload.id ?? `evt_mock_${Date.now()}`,
     created: Date.now(),
     type: payload.type,
     data: payload.properties ?? {},
+    ...(payload.durable ? { durable: payload.durable } : {}),
     location: envelope.directory && envelope.directory !== "global" ? { directory: envelope.directory } : undefined,
   }
 }

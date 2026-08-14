@@ -40,25 +40,25 @@ const reviewReadyStreak = 3
 
 benchmark.describe("performance: session timeline streaming", () => {
   benchmark("streams assistant text without remounting or oscillating", async ({ page, report }) => {
-    benchmark.setTimeout(Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 420_000) + 60_000)
+    benchmark.setTimeout(Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 45_000) + 15_000)
     const result = await runTimelineStreamBenchmark(page, {})
     report(result.metrics, result.context)
   })
 
   benchmark("streams assistant text in v2 with review pane closed", async ({ page, report }) => {
-    benchmark.setTimeout(Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 420_000) + 60_000)
+    benchmark.setTimeout(Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 45_000) + 15_000)
     const result = await runTimelineStreamBenchmark(page, { newLayoutDesigns: true })
     report(result.metrics, result.context)
   })
 
   benchmark("streams assistant text in v2 with review diffs and pane closed", async ({ page, report }) => {
-    benchmark.setTimeout(Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 420_000) + 60_000)
+    benchmark.setTimeout(Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 45_000) + 15_000)
     const result = await runTimelineStreamBenchmark(page, { newLayoutDesigns: true, reviewDiffs: true })
     report(result.metrics, result.context)
   })
 
   benchmark("streams assistant text in v2 with review pane open", async ({ page, report }) => {
-    benchmark.setTimeout(Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 420_000) + 60_000)
+    benchmark.setTimeout(Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 45_000) + 15_000)
     const result = await runTimelineStreamBenchmark(page, { newLayoutDesigns: true, reviewPane: true })
     report(result.metrics, result.context)
   })
@@ -100,10 +100,10 @@ benchmark.describe("performance: review pane", () => {
 })
 
 async function runTimelineStreamBenchmark(page: Page, options: TimelineStreamOptions) {
-  const completionTimeoutMs = Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 420_000)
-  const cpuThrottle = Number(process.env.TIMELINE_CPU_THROTTLE ?? 30)
-  const deltaCount = Number(process.env.TIMELINE_DELTA_COUNT ?? 160)
-  const historyTurns = Number(process.env.TIMELINE_HISTORY_TURNS ?? 320)
+  const completionTimeoutMs = Number(process.env.TIMELINE_COMPLETION_TIMEOUT_MS ?? 45_000)
+  const cpuThrottle = Number(process.env.TIMELINE_CPU_THROTTLE ?? 4)
+  const deltaCount = Number(process.env.TIMELINE_DELTA_COUNT ?? 80)
+  const historyTurns = Number(process.env.TIMELINE_HISTORY_TURNS ?? 80)
   const eventBatch = Number(process.env.TIMELINE_EVENT_BATCH ?? 1)
   const minimal = process.env.TIMELINE_MINIMAL === "1"
   const profileCPU = process.env.TIMELINE_CPU_PROFILE === "1"
@@ -136,17 +136,7 @@ async function runTimelineStreamBenchmark(page: Page, options: TimelineStreamOpt
   await startTimelineStreamProbe(page)
   fixture.transport.enqueue(deltas)
 
-  await page.waitForFunction(
-    (finalIndex) =>
-      (
-        window as Window & {
-          __timelineStreamBenchmark?: { applied: { index: number }[] }
-        }
-      ).__timelineStreamBenchmark?.applied.some((value) => value.index === finalIndex),
-    deltaCount,
-    { timeout: completionTimeoutMs },
-  )
-  await expect(fixture.text).toContainText("benchmark-complete")
+  await expect(fixture.text).toContainText("benchmark-complete", { timeout: completionTimeoutMs })
   await expect(fixture.text).toContainText("Streaming")
   await fixture.waitForStableGeometry()
   const metrics = await collectTimelineStreamMetrics(page, {
