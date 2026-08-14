@@ -16,7 +16,7 @@ import { SessionCompaction } from "./compaction"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
-import MAX_STEPS from "../session/prompt/max-steps.txt"
+import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
 import { ToolRegistry } from "@/tool/registry"
 import { MCP } from "../mcp"
 import { LSP } from "@/lsp/lsp"
@@ -1401,7 +1401,10 @@ export const layer = Layer.effect(
               sessionID,
               parentSessionID: session.parentID,
               system,
-              messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
+              messages: [
+                ...modelMsgs,
+                ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : []),
+              ],
               tools,
               model,
               toolChoice: format.type === "json_schema" || forceRequired ? ("required" as const) : undefined,
@@ -1791,34 +1794,38 @@ const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
 const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
 
-export const node = LayerNode.make(layer, [
-  SessionStatus.node,
-  Session.node,
-  Agent.node,
-  Provider.node,
-  SessionProcessor.node,
-  SessionCompaction.node,
-  Plugin.node,
-  Command.node,
-  Config.node,
-  Permission.node,
-  FSUtil.node,
-  MCP.node,
-  LSP.node,
-  ToolRegistry.node,
-  Truncate.node,
-  Image.node,
-  CrossSpawnSpawner.node,
-  Instruction.node,
-  SessionRunState.node,
-  SessionRevert.node,
-  SessionSummary.node,
-  SystemPrompt.node,
-  LLM.node,
-  EventV2Bridge.node,
-  RuntimeFlags.node,
-  AutoMode.node,
-  Database.node,
-])
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [
+    SessionStatus.node,
+    Session.node,
+    Agent.node,
+    Provider.node,
+    SessionProcessor.node,
+    SessionCompaction.node,
+    Plugin.node,
+    Command.node,
+    Config.node,
+    Permission.node,
+    FSUtil.node,
+    MCP.node,
+    LSP.node,
+    ToolRegistry.node,
+    Truncate.node,
+    Image.node,
+    CrossSpawnSpawner.node,
+    Instruction.node,
+    SessionRunState.node,
+    SessionRevert.node,
+    SessionSummary.node,
+    SystemPrompt.node,
+    LLM.node,
+    EventV2Bridge.node,
+    RuntimeFlags.node,
+    AutoMode.node,
+    Database.node,
+  ],
+})
 
 export * as SessionPrompt from "./prompt"
