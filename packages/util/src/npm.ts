@@ -30,15 +30,6 @@ export interface Interface {
     pkg: string,
     options?: { readonly subpaths?: readonly string[] },
   ) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
-  readonly install: (
-    dir: string,
-    input?: {
-      add: {
-        name: string
-        version?: string
-      }[]
-    },
-  ) => Effect.Effect<void, EffectFlock.LockError | InstallFailedError>
   readonly which: (pkg: string, bin?: string) => Effect.Effect<string | undefined>
 }
 
@@ -143,59 +134,6 @@ const layer = Layer.effect(
       return resolveEntryPoint(first.name, first.path, options?.subpaths)
     }, Effect.scoped)
 
-    const install: Interface["install"] = Effect.fn("Npm.install")(function* (dir, input) {
-      const canWrite = yield* afs.access(dir, { writable: true }).pipe(
-        Effect.as(true),
-        Effect.orElseSucceed(() => false),
-      )
-      if (!canWrite) return
-
-      const add = input?.add.map((pkg) => [pkg.name, pkg.version].filter(Boolean).join("@")) ?? []
-      if (
-        yield* Effect.gen(function* () {
-          const nodeModulesExists = yield* afs.existsSafe(path.join(dir, "node_modules"))
-          if (!nodeModulesExists) {
-            yield* reify({ add, dir })
-            return true
-          }
-          return false
-        }).pipe(Effect.withSpan("Npm.checkNodeModules"))
-      )
-        return
-
-      yield* Effect.gen(function* () {
-        const pkg = yield* afs.readJson(path.join(dir, "package.json")).pipe(Effect.orElseSucceed(() => ({})))
-        const lock = yield* afs.readJson(path.join(dir, "package-lock.json")).pipe(Effect.orElseSucceed(() => ({})))
-
-        const pkgAny = pkg as any
-        const lockAny = lock as any
-        const declared = new Set([
-          ...Object.keys(pkgAny?.dependencies || {}),
-          ...Object.keys(pkgAny?.devDependencies || {}),
-          ...Object.keys(pkgAny?.peerDependencies || {}),
-          ...Object.keys(pkgAny?.optionalDependencies || {}),
-          ...(input?.add || []).map((pkg) => pkg.name),
-        ])
-
-        const root = lockAny?.packages?.[""] || {}
-        const locked = new Set([
-          ...Object.keys(root?.dependencies || {}),
-          ...Object.keys(root?.devDependencies || {}),
-          ...Object.keys(root?.peerDependencies || {}),
-          ...Object.keys(root?.optionalDependencies || {}),
-        ])
-
-        for (const name of declared) {
-          if (!locked.has(name)) {
-            yield* reify({ dir, add })
-            return
-          }
-        }
-      }).pipe(Effect.withSpan("Npm.checkDirty"))
-
-      return
-    }, Effect.scoped)
-
     const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string) {
       const dir = directory(pkg)
       const binDir = path.join(dir, "node_modules", ".bin")
@@ -249,7 +187,6 @@ const layer = Layer.effect(
 
     return Service.of({
       add,
-      install,
       which,
     })
   }),
@@ -262,10 +199,6 @@ export const node = makeGlobalNode({
 })
 
 const { runPromise } = makeRuntime(Service, LayerNode.compile(node))
-
-export async function install(...args: Parameters<Interface["install"]>) {
-  return runPromise((svc) => svc.install(...args))
-}
 
 export async function add(...args: Parameters<Interface["add"]>) {
   return runPromise((svc) => svc.add(...args))

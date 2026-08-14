@@ -55,7 +55,6 @@ const integrations = Layer.mock(Integration.Service, {
 })
 const npm = Layer.mock(Npm.Service, {
   add: () => Effect.die("unused"),
-  install: () => Effect.die("unused"),
   which: () => Effect.die("unused"),
 })
 const aisdk = Layer.mock(AISDK.Service, {

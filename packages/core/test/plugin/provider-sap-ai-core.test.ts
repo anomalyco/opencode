@@ -14,7 +14,6 @@ const fixtureProvider = new URL("./fixtures/provider-factory.ts", import.meta.ur
 const it = testEffect(PluginTestLayer)
 const npm = Npm.Service.of({
   add: () => Effect.succeed({ directory: "", entrypoint: undefined }),
-  install: () => Effect.void,
   which: () => Effect.succeed(undefined),
 })
 
