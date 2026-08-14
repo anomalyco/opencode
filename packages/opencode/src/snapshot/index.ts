@@ -188,8 +188,11 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           ]
             .filter(Boolean)
             .join("\n")
-          yield* fs.ensureDir(path.join(state.gitdir, "info")).pipe(Effect.orDie)
-          yield* fs.writeFileString(target, text ? `${text}\n` : "").pipe(Effect.orDie)
+          // Refreshing the exclude file is advisory, so a failure must not take the session down.
+          yield* Effect.gen(function* () {
+            yield* fs.ensureDir(path.join(state.gitdir, "info"))
+            yield* fs.writeFileString(target, text ? `${text}\n` : "")
+          }).pipe(Effect.catch((error) => Effect.logWarning("failed to write snapshot exclude", { target, error })))
         })
 
         // Reuse the hashes for the git storage between the original repo and snapshot
