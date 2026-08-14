@@ -126,6 +126,7 @@ const context = createContext<{
   sessionID: string
   thinkingMode: () => ThinkingMode
   showThinking: () => boolean
+  toolDetailsMode: () => "show" | "collapse"
   markdownMode: () => "source" | "rendered"
   groupExploration: () => boolean
   diffWrapMode: () => "word" | "none"
@@ -223,6 +224,7 @@ export function Session() {
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
   const showThinking = createMemo(() => true)
+  const toolDetailsMode = createMemo<"show" | "collapse">(() => config.session?.tool_details ?? "show")
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
   const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
@@ -1138,6 +1140,7 @@ export function Session() {
         sessionID: route.sessionID,
         thinkingMode,
         showThinking,
+        toolDetailsMode,
         markdownMode,
         groupExploration,
         diffWrapMode,
@@ -3060,9 +3063,12 @@ function Shell(props: ToolProps) {
 }
 
 function Write(props: ToolProps) {
+  const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
   const pathFormatter = usePathFormatter()
+  const [expanded, setExpanded] = createSignal(false)
+  const collapsed = createMemo(() => ctx.toolDetailsMode() === "collapse")
   const code = createMemo(() => {
     return stringValue(props.input.content) ?? ""
   })
@@ -3073,17 +3079,20 @@ function Write(props: ToolProps) {
         <BlockTool
           path={{ label: "# Wrote", value: pathFormatter.format(stringValue(props.input.path)) }}
           part={props.part}
+          onClick={collapsed() ? () => setExpanded((value) => !value) : undefined}
         >
-          <line_number fg={theme.text.subdued} minWidth={3} paddingRight={1}>
-            <code
-              conceal={false}
-              fg={theme.text.default}
-              filetype={filetype(stringValue(props.input.path))}
-              syntaxStyle={syntax()}
-              content={code()}
-            />
-          </line_number>
-          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.path) ?? ""} />
+          <Show when={!collapsed() || expanded()}>
+            <line_number fg={theme.text.subdued} minWidth={3} paddingRight={1}>
+              <code
+                conceal={false}
+                fg={theme.text.default}
+                filetype={filetype(stringValue(props.input.path))}
+                syntaxStyle={syntax()}
+                content={code()}
+              />
+            </line_number>
+            <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.path) ?? ""} />
+          </Show>
         </BlockTool>
       </Match>
       <Match when={true}>
@@ -3325,6 +3334,8 @@ function Edit(props: ToolProps) {
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
   const pathFormatter = usePathFormatter()
+  const [expanded, setExpanded] = createSignal(false)
+  const collapsed = createMemo(() => ctx.toolDetailsMode() === "collapse")
 
   const view = createMemo(() => {
     const diffView = ctx.config.diffs?.view
@@ -3341,30 +3352,36 @@ function Edit(props: ToolProps) {
     <Switch>
       <Match when={file()}>
         {(item) => (
-          <BlockTool path={{ label: "← Edit", value: pathFormatter.format(path()) }} part={props.part}>
-            <box paddingLeft={1}>
-              <PatchDiff
-                diff={item().patch}
-                hunkFg={theme.diff.text.hunkHeader}
-                view={view()}
-                filetype={filetype(path())}
-                syntaxStyle={syntax()}
-                showLineNumbers={true}
-                width="100%"
-                wrapMode={ctx.diffWrapMode()}
-                fg={theme.text.default}
-                addedBg={theme.diff.background.added}
-                removedBg={theme.diff.background.removed}
-                contextBg={theme.diff.background.context}
-                addedSignColor={theme.diff.highlight.added}
-                removedSignColor={theme.diff.highlight.removed}
-                lineNumberFg={theme.diff.lineNumber.text}
-                lineNumberBg={theme.diff.background.context}
-                addedLineNumberBg={theme.diff.lineNumber.background.added}
-                removedLineNumberBg={theme.diff.lineNumber.background.removed}
-              />
-            </box>
-            <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.path) ?? ""} />
+          <BlockTool
+            path={{ label: "← Edit", value: pathFormatter.format(path()) }}
+            part={props.part}
+            onClick={collapsed() ? () => setExpanded((value) => !value) : undefined}
+          >
+            <Show when={!collapsed() || expanded()}>
+              <box paddingLeft={1}>
+                <PatchDiff
+                  diff={item().patch}
+                  hunkFg={theme.diff.text.hunkHeader}
+                  view={view()}
+                  filetype={filetype(path())}
+                  syntaxStyle={syntax()}
+                  showLineNumbers={true}
+                  width="100%"
+                  wrapMode={ctx.diffWrapMode()}
+                  fg={theme.text.default}
+                  addedBg={theme.diff.background.added}
+                  removedBg={theme.diff.background.removed}
+                  contextBg={theme.diff.background.context}
+                  addedSignColor={theme.diff.highlight.added}
+                  removedSignColor={theme.diff.highlight.removed}
+                  lineNumberFg={theme.diff.lineNumber.text}
+                  lineNumberBg={theme.diff.background.context}
+                  addedLineNumberBg={theme.diff.lineNumber.background.added}
+                  removedLineNumberBg={theme.diff.lineNumber.background.removed}
+                />
+              </box>
+              <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.path) ?? ""} />
+            </Show>
           </BlockTool>
         )}
       </Match>
@@ -3389,6 +3406,8 @@ function ApplyPatch(props: ToolProps) {
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
   const pathFormatter = usePathFormatter()
+  const [expanded, setExpanded] = createSignal(false)
+  const collapsed = createMemo(() => ctx.toolDetailsMode() === "collapse")
   const files = createMemo(() => parseApplyPatchFiles(props.metadata.files))
   const targets = createMemo(() => {
     const patch = stringValue(props.input.patchText)
@@ -3423,37 +3442,40 @@ function ApplyPatch(props: ToolProps) {
                   value: pathFormatter.format(file.relativePath),
                 }}
                 part={props.part}
+                onClick={collapsed() ? () => setExpanded((value) => !value) : undefined}
               >
-                <Show
-                  when={file.type !== "delete"}
-                  fallback={
-                    <text fg={theme.diff.text.removed}>
-                      -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
-                    </text>
-                  }
-                >
-                  <box paddingLeft={1}>
-                    <PatchDiff
-                      diff={file.patch}
-                      hunkFg={theme.diff.text.hunkHeader}
-                      view={view()}
-                      filetype={filetype(file.relativePath)}
-                      syntaxStyle={syntax()}
-                      showLineNumbers={true}
-                      width="100%"
-                      wrapMode={ctx.diffWrapMode()}
-                      fg={theme.text.default}
-                      addedBg={theme.diff.background.added}
-                      removedBg={theme.diff.background.removed}
-                      contextBg={theme.diff.background.context}
-                      addedSignColor={theme.diff.highlight.added}
-                      removedSignColor={theme.diff.highlight.removed}
-                      lineNumberFg={theme.diff.lineNumber.text}
-                      lineNumberBg={theme.diff.background.context}
-                      addedLineNumberBg={theme.diff.lineNumber.background.added}
-                      removedLineNumberBg={theme.diff.lineNumber.background.removed}
-                    />
-                  </box>
+                <Show when={!collapsed() || expanded()}>
+                  <Show
+                    when={file.type !== "delete"}
+                    fallback={
+                      <text fg={theme.diff.text.removed}>
+                        -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
+                      </text>
+                    }
+                  >
+                    <box paddingLeft={1}>
+                      <PatchDiff
+                        diff={file.patch}
+                        hunkFg={theme.diff.text.hunkHeader}
+                        view={view()}
+                        filetype={filetype(file.relativePath)}
+                        syntaxStyle={syntax()}
+                        showLineNumbers={true}
+                        width="100%"
+                        wrapMode={ctx.diffWrapMode()}
+                        fg={theme.text.default}
+                        addedBg={theme.diff.background.added}
+                        removedBg={theme.diff.background.removed}
+                        contextBg={theme.diff.background.context}
+                        addedSignColor={theme.diff.highlight.added}
+                        removedSignColor={theme.diff.highlight.removed}
+                        lineNumberFg={theme.diff.lineNumber.text}
+                        lineNumberBg={theme.diff.background.context}
+                        addedLineNumberBg={theme.diff.lineNumber.background.added}
+                        removedLineNumberBg={theme.diff.lineNumber.background.removed}
+                      />
+                    </box>
+                  </Show>
                 </Show>
               </BlockTool>
             )}

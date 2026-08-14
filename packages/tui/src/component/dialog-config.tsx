@@ -69,6 +69,15 @@ export const settings: Setting[] = [
     keywords: ["reasoning", "chain of thought"],
   },
   {
+    title: "Tool details",
+    category: "Session",
+    path: ["session", "tool_details"],
+    default: "show",
+    values: ["show", "collapse"],
+    labels: ["show", "collapse"],
+    keywords: ["tool output", "write", "edit", "patch", "diff", "code changes"],
+  },
+  {
     title: "Markdown",
     category: "Session",
     path: ["session", "markdown"],
