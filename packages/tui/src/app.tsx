@@ -1349,9 +1349,7 @@ function App(props: { pair?: DialogPairCredentials }) {
               width={1}
               height="100%"
               backgroundColor={
-                tabsResizeHovered() || tabsResizing()
-                  ? tabsTheme.background.action.primary.hovered
-                  : tabsTheme.background.default
+                tabsResizeHovered() || tabsResizing() ? tabsTheme.background.action.primary.hovered : undefined
               }
             />
           </box>
