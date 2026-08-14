@@ -1189,6 +1189,7 @@ export function Session() {
                     />
                   )}
                 </For>
+                <BackgroundToolHint messages={messages()} />
                 <Show when={session()?.revert?.messageID}>
                   <RevertMessage
                     count={messagesFromRevert().filter((message) => message.type === "user").length}
@@ -1200,8 +1201,7 @@ export function Session() {
                 </Show>
               </scrollbox>
             </box>
-            <box height={1} flexShrink={0} flexDirection="row" justifyContent="space-between">
-              <BackgroundToolHint messages={messages()} />
+            <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
               <Show when={config.experimental?.tab_scroll === true && awayFromBottom()}>
                 <text
                   fg={latestHovered() ? theme.text.default : theme.text.subdued}
@@ -1540,9 +1540,11 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
   return (
     <Show when={visible() && shortcut()}>
       {(value) => (
-        <text fg={theme.text.subdued} wrapMode="none" truncate flexShrink={1}>
-          <span style={{ fg: theme.text.default }}>{value()}</span> background
-        </text>
+        <box marginTop={1} paddingLeft={3} flexShrink={0}>
+          <text fg={theme.text.subdued}>
+            Press <span style={{ fg: theme.text.default }}>{value()}</span> to move running work to the background
+          </text>
+        </box>
       )}
     </Show>
   )
