@@ -136,7 +136,13 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
 
     const upgradeFailure = (method: Method, result?: { code: number; stdout: string; stderr: string }) => {
       if (method === "choco") return "not running from an elevated command shell"
-      if (result) return `Upgrade failed for ${method} (exit code ${result.code}).`
+      if (result) {
+        // fork: keep the tail of the actual script output — "exit code 1"
+        // alone made every real cause (missing curl, 404 asset, disk full)
+        // undiagnosable from the TUI toast and the log.
+        const tail = (result.stderr || result.stdout || "").trim().split("\n").slice(-4).join("\n").slice(-400)
+        return `Upgrade failed for ${method} (exit code ${result.code}).${tail ? ` Output: ${tail}` : ""}`
+      }
       return `Upgrade failed for ${method}.`
     }
 
@@ -165,7 +171,12 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
           stderr: result.stderr.toString("utf8"),
         }
       },
-      Effect.mapError(() => new UpgradeFailedError({ stderr: upgradeFailure("curl") })),
+      // fork: keep the underlying cause — "Upgrade failed for curl." with the
+      // real reason (install-script fetch refused, spawn failure) stripped
+      // made every failure look identical.
+      Effect.mapError(
+        (cause) => new UpgradeFailedError({ stderr: `${upgradeFailure("curl")} Cause: ${errorMessage(cause)}` }),
+      ),
     )
 
     const result: Interface = {

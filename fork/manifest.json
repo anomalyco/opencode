@@ -3,10 +3,10 @@
   "upstreamRemote": "anomalyco/opencode",
   "note": "Machine-readable inventory of everything this fork adds on top of upstream. Drives `bun run fork:verify` (run after every sync to prove nothing was silently dropped) and `bun run sync:check` (detect when upstream has moved past our baseline). Update `baseline` after each successful sync. Keep the human-readable rationale in FORK_WORKFLOW.md in step with this file.",
   "baseline": {
-    "upstreamRef": "0d927ba03f36d7f87e3cdb2b6c1f34c44913a099",
+    "upstreamRef": "91df88323196b13b099911ad7f0660ed3310f527",
     "upstreamBranch": "upstream/dev",
-    "syncedAt": "2026-08-11",
-    "forkTag": "fork/2026-08-11.2",
+    "syncedAt": "2026-08-13",
+    "forkTag": "fork/2026-08-13.1",
     "comment": "Last upstream commit fully merged into dev. sync:check compares upstream/dev against this ref. Bump it (and forkTag) after every sync."
   },
   "owned": [
@@ -90,6 +90,7 @@
     "packages/opencode/src/side-question/index.ts",
     "packages/opencode/src/tool/peers.ts",
     "packages/opencode/src/tool/peers.txt",
+    "packages/opencode/src/util/sync-log.ts",
     "packages/opencode/src/util/which.ts",
     "packages/opencode/test/agent/presence.test.ts",
     "packages/opencode/test/agent/repo-personas.test.ts",
@@ -161,6 +162,17 @@
     "packages/tui/test/model-fit.test.ts",
     "packages/tui/test/ui/dialog-select-footer.test.ts"
   ],
+  "_ownedUnused_2026-08-14": {
+    "note": "packages/opencode/src/util/sync-log.ts is registered as owned but currently has zero call sites. It was added by 21c1ac9dd6 to give non-Effect call sites (provider.ts, local/placement.ts) a TUI-safe logger after the core/util/log shim was deleted. The dev-side design solved the same problem differently — those helpers now return outcomes (PickOutcome, DiscoveryResult.warnings) and the Effect caller logs — so no non-Effect log site remains. Kept rather than deleted pending a decision: delete as dead code, or keep as the sanctioned helper for any future non-Effect call site. Registered so fork:verify does not report it as unclassified divergence in the meantime.",
+    "commits": ["21c1ac9dd6"]
+  },
+  "_ownedRemoved_2026-08-13": {
+    "note": "packages/core/src/util/log.ts (the legacy-logger compatibility shim, upstream's own module removed in #31310) was deleted 2026-08-12 — confirmed intentional, not a merge regression: upstream now has its own logger, making the shim genuinely obsolete."
+  },
+  "_ownedRemoved_2026-08-12": {
+    "note": "auto-reply.ts, automation-features.ts, pattern-detection.ts (+ its two CLI commands), scheduler.ts, and hook.ts were deliberately deleted 2026-08-07 (commits 88731dfc6f, 0530944759) for being dead/broken code, not lost in a merge. fork:verify was reporting all 7 as regressions because this manifest was never updated at deletion time. Removed here, not re-added.",
+    "commits": ["88731dfc6f", "0530944759"]
+  },
   "patched": [
     {
       "file": "packages/opencode/src/index.ts",

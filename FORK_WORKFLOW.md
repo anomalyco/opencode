@@ -27,10 +27,15 @@ Two rules keep syncs from being a mess:
 non-blocking warning so you can re-apply it deliberately. Pass `--strict` to fail
 on those too.
 
-> **Outstanding regressions** (lost in earlier syncs, need re-applying):
-> - `packages/tui/src/context/theme.tsx` — `ThemeState.set(store.active)` createEffect
-> - `packages/core/src/github-copilot/chat/openai-compatible-chat-language-model.ts` — `cache_creation_tokens` parsing
-> - `packages/llm/src/protocols/openai-chat.ts` — `cache_creation_tokens` in `OpenAIChatUsage`
+> **No outstanding regressions as of 2026-08-12.** `fork:verify` is 11/11 owned,
+> 18/18 patched. The `theme.tsx` `ThemeState.set` regression noted here since
+> 2026-06-18 had already been re-applied; the two `cache_creation_tokens`
+> entries were phantom (never a real commit, and OpenAI-compatible/copilot
+> APIs don't emit that field) and were dropped from the manifest back on
+> 2026-06-18 (commit `0399b97e0d`) — this callout just never caught up. A
+> manifest audit the same day also found 11 fork-marked patches
+> (`// fork:` comments) and 2 fork-only files that existed in the working tree
+> but were never added to the manifest at all; they are now tracked.
 
 When you add a new custom file or patch a new upstream file, **add it to the
 manifest in the same commit.** That is the single source of truth; the table that

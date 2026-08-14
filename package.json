@@ -14,11 +14,11 @@
     "dev:storybook": "bun --cwd packages/storybook storybook",
     "lint": "oxlint",
     "typecheck": "bun turbo typecheck",
-    "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "sync-upstream": "bun run script/sync-upstream.ts",
     "sync-upstream:apply": "bun run script/sync-upstream.ts --apply",
     "sync:check": "bun run script/sync-check.ts",
     "fork:verify": "bun run script/fork-verify.ts",
+    "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "tool-usage": "bun run script/tool-usage.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
     "prepare": "husky",
@@ -164,6 +164,7 @@
     "@modelcontextprotocol/sdk@1.29.0": "patches/@modelcontextprotocol%2Fsdk@1.29.0.patch",
     "effect@4.0.0-beta.83": "patches/effect@4.0.0-beta.83.patch",
     "@tanstack/virtual-core@3.17.3": "patches/@tanstack%2Fvirtual-core@3.17.3.patch",
-    "@ai-sdk/openai-compatible@2.0.41": "patches/@ai-sdk%2Fopenai-compatible@2.0.41.patch"
+    "@ai-sdk/openai-compatible@2.0.41": "patches/@ai-sdk%2Fopenai-compatible@2.0.41.patch",
+    "@ai-sdk/groq@3.0.31": "patches/@ai-sdk%2Fgroq@3.0.31.patch"
   }
 }
