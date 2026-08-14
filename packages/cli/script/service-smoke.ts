@@ -88,7 +88,6 @@ try {
   if (!(await exitsWithin(winner, 10_000))) throw new Error("Compiled service did not stop")
   for (let attempt = 0; attempt < 200 && (await Bun.file(registration).exists()); attempt++) await Bun.sleep(25)
   if (await Bun.file(registration).exists()) throw new Error("Compiled service registration was not removed")
-  await driveSmoke()
 } catch (cause) {
   failure = cause
 } finally {
@@ -110,50 +109,6 @@ function spawnService() {
   processes.push(process)
   errors.push(new Response(process.stderr).text())
   return process
-}
-
-async function driveSmoke() {
-  const name = "compiled-artifact"
-  const drive = path.resolve(import.meta.dir, "../../drive/src/cli/index.ts")
-  const driveEnv = {
-    ...env,
-    DRIVE_REGISTRY_DIR: path.join(root, "drive-registry"),
-    OPENCODE_DRIVE_KEEP_ARTIFACTS: "1",
-    OPENCODE_DRIVE_MEDIA_DIR: path.join(root, "drive-media"),
-  }
-  let started = false
-  try {
-    await runDrive(["start", "--name", name, "--", binary], drive, driveEnv)
-    started = true
-    const screenshot = (
-      await runDrive(
-        ["send", "--name", name, "--command.ui.screenshot", '{"name":"compiled-capture"}'],
-        drive,
-        driveEnv,
-      )
-    ).trim()
-    const bytes = Buffer.from(await Bun.file(screenshot).arrayBuffer())
-    if (!bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
-      throw new Error("Compiled Drive bridge did not produce a PNG capture")
-  } finally {
-    if (started) await runDrive(["stop", "--name", name], drive, driveEnv)
-  }
-}
-
-async function runDrive(args: ReadonlyArray<string>, drive: string, driveEnv: Record<string, string | undefined>) {
-  const child = Bun.spawn([process.execPath, drive, ...args], {
-    cwd: root,
-    env: driveEnv,
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-  const [status, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ])
-  if (status !== 0) throw new Error(`opencode-drive ${args[0]} failed:\n${stderr}`)
-  return stdout
 }
 
 async function waitForRegistration() {

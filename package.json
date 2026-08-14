@@ -33,7 +33,6 @@
     "packages": [
       "packages/*",
       "packages/console/*",
-      "packages/lab/*",
       "packages/stats/*",
       "packages/slack"
     ],

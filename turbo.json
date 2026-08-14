@@ -57,14 +57,6 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/lab-catalog#test": {
-      "dependsOn": ["opencode-drive#typecheck"],
-      "outputs": []
-    },
-    "opencode-drive#test": {
-      "dependsOn": ["@opencode-ai/client#typecheck"],
-      "outputs": []
-    },
     "@opencode-ai/workerd-spike#test": {
       "dependsOn": ["^build"],
       "outputs": []
