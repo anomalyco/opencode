@@ -1584,6 +1584,11 @@ const PART_MAPPING = {
 
 const INLINE_TOOL_ICON_WIDTH = 2
 
+function partStartTime(part: ToolPart) {
+  if (part.state.status === "pending") return undefined
+  return part.state.time.start
+}
+
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme } = useTheme()
   const ctx = use()
@@ -1605,6 +1610,9 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   })
   const summary = createMemo(() => reasoningSummary(content()))
   const syntax = createSyntaxStyleMemo(() => generateSubtleSyntax(theme))
+  const timestamp = createMemo(() =>
+    ctx.showTimestamps() ? Locale.todayTimeOrDateTime(props.part.time.start) : undefined,
+  )
 
   const toggle = () => {
     if (!inMinimal()) return
@@ -1627,6 +1635,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
             done={isDone()}
             title={summary().title}
             duration={isDone() ? Locale.duration(duration()) : undefined}
+            time={timestamp()}
           />
         </box>
         <Show when={(!inMinimal() || expanded()) && summary().body}>
@@ -1653,6 +1662,7 @@ function ReasoningHeader(props: {
   done: boolean
   title: string | null
   duration?: string
+  time?: string
 }) {
   const { theme } = useTheme()
   const fg = () =>
@@ -1673,7 +1683,7 @@ function ReasoningHeader(props: {
             <span>{props.open ? "- " : "+ "}</span>
           </Show>
           <span>Thought</span>
-          <Show when={props.title || props.duration}>
+          <Show when={props.title || props.duration || props.time}>
             <span>: </span>
           </Show>
           <Show when={props.title}>
@@ -1683,6 +1693,12 @@ function ReasoningHeader(props: {
             <span>
               {props.title ? " · " : ""}
               {props.duration}
+            </span>
+          </Show>
+          <Show when={props.time}>
+            <span>
+              {props.title || props.duration ? " · " : ""}
+              {props.time}
             </span>
           </Show>
         </text>
@@ -1867,6 +1883,12 @@ function InlineTool(props: {
     return callID === props.part.callID
   })
 
+  const timestamp = createMemo(() => {
+    if (!ctx.showTimestamps()) return undefined
+    const start = partStartTime(props.part)
+    return start === undefined ? undefined : Locale.todayTimeOrDateTime(start)
+  })
+
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
 
   const denied = createMemo(
@@ -1903,6 +1925,7 @@ function InlineTool(props: {
       failure={props.failure}
       spinner={props.spinner}
       separate={props.separate}
+      time={timestamp() ? <text fg={theme.textMuted}> · {timestamp()}</text> : undefined}
       onMouseOver={() => clickable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -1933,6 +1956,7 @@ export function InlineToolRow(props: {
   failure?: string
   spinner?: boolean
   separate?: boolean
+  time?: JSX.Element
   children: JSX.Element
   onMouseOver?: () => void
   onMouseOut?: () => void
@@ -1961,13 +1985,16 @@ export function InlineToolRow(props: {
         <Match when={true}>
           <Show
             fallback={
-              <text
-                paddingLeft={3}
-                fg={props.color}
-                attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
-              >
-                ~ {props.pending}
-              </text>
+              <box flexDirection="row">
+                <text
+                  paddingLeft={3}
+                  fg={props.color}
+                  attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+                >
+                  ~ {props.pending}
+                </text>
+                {props.time}
+              </box>
             }
             when={props.complete || props.failed}
           >
@@ -1986,6 +2013,7 @@ export function InlineToolRow(props: {
               >
                 {props.failed && !props.complete ? (props.failure ?? props.children) : props.children}
               </text>
+              {props.time}
             </box>
           </Show>
         </Match>
@@ -2007,9 +2035,15 @@ function BlockTool(props: {
   spinner?: boolean
 }) {
   const { theme } = useTheme()
+  const ctx = use()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+  const time = createMemo(() => {
+    if (!props.part || !ctx.showTimestamps()) return undefined
+    const start = partStartTime(props.part)
+    return start === undefined ? undefined : Locale.todayTimeOrDateTime(start)
+  })
   return (
     <box
       ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
@@ -2034,9 +2068,14 @@ function BlockTool(props: {
           <Show
             when={props.spinner}
             fallback={
-              <text paddingLeft={3} fg={theme.textMuted}>
-                {title()}
-              </text>
+              <box flexDirection="row">
+                <text paddingLeft={3} fg={theme.textMuted}>
+                  {title()}
+                </text>
+                <Show when={time()}>
+                  <text fg={theme.textMuted}> · {time()}</text>
+                </Show>
+              </box>
             }
           >
             <Spinner color={theme.textMuted}>{title().replace(/^# /, "")}</Spinner>
