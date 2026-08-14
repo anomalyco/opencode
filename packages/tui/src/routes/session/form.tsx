@@ -112,7 +112,7 @@ export function FormPrompt(props: {
   })
   const tabs = createMemo(() => (single() ? 1 : fields().length + 1))
   const tabbed = createMemo(() => {
-    const width = fields().reduce((sum, item) => sum + truncate(formLabel(item), 24).length + 3, "Confirm".length + 3)
+    const width = fields().reduce((sum, item) => sum + truncate(formLabel(item), 24).length + 5, "✓ Submit".length + 3)
     return width <= dimensions().width - 8
   })
   const answered = createMemo(
@@ -748,6 +748,7 @@ export function FormPrompt(props: {
             <For each={fields()}>
               {(item, index) => {
                 const isTab = () => index() === store.tab
+                const isAnswered = () => store.answers[item.key] !== undefined
                 return (
                   <box
                     paddingRight={2}
@@ -771,10 +772,12 @@ export function FormPrompt(props: {
                           ? theme.text.formfield.selected
                           : tabHover() === index()
                             ? theme.text.formfield.focused
-                            : theme.text.subdued
+                            : isAnswered()
+                              ? theme.text.feedback.success.default
+                              : theme.text.subdued
                       }
                     >
-                      {truncate(formLabel(item), 24)}
+                      {isAnswered() ? "☒" : "☐"} {truncate(formLabel(item), 24)}
                     </text>
                   </box>
                 )
@@ -801,10 +804,10 @@ export function FormPrompt(props: {
                     ? theme.text.formfield.selected
                     : tabHover() === "confirm"
                       ? theme.text.formfield.focused
-                      : theme.text.subdued
+                      : theme.text.feedback.success.default
                 }
               >
-                Confirm
+                ✓ Submit
               </text>
             </box>
           </box>
