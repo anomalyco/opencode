@@ -52,7 +52,7 @@ describe("Tool.Progress", () => {
         sessionID,
         assistantMessageID,
         timestamp,
-        agent: "build",
+        agent: "recruit",
         model,
       })
       const readAssistant = Effect.gen(function* () {

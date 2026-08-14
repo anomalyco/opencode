@@ -1,9 +1,8 @@
-import { Effect, Option, Schema, Scope, Stream } from "effect"
+import { Effect, Option, Schema, Stream } from "effect"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import * as path from "path"
 import * as Tool from "./tool"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./read.txt"
 import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
@@ -64,14 +63,12 @@ type Metadata = {
 export const ReadTool = Tool.define<
   typeof Parameters,
   Metadata,
-  FSUtil.Service | Instruction.Service | LSP.Service | Scope.Scope
+  FSUtil.Service | Instruction.Service
 >(
   "read",
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const instruction = yield* Instruction.Service
-    const lsp = yield* LSP.Service
-    const scope = yield* Scope.Scope
 
     const miss = Effect.fn("ReadTool.miss")(function* (filepath: string) {
       const dir = path.dirname(filepath)
@@ -112,11 +109,6 @@ export const ReadTool = Tool.define<
         }),
         { concurrency: "unbounded" },
       ).pipe(Effect.map((items: string[]) => items.sort((a, b) => a.localeCompare(b))))
-    })
-
-    const warm = Effect.fn("ReadTool.warm")(function* (filepath: string) {
-      // LSP warm-up is optional; do not let a background defect fail an otherwise successful read.
-      yield* lsp.touchFile(filepath).pipe(Effect.ignoreCause, Effect.forkIn(scope))
     })
 
     const readSample = Effect.fn("ReadTool.readSample")(function* (
@@ -349,8 +341,6 @@ export const ReadTool = Tool.define<
         output += `\n\n(End of file - total ${file.count} lines)`
       }
       output += "\n</content>"
-
-      yield* warm(filepath)
 
       if (loaded.length > 0) {
         output += `\n\n<system-reminder>\n${loaded.map((item) => item.content).join("\n\n")}\n</system-reminder>`

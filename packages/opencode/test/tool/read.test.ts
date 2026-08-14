@@ -10,7 +10,6 @@ import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
-import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
@@ -37,7 +36,7 @@ const ctx = {
   sessionID: SessionID.make("ses_test"),
   messageID: MessageID.make("msg_test"),
   callID: "",
-  agent: "build",
+  agent: "recruit",
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => Effect.void,
@@ -51,7 +50,6 @@ const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       FSUtil.node,
       CrossSpawnSpawner.node,
       Instruction.node,
-      LSP.node,
       Ripgrep.node,
       Truncate.node,
     ]),

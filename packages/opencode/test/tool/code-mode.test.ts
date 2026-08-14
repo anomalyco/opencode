@@ -15,7 +15,7 @@ import { Cause, Effect, Exit, Layer, Schema } from "effect"
 const ctx: Tool.Context = {
   sessionID: SessionID.make("ses_code-mode"),
   messageID: MessageID.make("msg_code-mode"),
-  agent: "build",
+  agent: "recruit",
   abort: new AbortController().signal,
   callID: "call_code_mode",
   messages: [],

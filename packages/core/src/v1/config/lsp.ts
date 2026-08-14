@@ -17,8 +17,6 @@ export const Entry = Schema.Union([
   }),
 ]).pipe((schema) => schema)
 
-// Keep this list aligned with the builtin servers in opencode's LSP runtime.
-// Custom servers must declare extensions because the runtime cannot infer them.
 export const builtinServerIds = [
   "deno",
   "typescript",

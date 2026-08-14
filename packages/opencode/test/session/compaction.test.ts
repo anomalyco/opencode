@@ -95,7 +95,7 @@ function createUserMessage(sessionID: SessionID, text: string) {
       id: MessageID.ascending(),
       role: "user",
       sessionID,
-      agent: "build",
+      agent: "recruit",
       model: ref,
       time: { created: Date.now() },
     })
@@ -117,7 +117,7 @@ function createAssistantMessage(sessionID: SessionID, parentID: MessageID, root:
       role: "assistant",
       sessionID,
       mode: "build",
-      agent: "build",
+      agent: "recruit",
       path: { cwd: root, root },
       cost: 0,
       tokens: {
@@ -179,7 +179,7 @@ function createCompactionMarker(sessionID: SessionID) {
         role: "user",
         model: ref,
         sessionID,
-        agent: "build",
+        agent: "recruit",
         time: { created: Date.now() },
       })
       yield* ssn.updatePart({
@@ -279,7 +279,7 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
 }
 
 function createSummaryCompaction(sessionID: SessionID) {
-  return SessionCompaction.use.create({ sessionID, agent: "build", model: ref, auto: false })
+  return SessionCompaction.use.create({ sessionID, agent: "recruit", model: ref, auto: false })
 }
 
 function readCompactionPart(sessionID: SessionID) {
@@ -561,7 +561,7 @@ describe("session.compaction.create", () => {
 
         yield* compact.create({
           sessionID: info.id,
-          agent: "build",
+          agent: "recruit",
           model: ref,
           auto: true,
           overflow: true,
@@ -590,7 +590,7 @@ describe("session.compaction.create", () => {
 
         yield* compact.create({
           sessionID: info.id,
-          agent: "build",
+          agent: "recruit",
           model: ref,
           auto: true,
           overflow: true,
@@ -622,7 +622,7 @@ describe("session.compaction.prune", () => {
             id: MessageID.ascending(),
             role: "user",
             sessionID: info.id,
-            agent: "build",
+            agent: "recruit",
             model: ref,
             time: { created: Date.now() },
           })
@@ -638,7 +638,7 @@ describe("session.compaction.prune", () => {
             role: "assistant",
             sessionID: info.id,
             mode: "build",
-            agent: "build",
+            agent: "recruit",
             path: { cwd: dir, root: dir },
             cost: 0,
             tokens: {
@@ -675,7 +675,7 @@ describe("session.compaction.prune", () => {
               id: MessageID.ascending(),
               role: "user",
               sessionID: info.id,
-              agent: "build",
+              agent: "recruit",
               model: ref,
               time: { created: Date.now() },
             })
@@ -718,7 +718,7 @@ describe("session.compaction.prune", () => {
           id: MessageID.ascending(),
           role: "user",
           sessionID: info.id,
-          agent: "build",
+          agent: "recruit",
           model: ref,
           time: { created: Date.now() },
         })
@@ -734,7 +734,7 @@ describe("session.compaction.prune", () => {
           role: "assistant",
           sessionID: info.id,
           mode: "build",
-          agent: "build",
+          agent: "recruit",
           path: { cwd: dir, root: dir },
           cost: 0,
           tokens: {
@@ -771,7 +771,7 @@ describe("session.compaction.prune", () => {
             id: MessageID.ascending(),
             role: "user",
             sessionID: info.id,
-            agent: "build",
+            agent: "recruit",
             model: ref,
             time: { created: Date.now() },
           })
@@ -1479,7 +1479,7 @@ describe("session.compaction.process", () => {
           role: "user",
           model: ref,
           sessionID: session.id,
-          agent: "build",
+          agent: "recruit",
           time: { created: Date.now() },
         })
         yield* ssn.updatePart({

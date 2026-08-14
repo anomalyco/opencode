@@ -15,7 +15,7 @@ function makeCtx(): Tool.Context {
   return {
     sessionID: SessionID.descending(),
     messageID: MessageID.ascending(),
-    agent: "build",
+    agent: "recruit",
     abort: new AbortController().signal,
     messages: [],
     metadata() {

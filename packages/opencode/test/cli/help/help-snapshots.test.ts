@@ -43,7 +43,6 @@ function normalize(text: string): string {
 // `completion` is intentionally excluded — it's a yargs built-in that emits
 // top-level help on `--help` and exits 1; not a real opencode command.
 const TOP_LEVEL = [
-  "acp",
   "mcp",
   "attach",
   "run",
@@ -53,12 +52,10 @@ const TOP_LEVEL = [
   "upgrade",
   "uninstall",
   "serve",
-  "web",
   "models",
   "stats",
   "export",
   "import",
-  "pr",
   "session",
   "plugin",
   "db",

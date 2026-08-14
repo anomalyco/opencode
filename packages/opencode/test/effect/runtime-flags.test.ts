@@ -28,7 +28,6 @@ describe("RuntimeFlags", () => {
             MOKS_AUTO_SHARE: "true",
             MOKS_DISABLE_EMBEDDED_WEB_UI: "true",
             MOKS_DISABLE_EXTERNAL_SKILLS: "true",
-            MOKS_DISABLE_LSP_DOWNLOAD: "true",
             MOKS_EXPERIMENTAL: "true",
             MOKS_ENABLE_EXA: "true",
             MOKS_ENABLE_PARALLEL: "true",
@@ -44,7 +43,6 @@ describe("RuntimeFlags", () => {
       expect(flags.disableDefaultPlugins).toBe(true)
       expect(flags.disableEmbeddedWebUi).toBe(true)
       expect(flags.disableExternalSkills).toBe(true)
-      expect(flags.disableLspDownload).toBe(true)
       expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.enableExa).toBe(true)
       expect(flags.enableParallel).toBe(true)
@@ -52,8 +50,6 @@ describe("RuntimeFlags", () => {
       expect(flags.enableQuestionTool).toBe(true)
       expect(flags.experimentalReferences).toBe(true)
       expect(flags.experimentalBackgroundSubagents).toBe(true)
-      expect(flags.experimentalLspTy).toBe(false)
-      expect(flags.experimentalLspTool).toBe(true)
       expect(flags.experimentalOxfmt).toBe(true)
       expect(flags.experimentalPlanMode).toBe(true)
       expect(flags.experimentalEventSystem).toBe(true)
@@ -62,20 +58,6 @@ describe("RuntimeFlags", () => {
       expect(flags.experimentalNativeLlm).toBe(false)
       expect(flags.experimentalWebSockets).toBe(false)
       expect(flags.client).toBe("desktop")
-    }),
-  )
-
-  it.effect("layer parses MOKS_EXPERIMENTAL_LSP_TY", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(
-        Effect.provide(
-          fromConfig({
-            MOKS_EXPERIMENTAL_LSP_TY: "true",
-          }),
-        ),
-      )
-
-      expect(flags.experimentalLspTy).toBe(true)
     }),
   )
 
@@ -110,7 +92,6 @@ describe("RuntimeFlags", () => {
       expect(flags.disableDefaultPlugins).toBe(true)
       expect(flags.disableEmbeddedWebUi).toBe(false)
       expect(flags.disableExternalSkills).toBe(false)
-      expect(flags.disableLspDownload).toBe(false)
       expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.disableClaudeCodeSkills).toBe(false)
       expect(flags.enableExa).toBe(false)
@@ -144,22 +125,6 @@ describe("RuntimeFlags", () => {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ MOKS_DISABLE_EXTERNAL_SKILLS: "true" })))
 
       expect(flags.disableExternalSkills).toBe(true)
-    }),
-  )
-
-  it.effect("disableLspDownload defaults to false", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
-
-      expect(flags.disableLspDownload).toBe(false)
-    }),
-  )
-
-  it.effect("disableLspDownload reads MOKS_DISABLE_LSP_DOWNLOAD", () =>
-    Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ MOKS_DISABLE_LSP_DOWNLOAD: "true" })))
-
-      expect(flags.disableLspDownload).toBe(true)
     }),
   )
 
@@ -322,7 +287,6 @@ describe("RuntimeFlags", () => {
               MOKS_PURE: "true",
               MOKS_DISABLE_DEFAULT_PLUGINS: "true",
               MOKS_DISABLE_EXTERNAL_SKILLS: "true",
-              MOKS_DISABLE_LSP_DOWNLOAD: "true",
               MOKS_EXPERIMENTAL: "true",
               MOKS_ENABLE_EXA: "true",
               MOKS_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "1234",
@@ -336,7 +300,6 @@ describe("RuntimeFlags", () => {
       expect(flags.disableDefaultPlugins).toBe(false)
       expect(flags.disableEmbeddedWebUi).toBe(false)
       expect(flags.disableExternalSkills).toBe(false)
-      expect(flags.disableLspDownload).toBe(false)
       expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.disableClaudeCodeSkills).toBe(false)
       expect(flags.enableExa).toBe(false)
@@ -351,6 +314,14 @@ describe("RuntimeFlags", () => {
   it.effect("disableClaudeCodeSkills defaults to false", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
+
+      expect(flags.disableClaudeCodeSkills).toBe(false)
+    }),
+  )
+
+  it.effect("disableClaudeCodeSkills reads MOKS_DISABLE_CLAUDE_CODE_SKILLS=false", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ MOKS_DISABLE_CLAUDE_CODE_SKILLS: "false" })))
 
       expect(flags.disableClaudeCodeSkills).toBe(false)
     }),

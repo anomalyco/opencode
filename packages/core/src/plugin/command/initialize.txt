@@ -1,6 +1,6 @@
 Open recruiter intake for this directory as a requisition at `${path}`.
 
-This is hiring intake, not a coding AGENTS.md setup. (`/init-code` / `build` is the coding escape hatch.)
+This is hiring intake for this requisition.
 
 User notes (honor these; they are not a finished JD):
 $ARGUMENTS

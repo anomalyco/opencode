@@ -37,10 +37,6 @@ Read the full files you will cite. Use skills to deepen analysis when needed:
 
 `moks push` is the ATS write (mock). Prefer bash for these CLIs when checking readiness. Do not use raw `git commit`.
 
-## Escape hatch
-
-If the user **explicitly** asks for code review and you are on the `build` agent, git/gh tooling is allowed. Otherwise stay on packet review.
-
 ## Output
 
 - Matter-of-fact, scannable bullets or short sections

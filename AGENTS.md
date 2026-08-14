@@ -41,14 +41,14 @@ Change: prominence, defaults, copy, agent wiring, workspace paths.
 | `git commit` | `moks commit` | Raw `git commit`; commit with no push path |
 | `git push` | `moks push` | Silent ATS writes from the agent |
 | PR review | `/review` packet review | `/review` still runs `gh pr` |
-| `build` doer | `recruit` (`build` hidden) | Rename the binary; keep `build` default |
+| `build` doer | `recruit` | Rename the binary; keep `build` default |
 | Plan → implement | Plan → execute hiring steps | Plan → generate recruiting software |
 | Explore codebase | Explore HIRING.md / cards / notes | Explore → OSINT-only agent |
 | LSP / formatters | Not a TA surface (defaults off) | TA-LSP metaphor, or delete the subsystem |
 
 Default loop: `/init` → load `HIRING.md` → score onto the card → draft outreach → `/review` → `moks commit` → `moks push`.
 
-Cast: `recruit` is the doer. Plan stays and exits to `recruit`. `build` is a hidden escape hatch (`--agent build`). Skills: `req-context`, `score-candidate`, `draft-outreach`, `commit-disposition`.
+Cast: `recruit` is the doer. Plan stays and exits to `recruit`. There is no coding agent. Skills: `req-context`, `score-candidate`, `draft-outreach`, `commit-disposition`.
 
 We do **not** use product moks to code this repo. Day-to-day engineering is the installed coding agent. Monorepo `.opencode/` configures that agent. It is not product code.
 

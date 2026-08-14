@@ -120,7 +120,7 @@ const user = Effect.fn("TestSession.user")(function* (sessionID: SessionID, text
     id: MessageID.ascending(),
     role: "user",
     sessionID,
-    agent: "build",
+    agent: "recruit",
     model: ref,
     time: { created: Date.now() },
   })
@@ -145,7 +145,7 @@ const assistant = Effect.fn("TestSession.assistant")(function* (
     role: "assistant",
     sessionID,
     mode: "build",
-    agent: "build",
+    agent: "recruit",
     path: { cwd: root, root },
     cost: 0,
     tokens: {

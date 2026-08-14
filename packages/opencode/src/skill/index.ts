@@ -182,10 +182,8 @@ const discoverSkills = Effect.fnUntraced(function* (
 ) {
   const state: ScanState = { matches: new Set(), dirs: new Set() }
 
-  const externalDirs: string[] = []
-  if (!disableExternalSkills) {
-    if (!disableClaudeCodeSkills) externalDirs.push(CLAUDE_EXTERNAL_DIR)
-    externalDirs.push(AGENTS_EXTERNAL_DIR)
+  if (!disableExternalSkills && !disableClaudeCodeSkills) {
+    const externalDirs = [CLAUDE_EXTERNAL_DIR, AGENTS_EXTERNAL_DIR]
 
     for (const dir of externalDirs) {
       const root = path.join(global.home, dir)

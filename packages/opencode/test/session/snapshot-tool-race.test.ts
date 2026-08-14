@@ -27,7 +27,6 @@ import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestLLMServer } from "../lib/llm-server"
 
-import { LSP } from "@/lsp/lsp"
 import { MCP } from "../../src/mcp"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -57,26 +56,6 @@ const mcp = Layer.succeed(
   }),
 )
 
-const lsp = Layer.succeed(
-  LSP.Service,
-  LSP.Service.of({
-    init: () => Effect.void,
-    status: () => Effect.succeed([]),
-    hasClients: () => Effect.succeed(false),
-    touchFile: () => Effect.void,
-    diagnostics: () => Effect.succeed({}),
-    hover: () => Effect.succeed(undefined),
-    definition: () => Effect.succeed([]),
-    references: () => Effect.succeed([]),
-    implementation: () => Effect.succeed([]),
-    documentSymbol: () => Effect.succeed([]),
-    workspaceSymbol: () => Effect.succeed([]),
-    prepareCallHierarchy: () => Effect.succeed([]),
-    incomingCalls: () => Effect.succeed([]),
-    outgoingCalls: () => Effect.succeed([]),
-  }),
-)
-
 const root = LayerNode.group([
   SessionPrompt.node,
   Session.node,
@@ -89,7 +68,6 @@ const root = LayerNode.group([
 const it = testEffect(
   LayerNode.compile(root, [
     [MCP.node, mcp],
-    [LSP.node, lsp],
     [RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })],
   ]),
 )
@@ -145,7 +123,7 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       // Seed user message
       yield* prompt.prompt({
         sessionID: session.id,
-        agent: "build",
+        agent: "recruit",
         noReply: true,
         parts: [{ type: "text", text: "create the file" }],
       })

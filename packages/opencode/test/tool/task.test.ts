@@ -73,7 +73,7 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
     id: MessageID.ascending(),
     role: "user",
     sessionID: chat.id,
-    agent: "build",
+    agent: "recruit",
     model: ref,
     time: { created: Date.now() },
   })
@@ -83,7 +83,7 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
     parentID: user.id,
     sessionID: chat.id,
     mode: "build",
-    agent: "build",
+    agent: "recruit",
     cost: 0,
     path: { cwd: "/tmp", root: "/tmp" },
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -144,10 +144,10 @@ describe("tool.task", () => {
     () =>
       Effect.gen(function* () {
         const agent = yield* Agent.Service
-        const build = yield* agent.get("build")
+        const recruit = yield* agent.get("recruit")
         const registry = yield* ToolRegistry.Service
         const get = Effect.fnUntraced(function* () {
-          const tools = yield* registry.tools({ ...ref, agent: build })
+          const tools = yield* registry.tools({ ...ref, agent: recruit })
           return tools.find((tool) => tool.id === TaskTool.id)?.description ?? ""
         })
         const first = yield* get()
@@ -186,10 +186,10 @@ describe("tool.task", () => {
     () =>
       Effect.gen(function* () {
         const agent = yield* Agent.Service
-        const build = yield* agent.get("build")
+        const recruit = yield* agent.get("recruit")
         const registry = yield* ToolRegistry.Service
         const description =
-          (yield* registry.tools({ ...ref, agent: build })).find((tool) => tool.id === TaskTool.id)?.description ?? ""
+          (yield* registry.tools({ ...ref, agent: recruit })).find((tool) => tool.id === TaskTool.id)?.description ?? ""
 
         expect(description).toContain("- alpha: Alpha agent")
         expect(description).not.toContain("- zebra: Zebra agent")
@@ -236,7 +236,7 @@ describe("tool.task", () => {
         {
           sessionID: chat.id,
           messageID: assistant.id,
-          agent: "build",
+          agent: "recruit",
           abort: new AbortController().signal,
           extra: { promptOps },
           messages: [],
@@ -273,7 +273,7 @@ describe("tool.task", () => {
           {
             sessionID: chat.id,
             messageID: assistant.id,
-            agent: "build",
+            agent: "recruit",
             abort: new AbortController().signal,
             extra: { promptOps, ...extra },
             messages: [],
@@ -332,7 +332,7 @@ describe("tool.task", () => {
           {
             sessionID: chat.id,
             messageID: assistant.id,
-            agent: "build",
+            agent: "recruit",
             abort: abort.signal,
             extra: { promptOps },
             messages: [],
@@ -370,7 +370,7 @@ describe("tool.task", () => {
         {
           sessionID: chat.id,
           messageID: assistant.id,
-          agent: "build",
+          agent: "recruit",
           abort: new AbortController().signal,
           extra: { promptOps },
           messages: [],
@@ -488,7 +488,7 @@ describe("tool.task", () => {
           {
             sessionID: chat.id,
             messageID: assistant.id,
-            agent: "build",
+            agent: "recruit",
             abort: new AbortController().signal,
             extra: { promptOps },
             messages: [],
@@ -553,7 +553,7 @@ describe("tool.task", () => {
           {
             sessionID: chat.id,
             messageID: assistant.id,
-            agent: "build",
+            agent: "recruit",
             abort: new AbortController().signal,
             extra: { promptOps: stubOps() },
             messages: [],
@@ -603,7 +603,7 @@ describe("tool.task", () => {
           {
             sessionID: chat.id,
             messageID: assistant.id,
-            agent: "build",
+            agent: "recruit",
             abort: new AbortController().signal,
             extra: { promptOps },
             messages: [],
@@ -650,7 +650,7 @@ describe("tool.task", () => {
         {
           sessionID: chat.id,
           messageID: assistant.id,
-          agent: "build",
+          agent: "recruit",
           abort: new AbortController().signal,
           extra: {
             promptOps: {
@@ -698,7 +698,7 @@ describe("tool.task", () => {
       const context = {
         sessionID: chat.id,
         messageID: assistant.id,
-        agent: "build",
+        agent: "recruit",
         abort: new AbortController().signal,
         extra: { promptOps },
         messages: [],
@@ -762,7 +762,7 @@ describe("tool.task", () => {
         {
           sessionID: chat.id,
           messageID: assistant.id,
-          agent: "build",
+          agent: "recruit",
           abort: new AbortController().signal,
           extra: { promptOps: stubOps({ text: "background done" }) },
           messages: [],
@@ -795,7 +795,7 @@ describe("tool.task", () => {
         {
           sessionID: chat.id,
           messageID: assistant.id,
-          agent: "build",
+          agent: "recruit",
           abort: new AbortController().signal,
           extra: {
             promptOps: {
@@ -834,7 +834,7 @@ describe("tool.task", () => {
         {
           sessionID: chat.id,
           messageID: assistant.id,
-          agent: "build",
+          agent: "recruit",
           abort: new AbortController().signal,
           extra: {
             promptOps: {
@@ -873,7 +873,7 @@ describe("tool.task", () => {
         {
           sessionID: chat.id,
           messageID: assistant.id,
-          agent: "build",
+          agent: "recruit",
           abort: new AbortController().signal,
           extra: {
             promptOps: {
@@ -912,7 +912,7 @@ describe("tool.task", () => {
         {
           sessionID: chat.id,
           messageID: assistant.id,
-          agent: "build",
+          agent: "recruit",
           abort: new AbortController().signal,
           extra: {
             promptOps: {

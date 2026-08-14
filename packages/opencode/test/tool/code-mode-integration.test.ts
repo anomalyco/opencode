@@ -26,7 +26,7 @@ const SERVER = "fixtures"
 const ctx: Tool.Context = {
   sessionID: SessionID.make("ses_code-mode-int"),
   messageID: MessageID.make("msg_code-mode-int"),
-  agent: "build",
+  agent: "recruit",
   abort: new AbortController().signal,
   callID: "call_code_mode_int",
   messages: [],

@@ -1,7 +1,6 @@
 import { Agent } from "@/agent/agent"
 import { Command } from "@/command"
 import { Format } from "@/format"
-import { LSP } from "@/lsp/lsp"
 import { Vcs } from "@/project/vcs"
 import { Skill } from "@/skill"
 import { Schema } from "effect"
@@ -51,7 +50,6 @@ export const InstancePaths = {
   command: "/command",
   agent: "/agent",
   skill: "/skill",
-  lsp: "/lsp",
   formatter: "/formatter",
 } as const
 
@@ -164,16 +162,6 @@ export const InstanceApi = HttpApi.make("instance")
             identifier: "app.skills",
             summary: "List skills",
             description: "Get a list of all available skills in the moks system.",
-          }),
-        ),
-        HttpApiEndpoint.get("lsp", InstancePaths.lsp, {
-          query: WorkspaceRoutingQuery,
-          success: described(Schema.Array(LSP.Status), "LSP server status"),
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "lsp.status",
-            summary: "Get LSP status",
-            description: "Get LSP server status",
           }),
         ),
         HttpApiEndpoint.get("formatter", InstancePaths.formatter, {

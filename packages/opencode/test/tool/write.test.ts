@@ -4,7 +4,6 @@ import { Effect, Layer } from "effect"
 import path from "path"
 import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
-import { LSP } from "@/lsp/lsp"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Format } from "../../src/format"
@@ -20,7 +19,7 @@ const ctx = {
   sessionID: SessionID.make("ses_test-write-session"),
   messageID: MessageID.make("msg_test"),
   callID: "",
-  agent: "build",
+  agent: "recruit",
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => Effect.void,
@@ -34,7 +33,6 @@ afterEach(async () => {
 const it = testEffect(
   LayerNode.compile(
     LayerNode.group([
-      LSP.node,
       FSUtil.node,
       EventV2Bridge.node,
       Format.node,

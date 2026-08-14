@@ -142,7 +142,6 @@ const scenarios: Scenario[] = [
   http.protected.get("/command", "command.list").json(200, array, "status"),
   http.protected.get("/agent", "app.agents").json(200, array, "status"),
   http.protected.get("/skill", "app.skills").json(200, array, "status"),
-  http.protected.get("/lsp", "lsp.status").json(200, array),
   http.protected.get("/formatter", "formatter.status").json(200, array),
   http.protected.get("/config", "config.get").json(200, undefined, "status"),
   http.protected
@@ -353,11 +352,6 @@ const scenarios: Scenario[] = [
       path: `/find/file?${new URLSearchParams({ query: "hello", dirs: "false" })}`,
       headers: ctx.headers(),
     }))
-    .json(200, array),
-  http.protected
-    .get("/find/symbol", "find.symbols")
-    .seeded((ctx) => ctx.file("hello.ts", "export const hello = 1\n"))
-    .at((ctx) => ({ path: `/find/symbol?${new URLSearchParams({ query: "hello" })}`, headers: ctx.headers() }))
     .json(200, array),
   http.protected
     .get("/event", "event.stream")
@@ -1453,7 +1447,7 @@ const scenarios: Scenario[] = [
       path: route("/session/{sessionID}/message", { sessionID: ctx.state.id }),
       headers: ctx.headers(),
       body: {
-        agent: "build",
+        agent: "recruit",
         model: { providerID: "test", modelID: "test-model" },
         parts: [{ type: "text", text: "hello llm" }],
       },
@@ -1488,7 +1482,7 @@ const scenarios: Scenario[] = [
       path: route("/session/{sessionID}/prompt_async", { sessionID: ctx.state.id }),
       headers: ctx.headers(),
       body: {
-        agent: "build",
+        agent: "recruit",
         model: { providerID: "test", modelID: "test-model" },
         parts: [{ type: "text", text: "hello async" }],
       },
@@ -1533,7 +1527,7 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({
       path: route("/session/{sessionID}/shell", { sessionID: ctx.state.id }),
       headers: ctx.headers(),
-      body: { agent: "build", model: { providerID: "test", modelID: "test-model" }, command: "printf shell-ok" },
+      body: { agent: "recruit", model: { providerID: "test", modelID: "test-model" }, command: "printf shell-ok" },
     }))
     .json(
       200,

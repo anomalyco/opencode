@@ -17,7 +17,7 @@ describe("AgentV2", () => {
       const agent = yield* AgentV2.Service
 
       expect(yield* agent.all()).toEqual([])
-      expect(yield* agent.get(AgentV2.ID.make("build"))).toBeUndefined()
+      expect(yield* agent.get(AgentV2.ID.make("missing"))).toBeUndefined()
     }),
   )
 
@@ -73,7 +73,7 @@ describe("AgentV2", () => {
   it.effect("applies direct agent updates", () =>
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service
-      const id = AgentV2.ID.make("build")
+      const id = AgentV2.ID.make("reviewer")
 
       yield* agent.transform((editor) =>
         editor.update(id, (info) => {
@@ -115,7 +115,6 @@ describe("AgentV2", () => {
 
       const agents = yield* agent.all()
       expect(agents.map((item) => String(item.id)).sort()).toEqual([
-        "build",
         "compaction",
         "explore",
         "general",
@@ -125,7 +124,7 @@ describe("AgentV2", () => {
         "title",
       ])
       expect(yield* agent.default()).toMatchObject({ id: "recruit", hidden: false, mode: "primary" })
-      expect(yield* agent.get(AgentV2.ID.make("build"))).toMatchObject({ hidden: true, mode: "primary" })
+      expect(yield* agent.get(AgentV2.ID.make("build"))).toBeUndefined()
       for (const item of agents) {
         expect(item.permissions.some((rule) => rule.action === "bash" && rule.effect !== "deny")).toBe(false)
       }

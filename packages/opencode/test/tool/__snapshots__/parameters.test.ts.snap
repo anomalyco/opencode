@@ -136,56 +136,6 @@ exports[`tool parameters JSON Schema (wire shape) invalid 1`] = `
 }
 `;
 
-exports[`tool parameters JSON Schema (wire shape) lsp 1`] = `
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "properties": {
-    "character": {
-      "description": "The character offset (1-based, as shown in editors)",
-      "maximum": 9007199254740991,
-      "minimum": 1,
-      "type": "integer",
-    },
-    "filePath": {
-      "description": "The absolute or relative path to the file",
-      "type": "string",
-    },
-    "line": {
-      "description": "The line number (1-based, as shown in editors)",
-      "maximum": 9007199254740991,
-      "minimum": 1,
-      "type": "integer",
-    },
-    "operation": {
-      "description": "The LSP operation to perform",
-      "enum": [
-        "goToDefinition",
-        "findReferences",
-        "hover",
-        "documentSymbol",
-        "workspaceSymbol",
-        "goToImplementation",
-        "prepareCallHierarchy",
-        "incomingCalls",
-        "outgoingCalls",
-      ],
-      "type": "string",
-    },
-    "query": {
-      "description": "Search query for workspaceSymbol. Empty string requests all symbols.",
-      "type": "string",
-    },
-  },
-  "required": [
-    "operation",
-    "filePath",
-    "line",
-    "character",
-  ],
-  "type": "object",
-}
-`;
-
 exports[`tool parameters JSON Schema (wire shape) plan 1`] = `
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",

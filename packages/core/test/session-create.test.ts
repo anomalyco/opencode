@@ -133,9 +133,9 @@ describe("SessionV2.create", () => {
       const input = { id, location }
       const created = yield* session.create(input)
 
-      yield* db.update(SessionTable).set({ agent: "build" }).where(eq(SessionTable.id, id)).run().pipe(Effect.orDie)
+      yield* db.update(SessionTable).set({ agent: "recruit" }).where(eq(SessionTable.id, id)).run().pipe(Effect.orDie)
 
-      expect(yield* session.create(input)).toMatchObject({ id: created.id, agent: "build" })
+      expect(yield* session.create(input)).toMatchObject({ id: created.id, agent: "recruit" })
     }),
   )
 
@@ -155,12 +155,12 @@ describe("SessionV2.create", () => {
           projectID: created.projectID,
           directory: created.location.directory,
           title: "updated",
-          agent: "build",
+          agent: "recruit",
           time: { created: 0, updated: 1 },
         }),
       })
 
-      expect(yield* session.create(input)).toMatchObject({ id, agent: "build" })
+      expect(yield* session.create(input)).toMatchObject({ id, agent: "recruit" })
     }),
   )
 

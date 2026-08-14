@@ -51,7 +51,6 @@ export function createFetch(override?: FetchHandler) {
       case "/experimental/workspace":
       case "/experimental/workspace/status":
       case "/formatter":
-      case "/lsp":
         return json([])
       case "/config":
       case "/experimental/resource":

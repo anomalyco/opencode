@@ -6,7 +6,6 @@
 import * as path from "path"
 import { Effect, Schema, Semaphore } from "effect"
 import * as Tool from "./tool"
-import { LSP } from "@/lsp/lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./edit.txt"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -58,7 +57,6 @@ export const Parameters = Schema.Struct({
 export const EditTool = Tool.define(
   "edit",
   Effect.gen(function* () {
-    const lsp = yield* LSP.Service
     const afs = yield* FSUtil.Service
     const format = yield* Format.Service
     const events = yield* EventV2Bridge.Service
@@ -189,25 +187,16 @@ export const EditTool = Tool.define(
             metadata: {
               diff,
               filediff,
-              diagnostics: {},
             },
           })
 
-          let output = "Edit applied successfully."
-          yield* lsp.touchFile(filePath, "document")
-          const diagnostics = yield* lsp.diagnostics()
-          const normalizedFilePath = FSUtil.normalizePath(filePath)
-          const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
-          if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
-
           return {
             metadata: {
-              diagnostics,
               diff,
               filediff,
             },
             title: `${path.relative(instance.worktree, filePath)}`,
-            output,
+            output: "Edit applied successfully.",
           }
         }),
     }

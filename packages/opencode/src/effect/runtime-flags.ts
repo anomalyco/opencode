@@ -19,7 +19,6 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   disableDefaultPlugins: bool("MOKS_DISABLE_DEFAULT_PLUGINS"),
   disableEmbeddedWebUi: bool("MOKS_DISABLE_EMBEDDED_WEB_UI"),
   disableExternalSkills: bool("MOKS_DISABLE_EXTERNAL_SKILLS"),
-  disableLspDownload: bool("MOKS_DISABLE_LSP_DOWNLOAD"),
   disableClaudeCodePrompt: Config.all({
     broad: bool("MOKS_DISABLE_CLAUDE_CODE"),
     direct: bool("MOKS_DISABLE_CLAUDE_CODE_PROMPT"),
@@ -41,8 +40,6 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   enableQuestionTool: bool("MOKS_ENABLE_QUESTION_TOOL"),
   experimentalReferences: enabledByExperimental("MOKS_EXPERIMENTAL_REFERENCES"),
   experimentalBackgroundSubagents: enabledByExperimental("MOKS_EXPERIMENTAL_BACKGROUND_SUBAGENTS"),
-  experimentalLspTy: bool("MOKS_EXPERIMENTAL_LSP_TY"),
-  experimentalLspTool: enabledByExperimental("MOKS_EXPERIMENTAL_LSP_TOOL"),
   experimentalOxfmt: enabledByExperimental("MOKS_EXPERIMENTAL_OXFMT"),
   experimentalPlanMode: enabledByExperimental("MOKS_EXPERIMENTAL_PLAN_MODE"),
   experimentalCodeMode: enabledByExperimental("MOKS_EXPERIMENTAL_CODE_MODE"),

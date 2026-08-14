@@ -12,7 +12,7 @@ function userMessage(id: string, text: string): SessionMessages[number] {
       time: {
         created: 1,
       },
-      agent: "build",
+      agent: "recruit",
       model: {
         providerID: "openai",
         modelID: "gpt-5",
@@ -48,7 +48,7 @@ function assistantInfo(
     modelID: input.modelID ?? "gpt-5",
     providerID: input.providerID ?? "openai",
     mode: "chat",
-    agent: "build",
+    agent: "recruit",
     path: {
       cwd: "/tmp",
       root: "/tmp",
@@ -193,7 +193,7 @@ function shellUserMessage(id: string): SessionMessages[number] {
       time: {
         created: 1,
       },
-      agent: "build",
+      agent: "recruit",
       model: {
         providerID: "openai",
         modelID: "gpt-5",

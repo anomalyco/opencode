@@ -8,7 +8,6 @@ import { Config } from "@/config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
-import PROMPT_INITIALIZE_CODE from "./template/initialize-code.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
 
@@ -46,7 +45,6 @@ export function hints(template: string) {
 
 export const Default = {
   INIT: "init",
-  INIT_CODE: "init-code",
   REVIEW: "review",
 } as const
 
@@ -77,15 +75,6 @@ const layer = Layer.effect(
           return PROMPT_INITIALIZE.replace("${path}", ctx.directory)
         },
         hints: hints(PROMPT_INITIALIZE),
-      }
-      commands[Default.INIT_CODE] = {
-        name: Default.INIT_CODE,
-        description: "escape hatch: coding AGENTS.md setup (not hiring)",
-        source: "command",
-        get template() {
-          return PROMPT_INITIALIZE_CODE.replace("${path}", ctx.worktree)
-        },
-        hints: hints(PROMPT_INITIALIZE_CODE),
       }
       commands[Default.REVIEW] = {
         name: Default.REVIEW,

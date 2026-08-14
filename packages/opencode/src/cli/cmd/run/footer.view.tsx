@@ -388,7 +388,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       return "EXIT"
     }
 
-    return shell() ? "SHELL" : "BUILD"
+    return shell() ? "SHELL" : "RECRUIT"
   })
   const modeColor = createMemo(() => {
     if (exiting()) {

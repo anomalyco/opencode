@@ -21,7 +21,6 @@ authority. Prefer the shapes and paths here over guessing.
 | Inspect | **`moks status`** — unpushed hiring commits |
 | Push authority | **`moks push`** — local/mock write (`.moks/ats.json`); `--execute` writes; adverse `--confirm`. Remote later. |
 | ATS edge | MCP **read** tools (e.g. Ashby); agent writes denied — only `moks push` |
-| Coding escape hatch | Hidden **`build`** agent (`--agent build` / `default_agent: build`) |
 
 Never teach silent ATS stage moves. Dispositions go through commit → status → push.
 
@@ -144,7 +143,6 @@ Every field is optional. File name is **`moks.json` / `moks.jsonc`**.
   "plugin": ["./local-plugin.ts"],
 
   "formatter": false,
-  "lsp": false,
 
   "compaction": { "auto": true, "tail_turns": 15 }
 }
@@ -153,7 +151,7 @@ Every field is optional. File name is **`moks.json` / `moks.jsonc`**.
 Shape notes:
 
 - `model` always carries a provider prefix: `"anthropic/claude-sonnet-4-6"`.
-- `default_agent` for product installs should be **`recruit`** (native default). Use `"build"` only as an explicit coding escape hatch.
+- `default_agent` for product installs should be **`recruit`** (native default).
 - `skills` is an object with `paths` and/or `urls`, not an array.
 - `agent` / `command` are objects keyed by name, not arrays.
 - `plugin` is an array of strings or `[name, options]` tuples.
@@ -190,7 +188,6 @@ Do not gitignore the hiring files.
 | ----- | ---- |
 | **recruit** | Default primary doer — hiring loop over local materials + skills + decision verbs |
 | **plan** | Hiring strategy only; edits plan markdown under `.moks/plans` |
-| **build** | Hidden coding escape hatch |
 | **general** / **explore** | Subagents (research / parallel work) |
 | Internal | `compaction`, `title`, `summary` (hidden) |
 
@@ -341,12 +338,12 @@ narrow last.
 `permission: "allow"` (top-level string) means allow everything — rarely wanted.
 
 Known keys include: `read, edit, glob, grep, list, bash, task, external_directory,
-todowrite, question, webfetch, websearch, lsp, doom_loop, skill`, plus MCP tool
+todowrite, question, webfetch, websearch, doom_loop, skill`, plus MCP tool
 names (`ashby_*`). Some only accept a flat action.
 
 **recruit defaults (product):** path-scoped `edit` (allow `.moks/*` + hiring
-fixtures; ask elsewhere), Ashby read allow / write deny, `question` + `plan_enter`
-allowed. Per-agent `permission:` overrides top-level.
+fixtures; ask elsewhere), Ashby read allow / write deny, `question` allowed.
+Per-agent `permission:` overrides top-level.
 
 Plan Mode: `plan` agent edits only plan markdown; no decision recording.
 

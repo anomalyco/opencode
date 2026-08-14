@@ -17,7 +17,7 @@ cwd is the requisition. `HIRING.md` is the constitution. `candidates/*.md` are w
 
 ## Quick start
 
-Default agent is `recruit`. Use `--agent build` only when you want the hidden coding escape hatch.
+Default agent is `recruit`.
 
 From repo (source / no install):
 

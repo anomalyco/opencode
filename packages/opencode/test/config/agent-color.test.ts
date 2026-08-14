@@ -12,14 +12,14 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const cfg = yield* Config.use.get()
-      expect(cfg.agent?.["build"]?.color).toBe("#FFA500")
+      expect(cfg.agent?.["recruit"]?.color).toBe("#FFA500")
       expect(cfg.agent?.["plan"]?.color).toBe("primary")
     }),
   {
     git: true,
     config: {
       agent: {
-        build: { color: "#FFA500" },
+        recruit: { color: "#FFA500" },
         plan: { color: "primary" },
       },
     },
@@ -32,15 +32,15 @@ it.instance(
     Effect.gen(function* () {
       const plan = yield* AgentSvc.use.get("plan")
       expect(plan?.color).toBe("#A855F7")
-      const build = yield* AgentSvc.use.get("build")
-      expect(build?.color).toBe("accent")
+      const recruit = yield* AgentSvc.use.get("recruit")
+      expect(recruit?.color).toBe("accent")
     }),
   {
     git: true,
     config: {
       agent: {
         plan: { color: "#A855F7" },
-        build: { color: "accent" },
+        recruit: { color: "accent" },
       },
     },
   },

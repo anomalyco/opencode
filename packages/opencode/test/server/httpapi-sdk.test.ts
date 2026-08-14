@@ -531,7 +531,6 @@ describe("HttpApi SDK", () => {
         const tools = yield* capture(() => sdk.tool.ids())
         const vcs = yield* capture(() => sdk.vcs.get())
         const formatter = yield* capture(() => sdk.formatter.status())
-        const lsp = yield* capture(() => sdk.lsp.status())
 
         return {
           statuses: statuses({
@@ -550,7 +549,6 @@ describe("HttpApi SDK", () => {
             tools,
             vcs,
             formatter,
-            lsp,
           }),
           project: { worktreeSelected: record(project.data).worktree === directory },
           paths: { directorySelected: record(paths.data).directory === directory },
@@ -742,7 +740,7 @@ describe("HttpApi SDK", () => {
         const prompt = yield* capture(() =>
           sdk.session.prompt({
             sessionID,
-            agent: "build",
+            agent: "recruit",
             noReply: true,
             parts: [{ type: "text", text: "hello" }],
           }),
@@ -750,7 +748,7 @@ describe("HttpApi SDK", () => {
         const asyncPrompt = yield* capture(() =>
           sdk.session.promptAsync({
             sessionID,
-            agent: "build",
+            agent: "recruit",
             noReply: true,
             parts: [{ type: "text", text: "async hello" }],
           }),
@@ -785,7 +783,7 @@ describe("HttpApi SDK", () => {
         const prompt = yield* capture(() =>
           sdk.session.prompt({
             sessionID,
-            agent: "build",
+            agent: "recruit",
             model: { providerID: "test", modelID: "test-model" },
             parts: [{ type: "text", text: "hello llm" }],
           }),
@@ -820,7 +818,7 @@ describe("HttpApi SDK", () => {
         const prompt = yield* capture(() =>
           sdk.session.prompt({
             sessionID,
-            agent: "build",
+            agent: "recruit",
             model: { providerID: "test", modelID: "test-model" },
             parts: [{ type: "text", text: "hello skill context" }],
           }),

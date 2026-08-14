@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
+import { generate } from "../packages/opencode/src/cli/cmd/generate"
 
 await $`bun ./packages/sdk/js/script/build.ts`
 
-await $`bun dev generate > ../sdk/openapi.json`.cwd("packages/opencode")
+await Bun.write("packages/sdk/openapi.json", await generate())
 
 await $`./script/format.ts`

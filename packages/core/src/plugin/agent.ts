@@ -9,9 +9,6 @@ import { Location } from "../location"
 import { PermissionV2 } from "../permission"
 
 const TRUNCATION_GLOB = path.join(Global.Path.data, "tool-output", "*")
-const BUILD_SYSTEM =
-  "You are an AI coding agent. Help the user accomplish software engineering tasks by inspecting the workspace, making targeted changes, and using tools according to the configured permissions."
-
 const RECRUIT_SYSTEM = `You are moks Recruit, the default hiring agent. You are not a coding agent.
 
 Help run hiring loops in this cwd (the req). HIRING.md is the constitution. candidates/<id>.md are working copies. Score on the card, draft outreach on the card (never send), and record dispositions via \`moks commit\` / \`moks push\`. Prefer local files over inventing ATS state.`
@@ -134,7 +131,6 @@ export const Plugin = define({
       { action: "*", resource: "*", effect: "allow" },
       ...readonlyExternalDirectory,
       { action: "question", resource: "*", effect: "deny" },
-      { action: "plan_enter", resource: "*", effect: "deny" },
       { action: "plan_exit", resource: "*", effect: "deny" },
       { action: "read", resource: "*", effect: "allow" },
       { action: "read", resource: "*.env", effect: "ask" },
@@ -148,23 +144,7 @@ export const Plugin = define({
         item.system ??= RECRUIT_SYSTEM
         item.mode = "primary"
         item.permissions.push(
-          ...PermissionV2.merge(defaults, [
-            { action: "question", resource: "*", effect: "allow" },
-            { action: "plan_enter", resource: "*", effect: "allow" },
-          ]),
-        )
-      })
-
-      draft.update(AgentV2.ID.make("build"), (item) => {
-        item.description = "Coding agent escape hatch. Hidden from the default Recruit/Plan cast."
-        item.system ??= BUILD_SYSTEM
-        item.mode = "primary"
-        item.hidden = true
-        item.permissions.push(
-          ...PermissionV2.merge(defaults, [
-            { action: "question", resource: "*", effect: "allow" },
-            { action: "plan_enter", resource: "*", effect: "allow" },
-          ]),
+          ...PermissionV2.merge(defaults, [{ action: "question", resource: "*", effect: "allow" }]),
         )
       })
 

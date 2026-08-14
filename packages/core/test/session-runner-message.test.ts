@@ -19,7 +19,7 @@ describe("toLLMMessages", () => {
       SessionMessage.Assistant.make({
         id: id(value),
         type: "assistant",
-        agent: "build",
+        agent: "recruit",
         model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
         content,
         time: { created, completed: created },
@@ -54,7 +54,7 @@ describe("toLLMMessages", () => {
         SessionMessage.AgentSwitched.make({
           id: id("agent"),
           type: "agent-switched",
-          agent: "build",
+          agent: "recruit",
           time: { created },
         }),
         SessionMessage.ModelSwitched.make({
@@ -145,7 +145,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant"),
           type: "assistant",
-          agent: "build",
+          agent: "recruit",
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantText.make({ type: "text", id: "text-1", text: "Checking" }),
@@ -302,7 +302,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-openai-reasoning"),
           type: "assistant",
-          agent: "build",
+          agent: "recruit",
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
@@ -333,7 +333,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-failed"),
           type: "assistant",
-          agent: "build",
+          agent: "recruit",
           model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
@@ -405,7 +405,7 @@ Recent work
         SessionMessage.Assistant.make({
           id: id("assistant-old-model"),
           type: "assistant",
-          agent: "build",
+          agent: "recruit",
           model: { id: ModelV2.ID.make("old-model"), providerID: ProviderV2.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({

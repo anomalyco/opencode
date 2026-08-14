@@ -77,7 +77,6 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
         "/experimental/workspace",
         "/experimental/workspace/status",
         "/formatter",
-        "/lsp",
       ].includes(url.pathname)
     )
       return json([])

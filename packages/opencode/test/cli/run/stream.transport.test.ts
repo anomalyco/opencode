@@ -199,7 +199,7 @@ function assistantMessage(input: { sessionID: string; id: string; parts: Session
       modelID: "gpt-5",
       providerID: "openai",
       mode: "chat",
-      agent: "build",
+      agent: "recruit",
       path: {
         cwd: "/tmp",
         root: "/tmp",

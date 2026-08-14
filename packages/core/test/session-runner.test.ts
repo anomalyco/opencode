@@ -2207,7 +2207,7 @@ describe("SessionRunnerLLM", () => {
         sessionID,
         assistantMessageID,
         timestamp: yield* DateTime.now,
-        agent: "build",
+        agent: "recruit",
         model: { id: ModelV2.ID.make("fake-model"), providerID: ProviderV2.ID.make("fake") },
       })
       yield* events.publish(SessionEvent.Tool.Input.Started, {
@@ -2271,7 +2271,7 @@ describe("SessionRunnerLLM", () => {
         sessionID,
         assistantMessageID,
         timestamp: yield* DateTime.now,
-        agent: "build",
+        agent: "recruit",
         model: { id: ModelV2.ID.make("fake-model"), providerID: ProviderV2.ID.make("fake") },
       })
       yield* events.publish(SessionEvent.Tool.Input.Started, {
@@ -2331,7 +2331,7 @@ describe("SessionRunnerLLM", () => {
         sessionID,
         assistantMessageID,
         timestamp: yield* DateTime.now,
-        agent: "build",
+        agent: "recruit",
         model: { id: ModelV2.ID.make("fake-model"), providerID: ProviderV2.ID.make("fake") },
       })
       yield* events.publish(SessionEvent.Tool.Input.Started, {

@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Effect } from "effect"
+import path from "path"
 import { Installation } from "../../src/installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { testEffect } from "../lib/effect"
@@ -13,6 +14,19 @@ describe("installation", () => {
       Effect.gen(function* () {
         const result = yield* Installation.use.latest("unknown")
         expect(result).toBe(InstallationVersion)
+      }),
+    )
+  })
+
+  describe("method", () => {
+    it.effect("returns curl only for ~/.moks/bin, never an OpenCode package manager", () =>
+      Effect.gen(function* () {
+        const result = yield* Installation.use.method()
+        if (process.execPath.includes(path.join(".moks", "bin"))) {
+          expect(result).toBe("curl")
+          return
+        }
+        expect(result).toBe("unknown")
       }),
     )
   })

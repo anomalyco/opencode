@@ -565,7 +565,7 @@ describe("ACP service sessions", () => {
         info: {
           role: "user",
           model: { providerID: "test", modelID: "test-model", variant: "default" },
-          agent: "build",
+          agent: "recruit",
         },
         parts: [],
       },
@@ -1212,7 +1212,7 @@ describe("ACP service sessions", () => {
         { type: "text", text: "assistant context", synthetic: true },
         { type: "text", text: "user context", ignored: true },
       ],
-      agent: "build",
+      agent: "recruit",
       directory: "/workspace",
     })
   })
@@ -1270,7 +1270,7 @@ describe("ACP service sessions", () => {
         arguments: "now",
         model: "test/test-model",
         variant: "default",
-        agent: "build",
+        agent: "recruit",
         directory: "/workspace",
       },
     ])

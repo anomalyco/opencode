@@ -470,7 +470,7 @@ export function createPromptState(input: PromptInput): PromptState {
           ]
         : []),
       ...(input.commands() ?? [])
-        .filter((item) => item.source !== "skill" && item.name !== "init-code" && !hidden.has(item.name))
+        .filter((item) => item.source !== "skill" && !hidden.has(item.name))
         .map(
           (item) =>
             ({

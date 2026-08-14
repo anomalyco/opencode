@@ -38,11 +38,7 @@ describe("CommandPlugin.Plugin", () => {
       })
       expect((yield* command.get("init"))?.template).toContain("`/repo/packages/app`")
       expect((yield* command.get("init"))?.template).toContain("HIRING.md")
-      expect(yield* command.get("init-code")).toMatchObject({
-        name: "init-code",
-        description: "guided AGENTS.md setup for coding agents",
-      })
-      expect((yield* command.get("init-code"))?.template).toContain("AGENTS.md")
+      expect(yield* command.get("init-code")).toBeUndefined()
       expect(yield* command.get("review")).toMatchObject({
         name: "review",
         description: "review candidate/req packet before commit/push",

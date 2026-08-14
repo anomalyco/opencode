@@ -59,10 +59,6 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       return found.map((item) => item.path)
     })
 
-    const findSymbol = Effect.fn("FileHttpApi.findSymbol")(function* () {
-      return []
-    })
-
     const list = Effect.fn("FileHttpApi.list")(function* (ctx: { query: { path: string } }) {
       const directory = (yield* InstanceState.context).directory
       return yield* filesystem(
@@ -131,7 +127,6 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
     return handlers
       .handle("findText", findText)
       .handle("findFile", findFile)
-      .handle("findSymbol", findSymbol)
       .handle("list", list)
       .handle("content", content)
       .handle("status", status)

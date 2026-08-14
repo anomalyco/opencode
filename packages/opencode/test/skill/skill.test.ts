@@ -242,7 +242,7 @@ Instructions here.
     ),
   )
 
-  it.live("discovers skills from .claude/skills/ directory", () =>
+  it.live("discovers skills from .claude/skills/ by default", () =>
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
@@ -270,7 +270,7 @@ description: A skill in the .claude/skills directory.
     ),
   )
 
-  it.live("discovers global skills from ~/.claude/skills/ directory", () =>
+  it.live("discovers global skills from ~/.claude/skills/ by default", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir({ git: true })),
@@ -336,7 +336,7 @@ description: A skill in the .claude/skills directory.
     }),
   )
 
-  it.live("discovers skills from .agents/skills/ directory", () =>
+  it.live("discovers skills from .agents/skills/ by default", () =>
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
@@ -364,7 +364,7 @@ description: A skill in the .agents/skills directory.
     ),
   )
 
-  it.live("discovers global skills from ~/.agents/skills/ directory", () =>
+  it.live("discovers global skills from ~/.agents/skills/ by default", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
         Effect.promise(() => tmpdir({ git: true })),
@@ -404,7 +404,7 @@ This skill is loaded from the global home directory.
     }),
   )
 
-  it.live("discovers skills from both .claude/skills/ and .agents/skills/", () =>
+  it.live("discovers skills from both .claude/skills/ and .agents/skills/ by default", () =>
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
@@ -473,8 +473,7 @@ description: A skill in the .agents/skills directory.
           )
 
           const skill = yield* Skill.Service
-          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
-          expect(list.map((s) => s.name)).toEqual(["agent-skill"])
+          expect((yield* skill.all()).filter((s) => s.location !== "<built-in>")).toEqual([])
         }),
       { git: true },
     ),

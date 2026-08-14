@@ -1,6 +1,5 @@
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
-import { LSP } from "@/lsp/lsp"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
@@ -30,11 +29,6 @@ export const FindFileQuery = Schema.Struct({
   limit: Schema.optional(
     Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(200)),
   ),
-})
-
-export const FindSymbolQuery = Schema.Struct({
-  ...WorkspaceRoutingQueryFields,
-  query: Schema.String,
 })
 
 export const LegacyMatch = Schema.Struct({
@@ -95,7 +89,6 @@ export const LegacyStatus = Schema.Struct({
 export const FilePaths = {
   findText: "/find",
   findFile: "/find/file",
-  findSymbol: "/find/symbol",
   list: "/file",
   content: "/file/content",
   status: "/file/status",
@@ -123,16 +116,6 @@ export const FileApi = HttpApi.make("file")
             identifier: "find.files",
             summary: "Find files",
             description: "Search for files or directories by name or pattern in the project directory.",
-          }),
-        ),
-        HttpApiEndpoint.get("findSymbol", FilePaths.findSymbol, {
-          query: FindSymbolQuery,
-          success: described(Schema.Array(LSP.Symbol), "Symbols"),
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "find.symbols",
-            summary: "Find symbols",
-            description: "Search for workspace symbols like functions, classes, and variables using LSP.",
           }),
         ),
         HttpApiEndpoint.get("list", FilePaths.list, {

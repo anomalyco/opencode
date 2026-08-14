@@ -42,7 +42,7 @@ Default branch is `dev`. Day-to-day workflow is Bun (`bun install` / `bun dev`) 
 
 ## Hiring loop
 
-Default agent is **`recruit`**. Use `--agent build` for the hidden coding escape hatch.
+Default agent is **`recruit`**.
 
 ```bash
 bun dev

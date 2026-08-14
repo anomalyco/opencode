@@ -164,7 +164,6 @@ const layer = Layer.effect(
             ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
           },
           question: "deny",
-          plan_enter: "deny",
           plan_exit: "deny",
           // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
           read: {
@@ -188,9 +187,6 @@ const layer = Layer.effect(
               defaults,
               Permission.fromConfig({
                 question: "allow",
-                plan_enter: "allow",
-                // Coding-analysis tool; not useful on hiring loops (BL-014).
-                lsp: "deny",
                 ...ashbyPermissionDefaults(),
                 // Path-scoped edits: free under .moks/ + ship hiring fixtures; ask elsewhere.
                 // `edit` also gates write and apply_patch. Wildcard `*` matches nested path segments.
@@ -222,23 +218,6 @@ const layer = Layer.effect(
             ),
             mode: "primary",
             native: true,
-          },
-          build: {
-            name: "build",
-            description: "Coding agent escape hatch. Hidden from the default Recruit/Plan cast.",
-            options: {},
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                question: "allow",
-                plan_enter: "allow",
-                ...ashbyPermissionDefaults(),
-              }),
-              user,
-            ),
-            mode: "primary",
-            native: true,
-            hidden: true,
           },
           plan: {
             name: "plan",
@@ -383,7 +362,7 @@ const layer = Layer.effect(
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
         }
 
-        // Explicit default unhides the agent so dogfood configs (e.g. default_agent: build) keep working.
+        // Explicit default unhides a hidden agent (e.g. compaction).
         if (cfg.default_agent && agents[cfg.default_agent]) {
           agents[cfg.default_agent].hidden = false
         }

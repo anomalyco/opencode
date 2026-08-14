@@ -3,7 +3,6 @@ import type {
   OpencodeClient,
   Event,
   FilePart,
-  LspStatus,
   McpStatus,
   Todo,
   Message,
@@ -394,7 +393,6 @@ export type TuiState = {
     question: (sessionID: string) => ReadonlyArray<QuestionRequest>
   }
   part: (messageID: string) => ReadonlyArray<Part>
-  lsp: () => ReadonlyArray<TuiSidebarLspItem>
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
 }
 
@@ -441,8 +439,6 @@ export type TuiSidebarMcpItem = {
   status: McpStatus["status"]
   error?: string
 }
-
-export type TuiSidebarLspItem = Pick<LspStatus, "id" | "root" | "status">
 
 export type TuiSidebarTodoItem = Pick<Todo, "content" | "status">
 

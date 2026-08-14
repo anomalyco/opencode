@@ -273,7 +273,7 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.init",
             summary: "Initialize session",
             description:
-              "Analyze the current application and create an AGENTS.md file with project-specific agent configurations.",
+              "Scaffold this directory as a requisition (HIRING.md + candidates/).",
           }),
         ),
         HttpApiEndpoint.post("share", SessionPaths.share, {
