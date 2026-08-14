@@ -162,13 +162,13 @@
     "packages/tui/test/ui/dialog-select-footer.test.ts"
   ],
   "_ownedRemoved_2026-08-14": {
-    "note": "packages/opencode/src/util/sync-log.ts was deleted in the origin/dev merge \u2014 confirmed intentional, not a merge regression. It was added by 21c1ac9dd6 to give non-Effect call sites (provider.ts, local/placement.ts) a TUI-safe logger after the core/util/log shim was deleted. The dev-side design solved the same problem differently: those helpers now return outcomes (PickOutcome, DiscoveryResult.warnings) and the Effect caller logs (tool/task.ts, provider.ts). That left zero call sites, so the file was removed rather than carried as dead code.",
+    "note": "packages/opencode/src/util/sync-log.ts was deleted in the origin/dev merge — confirmed intentional, not a merge regression. It was added by 21c1ac9dd6 to give non-Effect call sites (provider.ts, local/placement.ts) a TUI-safe logger after the core/util/log shim was deleted. The dev-side design solved the same problem differently: those helpers now return outcomes (PickOutcome, DiscoveryResult.warnings) and the Effect caller logs (tool/task.ts, provider.ts). That left zero call sites, so the file was removed rather than carried as dead code.",
     "commits": [
       "21c1ac9dd6"
     ]
   },
   "_ownedRemoved_2026-08-13": {
-    "note": "packages/core/src/util/log.ts (the legacy-logger compatibility shim, upstream's own module removed in #31310) was deleted 2026-08-12 \u2014 confirmed intentional, not a merge regression: upstream now has its own logger, making the shim genuinely obsolete."
+    "note": "packages/core/src/util/log.ts (the legacy-logger compatibility shim, upstream's own module removed in #31310) was deleted 2026-08-12 — confirmed intentional, not a merge regression: upstream now has its own logger, making the shim genuinely obsolete."
   },
   "_ownedRemoved_2026-08-12": {
     "note": "auto-reply.ts, automation-features.ts, pattern-detection.ts (+ its two CLI commands), scheduler.ts, and hook.ts were deliberately deleted 2026-08-07 (commits 88731dfc6f, 0530944759) for being dead/broken code, not lost in a merge. fork:verify was reporting all 7 as regressions because this manifest was never updated at deletion time. Removed here, not re-added.",
@@ -211,7 +211,7 @@
     {
       "file": "packages/tui/src/context/theme.tsx",
       "marker": "ThemeState.set",
-      "note": "createEffect writing ThemeState.set(store.active) \u2014 the writer half of the local-backend themed-loading-screen feature (reader is provider.ts ThemeState.get). theme-state.ts now lives in packages/core/src/local so both the TUI (writer) and the opencode provider (reader) can share the singleton across the package boundary."
+      "note": "createEffect writing ThemeState.set(store.active) — the writer half of the local-backend themed-loading-screen feature (reader is provider.ts ThemeState.get). theme-state.ts now lives in packages/core/src/local so both the TUI (writer) and the opencode provider (reader) can share the singleton across the package boundary."
     },
     {
       "file": "packages/opencode/src/effect/app-runtime.ts",
@@ -231,17 +231,17 @@
     {
       "file": "packages/core/src/git.ts",
       "marker": "LC_ALL",
-      "note": "Pins LC_ALL=C on git spawns. This code matches git's human-readable output by text (forceRequired), and git localises it \u2014 on a non-English machine those checks silently read false."
+      "note": "Pins LC_ALL=C on git spawns. This code matches git's human-readable output by text (forceRequired), and git localises it — on a non-English machine those checks silently read false."
     },
     {
       "file": "packages/opencode/test/fixture/fixture.ts",
       "marker": "disposeDirectory",
-      "note": "Disposes each test's instance when the test ends. InstanceStore otherwise holds every instance the suite creates \u2014 each with its own :memory: SQLite and slice of the app graph \u2014 until the process exits, which measured as the bulk of the suite's memory (provider dir: 3004 -> 2577 MB)."
+      "note": "Disposes each test's instance when the test ends. InstanceStore otherwise holds every instance the suite creates — each with its own :memory: SQLite and slice of the app graph — until the process exits, which measured as the bulk of the suite's memory (provider dir: 3004 -> 2577 MB)."
     },
     {
       "file": "packages/core/src/npm.ts",
       "marker": "basePackage",
-      "note": "Splits a package specifier from its export subpath. `@ai-sdk/amazon-bedrock/mantle` is not an installable npm spec \u2014 npa cannot parse it, so npm treats it as a local folder and arborist reads <cwd>/@ai-sdk/... Install the base package, resolve the full specifier for the entrypoint."
+      "note": "Splits a package specifier from its export subpath. `@ai-sdk/amazon-bedrock/mantle` is not an installable npm spec — npa cannot parse it, so npm treats it as a local folder and arborist reads <cwd>/@ai-sdk/... Install the base package, resolve the full specifier for the entrypoint."
     },
     {
       "file": "packages/core/src/config.ts",
@@ -300,7 +300,7 @@
     },
     {
       "file": "packages/opencode/src/cli/cmd/run.ts",
-      "marker": "fork: auto-mode \u2014 `--auto` (or OPENCODE_",
+      "marker": "fork: auto-mode — `--auto` (or OPENCODE_",
       "note": "Fork edit to an upstream file (+7/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
     },
     {
@@ -370,7 +370,7 @@
     },
     {
       "file": "packages/opencode/src/server/routes/instance/httpapi/handlers/global.ts",
-      "marker": "fork: name the binary location \u2014 the com",
+      "marker": "fork: name the binary location — the com",
       "note": "Fork edit to an upstream file (+7/-1 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
     },
     {
@@ -405,7 +405,7 @@
     },
     {
       "file": "packages/opencode/src/session/prompt.ts",
-      "marker": "fork: loop detection \u2014 if consecutive as",
+      "marker": "fork: loop detection — if consecutive as",
       "note": "Fork edit to an upstream file (+287/-121 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
     },
     {
@@ -655,12 +655,78 @@
     }
   ],
   "divergence": {
-    "note": "Ratchet for the failure this fork keeps hitting: a merge silently deleting a fork feature (see the self-healing compaction entry). Any file under `scope` that differs from baseline.upstreamRef and is neither owned/patched nor listed in `accepted` fails fork:verify. `accepted` is the divergence that already existed when the gate was added \u2014 classify those as feature or drift over time; new files must be classified immediately. The single remaining accepted entry is packages/core/src/effect/dfdf, which upstream committed by accident \u2014 its contents are an editor's \"File to save in:\" prompt. It is deleted here on purpose; it stays accepted rather than registered because there is no file left to carry a marker. Re-baseline deliberately with `bun run fork:verify --accept-divergence`.",
+    "note": "Ratchet for the failure this fork keeps hitting: a merge silently deleting a fork feature (see the self-healing compaction entry). Any file under `scope` that differs from baseline.upstreamRef and is neither owned/patched nor listed in `accepted` fails fork:verify. `accepted` is the divergence that already existed when the gate was added — classify those as feature or drift over time; new files must be classified immediately. The single remaining accepted entry is packages/core/src/effect/dfdf, which upstream committed by accident — its contents are an editor's \"File to save in:\" prompt. It is deleted here on purpose; it stays accepted rather than registered because there is no file left to carry a marker. Re-baseline deliberately with `bun run fork:verify --accept-divergence`.",
     "scope": [
       "^packages/[^/]+/(src|test)/"
     ],
     "accepted": [
-      "packages/core/src/effect/dfdf"
+      "packages/core/src/background-job.ts",
+      "packages/core/src/control-plane/move-session.ts",
+      "packages/core/src/credential.ts",
+      "packages/core/src/cross-spawn-spawner.ts",
+      "packages/core/src/effect/dfdf",
+      "packages/core/src/event.ts",
+      "packages/core/src/fs-util.ts",
+      "packages/core/src/global.ts",
+      "packages/core/src/models-dev.ts",
+      "packages/core/src/observability.ts",
+      "packages/core/src/permission/saved.ts",
+      "packages/core/src/process.ts",
+      "packages/core/src/project.ts",
+      "packages/core/src/project/directories.ts",
+      "packages/core/src/pty/ticket.ts",
+      "packages/core/src/repository-cache.ts",
+      "packages/core/src/ripgrep.ts",
+      "packages/core/src/ripgrep/binary.ts",
+      "packages/core/src/session/execution/local.ts",
+      "packages/core/src/session/projector.ts",
+      "packages/core/src/session/store.ts",
+      "packages/core/src/skill/discovery.ts",
+      "packages/core/src/tool/application-tools.ts",
+      "packages/core/src/util/effect-flock.ts",
+      "packages/opencode/src/account/account.ts",
+      "packages/opencode/src/account/repo.ts",
+      "packages/opencode/src/acp/session.ts",
+      "packages/opencode/src/auth/index.ts",
+      "packages/opencode/src/background/job.ts",
+      "packages/opencode/src/cli/cmd/attach.ts",
+      "packages/opencode/src/config/tui.ts",
+      "packages/opencode/src/control-plane/workspace.ts",
+      "packages/opencode/src/env/index.ts",
+      "packages/opencode/src/event-v2-bridge.ts",
+      "packages/opencode/src/format/index.ts",
+      "packages/opencode/src/git/index.ts",
+      "packages/opencode/src/image/image.ts",
+      "packages/opencode/src/lsp/lsp.ts",
+      "packages/opencode/src/mcp/auth.ts",
+      "packages/opencode/src/mcp/browser.ts",
+      "packages/opencode/src/permission/index.ts",
+      "packages/opencode/src/plugin/index.ts",
+      "packages/opencode/src/project/bootstrap.ts",
+      "packages/opencode/src/project/project.ts",
+      "packages/opencode/src/project/vcs.ts",
+      "packages/opencode/src/provider/auth.ts",
+      "packages/opencode/src/question/index.ts",
+      "packages/opencode/src/server/routes/instance/httpapi/websocket-tracker.ts",
+      "packages/opencode/src/session/instruction.ts",
+      "packages/opencode/src/session/processor.ts",
+      "packages/opencode/src/session/revert.ts",
+      "packages/opencode/src/session/run-state.ts",
+      "packages/opencode/src/session/session.ts",
+      "packages/opencode/src/session/status.ts",
+      "packages/opencode/src/session/system.ts",
+      "packages/opencode/src/session/todo.ts",
+      "packages/opencode/src/share/session.ts",
+      "packages/opencode/src/share/share-next.ts",
+      "packages/opencode/src/skill/discovery.ts",
+      "packages/opencode/src/skill/index.ts",
+      "packages/opencode/src/snapshot/index.ts",
+      "packages/opencode/src/storage/storage.ts",
+      "packages/opencode/src/tool/shell/prompt.ts",
+      "packages/opencode/src/tool/truncate.ts",
+      "packages/opencode/test/mcp/oauth-provider.test.ts",
+      "packages/opencode/test/session/snapshot-tool-race.test.ts",
+      "packages/tui/src/component/dialog-move-session.tsx"
     ]
   }
 }
