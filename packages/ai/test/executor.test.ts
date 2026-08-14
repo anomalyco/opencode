@@ -66,6 +66,7 @@ const expectAIError = (error: unknown) => {
 }
 
 const errorHttp = (error: AIError) => ("http" in error.reason ? error.reason.http : undefined)
+const largeProviderMessage = `Upstream request failed: ${"validation failed; ".repeat(1_000)}`
 
 describe("RequestExecutor", () => {
   it.effect("parses response body failures at the executor seam", () =>
@@ -76,11 +77,11 @@ describe("RequestExecutor", () => {
       expectAIError(error)
       expect(error.reason).toMatchObject({
         _tag: "Transport",
-        message: "ECONNRESET: disconnected <redacted> <redacted>",
+        message: "ECONNRESET: disconnected query-secret-123 header-secret-456",
         transport: "http",
         operation: "read",
         code: "ECONNRESET",
-        url: "https://provider.test/v1/chat?api_key=%3Credacted%3E&debug=1",
+        url: "https://provider.test/v1/chat?api_key=query-secret-123&debug=1",
       })
     }).pipe(
       Effect.provide(
@@ -153,12 +154,12 @@ describe("RequestExecutor", () => {
       expectAIError(error)
       expect(error.reason).toMatchObject({
         _tag: "Transport",
-        message: "ECONNRESET: proxy disconnected <redacted>",
-        url: "https://proxy.test/v1/chat?api_key=%3Credacted%3E",
+        message: "ECONNRESET: proxy disconnected proxy-secret",
+        url: "https://proxy.test/v1/chat?api_key=proxy-secret",
         http: {
           request: {
-            url: "https://proxy.test/v1/chat?api_key=%3Credacted%3E",
-            headers: { authorization: "<redacted>" },
+            url: "https://proxy.test/v1/chat?api_key=proxy-secret",
+            headers: { authorization: "Bearer proxy-secret" },
           },
         },
       })
@@ -218,7 +219,47 @@ describe("RequestExecutor", () => {
       expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect("classification" in error.reason ? error.reason.classification : undefined).toBeUndefined()
+      expect(error.reason.message).toBe("Provider request failed with HTTP 400")
     }).pipe(Effect.provide(responsesLayer([new Response("invalid parameter", { status: 400 })]))),
+  )
+
+  it.effect("preserves structured provider messages from large error bodies", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectAIError(error)
+      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: largeProviderMessage })
+      expect(errorHttp(error)?.body).toContain(largeProviderMessage)
+      expect(errorHttp(error)?.bodyTruncated).toBeUndefined()
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response(
+            JSON.stringify({
+              model: "gpt-5.6-sol",
+              error: { type: "invalid_request", message: largeProviderMessage },
+            }),
+            { status: 400 },
+          ),
+        ]),
+      ),
+    ),
+  )
+
+  it.effect("falls back when structured provider messages are empty", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectAIError(error)
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidRequest",
+        message: "Provider request failed with HTTP 400",
+      })
+    }).pipe(
+      Effect.provide(responsesLayer([new Response('{"error":{"message":"  "}}', { status: 400 })])),
+    ),
   )
 
   it.effect("classifies provider rate limits hidden behind HTTP 400", () =>
@@ -254,7 +295,7 @@ describe("RequestExecutor", () => {
     }),
   )
 
-  it.effect("returns redacted diagnostics for rate limits", () =>
+  it.effect("returns complete diagnostics for rate limits", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
@@ -269,15 +310,15 @@ describe("RequestExecutor", () => {
             requestId: "req_123",
             request: {
               method: "POST",
-              url: "https://provider.test/v1/chat?api_key=%3Credacted%3E&key=%3Credacted%3E&debug=1",
-              headers: { authorization: "<redacted>", "x-safe": "visible" },
+              url: "https://provider.test/v1/chat?api_key=secret&key=secret&debug=1",
+              headers: { authorization: "Bearer secret", "x-safe": "visible" },
             },
             response: {
               status: 429,
               headers: {
                 "retry-after-ms": "0",
                 "x-request-id": "req_123",
-                "x-api-key": "<redacted>",
+                "x-api-key": "secret",
               },
             },
           },
@@ -296,14 +337,14 @@ describe("RequestExecutor", () => {
     ),
   )
 
-  it.effect("honors current redacted header names in diagnostics", () =>
+  it.effect("preserves configured header names in diagnostics", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
       expectAIError(error)
-      expect(errorHttp(error)?.request.headers["x-safe"]).toBe("<redacted>")
-      expect(errorHttp(error)?.response?.headers["x-safe"]).toBe("<redacted>")
+      expect(errorHttp(error)?.request.headers["x-safe"]).toBe("visible")
+      expect(errorHttp(error)?.response?.headers["x-safe"]).toBe("response-secret")
     }).pipe(
       Effect.provide(responsesLayer([new Response("bad", { status: 400, headers: { "x-safe": "response-secret" } })])),
       Effect.provideService(Headers.CurrentRedactedNames, ["x-safe"]),
@@ -422,15 +463,15 @@ describe("RequestExecutor", () => {
     }),
   )
 
-  it.effect("truncates large authentication error bodies", () =>
+  it.effect("preserves large authentication error bodies", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
       expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "Authentication" })
-      expect(errorHttp(error)?.bodyTruncated).toBe(true)
-      expect(errorHttp(error)?.body).toHaveLength(16_384)
+      expect(errorHttp(error)?.bodyTruncated).toBeUndefined()
+      expect(errorHttp(error)?.body).toHaveLength(20_000)
     }).pipe(
       Effect.provide(
         responsesLayer([
@@ -441,16 +482,15 @@ describe("RequestExecutor", () => {
     ),
   )
 
-  it.effect("redacts common secret fields in response bodies", () =>
+  it.effect("preserves response body fields", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
       expectAIError(error)
-      expect(errorHttp(error)?.body).toContain('"key":"<redacted>"')
-      expect(errorHttp(error)?.body).toContain("api_key=<redacted>")
-      expect(errorHttp(error)?.body).not.toContain("body-secret")
-      expect(errorHttp(error)?.body).not.toContain("query-secret")
+      expect(errorHttp(error)?.body).toBe(
+        '{"error":{"message":"bad","key":"body-secret","detail":"api_key=query-secret"}}',
+      )
     }).pipe(
       Effect.provide(
         responsesLayer([
@@ -462,16 +502,15 @@ describe("RequestExecutor", () => {
     ),
   )
 
-  it.effect("redacts echoed request secret values in response bodies", () =>
+  it.effect("preserves echoed request values in response bodies", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(secretRequest).pipe(Effect.flip)
 
       expectAIError(error)
-      expect(errorHttp(error)?.body).toContain("provider echoed <redacted>")
-      expect(errorHttp(error)?.body).toContain("authorization <redacted>")
-      expect(errorHttp(error)?.body).not.toContain("query-secret-123")
-      expect(errorHttp(error)?.body).not.toContain("header-secret-456")
+      expect(errorHttp(error)?.body).toBe(
+        "provider echoed query-secret-123 and authorization header-secret-456",
+      )
     }).pipe(
       Effect.provide(
         responsesLayer([

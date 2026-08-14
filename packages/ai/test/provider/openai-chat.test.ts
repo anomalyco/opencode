@@ -1275,8 +1275,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(error).toBeInstanceOf(AIError)
-      expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
-      expect(error.message).toContain("HTTP 400")
+      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: "Bad request" })
     }),
   )
 

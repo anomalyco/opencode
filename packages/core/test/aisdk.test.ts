@@ -468,7 +468,7 @@ it.effect("derives status and code when the AI SDK error message is empty", () =
   }),
 )
 
-it.effect("preserves redacted HTTP context on AI SDK call errors", () =>
+it.effect("preserves complete HTTP context on AI SDK call errors", () =>
   Effect.gen(function* () {
     const error = yield* streamFailure(
       apiCallError({
@@ -480,7 +480,7 @@ it.effect("preserves redacted HTTP context on AI SDK call errors", () =>
     const http = "http" in error.reason ? error.reason.http : undefined
     expect(http?.request.url).toBe("https://api.example.com/chat")
     expect(http?.response?.status).toBe(404)
-    expect(http?.response?.headers["authorization"]).toBe("<redacted>")
+    expect(http?.response?.headers["authorization"]).toBe("Bearer secret-token")
     expect(http?.body).toBe('{"error":{"message":"","code":"not_found"}}')
   }),
 )
