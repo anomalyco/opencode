@@ -13,7 +13,7 @@ import { SessionHistory } from "./history.js"
 import { SessionModelHeaders } from "./model-headers.js"
 import { SessionPromptCacheKey } from "./prompt-cache-key.js"
 import { SessionRunnerModel } from "./runner/model.js"
-import PROMPT_DEFAULT from "./runner/prompt/base.txt"
+import { SessionSystemPrompt } from "./system-prompt.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 
 export const layer = Layer.effect(
@@ -39,7 +39,12 @@ export const layer = Layer.effect(
           sessionID: selection.session.id,
           agent: selection.agent.id,
           model: model.ref,
-          system: [selection.agent.info.system ? selection.agent.info.system : PROMPT_DEFAULT, history.initial]
+          system: [
+            selection.agent.info.system
+              ? selection.agent.info.system
+              : SessionSystemPrompt.make(toolDefinitions.map((tool) => tool.name)),
+            history.initial,
+          ]
             .filter((part) => part.length > 0)
             .map(SystemPart.make),
           messages: [

@@ -18,7 +18,7 @@ import { SessionModelHttp } from "./model-http.js"
 import { SessionPromptCacheKey } from "./prompt-cache-key.js"
 import { PromptCacheDiagnostics } from "./prompt-cache-diagnostics.js"
 import { MAX_STEPS_PROMPT } from "./runner/max-steps.js"
-import PROMPT_DEFAULT from "./runner/prompt/base.txt"
+import { SessionSystemPrompt } from "./system-prompt.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
@@ -182,7 +182,12 @@ export const layer = Layer.effect(
       // The final Step keeps definitions available to protocols with native "none",
       // preserving their prompt cache prefix. Calls are still rejected at execution.
       const tools = input.context.tools
-      const system = [agent.info.system ? agent.info.system : PROMPT_DEFAULT, input.context.initial]
+      const system = [
+        agent.info.system
+          ? agent.info.system
+          : SessionSystemPrompt.make(tools.definitions.map((tool) => tool.name)),
+        input.context.initial,
+      ]
         .filter((part) => part.length > 0)
         .map(SystemPart.make)
       const history = toLLMMessages(input.context.messages, resolved.ref, providerMetadataKey)

@@ -67,6 +67,7 @@ import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
 import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
 import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
+import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
 import { ID } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { Provider } from "@opencode-ai/core/provider"
@@ -76,7 +77,6 @@ import { asc, desc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
-import PROMPT_DEFAULT from "../src/session/runner/prompt/base.txt"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
 
 let requests: LLMRequest[] = []
@@ -133,7 +133,7 @@ const testLLM = TestLLM.layer({
 })
 const client = TestLLM.clientLayer
 const model = LanguageModel.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
-const defaultSystem = PROMPT_DEFAULT
+const defaultSystem = SessionSystemPrompt.make([])
 const replacementModel = LanguageModel.make({ id: "replacement", provider: "fake", route: OpenAIChat.route })
 const compactModel = LanguageModel.make({
   id: "compact",
