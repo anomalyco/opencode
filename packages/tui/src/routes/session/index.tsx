@@ -1519,20 +1519,28 @@ function turnTokenToolSummary(tool: SessionMessageAssistantTool) {
 function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
   const theme = useTheme()
   const shortcut = Keymap.useShortcut("session.background")
-  const running = createMemo(() => {
-    if (!shortcut()) return
-    const current = props.messages.findLast(
-      (message): message is SessionMessageAssistant => message.type === "assistant" && !message.time.completed,
-    )
-    const part = current?.content.find((part): part is SessionMessageAssistantTool => {
-      if (part.type !== "tool" || part.state.status !== "running") return false
-      const name = canonicalToolName(part.name)
-      return name === "shell" || name === "subagent"
-    })
-    if (!current || !part) return
-    return `${current.id}:${part.id}`
-  })
-  const visible = createDelayedPresence(running, BACKGROUND_TOOL_HINT_DELAY)
+  const running = createMemo(
+    () => {
+      if (!shortcut()) return
+      const current = props.messages.findLast(
+        (message): message is SessionMessageAssistant => message.type === "assistant" && !message.time.completed,
+      )
+      const part = current?.content.find((part): part is SessionMessageAssistantTool => {
+        if (part.type !== "tool" || part.state.status !== "running") return false
+        const name = canonicalToolName(part.name)
+        return name === "shell" || name === "subagent"
+      })
+      if (!current || !part) return
+      return { key: `${current.id}:${part.id}`, started: part.time.ran ?? part.time.created }
+    },
+    undefined,
+    {
+      equals: (previous, next) => previous?.key === next?.key && previous?.started === next?.started,
+    },
+  )
+  const visible = createDelayedPresence(running, (tool) =>
+    Math.max(0, BACKGROUND_TOOL_HINT_DELAY - (Date.now() - tool.started)),
+  )
   return (
     <Show when={visible() && shortcut()}>
       {(value) => (
