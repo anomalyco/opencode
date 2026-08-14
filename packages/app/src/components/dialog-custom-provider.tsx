@@ -12,7 +12,24 @@ import { ExternalLink } from "@/components/external-link"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
-import { type FormState, headerRow, modelRow, validateCustomProvider } from "./dialog-custom-provider-form"
+import { parseDiscoveryResult } from "./dialog-custom-provider-models"
+import {
+  type FormState,
+  headerRow,
+  modelRow,
+  modelsFromIDs,
+  validateCustomProvider,
+} from "./dialog-custom-provider-form"
+
+function headerMap(rows: FormState["headers"]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const row of rows) {
+    const key = row.key.trim()
+    const value = row.value.trim()
+    if (key && value) out[key] = value
+  }
+  return out
+}
 
 type Props = {
   onBack: () => void
@@ -175,6 +192,35 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
     saveMutation.mutate(result)
   }
 
+  const loadModelsMutation = useMutation(() => ({
+    mutationFn: async (input: { baseURL: string; apiKey: string; headers?: Record<string, string> }) => {
+      const res = await serverSDK().client.provider.discover({
+        discoverModelsPayload: {
+          baseURL: input.baseURL,
+          ...(input.apiKey ? { apiKey: input.apiKey } : {}),
+          ...(input.headers ? { headers: input.headers } : {}),
+        },
+      })
+      return parseDiscoveryResult(res.data)
+    },
+    onSuccess: (result) => {
+      if (!result.ok) {
+        showToast({
+          title: language.t(`provider.custom.models.load.${result.error}` as Parameters<typeof language.t>[0]),
+        })
+        return
+      }
+      if (result.models.length === 0) {
+        showToast({ title: language.t("provider.custom.models.load.empty") })
+        return
+      }
+      setForm("models", modelsFromIDs(result.models))
+    },
+    onError: () => {
+      showToast({ title: language.t("provider.custom.models.load.failed") })
+    },
+  }))
+
   return (
     <div class="flex flex-col gap-6 px-2.5 pb-3 overflow-y-auto max-h-[60vh]">
       <div class="px-2.5 flex gap-4 items-center">
@@ -228,7 +274,27 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
         </div>
 
         <div class="flex flex-col gap-3">
-          <label class="text-12-medium text-text-weak">{language.t("provider.custom.models.label")}</label>
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-12-medium text-text-weak">{language.t("provider.custom.models.label")}</label>
+            <Button
+              type="button"
+              size="small"
+              variant="ghost"
+              icon="download"
+              onClick={() =>
+                void loadModelsMutation.mutate({
+                  baseURL: form.baseURL,
+                  apiKey: form.apiKey,
+                  headers: headerMap(form.headers),
+                })
+              }
+              disabled={loadModelsMutation.isPending}
+            >
+              {loadModelsMutation.isPending
+                ? language.t("provider.custom.models.loading")
+                : language.t("provider.custom.models.load")}
+            </Button>
+          </div>
           <For each={form.models}>
             {(m, i) => (
               <div class="flex gap-2 items-start" data-row={m.row}>

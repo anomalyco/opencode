@@ -1,7 +1,20 @@
 import { describe, expect, test } from "bun:test"
-import { validateCustomProvider } from "./dialog-custom-provider-form"
+import { modelsFromIDs, validateCustomProvider } from "./dialog-custom-provider-form"
 
 const t = (key: string) => key
+
+describe("modelsFromIDs", () => {
+  test("builds one editable row per id with id as default name", () => {
+    const rows = modelsFromIDs(["model-a", "model-b"])
+
+    expect(rows).toHaveLength(2)
+    expect(rows[0]!.id).toBe("model-a")
+    expect(rows[0]!.name).toBe("model-a")
+    expect(rows[0]!.err).toEqual({})
+    expect(rows[1]!.id).toBe("model-b")
+    expect(rows[1]!.name).toBe("model-b")
+  })
+})
 
 describe("validateCustomProvider", () => {
   test("builds trimmed config payload", () => {
