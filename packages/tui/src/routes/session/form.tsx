@@ -356,20 +356,16 @@ export function FormPrompt(props: {
     const isTextual = textual()
     const isMulti = multi()
     if (!text) {
-      const previous = store.custom[current.key]
-      const existing = store.answers[current.key]
-      const values = Array.isArray(existing) ? existing.filter((value) => value !== previous) : []
-      const value = !isTextual && isMulti && Array.isArray(existing) ? values : undefined
-      if (!isTextual && isMulti) {
-        answer(current.key, value)
-        setStore("custom", current.key, "")
-        setStore("editing", false)
-        return true
-      }
-      const invalid = formValidateValue(current, value)
-      if (invalid) {
-        setStore("error", invalid)
-        return false
+      const value =
+        !isTextual && isMulti
+          ? formSetMultiselectCustom(store.answers[current.key], store.custom[current.key], "")
+          : undefined
+      if (isTextual || !isMulti) {
+        const invalid = formValidateValue(current, value)
+        if (invalid) {
+          setStore("error", invalid)
+          return false
+        }
       }
       answer(current.key, value)
       setStore("custom", current.key, "")
@@ -497,13 +493,14 @@ export function FormPrompt(props: {
       setStore("error", formValidateValue(invalid, store.answers[invalid.key]) ?? "Invalid answer")
       return
     }
-    const answer = Object.fromEntries(
-      fields().flatMap((field) => {
-        const value = store.answers[field.key]
-        return value === undefined ? [] : [[field.key, value] as const]
-      }),
+    reply(
+      Object.fromEntries(
+        fields().flatMap((field) => {
+          const value = store.answers[field.key]
+          return value === undefined ? [] : [[field.key, value] as const]
+        }),
+      ),
     )
-    reply(answer)
   }
 
   onMount(() => onCleanup(keymap.mode.push(FORM_MODE)))

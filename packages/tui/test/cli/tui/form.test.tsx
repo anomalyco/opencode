@@ -3,7 +3,6 @@ import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { ClipboardProvider } from "../../../src/context/clipboard"
 import type { FormWithLocation } from "../../../src/context/data"
 import { ClientProvider } from "../../../src/context/client"
 import { ThemeProvider } from "../../../src/context/theme"
@@ -57,30 +56,27 @@ async function mountForm(root: string, width = 80, fields?: FormWithLocation["fi
           state,
           worktree: root,
         }}
+        clipboard={{
+          async read() {
+            return undefined
+          },
+          write(text) {
+            copied.push(text)
+            return Promise.resolve()
+          },
+        }}
       >
-        <ClipboardProvider
-          value={{
-            async read() {
-              return undefined
-            },
-            write(text) {
-              copied.push(text)
-              return Promise.resolve()
-            },
-          }}
-        >
-          <ConfigProvider config={config}>
-            <Keymap.Provider>
-              <ClientProvider api={createApi(transport.fetch)}>
-                <ThemeProvider mode="dark" source={emptyThemeSource}>
-                  <ToastProvider>
-                    <FormPrompt form={form} />
-                  </ToastProvider>
-                </ThemeProvider>
-              </ClientProvider>
-            </Keymap.Provider>
-          </ConfigProvider>
-        </ClipboardProvider>
+        <ConfigProvider config={config}>
+          <Keymap.Provider>
+            <ClientProvider api={createApi(transport.fetch)}>
+              <ThemeProvider mode="dark" source={emptyThemeSource}>
+                <ToastProvider>
+                  <FormPrompt form={form} />
+                </ToastProvider>
+              </ThemeProvider>
+            </ClientProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
       </TestTuiContexts>
     )
   }
