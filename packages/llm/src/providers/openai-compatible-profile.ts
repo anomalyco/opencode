@@ -4,6 +4,7 @@ export interface OpenAICompatibleProfile {
 }
 
 export const profiles = {
+  apiario: { provider: "apiario", baseURL: "https://api.apiario.dev/v1" },
   baseten: { provider: "baseten", baseURL: "https://inference.baseten.co/v1" },
   cerebras: { provider: "cerebras", baseURL: "https://api.cerebras.ai/v1" },
   deepinfra: { provider: "deepinfra", baseURL: "https://api.deepinfra.com/v1/openai" },
