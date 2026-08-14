@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { marqueeCycleWidth, marqueeOverflows, marqueeText } from "../../src/util/marquee"
+import { marqueeCycleWidth, marqueeOverflows, marqueeText, marqueeTextParts } from "../../src/util/marquee"
 import { stringWidth } from "../../src/util/string-width"
 
 describe("marquee text", () => {
@@ -23,6 +23,18 @@ describe("marquee text", () => {
     const title = "A long session title"
     expect(marqueeText(title, 8, marqueeCycleWidth(title) - 3)).toBe(" · A lon")
     expect(marqueeText(title, 8, marqueeCycleWidth(title))).toBe("A long s")
+  })
+
+  test("identifies only the generated separator dot", () => {
+    expect(marqueeTextParts("A · title", 6, 7)).toEqual([
+      { value: "l", separator: false },
+      { value: "e", separator: false },
+      { value: " ", separator: false },
+      { value: "·", separator: true },
+      { value: " ", separator: false },
+      { value: "A", separator: false },
+    ])
+    expect(marqueeTextParts("A · title", 6, 2)[0]).toEqual({ value: "·", separator: false })
   })
 
   test("clips wide graphemes to terminal cells", () => {

@@ -34,7 +34,7 @@ import { TabPulse, unreadGlowIntensity } from "./tab-pulse"
 import { tint } from "../theme/color"
 import { SESSION_SIDEBAR_WIDTH } from "../ui/layout"
 import { projectName } from "../util/project"
-import { marqueeCycleWidth, marqueeOverflows, marqueeText } from "../util/marquee"
+import { marqueeCycleWidth, marqueeOverflows, marqueeText, marqueeTextParts } from "../util/marquee"
 import { useDialog } from "../ui/dialog"
 import { DialogSessionRename } from "./dialog-session-rename"
 
@@ -43,7 +43,7 @@ const FADE_WIDTH = 4
 // The add button renders as " + " at the end of the strip, so the tab layout leaves it room.
 const ADD_TAB_WIDTH = 3
 const MARQUEE_DELAY = 600
-const MARQUEE_INTERVAL = 100
+const MARQUEE_INTERVAL = 80
 const CONTEXT_MENU_WIDTH = 16
 const RIGHT_MOUSE_BUTTON = 2
 
@@ -398,7 +398,11 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                   ? marqueeText(title(), titleWidth(), marquee.offset())
                   : Locale.takeWidth(title(), titleWidth()),
               )
-              const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
+              const visibleTitleParts = createMemo(() =>
+                scrolling()
+                  ? marqueeTextParts(title(), titleWidth(), marquee.offset())
+                  : Locale.graphemes(visibleTitle()).map((value) => ({ value, separator: false })),
+              )
               const titleFades = createMemo(() => marqueeOverflows(title(), titleWidth()) && titleWidth() > FADE_WIDTH)
               const detail = createMemo(() => {
                 const fixture = tabs.detail?.(tab.sessionID)
@@ -496,13 +500,13 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
               }
               const separatorUpperColor = createMemo(() => tint(theme.background.default, previousGlowHue(), 0.1))
               const separatorLowerColor = createMemo(() => tint(theme.background.default, glowHue(), 0.12))
-              const titleColor = (index: number) => {
+              const titleColor = (index: number, separator: boolean) => {
                 const level = titleGlow.value().level
                 const color =
                   level === 0
                     ? foreground()
                     : glowTextColor(foreground(), glowColor(), 1 + numberWidth() + index, width(), level)
-                return titleFades()
+                const faded = titleFades()
                   ? fadeTitleColor(
                       color,
                       pulseBackground(),
@@ -511,6 +515,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       scrolling() ? marquee.leading() : 0,
                     )
                   : color
+                return separator ? tint(faded, pulseBackground(), 0.55) : faded
               }
               const release = () => {
                 setDragging(undefined)
@@ -647,9 +652,14 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                         selectable={false}
                         attributes={selected() ? TextAttributes.BOLD : undefined}
                       >
-                        <Show when={titleGlow.value().level > 0 || titleFades()} fallback={visibleTitle()}>
+                        <Show
+                          when={scrolling() || titleGlow.value().level > 0 || titleFades()}
+                          fallback={visibleTitle()}
+                        >
                           <For each={visibleTitleParts()}>
-                            {(character, index) => <span style={{ fg: titleColor(index()) }}>{character}</span>}
+                            {(part, index) => (
+                              <span style={{ fg: titleColor(index(), part.separator) }}>{part.value}</span>
+                            )}
                           </For>
                         </Show>
                       </text>
@@ -988,7 +998,11 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
               ? marqueeText(title(), availableTitleWidth(), marquee.offset())
               : Locale.takeWidth(title(), availableTitleWidth()),
           )
-          const visibleTitleParts = createMemo(() => Locale.graphemes(visibleTitle()))
+          const visibleTitleParts = createMemo(() =>
+            scrolling()
+              ? marqueeTextParts(title(), availableTitleWidth(), marquee.offset())
+              : Locale.graphemes(visibleTitle()).map((value) => ({ value, separator: false })),
+          )
           const titleFades = createMemo(
             () => marqueeOverflows(title(), availableTitleWidth()) && availableTitleWidth() > FADE_WIDTH,
           )
@@ -1000,10 +1014,10 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           }
           // Title characters sitting over the glow tinge toward its color, following the same
           // spatial falloff as the glow itself; characters beyond the tail stay neutral.
-          const characterColor = (index: number) => {
+          const characterColor = (index: number, separator: boolean) => {
             const base = foreground()
             const color = glows() ? glowTextColor(base, glowColor(), 1 + numberWidth() + index, width()) : base
-            return titleFades()
+            const faded = titleFades()
               ? fadeTitleColor(
                   color,
                   background(),
@@ -1012,6 +1026,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   scrolling() ? marquee.leading() : 0,
                 )
               : color
+            return separator ? tint(faded, background(), 0.55) : faded
           }
           // The running sweep's level under the number cell, reported by the pulse renderable.
           const [sweepLevel, setSweepLevel] = createSignal(0)
@@ -1100,9 +1115,11 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                   selectable={false}
                   attributes={bold()}
                 >
-                  <Show when={glows() || titleFades()} fallback={visibleTitle()}>
+                  <Show when={scrolling() || glows() || titleFades()} fallback={visibleTitle()}>
                     <For each={visibleTitleParts()}>
-                      {(character, index) => <span style={{ fg: characterColor(index()) }}>{character}</span>}
+                      {(part, index) => (
+                        <span style={{ fg: characterColor(index(), part.separator) }}>{part.value}</span>
+                      )}
                     </For>
                   </Show>
                 </text>
