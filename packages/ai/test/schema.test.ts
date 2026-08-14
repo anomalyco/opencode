@@ -113,6 +113,8 @@ test("AI errors expose the shared runtime tag", async () => {
 test("transport errors serialize execution facts", () => {
   const reason = new TransportReason({
     message: "connection closed",
+    transport: "websocket",
+    operation: "read",
     phase: "receive",
     delivery: "ambiguous",
     recovery: "fail",
@@ -121,6 +123,8 @@ test("transport errors serialize execution facts", () => {
   expect(Schema.encodeSync(TransportReason)(reason)).toEqual({
     _tag: "Transport",
     message: "connection closed",
+    transport: "websocket",
+    operation: "read",
     phase: "receive",
     delivery: "ambiguous",
     recovery: "fail",
