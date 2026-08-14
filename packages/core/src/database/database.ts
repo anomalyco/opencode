@@ -29,8 +29,18 @@ const layer = Layer.effect(
     yield* db.run("PRAGMA busy_timeout = 5000")
     yield* db.run("PRAGMA cache_size = -64000")
     yield* db.run("PRAGMA foreign_keys = ON")
+    // Autocheckpoint WAL file every ~1000 pages (~4MB) to prevent WAL file growing too large
+    yield* db.run("PRAGMA wal_autocheckpoint = 1000")
+    // Non-blocking passive checkpoint on startup to flush any uncommitted/leftover WAL frames from a previous unclean shutdown
     yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
     yield* DatabaseMigration.apply(db)
+
+    yield* Effect.addFinalizer(
+      Effect.fnUntraced(function* () {
+        // Fully flush and truncate WAL on graceful shutdown for minimal recovery on next boot
+        yield* db.run("PRAGMA wal_checkpoint(TRUNCATE)").pipe(Effect.ignore)
+      }),
+    )
 
     return { db }
   }).pipe(Effect.orDie),

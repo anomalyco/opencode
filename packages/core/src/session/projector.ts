@@ -11,6 +11,7 @@ import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
+import { SessionRecovery } from "./recovery"
 import { WorkspaceV2 } from "../workspace"
 import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
@@ -448,6 +449,15 @@ const layer = Layer.effectDiscard(
           .run()
           .pipe(Effect.orDie)
       }),
+    )
+
+    // Recover sessions that were interrupted by a crash during an active LLM turn.
+    // Run after all projectors are registered so the database state is ready.
+    yield* SessionRecovery.recover.pipe(
+      Effect.tapError((error) =>
+        Effect.logError("Session recovery failed", { error: String(error) }).pipe(Effect.ignore),
+      ),
+      Effect.ignore,
     )
   }),
 )
