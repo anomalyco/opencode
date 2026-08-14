@@ -267,8 +267,15 @@ export function Session() {
     })
   })
   const editor = useEditorContext()
-  const rows = createSessionRows(() => route.sessionID)
+  const [rowsSynced, setRowsSynced] = createSignal(false)
+  const rows = createSessionRows(
+    () => route.sessionID,
+    (id) => {
+      if (id === sessionID) setRowsSynced(true)
+    },
+  )
   const boundaries = createMemo(() => messageBoundaryIDs(rows, messages()))
+  const boundaryIDs = createMemo(() => new Set(boundaries().filter((id) => id !== undefined)))
   const [navigationMessage, setNavigationMessage] = createSignal<string>()
   const [navigationSlack, setNavigationSlack] = createSignal(0)
   const [synced, setSynced] = createSignal(false)
@@ -320,7 +327,6 @@ export function Session() {
         return
       }
       editor.reconnect(info.location.directory)
-      if (route.sessionID === sessionID && scroll) restoreScrollPosition(sessionID)
       setSynced(true)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
@@ -335,8 +341,16 @@ export function Session() {
 
   let seeded = false
   let sent = false
+  let restored = false
   let scroll: ScrollBoxRenderable
+  createEffect(() => {
+    if (restored || !synced() || !rowsSynced() || !scroll || scroll.isDestroyed) return
+    restored = true
+    restoreScrollPosition()
+  })
+  let awayTimer: ReturnType<typeof setTimeout> | undefined
   onCleanup(() => {
+    if (awayTimer) clearTimeout(awayTimer)
     if (!scroll || scroll.isDestroyed) return
     saveScrollAnchor()
   })
@@ -423,7 +437,9 @@ export function Session() {
   }
   function updateAwayFromBottom() {
     if (config.experimental?.tab_scroll !== true) return
-    setTimeout(() => {
+    if (awayTimer) clearTimeout(awayTimer)
+    awayTimer = setTimeout(() => {
+      awayTimer = undefined
       if (!scroll || scroll.isDestroyed) return
       const away = isAwayFromBottom()
       setAwayFromBottom(away)
@@ -435,15 +451,19 @@ export function Session() {
       sessionTabs.setScrollAnchor(sessionID, undefined)
       return
     }
-    const boundaryIDs = new Set(boundaries().filter((id) => id !== undefined))
-    const visible = scroll
-      .getChildren()
-      .filter((child) => child.id && boundaryIDs.has(child.id))
-      .map((child) => ({ messageID: child.id!, screenY: child.y - scroll.viewport.y }))
-    const anchor = visible.findLast((item) => item.screenY <= 0) ?? visible[0]
+    let first: { messageID: string; screenY: number } | undefined
+    let anchor: { messageID: string; screenY: number } | undefined
+    for (const child of scroll.getChildren()) {
+      if (!child.id || !boundaryIDs().has(child.id)) continue
+      const item = { messageID: child.id, screenY: child.y - scroll.viewport.y }
+      first ??= item
+      if (item.screenY <= 0) anchor = item
+    }
+    anchor ??= first
     if (anchor) sessionTabs.setScrollAnchor(sessionID, anchor)
+    else sessionTabs.setScrollAnchor(sessionID, undefined)
   }
-  function restoreScrollPosition(sessionID: string) {
+  function restoreScrollPosition() {
     const anchor = config.experimental?.tab_scroll === true ? sessionTabs.scrollAnchor(sessionID) : undefined
     const index = anchor ? boundaries().indexOf(anchor.messageID) : -1
     if (!anchor || index === -1) {
@@ -458,7 +478,13 @@ export function Session() {
     const restore = () =>
       afterLayout(() => {
         const boundary = scroll.getRenderable(anchor.messageID)
-        if (!boundary) return
+        if (!boundary) {
+          sessionTabs.setScrollAnchor(sessionID, undefined)
+          scroll.stickyScroll = true
+          scroll.scrollTo(scroll.scrollHeight)
+          setAwayFromBottom(false)
+          return
+        }
         const contentY = scroll.scrollTop + boundary.y - scroll.viewport.y
         const target = contentY - anchor.screenY
         const maximum = Math.max(0, scroll.scrollHeight - scroll.viewport.height)
@@ -582,6 +608,8 @@ export function Session() {
 
   function toBottom() {
     clearMessageNavigation()
+    if (awayTimer) clearTimeout(awayTimer)
+    awayTimer = undefined
     setAwayFromBottom(false)
     sessionTabs.setScrollAnchor(route.sessionID, undefined)
     setHiddenRows(undefined)

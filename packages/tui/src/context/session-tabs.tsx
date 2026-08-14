@@ -285,6 +285,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           scrollAnchors.delete(target)
           return
         }
+        const current = scrollAnchors.get(target)
+        if (current?.messageID === anchor.messageID && current.screenY === anchor.screenY) return
         scrollAnchors.set(target, anchor)
       },
       select(sessionID: string) {
