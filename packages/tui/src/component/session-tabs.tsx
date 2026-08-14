@@ -410,8 +410,9 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
       onMouseUp={(event) => {
         if (event.button === RIGHT_MOUSE_BUTTON) return
         release()
+        if (!didDrag) return
         didDrag = false
-        setTimeout(() => (suppressClick = false), 0)
+        queueMicrotask(() => (suppressClick = false))
       }}
       onMouseDrag={drag}
       onMouseDragEnd={release}
@@ -954,8 +955,11 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
     if (!source || source === NEW_SESSION_TAB.sessionID) return
     didDrag = true
     const slot = slotAt(event.x)
+    const target = slot === undefined ? undefined : Math.min(slot, tabs.tabs().length - 1)
     const sourceIndex = items().findIndex((item) => item.sessionID === source)
-    if (slot !== undefined && slot !== sourceIndex) setPreview({ sessionID: source, index: slot })
+    if (target !== undefined && target !== sourceIndex && preview()?.index !== target) {
+      setPreview({ sessionID: source, index: target })
+    }
   }
 
   return (
@@ -970,8 +974,9 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
       onMouseUp={(event) => {
         if (event.button === RIGHT_MOUSE_BUTTON) return
         release()
+        if (!didDrag) return
         didDrag = false
-        setTimeout(() => (suppressClick = false), 0)
+        queueMicrotask(() => (suppressClick = false))
       }}
       onMouseDrag={drag}
       onMouseDragEnd={release}
