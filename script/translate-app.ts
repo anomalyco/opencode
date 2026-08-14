@@ -14,6 +14,7 @@ const locales = DESKTOP_NATIVE_LOCALES.filter((locale): locale is Locale => loca
 
 const languages = {
   ar: "Arabic",
+  he: "Hebrew",
   br: "Brazilian Portuguese",
   bs: "Bosnian",
   da: "Danish",
