@@ -713,6 +713,7 @@
 [data-component="bash-output"],
 [data-component="edit-content"],
 [data-component="write-content"],
+[data-component="apply-patch-file-diff"],
 [data-component="todos"],
 [data-component="diagnostics"],
 .error-card {
@@ -1236,6 +1237,8 @@
     justify-content: space-between;
     width: 100%;
     gap: 20px;
+    -webkit-user-select: text;
+    user-select: text;
   }
 
   [data-slot="apply-patch-file-info"] {
