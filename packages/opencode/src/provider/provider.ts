@@ -2645,4 +2645,16 @@ export const node = LayerNode.make({
   deps: [FSUtil.node, Config.node, Auth.node, Env.node, Plugin.node, ModelsDev.node, RuntimeFlags.node],
 })
 
+export const defaultLayer = Layer.suspend(() =>
+  layer.pipe(
+    Layer.provide(FSUtil.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(Env.defaultLayer),
+    Layer.provide(Plugin.defaultLayer),
+    Layer.provide(ModelsDev.defaultLayer),
+    Layer.provide(RuntimeFlags.defaultLayer),
+  ),
+)
+
 export * as Provider from "./provider"

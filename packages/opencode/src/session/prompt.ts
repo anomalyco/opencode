@@ -1797,4 +1797,38 @@ export const node = LayerNode.make({
   ],
 })
 
+export const defaultLayer = Layer.suspend(() =>
+  layer.pipe(
+    Layer.provide([
+      SessionStatus.defaultLayer,
+      Session.defaultLayer,
+      Agent.defaultLayer,
+      Provider.defaultLayer,
+      SessionProcessor.defaultLayer,
+      SessionCompaction.defaultLayer,
+      Plugin.defaultLayer,
+      Command.defaultLayer,
+      Config.defaultLayer,
+      Permission.defaultLayer,
+      FSUtil.defaultLayer,
+      MCP.defaultLayer,
+      LSP.defaultLayer,
+      ToolRegistry.defaultLayer,
+      Truncate.defaultLayer,
+      Image.defaultLayer,
+      CrossSpawnSpawner.defaultLayer,
+      Instruction.defaultLayer,
+      SessionRunState.defaultLayer,
+      SessionRevert.defaultLayer,
+      SessionSummary.defaultLayer,
+      SystemPrompt.defaultLayer,
+      LLM.defaultLayer,
+      EventV2Bridge.defaultLayer,
+      RuntimeFlags.defaultLayer,
+      AutoMode.defaultLayer,
+      Database.defaultLayer,
+    ]),
+  ),
+)
+
 export * as SessionPrompt from "./prompt"

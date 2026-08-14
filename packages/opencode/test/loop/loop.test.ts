@@ -48,7 +48,6 @@ import { TestInstance } from "../fixture/fixture"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -69,7 +68,6 @@ const mcp = Layer.succeed(
     tools: () => Effect.succeed({}),
     prompts: () => Effect.succeed({}),
     resources: () => Effect.succeed({}),
-    instructions: () => Effect.succeed([]),
     add: () => Effect.succeed({ status: { status: "disabled" as const } }),
     connect: () => Effect.void,
     disconnect: () => Effect.void,

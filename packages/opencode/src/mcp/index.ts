@@ -88,15 +88,6 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP
 
 type MCPClient = Client
 
-// Raw MCP tool + the client/timeout needed to call it directly (code-mode's
-// sandboxed execution path calls client.callTool itself rather than going
-// through the AI-SDK Tool.execute closure tools() builds).
-export type McpTool = {
-  def: MCPToolDef
-  client: Client
-  timeout?: number
-}
-
 function createClient(directory: string, versionNegotiation: NonNullable<ClientOptions["versionNegotiation"]>) {
   const client = new Client({ name: "opencode", version: InstallationVersion }, { ...CLIENT_OPTIONS, versionNegotiation })
   client.setRequestHandler("roots/list", () =>
@@ -1182,5 +1173,14 @@ export const node = LayerNode.make({
   layer,
   deps: [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node],
 })
+
+export const defaultLayer = Layer.suspend(() =>
+  layer.pipe(
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(McpAuth.defaultLayer),
+    Layer.provide(EventV2Bridge.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+  ),
+)
 
 export * as MCP from "."

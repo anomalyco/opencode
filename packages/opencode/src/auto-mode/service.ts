@@ -37,4 +37,6 @@ export const node = LayerNode.make({
   deps: [Config.node],
 })
 
-export const AutoMode = { Service, layer, node, setAutoMode }
+export const defaultLayer = Layer.suspend(() => layer.pipe(Layer.provide(Config.defaultLayer)))
+
+export const AutoMode = { Service, layer, node, defaultLayer, setAutoMode }
