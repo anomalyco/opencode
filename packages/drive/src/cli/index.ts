@@ -100,7 +100,10 @@ const startCommand = Command.make(
     record: Flag.boolean("record").pipe(
       Flag.withDescription("Record the complete headless session and export it on stop"),
     ),
-    dev: Flag.string("dev").pipe(Flag.optional, Flag.withDescription("Path to an OpenCode development checkout")),
+    dev: Flag.string("dev").pipe(
+      Flag.optional,
+      Flag.withDescription("Path to the required OpenCode development checkout"),
+    ),
   },
   (config) =>
     executeEffect(
@@ -113,16 +116,16 @@ const startCommand = Command.make(
   Command.withDescription("Launch a local simulated OpenCode instance"),
   Command.withExamples([
     {
-      command: "opencode-drive start --name demo",
-      description: "Launch headless OpenCode on the default ports",
+      command: "opencode-drive start --name demo --dev <checkout>",
+      description: "Launch a headless development checkout on the default ports",
     },
     {
-      command: "opencode-drive start --visible",
-      description: "Launch visible OpenCode on the default ports",
+      command: "opencode-drive start --visible --dev <checkout>",
+      description: "Launch a visible development checkout on the default ports",
     },
     {
-      command: "opencode-drive start --name demo --script ./drive.ts",
-      description: "Launch headless OpenCode and run a script",
+      command: "opencode-drive start --name demo --script ./drive.ts --dev <checkout>",
+      description: "Launch a headless development checkout and run a script",
     },
   ]),
 )
