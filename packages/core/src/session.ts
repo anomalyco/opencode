@@ -741,21 +741,48 @@ const layer = Layer.effect(
         if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
         const project = yield* projects.resolve(directory)
         yield* persistProject(project)
-        const item = SessionInbox.Item.make({
-          type: "move",
-          payload: {
-            location: Location.Ref.make({ directory, workspaceID: input.workspaceID }),
-            projectID: project.id,
-            subpath: RelativePath.make(path.relative(project.directory, directory).replaceAll("\\", "/")),
-          },
-          delivery: input.delivery ?? "steer",
-        })
-        const inboxID = SessionMessage.ID.create()
-        yield* SessionInbox.admit(db, bus, {
-          id: inboxID,
+        const payload = {
           sessionID: input.sessionID,
-          item,
-        })
+          location: Location.Ref.make({ directory, workspaceID: input.workspaceID }),
+          projectID: project.id,
+          subpath: RelativePath.make(path.relative(project.directory, directory).replaceAll("\\", "/")),
+        }
+        const recovered = yield* SessionInbox.serialized(
+          input.sessionID,
+          Effect.gen(function* () {
+            const source = yield* fs
+              .stat(current.location.directory)
+              .pipe(Effect.catch(() => Effect.succeed(undefined)))
+            if (!source || source.type !== "Directory") {
+              const pending = (yield* SessionInbox.list(db, input.sessionID)).filter((item) => item.type === "move")
+              const cancellations = pending.map(
+                (item) => [SessionEvent.InboxCancelled, { sessionID: input.sessionID, inboxID: item.id }] as const,
+              )
+              const first = cancellations[0]
+              if (!first) {
+                yield* bus.publish(SessionEvent.Moved, payload)
+                return true
+              }
+              yield* bus.publishAll([first, ...cancellations.slice(1), [SessionEvent.Moved, payload]])
+              return true
+            }
+            yield* SessionInbox.admit(db, bus, {
+              id: SessionMessage.ID.create(),
+              sessionID: input.sessionID,
+              item: SessionInbox.Item.make({
+                type: "move",
+                payload: {
+                  location: payload.location,
+                  projectID: payload.projectID,
+                  subpath: payload.subpath,
+                },
+                delivery: input.delivery ?? "steer",
+              }),
+            })
+            return false
+          }),
+        )
+        if (recovered) return
         yield* execution.wake(input.sessionID)
       }),
       compact: Effect.fn("Session.compact")(function* (input) {

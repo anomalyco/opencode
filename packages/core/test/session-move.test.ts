@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
+import { mkdir, rm } from "fs/promises"
 import { Effect } from "effect"
 import { Worktree } from "@opencode-ai/schema/worktree"
 import { Bus } from "@opencode-ai/core/bus"
@@ -29,7 +30,7 @@ const it = testEffect(
 )
 
 describe("Session.move", () => {
-  it.effect("enqueues one move when the source directory no longer exists", () =>
+  it.effect("applies a move immediately when the source directory no longer exists", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -38,29 +39,26 @@ describe("Session.move", () => {
         Effect.gen(function* () {
           const session = yield* Session.Service
           const destination = AbsolutePath.make(tmp.path)
+          const source = path.join(tmp.path, "source")
+          yield* Effect.promise(() => mkdir(source))
           const created = yield* session.create({
-            location: Location.Ref.make({ directory: AbsolutePath.make(path.join(tmp.path, "deleted")) }),
+            location: Location.Ref.make({ directory: AbsolutePath.make(source) }),
           })
 
           yield* session.move({ sessionID: created.id, directory: destination })
+          expect((yield* session.get(created.id)).location.directory).toBe(AbsolutePath.make(source))
+          expect(yield* session.inbox(created.id)).toHaveLength(1)
 
-          expect((yield* session.get(created.id)).location.directory).toBe(
-            AbsolutePath.make(path.join(tmp.path, "deleted")),
-          )
-          expect(yield* session.inbox(created.id)).toMatchObject([
-            {
-              type: "move",
-              delivery: "steer",
-              payload: {
-                location: { directory: destination },
-                projectID: Project.ID.global,
-              },
-            },
-          ])
+          yield* Effect.promise(() => rm(source, { recursive: true }))
+          yield* session.move({ sessionID: created.id, directory: destination })
+
+          expect((yield* session.get(created.id)).location.directory).toBe(destination)
+          expect(yield* session.inbox(created.id)).toEqual([])
 
           yield* session.move({ sessionID: created.id, directory: destination })
-          expect(yield* session.inbox(created.id)).toHaveLength(2)
+          expect(yield* session.inbox(created.id)).toHaveLength(1)
 
+          yield* Effect.promise(() => mkdir(path.join(tmp.path, "other")))
           const steered = yield* session.create({
             location: Location.Ref.make({ directory: AbsolutePath.make(path.join(tmp.path, "other")) }),
           })

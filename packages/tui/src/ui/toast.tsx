@@ -4,7 +4,6 @@ import { useTheme } from "../context/theme"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "./border"
 import { TextAttributes } from "@opentui/core"
-import { tint } from "../theme/color"
 export type ToastOptions = {
   title?: string
   message: string
@@ -56,9 +55,7 @@ function ToastSurface(props: {
         paddingRight={2}
         paddingTop={1}
         paddingBottom={1}
-        backgroundColor={
-          hovered() ? tint(theme.background.default, theme.text.default, 0.04) : theme.background.default
-        }
+        backgroundColor={theme.background.default}
       >
         <Show
           when={props.toast.title}
@@ -67,7 +64,18 @@ function ToastSurface(props: {
               <text fg={theme.text.default} wrapMode="word" flexGrow={1}>
                 {props.toast.message}
               </text>
-              <Show when={props.toast.action || hovered()}>
+              <Show
+                when={props.toast.action}
+                fallback={
+                  <text
+                    flexShrink={0}
+                    marginLeft={2}
+                    fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
+                  >
+                    x
+                  </text>
+                }
+              >
                 <text
                   flexShrink={0}
                   marginLeft={2}
@@ -75,8 +83,7 @@ function ToastSurface(props: {
                   attributes={hovered() ? TextAttributes.BOLD : undefined}
                   fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
                 >
-                  {hovered() && props.toast.action ? "› " : ""}
-                  {props.toast.action?.label ?? "x"}
+                  › {props.toast.action?.label}
                 </text>
               </Show>
             </box>
@@ -87,7 +94,18 @@ function ToastSurface(props: {
               {props.toast.title}
             </text>
             <box flexGrow={1} />
-            <Show when={props.toast.action || hovered()}>
+            <Show
+              when={props.toast.action}
+              fallback={
+                <text
+                  flexShrink={0}
+                  marginLeft={2}
+                  fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
+                >
+                  x
+                </text>
+              }
+            >
               <text
                 flexShrink={0}
                 marginLeft={2}
@@ -95,8 +113,7 @@ function ToastSurface(props: {
                 attributes={hovered() ? TextAttributes.BOLD : undefined}
                 fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
               >
-                {hovered() && props.toast.action ? "› " : ""}
-                {props.toast.action?.label ?? "x"}
+                › {props.toast.action?.label}
               </text>
             </Show>
           </box>

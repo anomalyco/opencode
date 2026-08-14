@@ -35,6 +35,7 @@ async function renderSessionTabs(
     persisted?: string[]
     sessionGate?: Promise<void>
     sessionDirectories?: Record<string, string>
+    newLocation?: "launch" | "inherit"
   },
 ) {
   const temporary = options?.state ? undefined : await tmpdir()
@@ -106,7 +107,12 @@ async function renderSessionTabs(
     <TestTuiContexts paths={{ state }}>
       <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
         <StorageProvider>
-          <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
+          <ConfigProvider
+            config={createTuiResolvedConfig({
+              tabs: { enabled: true },
+              session: { new_location: options?.newLocation ?? "launch" },
+            })}
+          >
             <RouteProvider
               initialRoute={options?.home ? { type: "home" } : { type: "session", sessionID: initialSessionID }}
             >
@@ -319,8 +325,8 @@ test("tracks a temporary new session tab across close and creation", async () =>
   }
 })
 
-test("add opens the new session tab carrying the current session's location", async () => {
-  const setup = await renderSessionTabs("first")
+test("add opens the new session tab in the launch directory by default", async () => {
+  const setup = await renderSessionTabs("first", { sessionDirectories: { first: `${directory}/worktree` } })
 
   try {
     await wait(() => setup.tabs.current() === "first" && setup.data.session.get("first") !== undefined)
@@ -328,6 +334,22 @@ test("add opens the new session tab carrying the current session's location", as
     expect(setup.route.data).toEqual({ type: "home", location: { directory } })
     await wait(() => setup.tabs.newTab())
     expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first"])
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("add inherits the current session location when configured", async () => {
+  const worktree = `${directory}/worktree`
+  const setup = await renderSessionTabs("first", {
+    newLocation: "inherit",
+    sessionDirectories: { first: worktree },
+  })
+
+  try {
+    await wait(() => setup.tabs.current() === "first" && setup.data.session.get("first") !== undefined)
+    setup.tabs.add()
+    expect(setup.route.data).toEqual({ type: "home", location: { directory: worktree } })
   } finally {
     await setup.destroy()
   }

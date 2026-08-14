@@ -17,3 +17,14 @@ test("inherits the active session location when configured", () => {
 test("falls back to the launch directory without an active session", () => {
   expect(newSessionLocation("inherit", "/launch")).toEqual({ directory: "/launch" })
 })
+
+test("does not inherit an unavailable active location", () => {
+  expect(
+    newSessionLocation(
+      "inherit",
+      "/launch",
+      { directory: "/deleted", workspaceID: "work-1" },
+      { directory: "/deleted", workspaceID: "work-1" },
+    ),
+  ).toEqual({ directory: "/launch" })
+})

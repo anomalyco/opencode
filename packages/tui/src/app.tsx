@@ -665,14 +665,17 @@ function App(props: { pair?: DialogPairCredentials }) {
         category: "Session",
         slash: { name: "new", aliases: ["clear"] },
         run: () => {
+          const current =
+            route.data.type === "session"
+              ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
+              : undefined
           route.navigate({
             type: "home",
             location: newSessionLocation(
               config.data.session.new_location,
               paths.cwd,
-              route.data.type === "session"
-                ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
-                : undefined,
+              current,
+              location.error?.location,
             ),
           })
           dialog.clear()

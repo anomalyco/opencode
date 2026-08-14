@@ -10,6 +10,7 @@ import { useConfig } from "../config"
 import { useLocation } from "./location"
 import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
+import { newSessionLocation } from "../config/new-session-location"
 import {
   closeSessionTab,
   cycleSessionTab,
@@ -289,9 +290,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       add() {
         if (!enabled()) return
         const sessionID = current()
+        const currentLocation = (sessionID ? data.session.get(sessionID)?.location : undefined) ?? location.ref
         route.navigate({
           type: "home",
-          location: (sessionID ? data.session.get(sessionID)?.location : undefined) ?? location.ref,
+          location: newSessionLocation(
+            config.session.new_location,
+            paths.cwd,
+            currentLocation,
+            location.error?.location,
+          ),
         })
       },
       close(sessionID?: string) {
