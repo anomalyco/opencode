@@ -30,6 +30,14 @@ export const ScrollAcceleration = Schema.Struct({
 export const DiffStyle = Schema.Literals(["auto", "stacked"]).annotate({
   description: "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
 })
+export const Cursor = Schema.Struct({
+  style: Schema.optional(Schema.Literals(["block", "underline", "line", "default"])).annotate({
+    description: "Cursor shape. Use 'default' to preserve the terminal setting",
+  }),
+  blinking: Schema.optional(Schema.Boolean).annotate({
+    description: "Whether the cursor blinks. Has no effect when style is 'default'",
+  }),
+}).annotate({ description: "Terminal cursor settings" })
 
 export const AttentionSounds = Schema.Record(AttentionSoundName, Schema.optionalKey(Schema.String))
 export type AttentionSoundPaths = Schema.Schema.Type<typeof AttentionSounds>
@@ -62,11 +70,12 @@ export const Info = Schema.Struct({
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
+  cursor: Schema.optional(Cursor),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse"> & {
+export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "cursor"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -78,6 +87,10 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
   mouse: boolean
+  cursor?: {
+    style: "block" | "underline" | "line" | "default"
+    blinking: boolean
+  }
 }
 
 export const ResolveOptions = Schema.Struct({
@@ -113,6 +126,12 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
     mouse: input.mouse ?? true,
+    cursor: input.cursor
+      ? {
+          style: input.cursor.style ?? "block",
+          blinking: input.cursor.blinking ?? true,
+        }
+      : undefined,
   }
 }
 
