@@ -237,7 +237,7 @@ describe("built-in web search providers", () => {
       )
       expect(requests[0]).toMatchObject({
         url: WebSearchTavily.endpoint,
-        headers: { "x-tavily-access-mode": "keyless" },
+        headers: { "x-client-name": "opencode2", "x-tavily-access-mode": "keyless" },
         body: {
           query: "effect typescript",
           search_depth: "basic",
@@ -253,7 +253,7 @@ describe("built-in web search providers", () => {
       })
       yield* websearch.query(query)
       expect(requests[1]).toMatchObject({
-        headers: { authorization: "Bearer tavily-secret" },
+        headers: { authorization: "Bearer tavily-secret", "x-client-name": "opencode2" },
       })
       expect(requests[1]?.headers["x-tavily-access-mode"]).toBeUndefined()
     }),
