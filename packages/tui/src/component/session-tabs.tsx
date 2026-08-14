@@ -44,7 +44,7 @@ const FADE_WIDTH = 4
 // The add button renders as " + " at the end of the strip, so the tab layout leaves it room.
 const ADD_TAB_WIDTH = 3
 const MARQUEE_DELAY = 600
-const MARQUEE_INTERVAL = 70
+const MARQUEE_INTERVAL = 80
 const CONTEXT_MENU_WIDTH = 16
 const RIGHT_MOUSE_BUTTON = 2
 
