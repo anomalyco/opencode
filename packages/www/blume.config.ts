@@ -19,7 +19,7 @@ export default defineConfig({
   github: {
     owner: "anomalyco",
     repo: "opencode",
-    branch: "dev",
+    branch: "v2",
     dir: "packages/www",
   },
   theme: {
