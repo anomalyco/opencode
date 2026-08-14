@@ -1193,6 +1193,11 @@ export const layer = Layer.effect(
             // Instead of going idle silently, retry once per user turn with
             // tool_choice forced to "required".
             const emptyTurn =
+              // Only for a turn THIS loop produced. Entering a loop on a turn
+              // that already finished (a resumed session, a completed parent)
+              // is not an empty turn to retry — it is the exit condition, and
+              // retrying it re-prompts a session nobody asked to continue.
+              step > 0 &&
               ["stop", "length"].includes(lastAssistant.finish) &&
               !lastAssistant.error &&
               requiredRetryFor !== lastUser.id &&
