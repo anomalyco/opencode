@@ -5,6 +5,7 @@ import {
   CliRenderEvents,
   decodePasteBytes,
   stripAnsiSequences,
+  TextAttributes,
   type ScrollBoxRenderable,
   type TextareaRenderable,
 } from "@opentui/core"
@@ -751,7 +752,7 @@ export function FormPrompt(props: {
                 const isAnswered = () => store.answers[item.key] !== undefined
                 const color = () =>
                   isTab()
-                    ? theme.text.formfield.selected
+                    ? theme.text.default
                     : tabHover() === index()
                       ? theme.text.formfield.focused
                       : theme.text.subdued
@@ -772,7 +773,7 @@ export function FormPrompt(props: {
                       selectTabFromMouse(item)
                     }}
                   >
-                    <text fg={color()}>
+                    <text fg={color()} attributes={isTab() ? TextAttributes.BOLD : undefined}>
                       {isAnswered() ? "■" : "□"} {truncate(formLabel(item), 24)}
                     </text>
                   </box>
@@ -797,11 +798,12 @@ export function FormPrompt(props: {
               <text
                 fg={
                   confirm()
-                    ? theme.text.formfield.selected
+                    ? theme.text.default
                     : tabHover() === "confirm"
                       ? theme.text.formfield.focused
                       : theme.text.subdued
                 }
+                attributes={confirm() ? TextAttributes.BOLD : undefined}
               >
                 Submit
               </text>
