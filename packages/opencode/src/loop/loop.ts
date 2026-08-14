@@ -53,7 +53,11 @@ import { contractPart, DEFAULT_COMPLETION_TOKEN, matchesCompletion, promptDisabl
 export const COMPLETE_SIGNAL = DEFAULT_COMPLETION_TOKEN
 
 export const DefaultMaxIterations = 50
-export const DefaultNoProgressLimit = 3
+// fix-loop-stall: 10 was too low for complex tasks whose iterations produce
+// structurally similar output (long file dumps, boilerplate) across several
+// genuinely-progressing steps — raised to 15 so real progress has more room
+// before the stall guard fires.
+export const DefaultNoProgressLimit = 15
 export const DefaultIntervalSeconds = 2
 // Keep at most this many IterationInfo entries in the state payload.
 // After this cap the full count is still tracked via info.iteration.
@@ -64,7 +68,20 @@ const MaxStoredIterations = 50
 // Consecutive-iteration output comparison uses this as "near-identical" —
 // see the skein incident referenced in design.md: a promise token that never
 // arrives must not be the only way a loop stops.
-const NoProgressSimilarityThreshold = 0.92
+// fix-loop-stall: 0.92 false-positived on outputs that differ in small but
+// meaningful ways (e.g. one changed line in a long file dump) — character
+// bigrams over long, structurally-repetitive text (boilerplate, file
+// contents) score high regardless of the actual edit. Raised to 0.96, and
+// paired with MinOutputLengthChangeRatio below so a real heuristic — not
+// just a higher magic number — catches the case a fixed threshold alone
+// cannot: same length, same shape, genuinely different content.
+const NoProgressSimilarityThreshold = 0.96
+// fix-loop-stall: an output whose length differs from the previous
+// iteration's by more than this fraction is treated as progress even when
+// bigram similarity alone would call it near-identical — catches inserted/
+// removed content that a pure character-bigram score under-weights in long
+// output. 0 disables this heuristic; keep in [0, 1).
+const MinOutputLengthChangeRatio = 0.1
 
 export const LoopID = Schema.String.check(Schema.isStartsWith("loop")).pipe(
   Schema.brand("LoopID"),
@@ -382,6 +399,11 @@ export const layer = Layer.effect(
         const finishedAt = Date.now()
 
         if (Result.isFailure(outcome)) {
+          yield* Effect.logError("loop iteration prompt failed", {
+            "loop.id": record.info.id,
+            iteration: iterationNumber,
+            failure: String(outcome.failure),
+          })
           return {
             iteration: iterationNumber,
             sessionID: targetSessionID,
@@ -547,7 +569,16 @@ export const layer = Layer.effect(
 
           const limit = updated.info.noProgressLimit
           const noToolCalls = result.toolCalls === 0
+          // fix-loop-stall: a length swing this large means real content was
+          // added or removed — bigram similarity over long, structurally
+          // repetitive output (file dumps, boilerplate) can still score high
+          // in that case, so check length first and let it veto "identical."
+          const lengthChanged =
+            updated.lastOutput !== undefined &&
+            Math.abs(result.output.length - updated.lastOutput.length) / Math.max(updated.lastOutput.length, 1) >
+              MinOutputLengthChangeRatio
           const nearIdentical =
+            !lengthChanged &&
             updated.lastOutput !== undefined &&
             similarity(result.output, updated.lastOutput) >= NoProgressSimilarityThreshold
           const streak =
@@ -1561,15 +1592,15 @@ export const node = LayerNode.make({
   service: Service,
   layer,
   deps: [
-  Session.node,
-  SessionPrompt.node,
-  SessionStatus.node,
-  Config.node,
-  Provider.node,
-  AgentSvc.node,
-  Permission.node,
-  EventV2Bridge.node,
-],
+    Session.node,
+    SessionPrompt.node,
+    SessionStatus.node,
+    Config.node,
+    Provider.node,
+    AgentSvc.node,
+    Permission.node,
+    EventV2Bridge.node,
+  ],
 })
 
 export * as Loop from "./loop"

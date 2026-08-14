@@ -8,7 +8,7 @@
 // these two must be kept in step by hand (the server cannot import the SDK).
 export const LoopArgDefaults = {
   maxIterations: 50,
-  noProgressLimit: 3,
+  noProgressLimit: 10,
   intervalSeconds: 2,
   completionToken: "<promise>COMPLETE</promise>",
 } as const
