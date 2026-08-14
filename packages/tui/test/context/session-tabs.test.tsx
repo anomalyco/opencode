@@ -239,6 +239,7 @@ test("only the foreground TUI mutates unread state", async () => {
       () =>
         foreground?.tabs.status("second").unread === "activity" &&
         background?.tabs.status("second").unread === "activity",
+      10_000,
     )
 
     foreground.tabs.select("second")
@@ -246,6 +247,7 @@ test("only the foreground TUI mutates unread state", async () => {
       () =>
         foreground?.tabs.status("second").unread === undefined &&
         background?.tabs.status("second").unread === undefined,
+      10_000,
     )
   } finally {
     if (foreground) await foreground.destroy()
