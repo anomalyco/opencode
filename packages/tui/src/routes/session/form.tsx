@@ -113,7 +113,7 @@ export function FormPrompt(props: {
   })
   const tabs = createMemo(() => (single() ? 1 : fields().length + 1))
   const tabbed = createMemo(() => {
-    const width = fields().reduce((sum, item) => sum + truncate(formLabel(item), 24).length + 5, "Submit".length + 3)
+    const width = fields().reduce((sum, item) => sum + truncate(formLabel(item), 24).length + 3, "Submit".length + 3)
     return width <= dimensions().width - 8
   })
   const completed = (item: FormField) => {
@@ -749,7 +749,6 @@ export function FormPrompt(props: {
             <For each={fields()}>
               {(item, index) => {
                 const isTab = () => index() === store.tab
-                const isAnswered = () => completed(item)
                 const color = () =>
                   isTab()
                     ? theme.text.default
@@ -774,7 +773,7 @@ export function FormPrompt(props: {
                     }}
                   >
                     <text fg={color()} attributes={isTab() ? TextAttributes.BOLD : undefined}>
-                      {isAnswered() ? "■" : "□"} {truncate(formLabel(item), 24)}
+                      {truncate(formLabel(item), 24)}
                     </text>
                   </box>
                 )

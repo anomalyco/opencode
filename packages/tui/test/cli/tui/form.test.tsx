@@ -356,7 +356,7 @@ test("defers multiselect validation until submission", async () => {
     prompt.app.mockInput.pressEnter()
     prompt.app.mockInput.pressEnter()
     prompt.app.mockInput.pressArrow("right")
-    await prompt.app.waitForFrame((frame) => frame.includes("□ targets") && frame.includes("[ ] Now"))
+    await prompt.app.waitForFrame((frame) => frame.includes("[ ] Now"))
     expect(prompt.app.captureCharFrame()).not.toContain("Select at least")
 
     prompt.app.mockInput.pressArrow("right")
@@ -498,6 +498,28 @@ test("space toggles the selected multiselect option", async () => {
 
     prompt.app.mockInput.pressKey(" ")
     await prompt.app.waitForFrame((frame) => frame.includes("[ ] Staging"))
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("space activates the custom multiselect option", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [{ value: "staging", label: "Staging" }],
+      custom: true,
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressArrow("down")
+    prompt.app.mockInput.pressKey(" ")
+
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
+    await prompt.app.waitForFrame((frame) => frame.includes("[✓] Type your own answer"))
     expect(prompt.replies).toEqual([])
   } finally {
     prompt.app.renderer.destroy()
