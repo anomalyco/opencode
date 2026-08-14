@@ -6,7 +6,7 @@ export function make(tools: string[]) {
   const instructions: string[] = []
   if (tools.includes("write")) {
     instructions.push(
-      "- Use the write tool to create files or completely replace their content. Prefer using edit tool for targeted changes.",
+      "- Use the write tool to create files or completely replace their content. Prefer using the edit tool for targeted changes.",
     )
   }
   if (tools.includes("edit")) {
@@ -20,5 +20,5 @@ export function make(tools: string[]) {
   if (tools.includes("read")) {
     instructions.push("- Prefer using the read tool rather than shell commands like `cat`.")
   }
-  return PROMPT.replace("${OPENCODE_TOOL_INSTRUCTIONS}", instructions.join("\n"))
+  return PROMPT.replace("${OPENCODE_TOOL_GUIDANCE}", instructions.join("\n"))
 }
