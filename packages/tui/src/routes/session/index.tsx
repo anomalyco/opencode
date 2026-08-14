@@ -22,7 +22,7 @@ import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
 import { useEvent } from "../../context/event"
 import { SplitBorder } from "../../ui/border"
-import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
+import { useTuiPaths, useTuiStdin, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
@@ -354,6 +354,7 @@ export function Session() {
   const keymap = useOpencodeKeymap()
   const dialog = useDialog()
   const renderer = useRenderer()
+  const stdin = useTuiStdin()
 
   event.on("session.status", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
@@ -986,6 +987,7 @@ export function Session() {
             await openEditor({
               renderer,
               value: transcript,
+              stdin,
               cwd:
                 (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
                 project.instance.directory() ||
@@ -1002,6 +1004,7 @@ export function Session() {
             const result = await openEditor({
               renderer,
               value: transcript,
+              stdin,
               cwd:
                 (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
                 project.instance.directory() ||
