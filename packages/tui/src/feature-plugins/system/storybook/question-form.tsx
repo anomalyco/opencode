@@ -49,7 +49,6 @@ function QuestionFormStory(props: { context: Plugin.Context }) {
               type: "multiselect",
               options,
               custom: custom(),
-              minItems: 1,
               default: defaults() ? ["tests", "docs"] : undefined,
             }
           : {

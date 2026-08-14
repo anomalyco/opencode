@@ -228,6 +228,7 @@ test("typing a custom multiselect answer selects it before commit", async () => 
       type: "multiselect",
       options: [{ value: "staging", label: "Staging" }],
       custom: true,
+      minItems: 1,
     },
   ])
   try {
@@ -305,6 +306,7 @@ test("enter on an empty custom multiselect option clearly enters editing", async
       type: "multiselect",
       options: [{ value: "staging", label: "Staging" }],
       custom: true,
+      minItems: 1,
     },
   ])
   try {
@@ -324,8 +326,71 @@ test("enter on an empty custom multiselect option clearly enters editing", async
     prompt.app.mockInput.pressEnter()
     await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor === null)
     await prompt.app.waitForFrame((frame) => frame.includes("[ ] Type your own answer"))
+    expect(prompt.app.captureCharFrame()).not.toContain("Select at least")
 
     expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("defers multiselect validation until submission", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [{ value: "staging", label: "Staging" }],
+      required: true,
+      minItems: 1,
+    },
+    {
+      key: "priority",
+      type: "multiselect",
+      options: [{ value: "now", label: "Now" }],
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressEnter()
+    prompt.app.mockInput.pressEnter()
+    prompt.app.mockInput.pressArrow("right")
+    await prompt.app.waitForFrame((frame) => frame.includes("[ ] Now"))
+    expect(prompt.app.captureCharFrame()).not.toContain("Select at least")
+
+    prompt.app.mockInput.pressArrow("right")
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitForFrame((frame) => frame.includes("Select at least"))
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("submits an optional empty multiselect as an omitted answer", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [{ value: "staging", label: "Staging" }],
+      minItems: 1,
+    },
+    {
+      key: "priority",
+      type: "multiselect",
+      options: [{ value: "now", label: "Now" }],
+      default: ["now"],
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressEnter()
+    prompt.app.mockInput.pressEnter()
+    prompt.app.mockInput.pressArrow("right")
+    prompt.app.mockInput.pressArrow("right")
+    prompt.app.mockInput.pressEnter()
+
+    await prompt.app.waitFor(() => prompt.replies.length === 1)
+    expect(prompt.replies).toEqual([{ answer: { priority: ["now"] } }])
   } finally {
     prompt.app.renderer.destroy()
   }

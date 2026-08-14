@@ -245,7 +245,14 @@ export function FormPrompt(props: {
   )
 
   function answer(key: string, value: FormValue | undefined) {
-    setStore("answers", key, value)
+    const field = fields().find((item) => item.key === key)
+    setStore(
+      "answers",
+      key,
+      Array.isArray(value) && value.length === 0 && field?.type === "multiselect" && !field.required
+        ? undefined
+        : value,
+    )
     setStore("error", "")
   }
 
@@ -301,18 +308,7 @@ export function FormPrompt(props: {
     )
   }
 
-  function validateCurrent() {
-    if (confirm()) return true
-    const current = answerField()
-    if (!current) return true
-    const invalid = formValidateValue(current, store.answers[current.key])
-    if (!invalid) return true
-    setStore("error", invalid)
-    return false
-  }
-
   function selectTab(index: number) {
-    if (!confirm() && index > store.tab && !validateCurrent()) return
     const next = fields()[index]
     setStore("tab", index)
     setStore("selected", next && isFormAnswerField(next) ? formSelected(next, store.answers[next.key]) : 0)
@@ -363,6 +359,12 @@ export function FormPrompt(props: {
       const existing = store.answers[current.key]
       const values = Array.isArray(existing) ? existing.filter((value) => value !== previous) : []
       const value = !isTextual && isMulti && Array.isArray(existing) ? values : undefined
+      if (!isTextual && isMulti) {
+        answer(current.key, value)
+        setStore("custom", current.key, "")
+        setStore("editing", false)
+        return true
+      }
       const invalid = formValidateValue(current, value)
       if (invalid) {
         setStore("error", invalid)
@@ -906,15 +908,7 @@ export function FormPrompt(props: {
                             gap={1}
                           >
                             <Show when={multi()}>
-                              <text
-                                fg={
-                                  picked()
-                                    ? theme.text.feedback.success.default
-                                    : active()
-                                      ? theme.text.formfield.focused
-                                      : theme.text.formfield.default
-                                }
-                              >
+                              <text fg={picked() ? theme.text.feedback.success.default : theme.text.subdued}>
                                 [{picked() ? "✓" : " "}]
                               </text>
                             </Show>
@@ -960,15 +954,7 @@ export function FormPrompt(props: {
                         backgroundColor={other() ? theme.background.formfield.focused : theme.background.default}
                       >
                         <Show when={multi()}>
-                          <text
-                            fg={
-                              customChecked()
-                                ? theme.text.feedback.success.default
-                                : other()
-                                  ? theme.text.formfield.focused
-                                  : theme.text.formfield.default
-                            }
-                          >
+                          <text fg={customChecked() ? theme.text.feedback.success.default : theme.text.subdued}>
                             [{customChecked() ? "✓" : " "}]
                           </text>
                         </Show>
