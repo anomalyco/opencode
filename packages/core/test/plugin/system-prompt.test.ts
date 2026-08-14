@@ -74,7 +74,7 @@ describe("SystemPromptPlugin", () => {
         ["kimi-k2", "# Prompt and Tool Use"],
         ["trinity", "what command should I run to list files"],
         ["meta/muse-spark-1.1", "powered by Muse Spark"],
-        ["llama-3.3", "You are opencode, an interactive CLI tool"],
+        ["llama-3.3", fallback],
       ] as const
 
       yield* Effect.forEach(
