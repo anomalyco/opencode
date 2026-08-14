@@ -773,10 +773,7 @@ export function FormPrompt(props: {
                     }}
                   >
                     <text fg={color()}>
-                      <span style={{ fg: isAnswered() ? theme.text.default : color() }}>
-                        {isAnswered() ? "■" : "□"}
-                      </span>{" "}
-                      {truncate(formLabel(item), 24)}
+                      {isAnswered() ? "■" : "□"} {truncate(formLabel(item), 24)}
                     </text>
                   </box>
                 )
