@@ -30,6 +30,17 @@ function ToastSurface(props: {
     setHovered(value)
     props.onHover?.(value)
   }
+  const affordance = () => (
+    <text
+      flexShrink={0}
+      marginLeft={2}
+      wrapMode="none"
+      attributes={hovered() && props.toast.action ? TextAttributes.BOLD : undefined}
+      fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
+    >
+      {props.toast.action ? `› ${props.toast.action.label}` : "x"}
+    </text>
+  )
 
   return (
     <box
@@ -64,28 +75,7 @@ function ToastSurface(props: {
               <text fg={theme.text.default} wrapMode="word" flexGrow={1}>
                 {props.toast.message}
               </text>
-              <Show
-                when={props.toast.action}
-                fallback={
-                  <text
-                    flexShrink={0}
-                    marginLeft={2}
-                    fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
-                  >
-                    x
-                  </text>
-                }
-              >
-                <text
-                  flexShrink={0}
-                  marginLeft={2}
-                  wrapMode="none"
-                  attributes={hovered() ? TextAttributes.BOLD : undefined}
-                  fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
-                >
-                  › {props.toast.action?.label}
-                </text>
-              </Show>
+              {affordance()}
             </box>
           }
         >
@@ -94,28 +84,7 @@ function ToastSurface(props: {
               {props.toast.title}
             </text>
             <box flexGrow={1} />
-            <Show
-              when={props.toast.action}
-              fallback={
-                <text
-                  flexShrink={0}
-                  marginLeft={2}
-                  fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
-                >
-                  x
-                </text>
-              }
-            >
-              <text
-                flexShrink={0}
-                marginLeft={2}
-                wrapMode="none"
-                attributes={hovered() ? TextAttributes.BOLD : undefined}
-                fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
-              >
-                › {props.toast.action?.label}
-              </text>
-            </Show>
+            {affordance()}
           </box>
           <text fg={theme.text.default} wrapMode="word" width="100%">
             {props.toast.message}
