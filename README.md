@@ -1,8 +1,22 @@
 # moks
 
-TUI-first agent harness for engineering TAs — score candidates, draft outreach, and run hiring loops from the terminal.
+The agent harness for engineering talent acquisition.
+
+moks is to hiring what a coding agent is to software: same workplace shape — workspace, plan, tools, review, push — pointed at requisitions instead of repos. Local first. Remote later.
+
+A requisition is a directory. `HIRING.md` is the constitution. `candidates/<id>.md` are working copies. `moks commit` is the git audit. `moks push` is the write (local/mock for now). `.moks/` is cache only.
 
 **Based on [OpenCode](https://github.com/anomalyco/opencode).** MIT licensed. **Not** officially affiliated with OpenCode or Anomaly.
+
+| Coding | moks |
+|--------|------|
+| Repo | This directory is the req |
+| `AGENTS.md` | `HIRING.md` |
+| GitHub | ATS (later) |
+| Diff | Local card + constitution changes |
+| Commit / push | `moks commit` / `moks push` |
+| PR review | `/review` packet review |
+| Build agent | `recruit` (`build` stays hidden) |
 
 ## Install (from source)
 
@@ -26,23 +40,20 @@ bun run --conditions=browser src/index.ts
 
 Default branch is `dev`. Day-to-day workflow is Bun (`bun install` / `bun dev`) — not npm/pnpm as the primary path.
 
-## Hiring quickstart
+## Hiring loop
 
 Default agent is **`recruit`**. Use `--agent build` for the hidden coding escape hatch.
 
-TUI first:
-
 ```bash
 bun dev
-# then /init → add resume → /score-candidate → moks commit → moks push
+# /init → attach a resume → score-candidate → /review → moks commit → moks push
 ```
 
-Headless fixture run:
+Headless fixture run (no ATS required):
 
 ```bash
 cd packages/opencode
 
-# sample HIRING.md + candidate card (no ATS required)
 FIXTURES=src/product/fixtures/hiring
 
 bun run --conditions=browser src/index.ts run --agent recruit \
@@ -51,7 +62,7 @@ bun run --conditions=browser src/index.ts run --agent recruit \
 ```
 
 Built-in skills: `req-context`, `score-candidate`, `draft-outreach`, `commit-disposition`.  
-Fixtures + copy-paste commands: [`packages/opencode/src/product/fixtures/hiring/README.md`](packages/opencode/src/product/fixtures/hiring/README.md).
+Fixtures: [`packages/opencode/src/product/fixtures/hiring/README.md`](packages/opencode/src/product/fixtures/hiring/README.md).
 
 Record a disposition (git commit is the audit; `push --execute` writes the mock ATS):
 
@@ -60,7 +71,6 @@ bun run --conditions=browser src/index.ts commit --action advance \
   --target-kind candidate --target-id jordan-lee \
   --reason "strong event + postgres signal"
 
-# weekly decision signal (git log; "real req" is still a human judgment)
 bun run --conditions=browser src/index.ts activity --days 7
 ```
 
@@ -69,13 +79,11 @@ bun run --conditions=browser src/index.ts activity --days 7
 Same verbs; add `--json` for machine-readable stdout. Full contract: [`packages/opencode/src/product/headless.md`](packages/opencode/src/product/headless.md).
 
 ```bash
-# Git audit + ATS push (push exit 2 = needs_confirm)
 moks commit --action note --target-id jordan-lee --json
 moks status --json
 moks push --commit-id <sha> --json
 moks push --commit-id <sha> --confirm --execute --json
 
-# Agent NDJSON events (--json ≡ --format json); --auto for CI permissions
 moks run --json --agent recruit -f HIRING.md -f candidates/jordan-lee.md -- "Score this candidate"
 ```
 
@@ -87,9 +95,8 @@ moks run --json --agent recruit -f HIRING.md -f candidates/jordan-lee.md -- "Sco
 
 | Doc | What |
 |-----|------|
-| [docs/ROADMAP.md](docs/ROADMAP.md) | v0 product backlog |
-| [docs/FORK.md](docs/FORK.md) | Fork facts, remotes, affiliation |
 | [docs/gtm.html](docs/gtm.html) | Product strategy / GTM |
+| [AGENTS.md](AGENTS.md) | Constitution for work in this repo |
 
 ## License
 

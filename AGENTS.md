@@ -1,33 +1,82 @@
-## moks fork
+# moks
 
-This repo is **moks** — a product fork of the OpenCode *source* (`anomalyco/opencode` → `artemysone/moks`). See `docs/FORK.md`.
+This repo is the product. moks is to talent acquisition what OpenCode is to software engineering.
 
-### Do not confuse these three things
+**Code is everything** means the *shape* of agentic work is domain-portable: workspace, plan, tools, permissions, local working copy, remote system of record, review, and push. We do **not** rebuild the harness. We rewrite the job from “ship software” to “fill reqs / move candidates with evidence.”
 
-| Name | What it is | Where |
-|------|------------|--------|
-| **moks** | This product / this repo (TA agent harness). The thing we are building. | `/Users/…/moks` (this workspace) |
-| **OpenCode upstream** | The open-source project we forked. Code lineage only. | `upstream` remote → `anomalyco/opencode` |
-| **OpenCode (installed agent)** | The coding agent CLI/TUI running *this* session to edit moks. Dev tool, not the product. | System install (`opencode` binary, `~/.config/opencode`, `~/.local/share/opencode`) |
+People are not files. The working set is materials, records, and drafts.
 
-- When the user says “moks”, “the fork”, “our harness”, or “this repo” → **moks** (this workspace).
-- When they say “upstream” or “OpenCode upstream” → the GitHub project we pull from.
-- When they say “the agent”, “this session”, or “opencode on my machine” → the **installed** OpenCode used to build moks.
-- Paths like `packages/opencode` are **moks monorepo packages** (inherited names), not the installed agent.
-- Do not edit the user’s global OpenCode config/data (`~/.config/opencode`, `~/.local/share/opencode`) unless they explicitly ask. Product work stays in this repo.
-- `.opencode/` in this repo configures the *installed* agent while working here; it is not moks product code.
+Strategy: `docs/gtm.html`.
 
-- Remotes: `origin` = moks (push); `upstream` = OpenCode source (pull only).
-- Default branch is `dev`. Local `main` may not exist; use `dev` or `origin/dev` for diffs.
-- Runtime is Bun (`bun install`, `bun dev`). Do not introduce pnpm/npm as the primary workflow.
-- Prefer changes in `packages/opencode` (CLI/TUI/server) for the TA harness. Do not expand into `desktop`, `console`, `web`, or cloud/SST packages unless explicitly asked.
-- Do not ship under OpenCode package/install names. Do not imply official OpenCode affiliation.
-- Keep MIT license and upstream copyright notices; add moks copyright only for new work.
-- Their CI, releases, and cloud infra are not ours — don’t assume secrets, npm publishes, or SST stages work here.
-- Hard fork: do not merge `upstream/dev`. Cherry-pick a provider/kernel fix only if needed.
-- Product strategy / GTM: `docs/gtm.html`. v0 backlog: `docs/ROADMAP.md`.
+## Ontology (locked)
 
-## Monorepo (inherited from upstream)
+A requisition is the working directory.
+
+| Piece | Role |
+|-------|------|
+| cwd | the req |
+| `HIRING.md` | constitution (must-haves, scorecard, process) |
+| `candidates/<id>.md` | working copies (score, outreach, notes) |
+| `moks commit` | git audit of a decision |
+| `moks push` | the write (local/mock ATS now; remote later) |
+| `.moks/` | cache only (plans, ats.json). Not a hiring book |
+
+Do not invent `.moks/reqs/<slug>/`, a multi-req “book,” or `@slug` focus. One cwd, one req.
+
+## Porting rule
+
+Mold the harness. Do not rebuild it.
+
+Keep: session runner, permissions, MCP host, skill loader, multi-provider, plan-mode machinery, diff plumbing.
+
+Change: prominence, defaults, copy, agent wiring, workspace paths.
+
+| OpenCode | moks | Wrong port |
+|----------|------|------------|
+| Repo / project | This cwd is the req | One git remote per req; branch = stage |
+| `AGENTS.md` | `HIRING.md` | `/init` still writes coding AGENTS.md |
+| GitHub | ATS (Ashby later) | GitHub recruiting as the product |
+| Working tree | `HIRING.md` + `candidates/` | Cloud ATS with no local drafts |
+| Diff | Local hiring file deltas | Delete diff, or only show remote ATS |
+| `git commit` | `moks commit` | Raw `git commit`; commit with no push path |
+| `git push` | `moks push` | Silent ATS writes from the agent |
+| PR review | `/review` packet review | `/review` still runs `gh pr` |
+| `build` doer | `recruit` (`build` hidden) | Rename the binary; keep `build` default |
+| Plan → implement | Plan → execute hiring steps | Plan → generate recruiting software |
+| Explore codebase | Explore HIRING.md / cards / notes | Explore → OSINT-only agent |
+| LSP / formatters | Not a TA surface (defaults off) | TA-LSP metaphor, or delete the subsystem |
+
+Default loop: `/init` → load `HIRING.md` → score onto the card → draft outreach → `/review` → `moks commit` → `moks push`.
+
+Cast: `recruit` is the doer. Plan stays and exits to `recruit`. `build` is a hidden escape hatch (`--agent build`). Skills: `req-context`, `score-candidate`, `draft-outreach`, `commit-disposition`.
+
+We do **not** use product moks to code this repo. Day-to-day engineering is the installed coding agent. Monorepo `.opencode/` configures that agent. It is not product code.
+
+## Product path
+
+Work lives in `packages/opencode` (CLI / TUI / server), `packages/core`, and `packages/tui`, plus what those import (`plugin`, `protocol`, `schema`, `server`, `sdk/js`, `llm`).
+
+Folder names like `packages/opencode` and npm names like `@opencode-ai/*` are leftover package IDs. They are not the product and not the installed coding agent. Do not rename them unless asked.
+
+Do not bring back pruned company surfaces (desktop, console, web, app, SST). Do not ship under OpenCode install names. MIT stays; keep existing copyright notices; add moks copyright only on new work.
+
+Product identity is isolated: `moks.json` / `.moks/` / `MOKS_*` / `~/.config/moks`. Ignore `opencode.json`, `.opencode/`, and `OPENCODE_*`.
+
+## Repo
+
+Hard fork of OpenCode (`anomalyco/opencode` → `artemysone/moks`). OpenCode is lineage and the installed coding agent that edits this repo — not what we ship. No official affiliation.
+
+| Remote | Points at | Role |
+|--------|-----------|------|
+| `origin` | `artemysone/moks` | push |
+| `upstream` | `anomalyco/opencode` | reference only |
+
+- Default branch: `dev`. Push to `origin`.
+- Do not merge `upstream/dev`. Cherry-pick a provider/kernel fix only if needed.
+- Runtime is Bun (`bun install`, `bun dev`). Do not make pnpm/npm the primary workflow.
+- Do not edit `~/.config/opencode` or `~/.local/share/opencode` unless asked.
+
+## Monorepo
 
 - To regenerate the legacy JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - After changing the public Protocol or Server `HttpApi`, run `bun run generate` from `packages/client`. Do not edit `src/generated` or `src/generated-effect` directly.
@@ -37,15 +86,15 @@ This repo is **moks** — a product fork of the OpenCode *source* (`anomalyco/op
 
 Use a short branch name of at most three words, separated by hyphens. Do not use slashes or type prefixes such as `feat/` or `fix/`.
 
-Examples: `session-recovery`, `fix-scroll-state`, `regenerate-sdk`.
+Examples: `session-recovery`, `fix-scroll-state`, `candidate-cards`.
 
 ## Commits and PR Titles
 
 Use conventional commit-style messages and PR titles: `type(scope): summary`.
 
-Valid types are `feat`, `fix`, `docs`, `chore`, `refactor`, and `test`. Scopes are optional; use the affected package or area when helpful, e.g. `core`, `opencode`, `tui`, `app`, `desktop`, `sdk`, or `plugin`.
+Valid types are `feat`, `fix`, `docs`, `chore`, `refactor`, and `test`. Scopes are optional; use the affected package or area when helpful, e.g. `core`, `opencode`, `tui`, `sdk`, or `plugin`.
 
-Examples: `fix(tui): simplify thinking toggle styling`, `docs: update contributing guide`, `chore(sdk): regenerate types`.
+Examples: `fix(tui): simplify hiring diff title`, `docs: update contributing guide`, `feat(product): score onto candidate cards`.
 
 ## Style Guide
 
