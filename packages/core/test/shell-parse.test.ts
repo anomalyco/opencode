@@ -39,12 +39,20 @@ describe("ShellParse", () => {
     }
   })
 
-  test("portable scanning falls back to legacy permissions for opaque heredocs", async () => {
+  test("portable scanning authorizes opaque heredocs without inferring directories", async () => {
     const command = "cat <<'EOF'\nstatic body\nEOF"
-    const legacy = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
     const portable = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))
-    expect(portable).toEqual(legacy)
+    expect(portable).toEqual({ commands: [{ resource: command, save: command }], directories: [] })
   })
+
+  test.each(['c"\\d" relative', "'cd' /tmp", "c''d /tmp", "c\\\nd /tmp"])(
+    "portable scanning keeps source-shaped command heads under shell authorization: %s",
+    async (command) => {
+      const portable = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))
+      expect(portable.commands.map((item) => item.resource)).toEqual([command])
+      expect(portable.directories).toEqual([])
+    },
+  )
 
   test("splits PowerShell commands case-insensitively", async () => {
     const result = await Effect.runPromise(

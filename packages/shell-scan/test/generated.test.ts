@@ -127,6 +127,13 @@ describe("ShellScan generated PowerShell properties", () => {
     ])
 
     for (const form of forms) {
+      if (form.source.startsWith("left`") && ";|&".includes(form.word[4] ?? "")) {
+        expect(ShellScan.scanPowerShell(`Write-Output ${form.source}`)).toEqual({
+          kind: "opaque",
+          reason: "invalid-structure",
+        })
+        continue
+      }
       expect(ShellScan.scanPowerShell(`Write-Output ${form.source}`)).toEqual({
         kind: "scanned",
         commands: [{ resource: `Write-Output ${form.source}`, words: ["Write-Output", form.word] }],

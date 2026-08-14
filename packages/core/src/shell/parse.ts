@@ -159,9 +159,8 @@ export const scan = Effect.fn("ShellParse.scan")(function* (
   cwd: string,
   options?: { portable?: boolean },
 ) {
-  const legacy = yield* scanLegacy(command, shell, cwd)
-  if (!options?.portable) return legacy
-  return scanPortable(command, shell, cwd, legacy) ?? legacy
+  if (options?.portable) return scanPortable(command, shell, cwd)
+  return yield* scanLegacy(command, shell, cwd)
 })
 
 const scanLegacy = Effect.fn("ShellParse.scanLegacy")(function* (command: string, shell: string, cwd: string) {
@@ -198,55 +197,157 @@ const scanLegacy = Effect.fn("ShellParse.scanLegacy")(function* (command: string
   )
 })
 
-function scanPortable(
-  command: string,
-  shell: string,
-  cwd: string,
-  legacy: { commands: Array<{ resource: string; save: string }>; directories: string[] },
-) {
+function scanPortable(command: string, shell: string, cwd: string) {
   const powershell = ShellSelect.ps(shell)
   const result = powershell ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
-  if (result.kind === "opaque") return
+  if (result.kind === "opaque") return { commands: [{ resource: command, save: command }], directories: [] }
+  const carriage = powershell ? command.search(/\r(?!\n)/) : -1
+  if (carriage >= 0) return { commands: [], directories: [] }
 
-  // Reuse only legacy resources so experimental scanning cannot tighten arbitrary permission rules.
-  const portable = result.commands.reduce(
+  const parsed = result.commands.reduce(
     (output, item) => {
+      const index = item[ShellScan.Nested] ? -1 : command.indexOf(item.resource, output.cursor)
+      const offset = item[ShellScan.Nested]
+        ? command.lastIndexOf(item.resource, output.cursor - 1)
+        : index < 0
+          ? command.indexOf(item.resource)
+          : index
+      if (index >= 0) output.cursor = index + item.resource.length
+      const before = command.slice(0, Math.max(0, offset))
       const name = powershell ? item.words[0]?.toLowerCase() : item.words[0]
       if (!name) return output
-      if (CWD.has(name)) {
-        const directories = portableDirectoryArgs(item.words, powershell, cwd, shell)
-        if (directories.length === 0) output.compatible = false
-        output.directories.push(...directories)
+      if (powershell && name === "<") return output
+      if (
+        powershell &&
+        name === "foreach-object" &&
+        item.words.some((word) => word.startsWith("{")) &&
+        !/\|\s*$/.test(before)
+      )
+        return output
+      const sourceHead = powershell
+        ? item.words[0]
+        : sourceTokens(item.resource).find((token) => token.value === item.words[0])?.raw
+      if (CWD.has(name) && (powershell || sourceHead === item.words[0])) {
+        output.directories.push(...portableDirectoryArgs(item.words, item.resource, powershell, cwd, shell))
         return output
       }
-      const previous = legacy.commands.find((candidate) => candidate.resource === item.resource)
-      if (!previous) output.compatible = false
-      if (previous) output.commands.push(previous)
+      const save = powershell
+        ? powerShellSourcePrefix(item.resource, item.words)
+        : bashSourcePrefix(item.resource, item.words)
+      output.commands.push({
+        resource: powershell ? item.resource : bashResource(item.resource, before),
+        save: `${save} *`,
+      })
       return output
     },
     {
       commands: [] as Array<{ resource: string; save: string }>,
       directories: [] as string[],
-      compatible: true,
+      cursor: 0,
     },
   )
-  if (!portable.compatible) return
-  if (portable.directories.some((directory) => !legacy.directories.includes(directory))) return
-  return { commands: portable.commands, directories: portable.directories }
+  return { commands: parsed.commands, directories: parsed.directories }
 }
 
-function portableDirectoryArgs(command: string[], powershell: boolean, cwd: string, shell: string) {
-  if (!powershell)
+function bashResource(resource: string, before: string) {
+  if (!/(?:&&|\|\||\|&)\s*$|\|\s*$/.test(before)) return resource
+  const redirect = bashRedirect(resource)
+  return redirect < 0 ? resource : resource.slice(0, redirect).replace(/\d+$/, "").trim()
+}
+
+function bashRedirect(resource: string) {
+  let quote: "single" | "double" | undefined
+  for (let index = 0; index < resource.length; index++) {
+    const char = resource[index]
+    if (quote === "single") {
+      if (char === "'") quote = undefined
+      continue
+    }
+    if (char === "\\") {
+      index++
+      continue
+    }
+    if (char === '"') {
+      quote = quote === "double" ? undefined : "double"
+      continue
+    }
+    if (quote === "double") {
+      if (char === "$" && resource[index + 1] === "(") index = bashParenthesizedEnd(resource, index + 1)
+      else if (char === "`") index = bashBacktickEnd(resource, index)
+      continue
+    }
+    if (char === "'") {
+      quote = "single"
+      continue
+    }
+    if ((char === "$" || char === "<" || char === ">") && resource[index + 1] === "(") {
+      index = bashParenthesizedEnd(resource, index + 1)
+      continue
+    }
+    if (char === "`") {
+      index = bashBacktickEnd(resource, index)
+      continue
+    }
+    if (char === "<" || char === ">" || (char === "&" && resource[index + 1] === ">")) return index
+  }
+  return -1
+}
+
+function bashParenthesizedEnd(resource: string, start: number) {
+  let level = 1
+  let quote: "single" | "double" | undefined
+  for (let index = start + 1; index < resource.length; index++) {
+    const char = resource[index]
+    if (quote === "single") {
+      if (char === "'") quote = undefined
+      continue
+    }
+    if (char === "\\") {
+      index++
+      continue
+    }
+    if (char === '"') {
+      quote = quote === "double" ? undefined : "double"
+      continue
+    }
+    if (quote === "double") continue
+    if (char === "'") {
+      quote = "single"
+      continue
+    }
+    if (char === "(") level++
+    if (char === ")" && --level === 0) return index
+  }
+  return resource.length - 1
+}
+
+function bashBacktickEnd(resource: string, start: number) {
+  for (let index = start + 1; index < resource.length; index++) {
+    if (resource[index] === "\\") index++
+    else if (resource[index] === "`") return index
+  }
+  return resource.length - 1
+}
+
+function portableDirectoryArgs(command: string[], resource: string, powershell: boolean, cwd: string, shell: string) {
+  if (!powershell) {
+    const tokens = sourceTokens(resource)
+    const start = tokens.findIndex((token) => token.value === command[0])
+    if (start < 0) return []
     return directoryArgs(
-      command.map((text) => ({ type: "word", text })),
+      tokens.slice(start).map((token) => ({ type: "word", text: token.raw })),
       false,
       cwd,
       shell,
     )
+  }
 
+  const tokens = powerShellSourceTokens(resource)
+  const start = tokens.findIndex((token) => token.value.toLowerCase() === command[0]?.toLowerCase())
+  if (start < 0) return []
   const directories: string[] = []
   let expectsPath = false
-  for (const part of command.slice(1)) {
+  for (const part of tokens.slice(start + 1).map((token) => token.raw)) {
     if (expectsPath) {
       const value = directoryArgument(part, true, cwd, shell)
       if (value) directories.push(value)
@@ -261,6 +362,250 @@ function portableDirectoryArgs(command: string[], powershell: boolean, cwd: stri
     if (value) directories.push(value)
   }
   return directories
+}
+
+function sourceTokens(resource: string) {
+  const tokens: Array<{ raw: string; value: string }> = []
+  let raw = ""
+  let value = ""
+  let quote: "single" | "double" | "backtick" | undefined
+  let substitution = 0
+  let redirect = false
+
+  const finish = () => {
+    if (!raw) return
+    if (!redirect) tokens.push({ raw, value })
+    raw = ""
+    value = ""
+    redirect = false
+  }
+
+  for (let index = 0; index < resource.length; index++) {
+    const char = resource[index]
+    if (quote === "single") {
+      raw += char
+      if (char === "'") quote = undefined
+      else value += char
+      continue
+    }
+    if (quote === "double") {
+      raw += char
+      if (char === '"') quote = undefined
+      else if (char === "\\" && index + 1 < resource.length) {
+        const next = resource[index + 1]
+        if ('$`"\\\n'.includes(next)) {
+          raw += resource[++index]
+          if (next !== "\n") value += next
+        } else value += char
+      } else value += char
+      continue
+    }
+    if (quote === "backtick") {
+      raw += char
+      value += char
+      if (char === "`" && resource[index - 1] !== "\\") quote = undefined
+      continue
+    }
+    if (char === "'") {
+      raw += char
+      quote = "single"
+      continue
+    }
+    if (char === '"') {
+      raw += char
+      quote = "double"
+      continue
+    }
+    if (char === "`") {
+      raw += char
+      value += char
+      quote = "backtick"
+      continue
+    }
+    if (char === "\\" && index + 1 < resource.length) {
+      if (resource[index + 1] === "\n") {
+        finish()
+        index++
+        continue
+      }
+      if (!raw && /\s/.test(resource[index + 1])) {
+        index++
+        continue
+      }
+      raw += char + resource[++index]
+      value += resource[index]
+      continue
+    }
+    if ((char === "<" || char === ">") && resource[index + 1] === "(") {
+      const end = bashParenthesizedEnd(resource, index + 1)
+      if (raw) {
+        raw += resource.slice(index, end + 1)
+        value += resource.slice(index, end + 1)
+      }
+      index = end
+      continue
+    }
+    if (char === "$" && resource[index + 1] === "(") substitution++
+    if (char === ")" && substitution > 0) substitution--
+    if (substitution === 0 && /\s/.test(char)) {
+      finish()
+      continue
+    }
+    if (substitution === 0 && (char === "<" || char === ">" || (char === "&" && resource[index + 1] === ">"))) {
+      if (/^\d+$/.test(value)) {
+        raw = ""
+        value = ""
+      } else finish()
+      redirect = true
+      if (char === "&") index++
+      while (/[<>&|]/.test(resource[index + 1] ?? "")) index++
+      continue
+    }
+    raw += char
+    value += char
+  }
+  finish()
+
+  return tokens
+}
+
+function bashSourcePrefix(resource: string, words: string[]) {
+  const tokens = sourceTokens(resource)
+  const start = tokens.findIndex((token) => token.value === words[0])
+  if (start < 0) {
+    const command = tokens.findIndex((token) => !/^[A-Za-z_][A-Za-z0-9_]*\+?=/.test(token.raw))
+    return prefix(tokens.slice(Math.max(0, command)).map((token) => token.raw)).join(" ")
+  }
+  const source = tokens
+    .slice(start)
+    .map((token) => token.raw)
+    .filter((token) => !/^\$\([\s\S]*\)$/.test(token) && !/^`[\s\S]*`$/.test(token))
+  return prefix(source).join(" ")
+}
+
+function powerShellSourcePrefix(resource: string, words: string[]) {
+  const tokens = powerShellSourceTokens(resource)
+  const start = tokens.findIndex((token) => token.value.toLowerCase() === words[0]?.toLowerCase())
+  if (start < 0) return prefix(words).join(" ")
+  return prefix(tokens.slice(start).map((token) => token.raw)).join(" ")
+}
+
+function powerShellSourceTokens(resource: string) {
+  const tokens: Array<{ raw: string; value: string }> = []
+  let raw = ""
+  let value = ""
+  let quote: "single" | "double" | undefined
+  let redirect = false
+
+  const finish = () => {
+    if (!raw) return
+    if (!redirect) tokens.push({ raw, value })
+    raw = ""
+    value = ""
+    redirect = false
+  }
+
+  for (let index = 0; index < resource.length; index++) {
+    const char = resource[index]
+    if (quote === "single") {
+      raw += char
+      if (char === "'" && resource[index + 1] === "'") {
+        raw += resource[++index]
+        value += "'"
+      } else if (char === "'") quote = undefined
+      else value += char
+      continue
+    }
+    if (quote === "double") {
+      raw += char
+      if (char === '"') quote = undefined
+      else if (char === "`" && index + 1 < resource.length) {
+        raw += resource[++index]
+        value += resource[index]
+      } else value += char
+      continue
+    }
+    if (char === "'") {
+      raw += char
+      quote = "single"
+      continue
+    }
+    if (char === '"') {
+      raw += char
+      quote = "double"
+      continue
+    }
+    if (char === "`" && index + 1 < resource.length) {
+      raw += char + resource[++index]
+      if (resource[index] !== "\n" && resource[index] !== "\r") value += resource[index]
+      continue
+    }
+    if (char === "{" && !raw) {
+      const end = powerShellBracedEnd(resource, index)
+      raw = resource.slice(index, end + 1)
+      value = raw
+      index = end
+      continue
+    }
+    if (/\s/.test(char)) {
+      finish()
+      continue
+    }
+    if (char === ">") {
+      if (!raw && resource[index + 1] && !/[\s>&]/.test(resource[index + 1])) {
+        raw += char
+        value += char
+        continue
+      }
+      if (/^\d+$/.test(value)) {
+        raw = ""
+        value = ""
+      } else if (raw === "*") {
+        raw = ""
+        value = ""
+      } else finish()
+      redirect = true
+      while (/[>&\d]/.test(resource[index + 1] ?? "")) index++
+      continue
+    }
+    if ((char === "&" || char === ".") && !raw && tokens.length === 0) continue
+    raw += char
+    value += char
+  }
+  finish()
+  return tokens
+}
+
+function powerShellBracedEnd(resource: string, start: number) {
+  let level = 1
+  let quote: "single" | "double" | undefined
+  for (let index = start + 1; index < resource.length; index++) {
+    const char = resource[index]
+    if (char === "`" && quote !== "single") {
+      index++
+      continue
+    }
+    if (quote === "single") {
+      if (char === "'" && resource[index + 1] === "'") index++
+      else if (char === "'") quote = undefined
+      continue
+    }
+    if (quote === "double") {
+      if (char === '"') quote = undefined
+      continue
+    }
+    if (char === "'") {
+      quote = "single"
+      continue
+    }
+    if (char === '"') {
+      quote = "double"
+      continue
+    }
+    if (char === "{") level++
+    if (char === "}" && --level === 0) return index
+  }
+  return resource.length - 1
 }
 
 function parts(node: Node) {

@@ -189,6 +189,30 @@ describe("ShellScan", () => {
 })
 
 describe("ShellScan PowerShell", () => {
+  test("keeps adjacent invocation operators in resources", () => {
+    expect(ShellScan.scanPowerShell("&Remove-Item victim")).toEqual({
+      kind: "scanned",
+      commands: [{ resource: "&Remove-Item victim", words: ["Remove-Item", "victim"] }],
+    })
+  })
+
+  test("does not carry redirect state through comments", () => {
+    const result = ShellScan.scanPowerShell("< # comment\nRemove-Item victim")
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") return
+    expect(result.commands.map((command) => command.words[0])).toEqual(["<", "Remove-Item"])
+  })
+
+  test("scans module-qualified commands", () => {
+    const result = ShellScan.scanPowerShell("Microsoft.PowerShell.Management\\Get-Item x; Remove-Item y")
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") return
+    expect(result.commands.map((command) => command.words[0])).toEqual([
+      "Microsoft.PowerShell.Management\\Get-Item",
+      "Remove-Item",
+    ])
+  })
+
   test("splits carriage-return statement separators", () => {
     const result = ShellScan.scanPowerShell("Get-ChildItem\rRemove-Item victim")
     expect(result.kind).toBe("scanned")
@@ -221,13 +245,24 @@ describe("ShellScan PowerShell", () => {
     })
   })
 
-  test("keeps separators inside strings and honors backtick escapes", () => {
-    expect(ShellScan.scanPowerShell('Write-Output "safe; still safe"; Write-Output foo`;bar')).toEqual({
+  test("keeps separators inside strings", () => {
+    expect(ShellScan.scanPowerShell('Write-Output "safe; still safe"')).toEqual({
       kind: "scanned",
-      commands: [
-        { resource: 'Write-Output "safe; still safe"', words: ["Write-Output", "safe; still safe"] },
-        { resource: "Write-Output foo`;bar", words: ["Write-Output", "foo;bar"] },
-      ],
+      commands: [{ resource: 'Write-Output "safe; still safe"', words: ["Write-Output", "safe; still safe"] }],
+    })
+  })
+
+  test("treats escaped command separators as opaque for legacy compatibility", () => {
+    expect(ShellScan.scanPowerShell("Write-Output foo`;bar")).toEqual({
+      kind: "opaque",
+      reason: "invalid-structure",
+    })
+  })
+
+  test("treats line continuations as opaque for legacy compatibility", () => {
+    expect(ShellScan.scanPowerShell("Write-Output x`\nRemove-Item victim")).toEqual({
+      kind: "opaque",
+      reason: "invalid-structure",
     })
   })
 

@@ -5,5 +5,5 @@
 "@opencode-ai/client": minor
 ---
 
-Add an opt-in portable shell permission scanner with a legacy compatibility guard. Portable scanning can only remove
-permission resources; opaque or incomparable commands fall back to the default parser without adding prompts or denials.
+Add an opt-in portable shell permission scanner. Opaque commands use normal shell authorization without inferring
+external directories, while the default tree-sitter path remains unchanged.

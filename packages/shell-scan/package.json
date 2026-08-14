@@ -8,8 +8,6 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "research:execution": "bun run research/execution-oracle.ts",
-    "research:powershell": "bun run research/powershell-conformance.ts",
     "test": "bun test --only-failures",
     "typecheck": "tsgo --noEmit"
   },

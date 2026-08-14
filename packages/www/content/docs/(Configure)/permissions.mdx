@@ -141,11 +141,9 @@ permission scanner. The default remains the tree-sitter scanner.
 }
 ```
 
-Experimental scanning is compatibility-gated: OpenCode uses portable output
-only when its command and directory permission resources are a subset of the
-default scanner's output. Unsupported or incomparable syntax, including
-heredocs, falls back to the default scanner and cannot add permission prompts
-or denials.
+When enabled, the portable scanner is authoritative and tree-sitter is not
+consulted. Unsupported syntax, including heredocs, requests permission for the
+original shell command without inferring external directories.
 
 ## Defaults
 
