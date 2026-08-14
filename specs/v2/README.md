@@ -31,7 +31,6 @@ Generated clients follow the assembled public `HttpApi`. GitHub issues own activ
 | ----------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- |
 | [Event stream](./event-stream-architecture.md)                    | Accepted and implemented   | Record why public events use one encoded feed with independent queues.      |
 | [Managed restart continuation](./session-restart-continuation.md) | Superseded decision record | Preserve the graceful-only design replaced by write-ahead execution claims. |
-| [Instruction sync](./instruction-sync-proposal.md)                | Superseded decision record | Preserve the design replaced by frozen updates and snapshot-based forks.    |
 | [Provider policy](./provider-policy.md)                           | Proposed and unimplemented | Explore provider authorization independently from provider configuration.   |
 
 ## Historical Context
