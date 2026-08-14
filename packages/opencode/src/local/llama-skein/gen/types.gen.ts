@@ -681,6 +681,10 @@ export type ModelFit = {
    */
   max_fit_ctx?: number
   /**
+   * Largest --ctx-size that fits in raw VRAM bytes with NO safety margin applied: no vramSafetyFrac headroom cap, no promptMarginFrac prompt-budget trim. Only the real physical requirements (weights, KV cache, compute/activation overhead) are subtracted. This is what will load without OOMing, not what is comfortable to run at — expect it to sit close to 100% VRAM with little headroom for fluctuation. max_fit_ctx/max_safe_ctx are the conservative recommendations; this is the true ceiling for a caller who wants to choose their own risk. 0 when VRAM is unknown.
+   */
+  max_physical_ctx?: number
+  /**
    * How the model would run given memory.
    */
   run_mode?: "gpu" | "tensor_parallel" | "moe_offload" | "cpu_offload" | "cpu_only"

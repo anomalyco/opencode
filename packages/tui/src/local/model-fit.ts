@@ -50,11 +50,22 @@ export function computeRecommendedCtx(m: MemSnapshot, currentCtx: number, maxFit
 
 /**
  * True when a ctx_size is above what the model can actually load on this host.
- * `maxFitCtx` 0/undefined means the ceiling is unknown (non-llama-skein backend,
- * VRAM unreadable) — never block on missing data.
+ *
+ * Takes the *physical* ceiling (`/api/fit` `max_physical_ctx` — no
+ * vramSafetyFrac/promptMarginFrac margin, the true OOM line), not the
+ * conservative `max_fit_ctx` recommendation. Blocking on the conservative
+ * number is what made this dialog recommend a value and then refuse that
+ * same value: the two were computed with different amounts of safety margin,
+ * so a value the dialog itself suggested could read as "above ceiling" a
+ * moment later. Blocking on the true physical ceiling means "recommended"
+ * and "will this be refused" can never disagree.
+ *
+ * 0/undefined means the ceiling is unknown (non-llama-skein backend, VRAM
+ * unreadable, or an older llama-skein without this field) — never block on
+ * missing data.
  */
-export function aboveCeiling(ctx: number, maxFitCtx?: number): boolean {
-  return !!maxFitCtx && maxFitCtx > 0 && ctx > maxFitCtx
+export function aboveCeiling(ctx: number, maxPhysicalCtx?: number): boolean {
+  return !!maxPhysicalCtx && maxPhysicalCtx > 0 && ctx > maxPhysicalCtx
 }
 
 export const PRESETS = [

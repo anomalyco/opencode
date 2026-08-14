@@ -41,6 +41,12 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
   // context by llama-skein. 0 = unknown (non-llama-skein backend, VRAM unreadable).
   const maxFit = createMemo(() => fit()?.max_fit_ctx ?? 0)
 
+  // True physical ceiling: no vramSafetyFrac/promptMarginFrac margin, the
+  // actual OOM line. Selections are blocked against THIS, not maxFit — see
+  // aboveCeiling's doc comment for why blocking on the conservative number
+  // let this dialog recommend a value and then refuse that same value.
+  const maxPhysical = createMemo(() => fit()?.max_physical_ctx ?? 0)
+
   const modelName = createMemo(() => provider()?.models[props.modelID]?.name ?? props.modelID)
 
   onMount(() => {
@@ -79,11 +85,13 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
     const cur = current()
     const m = mem()
     const rec = recommended()
+    const physMax = maxPhysical()
     const kvPerToken = m && cur > 0 && m.kvEstMb > 0 ? m.kvEstMb / cur : null
     const extra = new Set(cur > 0 ? [cur] : [])
     if (rec) extra.add(rec)
+    if (physMax > 0) extra.add(physMax)
     const sizes = [...new Set([...PRESETS, ...extra])].sort((a, b) => a - b)
-    const ceiling = maxFit()
+    const ceiling = physMax
     return sizes.map((n) => {
       let description: string | undefined
       // fork: PRESETS is hand-authored and runs to 1M, so it offers sizes no
@@ -100,6 +108,8 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
         description = "current"
       } else if (n === rec) {
         description = "recommended for this model + VRAM"
+      } else if (n === physMax) {
+        description = "physical max — no safety margin, expect ~100% VRAM"
       } else if (n < MIN_WORKFLOW_CTX) {
         description = "⚠ too small — MCP tools fill this before meaningful work"
       } else if (n > cur && m && kvPerToken) {
@@ -109,22 +119,24 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
           description += ` · ⚠ exceeds free ${m.label} (${fmtGB(m.freeMb)} GB)`
         }
       }
-      return { value: n, title: fmtCtxK(n), description, highlight: n === cur || n === rec }
+      return { value: n, title: fmtCtxK(n), description, highlight: n === cur || n === rec || n === physMax }
     })
   })
 
   const titleSuffix = createMemo(() => {
     const m = mem()
-    const ceiling = maxFit()
+    const ceiling = maxPhysical()
+    const safe = maxFit()
     const parts: string[] = []
     if (m) parts.push(`${fmtGB(m.freeMb)}/${fmtGB(m.totalMb)} GB ${m.label} free`)
     if (ceiling > 0) parts.push(`max ${fmtCtxK(ceiling)}`)
+    if (safe > 0 && safe !== ceiling) parts.push(`safe ~${fmtCtxK(safe)}`)
     return parts.length ? ` · ${parts.join(" · ")}` : ""
   })
 
   function apply(ctx_size: number) {
     if (busy()) return
-    const ceiling = maxFit()
+    const ceiling = maxPhysical()
     if (aboveCeiling(ctx_size, ceiling)) {
       // Refuse without closing so a valid size can still be picked. Server-side
       // this is enforced again in local.model.setCtxSize.
