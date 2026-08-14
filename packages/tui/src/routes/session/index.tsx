@@ -274,6 +274,7 @@ export function Session() {
   const [synced, setSynced] = createSignal(false)
   const sessionTabs = useSessionTabs()
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
+  const [latestHovered, setLatestHovered] = createSignal(false)
 
   const clearMessageNavigation = () => {
     setNavigationSlack(0)
@@ -1116,7 +1117,12 @@ export function Session() {
             </box>
             <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
               <Show when={config.experimental?.tab_scroll === true && awayFromBottom()}>
-                <text fg={theme.text.subdued} onMouseUp={toBottom}>
+                <text
+                  fg={latestHovered() ? theme.text.default : theme.text.subdued}
+                  onMouseOver={() => setLatestHovered(true)}
+                  onMouseOut={() => setLatestHovered(false)}
+                  onMouseUp={toBottom}
+                >
                   Latest ↓
                 </text>
               </Show>
