@@ -1200,7 +1200,8 @@ export function Session() {
                 </Show>
               </scrollbox>
             </box>
-            <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
+            <box height={1} flexShrink={0} flexDirection="row" justifyContent="space-between">
+              <BackgroundToolHint messages={messages()} />
               <Show when={config.experimental?.tab_scroll === true && awayFromBottom()}>
                 <text
                   fg={latestHovered() ? theme.text.default : theme.text.subdued}
@@ -1270,7 +1271,6 @@ export function Session() {
                       return mutatePending("steer", next.id)
                     }}
                     sessionID={route.sessionID}
-                    right={<BackgroundToolHint messages={messages()} />}
                   />
                 </Match>
               </Switch>
