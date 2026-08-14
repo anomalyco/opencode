@@ -1671,7 +1671,7 @@ export function make(options: ClientOptions) {
         request<WorktreeListOutput>(
           {
             method: "GET",
-            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/worktree`,
+            path: `/api/worktree/${encodeURIComponent(input.projectID)}`,
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,
@@ -1682,7 +1682,7 @@ export function make(options: ClientOptions) {
         request<WorktreeCreateOutput>(
           {
             method: "POST",
-            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/worktree`,
+            path: `/api/worktree/${encodeURIComponent(input.projectID)}`,
             body: {
               strategy: input["strategy"],
               from: input["from"],
@@ -1699,7 +1699,7 @@ export function make(options: ClientOptions) {
         request<WorktreeRemoveOutput>(
           {
             method: "DELETE",
-            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/worktree`,
+            path: `/api/worktree/${encodeURIComponent(input.projectID)}`,
             body: { directory: input["directory"], force: input["force"] },
             successStatus: 204,
             declaredStatuses: [400, 401],
@@ -1711,7 +1711,7 @@ export function make(options: ClientOptions) {
         request<WorktreeRefreshOutput>(
           {
             method: "POST",
-            path: `/api/experimental/project/${encodeURIComponent(input.projectID)}/worktree/refresh`,
+            path: `/api/worktree/${encodeURIComponent(input.projectID)}/refresh`,
             successStatus: 204,
             declaredStatuses: [400, 401],
             empty: true,

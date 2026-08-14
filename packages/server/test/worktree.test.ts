@@ -36,7 +36,7 @@ it.live("lists, creates, and removes worktrees by project ID", () =>
         const resolved = yield* Effect.promise(() => fetch(location, { headers }).then((response) => response.json()))
         if (!isRecord(resolved) || !isRecord(resolved.project) || typeof resolved.project.id !== "string")
           throw new Error("Expected resolved project")
-        const url = new URL(`/api/experimental/project/${resolved.project.id}/worktree`, base)
+        const url = new URL(`/api/worktree/${resolved.project.id}`, base)
 
         const initial = yield* Effect.promise(() => fetch(url, { headers }).then((response) => response.json()))
         expect(initial).toEqual([{ directory: project }])
