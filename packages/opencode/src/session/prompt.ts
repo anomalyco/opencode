@@ -696,29 +696,36 @@ export const layer = Layer.effect(
         format: input.format,
       }
 
-      if (current?.agent !== info.agent) {
-        yield* events.publish(SessionEvent.AgentSwitched, {
-          sessionID: input.sessionID,
-          messageID: SessionMessage.ID.create(),
-          timestamp: DateTime.makeUnsafe(info.time.created),
-          agent: info.agent,
-        })
-      }
-      if (
+      // fork: persist the prompt's agent/model onto the session so a later
+      // prompt that names neither inherits them. This used to ride on
+      // session.next.* events and their projector, but the legacy prompt() path
+      // must not emit v2 events at all (they belong to the v2 input path, which
+      // publishes them from core) — so write the row directly instead. Same
+      // shape the projector writes.
+      const agentChanged = current?.agent !== info.agent
+      const modelChanged =
         current?.model?.providerID !== info.model.providerID ||
         current.model.id !== info.model.modelID ||
         (current.model.variant === "default" ? undefined : current.model.variant) !== info.model.variant
-      ) {
-        yield* events.publish(SessionEvent.ModelSwitched, {
-          sessionID: input.sessionID,
-          messageID: SessionMessage.ID.create(),
-          timestamp: DateTime.makeUnsafe(info.time.created),
-          model: {
-            id: ModelV2.ID.make(info.model.modelID),
-            providerID: ProviderV2.ID.make(info.model.providerID),
-            variant: ModelV2.VariantID.make(info.model.variant ?? "default"),
-          },
-        })
+      if (agentChanged || modelChanged) {
+        yield* db
+          .update(SessionTable)
+          .set({
+            ...(agentChanged ? { agent: info.agent } : {}),
+            ...(modelChanged
+              ? {
+                  model: {
+                    id: info.model.modelID,
+                    providerID: info.model.providerID,
+                    variant: info.model.variant ?? "default",
+                  },
+                }
+              : {}),
+            time_updated: info.time.created,
+          })
+          .where(eq(SessionTable.id, input.sessionID))
+          .run()
+          .pipe(Effect.orDie)
       }
 
       yield* Effect.addFinalizer(() => instruction.clear(info.id))
@@ -1093,20 +1100,6 @@ export const layer = Layer.effect(
           synthetic: [] as string[],
         },
       )
-      // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-      if (flags.experimentalEventSystem) {
-        yield* events.publish(SessionEvent.Prompted, {
-          sessionID: input.sessionID,
-          messageID: SessionMessage.ID.create(),
-          timestamp: DateTime.makeUnsafe(info.time.created),
-          delivery: "steer",
-          prompt: Prompt.make({
-            text: nextPrompt.text.join("\n"),
-            files: nextPrompt.files,
-            agents: nextPrompt.agents,
-          }),
-        })
-      }
       for (const text of nextPrompt.synthetic) {
         // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
         if (flags.experimentalEventSystem) {
