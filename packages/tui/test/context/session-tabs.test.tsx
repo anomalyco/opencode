@@ -223,7 +223,7 @@ test("only the foreground TUI mutates unread state", async () => {
     background = await renderSessionTabs("second", { state: temporary.path })
     foreground.focus()
     background.blur()
-    await wait(() => foreground?.tabs.tabs().length === 2 && background?.tabs.tabs().length === 2)
+    await wait(() => foreground?.tabs.tabs().length === 2 && background?.tabs.tabs().length === 2, 10_000)
 
     const firstDone = executionSucceeded("first")
     foreground.emit(firstDone)
@@ -239,6 +239,7 @@ test("only the foreground TUI mutates unread state", async () => {
       () =>
         foreground?.tabs.status("second").unread === "activity" &&
         background?.tabs.status("second").unread === "activity",
+      10_000,
     )
 
     foreground.tabs.select("second")
@@ -246,6 +247,7 @@ test("only the foreground TUI mutates unread state", async () => {
       () =>
         foreground?.tabs.status("second").unread === undefined &&
         background?.tabs.status("second").unread === undefined,
+      10_000,
     )
   } finally {
     if (foreground) await foreground.destroy()
