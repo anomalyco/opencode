@@ -142,6 +142,9 @@ async function renderSessionTabs(
     vcsLocations,
     state,
     emit: (event: OpenCodeEvent) => events.emit({ ...event, location: { directory } }),
+    focus: () => app.renderer.emit("focus"),
+    blur: () => app.renderer.emit("blur"),
+    flush: () => storage.flush(),
     async destroy() {
       app.renderer.destroy()
       await storage.flush()
@@ -149,6 +152,14 @@ async function renderSessionTabs(
     },
   }
 }
+
+const executionSucceeded = (sessionID: string): OpenCodeEvent => ({
+  id: `evt_done_${sessionID}`,
+  created: Date.now(),
+  type: "session.execution.succeeded",
+  durable: { aggregateID: sessionID, seq: 1, version: 1 },
+  data: { sessionID },
+})
 
 test("loads persisted tab metadata concurrently on connect", async () => {
   let release!: () => void
@@ -199,6 +210,46 @@ test("stores session tabs for the current working directory by default", async (
     expect(stored.cwd[directory].unread).toEqual({})
   } finally {
     await setup.destroy()
+  }
+})
+
+test("only the foreground TUI mutates unread state", async () => {
+  await using temporary = await tmpdir()
+  let foreground: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
+  let background: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
+
+  try {
+    foreground = await renderSessionTabs("first", { state: temporary.path })
+    background = await renderSessionTabs("second", { state: temporary.path })
+    foreground.focus()
+    background.blur()
+    await wait(() => foreground?.tabs.tabs().length === 2 && background?.tabs.tabs().length === 2)
+
+    const firstDone = executionSucceeded("first")
+    foreground.emit(firstDone)
+    background.emit(firstDone)
+    await Promise.all([foreground.flush(), background.flush()])
+    expect(foreground.tabs.status("first").unread).toBeUndefined()
+    expect(background.tabs.status("first").unread).toBeUndefined()
+
+    const secondDone = executionSucceeded("second")
+    foreground.emit(secondDone)
+    background.emit(secondDone)
+    await wait(
+      () =>
+        foreground?.tabs.status("second").unread === "activity" &&
+        background?.tabs.status("second").unread === "activity",
+    )
+
+    foreground.tabs.select("second")
+    await wait(
+      () =>
+        foreground?.tabs.status("second").unread === undefined &&
+        background?.tabs.status("second").unread === undefined,
+    )
+  } finally {
+    if (foreground) await foreground.destroy()
+    if (background) await background.destroy()
   }
 })
 

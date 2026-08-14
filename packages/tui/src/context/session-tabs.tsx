@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { useRenderer } from "@opentui/solid"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
@@ -52,7 +53,10 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const config = useConfig().data
     const location = useLocation()
     const paths = useTuiPaths()
+    const renderer = useRenderer()
     const enabled = () => config.tabs.enabled
+    // Focus reporting emits transitions, so an interactive launch owns unread state until its first blur.
+    const [focused, setFocused] = createSignal(true)
     // Keyed reconcile keeps tab object identity across reorders, so strip rows move instead of
     // mutating in place, which per-row animations and drag state depend on.
     const [store, updateStore] = useStorage().store<PersistedState>("tabs", {
@@ -68,6 +72,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     // User-closed tabs eligible for reopening; in-memory like history, deleted sessions pruned.
     let closedTabs: ClosedSessionTab[] = []
     const scrollPositions = new Map<string, number>()
+
+    const onFocus = () => setFocused(true)
+    const onBlur = () => setFocused(false)
+    renderer.on("focus", onFocus)
+    renderer.on("blur", onBlur)
+    onCleanup(() => {
+      renderer.off("focus", onFocus)
+      renderer.off("blur", onBlur)
+    })
 
     createEffect(() => {
       if (config.experimental?.tab_scroll === true) return
@@ -125,7 +138,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     }
 
     function markUnread(sessionID: string, unread: SessionTabUnread) {
-      if (!enabled()) return
+      if (!enabled() || !focused()) return
       const session = root(sessionID)
       if (current() === session || !state().tabs.some((tab) => tab.sessionID === session)) return
       if (state().unread[session] === unread) return
@@ -145,12 +158,21 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         sessionID,
         title: title(sessionID, state().tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
       })
-      if (tabs === state().tabs && !state().unread[sessionID]) return
+      if (tabs === state().tabs) return
       update((draft) => {
         draft.tabs = openSessionTab(draft.tabs, {
           sessionID,
           title: title(sessionID, draft.tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
         })
+      })
+    })
+
+    createEffect(() => {
+      if (!enabled() || !focused()) return
+      if (route.data.type !== "session" || route.data.sessionID === "dummy") return
+      const sessionID = root(route.data.sessionID)
+      if (!state().unread[sessionID]) return
+      update((draft) => {
         delete draft.unread[sessionID]
       })
     })
