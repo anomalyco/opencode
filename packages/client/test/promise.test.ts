@@ -66,7 +66,6 @@ test("config.get returns ordered config entries for a location", async () => {
         ],
       },
     },
-    { type: "file" as const, path: "/tmp/project/opencode.json" },
   ]
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",

@@ -30,7 +30,6 @@ describe("debug config command", () => {
           ],
         },
       },
-      { type: "file", path: path.join(project, "opencode.json") },
     ]
     let requested: URL | undefined
     const authorization: Array<string | null> = []

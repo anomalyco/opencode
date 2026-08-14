@@ -16,6 +16,7 @@ import { Permission } from "../../permission.js"
 import type { LocationMutation } from "../../location-mutation.js"
 import type { ReadTool } from "../../tool/plugin/read.js"
 import type { EditTool } from "../../tool/plugin/edit.js"
+import { AbsolutePath } from "../../schema.js"
 
 const legacySources = [
   { pattern: "{agent,agents}/**/*.md", primary: false },
@@ -210,5 +211,5 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
     }),
   )
   if (!info) return
-  return new Document({ type: "document", path: file.filepath, info })
+  return new Document({ type: "document", path: AbsolutePath.make(file.filepath), info })
 }

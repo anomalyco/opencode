@@ -388,7 +388,8 @@ export function webSearchHost(websearch: WebSearch.Interface): Plugin.Context["w
             }),
           default: {
             get: draft.default.get,
-            set: (providerID) => draft.default.set(WebSearch.ID.make(providerID)),
+            set: (selection) =>
+              draft.default.set(selection === false || selection === "random" ? selection : WebSearch.ID.make(selection)),
           },
         })
       }),

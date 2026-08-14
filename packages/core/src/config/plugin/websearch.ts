@@ -10,8 +10,9 @@ export const Plugin = define({
     const config = yield* Config.Service
     const loaded = { entries: yield* config.entries() }
     yield* ctx.websearch.transform((websearch) => {
-      const providerID = Config.latest(loaded.entries, "websearch")?.provider
-      if (providerID) websearch.default.set(providerID)
+      const selection = Config.latest(loaded.entries, "websearch")
+      if (selection === false) websearch.default.set(false)
+      if (selection) websearch.default.set(selection.provider)
     })
     yield* ctx.event.subscribe().pipe(
       Stream.filter((event) => event.type === "config.updated"),

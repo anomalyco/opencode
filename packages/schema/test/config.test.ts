@@ -6,13 +6,22 @@ import { ConfigMCP } from "../src/config/mcp.js"
 import { ConfigProvider } from "../src/config/provider.js"
 import { Mcp } from "../src/mcp.js"
 import { AbsolutePath } from "../src/schema.js"
+import { WebSearch } from "../src/websearch.js"
 
 describe("Config.Entry", () => {
+  test("accepts disabled, fixed, and random web search selection", () => {
+    const decode = Schema.decodeUnknownSync(Config.Info)
+
+    expect(decode({ websearch: false }).websearch).toBe(false)
+    expect(decode({ websearch: { provider: "exa" } }).websearch).toEqual({ provider: WebSearch.ID.make("exa") })
+    expect(decode({ websearch: { provider: "random" } }).websearch).toEqual({ provider: "random" })
+  })
+
   test("round-trips every configuration entry type", () => {
     const entries = [
       new Config.Document({
         type: "document",
-        path: "/project/opencode.json",
+        path: AbsolutePath.make("/project/opencode.json"),
         info: new Config.Info({
           permissions: [
             { action: "shell", resource: "*", effect: "ask" },
@@ -22,7 +31,6 @@ describe("Config.Entry", () => {
       }),
       new Config.Document({ type: "document", info: new Config.Info({ shell: "/bin/zsh" }) }),
       new Config.Directory({ type: "directory", path: AbsolutePath.make("/project/.opencode") }),
-      new Config.File({ type: "file", path: AbsolutePath.make("/project/opencode.json") }),
       new Config.AgentsDirectory({ type: "agents", path: AbsolutePath.make("/project/.agents") }),
       new Config.ClaudeDirectory({ type: "claude", path: AbsolutePath.make("/project/.claude") }),
     ]
@@ -37,7 +45,6 @@ describe("Config.Entry", () => {
       "document",
       "document",
       "directory",
-      "file",
       "agents",
       "claude",
     ])

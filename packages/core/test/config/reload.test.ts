@@ -18,6 +18,7 @@ import { Provider } from "@opencode-ai/core/provider"
 import { Reference } from "@opencode-ai/core/reference"
 import { Skill } from "@opencode-ai/core/skill"
 import { Effect, Schema } from "effect"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
@@ -79,7 +80,7 @@ describe("config plugin reloads", () => {
 function config(name: string) {
   return new Document({
     type: "document",
-    path: document,
+    path: AbsolutePath.make(document),
     info: decode({
       agents: { [name]: { description: `${title(name)} agent`, mode: "subagent" } },
       commands: { [name]: { template: `${title(name)} command`, description: `${title(name)} command` } },

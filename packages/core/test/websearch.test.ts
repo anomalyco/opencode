@@ -3,11 +3,10 @@ import { Effect, Exit, Scope } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
-import { KV } from "@opencode-ai/core/kv"
 import { WebSearch } from "@opencode-ai/core/websearch"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([WebSearch.node, Bus.node, KV.node])))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([WebSearch.node, Bus.node])))
 
 const register = (id: string) =>
   Effect.gen(function* () {
@@ -81,16 +80,14 @@ describe("WebSearch", () => {
     }),
   )
 
-  it.effect("uses the provider stored in KV", () =>
+  it.effect("chooses a registered provider for random selection", () =>
     Effect.gen(function* () {
       yield* register("exa")
-      const parallel = yield* register("parallel")
+      yield* register("parallel")
       const websearch = yield* WebSearch.Service
-      const kv = yield* KV.Service
-      yield* kv.set("websearch:provider", parallel.providerID)
+      yield* websearch.transform((draft) => draft.default.set("random"))
 
-      expect((yield* websearch.query({ query: "stored" })).providerID).toBe(parallel.providerID)
-      yield* kv.remove("websearch:provider")
+      expect(["exa", "parallel"]).toContain((yield* websearch.query({ query: "random" })).providerID)
     }),
   )
 
@@ -98,11 +95,9 @@ describe("WebSearch", () => {
     Effect.gen(function* () {
       yield* register("exa")
       const websearch = yield* WebSearch.Service
-      const kv = yield* KV.Service
-      yield* kv.set("websearch:provider", false)
+      yield* websearch.transform((draft) => draft.default.set(false))
 
       expect((yield* websearch.query({ query: "disabled" }).pipe(Effect.flip))._tag).toBe("WebSearch.Disabled")
-      yield* kv.remove("websearch:provider")
     }),
   )
 

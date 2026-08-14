@@ -183,10 +183,14 @@ function resourceMcpLayer(
     Layer.provide(
       Layer.mergeAll(
         overrides?.entries
-          ? Layer.succeed(
-              Config.Service,
-              Config.Service.of({ entries: overrides.entries, changes: () => Stream.never }),
-            )
+            ? Layer.succeed(
+                Config.Service,
+                Config.Service.of({
+                  entries: overrides.entries,
+                  update: () => Effect.die("unused config update"),
+                  changes: () => Stream.never,
+                }),
+              )
           : Config.testLayer([
               new Document({
                 type: "document",

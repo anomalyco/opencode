@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Npm } from "@opencode-ai/util/npm"
@@ -27,16 +27,7 @@ function formatterLayer(directory: string, configured?: ConfigInput["formatter"]
           }),
         ]
   return AppNodeBuilder.build(Formatter.node, [
-    [
-      Config.node,
-      Layer.succeed(
-        Config.Service,
-        Config.Service.of({
-          entries: () => Effect.succeed(entries),
-          changes: () => Stream.empty,
-        }),
-      ),
-    ],
+    [Config.node, Config.testLayer(entries)],
     [
       Location.node,
       Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),

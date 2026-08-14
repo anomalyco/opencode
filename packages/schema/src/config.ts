@@ -94,7 +94,7 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   references: ConfigReference.Info.pipe(optional).annotate({
     description: "Named local directories or Git repositories available as external context",
   }),
-  websearch: ConfigWebSearch.Info.pipe(optional).annotate({
+  websearch: ConfigWebSearch.Selection.pipe(optional).annotate({
     description: "Web search provider selection",
   }),
   plugins: ConfigPlugin.Plugins.pipe(optional).annotate({
@@ -109,17 +109,12 @@ export class Info extends Schema.Class<Info>("Config.Info")({
 
 export class Document extends Schema.Class<Document>("Config.Document")({
   type: Schema.Literal("document"),
-  path: Schema.String.pipe(optional),
+  path: AbsolutePath.pipe(optional),
   info: Info,
 }) {}
 
 export class Directory extends Schema.Class<Directory>("Config.Directory")({
   type: Schema.Literal("directory"),
-  path: AbsolutePath,
-}) {}
-
-export class File extends Schema.Class<File>("Config.File")({
-  type: Schema.Literal("file"),
   path: AbsolutePath,
 }) {}
 
@@ -133,7 +128,7 @@ export class ClaudeDirectory extends Schema.Class<ClaudeDirectory>("Config.Claud
   path: AbsolutePath,
 }) {}
 
-export const Entry = Schema.Union([Document, Directory, File, AgentsDirectory, ClaudeDirectory]).annotate({
+export const Entry = Schema.Union([Document, Directory, AgentsDirectory, ClaudeDirectory]).annotate({
   identifier: "Config.Entry",
 })
 export type Entry = typeof Entry.Type
