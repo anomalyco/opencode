@@ -153,7 +153,7 @@ describe("OpenAI Responses route", () => {
             { type: "input_text", text: "<system-update>\nTreat &lt;/system-update&gt; literally.\n</system-update>" },
           ],
         },
-        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+        { role: "assistant", content: [{ type: "input_text", text: "After." }] },
       ])
     }),
   )
@@ -529,11 +529,11 @@ describe("OpenAI Responses route", () => {
             encrypted_content: "encrypted-continuation-state",
             summary: [{ type: "summary_text", text: "I inspected the previous turn." }],
           },
-          { role: "assistant", content: [{ type: "output_text", text: "It shows a small test image." }] },
+          { role: "assistant", content: [{ type: "input_text", text: "It shows a small test image." }] },
           { role: "user", content: [{ type: "input_text", text: "Check the weather in Paris before continuing." }] },
           { type: "function_call", call_id: "call_weather_1", name: "get_weather", arguments: '{"city":"Paris"}' },
           { type: "function_call_output", call_id: "call_weather_1", output: '{"temperature":22}' },
-          { role: "assistant", content: [{ type: "output_text", text: "Paris is 22 degrees." }] },
+          { role: "assistant", content: [{ type: "input_text", text: "Paris is 22 degrees." }] },
           {
             role: "user",
             content: [{ type: "input_text", text: "Continue from this conversation in one short sentence." }],
@@ -947,7 +947,7 @@ describe("OpenAI Responses route", () => {
                     encrypted_content: "encrypted-state",
                     summary: [{ type: "summary_text", text: "Checked the previous diff." }],
                   },
-                  { role: "assistant", content: [{ type: "output_text", text: "The parser changed." }] },
+                  { role: "assistant", content: [{ type: "input_text", text: "The parser changed." }] },
                   { role: "user", content: [{ type: "input_text", text: "Summarize it." }] },
                 ],
               })
@@ -995,13 +995,13 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(prepared.body.input).toEqual([
-        { role: "assistant", content: [{ type: "output_text", text: "Before." }] },
+        { role: "assistant", content: [{ type: "input_text", text: "Before." }] },
         {
           type: "reasoning",
           encrypted_content: "encrypted-state",
           summary: [{ type: "summary_text", text: "Checked order." }],
         },
-        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+        { role: "assistant", content: [{ type: "input_text", text: "After." }] },
       ])
     }),
   )
@@ -1131,7 +1131,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body).toMatchObject({
         input: [
           { role: "user", content: [{ type: "input_text", text: "What changed?" }] },
-          { role: "assistant", content: [{ type: "output_text", text: "The parser changed." }] },
+          { role: "assistant", content: [{ type: "input_text", text: "The parser changed." }] },
           { role: "user", content: [{ type: "input_text", text: "Summarize it." }] },
         ],
         store: false,
