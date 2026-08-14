@@ -4,12 +4,17 @@ The sidebar indicator (tasks 2–4) ships without any llama-skein change, using
 `run_mode` + `vram_required_mb`. Only the `under_offloaded` preference and the
 "remove the pin" wording depend on llama-skein `flag-under-offloaded-models`.
 
-- [ ] 1. Resolve the "Where the control lives" Open Question before building:
-       extend `DialogModelCtx` into a per-model dialog covering ctx *and*
-       placement, or add rows to `DialogTuning`. Record the choice and the
-       renaming decision in `design.md`. Folding per-model settings into the
-       host-wide tuning dialog is part of why this gap was missed.
-       Validation: `design.md` states the chosen surface and why.
+- [x] 1. Resolve the "Where the control lives" Open Question. **Decided 2026-08-14,
+       see `design.md`.** D1: extend `DialogModelCtx`; do not touch `DialogTuning`.
+       The signatures decide it — `DialogTuning(props: {providerID})` has no
+       `modelID` and patches the host-wide `/api/tuning`, so a per-model write there
+       is a category error, not a missing parameter. `DialogModelCtx(props:
+       {providerID, modelID})` already reads `getModelFit` (line 60, whose response
+       already carries `run_mode`/`host_resident_mb`/`placement`), already patches
+       with an abort/stale guard (line 142), and already faces the same reload cost.
+       Retitle from `Context — ${modelName()}` to `${modelName()}` with "Context"
+       and "Placement" as sections. D2: the indicator keys on `under_offloaded`,
+       never `run_mode` alone. D3: reuse the existing reload-cost convention.
 
 - [ ] 2. Read `run_mode`, `host_resident_mb`, and `vram_required_mb` from the
        existing `/api/fit` poll in `packages/tui/src/feature-plugins/sidebar/context.tsx`.
@@ -19,7 +24,11 @@ The sidebar indicator (tasks 2–4) ships without any llama-skein change, using
 
 - [ ] 3. Render the placement indicator per the spec: fire only on avoidable
        offload, name the host-resident amount, stay silent for genuine hybrids and
-       fully-resident models.
+       fully-resident models. Also per D1: retitle `DialogModelCtx` from
+       `Context — ${modelName()}` to `${modelName()}` with "Context" and "Placement"
+       sections, and make the sidebar VRAM/placement area a second click target
+       opening the same dialog (the Context label keeps working, so nobody
+       relearns anything).
        Validation: `cd packages/tui && bun run typecheck`; manual check against
        host A `M2` (must warn) and `M4`
        (must stay silent).
