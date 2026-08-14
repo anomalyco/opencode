@@ -501,6 +501,28 @@ test("space toggles the selected multiselect option", async () => {
   }
 })
 
+test("keeps a visible space between a multiselect marker and wrapped label", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 58, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [
+        {
+          value: "responsive verification across narrow and wide terminal layouts",
+          label: "Responsive verification across narrow and wide terminal layouts",
+        },
+      ],
+      default: ["responsive verification across narrow and wide terminal layouts"],
+    },
+  ])
+  try {
+    expect(prompt.app.captureCharFrame()).toContain("[✓] Responsive verification")
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
 test("space activates the custom multiselect option", async () => {
   await using tmp = await tmpdir()
   const prompt = await mountForm(tmp.path, 80, [

@@ -899,10 +899,13 @@ export function FormPrompt(props: {
                           <box
                             backgroundColor={active() ? theme.background.formfield.focused : theme.background.default}
                             flexDirection="row"
-                            gap={1}
                           >
                             <Show when={multi()}>
-                              <text fg={picked() ? theme.text.feedback.success.default : theme.text.subdued}>
+                              <text
+                                width={4}
+                                flexShrink={0}
+                                fg={picked() ? theme.text.feedback.success.default : theme.text.subdued}
+                              >
                                 [{picked() ? "✓" : " "}]
                               </text>
                             </Show>
@@ -944,11 +947,14 @@ export function FormPrompt(props: {
                       <box
                         flexDirection="row"
                         flexGrow={1}
-                        gap={1}
                         backgroundColor={other() ? theme.background.formfield.focused : theme.background.default}
                       >
                         <Show when={multi()}>
-                          <text fg={customChecked() ? theme.text.feedback.success.default : theme.text.subdued}>
+                          <text
+                            width={4}
+                            flexShrink={0}
+                            fg={customChecked() ? theme.text.feedback.success.default : theme.text.subdued}
+                          >
                             [{customChecked() ? "✓" : " "}]
                           </text>
                         </Show>
