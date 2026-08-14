@@ -242,6 +242,63 @@ describe("opencode run (non-interactive subprocess)", () => {
   )
 
   cliIt.concurrent(
+    "recovers from a provider size error via compaction without emitting an error event",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.error(413, {
+          error: { type: "request_too_large", message: "Request exceeds the maximum size" },
+        })
+        yield* llm.text("compacted history")
+        yield* llm.text("recovered output")
+
+        const result = yield* opencode.run("recover after overflow", {
+          format: "json",
+          env: { OPENCODE_DISABLE_AUTOCOMPACT: "0" },
+        })
+
+        opencode.expectExit(result, 0)
+        const events = opencode.parseJsonEvents(result.stdout)
+        expect(events.some((event) => event.type === "error")).toBe(false)
+        expect(
+          events.some(
+            (event) =>
+              event.type === "text" &&
+              typeof event.part === "object" &&
+              event.part !== null &&
+              "text" in event.part &&
+              event.part.text === "recovered output",
+          ),
+        ).toBe(true)
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "exits nonzero with an error event when compaction cannot shrink the session",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.error(413, {
+          error: { type: "request_too_large", message: "Request exceeds the maximum size" },
+        })
+        yield* llm.error(413, {
+          error: { type: "request_too_large", message: "Request exceeds the maximum size" },
+        })
+
+        const result = yield* opencode.run("overflow beyond recovery", {
+          format: "json",
+          env: { OPENCODE_DISABLE_AUTOCOMPACT: "0" },
+        })
+
+        opencode.expectExit(result, 1)
+        const events = opencode.parseJsonEvents(result.stdout)
+        const errors = events.filter((event) => event.type === "error")
+        expect(errors.length).toBe(1)
+        expect(JSON.stringify(errors[0])).toContain("too large to compact")
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
     "rejects requested permissions by default and allows them with the dangerous flag",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {
