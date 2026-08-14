@@ -821,7 +821,7 @@ export function FormPrompt(props: {
                 <text fg={theme.text.subdued}>{external().description}</text>
               </Show>
               <text
-                fg={theme.background.action.primary.default}
+                fg={theme.text.action.primary.default}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
                   openExternal()
@@ -919,7 +919,7 @@ export function FormPrompt(props: {
                           </Show>
                         </box>
                         <Show when={row.description}>
-                          <box paddingLeft={3}>
+                          <box paddingLeft={multi() ? 7 : 3}>
                             <text fg={theme.text.subdued}>{row.description}</text>
                           </box>
                         </Show>
