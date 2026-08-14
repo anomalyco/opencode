@@ -158,17 +158,6 @@ export function FormPrompt(props: {
     return formCustom(answerField())
   })
   const multi = createMemo(() => answerField()?.type === "multiselect")
-  const actionLabel = createMemo(() => {
-    if (confirm()) return "submit"
-    const external = externalField()
-    if (external) {
-      if (store.answers[external.key] === true) return "continue"
-      return store.externalReady[external.key] ? "I finished" : "open link"
-    }
-    if (multi()) return "toggle"
-    if (single()) return "submit"
-    return "confirm"
-  })
   const placeholder = createMemo(() => {
     const current = answerField()
     if (current?.type === "string") {
@@ -195,6 +184,21 @@ export function FormPrompt(props: {
     const answer = store.answers[answerField()?.key ?? ""]
     if (Array.isArray(answer)) return answer.includes(value)
     return answer === value
+  })
+  const actionLabel = createMemo(() => {
+    if (confirm()) return "submit"
+    const external = externalField()
+    if (external) {
+      if (store.answers[external.key] === true) return "continue"
+      return store.externalReady[external.key] ? "I finished" : "open link"
+    }
+    if (multi()) {
+      if (other() && store.editing) return "done"
+      if (other() && !input()) return "edit"
+      return "toggle"
+    }
+    if (single()) return "submit"
+    return "confirm"
   })
 
   createEffect(() => {
@@ -984,7 +988,7 @@ export function FormPrompt(props: {
                             }}
                             initialValue={input()}
                             placeholder="Type your own answer"
-                            placeholderColor={theme.text.subdued}
+                            placeholderColor={other() ? theme.text.formfield.focused : theme.text.subdued}
                             minHeight={1}
                             maxHeight={6}
                             textColor={theme.text.formfield.focused}

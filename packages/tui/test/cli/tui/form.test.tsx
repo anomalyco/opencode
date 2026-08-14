@@ -297,6 +297,30 @@ test("typing on the highlighted custom option opens it without losing burst inpu
   }
 })
 
+test("enter on an empty custom multiselect option clearly enters editing", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [{ value: "staging", label: "Staging" }],
+      custom: true,
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressArrow("down")
+    await prompt.app.waitForFrame((frame) => frame.includes("enter edit"))
+
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
+    await prompt.app.waitForFrame((frame) => frame.includes("enter done"))
+
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
 test("typing a custom single-select answer selects it without submitting", async () => {
   await using tmp = await tmpdir()
   const prompt = await mountForm(tmp.path, 80, [
