@@ -36,6 +36,7 @@ import { SessionContext } from "@opencode-ai/core/session/context"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
+import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
 import { Money } from "@opencode-ai/schema/money"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -136,6 +137,15 @@ const testLLM = TestLLM.layer({
     }),
 })
 const client = TestLLM.clientLayer
+const closedTransports: Session.ID[] = []
+const modelTransport = Layer.succeed(
+  SessionModelTransport.Service,
+  SessionModelTransport.Service.of({
+    bind: () => ({ execute: () => Effect.die("Unexpected WebSocket execution") }),
+    close: (sessionID) => Effect.sync(() => closedTransports.push(sessionID)),
+    closeAll: Effect.void,
+  }),
+)
 const model = LanguageModel.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
 const defaultSystem = PROMPT_DEFAULT
 const replacementModel = LanguageModel.make({ id: "replacement", provider: "fake", route: OpenAIChat.route })
@@ -377,6 +387,7 @@ const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Config.node, config],
   [McpInstructions.node, mcpInstructions],
   [PluginSupervisor.node, pluginSupervisor],
+  [SessionModelTransport.node, modelTransport],
 ])
 const execution = Layer.effect(
   SessionExecution.Service,
@@ -451,6 +462,7 @@ const it = testEffect(
       [SessionExecution.node, execution],
       [Config.node, config],
       [PluginSupervisor.node, pluginSupervisor],
+      [SessionModelTransport.node, modelTransport],
     ],
   ).pipe(Layer.provideMerge(testLLM)),
 )
@@ -497,6 +509,7 @@ const setup = Effect.gen(function* () {
   requests = (yield* TestLLM.Service).requests
   authorizations.length = 0
   executions.length = 0
+  closedTransports.length = 0
   systemBaseline = "Initial context"
   systemRemoved = false
   systemUnavailable = false
@@ -1325,6 +1338,7 @@ describe("SessionRunnerLLM", () => {
       expect((yield* session.get(sessionID)).location.directory).toBe(AbsolutePath.make("/moved"))
       expect(yield* session.inbox(sessionID)).toEqual([])
       expect(requests).toEqual([])
+      expect(closedTransports).toEqual([sessionID])
       expect(
         (yield* db
           .select({ type: EventTable.type })
