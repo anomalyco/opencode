@@ -5,11 +5,11 @@ describe("inlineCodeKind", () => {
   test("leaves code expressions as normal inline code", () => {
     expect(
       inlineCodeKind(
-        `case "question.asked": ... input.setStore("question", question.sessionID, [question]) / splice/insert`,
+        `case "form.created": ... input.setStore("form", form.sessionID, [form]) / splice/insert`,
       ),
     ).toBeUndefined()
     expect(inlineCodeKind(`<SessionQuestionDock request={request} ... />`)).toBeUndefined()
-    expect(inlineCodeKind(`from sync.data.question + sync.data.session.`)).toBeUndefined()
+    expect(inlineCodeKind(`from sync.data.form + sync.data.session.`)).toBeUndefined()
     expect(inlineCodeKind(`@opencode-ai/app <StatusPopover />)`)).toBeUndefined()
     expect(inlineCodeKind(`sync.data.session`)).toBeUndefined()
     expect(inlineCodeKind(`window.api`)).toBeUndefined()

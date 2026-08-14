@@ -1,11 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import type { Message, Part, Project } from "@/types"
-import type { PermissionRequest, QuestionAsked, SessionInfo } from "@opencode-ai/client/promise"
+import type { PermissionRequest, SessionInfo } from "@opencode-ai/client/promise"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
-
-type QuestionRequest = QuestionAsked["data"]
 
 const rootSession = (input: { id: string; parentID?: string; archived?: number }) =>
   ({
@@ -47,19 +45,6 @@ const permissionRequest = (id: string, sessionID: string, title = id) =>
     save: [],
   }) as PermissionRequest
 
-const questionRequest = (id: string, sessionID: string, title = id) =>
-  ({
-    id,
-    sessionID,
-    questions: [
-      {
-        question: title,
-        header: title,
-        options: [{ label: title, description: title }],
-      },
-    ],
-  }) as QuestionRequest
-
 const baseState = (input: Partial<State> = {}) =>
   ({
     status: "complete",
@@ -77,7 +62,6 @@ const baseState = (input: Partial<State> = {}) =>
     session_diff: {},
     todo: {},
     permission: {},
-    question: {},
     mcp: {},
     lsp: [],
     vcs: undefined,
@@ -222,7 +206,6 @@ describe("applyDirectoryEvent", () => {
         session_diff: { ses_1: [] },
         todo: { ses_1: [] },
         permission: { ses_1: [] },
-        question: { ses_1: [] },
         session_status: { ses_1: { type: "busy" } },
       }),
     )
@@ -243,7 +226,6 @@ describe("applyDirectoryEvent", () => {
     expect(store.session_diff.ses_1).toBeUndefined()
     expect(store.todo.ses_1).toBeUndefined()
     expect(store.permission.ses_1).toBeUndefined()
-    expect(store.question.ses_1).toBeUndefined()
     expect(store.session_status.ses_1).toBeUndefined()
   })
 
@@ -284,7 +266,6 @@ describe("applyDirectoryEvent", () => {
           session_diff: { [item.info.id]: [] },
           todo: { [item.info.id]: [] },
           permission: { [item.info.id]: [] },
-          question: { [item.info.id]: [] },
           session_status: { [item.info.id]: { type: "busy" } },
         }),
       )
@@ -308,7 +289,6 @@ describe("applyDirectoryEvent", () => {
       expect(store.session_diff[item.info.id]).toBeUndefined()
       expect(store.todo[item.info.id]).toBeUndefined()
       expect(store.permission[item.info.id]).toBeUndefined()
-      expect(store.question[item.info.id]).toBeUndefined()
       expect(store.session_status[item.info.id]).toBeUndefined()
     }
   })
@@ -327,7 +307,6 @@ describe("applyDirectoryEvent", () => {
         session_diff: { [dropped.id]: [] },
         todo: { [dropped.id]: [] },
         permission: { [dropped.id]: [] },
-        question: { [dropped.id]: [] },
         session_status: { [dropped.id]: { type: "busy" } },
       }),
     )
@@ -351,7 +330,6 @@ describe("applyDirectoryEvent", () => {
     expect(store.session_diff[dropped.id]).toBeUndefined()
     expect(store.todo[dropped.id]).toBeUndefined()
     expect(store.permission[dropped.id]).toBeUndefined()
-    expect(store.question[dropped.id]).toBeUndefined()
     expect(store.session_status[dropped.id]).toBeUndefined()
     expect(todos).toEqual([dropped.id])
   })
@@ -488,12 +466,11 @@ describe("applyDirectoryEvent", () => {
     expect(store.part[messageID]).toBeUndefined()
   })
 
-  test("tracks permission and question request lifecycles", () => {
+  test("tracks permission request lifecycles", () => {
     const sessionID = "ses_1"
     const [store, setStore] = createStore(
       baseState({
         permission: { [sessionID]: [permissionRequest("perm_1", sessionID), permissionRequest("perm_3", sessionID)] },
-        question: { [sessionID]: [questionRequest("q_1", sessionID), questionRequest("q_3", sessionID)] },
       }),
     )
 
@@ -526,36 +503,6 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
     expect(store.permission[sessionID]?.map((x) => x.id)).toEqual(["perm_1", "perm_3"])
-
-    applyDirectoryEvent({
-      event: { type: "question.asked", properties: questionRequest("q_2", sessionID) },
-      store,
-      setStore,
-      push() {},
-      directory: "/tmp",
-      loadLsp() {},
-    })
-    expect(store.question[sessionID]?.map((x) => x.id)).toEqual(["q_1", "q_2", "q_3"])
-
-    applyDirectoryEvent({
-      event: { type: "question.asked", properties: questionRequest("q_2", sessionID, "updated") },
-      store,
-      setStore,
-      push() {},
-      directory: "/tmp",
-      loadLsp() {},
-    })
-    expect(store.question[sessionID]?.find((x) => x.id === "q_2")?.questions[0]?.header).toBe("updated")
-
-    applyDirectoryEvent({
-      event: { type: "question.rejected", properties: { sessionID, requestID: "q_2" } },
-      store,
-      setStore,
-      push() {},
-      directory: "/tmp",
-      loadLsp() {},
-    })
-    expect(store.question[sessionID]?.map((x) => x.id)).toEqual(["q_1", "q_3"])
   })
 
   test("updates vcs branch in store and cache", () => {

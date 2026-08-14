@@ -10,7 +10,7 @@ import type {
   SessionMessageInfo,
 } from "@opencode-ai/client/promise"
 import type { Message, Part, Todo } from "@/types"
-import type { FileDiffInfo, PermissionRequest, QuestionAsked, SessionStatus } from "@opencode-ai/client/promise"
+import type { FileDiffInfo, PermissionRequest, SessionStatus } from "@opencode-ai/client/promise"
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { rootSession } from "@/utils/session-route"
@@ -18,8 +18,6 @@ import { compareMessages, messageKey, normalizeSessionMessages } from "@/utils/s
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
 import type { ServerApi } from "@/utils/server"
-
-type QuestionRequest = QuestionAsked["data"]
 
 type MessageApi = ServerApi["message"]
 
@@ -200,7 +198,6 @@ export function createServerSession(
     session_diff: {} as Record<string, FileDiffInfo[]>,
     todo: {} as Record<string, Todo[]>,
     permission: {} as Record<string, PermissionRequest[]>,
-    question: {} as Record<string, QuestionRequest[]>,
     form: {} as Record<string, FormInfo[]>,
     pending: {} as Record<string, SessionInboxInfo[]>,
     input: {} as Record<string, string[]>,
@@ -281,9 +278,6 @@ export function createServerSession(
         ...messageLoads.keys(),
         ...optimistic.keys(),
         ...Object.entries(data.permission)
-          .filter(([, items]) => items.length > 0)
-          .map(([sessionID]) => sessionID),
-        ...Object.entries(data.question)
           .filter(([, items]) => items.length > 0)
           .map(([sessionID]) => sessionID),
         ...Object.entries(data.form)
@@ -529,9 +523,6 @@ export function createServerSession(
       ...messageLoads.keys(),
       ...optimistic.keys(),
       ...Object.entries(data.permission)
-        .filter(([, items]) => items.length > 0)
-        .map(([sessionID]) => sessionID),
-      ...Object.entries(data.question)
         .filter(([, items]) => items.length > 0)
         .map(([sessionID]) => sessionID),
       ...Object.entries(data.form)
@@ -1340,36 +1331,6 @@ export function createServerSession(
           }),
         )
         return
-      }
-      case "question.asked": {
-        const question = event.properties as QuestionRequest
-        const questions = data.question[question.sessionID]
-        if (!questions) {
-          setData("question", question.sessionID, [question])
-          return
-        }
-        const result = Binary.search(questions, question.id, (item) => item.id)
-        if (result.found) setData("question", question.sessionID, result.index, reconcile(question))
-        if (!result.found)
-          setData(
-            "question",
-            question.sessionID,
-            produce((draft) => void draft.splice(result.index, 0, question)),
-          )
-        return
-      }
-      case "question.replied":
-      case "question.rejected": {
-        const props = event.properties as { sessionID: string; requestID: string }
-        setData(
-          "question",
-          props.sessionID,
-          produce((draft) => {
-            if (!draft) return
-            const result = Binary.search(draft, props.requestID, (item) => item.id)
-            if (result.found) draft.splice(result.index, 1)
-          }),
-        )
       }
     }
   }

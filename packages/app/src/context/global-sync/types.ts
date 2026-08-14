@@ -2,7 +2,6 @@ import type { Agent, Config, LspStatus, Message, Part, Path, Todo, VcsInfo } fro
 import type {
   FileDiffInfo,
   PermissionRequest,
-  QuestionAsked,
   ReferenceInfo,
   SessionInfo,
   SessionStatus,
@@ -11,8 +10,6 @@ import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import type { CommandInfo, McpResource, McpServer, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
-
-type QuestionRequest = QuestionAsked["data"]
 
 export type ProjectMeta = {
   name?: string
@@ -51,9 +48,6 @@ export type State = {
   }
   permission: {
     [sessionID: string]: PermissionRequest[]
-  }
-  question: {
-    [sessionID: string]: QuestionRequest[]
   }
   mcp_ready: boolean
   mcp: {

@@ -21,7 +21,6 @@ import { Plugin } from "./plugin.js"
 import { Project } from "./project.js"
 import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
-import { Question } from "./question.js"
 import { Reference } from "./reference.js"
 import { ServerEvent } from "./server-event.js"
 import { Shell } from "./shell.js"
@@ -56,7 +55,6 @@ const featureDefinitions = Event.inventory(
   ...Skill.Event.Definitions,
   ...Pty.Event.Definitions,
   ...Shell.Event.Definitions,
-  ...Question.Event.Definitions,
   ...Form.Event.Definitions,
   ...WebSearch.Event.Definitions,
 )

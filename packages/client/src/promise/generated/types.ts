@@ -324,12 +324,6 @@ export type Pty = {
   exitCode?: number
 }
 
-export type QuestionOption = { label: string; description: string }
-
-export type QuestionTool = { messageID: string; id: string }
-
-export type QuestionAnswer = Array<string>
-
 export type FormMetadata1 = { [x: string]: any }
 
 export type FormWhen1 = { key: string; op: "eq" | "neq"; value: string | number | boolean }
@@ -910,15 +904,6 @@ export type ShellDeleted = {
   data: { id: string }
 }
 
-export type QuestionRejected = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "question.rejected"
-  location?: LocationRef
-  data: { sessionID: string; requestID: string }
-}
-
 export type FormCancelled = {
   id: string
   created: number
@@ -1427,23 +1412,6 @@ export type PtyUpdated = {
   data: { info: Pty }
 }
 
-export type QuestionInfo = {
-  question: string
-  header: string
-  options: Array<QuestionOption>
-  multiple?: boolean
-  custom?: boolean
-}
-
-export type QuestionReplied = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "question.replied"
-  location?: LocationRef
-  data: { sessionID: string; requestID: string; answers: Array<QuestionAnswer> }
-}
-
 export type FormStringField1 = {
   key: string
   title?: string
@@ -1682,15 +1650,6 @@ export type FormReplied = {
   type: "form.replied"
   location?: LocationRef
   data: { id: string; sessionID: string; answer: FormAnswer }
-}
-
-export type QuestionAsked = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "question.asked"
-  location?: LocationRef
-  data: { id: string; sessionID: string; questions: Array<QuestionInfo>; tool?: QuestionTool }
 }
 
 export type FormField1 =
@@ -2114,9 +2073,6 @@ export type V2Event =
   | ShellCreated
   | ShellExited
   | ShellDeleted
-  | QuestionAsked
-  | QuestionReplied
-  | QuestionRejected
   | FormCreated
   | FormReplied
   | FormCancelled
