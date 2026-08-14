@@ -1,7 +1,6 @@
 export * as ShellParse from "./parse.js"
 
 import { Effect } from "effect"
-import { ShellScan } from "@opencode-ai/shell-scan"
 import { fileURLToPath } from "url"
 import os from "os"
 import path from "path"
@@ -10,6 +9,7 @@ import { shellParserWasm } from "#shell-parser-wasm"
 import { ShellSelect } from "./select.js"
 
 type Part = { type: string; text: string }
+type SourceToken = { raw: string; value: string }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const POWERSHELL_PATH_FLAGS = new Set(["-literalpath", "-path"])
 
@@ -159,7 +159,7 @@ export const scan = Effect.fn("ShellParse.scan")(function* (
   cwd: string,
   options?: { portable?: boolean },
 ) {
-  if (options?.portable) return scanPortable(command, shell, cwd)
+  if (options?.portable) return yield* Effect.promise(() => scanPortable(command, shell, cwd))
   return yield* scanLegacy(command, shell, cwd)
 })
 
@@ -197,7 +197,8 @@ const scanLegacy = Effect.fn("ShellParse.scanLegacy")(function* (command: string
   )
 })
 
-function scanPortable(command: string, shell: string, cwd: string) {
+async function scanPortable(command: string, shell: string, cwd: string) {
+  const { ShellScan } = await import("@opencode-ai/shell-scan")
   const powershell = ShellSelect.ps(shell)
   const result = powershell ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
   if (result.kind === "opaque") return { commands: [{ resource: command, save: command }], directories: [] }
@@ -224,16 +225,13 @@ function scanPortable(command: string, shell: string, cwd: string) {
         !/\|\s*$/.test(before)
       )
         return output
-      const sourceHead = powershell
-        ? item.words[0]
-        : sourceTokens(item.resource).find((token) => token.value === item.words[0])?.raw
+      const tokens = powershell ? powerShellSourceTokens(item.resource) : sourceTokens(item.resource)
+      const sourceHead = powershell ? item.words[0] : tokens.find((token) => token.value === item.words[0])?.raw
       if (CWD.has(name) && (powershell || sourceHead === item.words[0])) {
-        output.directories.push(...portableDirectoryArgs(item.words, item.resource, powershell, cwd, shell))
+        output.directories.push(...portableDirectoryArgs(item.words, tokens, powershell, cwd, shell))
         return output
       }
-      const save = powershell
-        ? powerShellSourcePrefix(item.resource, item.words)
-        : bashSourcePrefix(item.resource, item.words)
+      const save = powershell ? powerShellSourcePrefix(tokens, item.words) : bashSourcePrefix(tokens, item.words)
       output.commands.push({
         resource: powershell ? item.resource : bashResource(item.resource, before),
         save: `${save} *`,
@@ -329,9 +327,14 @@ function bashBacktickEnd(resource: string, start: number) {
   return resource.length - 1
 }
 
-function portableDirectoryArgs(command: string[], resource: string, powershell: boolean, cwd: string, shell: string) {
+function portableDirectoryArgs(
+  command: string[],
+  tokens: SourceToken[],
+  powershell: boolean,
+  cwd: string,
+  shell: string,
+) {
   if (!powershell) {
-    const tokens = sourceTokens(resource)
     const start = tokens.findIndex((token) => token.value === command[0])
     if (start < 0) return []
     return directoryArgs(
@@ -342,7 +345,6 @@ function portableDirectoryArgs(command: string[], resource: string, powershell: 
     )
   }
 
-  const tokens = powerShellSourceTokens(resource)
   const start = tokens.findIndex((token) => token.value.toLowerCase() === command[0]?.toLowerCase())
   if (start < 0) return []
   const directories: string[] = []
@@ -365,7 +367,7 @@ function portableDirectoryArgs(command: string[], resource: string, powershell: 
 }
 
 function sourceTokens(resource: string) {
-  const tokens: Array<{ raw: string; value: string }> = []
+  const tokens: SourceToken[] = []
   let raw = ""
   let value = ""
   let quote: "single" | "double" | "backtick" | undefined
@@ -469,8 +471,7 @@ function sourceTokens(resource: string) {
   return tokens
 }
 
-function bashSourcePrefix(resource: string, words: string[]) {
-  const tokens = sourceTokens(resource)
+function bashSourcePrefix(tokens: SourceToken[], words: string[]) {
   const start = tokens.findIndex((token) => token.value === words[0])
   if (start < 0) {
     const command = tokens.findIndex((token) => !/^[A-Za-z_][A-Za-z0-9_]*\+?=/.test(token.raw))
@@ -483,15 +484,14 @@ function bashSourcePrefix(resource: string, words: string[]) {
   return prefix(source).join(" ")
 }
 
-function powerShellSourcePrefix(resource: string, words: string[]) {
-  const tokens = powerShellSourceTokens(resource)
+function powerShellSourcePrefix(tokens: SourceToken[], words: string[]) {
   const start = tokens.findIndex((token) => token.value.toLowerCase() === words[0]?.toLowerCase())
   if (start < 0) return prefix(words).join(" ")
   return prefix(tokens.slice(start).map((token) => token.raw)).join(" ")
 }
 
 function powerShellSourceTokens(resource: string) {
-  const tokens: Array<{ raw: string; value: string }> = []
+  const tokens: SourceToken[] = []
   let raw = ""
   let value = ""
   let quote: "single" | "double" | undefined
@@ -552,7 +552,7 @@ function powerShellSourceTokens(resource: string) {
       continue
     }
     if (char === ">") {
-      if (!raw && resource[index + 1] && !/[\s>&]/.test(resource[index + 1])) {
+      if (resource[index + 1] && !/[\s>&]/.test(resource[index + 1])) {
         raw += char
         value += char
         continue

@@ -3,14 +3,12 @@ export * as ShellScan from "./index.js"
 export type OpaqueReason =
   | "command-substitution"
   | "compound-command"
-  | "command-wrapper"
   | "dynamic-command-name"
   | "dynamic-directory"
   | "dynamic-execution"
   | "heredoc"
   | "invalid-redirect"
   | "invalid-structure"
-  | "shell-evaluation"
   | "unterminated-escape"
   | "unterminated-quote"
 
@@ -36,53 +34,8 @@ const BASH_COMPOUND_KEYWORDS = new Set([
   "done",
   "coproc",
 ])
-const POWERSHELL_LOCATIONS = new Set(["set-location", "cd", "chdir", "sl", "push-location"])
-const POWERSHELL_ALIASES: Record<string, string> = {
-  "%": "foreach-object",
-  "?": "where-object",
-  ac: "add-content",
-  asnp: "add-pssnapin",
-  cli: "clear-item",
-  clc: "clear-content",
-  copy: "copy-item",
-  cp: "copy-item",
-  cpi: "copy-item",
-  del: "remove-item",
-  erase: "remove-item",
-  etsn: "enter-pssession",
-  foreach: "foreach-object",
-  icm: "invoke-command",
-  ihy: "invoke-history",
-  ii: "invoke-item",
-  ipal: "import-alias",
-  ipmo: "import-module",
-  ipsn: "import-pssession",
-  mi: "move-item",
-  move: "move-item",
-  mv: "move-item",
-  nal: "new-alias",
-  ni: "new-item",
-  nmo: "new-module",
-  r: "invoke-history",
-  rd: "remove-item",
-  ren: "rename-item",
-  ri: "remove-item",
-  rm: "remove-item",
-  rmdir: "remove-item",
-  rni: "rename-item",
-  rmo: "remove-module",
-  rsnp: "remove-pssnapin",
-  sajb: "start-job",
-  sal: "set-alias",
-  saps: "start-process",
-  sbp: "set-psbreakpoint",
-  sc: "set-content",
-  si: "set-item",
-  start: "start-process",
-  pushd: "push-location",
-  trcm: "trace-command",
-  where: "where-object",
-}
+const POWERSHELL_LOCATIONS = new Set(["set-location", "cd", "chdir", "sl", "push-location", "pushd"])
+const BASH_REDIRECTS = ["&>>", "&>", "<<<", "<<-", "<<", "<>", "<&", ">&", ">|", ">>", ">", "<"]
 const MAX_BASH_INPUT_LENGTH = 64 * 1024
 const MAX_SUBSTITUTION_DEPTH = 32
 
@@ -121,7 +74,6 @@ function scanBash(input: string, depth: number): Result {
   let assignmentHeadUnsafe = false
   let segment = 0
   let quote: "single" | "double" | undefined
-  let dynamicWord = false
   let compound = false
   let invalidRedirect = false
   let invalidStructure = false
@@ -193,7 +145,6 @@ function scanBash(input: string, depth: number): Result {
           return { kind: "opaque", reason: "dynamic-execution" }
         if (char === "$" && /^\$\{\([^)]*e[^)]*\)/.test(input.slice(index)))
           return { kind: "opaque", reason: "dynamic-execution" }
-        if (char === "$") dynamicWord = true
         word += char
       }
       continue
@@ -257,7 +208,9 @@ function scanBash(input: string, depth: number): Result {
       segment = newline + 1
       continue
     }
-    const redirect = /^(?:&>>?|<<<|<<-?|<>|<&|>&|>\||>>|>|<)/.exec(input.slice(index))?.[0]
+    const redirect = "<>&".includes(char)
+      ? BASH_REDIRECTS.find((candidate) => input.startsWith(candidate, index))
+      : undefined
     if (redirect) {
       hasRedirect = true
       if (redirectTarget) invalidRedirect = true
@@ -291,7 +244,6 @@ function scanBash(input: string, depth: number): Result {
     }
     terminalBackground = false
     wordStarted = true
-    if (char === "$") dynamicWord = true
     if (char === "=" && !assignmentHeadUnsafe && /^[A-Za-z_][A-Za-z0-9_]*\+?$/.test(word)) assignmentWord = true
     word += char
   }
@@ -307,10 +259,7 @@ function scanBash(input: string, depth: number): Result {
   if (conditional) commands.splice(0, commands.length, ...conditional)
   if (compound || commands.some((command) => BASH_COMPOUND_KEYWORDS.has(command.words[0] ?? "")))
     return { kind: "opaque", reason: "compound-command" }
-  if (
-    commands.some((command) => /[$`]/.test(command.words[0] ?? "")) ||
-    (dynamicWord && commands[0]?.words[0]?.includes("$"))
-  )
+  if (commands.some((command) => /[$`]/.test(command.words[0] ?? "")))
     return { kind: "opaque", reason: "dynamic-command-name" }
   if (commands.some((command) => command.words[0]?.startsWith("=")))
     return { kind: "opaque", reason: "dynamic-command-name" }
@@ -507,7 +456,6 @@ function scanPowerShellNested(input: string, depth: number): Result {
   let comment = false
   let separated = false
   let dangling = false
-  let dynamicDirectory = false
 
   const finishWord = () => {
     if (!started) return
@@ -568,7 +516,8 @@ function scanPowerShellNested(input: string, depth: number): Result {
       segment = newline + 1
       continue
     }
-    const redirect = powerShellRedirect(input, index)
+    const redirect =
+      char === ">" || (!started && (char === "*" || /\d/.test(char))) ? powerShellRedirect(input, index) : undefined
     if (redirect) {
       finishWord()
       redirectTarget = !redirect.includes("&")
@@ -620,31 +569,13 @@ function scanPowerShellNested(input: string, depth: number): Result {
   if (quote) return { kind: "opaque", reason: "unterminated-quote" }
   if (!comment) finishCommand(input.length)
   if (redirectTarget || invalid || dangling) return { kind: "opaque", reason: "invalid-structure" }
-  if (
-    dynamic ||
-    commands.some((command) => {
-      const head = command.words[0] ?? ""
-      if (
-        head.includes("\\") &&
-        !/^[A-Za-z]:\\/.test(head) &&
-        !/^[A-Za-z_][A-Za-z0-9_.-]*\\[A-Za-z_][A-Za-z0-9_.-]*$/.test(head)
+  const reason = dynamic
+    ? "dynamic-execution"
+    : commands.reduce<OpaqueReason | undefined>(
+        (result, command) => result ?? powerShellOpaqueReason(command),
+        undefined,
       )
-        return true
-      const rawName = shellCommandName(head)
-      const name = POWERSHELL_ALIASES[rawName] ?? rawName
-      if (head.includes("$") || head.includes("@")) return true
-      if (["return", "throw", "exit", "break", "continue"].includes(name) && command.words.length > 1) return true
-      if (POWERSHELL_LOCATIONS.has(name ?? ""))
-        return (dynamicDirectory =
-          command.words.some(
-            (word, index) =>
-              index > 0 && (word.includes("(") || (word.includes("$") && !knownPowerShellDirectory(word))),
-          ) ||
-          command.words.some((word, index) => index > 0 && /^[A-Za-z]+:/.test(word) && !/^[A-Za-z]:[\\/]/.test(word)))
-      return false
-    })
-  )
-    return { kind: "opaque", reason: dynamicDirectory ? "dynamic-directory" : "dynamic-execution" }
+  if (reason) return { kind: "opaque", reason }
   return { kind: "scanned", commands }
 }
 
@@ -691,6 +622,33 @@ function powerShellBlock(input: string, start: number) {
 function shellCommandName(word: string | undefined) {
   const value = (word ?? "").toLowerCase()
   return value.slice(Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\")) + 1)
+}
+
+function powerShellOpaqueReason(command: Command): OpaqueReason | undefined {
+  const head = command.words[0] ?? ""
+  if (
+    (head.includes("\\") &&
+      !/^[A-Za-z]:\\/.test(head) &&
+      !/^[A-Za-z_][A-Za-z0-9_.-]*\\[A-Za-z_][A-Za-z0-9_.-]*$/.test(head)) ||
+    head.includes("$") ||
+    head.includes("@")
+  )
+    return "dynamic-execution"
+
+  const name = shellCommandName(head)
+  if (["return", "throw", "exit", "break", "continue"].includes(name) && command.words.length > 1)
+    return "dynamic-execution"
+  if (!POWERSHELL_LOCATIONS.has(name)) return
+  if (
+    command.words.some(
+      (word, index) =>
+        index > 0 &&
+        (word.includes("(") ||
+          (word.includes("$") && !knownPowerShellDirectory(word)) ||
+          (/^[A-Za-z]+:/.test(word) && !/^[A-Za-z]:[\\/]/.test(word))),
+    )
+  )
+    return "dynamic-directory"
 }
 
 function knownPowerShellDirectory(word: string) {

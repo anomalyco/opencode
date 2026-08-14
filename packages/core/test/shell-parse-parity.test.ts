@@ -130,6 +130,8 @@ function generated() {
     'docker "compose" up',
     "git >x",
     "git *>&1",
+    "git foo2>bar",
+    "git 12>bar",
     "git a`;b",
     "git & Write-Output q",
     "Write-Output 'ForEach-Object { Remove-Item x }' | ForEach-Object { Remove-Item x }",
