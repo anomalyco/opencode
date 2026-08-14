@@ -549,7 +549,7 @@ export function filterCompacted(msgs: Iterable<WithParts>) {
     if (msg.info.role === "user" && completed.has(msg.info.id)) {
       const part = msg.parts.find((item): item is CompactionPart => item.type === "compaction")
       if (!part) continue
-      if (!part.tail_start_id) continue
+      if (!part.tail_start_id) break
       retain = part.tail_start_id
       if (msg.info.id === retain) break
       continue
@@ -615,7 +615,7 @@ export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: Ses
       if (message.role === "user" && completed.has(message.id)) {
         const compaction = (yield* parts(message.id)).find((item): item is CompactionPart => item.type === "compaction")
         if (!compaction) continue
-        if (!compaction.tail_start_id) continue
+        if (!compaction.tail_start_id) break pages
         retain = compaction.tail_start_id
         if (message.id === retain) break pages
         continue

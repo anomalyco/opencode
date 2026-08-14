@@ -672,11 +672,11 @@ describe("MessageV2.filterCompacted", () => {
         const before = yield* fill(sessionID, 2)
         const compaction = yield* addUser(sessionID)
         yield* addCompactionPart(sessionID, compaction)
-        const summary = yield* addAssistant(sessionID, compaction, { summary: true, finish: "end_turn" })
+        const incomplete = yield* addAssistant(sessionID, compaction, { finish: "end_turn" })
         const after = yield* fill(sessionID, 60)
 
         const result = yield* MessageV2.filterCompactedEffect(sessionID)
-        expect(result.map((item) => item.info.id)).toEqual([...before, compaction, summary, ...after])
+        expect(result.map((item) => item.info.id)).toEqual([...before, compaction, incomplete, ...after])
       }),
     ),
   )
@@ -963,13 +963,12 @@ describe("MessageV2.filterCompacted", () => {
     ),
   )
 
-  it.instance("does not hydrate parts before a completed compaction", () =>
+  it.instance("does not hydrate parts before a completed full compaction", () =>
     withSession(({ session, sessionID }) =>
       Effect.gen(function* () {
         const old = yield* addUser(sessionID, "old prompt")
-        const tail = yield* addUser(sessionID, "retained prompt")
         const compaction = yield* addUser(sessionID)
-        yield* addCompactionPart(sessionID, compaction, tail)
+        yield* addCompactionPart(sessionID, compaction)
         const summary = yield* addAssistant(sessionID, compaction, { summary: true, finish: "end_turn" })
         yield* session.updatePart({
           id: PartID.ascending(),
@@ -984,7 +983,7 @@ describe("MessageV2.filterCompacted", () => {
         yield* db.run(sql`UPDATE part SET data = 'invalid json' WHERE message_id = ${old}`)
 
         const result = yield* MessageV2.filterCompactedEffect(sessionID)
-        expect(result.map((item) => item.info.id)).toEqual([compaction, summary, tail, ...recent])
+        expect(result.map((item) => item.info.id)).toEqual([compaction, summary, ...recent])
       }),
     ),
   )
