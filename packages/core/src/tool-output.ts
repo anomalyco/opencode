@@ -29,13 +29,18 @@ const cleanup = Effect.fn("ToolOutput.cleanup")(function* (fs: FSUtil.Interface,
     Effect.map((entries) => entries.filter((entry) => /^tool_[0-9a-f]{12}/.test(entry))),
     Effect.catch(() => Effect.succeed([])),
   )
-  for (const entry of entries) {
-    const file = path.join(directory, entry)
-    const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
-    const mtime = info && Option.getOrUndefined(info.mtime)
-    if (!mtime || mtime.getTime() >= cutoff) continue
-    yield* fs.remove(file).pipe(Effect.catch(() => Effect.void))
-  }
+  yield* Effect.forEach(
+    entries,
+    (entry) =>
+      Effect.gen(function* () {
+        const file = path.join(directory, entry)
+        const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        const mtime = info && Option.getOrUndefined(info.mtime)
+        if (!mtime || mtime.getTime() >= cutoff) return
+        yield* fs.remove(file).pipe(Effect.catch(() => Effect.void))
+      }),
+    { concurrency: 8, discard: true },
+  )
 })
 
 const layer = Layer.effect(
