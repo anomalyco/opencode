@@ -134,15 +134,16 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
       return distribution.brewFormula
     })
 
+    // fork: the tail of the actual script output — "exit code 1" alone made
+    // every real cause (missing curl, 404 asset, disk full) undiagnosable.
+    // It goes to the log only: script output is untrusted and must not reach
+    // the user-facing error, which the sanitization tests pin down.
+    const upgradeFailureDetail = (result?: { code: number; stdout: string; stderr: string }) =>
+      (result?.stderr || result?.stdout || "").trim().split("\n").slice(-4).join("\n").slice(-400)
+
     const upgradeFailure = (method: Method, result?: { code: number; stdout: string; stderr: string }) => {
       if (method === "choco") return "not running from an elevated command shell"
-      if (result) {
-        // fork: keep the tail of the actual script output — "exit code 1"
-        // alone made every real cause (missing curl, 404 asset, disk full)
-        // undiagnosable from the TUI toast and the log.
-        const tail = (result.stderr || result.stdout || "").trim().split("\n").slice(-4).join("\n").slice(-400)
-        return `Upgrade failed for ${method} (exit code ${result.code}).${tail ? ` Output: ${tail}` : ""}`
-      }
+      if (result) return `Upgrade failed for ${method} (exit code ${result.code}).`
       return `Upgrade failed for ${method}.`
     }
 
@@ -173,10 +174,9 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
       },
       // fork: keep the underlying cause — "Upgrade failed for curl." with the
       // real reason (install-script fetch refused, spawn failure) stripped
-      // made every failure look identical.
-      Effect.mapError(
-        (cause) => new UpgradeFailedError({ stderr: `${upgradeFailure("curl")} Cause: ${errorMessage(cause)}` }),
-      ),
+      // made every failure look identical. Logged, not surfaced.
+      Effect.tapError((cause) => Effect.logError("curl upgrade failed", { cause: errorMessage(cause) })),
+      Effect.mapError(() => new UpgradeFailedError({ stderr: upgradeFailure("curl") })),
     )
 
     const result: Interface = {
@@ -326,6 +326,12 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
             return yield* new UpgradeFailedError({ stderr: `Unknown installation method: ${m}` })
         }
         if (!upgradeResult || upgradeResult.code !== 0) {
+          yield* Effect.logError("upgrade failed", {
+            method: m,
+            target,
+            code: upgradeResult?.code,
+            output: upgradeFailureDetail(upgradeResult),
+          })
           return yield* new UpgradeFailedError({ stderr: upgradeFailure(m, upgradeResult) })
         }
         yield* Effect.logInfo("upgraded", {

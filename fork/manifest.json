@@ -90,7 +90,6 @@
     "packages/opencode/src/side-question/index.ts",
     "packages/opencode/src/tool/peers.ts",
     "packages/opencode/src/tool/peers.txt",
-    "packages/opencode/src/util/sync-log.ts",
     "packages/opencode/src/util/which.ts",
     "packages/opencode/test/agent/presence.test.ts",
     "packages/opencode/test/agent/repo-personas.test.ts",
@@ -162,8 +161,8 @@
     "packages/tui/test/model-fit.test.ts",
     "packages/tui/test/ui/dialog-select-footer.test.ts"
   ],
-  "_ownedUnused_2026-08-14": {
-    "note": "packages/opencode/src/util/sync-log.ts is registered as owned but currently has zero call sites. It was added by 21c1ac9dd6 to give non-Effect call sites (provider.ts, local/placement.ts) a TUI-safe logger after the core/util/log shim was deleted. The dev-side design solved the same problem differently — those helpers now return outcomes (PickOutcome, DiscoveryResult.warnings) and the Effect caller logs — so no non-Effect log site remains. Kept rather than deleted pending a decision: delete as dead code, or keep as the sanctioned helper for any future non-Effect call site. Registered so fork:verify does not report it as unclassified divergence in the meantime.",
+  "_ownedRemoved_2026-08-14": {
+    "note": "packages/opencode/src/util/sync-log.ts was deleted in the origin/dev merge — confirmed intentional, not a merge regression. It was added by 21c1ac9dd6 to give non-Effect call sites (provider.ts, local/placement.ts) a TUI-safe logger after the core/util/log shim was deleted. The dev-side design solved the same problem differently: those helpers now return outcomes (PickOutcome, DiscoveryResult.warnings) and the Effect caller logs (tool/task.ts, provider.ts). That left zero call sites, so the file was removed rather than carried as dead code.",
     "commits": ["21c1ac9dd6"]
   },
   "_ownedRemoved_2026-08-13": {
