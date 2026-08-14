@@ -29,6 +29,7 @@ export function PaneWorkspace(props: { sessionID?: string; groupID?: string; ver
 }
 
 function PaneNode(props: { node: PaneLayoutNode; rootSessionID?: string; verticalTabsWidth: number }) {
+  const panes = usePaneLayout()
   const theme = useTheme()
   return (
     <Switch>
@@ -42,7 +43,11 @@ function PaneNode(props: { node: PaneLayoutNode; rootSessionID?: string; vertica
               <UnavailablePane label={`Session ${item().id}`} />
             </Match>
             <Match when={item().type === "terminal"}>
-              <PersistentTerminalPane ptyID={item().id} autoFocus={!props.rootSessionID} />
+              <PersistentTerminalPane
+                ptyID={item().id}
+                autoFocus={!props.rootSessionID || panes.shouldFocus(item().id)}
+                onAutoFocus={() => panes.clearFocus(item().id)}
+              />
             </Match>
           </Switch>
         )}

@@ -13,7 +13,7 @@ import { Group } from "./group.js"
 import { Database } from "../database/database.js"
 import { Pty } from "@opencode-ai/schema/pty"
 
-const ProtocolVersion = 2
+const ProtocolVersion = 4
 const MaxFrameBytes = 8 * 1024 * 1024
 
 const Lifecycle = Schema.Union([
@@ -78,6 +78,7 @@ const Response = Schema.Union([
     cols: Schema.Number,
     rows: Schema.Number,
     generation: Schema.Number,
+    checkpoint_base64: Schema.String,
   }),
   Schema.Struct({
     type: Schema.Literal("exited"),
@@ -100,6 +101,7 @@ export type Role = "controller" | "observer"
 
 export type Info = Pty.Info & {
   readonly groupID: Group.ID
+  readonly size: { readonly cols: number; readonly rows: number }
   readonly output: { readonly head: number; readonly tail: number }
 }
 
@@ -112,7 +114,13 @@ export type Snapshot = {
 
 export type StreamEvent =
   | { readonly type: "output"; readonly start: number; readonly end: number; readonly data: Uint8Array }
-  | { readonly type: "resized"; readonly cols: number; readonly rows: number; readonly generation: number }
+  | {
+      readonly type: "resized"
+      readonly cols: number
+      readonly rows: number
+      readonly generation: number
+      readonly checkpoint: Uint8Array
+    }
   | { readonly type: "exited"; readonly exitCode?: number; readonly finalOffset: number }
   | { readonly type: "controller_changed"; readonly attachmentID?: string; readonly generation: number }
 
@@ -170,8 +178,22 @@ export interface Interface {
     rows: number,
     attachmentID?: string,
   ) => Effect.Effect<void, NotFoundError | UnavailableError>
+  readonly control: (
+    id: Pty.ID,
+    attachmentID: string,
+    cols: number,
+    rows: number,
+  ) => Effect.Effect<void, NotFoundError | UnavailableError>
+  readonly input: (
+    id: Pty.ID,
+    attachmentID: string,
+    cols: number,
+    rows: number,
+    data: Uint8Array,
+  ) => Effect.Effect<void, NotFoundError | UnavailableError>
   readonly snapshot: (id: Pty.ID) => Effect.Effect<Snapshot, NotFoundError | UnavailableError>
   readonly remove: (id: Pty.ID) => Effect.Effect<void, NotFoundError | UnavailableError>
+  readonly shutdown: () => Effect.Effect<void, UnavailableError>
   readonly attach: (
     id: Pty.ID,
     input: {
@@ -282,6 +304,44 @@ export const layer = Layer.effect(
       return undefined
     })
 
+    const control = Effect.fn("PersistentPty.control")(function* (
+      id: Pty.ID,
+      attachmentID: string,
+      cols: number,
+      rows: number,
+    ) {
+      yield* get(id)
+      const response = yield* request(client, {
+        op: "control",
+        id: fromID(id),
+        attachment_id: attachmentID,
+        cols,
+        rows,
+      })
+      if (response.type !== "ok") return yield* unexpected(response)
+      return undefined
+    })
+
+    const input = Effect.fn("PersistentPty.input")(function* (
+      id: Pty.ID,
+      attachmentID: string,
+      cols: number,
+      rows: number,
+      data: Uint8Array,
+    ) {
+      yield* get(id)
+      const response = yield* request(client, {
+        op: "input",
+        id: fromID(id),
+        attachment_id: attachmentID,
+        cols,
+        rows,
+        data_base64: Buffer.from(data).toString("base64"),
+      })
+      if (response.type !== "ok") return yield* unexpected(response)
+      return undefined
+    })
+
     const snapshot = Effect.fn("PersistentPty.snapshot")(function* (id: Pty.ID) {
       yield* get(id)
       const response = yield* request(client, { op: "snapshot", id: fromID(id) })
@@ -307,6 +367,12 @@ export const layer = Layer.effect(
         }),
       )
       return undefined
+    })
+
+    const shutdown = Effect.fn("PersistentPty.shutdown")(function* () {
+      const response = yield* Effect.tryPromise({ try: () => client.shutdown(), catch: unavailable })
+      if (!response) return
+      if (response.type !== "ok") return yield* unexpected(response)
     })
 
     const removeVisibleExit = (id: Pty.ID) => {
@@ -349,7 +415,7 @@ export const layer = Layer.effect(
       })
     })
 
-    return Service.of({ list, get, create, write, resize, snapshot, remove, attach })
+    return Service.of({ list, get, create, write, resize, control, input, snapshot, remove, shutdown, attach })
   }),
 )
 
@@ -360,12 +426,35 @@ class Client {
 
   constructor(private readonly directory: string) {}
 
-  request(value: object, start = false) {
-    return this.connect(start).then((registration) => oneShot(registration, value))
+  request(value: object, start = false): Promise<WireResponse> {
+    return this.connect(start)
+      .then((registration) => oneShot(registration, value))
+      .catch((error) => {
+        if (!(error instanceof ConnectError)) throw error
+        this.registration = undefined
+        if (!start) throw error
+        return this.connect(true).then((registration) => oneShot(registration, value))
+      })
   }
 
   requestIfRunning(value: object) {
     return this.request(value).catch(() => undefined)
+  }
+
+  async shutdown() {
+    const response = await this.requestIfRunning({ op: "shutdown" })
+    this.registration = undefined
+    if (!response) return
+    const deadline = Date.now() + 5_000
+    while (Date.now() < deadline) {
+      const running = await discover(this.directory).then(
+        () => true,
+        () => false,
+      )
+      if (!running) return response
+      await setTimeout(50)
+    }
+    throw new Error("opencode-pty did not stop")
   }
 
   async subscribe(
@@ -422,6 +511,7 @@ class Client {
               cols: event.cols,
               rows: event.rows,
               generation: event.generation,
+              checkpoint: Buffer.from(event.checkpoint_base64, "base64"),
             })
           if (event.type === "controller_changed")
             input.onEvent({
@@ -560,7 +650,10 @@ async function discover(directory: string) {
 async function oneShot(registration: Registration, request: object) {
   const socket = net.createConnection(registration.socket)
   const frames = decoder(socket)
-  await connected(socket)
+  await connected(socket).catch((cause) => {
+    socket.destroy()
+    throw new ConnectError(cause)
+  })
   socket.write(encode({ token: registration.token, request }))
   const first = await frames.next()
   socket.end()
@@ -568,6 +661,12 @@ async function oneShot(registration: Registration, request: object) {
   const response = decode(first.value)
   if (response.type === "error") throw new Error(response.message)
   return response
+}
+
+class ConnectError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause))
+  }
 }
 
 function connected(socket: net.Socket) {
@@ -620,6 +719,7 @@ function toInfo(value: WireTerminal): Info {
       ...(status === "exited" ? { exitCode: value.lifecycle.exit_code ?? undefined } : {}),
     }),
     groupID: Group.ID.make(value.group_id),
+    size: { cols: value.cols, rows: value.rows },
     output: { head: value.output_head, tail: value.output_tail },
   }
 }

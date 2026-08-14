@@ -38,5 +38,6 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "Group.Info" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
+const ItemAdded = ephemeral({ type: "group.item.added", schema: { groupID: ID, item: Item } })
 const ItemRemoved = ephemeral({ type: "group.item.removed", schema: { groupID: ID, item: Item } })
-export const Event = { ItemRemoved, Definitions: inventory(ItemRemoved) }
+export const Event = { ItemAdded, ItemRemoved, Definitions: inventory(ItemAdded, ItemRemoved) }

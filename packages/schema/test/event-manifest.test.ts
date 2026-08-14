@@ -65,7 +65,7 @@ describe("public event manifest", () => {
     expect(Integration.Event.Definitions).toEqual([Integration.Event.Updated, Integration.Event.ConnectionUpdated])
     expect(Permission.Event.Definitions).toEqual([Permission.Event.Asked, Permission.Event.Replied])
     expect(Form.Event.Definitions).toEqual([Form.Event.Created, Form.Event.Replied, Form.Event.Cancelled])
-    expect(Group.Event.Definitions).toEqual([Group.Event.ItemRemoved])
+    expect(Group.Event.Definitions).toEqual([Group.Event.ItemAdded, Group.Event.ItemRemoved])
     expect(Reference.Event.Definitions).toEqual([Reference.Event.Updated])
     expect(Plugin.Event.Definitions).toEqual([Plugin.Event.Added, Plugin.Event.Updated])
     expect(McpEvent.Definitions).toEqual([McpEvent.ToolsChanged, McpEvent.ResourcesChanged, McpEvent.StatusChanged])

@@ -5,7 +5,7 @@ import { useData } from "./data"
 import { useStorage } from "./storage"
 import { reconcilePaneLayout, removePaneLayoutItem, type PaneLayoutNode } from "./pane-layout-model"
 import { useEvent } from "./event"
-import { onCleanup } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 
 type PaneWorkspace = {
   sessionID?: string
@@ -24,6 +24,7 @@ export const { use: usePaneLayout, provider: PaneLayoutProvider } = createSimple
     const client = useClient()
     const data = useData()
     const event = useEvent()
+    const [focus, setFocus] = createSignal<string>()
     const [store, update] = useStorage().store<PaneLayoutState>("pane-layout-v1", {
       initial: { workspaces: {} },
     })
@@ -42,6 +43,19 @@ export const { use: usePaneLayout, provider: PaneLayoutProvider } = createSimple
           layout,
         }
       })
+
+    onCleanup(
+      event.on("group.item.added", (evt) => {
+        void update((draft) => {
+          Object.values(draft.workspaces).forEach((workspace) => {
+            if (workspace.groupID !== evt.data.groupID) return
+            if (workspace.items.some((item) => item.type === evt.data.item.type && item.id === evt.data.item.id)) return
+            workspace.items.push(evt.data.item)
+            workspace.layout = reconcilePaneLayout(workspace.layout, workspace.items) ?? workspace.layout
+          })
+        }).catch((error) => console.error("Failed to add pane layout item", error))
+      }),
+    )
 
     onCleanup(
       event.on("group.item.removed", (evt) => {
@@ -110,6 +124,7 @@ export const { use: usePaneLayout, provider: PaneLayoutProvider } = createSimple
           env: {},
         })
         const next = await api.group.get({ groupID: group.id })
+        setFocus(terminal.id)
         await save(sessionID, next, sessionID)
         return terminal
       },
@@ -131,6 +146,12 @@ export const { use: usePaneLayout, provider: PaneLayoutProvider } = createSimple
           })
         await save(group.id, await api.group.get({ groupID: group.id }))
         return { group, terminal }
+      },
+      shouldFocus(ptyID: string) {
+        return focus() === ptyID
+      },
+      clearFocus(ptyID: string) {
+        setFocus((current) => (current === ptyID ? undefined : current))
       },
     }
   },

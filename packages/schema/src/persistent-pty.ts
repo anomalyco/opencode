@@ -8,6 +8,7 @@ import { NonNegativeInt, PositiveInt, optional } from "./schema.js"
 export const Info = Schema.Struct({
   ...Pty.Info.fields,
   groupID: Group.ID,
+  size: Schema.Struct({ cols: PositiveInt, rows: PositiveInt }),
   output: Schema.Struct({ head: NonNegativeInt, tail: NonNegativeInt }),
 }).annotate({ identifier: "PersistentPty.Info" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}

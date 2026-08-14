@@ -65,6 +65,13 @@ const layer = Layer.effect(
             const previous = groups[index]
             if (!previous) return
             yield* Effect.forEach(
+              group.items.filter(
+                (item) => !previous.items.some((current) => current.type === item.type && current.id === item.id),
+              ),
+              (item) => bus.publish(Event.ItemAdded, { groupID: group.id, item }),
+              { discard: true },
+            )
+            yield* Effect.forEach(
               previous.items.filter(
                 (item) => !group.items.some((next) => next.type === item.type && next.id === item.id),
               ),

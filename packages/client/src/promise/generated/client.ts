@@ -195,6 +195,7 @@ import type {
   ServerPersistentPtyListOutput,
   ServerPersistentPtyCreateInput,
   ServerPersistentPtyCreateOutput,
+  ServerPersistentPtyShutdownOutput,
   ServerPersistentPtyGetInput,
   ServerPersistentPtyGetOutput,
   ServerPersistentPtyUpdateInput,
@@ -1686,6 +1687,17 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      shutdown: (requestOptions?: RequestOptions) =>
+        request<ServerPersistentPtyShutdownOutput>(
+          {
+            method: "POST",
+            path: `/api/persistent-pty/shutdown`,
+            successStatus: 204,
+            declaredStatuses: [503, 401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
       get: (input: ServerPersistentPtyGetInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: ServerPersistentPtyGetOutput }>(
           {

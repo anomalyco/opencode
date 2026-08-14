@@ -72,4 +72,20 @@ describe("Group", () => {
       ])
     }),
   )
+
+  it.effect("publishes every added group item", () =>
+    Effect.gen(function* () {
+      const groups = yield* Group.Service
+      const bus = yield* Bus.Service
+      const session = { type: "session" as const, id: Session.ID.make("ses_one") }
+      const terminal = { type: "terminal" as const, id: Pty.ID.make("pty_one") }
+      const group = yield* groups.create([session])
+      const event = yield* bus.subscribe(Group.Event.ItemAdded).pipe(Stream.runHead, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* groups.set(Group.Info.make({ id: group.id, items: [session, terminal] }))
+
+      expect((yield* Fiber.join(event)).valueOrUndefined?.data).toEqual({ groupID: group.id, item: terminal })
+    }),
+  )
 })

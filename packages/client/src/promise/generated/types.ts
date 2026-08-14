@@ -351,6 +351,7 @@ export type PersistentPtyInfo = {
   pid: number
   exitCode?: number
   groupID: string
+  size: { cols: number; rows: number }
   output: { head: number; tail: number }
 }
 
@@ -1492,6 +1493,15 @@ export type FormMultiselectField1 = {
   default?: Array<string>
 }
 
+export type GroupItemAdded = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "group.item.added"
+  location?: LocationRef
+  data: { groupID: string; item: GroupItem }
+}
+
 export type GroupItemRemoved = {
   id: string
   created: number
@@ -2110,6 +2120,7 @@ export type V2Event =
   | FormCreated
   | FormReplied
   | FormCancelled
+  | GroupItemAdded
   | GroupItemRemoved
   | WebsearchUpdated
   | SessionStatus2
@@ -5565,6 +5576,8 @@ export type ServerPersistentPtyCreateInput = {
 }
 
 export type ServerPersistentPtyCreateOutput = { data: PersistentPtyInfo }["data"]
+
+export type ServerPersistentPtyShutdownOutput = void
 
 export type ServerPersistentPtyGetInput = { readonly ptyID: { readonly ptyID: string }["ptyID"] }
 

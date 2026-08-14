@@ -440,6 +440,7 @@ test("closing a terminal-only workspace tab terminates its terminals and removes
     status: "running" as const,
     pid: 123,
     groupID,
+    size: { cols: 80, rows: 24 },
     output: { head: 0, tail: 0 },
   }
   const setup = await renderSessionTabs("first", {

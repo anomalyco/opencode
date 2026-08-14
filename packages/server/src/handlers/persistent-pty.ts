@@ -99,6 +99,13 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.persistent
         }),
       )
       .handle(
+        "persistentPty.shutdown",
+        Effect.fn(function* () {
+          yield* pty.shutdown().pipe(mapUnavailable)
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
         "persistentPty.get",
         Effect.fn(function* (ctx) {
           return { data: yield* pty.get(ctx.params.ptyID).pipe(mapTerminalError) }
@@ -165,6 +172,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.persistent
 
           const cursor = Number(url.searchParams.get("cursor") ?? "0")
           const role = url.searchParams.get("role") === "observer" ? "observer" : "controller"
+          const framedInput = url.searchParams.get("input_protocol") === "1"
           const attachmentID = url.searchParams.get("attachment_id") ?? crypto.randomUUID()
           if (!Number.isSafeInteger(cursor) || cursor < 0) return HttpServerResponse.empty({ status: 400 })
 
@@ -179,7 +187,13 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.persistent
               takeover: url.searchParams.get("takeover") === "true",
               onEvent: (event) => {
                 if (event.type === "output") Queue.offerUnsafe(outbox, event.data)
-                if (event.type !== "output") Queue.offerUnsafe(outbox, JSON.stringify(event))
+                if (event.type === "resized")
+                  Queue.offerUnsafe(
+                    outbox,
+                    JSON.stringify({ ...event, checkpoint: Buffer.from(event.checkpoint).toString("base64") }),
+                  )
+                if (event.type !== "output" && event.type !== "resized")
+                  Queue.offerUnsafe(outbox, JSON.stringify(event))
               },
               onEnd: () => Queue.offerUnsafe(outbox, new Socket.CloseEvent(1000)),
             })
@@ -196,6 +210,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.persistent
             JSON.stringify({
               type: "attached",
               attachmentID,
+              inputProtocol: framedInput ? 1 : 0,
               info: attachment.info,
               role: attachment.role,
               generation: attachment.generation,
@@ -208,6 +223,10 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.persistent
             }),
           )
           if (attachment.replay.data.length > 0) Queue.offerUnsafe(outbox, attachment.replay.data)
+          Queue.offerUnsafe(
+            outbox,
+            JSON.stringify({ type: "replay_complete", endOffset: attachment.replay.endOffset }),
+          )
           attachment.activate()
 
           const drain = Effect.gen(function* () {
@@ -220,17 +239,28 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.persistent
 
           yield* Effect.race(
             drain,
-            socket.runRaw((message) =>
-              role === "controller"
-                ? pty
-                    .write(
-                      ctx.params.ptyID,
-                      typeof message === "string" ? message : Buffer.from(message).toString(),
-                      attachmentID,
-                    )
-                    .pipe(Effect.ignore)
-                : Effect.void,
-            ),
+            socket.runRaw((message) => {
+              if (role !== "controller") return Effect.void
+              const data = typeof message === "string" ? Buffer.from(message) : message
+              if (!framedInput)
+                return pty
+                  .input(
+                    ctx.params.ptyID,
+                    attachmentID,
+                    attachment.info.size.cols,
+                    attachment.info.size.rows,
+                    data,
+                  )
+                  .pipe(Effect.ignore)
+              if (data.byteLength < 5) return Effect.void
+              const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+              const type = data[0]
+              const cols = view.getUint16(1)
+              const rows = view.getUint16(3)
+              if ((type !== 0 && type !== 1) || cols === 0 || rows === 0) return Effect.void
+              if (type === 0) return pty.control(ctx.params.ptyID, attachmentID, cols, rows).pipe(Effect.ignore)
+              return pty.input(ctx.params.ptyID, attachmentID, cols, rows, data.subarray(5)).pipe(Effect.ignore)
+            }),
           ).pipe(
             Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
             Effect.ensuring(Effect.sync(() => attachment.detach())),
