@@ -26,6 +26,8 @@ type WebSocketConstructorWithHeaders = new (
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/AI/WebSocketExecutor") {}
 
+const MAX_FRAME_BYTES = 16 * 1024 * 1024
+
 const transportError = (
   method: string,
   message: string,
@@ -195,10 +197,35 @@ export const fromWebSocket = (
     yield* waitOpen(ws, input)
     const messages = yield* Queue.bounded<string | Uint8Array, AIError | Cause.Done<void>>(128)
 
+    const oversized = (message: string | Uint8Array) =>
+      typeof message === "string" ? new Blob([message]).size > MAX_FRAME_BYTES : message.byteLength > MAX_FRAME_BYTES
+    const rejectOversized = (message: string | Uint8Array) => {
+      if (!oversized(message)) return false
+      Queue.failCauseUnsafe(
+        messages,
+        Cause.fail(
+          transportError("message", "WebSocket message exceeds the 16 MiB limit", {
+            url: input.url,
+            operation: "read",
+            code: "message-too-large",
+            phase: "receive",
+          }),
+        ),
+      )
+      if (ws.readyState === globalThis.WebSocket.OPEN) ws.close(1009, "Message too large")
+      return true
+    }
+
     const onMessage = (event: MessageEvent) => {
-      if (typeof event.data === "string") return Queue.offerUnsafe(messages, event.data)
+      if (typeof event.data === "string") {
+        if (rejectOversized(event.data)) return
+        return Queue.offerUnsafe(messages, event.data)
+      }
       const binary = binaryMessage(event.data)
-      if (binary) return Queue.offerUnsafe(messages, binary)
+      if (binary) {
+        if (rejectOversized(binary)) return
+        return Queue.offerUnsafe(messages, binary)
+      }
       Queue.failCauseUnsafe(
         messages,
         Cause.fail(
