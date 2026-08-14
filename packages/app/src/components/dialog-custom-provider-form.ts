@@ -154,5 +154,6 @@ let row = 0
 
 const nextRow = () => `row-${row++}`
 
-export const modelRow = (): ModelRow => ({ row: nextRow(), id: "", name: "", err: {} })
+export const modelRow = (id = "", name = ""): ModelRow => ({ row: nextRow(), id, name, err: {} })
 export const headerRow = (): HeaderRow => ({ row: nextRow(), key: "", value: "", err: {} })
+export const modelsFromIDs = (ids: string[]): ModelRow[] => ids.map((id) => modelRow(id, id))
