@@ -2,7 +2,7 @@ export * as ToolOutput from "./tool-output.js"
 
 import path from "path"
 import type { Tool } from "@opencode-ai/schema/tool"
-import { Context, Duration, Effect, Layer, Schedule } from "effect"
+import { Context, Duration, Effect, Layer, Option, Schedule } from "effect"
 import { makeGlobalNode, makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Global } from "@opencode-ai/util/global"
@@ -24,14 +24,17 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolOutput") {}
 
 const cleanup = Effect.fn("ToolOutput.cleanup")(function* (fs: FSUtil.Interface, directory: string) {
-  const cutoff = Identifier.timestamp(Identifier.create("tool", "ascending", Date.now() - Duration.toMillis(RETENTION)))
+  const cutoff = Date.now() - Duration.toMillis(RETENTION)
   const entries = yield* fs.readDirectory(directory).pipe(
     Effect.map((entries) => entries.filter((entry) => /^tool_[0-9a-f]{12}/.test(entry))),
     Effect.catch(() => Effect.succeed([])),
   )
   for (const entry of entries) {
-    if (Identifier.timestamp(entry) >= cutoff) continue
-    yield* fs.remove(path.join(directory, entry)).pipe(Effect.catch(() => Effect.void))
+    const file = path.join(directory, entry)
+    const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+    const mtime = info && Option.getOrUndefined(info.mtime)
+    if (!mtime || mtime.getTime() >= cutoff) continue
+    yield* fs.remove(file).pipe(Effect.catch(() => Effect.void))
   }
 })
 

@@ -143,15 +143,16 @@ describe("ToolOutput", () => {
     ),
   )
 
-  it.live("removes expired managed files", () =>
+  it.live("uses file modification time when IDs wrap", () =>
     withStore((output, fs, root) =>
       Effect.gen(function* () {
         const directory = path.join(root, ToolOutput.DIRECTORY)
-        const old = path.join(directory, Identifier.create("tool", "ascending", Date.now() - 8 * 24 * 60 * 60 * 1_000))
-        const recent = path.join(directory, Identifier.ascending("tool"))
+        const old = path.join(directory, Identifier.create("tool", "ascending", 2 ** 36 - 1))
+        const recent = path.join(directory, Identifier.create("tool", "ascending", 2 ** 36 + 1))
         yield* fs.ensureDir(directory)
         yield* fs.writeFileString(old, "old")
         yield* fs.writeFileString(recent, "recent")
+        yield* fs.utimes(old, new Date(), new Date(Date.now() - 8 * 24 * 60 * 60 * 1_000))
         yield* output.cleanup()
         expect(yield* fs.exists(old)).toBe(false)
         expect(yield* fs.exists(recent)).toBe(true)
