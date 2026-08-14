@@ -1693,8 +1693,6 @@ export type QuestionAsked = {
   data: { id: string; sessionID: string; questions: Array<QuestionInfo>; tool?: QuestionTool }
 }
 
-export type QuestionRequest = { id: string; sessionID: string; questions: Array<QuestionInfo>; tool?: QuestionTool }
-
 export type FormField1 =
   | FormStringField1
   | FormNumberField1
@@ -2297,14 +2295,6 @@ export const isPtyNotFoundError = (value: unknown): value is PtyNotFoundError =>
 export type ShellNotFoundError = { readonly _tag: "ShellNotFoundError"; readonly id: string; readonly message: string }
 export const isShellNotFoundError = (value: unknown): value is ShellNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ShellNotFoundError"
-
-export type QuestionNotFoundError = {
-  readonly _tag: "QuestionNotFoundError"
-  readonly requestID: string
-  readonly message: string
-}
-export const isQuestionNotFoundError = (value: unknown): value is QuestionNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "QuestionNotFoundError"
 
 export type WorktreeError = {
   readonly name: "WorktreeError"
@@ -5610,36 +5600,6 @@ export type ShellRemoveInput = {
 }
 
 export type ShellRemoveOutput = void
-
-export type QuestionRequestListInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type QuestionRequestListOutput = {
-  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
-  data: Array<QuestionRequest>
-}
-
-export type QuestionListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
-
-export type QuestionListOutput = { data: Array<QuestionRequest> }["data"]
-
-export type QuestionReplyInput = {
-  readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
-  readonly requestID: { readonly sessionID: string; readonly requestID: string }["requestID"]
-  readonly answers: { readonly answers: ReadonlyArray<ReadonlyArray<string>> }["answers"]
-}
-
-export type QuestionReplyOutput = void
-
-export type QuestionRejectInput = {
-  readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
-  readonly requestID: { readonly sessionID: string; readonly requestID: string }["requestID"]
-}
-
-export type QuestionRejectOutput = void
 
 export type ReferenceListInput = {
   readonly location?: {

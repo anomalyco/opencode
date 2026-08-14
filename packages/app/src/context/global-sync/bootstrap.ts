@@ -17,7 +17,6 @@ import type {
   ReferenceListInput,
   ReferenceListOutput,
   ReferenceInfo,
-  QuestionRequest,
   SessionApi,
   SessionInfo,
 } from "@opencode-ai/client/promise"
@@ -112,7 +111,6 @@ type LocationApi = { readonly get: (input?: LocationGetInput) => Promise<Locatio
 
 type McpApi = ServerApi["mcp"]
 type PermissionApi = ServerApi["permission"]
-type QuestionApi = ServerApi["question"]
 type VcsApi = ServerApi["vcs"]
 
 export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi, worktrees: WorktreeApi) =>
@@ -303,7 +301,6 @@ export async function bootstrapDirectory(input: {
     readonly mcp: McpApi
     readonly permission: PermissionApi
     readonly project: ProjectApi
-    readonly question: QuestionApi
     readonly reference: ReferenceListApi
     readonly session: SessionApi
     readonly vcs: VcsApi
@@ -389,40 +386,6 @@ export async function bootstrapDirectory(input: {
                   )
                   if (input.session) input.session.set("permission", sessionID, value)
                   if (!input.session) input.setStore("permission", sessionID, value)
-                }
-              }),
-            )
-          }),
-      ),
-    () =>
-      retry(() =>
-        input.api.question.request
-          .list({ location: { directory: input.directory } })
-          .then((result) => result.data)
-          .then((questions) => {
-            const ids = questions.map((question) => question.sessionID)
-            const grouped = groupBySession(
-              questions.filter((question) => !!question.id && !!question.sessionID) as QuestionRequest[],
-            )
-            const warm = input.session
-              ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
-              : warmSessions({ ids, store: input.store, setStore: input.setStore, api: input.api.session })
-            return warm.then(() =>
-              batch(() => {
-                const current = input.session?.data.question ?? input.store.question
-                for (const sessionID of Object.keys(current)) {
-                  if (grouped[sessionID]) continue
-                  if (input.session?.get(sessionID)?.location.directory !== input.directory) continue
-                  if (input.session) input.session.set("question", sessionID, [])
-                  if (!input.session) input.setStore("question", sessionID, [])
-                }
-                for (const [sessionID, questions] of Object.entries(grouped)) {
-                  const value = reconcile(
-                    questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
-                    { key: "id" },
-                  )
-                  if (input.session) input.session.set("question", sessionID, value)
-                  if (!input.session) input.setStore("question", sessionID, value)
                 }
               }),
             )

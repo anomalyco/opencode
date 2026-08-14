@@ -10,7 +10,7 @@ import type {
   SessionMessageInfo,
 } from "@opencode-ai/client/promise"
 import type { Message, Part, Todo } from "@/types"
-import type { FileDiffInfo, PermissionRequest, QuestionRequest, SessionStatus } from "@opencode-ai/client/promise"
+import type { FileDiffInfo, PermissionRequest, QuestionAsked, SessionStatus } from "@opencode-ai/client/promise"
 import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { rootSession } from "@/utils/session-route"
@@ -18,6 +18,8 @@ import { compareMessages, messageKey, normalizeSessionMessages } from "@/utils/s
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
 import type { ServerApi } from "@/utils/server"
+
+type QuestionRequest = QuestionAsked["data"]
 
 type MessageApi = ServerApi["message"]
 

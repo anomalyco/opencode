@@ -27,7 +27,6 @@ import { Plugin } from "./plugin.js"
 import { PluginSupervisor } from "./plugin/supervisor.js"
 import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
-import { Question } from "./question.js"
 import { Shell } from "./shell.js"
 import { Reference } from "./reference.js"
 import { WebSearch } from "./websearch.js"
@@ -86,7 +85,6 @@ const locationServiceNodes = [
   ReferenceInstructions.node,
   InstructionEntry.node,
   Form.node,
-  Question.node,
   Generate.node,
   SessionGenerateNode.node,
   ReadToolFileSystem.node,

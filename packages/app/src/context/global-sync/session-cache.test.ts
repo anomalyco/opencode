@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import type { Message, Part, Todo } from "@/types"
-import type { FormInfo, PermissionRequest, QuestionRequest, SessionStatus } from "@opencode-ai/client/promise"
+import type { FormInfo, PermissionRequest, QuestionAsked, SessionStatus } from "@opencode-ai/client/promise"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { dropSessionCaches, pickSessionCacheEvictions } from "./session-cache"
+
+type QuestionRequest = QuestionAsked["data"]
 
 const msg = (id: string, sessionID: string) =>
   ({

@@ -5,7 +5,7 @@ import type { Message, Part, Project, Todo } from "@/types"
 import type {
   FileDiffInfo,
   PermissionRequest,
-  QuestionRequest,
+  QuestionAsked,
   SessionInfo,
   SessionStatus,
 } from "@opencode-ai/client/promise"
@@ -14,6 +14,8 @@ import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { messageKey } from "@/utils/session-message"
+
+type QuestionRequest = QuestionAsked["data"]
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const SESSION_CONTENT_EVENTS = new Set([

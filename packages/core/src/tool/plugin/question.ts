@@ -5,7 +5,7 @@ import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema } from "effect"
 import { Form } from "../../form.js"
 import { Permission } from "../../permission.js"
-import { Question } from "../../question.js"
+import { Question } from "@opencode-ai/schema/question"
 
 export const name = "question"
 

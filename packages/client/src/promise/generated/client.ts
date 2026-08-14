@@ -194,14 +194,6 @@ import type {
   ShellOutputOutput,
   ShellRemoveInput,
   ShellRemoveOutput,
-  QuestionRequestListInput,
-  QuestionRequestListOutput,
-  QuestionListInput,
-  QuestionListOutput,
-  QuestionReplyInput,
-  QuestionReplyOutput,
-  QuestionRejectInput,
-  QuestionRejectOutput,
   ReferenceListInput,
   ReferenceListOutput,
   WorktreeListInput,
@@ -1656,56 +1648,6 @@ export function make(options: ClientOptions) {
             query: { location: input["location"] },
             successStatus: 204,
             declaredStatuses: [404, 401, 400],
-            empty: true,
-          },
-          requestOptions,
-        ),
-    },
-    question: {
-      request: {
-        list: (input?: QuestionRequestListInput, requestOptions?: RequestOptions) =>
-          request<QuestionRequestListOutput>(
-            {
-              method: "GET",
-              path: `/api/question/request`,
-              query: { location: input?.["location"] },
-              successStatus: 200,
-              declaredStatuses: [401, 400],
-              empty: false,
-            },
-            requestOptions,
-          ),
-      },
-      list: (input: QuestionListInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: QuestionListOutput }>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/question`,
-            successStatus: 200,
-            declaredStatuses: [404, 400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      reply: (input: QuestionReplyInput, requestOptions?: RequestOptions) =>
-        request<QuestionReplyOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/question/${encodeURIComponent(input.requestID)}/reply`,
-            body: { answers: input["answers"] },
-            successStatus: 204,
-            declaredStatuses: [404, 400, 401],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      reject: (input: QuestionRejectInput, requestOptions?: RequestOptions) =>
-        request<QuestionRejectOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/question/${encodeURIComponent(input.requestID)}/reject`,
-            successStatus: 204,
-            declaredStatuses: [404, 400, 401],
             empty: true,
           },
           requestOptions,

@@ -20,7 +20,6 @@ import { ServerGroup } from "./groups/server.js"
 import { DebugGroup } from "./groups/debug.js"
 import { PtyGroup } from "./groups/pty.js"
 import { ShellGroup } from "./groups/shell.js"
-import { makeQuestionGroup } from "./groups/question.js"
 import { ReferenceGroup } from "./groups/reference.js"
 import { Authorization } from "./middleware/authorization.js"
 import { LocationGroup } from "./groups/location.js"
@@ -71,9 +70,7 @@ type MixedMiddlewareGroups<
   LocationService,
   SessionLocationId extends HttpApiMiddleware.AnyId,
   SessionLocationService,
-> =
-  | ReturnType<typeof makePermissionGroup<LocationId, LocationService, SessionLocationId, SessionLocationService>>
-  | ReturnType<typeof makeQuestionGroup<LocationId, LocationService, SessionLocationId, SessionLocationService>>
+> = ReturnType<typeof makePermissionGroup<LocationId, LocationService, SessionLocationId, SessionLocationService>>
 
 type ApiGroups<
   LocationId extends HttpApiMiddleware.AnyId,
@@ -170,7 +167,6 @@ const makeApiFromGroup = <
     .add(eventGroup)
     .add(PtyGroup.middleware(locationMiddleware))
     .add(ShellGroup.middleware(locationMiddleware))
-    .add(makeQuestionGroup(locationMiddleware, sessionLocationMiddleware))
     .add(ReferenceGroup.middleware(locationMiddleware))
     .add(WorktreeGroup)
     .add(VcsGroup.middleware(locationMiddleware))

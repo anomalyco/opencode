@@ -1,7 +1,9 @@
 import type { Message, Part, Todo } from "@/types"
-import type { FormInfo, PermissionRequest, QuestionRequest, SessionStatus } from "@opencode-ai/client/promise"
+import type { FormInfo, PermissionRequest, QuestionAsked, SessionStatus } from "@opencode-ai/client/promise"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
+
+type QuestionRequest = QuestionAsked["data"]
 
 export const SESSION_CACHE_LIMIT = 40
 
