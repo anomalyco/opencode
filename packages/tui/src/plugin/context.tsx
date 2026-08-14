@@ -15,6 +15,7 @@ import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import type { Page } from "@opencode-ai/plugin/tui/context"
+import { importModule } from "@opencode-ai/util/runtime-import"
 import { resolveSlots, type Claim } from "./structure"
 import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
 import { isDeepEqual } from "remeda"
@@ -535,7 +536,10 @@ async function resolvePlugin(
   const version = local ? freshSpecifier(entrypoint, (await stat(new URL(entrypoint))).mtimeMs) : entrypoint
   if (previous && previous.version === version && sameOptions(previous.options, options))
     return { status: "unchanged" as const, plugin: previous.plugin, version }
-  const mod: { readonly default?: unknown } = await import(version)
+  // importModule: the Node SEA embedder routes dynamic import() of file URLs
+  // through builtin-module lookup (ERR_UNKNOWN_BUILTIN_MODULE), so the vm-based
+  // runtime import is used instead; on Bun it is a plain import.
+  const mod = (await importModule(version)) as { readonly default?: unknown }
   if (!isPlugin(mod.default)) throw new Error(`Invalid V2 TUI plugin module: ${spec}`)
   return { status: "loaded" as const, plugin: mod.default, version }
 }
