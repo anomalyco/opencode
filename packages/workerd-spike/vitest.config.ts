@@ -51,10 +51,8 @@ export default defineWorkersConfig({
       // mime-types requires mime-db's JSON database at require time; keep the
       // lookup surface but back it with a static shim.
       { find: /^mime-types$/, replacement: new URL("./test/shims/mime-types.mjs", import.meta.url).pathname },
-      // util/npm.ts imports the npm toolchain at module scope; plugin installs
-      // never happen in the workerd profile (plugin discovery is precompiled-only),
-      // and @npmcli/config touches process.stdout.isTTY during module init.
-      { find: /^@npmcli\/config(\/.*)?$/, replacement: mockProxy },
+      // Plugin installs never happen in the workerd profile (plugin discovery
+      // is precompiled-only), so mock the package installation toolchain.
       { find: /^@npmcli\/arborist(\/.*)?$/, replacement: mockProxy },
       { find: /^pacote(\/.*)?$/, replacement: mockProxy },
     ],

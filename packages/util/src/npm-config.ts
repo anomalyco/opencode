@@ -1,15 +1,16 @@
 export * as NpmConfig from "./npm-config.js"
 
 import { fileURLToPath } from "url"
-// @ts-expect-error npm does not publish types for this internal config API.
-import Config from "@npmcli/config"
-// @ts-expect-error npm does not publish types for this internal config API.
-import { definitions, flatten, nerfDarts, shorthands } from "@npmcli/config/lib/definitions/index.js"
 import { Effect } from "effect"
 
 export const load = (dir: string) =>
   Effect.tryPromise({
     try: async () => {
+      // @ts-expect-error npm does not publish types for this internal config API.
+      const { default: Config } = await import("@npmcli/config")
+      // @ts-expect-error npm does not publish types for this internal config API.
+      const { default: npmDefinitions } = await import("@npmcli/config/lib/definitions/index.js")
+      const { definitions, flatten, nerfDarts, shorthands } = npmDefinitions
       const config = new Config({
         // Resolved per call: on workerd import.meta.url is undefined and building
         // this URL at module scope fails startup validation; npm config never runs there.
