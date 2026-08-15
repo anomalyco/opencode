@@ -158,11 +158,11 @@ const layer = Layer.effect(
      */
     const runSteps = Effect.fn("SessionRunner.runSteps")(function* (
       sessionID: SessionSchema.ID,
-      continuation?: Continuation,
-      initialPromotable: SessionInbox.Promotable = continuation ? "steer" : "input",
+      continuation: Continuation | undefined,
+      drainPromotable: SessionInbox.Promotable,
     ) {
-      // Fresh work may promote queued input; later steps absorb steers only.
-      let promotable = initialPromotable
+      // Fresh work may promote queued input; resumed turns and later steps absorb steers only.
+      let promotable: SessionInbox.Promotable = continuation ? "steer" : drainPromotable
       let step = continuation?.step ?? 1
       let next = continuation
       while (true) {
