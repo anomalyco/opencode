@@ -31,8 +31,8 @@ import { testEffect } from "./lib/effect"
 
 const executionCalls: Session.ID[] = []
 const interruptCalls: Session.ID[] = []
+const interruptContinuations: Array<boolean | undefined> = []
 const wakeCalls: Session.ID[] = []
-const wakeScopes: Array<string | undefined> = []
 const activeSessions = new Set<Session.ID>()
 const execution = Layer.succeed(
   SessionExecution.Service,
@@ -42,14 +42,14 @@ const execution = Layer.succeed(
       Effect.sync(() => {
         executionCalls.push(sessionID)
       }),
-    interrupt: (sessionID) =>
+    interrupt: (sessionID, options) =>
       Effect.sync(() => {
         interruptCalls.push(sessionID)
+        interruptContinuations.push(options?.continue)
       }),
-    wake: (sessionID, options) =>
+    wake: (sessionID) =>
       Effect.sync(() => {
         wakeCalls.push(sessionID)
-        wakeScopes.push(options?.scope)
       }),
     awaitIdle: () => Effect.void,
   }),
@@ -179,39 +179,18 @@ describe("Session.prompt", () => {
     }),
   )
 
-  it.effect("continues steering input after interruption", () =>
+  it.effect("forwards interrupt continuation policy", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
-      yield* session.synthetic({ sessionID, text: "Continue after interrupt", resume: false })
       interruptCalls.length = 0
-      wakeCalls.length = 0
-      wakeScopes.length = 0
-
-      yield* session.interrupt(sessionID, { continue: true })
-
-      expect(interruptCalls).toEqual([sessionID])
-      expect(wakeCalls).toEqual([sessionID])
-      expect(wakeScopes).toEqual(["steer"])
-    }),
-  )
-
-  it.effect("leaves queued input parked after interruption", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* Session.Service
-      yield* session.synthetic({
-        sessionID,
-        text: "Wait until explicitly resumed",
-        delivery: "queue",
-        resume: false,
-      })
-      interruptCalls.length = 0
+      interruptContinuations.length = 0
       wakeCalls.length = 0
 
       yield* session.interrupt(sessionID, { continue: true })
 
       expect(interruptCalls).toEqual([sessionID])
+      expect(interruptContinuations).toEqual([true])
       expect(wakeCalls).toEqual([])
     }),
   )

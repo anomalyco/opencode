@@ -14,8 +14,9 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
 import { UserInterruptedError } from "@opencode-ai/core/session/error"
 import { SessionEvent } from "@opencode-ai/core/session/event"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionRunner } from "@opencode-ai/core/session/runner/index"
-import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionInboxTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
@@ -161,6 +162,106 @@ describe("SessionExecution lifecycle", () => {
       yield* execution.awaitIdle(sessionID)
 
       expect(scopes).toEqual(["steer", "all"])
+    }),
+  )
+
+  it.effect("an active-scope wake preserves a steer-scoped execution", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_wake_scope_preserved")
+      yield* seedSessions(database, [sessionID])
+
+      const firstRunning = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const scopes: Array<SessionRunner.DrainScope | undefined> = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, (input) =>
+        Effect.gen(function* () {
+          scopes.push(input.scope)
+          if (scopes.length !== 1) return
+          yield* Deferred.succeed(firstRunning, undefined)
+          yield* Deferred.await(release)
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+
+      yield* execution.wake(sessionID, { scope: "steer" })
+      yield* Deferred.await(firstRunning)
+      yield* execution.wake(sessionID, { scope: "active" })
+      yield* Deferred.succeed(release, undefined)
+      yield* execution.awaitIdle(sessionID)
+
+      expect(scopes).toEqual(["steer", "steer"])
+    }),
+  )
+
+  it.effect("an active-scope wake does not start an idle execution", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_wake_scope_idle")
+      yield* seedSessions(database, [sessionID])
+
+      const scopes: Array<SessionRunner.DrainScope | undefined> = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, (input) => Effect.sync(() => scopes.push(input.scope)))
+      const execution = Context.get(context, SessionExecution.Service)
+
+      yield* execution.wake(sessionID, { scope: "active" })
+      yield* execution.awaitIdle(sessionID)
+
+      expect(scopes).toEqual([])
+    }),
+  )
+
+  it.effect("overlapping interrupt-generation wakes cannot promote queued work", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_interrupt_scope_race")
+      yield* seedSessions(database, [sessionID])
+      yield* database.db
+        .insert(SessionInboxTable)
+        .values({
+          id: SessionMessage.ID.make("msg_interrupt_queue"),
+          session_id: sessionID,
+          type: "synthetic",
+          payload: { text: "Queue for later" },
+          delivery: "queue",
+          enqueued_seq: 1,
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const firstRunning = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const scopes: Array<SessionRunner.DrainScope | undefined> = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, (input) =>
+        Effect.gen(function* () {
+          scopes.push(input.scope)
+          if (scopes.length !== 1) return
+          yield* Deferred.succeed(firstRunning, undefined)
+          yield* Effect.uninterruptible(Deferred.await(release))
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+
+      yield* execution.resume(sessionID).pipe(Effect.forkIn(scope))
+      yield* Deferred.await(firstRunning)
+      const interrupted = yield* Effect.all([
+        execution.interrupt(sessionID, { continue: true }).pipe(Effect.forkIn(scope)),
+        execution.interrupt(sessionID, { continue: true }).pipe(Effect.forkIn(scope)),
+      ])
+      yield* Effect.yieldNow
+      yield* execution.wake(sessionID)
+      yield* Deferred.succeed(release, undefined)
+      yield* Effect.forEach(interrupted, Fiber.join, { discard: true })
+      yield* execution.awaitIdle(sessionID)
+
+      expect(scopes[0]).toBe("all")
+      expect(scopes.slice(1)).toEqual(["steer"])
     }),
   )
 

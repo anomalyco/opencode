@@ -789,7 +789,10 @@ const layer = Layer.effect(
             return false
           }),
         )
-        if (recovered) return
+        if (recovered) {
+          yield* execution.wake(input.sessionID, { scope: "active" })
+          return
+        }
         yield* execution.wake(input.sessionID)
       }),
       compact: Effect.fn("Session.compact")(function* (input) {
@@ -875,9 +878,7 @@ const layer = Layer.effect(
       interrupt: Effect.fn("Session.interrupt")((sessionID, options) =>
         Effect.uninterruptible(
           Effect.gen(function* () {
-            yield* execution.interrupt(sessionID)
-            if (options?.continue && (yield* SessionInbox.has(db, sessionID, "steer")))
-              yield* execution.wake(sessionID, { scope: "steer" })
+            yield* execution.interrupt(sessionID, options)
           }),
         ),
       ),

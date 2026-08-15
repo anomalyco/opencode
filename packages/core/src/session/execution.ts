@@ -1,7 +1,8 @@
 export * as SessionExecution from "./execution.js"
 
-import { Cause, Context, Effect, Exit, Layer, Stream } from "effect"
+import { Cause, Context, Effect, Exit, Layer } from "effect"
 import { Bus } from "../bus.js"
+import { Database } from "../database/database.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { SessionEvent } from "./event.js"
@@ -11,6 +12,7 @@ import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
 import { toSessionError } from "./to-session-error.js"
 import { UserInterruptedError } from "./error.js"
+import { SessionInbox } from "./inbox.js"
 
 export interface Interface {
   /** Snapshots active execution owned by this process. */
@@ -20,10 +22,10 @@ export interface Interface {
   /** Registers newly recorded work. Repeated wakeups coalesce, with a full drain taking precedence. */
   readonly wake: (
     sessionID: SessionSchema.ID,
-    options?: { readonly scope?: SessionRunner.DrainScope },
+    options?: { readonly scope?: SessionRunner.DrainScope | "active" },
   ) => Effect.Effect<void>
   /** Interrupt active work owned by this process. Idle interruption is a no-op. */
-  readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<void>
   /** Resolves once this process owns no active execution for the Session. Returns immediately when idle and never starts work. */
   readonly awaitIdle: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
@@ -48,8 +50,11 @@ export const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
     const bus = yield* Bus.Service
+    const db = (yield* Database.Service).db
     const wakeScopes = new Map<SessionSchema.ID, SessionRunner.DrainScope>()
     const activeScopes = new Map<SessionSchema.ID, SessionRunner.DrainScope>()
+    const continuingInterrupts = new Map<SessionSchema.ID, Set<symbol>>()
+    const deferredWakes = new Set<SessionSchema.ID>()
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
         Effect.tapCause((cause) =>
@@ -145,22 +150,65 @@ export const layer = Layer.effect(
           }),
         ),
     })
-    const wake = (sessionID: SessionSchema.ID, scope: SessionRunner.DrainScope) =>
+    const scheduleWake = (sessionID: SessionSchema.ID, scope: SessionRunner.DrainScope) =>
       Effect.sync(() => {
         if (scope === "all" || !wakeScopes.has(sessionID)) wakeScopes.set(sessionID, scope)
       }).pipe(Effect.andThen(coordinator.wake(sessionID)))
 
-    yield* bus.subscribe(SessionEvent.Moved).pipe(
-      Stream.runForEach((event) => wake(event.data.sessionID, activeScopes.get(event.data.sessionID) ?? "all")),
-      Effect.forkScoped,
-    )
+    const wake = (sessionID: SessionSchema.ID, scope: SessionRunner.DrainScope) =>
+      Effect.suspend(() => {
+        if (!continuingInterrupts.has(sessionID)) return scheduleWake(sessionID, scope)
+        deferredWakes.add(sessionID)
+        return Effect.void
+      })
+
+    const interrupt = (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => {
+      if (!options?.continue) return coordinator.interrupt(sessionID, "user")
+      const token = Symbol()
+      const release = Effect.sync(() => {
+        const active = continuingInterrupts.get(sessionID)
+        active?.delete(token)
+        if (active?.size !== 0) return
+        continuingInterrupts.delete(sessionID)
+        deferredWakes.delete(sessionID)
+      })
+      return Effect.uninterruptible(
+        Effect.sync(() => {
+          const active = continuingInterrupts.get(sessionID)
+          if (active) {
+            active.add(token)
+            return
+          }
+          continuingInterrupts.set(sessionID, new Set([token]))
+          deferredWakes.delete(sessionID)
+          wakeScopes.delete(sessionID)
+        }).pipe(
+          Effect.andThen(coordinator.interrupt(sessionID, "user")),
+          Effect.andThen(SessionInbox.has(db, sessionID, "steer")),
+          Effect.flatMap((hasSteer) =>
+            Effect.sync(() => {
+              const deferred = deferredWakes.delete(sessionID)
+              return hasSteer || deferred
+            }).pipe(
+              Effect.flatMap((resume) =>
+                resume ? scheduleWake(sessionID, "steer").pipe(Effect.andThen(release)) : release,
+              ),
+            ),
+          ),
+          Effect.ensuring(release),
+        ),
+      )
+    }
 
     return Service.of({
       active: coordinator.active,
-      interrupt: (sessionID) =>
-        Effect.sync(() => wakeScopes.delete(sessionID)).pipe(Effect.andThen(coordinator.interrupt(sessionID, "user"))),
+      interrupt,
       resume: coordinator.run,
-      wake: (sessionID, options) => wake(sessionID, options?.scope ?? "all"),
+      wake: (sessionID, options) => {
+        if (options?.scope !== "active") return wake(sessionID, options?.scope ?? "all")
+        const scope = activeScopes.get(sessionID)
+        return scope ? wake(sessionID, scope) : Effect.void
+      },
       awaitIdle: coordinator.awaitIdle,
     })
   }),
@@ -169,7 +217,7 @@ export const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, LocationServiceMap.node, Bus.node],
+  deps: [SessionStore.node, LocationServiceMap.node, Bus.node, Database.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */
