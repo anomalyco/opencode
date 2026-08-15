@@ -73,6 +73,15 @@ export const Model = Schema.Struct({
         "Replace the model-family system prompt with this text. Use {file:./path} to load it from a file resolved relative to the config file.",
     }),
   ),
+  sampling: Schema.optional(
+    Schema.Struct({
+      temperature: Schema.optional(Schema.Finite),
+      topP: Schema.optional(Schema.Finite),
+      topK: Schema.optional(Schema.Finite),
+    }).annotate({
+      description: "Sampling defaults for this model. Consulted before the built-in per-family sampling ladders.",
+    }),
+  ),
   provider: Schema.optional(
     Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) }),
   ),

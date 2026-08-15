@@ -14,15 +14,23 @@ const PARAMS_RE = /(\d+(?:\.\d+)?)\s*[bB]\b/
 // then the vendor family guard, then the parameter-count heuristic, then "default".
 // The vendor guard runs before the heuristic so frontier ids with a parameter
 // suffix (e.g. "gemini-2.5-flash-8b") keep their vendor behavior byte-identical.
-export function resolve(model: Provider.Model): ModelTier {
-  if (model.tier) return model.tier
-  if (vendor(model)) return "vendor"
+// The source distinguishes positive evidence (config, heuristic) from the bare
+// fall-through, so consumers like sampling can avoid overriding unknown models.
+export function detect(model: Provider.Model): {
+  tier: ModelTier
+  source: "config" | "vendor" | "heuristic" | "fallback"
+} {
+  if (model.tier) return { tier: model.tier, source: "config" }
+  if (vendor(model)) return { tier: "vendor", source: "vendor" }
   const match = PARAMS_RE.exec(model.api.id)
-  if (!match) return "default"
-  if (Number(match[1]) <= MINIMAL_MAX_PARAMS_B) return "minimal"
-  // 10B–40B is the "default" band; larger sizes without a family match also
-  // get "default" (the vendor case was handled above).
-  return "default"
+  if (!match) return { tier: "default", source: "fallback" }
+  if (Number(match[1]) <= MINIMAL_MAX_PARAMS_B) return { tier: "minimal", source: "heuristic" }
+  if (Number(match[1]) <= DEFAULT_MAX_PARAMS_B) return { tier: "default", source: "heuristic" }
+  return { tier: "default", source: "fallback" }
+}
+
+export function resolve(model: Provider.Model): ModelTier {
+  return detect(model).tier
 }
 
 // Mirrors the family ladder in session/system.ts provider() — keep in sync.

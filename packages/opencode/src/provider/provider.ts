@@ -1041,6 +1041,13 @@ export const Model = Schema.Struct({
   family: optional(Schema.String),
   tier: optional(Schema.Literals(["minimal", "default"])),
   prompt: optional(Schema.String),
+  sampling: optional(
+    Schema.Struct({
+      temperature: optional(Schema.Finite),
+      topP: optional(Schema.Finite),
+      topK: optional(Schema.Finite),
+    }),
+  ),
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
   limit: ProviderLimit,
@@ -1510,6 +1517,7 @@ const layer = Layer.effect(
               family: model.family ?? existingModel?.family ?? "",
               tier: model.tier ?? existingModel?.tier,
               prompt: model.prompt ?? existingModel?.prompt,
+              sampling: model.sampling ?? existingModel?.sampling,
               release_date: model.release_date ?? existingModel?.release_date ?? "",
               variants: {},
             }
