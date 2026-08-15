@@ -83,6 +83,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         return store.history.at(store.index)
       },
       append(item: PromptInfo) {
+        if (store.history.at(-1)?.input === item.input) return
         const entry = structuredClone(unwrap(item))
         if (isDuplicateEntry(store.history.at(-1), entry)) {
           setStore("index", 0)
