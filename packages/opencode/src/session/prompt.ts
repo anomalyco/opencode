@@ -243,10 +243,12 @@ const layer = Layer.effect(
       }
     })
 
-    // Single title write: fires when a turn completes with the title still at
-    // its default. A user-renamed title is never overwritten, and an aborted
-    // first turn stays default until the next completed turn (the history then
-    // has more than one real user message, so the guard must not require one).
+    // Single title write: fires at the first execution step of a turn, while
+    // the title is still at its default — the first user message already
+    // carries the request, so waiting for the turn to complete only delays a
+    // stable title. A user-renamed title is never overwritten; a turn whose
+    // generation fails or aborts stays default and retries on the next turn,
+    // since step 1 runs once per prompt.
     const retitle = Effect.fn("SessionPrompt.retitle")(function* (input: {
       session: Session.Info
       history: SessionV1.WithParts[]
@@ -271,7 +273,7 @@ const layer = Layer.effect(
         user: input.user,
         context: input.history,
         instruction:
-          "Generate a title for this conversation. Consider the whole conversation so far, including what the assistant actually did:\n",
+          "Generate a title for this conversation. The conversation may be just the first user message — base the title on what the user is asking for:\n",
       })
       if (!t) return
       yield* sessions
@@ -1221,13 +1223,6 @@ const layer = Layer.effect(
               providerID: lastUser.model.providerID,
               modelID: lastUser.model.modelID,
             })
-            yield* retitle({
-              session,
-              history: msgs,
-              providerID: lastUser.model.providerID,
-              modelID: lastUser.model.modelID,
-              user: lastUser,
-            }).pipe(Effect.ignore, Effect.forkIn(scope))
             yield* autoSummary
               .update({
                 sessionID,
@@ -1354,8 +1349,16 @@ const layer = Layer.effect(
               })
             }
 
-            if (step === 1)
+            if (step === 1) {
               yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
+              yield* retitle({
+                session,
+                history: msgs,
+                providerID: lastUser.model.providerID,
+                modelID: lastUser.model.modelID,
+                user: lastUser,
+              }).pipe(Effect.ignore, Effect.forkIn(scope))
+            }
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
