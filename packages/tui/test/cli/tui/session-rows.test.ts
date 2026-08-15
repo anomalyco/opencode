@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
-import { cacheReuseDrop, messageBoundaryIDs, reduceSessionRows, turnDuration } from "../../../src/routes/session/rows"
+import {
+  cacheReuseDrop,
+  messageBoundaryIDs,
+  reduceSessionRows,
+  tokenThroughput,
+  turnDuration,
+} from "../../../src/routes/session/rows"
 
 test("measures turn duration from the user prompt across assistant steps", () => {
   const first = assistant("assistant-1", [])
@@ -14,6 +20,39 @@ test("measures turn duration from the user prompt across assistant steps", () =>
   ]
 
   expect(turnDuration(final, messages)).toBe(29_000)
+})
+
+test("measures visible output throughput after the first token", () => {
+  const message = assistant("assistant-1", [])
+  message.finish = "stop"
+  message.time = { created: 1_000, started: 2_000, generated: 4_000, completed: 8_000 }
+  message.tokens = { input: 100, output: 80, reasoning: 20, cache: { read: 50, write: 0 } }
+
+  expect(tokenThroughput(message)).toEqual({ tokens: 79, duration: 2_000, rate: 39.5 })
+})
+
+test("does not report throughput without a stable generation window", () => {
+  const message = assistant("assistant-1", [])
+  message.finish = "stop"
+  message.time = { created: 1_000, completed: 4_000 }
+  message.tokens = { input: 100, output: 80, reasoning: 20, cache: { read: 0, write: 0 } }
+  expect(tokenThroughput(message)).toBeUndefined()
+
+  message.time.started = 4_000
+  message.time.generated = 4_000
+  expect(tokenThroughput(message)).toBeUndefined()
+
+  message.time.started = 3_751
+  expect(tokenThroughput(message)).toBeUndefined()
+})
+
+test("does not report throughput for tool-call steps", () => {
+  const message = assistant("assistant-1", [])
+  message.finish = "tool-calls"
+  message.time = { created: 1_000, started: 2_000, generated: 4_000, completed: 8_000 }
+  message.tokens = { input: 100, output: 80, reasoning: 20, cache: { read: 0, write: 0 } }
+
+  expect(tokenThroughput(message)).toBeUndefined()
 })
 
 test("filters OpenAI cache quantization from cache reuse drops", () => {

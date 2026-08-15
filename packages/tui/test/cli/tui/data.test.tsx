@@ -513,19 +513,31 @@ test("truncates committed revert messages without changing lifetime usage", asyn
         model: { providerID: "provider", id: "model" },
       },
     })
+    emitEvent(events, {
+      id: "evt_revert_boundary_text_started",
+      created: 1.25,
+      type: "session.text.started",
+      durable: durable(sessionID, 2),
+      data: {
+        sessionID,
+        assistantMessageID: "msg_revert_boundary",
+        ordinal: 0,
+      },
+    })
     cost = 0.5
     tokens = { input: 5, output: 2, reasoning: 1, cache: { read: 1, write: 1 } }
     emitEvent(events, {
       id: "evt_revert_boundary_ended",
       created: 2,
       type: "session.step.ended",
-      durable: durable(sessionID, 2),
+      durable: durable(sessionID, 3),
       data: {
         sessionID,
         assistantMessageID: "msg_revert_boundary",
         finish: "stop",
         cost: 0.5,
         tokens,
+        generated: 1.75,
       },
     })
     emitEvent(events, {
@@ -535,6 +547,12 @@ test("truncates committed revert messages without changing lifetime usage", asyn
       data: { sessionID, cost, tokens },
     })
     await wait(() => data.session.get(sessionID)?.cost === 0.5)
+    expect(data.session.message.get(sessionID, "msg_revert_boundary")?.time).toEqual({
+      created: 1,
+      started: 1.25,
+      generated: 1.75,
+      completed: 2,
+    })
 
     emitEvent(events, {
       id: "evt_revert_later_started",

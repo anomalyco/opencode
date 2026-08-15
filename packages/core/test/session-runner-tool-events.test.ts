@@ -266,6 +266,7 @@ test("step finish records settlement without publishing step ended", async () =>
 
   expect(published.some((event) => event.type === "step.ended.2")).toBe(false)
   expect(publisher.record().finish).toMatchObject({ finish: "stop" })
+  expect(publisher.record().finish).toHaveProperty("generated")
 })
 
 test("content-filter finish retains failure evidence until step closeout", async () => {

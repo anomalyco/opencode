@@ -353,6 +353,16 @@ export function turnDuration(message: SessionMessageAssistant, messages: Session
   return Math.max(0, message.time.completed - (input?.time.created ?? message.time.created))
 }
 
+export function tokenThroughput(message: SessionMessageAssistant) {
+  if (message.finish !== "stop" && message.finish !== "length") return undefined
+  if (message.tokens === undefined || message.time.started === undefined || message.time.generated === undefined)
+    return undefined
+  const duration = message.time.generated - message.time.started
+  const tokens = message.tokens.output - 1
+  if (duration < 250 || tokens <= 0) return undefined
+  return { tokens, duration, rate: (tokens * 1_000) / duration }
+}
+
 function hasTokenUsage(
   message: SessionMessageAssistant,
 ): message is SessionMessageAssistant & { tokens: NonNullable<SessionMessageAssistant["tokens"]> } {

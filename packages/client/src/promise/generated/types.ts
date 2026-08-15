@@ -602,6 +602,7 @@ export type SessionStepEnded = {
     finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
     cost: MoneyUSD
     tokens: TokenUsageInfo
+    generated?: number
     snapshot?: string
     files?: Array<string>
   }
@@ -1106,6 +1107,7 @@ export type SessionStepFailed = {
     error: SessionStructuredError
     cost?: MoneyUSD
     tokens?: TokenUsageInfo
+    generated?: number
     snapshot?: string
     files?: Array<string>
   }
@@ -1896,7 +1898,7 @@ export type SessionInboxEnqueued = {
 export type SessionMessageAssistant = {
   id: string
   metadata?: { [x: string]: JsonValue }
-  time: { created: number; completed?: number }
+  time: { created: number; started?: number; generated?: number; completed?: number }
   type: "assistant"
   agent: string
   model: ModelRef
@@ -2593,7 +2595,12 @@ export type SessionImportInput = {
       | {
           readonly id: string
           readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly time: { readonly created: number; readonly completed?: number }
+          readonly time: {
+            readonly created: number
+            readonly started?: number
+            readonly generated?: number
+            readonly completed?: number
+          }
           readonly type: "assistant"
           readonly agent: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
@@ -2860,7 +2867,12 @@ export type SessionImportInput = {
       | {
           readonly id: string
           readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly time: { readonly created: number; readonly completed?: number }
+          readonly time: {
+            readonly created: number
+            readonly started?: number
+            readonly generated?: number
+            readonly completed?: number
+          }
           readonly type: "assistant"
           readonly agent: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
@@ -3127,7 +3139,12 @@ export type SessionImportInput = {
       | {
           readonly id: string
           readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly time: { readonly created: number; readonly completed?: number }
+          readonly time: {
+            readonly created: number
+            readonly started?: number
+            readonly generated?: number
+            readonly completed?: number
+          }
           readonly type: "assistant"
           readonly agent: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }

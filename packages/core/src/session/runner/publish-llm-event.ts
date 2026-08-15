@@ -1,5 +1,5 @@
 import { type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode-ai/ai"
-import { Effect } from "effect"
+import { DateTime, Effect } from "effect"
 import { Bus } from "../../bus.js"
 import { Model } from "../../model.js"
 import { SessionEvent } from "../event.js"
@@ -36,6 +36,7 @@ export interface StepRecord {
   readonly finish?: {
     readonly finish: Extract<LLMEvent, { type: "step-finish" }>["reason"]["normalized"]
     readonly tokens: ReturnType<typeof SessionUsage.tokens>
+    readonly generated: DateTime.Utc
   }
   readonly calls: ReadonlyArray<{
     readonly id: string
@@ -310,6 +311,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   const publishStepFailure = Effect.fnUntraced(function* (details?: {
     readonly cost?: Money.USD
     readonly tokens?: ReturnType<typeof SessionUsage.tokens>
+    readonly generated?: DateTime.Utc
     readonly snapshot?: Snapshot.ID
     readonly files?: readonly RelativePath[]
   }) {
@@ -493,9 +495,14 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         return
       }
       case "step-finish":
+        const generated = yield* DateTime.now
         yield* flush()
         if (stepSettlement) return yield* Effect.die(new Error("Duplicate step finish"))
-        stepSettlement = { finish: event.reason.normalized, tokens: SessionUsage.tokens(event.usage) }
+        stepSettlement = {
+          finish: event.reason.normalized,
+          tokens: SessionUsage.tokens(event.usage),
+          generated,
+        }
         if (event.reason.normalized === "content-filter") {
           providerFailed = true
           yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" })

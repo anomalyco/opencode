@@ -221,6 +221,8 @@ export const Assistant = Schema.Struct({
   retry: AssistantRetry.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
+    started: DateTimeUtcFromMillis.pipe(optional),
+    generated: DateTimeUtcFromMillis.pipe(optional),
     completed: DateTimeUtcFromMillis.pipe(optional),
   }),
 }).annotate({ identifier: "Session.Message.Assistant" })

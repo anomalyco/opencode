@@ -302,6 +302,7 @@ const layer = Layer.effect(
       const stepUsage = (finish: NonNullable<StepRecord["finish"]>) => ({
         cost: SessionUsage.calculateCost(resolved.cost, finish.tokens),
         tokens: finish.tokens,
+        generated: finish.generated,
       })
 
       const captureStepEnd = Effect.fnUntraced(function* () {

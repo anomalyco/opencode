@@ -194,6 +194,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
                 draft.retry = undefined
                 draft.error = undefined
                 draft.finish = undefined
+                draft.time.started = undefined
+                draft.time.generated = undefined
                 draft.time.completed = undefined
                 if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, start: event.data.snapshot }
               }),
@@ -229,6 +231,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           draft.finish = event.data.finish
           draft.cost = event.data.cost
           draft.tokens = event.data.tokens
+          draft.time.generated = event.data.generated
           if (event.data.snapshot || event.data.files)
             draft.snapshot = {
               ...draft.snapshot,
@@ -247,6 +250,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             draft.cost = event.data.cost
             draft.tokens = castDraft(event.data.tokens)
           }
+          draft.time.generated = event.data.generated
           if (event.data.snapshot || event.data.files)
             draft.snapshot = {
               ...draft.snapshot,
@@ -257,6 +261,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       },
       "session.text.started": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          if (draft.time.completed === undefined) draft.time.started ??= event.created
           draft.content.push(castDraft(SessionMessage.AssistantText.make({ type: "text", text: "" })))
         })
       },

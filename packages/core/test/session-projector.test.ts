@@ -47,7 +47,9 @@ const build = Agent.defaultID
 const assistantRow = (
   id: SessionMessage.ID,
   seq: number,
-  time: { created: DateTime.Utc; completed?: DateTime.Utc } = { created },
+  time: { created: DateTime.Utc; started?: DateTime.Utc; generated?: DateTime.Utc; completed?: DateTime.Utc } = {
+    created,
+  },
   usage?: Pick<SessionMessage.Assistant, "cost" | "tokens">,
 ) => {
   const {
@@ -667,12 +669,18 @@ describe("SessionProjector", () => {
       const usageUpdated = yield* service
         .subscribe(SessionEvent.UsageUpdated)
         .pipe(Stream.runHead, Effect.forkScoped({ startImmediately: true }))
+      yield* service.publish(SessionEvent.Text.Started, {
+        sessionID,
+        assistantMessageID: SessionMessage.ID.make("msg_assistant_2"),
+        ordinal: 0,
+      })
       yield* service.publish(SessionEvent.Step.Ended, {
         sessionID,
         assistantMessageID: SessionMessage.ID.make("msg_assistant_2"),
         finish: "stop",
         cost: Money.USD.make(1.25),
         tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
+        generated: DateTime.makeUnsafe(0),
       })
 
       const rows = yield* db
@@ -691,7 +699,11 @@ describe("SessionProjector", () => {
         finish: "stop",
         cost: Money.USD.make(1.25),
         tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
-        time: { completed: DateTime.makeUnsafe(0) },
+        time: {
+          started: DateTime.makeUnsafe(0),
+          generated: DateTime.makeUnsafe(0),
+          completed: DateTime.makeUnsafe(0),
+        },
       })
       expect(
         yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie),
