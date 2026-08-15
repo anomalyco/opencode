@@ -88,6 +88,16 @@ describe("transcript", () => {
       expect(result).toBe("## Assistant (Build · Claude Sonnet 4 · 5.4s)\n\n")
     })
 
+    test("includes a non-default model variant", () => {
+      const result = formatAssistantHeader({ ...baseMsg, variant: "high" }, true, providers)
+      expect(result).toBe("## Assistant (Build · Claude Sonnet 4 (high) · 5.4s)\n\n")
+    })
+
+    test("omits the default model variant", () => {
+      const result = formatAssistantHeader({ ...baseMsg, variant: "default" }, true, providers)
+      expect(result).toBe("## Assistant (Build · Claude Sonnet 4 · 5.4s)\n\n")
+    })
+
     test("excludes metadata when disabled", () => {
       const result = formatAssistantHeader(baseMsg, false)
       expect(result).toBe("## Assistant\n\n")
