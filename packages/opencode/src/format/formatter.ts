@@ -411,3 +411,13 @@ export const dfmt: Info = {
     return [match, "-i", "$FILE"]
   },
 }
+
+export const stylua: Info = {
+  name: "stylua",
+  extensions: [".lua"],
+  async enabled() {
+    const match = which("stylua")
+    if (!match) return false
+    return [match, "$FILE"]
+  },
+}
