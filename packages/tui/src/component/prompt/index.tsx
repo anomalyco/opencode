@@ -1851,12 +1851,10 @@ export function Prompt(props: PromptProps) {
                 flexGrow={1}
                 flexShrink={1}
                 minWidth={0}
-                ref={(renderable: BoxRenderable) =>
-                  setTimeout(() => {
-                    if (!renderable.isDestroyed) setLocationWidth(renderable.width)
-                  }, 0)
-                }
-                on:resized={(event: { width: number }) => setLocationWidth(event.width)}
+                onSizeChange={function (this: BoxRenderable) {
+                  const width = this.width
+                  queueMicrotask(() => setLocationWidth(width))
+                }}
               >
                 <Switch>
                   <Match when={status() === "running"}>
