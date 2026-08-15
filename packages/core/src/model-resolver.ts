@@ -168,7 +168,6 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ) {
-  const noAuth = model.settings?.apiKey === "" && credential === undefined
   const resolved = prepareRuntimeModel(model, credential)
   const packageName = Provider.packageName(resolved.package)
   const key = apiKey(resolved, credential)
@@ -239,7 +238,6 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
       return LanguageModel.update(runtime, {
-        route: noAuth ? runtime.route.with({ auth: Auth.none }) : runtime.route,
         provider: resolved.providerID,
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, resolved.compatibility)
@@ -360,17 +358,21 @@ export const layer = Layer.effect(
       const connection = yield* integrations.connection.active(
         provider?.integrationID ?? Integration.ID.make(selected.providerID),
       )
-      const model = yield* resolveModel(
-        selected,
-        variant,
-        connection ? yield* integrations.connection.resolve(connection) : undefined,
-        {
-          loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
-          loadAISDK: (model) => aisdk.model(model),
-        },
-      )
+      const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
+      const runtimeInfo = yield* withVariant(selected, variant)
+      const model = yield* fromCatalogModel(runtimeInfo, credential, {
+        loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
+        loadAISDK: (model) => aisdk.model(model),
+      })
+      const runtime =
+        provider?.activation === "enabled" &&
+        credential === undefined &&
+        !hasConfiguredAuth(runtimeInfo) &&
+        usesAPIKeyAuth(runtimeInfo.package)
+          ? LanguageModel.update(model, { route: model.route.with({ auth: Auth.none }) })
+          : model
       return {
-        model,
+        model: runtime,
         ref: Ref.make({
           id: selected.id,
           providerID: selected.providerID,
@@ -400,6 +402,35 @@ export const layer = Layer.effect(
     })
   }),
 )
+
+function hasConfiguredAuth(model: Info) {
+  return [model.settings?.apiKey, model.settings?.authToken, model.settings?.accessToken].some(
+    (value) => typeof value === "string" && value !== "",
+  )
+}
+
+function usesAPIKeyAuth(packageName: string | undefined) {
+  const name = Provider.packageName(packageName)
+  return (
+    name === "@ai-sdk/openai" ||
+    name === "@ai-sdk/anthropic" ||
+    name === "@ai-sdk/openai-compatible" ||
+    name === "@ai-sdk/google" ||
+    name === "@ai-sdk/xai" ||
+    name === "@openrouter/ai-sdk-provider" ||
+    name === "@ai-sdk/azure" ||
+    name === "@opencode-ai/ai/providers/openai" ||
+    name?.startsWith("@opencode-ai/ai/providers/openai/") === true ||
+    name === "@opencode-ai/ai/providers/anthropic" ||
+    name === "@opencode-ai/ai/providers/anthropic-compatible" ||
+    name === "@opencode-ai/ai/providers/openai-compatible" ||
+    name === "@opencode-ai/ai/providers/google" ||
+    name === "@opencode-ai/ai/providers/xai" ||
+    name === "@opencode-ai/ai/providers/openrouter" ||
+    name === "@opencode-ai/ai/providers/azure" ||
+    name?.startsWith("@opencode-ai/ai/providers/azure/") === true
+  )
+}
 
 export const node = makeLocationNode({
   service: Service,

@@ -347,6 +347,8 @@ describe("OpencodePlugin", () => {
         })
         yield* addPlugin()
         expect(required(yield* catalog.provider.get(Provider.ID.opencode)).settings?.apiKey).toBe("public")
+        expect(required(yield* catalog.provider.get(Provider.ID.opencode)).activation).toBe("enabled")
+        expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(Provider.ID.opencode)
         expect(required(yield* catalog.model.get(Provider.ID.opencode, Model.ID.make("free"))).enabled).toBe(true)
       }),
     ),

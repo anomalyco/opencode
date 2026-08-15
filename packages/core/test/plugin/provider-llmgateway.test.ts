@@ -60,14 +60,14 @@ describe("LLMGatewayPlugin", () => {
       })
       yield* catalog.transform((catalog) => {
         catalog.provider.update(Provider.ID.make("llmgateway"), (provider) => {
-          provider.disabled = true
+          provider.activation = "disabled"
           provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
           provider.settings = { baseURL: "https://api.llmgateway.io/v1" }
         })
       })
       yield* addPlugin()
 
-      expect((yield* catalog.provider.get(Provider.ID.make("llmgateway")))?.disabled).toBe(true)
+      expect((yield* catalog.provider.get(Provider.ID.make("llmgateway")))?.activation).toBe("disabled")
       expect((yield* catalog.provider.get(Provider.ID.make("llmgateway")))?.headers).toBeUndefined()
     }),
   )

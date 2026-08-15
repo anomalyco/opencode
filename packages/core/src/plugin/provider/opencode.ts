@@ -178,7 +178,10 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
       if (!item) return
       const hasKey = Boolean(process.env.OPENCODE_API_KEY || connected || item.provider.settings?.apiKey)
       catalog.provider.update(item.provider.id, (provider) => {
-        if (!hasKey) provider.settings = { ...provider.settings, apiKey: "public" }
+        if (!hasKey) {
+          provider.activation = "enabled"
+          provider.settings = { ...provider.settings, apiKey: "public" }
+        }
       })
       if (hasKey) return
       for (const model of item.models.values()) {

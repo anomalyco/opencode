@@ -192,7 +192,7 @@ export type ProviderInfo = {
   id: string
   integrationID?: string
   name: string
-  disabled?: boolean
+  activation: "auto" | "enabled" | "disabled"
   package: string
   settings?: { [x: string]: any }
   headers?: { [x: string]: string }

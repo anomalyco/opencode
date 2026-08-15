@@ -102,7 +102,7 @@ describe("Catalog", () => {
     }).pipe(Effect.provide(localCatalogLayer))
   })
 
-  it.effect("requires an explicit empty API key for a credentialless gateway", () => {
+  it.effect("makes an explicitly enabled provider available without a connection", () => {
     const integrationID = Integration.ID.make("gateway")
     const providerID = Provider.ID.make("remote")
     const localCatalogLayer = Layer.fresh(
@@ -124,7 +124,7 @@ describe("Catalog", () => {
 
       yield* catalog.transform((editor) =>
         editor.provider.update(providerID, (provider) => {
-          provider.settings = { ...provider.settings, apiKey: "" }
+          provider.activation = "enabled"
         }),
       )
       expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])
@@ -307,7 +307,7 @@ describe("Catalog", () => {
       const fallbackModel = Model.ID.make("fallback")
       yield* catalog.transform((catalog) => {
         catalog.provider.update(disabledProvider, (provider) => {
-          provider.disabled = true
+          provider.activation = "disabled"
         })
         catalog.model.update(disabledProvider, disabledModel, () => {})
         catalog.provider.update(enabledProvider, () => {})

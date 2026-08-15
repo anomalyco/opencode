@@ -65,8 +65,8 @@ const layer = Layer.effect(
     const integrations = yield* Integration.Service
 
     const available = (provider: Provider.Info, integration: Integration.Info | undefined) => {
-      if (provider.disabled) return false
-      if (typeof provider.settings?.apiKey === "string") return true
+      if (provider.activation === "disabled") return false
+      if (provider.activation === "enabled") return true
       if (integration?.connections.length) return true
       return provider.integrationID === undefined && !integration
     }

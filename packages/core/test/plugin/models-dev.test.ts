@@ -64,6 +64,7 @@ describe("ModelsDevPlugin", () => {
               info: {
                 id: providerID,
                 name: "Acme",
+                activation: "auto",
                 package: Provider.aisdk("@ai-sdk/openai-compatible"),
                 settings: { baseURL: "https://api.acme.test/v1" },
               },
@@ -239,6 +240,7 @@ describe("ModelsDevPlugin", () => {
           info: {
             id: providerID,
             name: "Acme",
+            activation: "auto",
             package: Provider.aisdk("@ai-sdk/openai-compatible"),
           },
           environment: [],
@@ -330,6 +332,7 @@ describe("ModelsDevPlugin", () => {
                       info: {
                         id: providerID,
                         name: "Acme",
+                        activation: "auto",
                         package: Provider.aisdk("@ai-sdk/openai-compatible"),
                         settings: { baseURL: "https://${ACME_HOST}/${UNDECLARED_HOST}/v1" },
                       },
@@ -385,6 +388,7 @@ describe("ModelsDevPlugin", () => {
         info: {
           id: Provider.ID.make(id),
           name,
+          activation: "auto",
           package: Provider.aisdk(packageName),
         },
         environment: id === "azure" ? ["AZURE_RESOURCE_NAME", environment] : [environment],
