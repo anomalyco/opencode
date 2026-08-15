@@ -18,9 +18,9 @@ const categories = [
   "disabled-by-default-v8.cpu_profiler",
 ]
 
-export async function startChromeTrace(page: Page, name: string) {
+export async function startChromeTrace(page: Page, name: string): Promise<undefined | (() => Promise<string>)> {
   const directory = process.env.OPENCODE_PERFORMANCE_TRACE_DIR
-  if (!directory) return
+  if (!directory) return undefined
 
   const selectors = process.env.OPENCODE_PERFORMANCE_SELECTOR_TRACE === "1"
   const file = await prepareChromeTrace(directory, name, selectors)
@@ -86,7 +86,8 @@ async function writeProtocolStream(session: CDPSession, handle: string, file: st
   try {
     while (true) {
       const chunk = await session.send("IO.read", { handle })
-      await output.write(chunk.base64Encoded ? Buffer.from(chunk.data, "base64") : chunk.data)
+      if (chunk.base64Encoded) await output.write(Buffer.from(chunk.data, "base64"))
+      else await output.write(chunk.data)
       if (chunk.eof) break
     }
   } finally {

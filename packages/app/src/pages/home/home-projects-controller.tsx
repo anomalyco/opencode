@@ -1,10 +1,8 @@
 import { useDirectoryPicker } from "@/components/directory-picker"
 import { useServerActionsController } from "@/components/server/server-management-controller"
 import { useSettingsCommand } from "@/components/settings-dialog"
-import { DialogServerV2 } from "@/components/settings-v2/dialog-server-v2"
 import { type LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
-import { useNotification } from "@/context/notification"
 import { usePlatform } from "@/context/platform"
 import { ServerConnection } from "@/context/servers"
 import { closeHomeProject, errorMessage, homeProjectDirectories } from "@/pages/layout/helpers"
@@ -63,7 +61,11 @@ export function createHomeProjectsController(home: HomeController) {
         serverManagement.defaults.set(conn ? ServerConnection.key(conn) : null),
       canRemove: (conn: ServerConnection.Any) => serverManagement.connection.canRemove(ServerConnection.key(conn)),
       remove: (conn: ServerConnection.Any) => serverManagement.connection.remove(ServerConnection.key(conn)),
-      edit: (conn: ServerConnection.Http) => dialog.show(() => <DialogServerV2 mode="edit" server={conn} />),
+      edit: (conn: ServerConnection.Http) => {
+        void import("@/components/settings-v2/dialog-server-v2").then(({ DialogServerV2 }) => {
+          void dialog.show(() => <DialogServerV2 mode="edit" server={conn} />)
+        })
+      },
       focus: home.selection.focusServer,
     },
     project: {

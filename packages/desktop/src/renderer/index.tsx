@@ -10,37 +10,40 @@ import {
   type Locale,
   type Platform,
   PlatformProvider,
+  preloadRoute,
   createDraftStore,
   ServerConnection,
   useCommand,
   useWslServers,
   useLanguage,
-} from "@opencode-ai/app"
+} from "@opencode-ai/app/desktop"
 import type { UpdaterState } from "@opencode-ai/app/updater"
-import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { createMemoryHistory, MemoryRouter, type BaseRouterProps } from "@solidjs/router"
-import { createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, lazy, onCleanup, Show, Suspense } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
-import { t } from "./i18n"
 import { initializationData } from "./initialization"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import { windowFullscreen } from "./window-fullscreen"
 import { availableStartupServer, readyWslConnections } from "./wsl/connections"
-import { MigrationStatus } from "./migration-status"
 import "./styles.css"
 import { Splash } from "@opencode-ai/ui/logo"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 
+const MigrationStatus = lazy(() => import("./migration-status").then((module) => ({ default: module.MigrationStatus })))
+
 const root = document.getElementById("root")
 const version = import.meta.env.OPENCODE_VERSION ?? pkg.version
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
-  throw new Error(t("desktop.error.dev.rootNotFound"))
+  throw new Error(
+    "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
+  )
 }
 
 if (import.meta.env.VITE_SENTRY_DSN) {
+  const Sentry = await import("@sentry/solid")
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
     environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
@@ -336,6 +339,7 @@ function LoadingSplash() {
 
 function DesktopRoot(props: { windowState: DesktopWindowState }) {
   const platform = createPlatform(props.windowState)
+  const initialUrl = getLastActiveUrl(platform.windowID ?? "browser")
   const loadLocale = async () => {
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
@@ -353,6 +357,7 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
 
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(loadLocale)
+  const [route] = createResource(() => preloadRoute(initialUrl))
   const router = (props: BaseRouterProps) => (
     <DesktopMemoryRouter {...props} windowID={platform.windowID ?? "browser"} />
   )
@@ -379,9 +384,7 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
   function App() {
     const wslServers = useWslServers()
     const language = useLanguage()
-    const ready = createMemo(
-      () => !defaultServer.loading && !sidecar.loading && !locale.loading && !wslServers.isLoading,
-    )
+    const ready = createMemo(() => !defaultServer.loading && !sidecar.loading && !locale.loading && !route.loading)
     const servers = createMemo(() => {
       const data = initializationData(sidecar)
       const list: ServerConnection.Any[] = []
@@ -408,15 +411,13 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
         <Show when={effectiveDefaultServer()} keyed>
           {(key) => (
             <AppInterface defaultServer={key} servers={servers()} router={router} startup={onboarding.promise}>
-              <DesktopFirstLaunchOnboarding
-                initialUrl={getLastActiveUrl(platform.windowID ?? "browser")}
-                onLoaded={onboarding.resolve}
-                serverKey={key}
-              />
+              <DesktopFirstLaunchOnboarding initialUrl={initialUrl} onLoaded={onboarding.resolve} serverKey={key} />
               <DesktopEffects />
-              <Show when={initializationData(sidecar)} keyed>
-                {(server) => <MigrationStatus server={server} />}
-              </Show>
+              <Suspense fallback={null}>
+                <Show when={initializationData(sidecar)} keyed>
+                  {(server) => <MigrationStatus server={server} />}
+                </Show>
+              </Suspense>
             </AppInterface>
           )}
         </Show>

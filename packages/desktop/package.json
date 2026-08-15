@@ -50,7 +50,7 @@
     "@valibot/to-json-schema": "1.6.0",
     "electron": "42.3.3",
     "electron-builder": "26.15.2",
-    "electron-vite": "^5",
+    "electron-vite": "6.0.0-beta.1",
     "solid-js": "catalog:",
     "sury": "11.0.0-alpha.4",
     "typescript": "~5.6.2",

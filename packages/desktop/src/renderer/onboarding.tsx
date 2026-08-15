@@ -1,4 +1,4 @@
-import { ServerConnection, useServers, useTabs } from "@opencode-ai/app"
+import { ServerConnection, useServers, useTabs } from "@opencode-ai/app/desktop"
 import { onMount } from "solid-js"
 
 export function DesktopFirstLaunchOnboarding(props: {
@@ -15,11 +15,11 @@ export function DesktopFirstLaunchOnboarding(props: {
 
   async function runFirstLaunchOnboarding() {
     try {
-      await Promise.all([tabs.ready.promise, tabs.recentReady.promise].map((p) => p ?? Promise.resolve()))
-      const existingInstall = await window.api.isOldLayoutEligible()
-
       const pending = await window.api.isFirstLaunchOnboardingPending()
       if (!pending) return
+
+      await Promise.all([tabs.ready.promise, tabs.recentReady.promise].map((p) => p ?? Promise.resolve()))
+      const existingInstall = await window.api.isOldLayoutEligible()
 
       const shouldTrigger =
         !existingInstall &&

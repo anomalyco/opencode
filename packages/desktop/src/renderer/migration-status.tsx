@@ -1,5 +1,5 @@
 import { OpenCode, type MigrationV1StatusOutput } from "@opencode-ai/client/promise"
-import { useLanguage } from "@opencode-ai/app"
+import { useLanguage } from "@opencode-ai/app/desktop"
 import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
 import { showToastV2, toasterV2, ToastV2 } from "@opencode-ai/ui/v2/toast-v2"
 import { createRoot, createSignal, onCleanup, onMount } from "solid-js"

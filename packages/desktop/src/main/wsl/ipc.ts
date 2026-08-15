@@ -4,6 +4,10 @@ import type { WslServersController } from "./servers"
 import type { WslServersState } from "../../preload/types"
 import { nativeT } from "../native-translations"
 
+export function registerWslInitialization(ready: Promise<void>) {
+  ipcMain.handle("wsl-servers-await-initialization", () => ready)
+}
+
 export function registerWslIpcHandlers(controller?: WslServersController) {
   if (!controller) {
     registerUnavailableWslIpcHandlers()
