@@ -55,8 +55,7 @@ export function DialogSessionList() {
           ...(allProjects
             ? {}
             : {
-                project: current.project.id,
-                subpath: path.relative(current.project.directory, current.directory).replaceAll("\\", "/"),
+                directory: current.directory,
               }),
           ...(query ? { search: query } : {}),
           limit: 50,
