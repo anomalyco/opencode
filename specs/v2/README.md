@@ -25,13 +25,13 @@ Generated clients follow the assembled public `HttpApi`. GitHub issues own activ
 | [Session](./session.md) | Explain prompt admission, execution, instructions, compaction, and recovery boundaries. |
 | [Tools](./tools.md)     | Explain tool construction, registration, execution, and outcome laws.                   |
 
-## Decisions And Proposals
+## Decision Records
 
 | Document                                                          | Status                     | Job                                                                         |
 | ----------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- |
 | [Event stream](./event-stream-architecture.md)                    | Accepted and implemented   | Record why public events use one encoded feed with independent queues.      |
 | [Managed restart continuation](./session-restart-continuation.md) | Superseded decision record | Preserve the graceful-only design replaced by write-ahead execution claims. |
-| [Provider policy](./provider-policy.md)                           | Proposed and unimplemented | Explore provider authorization independently from provider configuration.   |
+| [Provider policy](./provider-policy.md)                           | Accepted and implemented   | Record provider authorization independently from provider configuration.    |
 
 ## Historical Context
 
