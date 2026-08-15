@@ -71,6 +71,7 @@ import { DialogImagePreview } from "../dialog-image-preview"
 import { useDirectoryRecents } from "../../prompt/directory-recents"
 import { directoryRecentValue } from "../../prompt/directory-completion"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
+import { truncateFilePath } from "../../ui/file-path"
 
 export type PromptProps = {
   sessionID?: string
@@ -1555,6 +1556,12 @@ export function Prompt(props: PromptProps) {
     const branch = data.location.vcs.info(location)?.branch.current
     return branch ? `${directory}:${branch}` : directory
   })
+  const [locationWidth, setLocationWidth] = createSignal(dimensions().width)
+  const locationLabelDisplay = createMemo(() => {
+    const label = locationLabel()
+    if (!label) return
+    return truncateFilePath(label, locationWidth())
+  })
   const locationActions = useWorkingDirectoryActions({
     directory: () => footerLocation()?.directory,
     onMove: () => void move.open(),
@@ -1840,7 +1847,17 @@ export function Prompt(props: PromptProps) {
         <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
           <Slot path="prompt.footer" input={footerInput()}>
             <Slot path="prompt.footer.status" input={footerInput()}>
-              <box flexGrow={1} flexShrink={1} minWidth={0}>
+              <box
+                flexGrow={1}
+                flexShrink={1}
+                minWidth={0}
+                ref={(renderable: BoxRenderable) =>
+                  setTimeout(() => {
+                    if (!renderable.isDestroyed) setLocationWidth(renderable.width)
+                  }, 0)
+                }
+                on:resized={(event: { width: number }) => setLocationWidth(event.width)}
+              >
                 <Switch>
                   <Match when={status() === "running"}>
                     <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
@@ -1877,7 +1894,7 @@ export function Prompt(props: PromptProps) {
                     </box>
                   </Match>
                   <Match when={true}>
-                    <Show when={!props.hint && locationLabel()} fallback={props.hint ?? <text />}>
+                    <Show when={!props.hint && locationLabelDisplay()} fallback={props.hint ?? <text />}>
                       {(location) => (
                         <text
                           id="prompt.footer.location"

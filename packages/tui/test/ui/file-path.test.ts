@@ -14,6 +14,10 @@ describe("truncateFilePath", () => {
     expect(truncateFilePath(path, 19)).toBe("…/dialog-select.tsx")
   })
 
+  test("preserves the working directory and branch suffix", () => {
+    expect(truncateFilePath("~/code/experiments/category-theory:main", 30)).toBe("…/experi…/category-theory:main")
+  })
+
   test("uses remaining width for part of a long parent segment", () => {
     const path = "/private/var/folders/run-17f048ec-dbb2-4b36-860c-98637bb51a8d/files"
     expect(truncateFilePath(path, 40)).toBe("/…/run-17f048ec-dbb2-4b36-860c-98…/files")
