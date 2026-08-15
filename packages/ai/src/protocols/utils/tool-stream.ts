@@ -1,15 +1,18 @@
 import { Effect } from "effect"
 import { AIError, LLMEvent, type ProviderMetadata, type ToolCall, type ToolInputError } from "../../schema/index.js"
-import { eventError, parseToolInput, type ToolAccumulator } from "../shared.js"
+import { eventError, parseToolInput } from "../shared.js"
 
 type StreamKey = string | number
 
 /**
  * One pending streamed tool call. Providers emit the tool identity and JSON
- * argument text across separate chunks; `input` is the raw JSON string collected
- * so far, not the parsed object.
+ * argument text across separate chunks. Keep chunks separate until the terminal
+ * boundary so appending small provider fragments stays linear.
  */
-export interface PendingTool extends ToolAccumulator {
+export interface PendingTool {
+  readonly id: string
+  readonly name: string
+  readonly chunks: string[]
   readonly providerExecuted?: boolean
   readonly providerMetadata?: ProviderMetadata
 }
@@ -65,7 +68,7 @@ const inputDelta = (tool: PendingTool, text: string) =>
   })
 
 const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
-  const raw = inputOverride ?? tool.input
+  const raw = inputOverride ?? tool.chunks.join("")
   return parseToolInput(route, tool.name, raw).pipe(
     Effect.map((input): ToolCall | ToolInputError =>
       LLMEvent.toolCall({
@@ -123,8 +126,8 @@ export const isError = <K extends StreamKey>(result: AppendOutcome<K> | AIError)
 export const start = <K extends StreamKey>(
   tools: State<K>,
   key: K,
-  tool: Omit<PendingTool, "input"> & { readonly input?: string },
-) => withTool(tools, key, { ...tool, input: tool.input ?? "" })
+  tool: Omit<PendingTool, "chunks"> & { readonly input?: string },
+) => withTool(tools, key, { ...tool, chunks: tool.input === undefined ? [] : [tool.input] })
 
 /**
  * Append a streamed argument delta, starting the tool if this provider encodes
@@ -144,10 +147,12 @@ export const appendOrStart = <K extends StreamKey>(
   const name = current?.name ?? delta.name
   if (!id || !name) return eventError(route, missingToolMessage)
 
-  const tool = {
+  const chunks = current?.chunks ?? []
+  if (delta.text.length > 0) chunks.push(delta.text)
+  const tool: PendingTool = {
     id,
     name,
-    input: `${current?.input ?? ""}${delta.text}`,
+    chunks,
     providerExecuted: current?.providerExecuted,
     providerMetadata: current?.providerMetadata,
   }
@@ -171,7 +176,8 @@ export const appendExisting = <K extends StreamKey>(
   const current = tools[key]
   if (!current) return eventError(route, missingToolMessage)
   if (text.length === 0) return { tools, tool: current, events: [] }
-  return appendTool(tools, key, { ...current, input: `${current.input}${text}` }, text)
+  current.chunks.push(text)
+  return appendTool(tools, key, current, text)
 }
 
 /**

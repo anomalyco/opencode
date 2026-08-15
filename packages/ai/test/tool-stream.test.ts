@@ -19,6 +19,7 @@ describe("ToolStream", () => {
       if (ToolStream.isError(first)) return yield* first
       const second = ToolStream.appendOrStart(ADAPTER, first.tools, 0, { text: ':"weather"}' }, "missing tool")
       if (ToolStream.isError(second)) return yield* second
+      expect(second.tools[0]?.chunks).toEqual(['{"query"', ':"weather"}'])
       const finished = yield* ToolStream.finish(ADAPTER, second.tools, 0)
 
       expect(first.events).toEqual([

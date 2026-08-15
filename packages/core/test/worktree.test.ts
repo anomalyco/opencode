@@ -3,7 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { and, eq, isNull } from "drizzle-orm"
-import { Effect, Fiber, Stream } from "effect"
+import { Deferred, Effect, Fiber, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -126,6 +126,38 @@ describe("Worktree", () => {
         .pipe(Effect.flip)
       expect(error).toBeInstanceOf(Worktree.StrategyUnavailableError)
       if (error instanceof Worktree.StrategyUnavailableError) expect(error.strategy).toBe(unavailable)
+    }),
+  )
+
+  it.live("coalesces concurrent boot refreshes by project", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktrees = yield* Worktree.Service
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let calls = 0
+      yield* worktrees.register({
+        id: Worktree.StrategyID.make("coalesced-test"),
+        create: (input) => Effect.succeed({ directory: input.directory }),
+        remove: () => Effect.void,
+        list: () =>
+          Effect.gen(function* () {
+            calls++
+            yield* Deferred.succeed(started, undefined)
+            yield* Deferred.await(release)
+            return []
+          }),
+      })
+
+      const first = yield* worktrees.refreshAfterBoot({ projectID: input.projectID }).pipe(Effect.forkScoped)
+      yield* Deferred.await(started)
+      const second = yield* worktrees.refreshAfterBoot({ projectID: input.projectID }).pipe(Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      expect(calls).toBe(1)
+      yield* Fiber.interrupt(first)
+      yield* Deferred.succeed(release, undefined)
+      expect(yield* Fiber.join(second)).toEqual({ updated: [], removed: [] })
     }),
   )
 

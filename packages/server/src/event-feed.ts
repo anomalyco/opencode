@@ -2,6 +2,7 @@ export * as EventFeed from "./event-feed"
 
 import { Bus } from "@opencode-ai/core/bus"
 import { Event } from "@opencode-ai/schema/event"
+import { EventManifest } from "@opencode-ai/schema/event-manifest"
 import { isOpenCodeEvent, OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
 import { Cause, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "effect"
 
@@ -27,9 +28,15 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/server/EventFeed") {}
 
 const encode = Schema.encodeUnknownSync(OpenCodeEvent)
+const encoders = new Map<string, (event: unknown) => unknown>(
+  EventManifest.ServerDefinitions.map((definition) => {
+    const encode = Schema.encodeUnknownSync(definition)
+    return [definition.type, encode] as const
+  }),
+)
 
 export function frame(event: OpenCodeEvent) {
-  return `data: ${JSON.stringify(encode(event))}\n\n`
+  return `data: ${JSON.stringify(encoders.get(event.type)?.(event) ?? encode(event))}\n\n`
 }
 
 export const make = Effect.fn("EventFeed.make")(function* (

@@ -1,6 +1,7 @@
 export * as PluginHost from "./host.js"
 
 import { Plugin } from "@opencode-ai/plugin/effect"
+import type { EventSelection } from "@opencode-ai/plugin/effect/event"
 import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import type { CredentialOAuth } from "@opencode-ai/sdk/v2/types"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
@@ -59,6 +60,23 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
     ref.directory === location.directory && ref.workspaceID === location.workspaceID
   const response = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(Effect.map((data) => ({ location: locationInfo(), data })))
+  const subscribeEvents = (selection?: EventSelection) => {
+    if (selection === undefined)
+      return bus.subscribe(EventManifest.ServerDefinitions).pipe(Stream.provideService(Location.Service, location))
+    const types = typeof selection === "string" ? [selection] : selection
+    const definitions = types
+      .map((type) => EventManifest.Server.get(type))
+      .filter((definition) => definition !== undefined)
+    if (definitions.length !== types.length) {
+      const unknown = types.find((type) => !EventManifest.Server.has(type))
+      return Stream.die(new Error(`Unknown plugin event type: ${unknown ?? "unknown"}`))
+    }
+    const first = definitions[0]
+    if (first === undefined) return Stream.die(new Error("Plugin event selection cannot be empty"))
+    return bus
+      .subscribe([first, ...definitions.slice(1)])
+      .pipe(Stream.filter(EventManifest.isServer), Stream.provideService(Location.Service, location))
+  }
 
   return {
     app,
@@ -180,7 +198,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
         }),
     },
     event: {
-      subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)),
+      subscribe: subscribeEvents,
     },
     integration: {
       list: () => response(integration.list()),

@@ -82,7 +82,7 @@ export const Plugin = define({
       .pipe(
         Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isAgentSource(entries, update.path))),
       )
-    const configUpdates = ctx.event.subscribe().pipe(Stream.filter((event) => event.type === "config.updated"))
+    const configUpdates = ctx.event.subscribe("config.updated")
     yield* Stream.merge(sourceChanges, configUpdates).pipe(
       Stream.debounce("100 millis"),
       Stream.runForEach(() => reload),

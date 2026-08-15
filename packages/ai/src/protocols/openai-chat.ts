@@ -226,7 +226,7 @@ type OpenAIChatRequestMessage = LLMRequest["messages"][number]
 interface PendingToolDelta {
   readonly id?: string
   readonly name?: string
-  readonly input: string
+  readonly chunks: string[]
 }
 
 export interface ParserState {
@@ -754,13 +754,15 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       const pending = pendingTools[index]
       const id = current?.id ?? pending?.id ?? (tool.id || undefined)
       const name = current?.name ?? pending?.name ?? (tool.function?.name || undefined)
-      const text = `${pending?.input ?? ""}${tool.function?.arguments ?? ""}`
+      const delta = tool.function?.arguments ?? ""
       latestToolIndex = index
       nextToolIndex = Math.max(nextToolIndex, index + 1)
       if (!current && (!id || !name)) {
+        const chunks = pending?.chunks ?? []
+        if (delta.length > 0) chunks.push(delta)
         pendingTools = {
           ...pendingTools,
-          [index]: { id: id || undefined, name: name || undefined, input: text },
+          [index]: { id: id || undefined, name: name || undefined, chunks },
         }
         continue
       }
@@ -772,7 +774,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         ADAPTER,
         tools,
         index,
-        { id: id || undefined, name: name || undefined, text },
+        { id: id || undefined, name: name || undefined, text: `${pending?.chunks.join("") ?? ""}${delta}` },
         "OpenAI Chat tool call delta is missing id or name",
       )
       if (ToolStream.isError(result)) return yield* result

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Message, SystemPart } from "@opencode-ai/ai"
-import { DateTime, Effect, Schema } from "effect"
+import { DateTime, Effect, Schema, Stream } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Model } from "@opencode-ai/core/model"
@@ -19,7 +19,10 @@ import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { define } from "@opencode-ai/plugin/promise/plugin"
 import { Money } from "@opencode-ai/schema/money"
+import { Config } from "@opencode-ai/schema/config"
+import { Event } from "@opencode-ai/schema/event"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
+import type { EventSelection } from "@opencode-ai/plugin/effect/event"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 import { host as testHost } from "./host"
@@ -27,6 +30,75 @@ import { host as testHost } from "./host"
 const it = testEffect(PluginTestLayer)
 
 describe("fromPromise", () => {
+  it.effect("forwards selected public event types", () =>
+    Effect.gen(function* () {
+      let selected: readonly string[] | undefined
+      let received: unknown
+      const host = testHost({
+        event: {
+          subscribe: (selection?: EventSelection) => {
+            selected = selection === undefined ? undefined : typeof selection === "string" ? [selection] : selection
+            return Stream.make({
+              id: Event.ID.create(),
+              created: DateTime.makeUnsafe(1),
+              type: Config.Event.Updated.type,
+              data: {},
+            })
+          },
+        },
+      })
+
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-selected-events",
+          setup: async (ctx) => {
+            for await (const event of ctx.event.subscribe("config.updated")) {
+              received = event
+              break
+            }
+          },
+        }),
+      ).effect(host)
+
+      expect(selected).toEqual(["config.updated"])
+      expect(received).toMatchObject({ type: "config.updated", created: 1 })
+    }),
+  )
+
+  it.effect("closes active event iterators with the plugin scope", () =>
+    Effect.gen(function* () {
+      let begin: (() => void) | undefined
+      let released = false
+      const started = new Promise<void>((resolve) => (begin = resolve))
+      const host = testHost({
+        event: {
+          subscribe: () =>
+            Stream.unwrap(
+              Effect.sync(() => {
+                begin?.()
+                return Stream.never
+              }),
+            ).pipe(Stream.ensuring(Effect.sync(() => (released = true)))),
+        },
+      })
+
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-event-lifecycle",
+          setup: async (ctx) => {
+            const iterator = ctx.event.subscribe("config.updated")[Symbol.asyncIterator]()
+            void iterator.next().catch(() => undefined)
+            await started
+          },
+        }),
+      )
+        .effect(host)
+        .pipe(Effect.scoped)
+
+      expect(released).toBe(true)
+    }),
+  )
+
   it.effect("adapts session creation through the protocol schema", () =>
     Effect.gen(function* () {
       let seen: unknown

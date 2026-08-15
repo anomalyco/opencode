@@ -121,12 +121,25 @@ describe("Bus", () => {
       yield* Effect.yieldNow
 
       yield* bus.publish(Message, { text: "hello" })
+      yield* bus.publish(GlobalMessage, { text: "ignored" })
       yield* bus.publish(CountMessage, { count: 2 })
 
       const received = Array.from(yield* Fiber.join(fiber)).map((event) =>
         event.type === "test.message" ? event.data.text : event.data.count,
       )
       expect(received).toEqual(["hello", 2])
+    }),
+  )
+
+  it.effect("delivers duplicate selected definitions once", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const fiber = yield* bus.subscribe([Message, Message]).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      const event = yield* bus.publish(Message, { text: "hello" })
+
+      expect(Array.from(yield* Fiber.join(fiber))).toEqual([event])
     }),
   )
 

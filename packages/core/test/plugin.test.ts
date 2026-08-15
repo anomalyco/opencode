@@ -7,6 +7,8 @@ import { Agent } from "@opencode-ai/core/agent"
 import { Bus } from "@opencode-ai/core/bus"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
+import { Location } from "@opencode-ai/core/location"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Tool } from "@opencode-ai/core/tool"
@@ -24,14 +26,22 @@ describe("Plugin", () => {
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const bus = yield* Bus.Service
+      const location = yield* Location.Service
       const host = yield* PluginHost.make(plugins)
-      const received = yield* host.event.subscribe().pipe(
+      const received = yield* host.event.subscribe("config.updated").pipe(
         Stream.filter((event) => event.type === "config.updated"),
         Stream.runHead,
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of({ ...location, directory: AbsolutePath.make(location.directory + "-other") }),
+        ),
         Effect.forkScoped({ startImmediately: true }),
       )
       yield* Effect.sleep("10 millis")
 
+      yield* bus.publish(Agent.Event.Updated, {})
+      yield* Effect.sleep("10 millis")
+      expect(received.pollUnsafe()).toBeUndefined()
       yield* bus.publish(ConfigSchema.Event.Updated, {})
 
       expect((yield* Fiber.join(received)).valueOrUndefined?.type).toBe("config.updated")

@@ -463,7 +463,7 @@ describe("LocationServiceMap", () => {
             const secondRef = Location.Ref.make({ directory: AbsolutePath.make(second.path) })
             const firstContext = yield* locations.contextEffect(firstRef)
             const secondContext = yield* locations.contextEffect(secondRef)
-            const received = { first: 0, second: 0 }
+            const received = { first: 0, second: 0, global: 0 }
             yield* bus.subscribe(Config.Event.Updated).pipe(
               Stream.runForEach(() => Effect.sync(() => received.first++)),
               Effect.provideContext(firstContext),
@@ -474,12 +474,18 @@ describe("LocationServiceMap", () => {
               Effect.provideContext(secondContext),
               Effect.forkScoped({ startImmediately: true }),
             )
+            yield* bus.subscribe(Config.Event.Updated).pipe(
+              Stream.runForEach(() => Effect.sync(() => received.global++)),
+              Effect.forkScoped({ startImmediately: true }),
+            )
             yield* Effect.sleep("10 millis")
 
             yield* bus.publish(Config.Event.Updated, {}, { location: firstRef })
+            yield* bus.publish(Config.Event.Updated, {}, { location: secondRef })
+            yield* bus.publish(Config.Event.Updated, {})
             yield* Effect.sleep("10 millis")
 
-            expect(received).toEqual({ first: 1, second: 0 })
+            expect(received).toEqual({ first: 2, second: 2, global: 3 })
           }),
         ),
       ),

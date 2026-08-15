@@ -181,8 +181,15 @@ and plugin options.
 | `ctx.skill`            | `list`, `transform`, `reload`                                                                |
 | `ctx.tool`             | `transform` and `hook`                                                                       |
 | `ctx.aisdk`            | `hook`                                                                                       |
-| `ctx.event`            | `subscribe` to the current public server event stream                                        |
+| `ctx.event`            | `subscribe()` to all public events, one event type, or a non-empty list of event types       |
 | `ctx.options`          | Readonly options from the matching config object                                             |
+
+Pass the event type at subscription time when the plugin only handles selected events:
+
+```ts
+ctx.event.subscribe("config.updated")
+ctx.event.subscribe(["session.created", "session.agent.selected"])
+```
 
 ### Transform hooks
 

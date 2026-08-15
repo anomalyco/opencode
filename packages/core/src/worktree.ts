@@ -1,6 +1,6 @@
 export * as Worktree from "./worktree.js"
 
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Deferred, Effect, FiberSet, Layer, Schema } from "effect"
 import { and, asc, desc, eq, isNotNull, isNull, ne, or } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
@@ -119,6 +119,7 @@ export interface Interface {
   readonly create: (input: CreateInput) => Effect.Effect<Info, Error>
   readonly remove: (input: RemoveInput) => Effect.Effect<void, Error>
   readonly refresh: (input: RefreshInput) => Effect.Effect<RefreshResult, Error>
+  readonly refreshAfterBoot: (input: RefreshInput) => Effect.Effect<RefreshResult, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Worktree") {}
@@ -128,7 +129,7 @@ export const refreshAfterBoot = Effect.gen(function* () {
   const worktrees = yield* Service
   yield* Effect.gen(function* () {
     yield* Effect.logInfo("worktree refresh started", { projectID: location.project.id })
-    const result = yield* worktrees.refresh({ projectID: location.project.id })
+    const result = yield* worktrees.refreshAfterBoot({ projectID: location.project.id })
     yield* Effect.logInfo("worktree refresh done", {
       projectID: location.project.id,
       updated: result.updated,
@@ -147,6 +148,7 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const db = (yield* Database.Service).db
     const bus = yield* Bus.Service
+    const forkRefresh = yield* FiberSet.makeRuntime<never, void, never>()
 
     const changed = Effect.fnUntraced(function* (projectID: ProjectSchema.ID, update: boolean) {
       if (update) yield* bus.publish(Event.Updated, { projectID })
@@ -330,12 +332,35 @@ const layer = Layer.effect(
       return changes
     })
 
+    const bootRefreshes = new Map<ProjectSchema.ID, Deferred.Deferred<RefreshResult, Error>>()
+    const refreshAfterBoot = (input: RefreshInput) =>
+      Effect.suspend(() => {
+        const existing = bootRefreshes.get(input.projectID)
+        if (existing) return Deferred.await(existing)
+        const deferred = Deferred.makeUnsafe<RefreshResult, Error>()
+        bootRefreshes.set(input.projectID, deferred)
+        forkRefresh(
+          refresh(input).pipe(
+            Effect.exit,
+            Effect.tap((exit) =>
+              Effect.sync(() => {
+                if (bootRefreshes.get(input.projectID) === deferred) bootRefreshes.delete(input.projectID)
+                Deferred.doneUnsafe(deferred, exit)
+              }),
+            ),
+            Effect.asVoid,
+          ),
+        )
+        return Deferred.await(deferred)
+      })
+
     return Service.of({
       register,
       list: ops.list,
       create,
       remove,
       refresh,
+      refreshAfterBoot,
     })
   }),
 )

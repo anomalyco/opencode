@@ -4,6 +4,7 @@ import { HttpApiEndpoint, HttpApiSchema } from "effect/unstable/httpapi"
 import { define } from "../effect/plugin.js"
 import type { Context, Plugin } from "./plugin.js"
 import type { Info } from "./tool.js"
+import type { EventSelection } from "./event.js"
 
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
 type Registration = { readonly dispose: () => Promise<void> }
@@ -84,6 +85,12 @@ export function fromPromise(plugin: Plugin) {
         const WebSearchEndpoints = ClientApi.groups["server.websearch"].endpoints
         const scope = yield* Scope.Scope
         const context = yield* Effect.context<Scope.Scope>()
+        const eventIterators = new Set<AsyncIterator<PromiseEvent>>()
+        yield* Effect.addFinalizer(() =>
+          Effect.promise(async () => {
+            await Promise.all(Array.from(eventIterators, (iterator) => Promise.resolve(iterator.return?.())))
+          }),
+        )
 
         // Run a hook registration on the plugin scope and resolve once it is registered.
         const register = (effect: Effect.Effect<HostRegistration, never, Scope.Scope>): Promise<Registration> =>
@@ -149,12 +156,13 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.command.reload()),
           },
           event: {
-            subscribe: () =>
-              Stream.toAsyncIterable(
-                host.event.subscribe().pipe(
+            subscribe: (selection?: EventSelection) =>
+              eventIterable(
+                host.event.subscribe(selection).pipe(
                   Stream.mapEffect((event) => Schema.encodeUnknownEffect(OpenCodeEvent)(event)),
                   Stream.map((event) => event as unknown as PromiseEvent),
                 ),
+                eventIterators,
               ),
           },
           integration: {
@@ -307,6 +315,41 @@ export function fromPromise(plugin: Plugin) {
         yield* Effect.addFinalizer(() => Effect.promise(() => Promise.resolve(cleanup())))
       }),
   })
+}
+
+function eventIterable<E>(stream: Stream.Stream<PromiseEvent, E>, active: Set<AsyncIterator<PromiseEvent>>) {
+  const iterable = Stream.toAsyncIterable(stream)
+  return {
+    [Symbol.asyncIterator]() {
+      const source = iterable[Symbol.asyncIterator]()
+      let done = false
+      const forget = () => active.delete(iterator)
+      const iterator: AsyncIterator<PromiseEvent> = {
+        next: async () => {
+          try {
+            const result = await source.next()
+            if (result.done) {
+              done = true
+              forget()
+            }
+            return result
+          } catch (error) {
+            done = true
+            forget()
+            throw error
+          }
+        },
+        return: async () => {
+          if (done) return { done: true, value: undefined }
+          done = true
+          forget()
+          return source.return ? source.return() : { done: true, value: undefined }
+        },
+      }
+      active.add(iterator)
+      return iterator
+    },
+  }
 }
 
 function attempt<A>(evaluate: (signal: AbortSignal) => PromiseLike<A>) {

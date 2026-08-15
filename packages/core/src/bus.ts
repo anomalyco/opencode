@@ -172,6 +172,12 @@ interface Options {
   readonly persist?: boolean
 }
 
+type RoutedSubscription = {
+  readonly types?: ReadonlySet<string>
+  readonly location?: Location.Ref
+  readonly pubsub: PubSub.PubSub<Event.Payload>
+}
+
 export function configured(options?: Options) {
   return makeGlobalNode({
     service: Service,
@@ -187,6 +193,9 @@ export function configured(options?: Options) {
           durable: new Map<string, Set<PubSub.PubSub<void>>>(),
           typed: new Map<string, PubSub.PubSub<Event.Payload>>(),
         }
+        const routed = new Set<RoutedSubscription>()
+        const routedByType = new Map<string, Set<RoutedSubscription>>()
+        const routedWildcard = new Set<RoutedSubscription>()
         const projectors = new Map<string, Subscriber[]>()
         const listeners = new Array<Subscriber>()
         const durableLocks = KeyedMutex.makeUnsafe<string>()
@@ -203,6 +212,37 @@ export function configured(options?: Options) {
             return created
           })
 
+        const streamRouted = (types?: ReadonlySet<string>, location?: Location.Ref) =>
+          Stream.unwrap(
+            Effect.acquireRelease(
+              Effect.gen(function* () {
+                const pubsub = yield* PubSub.unbounded<Event.Payload>()
+                const subscription = yield* PubSub.subscribe(pubsub)
+                const route = { types, location, pubsub }
+                routed.add(route)
+                if (types === undefined) routedWildcard.add(route)
+                else
+                  for (const type of types) {
+                    const selected = routedByType.get(type) ?? new Set()
+                    selected.add(route)
+                    routedByType.set(type, selected)
+                  }
+                return { route, subscription }
+              }),
+              ({ route }) =>
+                Effect.sync(() => {
+                  routed.delete(route)
+                  if (route.types === undefined) routedWildcard.delete(route)
+                  else
+                    for (const type of route.types) {
+                      const selected = routedByType.get(type)
+                      selected?.delete(route)
+                      if (selected?.size === 0) routedByType.delete(type)
+                    }
+                }).pipe(Effect.andThen(PubSub.shutdown(route.pubsub)), Effect.asVoid),
+            ).pipe(Effect.map(({ subscription }) => Stream.fromSubscription(subscription))),
+          )
+
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
             yield* PubSub.shutdown(pubsub.live)
@@ -212,6 +252,7 @@ export function configured(options?: Options) {
               { discard: true },
             )
             yield* Effect.forEach(pubsub.typed.values(), PubSub.shutdown, { discard: true })
+            yield* Effect.forEach(routed, (route) => PubSub.shutdown(route.pubsub), { discard: true })
           }),
         )
 
@@ -439,6 +480,17 @@ export function configured(options?: Options) {
             )
             const typed = pubsub.typed.get(event.type)
             if (typed) yield* PubSub.publish(typed, event)
+            const routes = [...(routedByType.get(event.type) ?? []), ...routedWildcard]
+            yield* Effect.forEach(routes, (route) => {
+              if (
+                route.location !== undefined &&
+                event.location !== undefined &&
+                (route.location.directory !== event.location.directory ||
+                  route.location.workspaceID !== event.location.workspaceID)
+              )
+                return Effect.void
+              return PubSub.publish(route.pubsub, event)
+            })
             yield* PubSub.publish(pubsub.live, event)
           })
         }
@@ -664,25 +716,10 @@ export function configured(options?: Options) {
             .pipe(Effect.orDie)
         }
 
-        const local = <A extends Event.Payload>(stream: Stream.Stream<A>) =>
-          Stream.unwrap(
-            Effect.serviceOption(Location.Service).pipe(
-              Effect.map((location) =>
-                Option.match(location, {
-                  onNone: () => stream,
-                  onSome: (location) =>
-                    stream.pipe(
-                      Stream.filter(
-                        (event) =>
-                          !event.location ||
-                          (event.location.directory === location.directory &&
-                            event.location.workspaceID === location.workspaceID),
-                      ),
-                    ),
-                }),
-              ),
-            ),
-          )
+        const locationRef = (location: Location.Ref): Location.Ref => ({
+          directory: location.directory,
+          workspaceID: location.workspaceID,
+        })
 
         function subscribe(): Stream.Stream<Event.Payload>
         function subscribe<D extends Event.Definition>(definition: D): Stream.Stream<Event.Payload<D>>
@@ -692,13 +729,40 @@ export function configured(options?: Options) {
         function subscribe(input?: Event.Definition | readonly Event.Definition[]): Stream.Stream<Event.Payload> {
           if (input === undefined) return streamLive()
           if (isDefinition(input)) {
-            return local(Stream.unwrap(getOrCreate(input).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub)))))
+            return Stream.unwrap(
+              Effect.serviceOption(Location.Service).pipe(
+                Effect.flatMap((location) =>
+                  Option.match(location, {
+                    onNone: () => getOrCreate(input).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub))),
+                    onSome: (location) => Effect.succeed(streamRouted(new Set([input.type]), locationRef(location))),
+                  }),
+                ),
+              ),
+            )
           }
-          const types = new Set(input.map((definition) => definition.type))
-          return streamLive().pipe(Stream.filter((event) => types.has(event.type)))
+          return Stream.unwrap(
+            Effect.serviceOption(Location.Service).pipe(
+              Effect.map((location) =>
+                streamRouted(
+                  new Set(input.map((definition) => definition.type)),
+                  Option.match(location, { onNone: () => undefined, onSome: locationRef }),
+                ),
+              ),
+            ),
+          )
         }
 
-        const streamLive = (): Stream.Stream<Event.Payload> => local(Stream.fromPubSub(pubsub.live))
+        const streamLive = (): Stream.Stream<Event.Payload> =>
+          Stream.unwrap(
+            Effect.serviceOption(Location.Service).pipe(
+              Effect.map((location) =>
+                Option.match(location, {
+                  onNone: () => Stream.fromPubSub(pubsub.live),
+                  onSome: (location) => streamRouted(undefined, locationRef(location)),
+                }),
+              ),
+            ),
+          )
 
         const readAfter = (
           aggregateID: string,
