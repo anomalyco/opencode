@@ -137,13 +137,13 @@ export const layer = Layer.effect(
     return Service.of({
       active: coordinator.active,
       interrupt: (sessionID, options) =>
-        coordinator.interrupt(
-          sessionID,
-          "user",
-          options?.continue
-            ? { continue: { request: "steer", when: SessionInbox.has(db, sessionID, "steer") } }
-            : undefined,
-        ),
+        Effect.gen(function* () {
+          yield* coordinator.interrupt(sessionID, "user")
+          if (!options?.continue) return
+          // Resume only steering input from the interrupted intent. Queued next-turn work
+          // stays parked: a steer-scoped drain never promotes queue-delivery rows.
+          if (yield* SessionInbox.has(db, sessionID, "steer")) yield* coordinator.wake(sessionID, "steer")
+        }),
       resume: coordinator.run,
       wake: coordinator.wake,
       wakeActive: coordinator.wakeActive,
