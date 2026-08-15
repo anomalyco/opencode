@@ -53,6 +53,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     sessionID?: string
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
+    fetchMessageDiff?: (sessionID: string, messageID: string) => Promise<void>
   }) => {
     return {
       get store() {
@@ -66,6 +67,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
+      fetchMessageDiff: props.fetchMessageDiff,
     }
   },
 })
