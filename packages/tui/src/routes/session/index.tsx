@@ -220,13 +220,7 @@ export function Session() {
   const foregroundTasks = createMemo(() =>
     sync.data.capabilities.experimentalBackgroundSubagents
       ? messages().flatMap((message) =>
-          (sync.data.part[message.id] ?? []).filter(
-            (part): part is ToolPart =>
-              part.type === "tool" &&
-              part.tool === "task" &&
-              part.state.status === "running" &&
-              part.state.metadata?.background !== true,
-          ),
+          (sync.data.part[message.id] ?? []).filter(isForegroundRunningTask),
         )
       : [],
   )
@@ -1515,13 +1509,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
             <Show
               when={
                 sync.data.capabilities.experimentalBackgroundSubagents &&
-                props.parts.some(
-                  (x) =>
-                    x.type === "tool" &&
-                    x.tool === "task" &&
-                    x.state.status === "running" &&
-                    x.state.metadata?.background !== true,
-                )
+                props.parts.some(isForegroundRunningTask)
               }
             >
               <span style={{ fg: theme.textMuted }}> · </span>
@@ -2722,4 +2710,14 @@ export function parseDiagnostics(value: unknown, filePath: string) {
       return [{ range: { start: { line, character } }, message }]
     })
     .slice(0, 3)
+}
+
+export function isForegroundRunningTask(part: Part): part is ToolPart {
+  return (
+    part.type === "tool" &&
+    part.tool === "task" &&
+    part.state.status === "running" &&
+    part.state.metadata?.background !== true &&
+    part.state.input?.background !== true
+  )
 }
