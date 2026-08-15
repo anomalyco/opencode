@@ -1025,6 +1025,19 @@
         "typescript": "catalog:",
       },
     },
+    "packages/workspace-incus": {
+      "name": "@opencode-ai/workspace-incus",
+      "version": "0.0.0",
+      "dependencies": {
+        "@opencode-ai/core": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+      },
+    },
     "packages/www": {
       "name": "@opencode-ai/www",
       "dependencies": {
@@ -2064,6 +2077,8 @@
     "@opencode-ai/util": ["@opencode-ai/util@workspace:packages/util"],
 
     "@opencode-ai/web": ["@opencode-ai/web@workspace:packages/web"],
+
+    "@opencode-ai/workspace-incus": ["@opencode-ai/workspace-incus@workspace:packages/workspace-incus"],
 
     "@opencode-ai/www": ["@opencode-ai/www@workspace:packages/www"],
 

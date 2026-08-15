@@ -12,13 +12,17 @@ import { TestClock } from "effect/testing"
 import { ChildProcess } from "effect/unstable/process"
 import { testEffect } from "./lib/effect"
 
-const calls: Array<{ readonly operation: string; readonly binding?: WorkspaceDriver.Binding }> = []
+const calls: Array<{
+  readonly operation: string
+  readonly binding?: WorkspaceDriver.Binding
+  readonly source?: WorkspaceDriver.Source
+}> = []
 const memory = makeMemoryDriver()
 let failConnect = false
 
 const driver = WorkspaceDriver.make({
-  create: ({ workspaceID }) => {
-    calls.push({ operation: "create" })
+  create: ({ workspaceID, source }) => {
+    calls.push({ operation: "create", source })
     return Effect.succeed({ binding: { workspaceID, generation: 0 } })
   },
   connect: ({ binding }) => {
@@ -39,7 +43,7 @@ const driver = WorkspaceDriver.make({
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Workspace.configured({ idleThreshold: "5 minutes", pollInterval: "1 minute" })]),
-    [[WorkspaceDriver.node, WorkspaceDriver.registryNode({ fake: driver })]],
+    [[WorkspaceDriver.node, WorkspaceDriver.registryNode({ fake: driver, other: driver })]],
   ),
 )
 
@@ -91,6 +95,17 @@ it.effect("persists the workspace lifecycle and reconnects after idle suspension
 
     yield* workspace.destroy(created.id)
     expect(calls.at(-1)?.operation).toBe("destroy")
+  }),
+)
+
+it.effect("forks from a workspace owned by the same provider", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const source = yield* workspace.create("fake")
+    const fork = yield* workspace.fork(source.id)
+
+    expect(fork.id).not.toBe(source.id)
+    expect(calls[1]?.source).toEqual({ workspaceID: source.id, binding: source.binding })
   }),
 )
 

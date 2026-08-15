@@ -28,6 +28,9 @@ import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { Permission } from "@opencode-ai/core/permission"
 import { SubagentTool } from "@opencode-ai/core/tool/plugin/subagent"
 import { Tool } from "@opencode-ai/core/tool"
+import { makeMemoryDriver } from "@opencode-ai/core/environment/index"
+import { Workspace } from "@opencode-ai/core/workspace"
+import { WorkspaceDriver } from "@opencode-ai/core/workspace/driver"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
@@ -112,6 +115,7 @@ const nodes = LayerNode.group([
   SessionExecution.node,
   PluginRuntime.providerNode,
   LocationServiceMap.node,
+  Workspace.node,
 ])
 const replacements = [
   [SessionExecution.node, executionNode],
@@ -119,6 +123,23 @@ const replacements = [
 ] satisfies LayerNode.Replacements
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(AppNodeBuilder.build(nodes, [...replacements, [PluginSupervisor.node, subagentPluginSupervisor]]))
+const workspaceCreates: Array<WorkspaceDriver.Source | undefined> = []
+const workspaceDriver = WorkspaceDriver.make({
+  create: ({ workspaceID, source }) => {
+    workspaceCreates.push(source)
+    return Effect.succeed({ binding: { workspaceID } })
+  },
+  connect: () => Effect.succeed(makeMemoryDriver()),
+  suspendForIdle: () => Effect.void,
+  destroy: () => Effect.void,
+})
+const workspaceIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    ...replacements,
+    [PluginSupervisor.node, subagentPluginSupervisor],
+    [WorkspaceDriver.node, WorkspaceDriver.registryNode({ fake: workspaceDriver })],
+  ]),
+)
 
 const withSubagent = (location: Location.Ref) =>
   Effect.gen(function* () {
@@ -321,6 +342,46 @@ describe("SubagentTool", () => {
           })
           const fallbackChild = yield* sessions.get(outputSessionID(fallback.metadata))
           expect(fallbackChild).toMatchObject({ parentID: parent.id, model: parentModel })
+        }),
+      ),
+    ),
+  )
+
+  workspaceIt.live("forks workspace-backed subagents into isolated locations", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          workspaceCreates.splice(0)
+          const workspaces = yield* Workspace.Service
+          const base = yield* workspaces.create("fake")
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path), workspaceID: base.id })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const settled = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-isolated-subagent",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "isolated", prompt: "change this" },
+            },
+          })
+          const child = yield* sessions.get(outputSessionID(settled.metadata))
+
+          expect(child.location.workspaceID).not.toBe(base.id)
+          expect(settled.metadata).toMatchObject({ workspaceID: child.location.workspaceID })
+          expect(workspaceCreates[1]).toEqual({ workspaceID: base.id, binding: base.binding })
+          expect((yield* sessions.inbox(child.id)).find((message) => message.type === "user")?.payload.text).toContain(
+            `You are working in isolated workspace ${child.location.workspaceID}`,
+          )
         }),
       ),
     ),

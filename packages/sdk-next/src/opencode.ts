@@ -64,6 +64,7 @@ export const create = Effect.fn("OpenCode.create")(function* (options: CreateOpt
     events: client.event,
     workspace: {
       create: ({ provider }: { readonly provider: string }) => workspace.create(provider),
+      fork: ({ source }: { readonly source: Workspace.ID }) => workspace.fork(source),
       destroy: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => workspace.destroy(workspaceID),
     },
     // The embedded host contributes plugins through the ordinary discovery flow:

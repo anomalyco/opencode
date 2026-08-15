@@ -438,10 +438,14 @@ it.live("embedded client is available as a Layer service", () =>
 it.live("configures workspace providers through the SDK facade", () =>
   withEmbedded("opencode-embedded-workspace-", (fixture) =>
     Effect.gen(function* () {
-      const calls: Array<{ readonly operation: string; readonly workspaceID: string }> = []
+      const calls: Array<{
+        readonly operation: string
+        readonly workspaceID: string
+        readonly source?: WorkspaceDriver.Source
+      }> = []
       const driver = WorkspaceDriver.make({
-        create: ({ workspaceID }) => {
-          calls.push({ operation: "create", workspaceID })
+        create: ({ workspaceID, source }) => {
+          calls.push({ operation: "create", workspaceID, source })
           return Effect.succeed({ binding: { externalID: workspaceID } })
         },
         connect: ({ workspaceID }) => {
@@ -459,7 +463,14 @@ it.live("configures workspace providers through the SDK facade", () =>
 
       expect(workspace.provider).toBe("fake")
       expect(workspace.binding).toEqual({ externalID: workspace.id })
-      expect(calls).toEqual([{ operation: "create", workspaceID: workspace.id }])
+      expect(calls).toEqual([{ operation: "create", workspaceID: workspace.id, source: undefined }])
+
+      const fork = yield* opencode.workspace.fork({ source: workspace.id })
+      expect(calls[1]).toEqual({
+        operation: "create",
+        workspaceID: fork.id,
+        source: { workspaceID: workspace.id, binding: workspace.binding },
+      })
 
       const workspaceLocation = fixture.sdk.Location.Ref.make({
         directory: fixture.sdk.AbsolutePath.make("/"),
@@ -469,7 +480,7 @@ it.live("configures workspace providers through the SDK facade", () =>
       expect(session.location.workspaceID).toBe(workspace.id)
 
       yield* opencode.workspace.destroy({ workspaceID: workspace.id })
-      expect(calls.map((call) => call.operation)).toEqual(["create", "destroy"])
+      expect(calls.map((call) => call.operation)).toEqual(["create", "create", "destroy"])
       expect((yield* opencode.workspace.destroy({ workspaceID: workspace.id }).pipe(Effect.flip))._tag).toBe(
         "Workspace.NotFound",
       )

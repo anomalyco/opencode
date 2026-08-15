@@ -23,9 +23,15 @@ export class ProviderNotFound extends Schema.TaggedErrorClass<ProviderNotFound>(
   provider: Schema.String,
 }) {}
 
+export interface Source {
+  readonly workspaceID: Workspace.ID
+  readonly binding: Binding
+}
+
 export interface Interface {
   readonly create: (input: {
     readonly workspaceID: Workspace.ID
+    readonly source?: Source
   }) => Effect.Effect<{ readonly binding: Binding }, Error>
   readonly connect: (input: {
     readonly workspaceID: Workspace.ID
