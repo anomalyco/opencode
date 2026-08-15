@@ -535,9 +535,22 @@ const layer = Layer.effect(
               agent: userMessage.agent,
               model: userMessage.model,
             })
+            // Only blame media when media parts were actually dropped with the
+            // compacted head; text-only overflows get the truthful cause.
+            const hadMedia = selected.head.some((item) =>
+              item.parts.some(
+                (part) =>
+                  (part.type === "file" && MessageV2.isMedia(part.mime)) ||
+                  (part.type === "tool" &&
+                    part.state.status === "completed" &&
+                    (part.state.attachments ?? []).some((attachment) => MessageV2.isMedia(attachment.mime))),
+              ),
+            )
             const text =
               (input.overflow
-                ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
+                ? hadMedia
+                  ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
+                  : "The conversation exceeded the model's context window and was compacted. Do not mention attachments to the user; there were none.\n\n"
                 : "") +
               "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
             yield* session.updatePart({

@@ -1193,7 +1193,7 @@ describe("session.compaction.process", () => {
   )
 
   it.instance(
-    "falls back to overflow guidance when no replayable turn exists",
+    "falls back to truthful overflow guidance when no media was removed",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
       const session = yield* ssn.create({})
@@ -1213,8 +1213,49 @@ describe("session.compaction.process", () => {
 
       expect(result).toBe("continue")
       expect(last?.info.role).toBe("user")
+      expect(last?.parts[0]?.type).toBe("text")
       if (last?.parts[0]?.type === "text") {
-        expect(last.parts[0].text).toContain("previous request exceeded the provider's size limit")
+        expect(last.parts[0].text).toContain("exceeded the model's context window and was compacted")
+        expect(last.parts[0].text).toContain("Do not mention attachments to the user; there were none.")
+        expect(last.parts[0].text).not.toContain("media attachments")
+      }
+    }),
+  )
+
+  it.instance(
+    "mentions media attachments in overflow guidance only when media was removed",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const earlier = yield* createUserMessage(session.id, "earlier")
+      yield* ssn.updatePart({
+        id: PartID.ascending(),
+        messageID: earlier.id,
+        sessionID: session.id,
+        type: "file",
+        mime: "image/png",
+        filename: "big.png",
+        url: `data:image/png;base64,${"a".repeat(1_000)}`,
+      })
+      const msg = yield* createUserMessage(session.id, "current")
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+
+      const result = yield* SessionCompaction.use.process({
+        parentID: msg.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+        overflow: true,
+      })
+
+      const last = (yield* ssn.messages({ sessionID: session.id })).at(-1)
+
+      expect(result).toBe("continue")
+      expect(last?.info.role).toBe("user")
+      expect(last?.parts[0]?.type).toBe("text")
+      if (last?.parts[0]?.type === "text") {
+        expect(last.parts[0].text).toContain("large media attachments")
+        expect(last.parts[0].text).not.toContain("there were none")
       }
     }),
   )
