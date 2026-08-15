@@ -686,7 +686,7 @@ const replaySessionProjection = (id: Session.ID) =>
 type FragmentKind = "text" | "reasoning" | "tool input"
 
 type FragmentFixture = {
-  readonly delta: Event.Definition
+  readonly delta?: Event.Definition
   readonly completeEvents: LLMEvent[]
   readonly partialEvents: LLMEvent[]
   readonly expectedAssistant: unknown
@@ -748,7 +748,6 @@ const fragmentFixture = (kind: FragmentKind, id: string, chunks: readonly string
       ]
       const expectedContent = { type: "tool", id, state: { status: "streaming", input: text } }
       return {
-        delta: SessionEvent.Tool.Input.Delta,
         partialEvents,
         completeEvents: [...partialEvents, LLMEvent.toolInputEnd({ id, name: "echo" })],
         expectedAssistant: { type: "assistant", content: [expectedContent] },
@@ -767,20 +766,37 @@ const verifyEphemeralDeltas = (kind: FragmentKind) =>
     const expectedContext = [{ type: "user", text: prompt }, fixture.expectedAssistant]
     yield* admit(session, prompt)
     const bus = yield* Bus.Service
-    const live = yield* bus.subscribe(fixture.delta).pipe(Stream.take(32), Stream.runCollect, Effect.forkScoped)
+    const live = fixture.delta
+      ? yield* bus.subscribe(fixture.delta).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      : undefined
     yield* Effect.yieldNow
     yield* TestLLM.push(fixture.completeEvents)
 
     yield* session.resume(sessionID)
 
     const { db } = yield* Database.Service
-    const deltas = yield* db
-      .select({ type: EventTable.type })
-      .from(EventTable)
-      .where(eq(EventTable.type, Bus.versionedType(fixture.delta.type, 1)))
-      .all()
-      .pipe(Effect.orDie)
-    expect(Array.from(yield* Fiber.join(live))).toHaveLength(32)
+    const deltas = fixture.delta
+      ? yield* db
+          .select({ type: EventTable.type })
+          .from(EventTable)
+          .where(eq(EventTable.type, Bus.versionedType(fixture.delta.type, 1)))
+          .all()
+          .pipe(Effect.orDie)
+      : []
+    if (live) {
+      const streamed = Array.from(yield* Fiber.join(live))
+      expect(streamed).toHaveLength(2)
+      expect(
+        streamed
+          .map((event) => {
+            if (!event.data || typeof event.data !== "object" || !("delta" in event.data))
+              throw new Error("Expected delta event")
+            if (typeof event.data.delta !== "string") throw new Error("Expected string delta")
+            return event.data.delta
+          })
+          .join(""),
+      ).toBe(chunks.join(""))
+    }
     expect(deltas).toHaveLength(0)
     expect(yield* session.context(sessionID)).toMatchObject(expectedContext)
 
@@ -5219,8 +5235,11 @@ describe("SessionRunnerLLM", () => {
   )
 
   for (const kind of fragmentKinds) {
-    it.effect(`broadcasts provider ${kind} deltas without storing projection rewrites`, () =>
-      verifyEphemeralDeltas(kind),
+    it.effect(
+      kind === "tool input"
+        ? "does not broadcast provider tool input deltas"
+        : `batches provider ${kind} deltas without storing projection rewrites`,
+      () => verifyEphemeralDeltas(kind),
     )
 
     it.effect(`durably closes partial ${kind} when the provider stream fails`, () => verifyPartialFlushOnFailure(kind))
