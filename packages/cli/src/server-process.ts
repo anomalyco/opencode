@@ -12,6 +12,7 @@ import { Effect, FileSystem, Option, Redacted, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
+import { guardServiceProcess } from "./stdio"
 import { Updater } from "./services/updater"
 import { WebUi } from "./services/web-ui"
 
@@ -41,7 +42,11 @@ export const run = Effect.fnUntraced(function* (options: Options) {
 
 const processEffect = Effect.fnUntraced(function* (options: Options) {
   const global = yield* Global.Service
-  if (options.mode === "service") yield* Effect.sync(() => process.chdir(global.home))
+  if (options.mode === "service")
+    yield* Effect.sync(() => {
+      guardServiceProcess()
+      process.chdir(global.home)
+    })
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const foreground = options.mode === "default"
