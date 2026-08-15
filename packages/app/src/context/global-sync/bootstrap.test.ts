@@ -9,6 +9,7 @@ import {
   loadProjectsQuery,
   loadProvidersQuery,
   loadReferencesQuery,
+  syncCurrentProject,
 } from "./bootstrap"
 import { ServerScope } from "@/utils/server-scope"
 import type { ServerApi } from "@/utils/server"
@@ -159,6 +160,35 @@ describe("query keys", () => {
       { id: "a", sandboxes: ["/a/copy"] },
       { id: "b", sandboxes: [] },
     ])
+  })
+
+  test("adds a newly discovered current project to the global inventory", async () => {
+    const projects = {
+      current: async () => ({ id: "new", directory: "/new", canonical: "/new" }),
+      list: async () => [
+        { id: "old", canonical: "/old", time: { created: 1, updated: 1 }, sandboxes: [] },
+        { id: "new", canonical: "/new", vcs: "git", time: { created: 2, updated: 2 }, sandboxes: [] },
+      ],
+    } as unknown as ProjectApi
+    const worktrees = {
+      list: async ({ projectID }: { projectID: string }) => [{ directory: `/${projectID}` }],
+    } as unknown as WorktreeApi
+    let project = ""
+    let inventory: Array<{ id: string; vcs?: string }> = []
+
+    await syncCurrentProject({
+      directory: "/new",
+      scope: ServerScope.local,
+      projects,
+      worktrees,
+      queryClient: new QueryClient(),
+      setProject: (id) => (project = id),
+      setProjects: (next) => (inventory = next),
+    })
+
+    expect(project).toBe("new")
+    expect(inventory.map((item) => item.id)).toEqual(["new", "old"])
+    expect(inventory[0]?.vcs).toBe("git")
   })
 
   test("loads references from the current location-scoped endpoint", async () => {
