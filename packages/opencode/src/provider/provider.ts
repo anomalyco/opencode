@@ -800,10 +800,18 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         env["CLOUDFLARE_API_TOKEN"] || env["CF_AIG_TOKEN"] || (auth?.type === "api" ? auth.key : undefined)
 
       if (!apiToken) {
-        throw new Error(
-          "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
-            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
-        )
+        // Don't crash Provider.list when the env/auth has Cloudflare IDs but no
+        // token — the provider is simply unavailable until credentials exist.
+        // Defer the error to getModel so listing other providers still works.
+        return {
+          autoload: false,
+          async getModel() {
+            throw new Error(
+              "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
+                "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
+            )
+          },
+        }
       }
 
       const { createAiGateway } = yield* Effect.promise(() => import("ai-gateway-provider"))
