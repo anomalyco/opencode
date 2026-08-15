@@ -5925,6 +5925,86 @@
         ]
       }
     },
+    "/session/{sessionID}/context-budget": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "session.contextBudget",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Context budget",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionContextBudget"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Report the session's context arithmetic: effective model limits, compaction reserve, usable window, per-request baseline cost (system prompt, tools, instructions), history estimate with provider-reported usage, and projected headroom for the next request.",
+        "summary": "Get session context budget",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.contextBudget({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/session/{sessionID}/todo": {
       "get": {
         "tags": ["session"],
@@ -20930,6 +21010,31 @@
                   "type": "string",
                   "enum": ["alpha", "beta", "deprecated", "active"]
                 },
+                "tier": {
+                  "type": "string",
+                  "enum": ["minimal", "default"],
+                  "description": "Capability tier for this model. Overrides the built-in size heuristic; frontier family models resolve their vendor behavior when unset."
+                },
+                "prompt": {
+                  "type": "string",
+                  "description": "Replace the model-family system prompt with this text. Use {file:./path} to load it from a file resolved relative to the config file."
+                },
+                "sampling": {
+                  "type": "object",
+                  "properties": {
+                    "temperature": {
+                      "type": "number"
+                    },
+                    "topP": {
+                      "type": "number"
+                    },
+                    "topK": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Sampling defaults for this model. Consulted before the built-in per-family sampling ladders."
+                },
                 "provider": {
                   "type": "object",
                   "properties": {
@@ -21514,6 +21619,9 @@
               "reserved": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "prompt": {
+                "type": "string"
               }
             },
             "additionalProperties": false
@@ -21585,6 +21693,28 @@
           },
           "family": {
             "type": "string"
+          },
+          "tier": {
+            "type": "string",
+            "enum": ["minimal", "default"]
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "sampling": {
+            "type": "object",
+            "properties": {
+              "temperature": {
+                "type": "number"
+              },
+              "topP": {
+                "type": "number"
+              },
+              "topK": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": false
           },
           "capabilities": {
             "type": "object",
@@ -23081,6 +23211,165 @@
             }
           }
         }
+      },
+      "SessionContextBudget": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "object",
+            "properties": {
+              "providerID": {
+                "type": "string"
+              },
+              "modelID": {
+                "type": "string"
+              },
+              "limit": {
+                "type": "object",
+                "properties": {
+                  "context": {
+                    "type": "number",
+                    "description": "Context window in tokens as reported by provider/config; 0 when unknown (the engine then assumes a conservative usable window, reflected in `usable`)"
+                  },
+                  "output": {
+                    "type": "number",
+                    "description": "Effective per-request output token cap: configured limit.output or the window-derived fallback"
+                  }
+                },
+                "required": ["context", "output"],
+                "additionalProperties": false
+              },
+              "tier": {
+                "type": "string",
+                "enum": ["minimal", "default", "vendor"],
+                "description": "Resolved capability tier for the model"
+              }
+            },
+            "required": ["providerID", "modelID", "limit", "tier"],
+            "additionalProperties": false
+          },
+          "reserve": {
+            "type": "number",
+            "description": "Compaction reserve in tokens (config override or the proportional formula over the context window); 0 when the model reports no context limit"
+          },
+          "usable": {
+            "type": "number",
+            "description": "The engine's compaction-triggering window in tokens. Depending on which limits the model reports this is input−reserve, context−output budget, or the conservative default for models with no reported limit"
+          },
+          "baseline": {
+            "type": "object",
+            "properties": {
+              "system_prompt": {
+                "type": "object",
+                "properties": {
+                  "chars": {
+                    "type": "number",
+                    "description": "Character count of the serialized content"
+                  },
+                  "est_tokens": {
+                    "type": "number",
+                    "description": "Estimated tokens (chars-based heuristic; re-derive from chars with an exact tokenizer if needed)"
+                  }
+                },
+                "required": ["chars", "est_tokens"],
+                "additionalProperties": false,
+                "description": "Family/tier (or agent) prompt + environment + MCP instructions + skills"
+              },
+              "tools": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "type": "number"
+                  },
+                  "chars": {
+                    "type": "number",
+                    "description": "Serialized id + description + provider-transformed JSON schema across the roster"
+                  },
+                  "est_tokens": {
+                    "type": "number"
+                  }
+                },
+                "required": ["count", "chars", "est_tokens"],
+                "additionalProperties": false
+              },
+              "instructions": {
+                "type": "object",
+                "properties": {
+                  "chars": {
+                    "type": "number",
+                    "description": "Character count of the serialized content"
+                  },
+                  "est_tokens": {
+                    "type": "number",
+                    "description": "Estimated tokens (chars-based heuristic; re-derive from chars with an exact tokenizer if needed)"
+                  }
+                },
+                "required": ["chars", "est_tokens"],
+                "additionalProperties": false,
+                "description": "Project/global instruction files (AGENTS.md and config instructions)"
+              }
+            },
+            "required": ["system_prompt", "tools", "instructions"],
+            "additionalProperties": false,
+            "description": "What every request pays before history"
+          },
+          "history": {
+            "type": "object",
+            "properties": {
+              "est_tokens": {
+                "type": "number",
+                "description": "Estimate over the projected (post-compaction-filter) message window"
+              },
+              "last_reported": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "number"
+                  },
+                  "output": {
+                    "type": "number"
+                  },
+                  "cache_read": {
+                    "type": "number"
+                  },
+                  "total": {
+                    "type": "number"
+                  }
+                },
+                "required": ["input", "output", "cache_read", "total"],
+                "additionalProperties": false,
+                "description": "Provider-reported usage from the most recent finished assistant message"
+              },
+              "messages": {
+                "type": "number",
+                "description": "Messages in the projected window"
+              },
+              "post_compaction": {
+                "type": "boolean",
+                "description": "Whether the session has at least one completed compaction"
+              }
+            },
+            "required": ["est_tokens", "messages", "post_compaction"],
+            "additionalProperties": false
+          },
+          "next_request": {
+            "type": "object",
+            "properties": {
+              "est_input_tokens": {
+                "type": "number",
+                "description": "Sum of baseline components and history est_tokens"
+              },
+              "headroom": {
+                "type": "number",
+                "description": "usable − est_input_tokens; negative when the next request is projected to overflow"
+              }
+            },
+            "required": ["est_input_tokens", "headroom"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["model", "reserve", "usable", "baseline", "history", "next_request"],
+        "additionalProperties": false
       },
       "TextPartInput": {
         "type": "object",

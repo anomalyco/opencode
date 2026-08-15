@@ -75,11 +75,93 @@ export const PermissionResponsePayload = Schema.Struct({
   response: PermissionV1.Reply,
 })
 
+const BudgetEstimate = Schema.Struct({
+  chars: described(Schema.Finite, "Character count of the serialized content"),
+  est_tokens: described(
+    Schema.Finite,
+    "Estimated tokens (chars-based heuristic; re-derive from chars with an exact tokenizer if needed)",
+  ),
+})
+
+// D1: the context-budget response. All token figures are estimates from the
+// engine's chars-based heuristic unless taken from provider-reported usage
+// (history.last_reported). The baseline is a dry-run assembly mirroring the
+// prompt loop and request prep without dispatch side effects: doom-loop strip
+// budgets are not consumed, plugin transform hooks do not run, and
+// MCP-provided tools are not included in the tools figure.
+export const ContextBudget = Schema.Struct({
+  model: Schema.Struct({
+    providerID: Schema.String,
+    modelID: Schema.String,
+    limit: Schema.Struct({
+      context: described(
+        Schema.Finite,
+        "Context window in tokens as reported by provider/config; 0 when unknown (the engine then assumes a conservative usable window, reflected in `usable`)",
+      ),
+      output: described(
+        Schema.Finite,
+        "Effective per-request output token cap: configured limit.output or the window-derived fallback",
+      ),
+    }),
+    tier: described(Schema.Literals(["minimal", "default", "vendor"]), "Resolved capability tier for the model"),
+  }),
+  reserve: described(
+    Schema.Finite,
+    "Compaction reserve in tokens (config override or the proportional formula over the context window); 0 when the model reports no context limit",
+  ),
+  usable: described(
+    Schema.Finite,
+    "The engine's compaction-triggering window in tokens. Depending on which limits the model reports this is input−reserve, context−output budget, or the conservative default for models with no reported limit",
+  ),
+  baseline: described(
+    Schema.Struct({
+      system_prompt: described(
+        BudgetEstimate,
+        "Family/tier (or agent) prompt + environment + MCP instructions + skills",
+      ),
+      tools: Schema.Struct({
+        count: Schema.Finite,
+        chars: described(
+          Schema.Finite,
+          "Serialized id + description + provider-transformed JSON schema across the roster",
+        ),
+        est_tokens: Schema.Finite,
+      }),
+      instructions: described(BudgetEstimate, "Project/global instruction files (AGENTS.md and config instructions)"),
+    }),
+    "What every request pays before history",
+  ),
+  history: Schema.Struct({
+    est_tokens: described(Schema.Finite, "Estimate over the projected (post-compaction-filter) message window"),
+    last_reported: Schema.optional(
+      described(
+        Schema.Struct({
+          input: Schema.Finite,
+          output: Schema.Finite,
+          cache_read: Schema.Finite,
+          total: Schema.Finite,
+        }),
+        "Provider-reported usage from the most recent finished assistant message",
+      ),
+    ),
+    messages: described(Schema.Finite, "Messages in the projected window"),
+    post_compaction: described(Schema.Boolean, "Whether the session has at least one completed compaction"),
+  }),
+  next_request: Schema.Struct({
+    est_input_tokens: described(Schema.Finite, "Sum of baseline components and history est_tokens"),
+    headroom: described(
+      Schema.Finite,
+      "usable − est_input_tokens; negative when the next request is projected to overflow",
+    ),
+  }),
+}).annotate({ identifier: "SessionContextBudget" })
+
 export const SessionPaths = {
   list: root,
   status: `${root}/status`,
   get: `${root}/:sessionID`,
   children: `${root}/:sessionID/children`,
+  contextBudget: `${root}/:sessionID/context-budget`,
   todo: `${root}/:sessionID/todo`,
   diff: `${root}/:sessionID/diff`,
   messages: `${root}/:sessionID/message`,
@@ -151,6 +233,19 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.children",
             summary: "Get session children",
             description: "Retrieve all child sessions that were forked from the specified parent session.",
+          }),
+        ),
+        HttpApiEndpoint.get("contextBudget", SessionPaths.contextBudget, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(ContextBudget, "Context budget"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.contextBudget",
+            summary: "Get session context budget",
+            description:
+              "Report the session's context arithmetic: effective model limits, compaction reserve, usable window, per-request baseline cost (system prompt, tools, instructions), history estimate with provider-reported usage, and projected headroom for the next request.",
           }),
         ),
         HttpApiEndpoint.get("todo", SessionPaths.todo, {

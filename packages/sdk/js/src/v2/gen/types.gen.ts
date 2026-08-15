@@ -2571,6 +2571,107 @@ export type NotFoundError = {
   }
 }
 
+export type SessionContextBudget = {
+  model: {
+    providerID: string
+    modelID: string
+    limit: {
+      /**
+       * Context window in tokens as reported by provider/config; 0 when unknown (the engine then assumes a conservative usable window, reflected in `usable`)
+       */
+      context: number
+      /**
+       * Effective per-request output token cap: configured limit.output or the window-derived fallback
+       */
+      output: number
+    }
+    /**
+     * Resolved capability tier for the model
+     */
+    tier: "minimal" | "default" | "vendor"
+  }
+  /**
+   * Compaction reserve in tokens (config override or the proportional formula over the context window); 0 when the model reports no context limit
+   */
+  reserve: number
+  /**
+   * The engine's compaction-triggering window in tokens. Depending on which limits the model reports this is input−reserve, context−output budget, or the conservative default for models with no reported limit
+   */
+  usable: number
+  /**
+   * What every request pays before history
+   */
+  baseline: {
+    /**
+     * Family/tier (or agent) prompt + environment + MCP instructions + skills
+     */
+    system_prompt: {
+      /**
+       * Character count of the serialized content
+       */
+      chars: number
+      /**
+       * Estimated tokens (chars-based heuristic; re-derive from chars with an exact tokenizer if needed)
+       */
+      est_tokens: number
+    }
+    tools: {
+      count: number
+      /**
+       * Serialized id + description + provider-transformed JSON schema across the roster
+       */
+      chars: number
+      est_tokens: number
+    }
+    /**
+     * Project/global instruction files (AGENTS.md and config instructions)
+     */
+    instructions: {
+      /**
+       * Character count of the serialized content
+       */
+      chars: number
+      /**
+       * Estimated tokens (chars-based heuristic; re-derive from chars with an exact tokenizer if needed)
+       */
+      est_tokens: number
+    }
+  }
+  history: {
+    /**
+     * Estimate over the projected (post-compaction-filter) message window
+     */
+    est_tokens: number
+    /**
+     * Provider-reported usage from the most recent finished assistant message
+     */
+    last_reported?: {
+      input: number
+      output: number
+      cache_read: number
+      total: number
+    }
+    /**
+     * Messages in the projected window
+     */
+    messages: number
+    /**
+     * Whether the session has at least one completed compaction
+     */
+    post_compaction: boolean
+  }
+  next_request: {
+    /**
+     * Sum of baseline components and history est_tokens
+     */
+    est_input_tokens: number
+    /**
+     * usable − est_input_tokens; negative when the next request is projected to overflow
+     */
+    headroom: number
+  }
+}
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -9710,6 +9811,40 @@ export type SessionChildrenResponses = {
 }
 
 export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
+
+export type SessionContextBudgetData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/context-budget"
+}
+
+export type SessionContextBudgetErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionContextBudgetError = SessionContextBudgetErrors[keyof SessionContextBudgetErrors]
+
+export type SessionContextBudgetResponses = {
+  /**
+   * Context budget
+   */
+  200: SessionContextBudget
+}
+
+export type SessionContextBudgetResponse = SessionContextBudgetResponses[keyof SessionContextBudgetResponses]
 
 export type SessionTodoData = {
   body?: never

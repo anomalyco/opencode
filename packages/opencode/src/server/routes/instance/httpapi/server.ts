@@ -38,6 +38,7 @@ import { SessionRunState } from "@/session/run-state"
 import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
+import { SystemPrompt } from "@/session/system"
 import { Todo } from "@/session/todo"
 import { SessionShare } from "@/share/session"
 import { ShareNext } from "@/share/share-next"
@@ -245,6 +246,7 @@ const app = LayerNode.group([
   SessionSummary.node,
   SessionPrompt.node,
   Instruction.node,
+  SystemPrompt.node,
   LLM.node,
   LSP.node,
   MCP.node,

@@ -3,17 +3,30 @@ import { Agent } from "@/agent/agent"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Command } from "@/command"
+import { Config } from "@/config/config"
 import { Permission } from "@/permission"
+import { Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider/transform"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
+import { Instruction } from "@/session/instruction"
 import { MessageV2 } from "@/session/message-v2"
+import { usable, reserved } from "@/session/overflow"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
+import { SystemPrompt } from "@/session/system"
+import { SessionTier } from "@/session/tier"
 import { Todo } from "@/session/todo"
+import { ToolJsonSchema } from "@/tool/json-schema"
+import { ToolRegistry } from "@/tool/registry"
+import { Token } from "@/util/token"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Database } from "@opencode-ai/core/database/database"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Cause, Effect, Option, Schema, Scope } from "effect"
@@ -59,6 +72,13 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
     const events = yield* EventV2Bridge.Service
+    const providerSvc = yield* Provider.Service
+    const configSvc = yield* Config.Service
+    const sys = yield* SystemPrompt.Service
+    const registry = yield* ToolRegistry.Service
+    const instruction = yield* Instruction.Service
+    const flags = yield* RuntimeFlags.Service
+    const database = yield* Database.Service
     const scope = yield* Scope.Scope
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
@@ -94,6 +114,137 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const todo = Effect.fn("SessionHttpApi.todo")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* requireSession(ctx.params.sessionID)
       return yield* todoSvc.get(ctx.params.sessionID)
+    })
+
+    // D1: context arithmetic for routers and other consumers. Resolves the
+    // session's current model and agent the same way the prompt loop does,
+    // then dry-runs the baseline assembly (system prompt, tool roster,
+    // instructions) without dispatch side effects. See the ContextBudget
+    // schema for field semantics and documented approximations.
+    const contextBudget = Effect.fn("SessionHttpApi.contextBudget")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      const info = yield* requireSession(ctx.params.sessionID)
+      const cfg = yield* configSvc.get()
+
+      // Model precedence mirrors SessionPrompt: session's pinned model, then
+      // the most recent user message's model, then the provider default.
+      const ref = info.model
+        ? { providerID: info.model.providerID, modelID: info.model.id }
+        : yield* Effect.gen(function* () {
+            const match = yield* session
+              .findMessage(ctx.params.sessionID, (m) => m.info.role === "user" && !!m.info.model)
+              .pipe(Effect.orDie)
+            if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
+            return yield* providerSvc.defaultModel().pipe(Effect.orDie)
+          })
+      const model = yield* providerSvc
+        .getModel(ref.providerID, ref.modelID)
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+      const agent = (info.agent ? yield* agentSvc.get(info.agent) : undefined) ?? (yield* agentSvc.defaultInfo())
+      const tier = SessionTier.resolve(model)
+
+      const [skills, env, instructions, mcpInstructions] = yield* Effect.all([
+        sys.skills(agent),
+        sys.environment(model),
+        instruction.system().pipe(Effect.orDie),
+        sys.mcp(agent, info.permission),
+      ])
+      const systemText = [
+        ...(agent.prompt ? [agent.prompt] : SystemPrompt.provider(model)),
+        ...env,
+        ...(mcpInstructions ? [mcpInstructions] : []),
+        ...(skills ? [skills] : []),
+      ]
+        .filter(Boolean)
+        .join("\n")
+      const instructionsText = instructions.join("\n")
+
+      const ruleset = Permission.merge(agent.permission, info.permission ?? [])
+      const toolDefs = yield* registry.tools({
+        providerID: model.providerID,
+        modelID: ModelV2.ID.make(model.api.id),
+        agent,
+        permission: info.permission,
+        tier,
+      })
+      const disabled = Permission.disabled(
+        toolDefs.map((item) => item.id),
+        ruleset,
+      )
+      const tools = toolDefs
+        .filter((item) => !disabled.has(item.id))
+        .map((item) => {
+          const serialized = JSON.stringify([
+            item.id,
+            item.description,
+            ProviderTransform.schema(model, ToolJsonSchema.fromTool(item)),
+          ])
+          return { id: item.id, chars: serialized.length, est_tokens: Token.estimate(serialized) }
+        })
+
+      const all = yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
+      const filtered = yield* MessageV2.filterCompactedEffect(ctx.params.sessionID).pipe(
+        Effect.provideService(Database.Service, database),
+      )
+      const modelMsgs = yield* MessageV2.toModelMessagesEffect(filtered, model)
+      const historyTokens = Token.estimate(JSON.stringify(modelMsgs))
+      const finished = all.findLast((m) => m.info.role === "assistant" && !!m.info.time.completed)
+      const lastReported =
+        finished && finished.info.role === "assistant"
+          ? {
+              input: finished.info.tokens.input,
+              output: finished.info.tokens.output,
+              cache_read: finished.info.tokens.cache.read,
+              total:
+                finished.info.tokens.total ||
+                finished.info.tokens.input +
+                  finished.info.tokens.output +
+                  finished.info.tokens.cache.read +
+                  finished.info.tokens.cache.write,
+            }
+          : undefined
+
+      const systemPrompt = { chars: systemText.length, est_tokens: Token.estimate(systemText) }
+      const instructionCost = { chars: instructionsText.length, est_tokens: Token.estimate(instructionsText) }
+      const toolsTokens = tools.reduce((sum, item) => sum + item.est_tokens, 0)
+      const estInput = systemPrompt.est_tokens + instructionCost.est_tokens + toolsTokens + historyTokens
+      const usableWindow = usable({ cfg, model, outputTokenMax: flags.outputTokenMax, sessionID: ctx.params.sessionID })
+
+      return {
+        model: {
+          providerID: model.providerID,
+          modelID: model.id,
+          limit: {
+            context: model.limit.context ?? 0,
+            output: ProviderTransform.maxOutputTokens(model, flags.outputTokenMax),
+          },
+          tier,
+        },
+        reserve: model.limit.context ? reserved(cfg, model.limit.input || model.limit.context) : 0,
+        usable: usableWindow,
+        baseline: {
+          system_prompt: systemPrompt,
+          tools: {
+            count: tools.length,
+            chars: tools.reduce((sum, item) => sum + item.chars, 0),
+            est_tokens: toolsTokens,
+          },
+          instructions: instructionCost,
+        },
+        history: {
+          est_tokens: historyTokens,
+          ...(lastReported ? { last_reported: lastReported } : {}),
+          messages: filtered.length,
+          post_compaction: all.some(
+            (m) => m.info.role === "assistant" && m.info.summary === true && !!m.info.finish && !m.info.error,
+          ),
+        },
+        next_request: {
+          est_input_tokens: estInput,
+          headroom: usableWindow - estInput,
+        },
+      }
     })
 
     const diff = Effect.fn("SessionHttpApi.diff")(function* (ctx: {
@@ -415,6 +566,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("status", status)
       .handle("get", get)
       .handle("children", children)
+      .handle("contextBudget", contextBudget)
       .handle("todo", todo)
       .handle("diff", diff)
       .handle("messages", messages)

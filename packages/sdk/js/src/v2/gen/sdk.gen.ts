@@ -181,6 +181,8 @@ import type {
   SessionChildrenResponses,
   SessionCommandErrors,
   SessionCommandResponses,
+  SessionContextBudgetErrors,
+  SessionContextBudgetResponses,
   SessionCreateErrors,
   SessionCreateResponses,
   SessionDeleteErrors,
@@ -3627,6 +3629,42 @@ export class Session2 extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<SessionChildrenResponses, SessionChildrenErrors, ThrowOnError>({
       url: "/session/{sessionID}/children",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get session context budget
+   *
+   * Report the session's context arithmetic: effective model limits, compaction reserve, usable window, per-request baseline cost (system prompt, tools, instructions), history estimate with provider-reported usage, and projected headroom for the next request.
+   */
+  public contextBudget<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionContextBudgetResponses,
+      SessionContextBudgetErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/context-budget",
       ...options,
       ...params,
     })
