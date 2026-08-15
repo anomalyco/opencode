@@ -67,6 +67,12 @@ export const Model = Schema.Struct({
         "Capability tier for this model. Overrides the built-in size heuristic; frontier family models resolve their vendor behavior when unset.",
     }),
   ),
+  prompt: Schema.optional(
+    Schema.String.annotate({
+      description:
+        "Replace the model-family system prompt with this text. Use {file:./path} to load it from a file resolved relative to the config file.",
+    }),
+  ),
   provider: Schema.optional(
     Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) }),
   ),

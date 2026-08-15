@@ -1040,6 +1040,7 @@ export const Model = Schema.Struct({
   name: Schema.String,
   family: optional(Schema.String),
   tier: optional(Schema.Literals(["minimal", "default"])),
+  prompt: optional(Schema.String),
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
   limit: ProviderLimit,
@@ -1508,6 +1509,7 @@ const layer = Layer.effect(
               headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
               family: model.family ?? existingModel?.family ?? "",
               tier: model.tier ?? existingModel?.tier,
+              prompt: model.prompt ?? existingModel?.prompt,
               release_date: model.release_date ?? existingModel?.release_date ?? "",
               variants: {},
             }
