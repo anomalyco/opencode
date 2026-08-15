@@ -6,16 +6,25 @@ import { ProviderTransform } from "@/provider/transform"
 import type { MessageV2 } from "./message-v2"
 
 const COMPACTION_BUFFER = 20_000
+const RESERVED_MINIMUM = 2_048
+const RESERVED_RATIO = 0.15
+
+// Compaction reserve proportional to the window: a fixed 20k reserve is ~36%
+// of a 56k local window but only 10% of 200k. `compaction.reserved` config
+// keeps absolute priority; the min() keeps large-window behavior unchanged.
+export function reserved(cfg: ConfigV1.Info, context: number) {
+  return (
+    cfg.compaction?.reserved ??
+    Math.min(COMPACTION_BUFFER, Math.max(RESERVED_MINIMUM, Math.floor(context * RESERVED_RATIO)))
+  )
+}
 
 export function usable(input: { cfg: ConfigV1.Info; model: Provider.Model; outputTokenMax?: number }) {
   const context = input.model.limit.context
   if (context === 0) return 0
 
-  const reserved =
-    input.cfg.compaction?.reserved ??
-    Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
   return input.model.limit.input
-    ? Math.max(0, input.model.limit.input - reserved)
+    ? Math.max(0, input.model.limit.input - reserved(input.cfg, input.model.limit.input))
     : Math.max(0, context - ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
 }
 
