@@ -54,6 +54,9 @@ export const Definitions = {
   app_toggle_diffwrap: keybind("none", "Toggle diff wrapping"),
   app_toggle_paste_summary: keybind("none", "Toggle paste summary"),
   app_toggle_session_directory_filter: keybind("none", "Toggle session directory filtering"),
+  // fork: same binding this command had before ae9cc413d1 deleted it as
+  // collateral damage — see app.tsx's permission.mode command.
+  permission_mode: keybind("<leader>p", "Toggle permission auto-approve"),
   loop_list: keybind("<leader>j", "Show running and past work"),
   command_list: keybind("ctrl+p", "List available commands"),
   help_show: keybind("none", "Open help dialog"),
@@ -269,6 +272,7 @@ export const CommandMap = {
   app_toggle_diffwrap: "app.toggle.diffwrap",
   app_toggle_paste_summary: "app.toggle.paste_summary",
   app_toggle_session_directory_filter: "app.toggle.session_directory_filter",
+  permission_mode: "permission.mode",
   loop_list: "loop.list",
   command_list: "command.palette.show",
   help_show: "help.show",

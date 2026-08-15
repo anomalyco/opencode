@@ -965,6 +965,22 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
+        // fork: restores parity with upstream's permission.mode command, deleted
+        // 2026-08-06 in ae9cc413d1 as collateral damage of tearing out a
+        // fork-authored 4-state autonomy ladder (manual/skip-ask/continue/auto)
+        // that this toggle had been folded into. The ladder's "continue" and
+        // "auto" states really were dead duplicates of /loop and /auto — this
+        // one wasn't; it's the same permission.toggle() upstream still ships.
+        name: "permission.mode",
+        title:
+          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
+        category: "System",
+        run: () => {
+          local.permission.toggle()
+          dialog.clear()
+        },
+      },
+      {
         name: "app.toggle.paste_summary",
         title: pasteSummaryEnabled() ? "Disable paste summary" : "Enable paste summary",
         category: "System",
