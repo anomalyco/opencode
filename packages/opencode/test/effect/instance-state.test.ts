@@ -4,6 +4,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { $ } from "bun"
 import { Context, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import { InstanceState } from "@/effect/instance-state"
+import { disposeInstance } from "@/effect/instance-registry"
 import {
   disposeAllInstancesEffect,
   provideInstanceEffect,
@@ -76,6 +77,29 @@ it.live("InstanceState invalidates on reload", () =>
 
     expect(a).not.toBe(b)
     expect(seen).toEqual(["1"])
+  }),
+)
+
+// The config PATCH route (ConfigHttpApi.update) marks the instance for
+// disposal; InstanceStore.dispose then runs disposeInstance(directory), which
+// must invalidate every InstanceState cache — including the Provider state
+// holding resolved model limits — so the next turn re-resolves them without a
+// restart. This pins that per-directory invalidation.
+it.live("InstanceState invalidates on disposeInstance for that directory only", () =>
+  Effect.gen(function* () {
+    const one = yield* tmpdirScoped()
+    const two = yield* tmpdirScoped()
+    let n = 0
+    const state = yield* InstanceState.make(() => Effect.sync(() => ({ n: ++n })))
+
+    const a = yield* access(state, one)
+    const other = yield* access(state, two)
+    yield* Effect.promise(() => disposeInstance(one))
+    const b = yield* access(state, one)
+
+    expect(a).not.toBe(b)
+    expect(n).toBe(3)
+    expect(yield* access(state, two)).toBe(other)
   }),
 )
 
