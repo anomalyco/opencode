@@ -234,13 +234,7 @@ describe("run entry body", () => {
               subagent_type: "explore",
             },
             title: "",
-            output: [
-              '<task id="child-1" state="completed">',
-              "<task_result>",
-              "# Findings\n\n- Footer stays live",
-              "</task_result>",
-              "</task>",
-            ].join("\n"),
+            output: ["<<<TASK child-1 COMPLETED: Inspect reducer>>>", "# Findings\n\n- Footer stays live"].join("\n"),
             metadata: {
               sessionId: "child-1",
             },
@@ -264,9 +258,7 @@ describe("run entry body", () => {
               subagent_type: "explore",
             },
             title: "",
-            output: ['<task id="child-1" state="completed">', "<task_result>", "", "</task_result>", "</task>"].join(
-              "\n",
-            ),
+            output: "<<<TASK child-1 COMPLETED: Inspect reducer>>>\n",
             metadata: {
               sessionId: "child-1",
             },

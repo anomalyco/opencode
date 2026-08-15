@@ -761,6 +761,11 @@ function taskResult(output: string): string | undefined {
     return undefined
   }
 
+  const task = output.match(/^<<<TASK [^\n]+>>>\n?([\s\S]*)$/)
+  if (task) {
+    return task[1].trim() || undefined
+  }
+
   const match = output.match(/<task_result>\s*([\s\S]*?)\s*<\/task_result>/)
   if (match) {
     return match[1].trim() || undefined

@@ -28,17 +28,8 @@ const BACKGROUND_DESCRIPTION = [
   "Use background only for independent work that can run while you continue elsewhere.",
   "You will be notified automatically when it finishes.",
 ].join(" ")
-const BACKGROUND_STARTED = [
-  "The task is working in the background. You will be notified automatically when it finishes.",
-  "DO NOT sleep, poll for progress, ask the task for status, or duplicate this task's work — avoid working with the same files or topics it is using.",
-  "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
-].join("\n")
-const BACKGROUND_UPDATED = [
-  "Additional context sent to the running background task.",
-  "The task is still working in the background. You will be notified automatically when it finishes.",
-  "DO NOT sleep, poll for progress, ask the task for status, or duplicate this task's work — avoid working with the same files or topics it is using.",
-  "Work on non-overlapping tasks, or briefly tell the user what you sent and end your response.",
-].join("\n")
+const BACKGROUND_STARTED = "Result arrives automatically; don't poll or work on its files/topics."
+const BACKGROUND_UPDATED = "Context sent; result arrives automatically; don't poll or work on its files/topics."
 
 const BaseParameterFields = {
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
@@ -64,18 +55,12 @@ export const Parameters = Schema.Struct({
 function renderOutput(input: {
   sessionID: SessionID
   state: "running" | "completed" | "error"
-  summary?: string
+  title: string
   text: string
 }) {
-  const tag = input.state === "error" ? "task_error" : "task_result"
-  return [
-    `<task id="${input.sessionID}" state="${input.state}">`,
-    ...(input.summary ? [`<summary>${input.summary}</summary>`] : []),
-    `<${tag}>`,
-    input.text,
-    `</${tag}>`,
-    "</task>",
-  ].join("\n")
+  const state = input.state === "error" ? "FAILED" : input.state.toUpperCase()
+  const title = input.title.replace(/\s+/g, " ").replaceAll(">>>", "> > >").trim()
+  return [`<<<TASK ${input.sessionID} ${state}: ${title}>>>`, input.text].join("\n")
 }
 
 export const TaskTool = Tool.define(
@@ -230,10 +215,7 @@ export const TaskTool = Tool.define(
                 text: renderOutput({
                   sessionID: nextSession.id,
                   state,
-                  summary:
-                    state === "completed"
-                      ? `Background task completed: ${params.description}`
-                      : `Background task failed: ${params.description}`,
+                  title: params.description,
                   text,
                 }),
               },
@@ -264,7 +246,7 @@ export const TaskTool = Tool.define(
           output: renderOutput({
             sessionID: nextSession.id,
             state: "running",
-            summary: "Background task updated",
+            title: params.description,
             text: BACKGROUND_UPDATED,
           }),
         }
@@ -296,7 +278,7 @@ export const TaskTool = Tool.define(
           output: renderOutput({
             sessionID: nextSession.id,
             state: "running",
-            summary: "Background task started",
+            title: params.description,
             text: BACKGROUND_STARTED,
           }),
         }
@@ -330,7 +312,12 @@ export const TaskTool = Tool.define(
             return {
               title: params.description,
               metadata,
-              output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
+              output: renderOutput({
+                sessionID: nextSession.id,
+                state: "completed",
+                title: params.description,
+                text: result?.output ?? "",
+              }),
             }
           }),
         (_, exit) =>

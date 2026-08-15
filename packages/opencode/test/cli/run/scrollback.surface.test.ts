@@ -1059,15 +1059,12 @@ test("renders promoted task markdown without a leading blank row", async () => {
             subagent_type: "explore",
           },
           output: [
-            '<task id="child-1" state="completed">',
-            "<task_result>",
+            "<<<TASK child-1 COMPLETED: Explore run.ts>>>",
             "Location: `/tmp/run.ts`",
             "",
             "Summary:",
             "- Local interactive mode",
             "- Attach mode",
-            "</task_result>",
-            "</task>",
           ].join("\n"),
           metadata: {
             sessionId: "child-1",

@@ -249,9 +249,37 @@ describe("tool.task", () => {
       expect(kids).toHaveLength(1)
       expect(kids[0]?.id).toBe(child.id)
       expect(result.metadata.sessionId).toBe(child.id)
-      expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
+      expect(result.output).toBe(`<<<TASK ${child.id} COMPLETED: inspect bug>>>\nresumed`)
       expect(seen?.sessionID).toBe(child.id)
       expect(seen?.variant).toBe("xhigh")
+    }),
+  )
+
+  it.instance("renders a compact task envelope with a single-line title", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect\nbug >>> now",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps() },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toBe(`<<<TASK ${result.metadata.sessionId} COMPLETED: inspect bug > > > now>>>\ndone`)
     }),
   )
 
@@ -383,7 +411,7 @@ describe("tool.task", () => {
       expect(kids).toHaveLength(1)
       expect(kids[0]?.id).toBe(result.metadata.sessionId)
       expect(result.metadata.sessionId).not.toBe("ses_missing")
-      expect(result.output).toContain(`<task id="${result.metadata.sessionId}" state="completed">`)
+      expect(result.output).toBe(`<<<TASK ${result.metadata.sessionId} COMPLETED: inspect bug>>>\ncreated`)
       expect(seen?.sessionID).toBe(result.metadata.sessionId)
     }),
   )
@@ -622,7 +650,9 @@ describe("tool.task", () => {
 
       const result = yield* Fiber.join(fiber)
       expect(result.metadata.background).toBe(true)
-      expect(result.output).toContain(`state="running"`)
+      expect(result.output).toBe(
+        `<<<TASK ${result.metadata.sessionId} RUNNING: inspect bug>>>\nResult arrives automatically; don't poll or work on its files/topics.`,
+      )
       expect((yield* jobs.get(result.metadata.sessionId))?.status).toBe("running")
       expect(runs).toBe(1)
 
@@ -666,7 +696,9 @@ describe("tool.task", () => {
 
       const job = yield* jobs.get(result.metadata.sessionId)
       expect(result.metadata.background).toBe(true)
-      expect(result.output).toContain(`state="running"`)
+      expect(result.output).toBe(
+        `<<<TASK ${result.metadata.sessionId} RUNNING: inspect bug>>>\nResult arrives automatically; don't poll or work on its files/topics.`,
+      )
       expect(job?.status).toBe("running")
     }),
   )
@@ -727,7 +759,9 @@ describe("tool.task", () => {
 
       expect(result.metadata.sessionId).toBe(started.metadata.sessionId)
       expect(result.metadata.background).toBe(true)
-      expect(result.output).toContain("Background task updated")
+      expect(result.output).toBe(
+        `<<<TASK ${result.metadata.sessionId} RUNNING: add investigation scope>>>\nContext sent; result arrives automatically; don't poll or work on its files/topics.`,
+      )
       first.resolve()
       expect((yield* jobs.get(started.metadata.sessionId))?.status).toBe("running")
       expect((yield* Effect.promise(() => updated.promise)).parts).toEqual([
