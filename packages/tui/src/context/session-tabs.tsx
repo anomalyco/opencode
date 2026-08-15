@@ -248,6 +248,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     onCleanup(event.on("session.execution.interrupted", (evt) => markUnread(evt.data.sessionID, "activity")))
     onCleanup(event.on("session.execution.failed", (evt) => markUnread(evt.data.sessionID, "error")))
     onCleanup(
+      event.on("session.moved", (evt) => {
+        if (!enabled() || !state().tabs.some((tab) => tab.sessionID === root(evt.data.sessionID))) return
+        void Promise.allSettled([data.location.syncInfo(evt.data.location), data.location.vcs.sync(evt.data.location)])
+      }),
+    )
+    onCleanup(
       event.on("session.inbox.enqueued", (evt) => {
         if (!enabled() || evt.data.item.type !== "user") return
         const sessionID = root(evt.data.sessionID)

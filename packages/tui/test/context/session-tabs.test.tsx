@@ -197,6 +197,32 @@ test("loads VCS metadata for each persisted tab location", async () => {
   }
 })
 
+test("loads location metadata when an open session moves", async () => {
+  const destination = `${directory}/moved-worktree`
+  const setup = await renderSessionTabs("first")
+
+  try {
+    await wait(() => setup.locations.includes(directory) && setup.vcsLocations.includes(directory))
+    setup.emit({
+      id: "evt_moved",
+      created: 1,
+      type: "session.moved",
+      durable: { aggregateID: "first", seq: 1, version: 1 },
+      data: {
+        sessionID: "first",
+        location: { directory: destination },
+        projectID: "project",
+      },
+    })
+
+    await wait(() => setup.data.session.get("first")?.location.directory === destination)
+    await wait(() => setup.locations.includes(destination))
+    await wait(() => setup.vcsLocations.includes(destination))
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("stores session tabs for the current working directory by default", async () => {
   const setup = await renderSessionTabs("first")
 
