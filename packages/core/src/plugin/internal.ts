@@ -119,7 +119,7 @@ const layer = Layer.effectDiscard(
         yield* add(ConfigExternalPlugin.Plugin)
         yield* add(ConfigProviderPlugin.Plugin)
         yield* add(VariantPlugin.Plugin)
-      }),
+      }).pipe(Effect.andThen(plugin.sealInitial)),
     ).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
   }),
 )
