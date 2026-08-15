@@ -52,7 +52,11 @@ function search<T>(items: T[], target: string, key: (item: T) => string) {
 }
 
 function compareMessage(a: Message, b: Message) {
-  return a.time.created - b.time.created || a.id.localeCompare(b.id)
+  // Raw comparison, not localeCompare: storage pages with ORDER BY time_created, id under
+  // SQLite's BINARY collation, so locale collation can order a same-millisecond pair the
+  // opposite way here. localeCompare also returns 0 for canonically-equivalent distinct ids,
+  // which would make this sort input-order dependent.
+  return a.time.created - b.time.created || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 }
 
 const messageKey = (message: Message) => message.time.created + message.id
