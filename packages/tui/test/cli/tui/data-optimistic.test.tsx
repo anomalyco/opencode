@@ -231,6 +231,108 @@ test("cancellation clears the optimistic echo for good", async () => {
   }
 })
 
+test("optimistic session creation seeds info and suppresses initial reads", async () => {
+  const events = createEventStream()
+  const sessionID = "ses_optimistic"
+  const fetched: string[] = []
+  const calls = createFetch((url) => {
+    if (!url.pathname.startsWith(`/api/session/${sessionID}`)) return
+    fetched.push(url.pathname)
+    if (url.pathname === `/api/session/${sessionID}`)
+      return json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          location: { directory },
+          agent: "build",
+          title: "Server title",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 1, updated: 1 },
+        },
+      })
+  }, events)
+  const { app, data } = await renderData(calls.fetch)
+
+  try {
+    data.session.optimistic.create({
+      sessionID,
+      projectID: "proj_test",
+      location: { directory },
+      agent: "build",
+      model: { providerID: "provider", id: "model" },
+    })
+    const seeded = data.session.get(sessionID)
+    expect(seeded?.projectID).toBe("proj_test")
+    expect(seeded?.agent).toBe("build")
+
+    // Seeded reads are marked complete: the server does not know the session yet.
+    await data.session.sync(sessionID, { children: true })
+    await data.session.message.sync(sessionID)
+    await data.session.pending.sync(sessionID)
+    expect(fetched).toEqual([])
+
+    // The session.created echo invalidates the info read and loads server truth.
+    emitEvent(events, {
+      id: "evt_created",
+      created: 2,
+      type: "session.created",
+      durable: durable(sessionID),
+      data: {
+        sessionID,
+        projectID: "proj_test",
+        location: { directory },
+        slug: "server-slug",
+        agent: "build",
+        version: "test",
+      },
+    })
+    await wait(() => data.session.get(sessionID)?.title === "Server title")
+    expect(fetched).toEqual([`/api/session/${sessionID}`])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("rollbackCreate removes the seeded session and re-enables reads", async () => {
+  const events = createEventStream()
+  const sessionID = "ses_rollback"
+  const fetched: string[] = []
+  const calls = createFetch((url) => {
+    if (url.pathname !== `/api/session/${sessionID}/message`) return
+    fetched.push(url.pathname)
+    return json({ data: [], cursor: {} })
+  }, events)
+  const { app, data } = await renderData(calls.fetch)
+
+  try {
+    data.session.optimistic.create({
+      sessionID,
+      projectID: "proj_test",
+      location: { directory },
+    })
+    data.session.optimistic.prompt({
+      sessionID,
+      messageID: "msg_first",
+      delivery: "steer",
+      text: "First prompt",
+    })
+    expect(data.session.message.list(sessionID)).toHaveLength(1)
+
+    data.session.optimistic.rollback(sessionID, "msg_first")
+    data.session.optimistic.rollbackCreate(sessionID)
+    expect(data.session.get(sessionID)).toBeUndefined()
+    expect(data.session.message.list(sessionID)).toHaveLength(0)
+    expect(data.session.pending.list(sessionID)).toHaveLength(0)
+
+    // The seed's completed read markers are gone with it.
+    await data.session.message.sync(sessionID)
+    expect(fetched).toEqual([`/api/session/${sessionID}/message`])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("revert commit preserves unconfirmed optimistic prompts", async () => {
   const events = createEventStream()
   const sessionID = "session-optimistic-revert"

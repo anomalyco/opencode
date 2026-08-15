@@ -59,8 +59,10 @@ import {
 import { useData } from "../../context/data"
 import { usePromptRef } from "../../context/prompt"
 import { useLocation } from "../../context/location"
-import type { PromptFileAttachment, PromptSkillAttachment, SkillInfo } from "@opencode-ai/client"
+import type { LocationRef, PromptFileAttachment, PromptSkillAttachment, SkillInfo } from "@opencode-ai/client"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
+import { SessionID } from "@opencode-ai/schema/session-id"
+import { useSessionTabs } from "../../context/session-tabs"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { abbreviateHome } from "../../runtime"
 import { Slot } from "../../plugin/render"
@@ -258,6 +260,7 @@ export function Prompt(props: PromptProps) {
   const route = useRoute()
   const data = useData()
   const activePrompt = usePromptRef()
+  const sessionTabs = useSessionTabs()
   const directoryRecents = useDirectoryRecents()
   const keymapCommands = Keymap.useCommands()
   const currentLocation = useLocation()
@@ -1242,6 +1245,8 @@ export function Prompt(props: PromptProps) {
     const variant = selection.variant
     let sessionID = props.sessionID
     let finishMoveProgress = false
+    let createSession: (() => Promise<unknown>) | undefined
+    let createLocation: LocationRef | undefined
     if (sessionID == null) {
       const directory = await move.getDirectory()
       if (move.pending() && !directory) return false
@@ -1249,31 +1254,46 @@ export function Prompt(props: PromptProps) {
       // The location context is where the next session is created: seeded by the home
       // route (launch cwd, inherited session location, or picked project) and updated
       // by /cd before a session exists.
-      const location = currentLocation.ref ?? data.location.default()
-
-      const created = await client.api.session
-        .create({
-          location: directory ? { directory } : location,
+      const location = directory ? { directory } : (currentLocation.ref ?? data.location.default())
+      const model = { providerID: selection.providerID, id: selection.modelID, variant }
+      // Seed the session locally with a client-generated ID and create it in the
+      // background so navigation and the prompt echo render immediately. Optimistic
+      // creation covers the plain prompt path when the location's project is known.
+      // Worktree-backed creation keeps its progress flow, and command, skill, and
+      // shell submissions target the session right away, so those await creation.
+      const plainPrompt = store.mode !== "shell" && !(slashHead && isCommand) && !isSkill
+      const projectID = directory ? undefined : data.location.info(location)?.project.id
+      if (plainPrompt && projectID) {
+        const created = SessionID.create()
+        data.session.optimistic.create({
+          sessionID: created,
+          projectID,
+          location,
           agent: agent.id,
-          model: {
-            providerID: selection.providerID,
-            id: selection.modelID,
-            variant,
-          },
+          model,
         })
-        .catch(() => undefined)
-
-      if (!created) {
-        if (finishMoveProgress) move.finishSubmit()
-        toast.show({
-          message: "Creating a session failed. Open console for more details.",
-          variant: "error",
-        })
-
-        return true
+        sessionID = created
+        createLocation = location
+        createSession = () => client.api.session.create({ id: created, location, agent: agent.id, model })
       }
 
-      sessionID = created.id
+      if (sessionID == null) {
+        const created = await client.api.session
+          .create({ location, agent: agent.id, model })
+          .catch(() => undefined)
+
+        if (!created) {
+          if (finishMoveProgress) move.finishSubmit()
+          toast.show({
+            message: "Creating a session failed. Open console for more details.",
+            variant: "error",
+          })
+
+          return true
+        }
+
+        sessionID = created.id
+      }
     }
 
     // Capture mode before it gets reset
@@ -1335,8 +1355,14 @@ export function Prompt(props: PromptProps) {
       // Mark the editor context sent with the echo so a rapid follow-up submit
       // does not re-attach the same selection while admission is in flight.
       if (editorContextText) editor.markSelectionSent()
+      let createFailed = false
       void enqueueSubmit(submitSessionID, async () => {
         const error = await (async () => {
+          if (createSession)
+            await createSession().catch((error) => {
+              createFailed = true
+              throw error
+            })
           let session = data.session.get(submitSessionID)
           if (!session) {
             await data.session.sync(submitSessionID)
@@ -1375,6 +1401,17 @@ export function Prompt(props: PromptProps) {
         )
         if (error === undefined) return
         data.session.optimistic.rollback(submitSessionID, messageID)
+        if (createFailed) {
+          // The session never existed server-side: leave the optimistic tab, return
+          // to the home screen with the prompt restored, and drop the seed.
+          if (route.data.type === "session" && route.data.sessionID === submitSessionID)
+            route.navigate({ type: "home", prompt: snapshot, location: createLocation })
+          else saveDraft(undefined, { prompt: snapshot, cursor: snapshot.text.length })
+          sessionTabs.close(submitSessionID)
+          data.session.optimistic.rollbackCreate(submitSessionID)
+          toast.show({ title: "Failed to create session", message: errorMessage(error), variant: "error" })
+          return
+        }
         restorePrompt(submitSessionID, snapshot)
         toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
       })

@@ -346,6 +346,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       messageIndex.delete(sessionID)
       optimisticPrompts.delete(sessionID)
       sync.invalidate(`session:${sessionID}`)
+      sync.invalidate(`session.family:${sessionID}`)
       sync.invalidate(`session.pending:${sessionID}`)
       sync.invalidate(`session.message:${sessionID}`)
       sync.invalidate(`session.permission:${sessionID}`)
@@ -1066,6 +1067,41 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
         },
         optimistic: {
+          // Seed a session locally before server creation so navigation and the first
+          // prompt echo render immediately. Reads are marked complete so the session
+          // route does not fetch a session the server does not know yet; the
+          // session.created echo invalidates the info read and loads server truth.
+          create(input: {
+            sessionID: string
+            projectID: string
+            location: LocationRef
+            agent?: string
+            model?: SessionInfo["model"]
+          }) {
+            const now = Date.now()
+            const info: SessionInfo = {
+              id: input.sessionID,
+              projectID: input.projectID,
+              location: input.location,
+              agent: input.agent,
+              model: input.model,
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              time: { created: now, updated: now },
+            }
+            batch(() => {
+              setStore("session", "info", input.sessionID, info)
+              registerSession(input.sessionID)
+            })
+            sync.complete(`session:${input.sessionID}`)
+            sync.complete(`session.family:${input.sessionID}`)
+            sync.complete(`session.pending:${input.sessionID}`)
+            sync.complete(`session.message:${input.sessionID}`)
+          },
+          // Remove a seeded session after creation fails. Callers navigate away first.
+          rollbackCreate(sessionID: string) {
+            removeSession(sessionID)
+          },
           // Locally echo a user prompt before server admission. The session.inbox.enqueued
           // echo carrying the same message ID replaces the copy with server truth; rollback
           // removes the echo when submission fails.
