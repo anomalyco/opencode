@@ -12,7 +12,8 @@ import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
-import { isOverflow } from "./overflow"
+import { isOverflow, learnContextLimit } from "./overflow"
+import { Token } from "@/util/token"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
@@ -72,6 +73,7 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  lastStream: LLM.StreamInput | undefined
 }
 
 type StreamEvent = LLMEvent
@@ -111,6 +113,7 @@ const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        lastStream: undefined,
       }
       let aborted = false
 
@@ -476,7 +479,7 @@ const layer = Layer.effect(
               .pipe(Effect.ignore, Effect.forkIn(scope))
             if (
               !ctx.assistantMessage.summary &&
-              isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
+              isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model, sessionID: ctx.sessionID })
             ) {
               ctx.needsCompaction = true
             }
@@ -605,6 +608,17 @@ const layer = Layer.effect(
         })
         const error = parse(e)
         if (SessionV1.ContextOverflowError.isInstance(error)) {
+          // With no configured context limit, remember the failing request's
+          // estimated size as a session-level upper bound so the next
+          // overflow check compacts before the provider rejects again.
+          if (!input.model.limit.context && ctx.lastStream) {
+            const estimated = Token.estimate(JSON.stringify([ctx.lastStream.system, ctx.lastStream.messages]))
+            learnContextLimit(ctx.sessionID, estimated)
+            yield* Effect.logWarning("learned session context cap from provider overflow", {
+              "session.id": ctx.sessionID,
+              estimated,
+            })
+          }
           if ((yield* config.get()).compaction?.auto === false && !ctx.assistantMessage.summary) {
             ctx.assistantMessage.error = error
             ctx.assistantMessage.finish = "error"
@@ -630,6 +644,7 @@ const layer = Layer.effect(
           messageID: input.assistantMessage.id,
         })
         ctx.needsCompaction = false
+        ctx.lastStream = streamInput
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
         return yield* Effect.gen(function* () {

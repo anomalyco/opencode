@@ -9,6 +9,36 @@ const COMPACTION_BUFFER = 20_000
 const RESERVED_MINIMUM = 2_048
 const RESERVED_RATIO = 0.15
 
+// An unset/zero context limit must not read as infinite: router and local
+// providers frequently report 0, which previously disabled proactive
+// compaction entirely and let every session run into provider overflow
+// errors. Unless auto compaction is explicitly off, assume this conservative
+// usable window, shrunk further by any session-level cap learned from
+// provider overflow errors.
+export const DEFAULT_USABLE_CONTEXT = 32_000
+
+const learnedLimits = new Map<string, number>()
+const warnedSessions = new Set<string>()
+
+// Records the estimated input size of a request the provider rejected for
+// context overflow. Used as an upper bound on the real window for models that
+// report no context limit; only the smallest observation is kept.
+export function learnContextLimit(sessionID: string, tokens: number) {
+  if (tokens <= 0) return
+  const prior = learnedLimits.get(sessionID)
+  if (prior === undefined || tokens < prior) learnedLimits.set(sessionID, tokens)
+}
+
+// True exactly once per session when the model reports no context limit while
+// auto compaction stays enabled, so the caller can log the fallback loudly.
+export function shouldWarnUnsetLimit(input: { cfg: ConfigV1.Info; model: Provider.Model; sessionID: string }) {
+  if (input.model.limit.context) return false
+  if (input.cfg.compaction?.auto === false) return false
+  if (warnedSessions.has(input.sessionID)) return false
+  warnedSessions.add(input.sessionID)
+  return true
+}
+
 // Compaction reserve proportional to the window: a fixed 20k reserve is ~36%
 // of a 56k local window but only 10% of 200k. `compaction.reserved` config
 // keeps absolute priority; the min() keeps large-window behavior unchanged.
@@ -19,9 +49,19 @@ export function reserved(cfg: ConfigV1.Info, context: number) {
   )
 }
 
-export function usable(input: { cfg: ConfigV1.Info; model: Provider.Model; outputTokenMax?: number }) {
+export function usable(input: {
+  cfg: ConfigV1.Info
+  model: Provider.Model
+  outputTokenMax?: number
+  sessionID?: string
+}) {
   const context = input.model.limit.context
-  if (context === 0) return 0
+  if (!context) {
+    if (input.cfg.compaction?.auto === false) return 0
+    const learned = input.sessionID ? learnedLimits.get(input.sessionID) : undefined
+    if (learned === undefined) return DEFAULT_USABLE_CONTEXT
+    return Math.min(DEFAULT_USABLE_CONTEXT, Math.max(0, learned - reserved(input.cfg, learned)))
+  }
 
   return input.model.limit.input
     ? Math.max(0, input.model.limit.input - reserved(input.cfg, input.model.limit.input))
@@ -33,9 +73,9 @@ export function isOverflow(input: {
   tokens: SessionV1.Assistant["tokens"]
   model: Provider.Model
   outputTokenMax?: number
+  sessionID?: string
 }) {
   if (input.cfg.compaction?.auto === false) return false
-  if (input.model.limit.context === 0) return false
 
   const count =
     input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write

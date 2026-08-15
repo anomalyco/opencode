@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { reserved, usable } from "@/session/overflow"
+import {
+  reserved,
+  usable,
+  isOverflow,
+  learnContextLimit,
+  shouldWarnUnsetLimit,
+  DEFAULT_USABLE_CONTEXT,
+} from "@/session/overflow"
 import type { Provider } from "@/provider/provider"
 
 function cfg(compaction?: ConfigV1.Info["compaction"]) {
@@ -63,5 +70,73 @@ describe("overflow.usable", () => {
 
   test("keeps the context minus output path for models without limit.input", () => {
     expect(usable({ cfg: cfg(), model: model({ context: 200_000, output: 64_000 }) })).toBe(168_000)
+  })
+
+  test("unset context limit falls back to the conservative default window", () => {
+    expect(usable({ cfg: cfg(), model: model({ context: 0, output: 32_000 }) })).toBe(DEFAULT_USABLE_CONTEXT)
+  })
+
+  test("unset context limit stays disabled when compaction.auto is off", () => {
+    expect(usable({ cfg: cfg({ auto: false }), model: model({ context: 0, output: 32_000 }) })).toBe(0)
+  })
+
+  test("learned session cap shrinks the default window", () => {
+    const sessionID = "ses_learned_cap"
+    learnContextLimit(sessionID, 10_000)
+    // 10_000 - reserved(10_000) = 10_000 - 2_048
+    expect(usable({ cfg: cfg(), model: model({ context: 0, output: 32_000 }), sessionID })).toBe(7_952)
+    // only the smallest observation is kept
+    learnContextLimit(sessionID, 50_000)
+    expect(usable({ cfg: cfg(), model: model({ context: 0, output: 32_000 }), sessionID })).toBe(7_952)
+    learnContextLimit(sessionID, 5_000)
+    expect(usable({ cfg: cfg(), model: model({ context: 0, output: 32_000 }), sessionID })).toBe(2_952)
+  })
+
+  test("learned cap never applies to models with explicit limits", () => {
+    const sessionID = "ses_learned_explicit"
+    learnContextLimit(sessionID, 1_000)
+    expect(usable({ cfg: cfg(), model: model({ context: 200_000, output: 64_000 }), sessionID })).toBe(168_000)
+  })
+})
+
+describe("overflow.isOverflow", () => {
+  const tokens = (total: number) => ({ input: total, output: 0, reasoning: 0, cache: { read: 0, write: 0 } })
+
+  test("unset context limit overflows at the conservative default window", () => {
+    const zero = model({ context: 0, output: 32_000 })
+    expect(isOverflow({ cfg: cfg(), tokens: tokens(33_000), model: zero })).toBe(true)
+    expect(isOverflow({ cfg: cfg(), tokens: tokens(10_000), model: zero })).toBe(false)
+  })
+
+  test("unset context limit never overflows when compaction.auto is off", () => {
+    const zero = model({ context: 0, output: 32_000 })
+    expect(isOverflow({ cfg: cfg({ auto: false }), tokens: tokens(100_000), model: zero })).toBe(false)
+  })
+
+  test("explicit limits behave exactly as before", () => {
+    const explicit = model({ context: 200_000, output: 64_000 })
+    expect(isOverflow({ cfg: cfg(), tokens: tokens(168_000), model: explicit })).toBe(true)
+    expect(isOverflow({ cfg: cfg(), tokens: tokens(167_999), model: explicit })).toBe(false)
+  })
+})
+
+describe("overflow.shouldWarnUnsetLimit", () => {
+  test("warns exactly once per session for unset limits", () => {
+    const input = { cfg: cfg(), model: model({ context: 0, output: 32_000 }), sessionID: "ses_warn_once" }
+    expect(shouldWarnUnsetLimit(input)).toBe(true)
+    expect(shouldWarnUnsetLimit(input)).toBe(false)
+  })
+
+  test("never warns for explicit limits or disabled auto compaction", () => {
+    expect(
+      shouldWarnUnsetLimit({ cfg: cfg(), model: model({ context: 200_000, output: 64_000 }), sessionID: "ses_warn_a" }),
+    ).toBe(false)
+    expect(
+      shouldWarnUnsetLimit({
+        cfg: cfg({ auto: false }),
+        model: model({ context: 0, output: 32_000 }),
+        sessionID: "ses_warn_b",
+      }),
+    ).toBe(false)
   })
 })
