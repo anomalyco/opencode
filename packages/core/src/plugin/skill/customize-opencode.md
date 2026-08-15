@@ -47,7 +47,8 @@ already-loaded config until then.
 | Global commands               | `~/.config/opencode/command(s)/<name>.md`                                                                                 |
 | Project skills                | `.opencode/skill(s)/<name>/SKILL.md`                                                                                      |
 | Global skills                 | `~/.config/opencode/skill(s)/<name>/SKILL.md`                                                                             |
-| External skills (auto-loaded) | `~/.claude/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md`                                                    |
+| External skills — global (auto-loaded)  | `~/.claude/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md`                                                    |
+| External skills — project (auto-loaded) | `.claude/skills/<name>/SKILL.md`, `.agents/skills/<name>/SKILL.md` (discovered by walking up from the cwd to the worktree root) |
 
 Configs from each scope are deep-merged. Project overrides global. Unknown
 top-level keys in `opencode.json` are rejected with `ConfigInvalidError`.
