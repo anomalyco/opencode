@@ -2353,6 +2353,57 @@ noLLMServer.instance(
   },
 )
 
+noLLMServer.instance(
+  "unknown variant throws and lists the model's valid values (#40182)",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const exit = yield* prompt
+        .prompt({
+          sessionID: session.id,
+          agent: "build",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") },
+          variant: "totally-invalid-xyz",
+          noReply: true,
+          parts: [{ type: "text", text: "hello" }],
+        })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause)
+        expect(NamedError.Unknown.isInstance(err)).toBe(true)
+        if (NamedError.Unknown.isInstance(err)) {
+          expect(err.data.message).toContain('Unknown variant "totally-invalid-xyz"')
+          expect(err.data.message).toContain("test/test-model")
+          // Lists the declared variants so the user can correct the flag.
+          expect(err.data.message).toContain("high")
+          expect(err.data.message).toContain("xhigh")
+        }
+      }
+    }),
+  {
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              variants: { xhigh: {}, high: {} },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
 // Agent / command resolution errors
 
 noLLMServer.instance(

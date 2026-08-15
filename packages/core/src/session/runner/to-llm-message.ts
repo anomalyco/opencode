@@ -71,7 +71,35 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
   const sameModel =
     String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
-  const content = message.content.flatMap((item): ContentPart[] => {
+  // An interrupted tool run can leave a second tool part that reuses an
+  // existing callID (e.g. a `completed` part plus an `error`/`Tool execution
+  // aborted` part with `metadata.interrupted`). Serializing both to the
+  // provider yields a duplicate `tool_call_id`, which every provider rejects
+  // with a 400 - and because compaction re-sends the full history, the
+  // session can never compact again. Drop the duplicate before lowering,
+  // keeping the most informative state (completed > error > running > pending).
+  // See #40235.
+  const toolStateRank: Record<SessionMessage.ToolState["status"], number> = {
+    completed: 0,
+    error: 1,
+    running: 2,
+    pending: 3,
+  }
+  // For each callID, pick the part with the most informative status. The
+  // first occurrence's position is preserved so tool/text/reasoning order
+  // stays stable.
+  const bestToolByCallID = new Map<string, SessionMessage.AssistantTool>()
+  for (const item of message.content) {
+    if (item.type !== "tool") continue
+    const prev = bestToolByCallID.get(item.id)
+    if (!prev || toolStateRank[item.state.status] < toolStateRank[prev.state.status]) {
+      bestToolByCallID.set(item.id, item)
+    }
+  }
+  const dedupedContent = message.content.filter(
+    (item) => item.type !== "tool" || item === bestToolByCallID.get(item.id),
+  )
+  const content = dedupedContent.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
     if (item.type === "reasoning")
       return sameModel
@@ -98,7 +126,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
     if (part.type !== "reasoning") return true
     return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
   })
-  const results = message.content
+  const results = dedupedContent
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true)
     .map((item) =>
       toolResult(item, reuseProviderMetadata ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined),
