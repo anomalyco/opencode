@@ -1,0 +1,92 @@
+---
+title: "Voice input"
+description: "Use voice input in your terminal with OpenCode via a local MCP server"
+icon: "microphone"
+---
+
+Speak your prompts instead of typing them. The voice input MCP server records audio
+from your microphone, transcribes it locally with Whisper, and optionally types the
+result at your cursor — all 100% offline, no cloud API required.
+
+It works with any MCP-compatible tool (OpenCode, Claude Code, Cursor), and is useful
+anywhere you'd rather dictate than type.
+
+## Install
+
+The server is published as a standalone package:
+
+```bash
+npm install -g @yuvarjbhado/voice-mcp
+```
+
+Or run it on demand with `npx`:
+
+```bash
+npx -y @yuvarjbhado/voice-mcp
+```
+
+## Prerequisites
+
+- **Recording tool**: `sox` (macOS/Linux) or `ffmpeg` (Windows / fallback)
+  ```bash
+  brew install sox          # macOS
+  sudo apt install sox      # Linux
+  scoop install ffmpeg      # Windows
+  ```
+- **Transcription engine**: local [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
+  ```bash
+  pip install faster-whisper
+  ```
+
+## Configure
+
+Add the server to your OpenCode config (usually `~/.config/opencode/config.json`):
+
+```json
+{
+  "mcp": {
+    "voice": {
+      "command": "npx",
+      "args": ["-y", "@yuvarjbhado/voice-mcp"]
+    }
+  }
+}
+```
+
+Restart OpenCode to load the server, then invoke it from a session:
+
+```
+@voice voice_transcribe
+@voice voice_type
+@voice voice_status
+```
+
+## Tools
+
+| Tool | Description |
+|------|-------------|
+| `voice_transcribe` | Record audio and return the transcribed text. |
+| `voice_type` | Record, transcribe, and type the text at the cursor position. |
+| `voice_status` | Report whether recording and transcription are available. |
+
+Both `voice_transcribe` and `voice_type` accept optional arguments:
+
+- `duration` (number, default `10`) — recording length in seconds
+- `language` (string, default auto-detect) — e.g. `en`, `es`, `fr`
+
+## Configuration
+
+The transcription model can be tuned with environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WHISPER_MODEL` | `base` | Model size (`tiny`, `base`, `small`, `medium`, `large-v3`) |
+| `WHISPER_DEVICE` | `auto` | `cpu`, `cuda`, or `auto` |
+| `WHISPER_COMPUTE` | `int8` | Compute type (`int8`, `float16`, `float32`) |
+
+## Privacy
+
+Audio is captured locally and transcribed on your machine with faster-whisper.
+Nothing is sent to a remote server.
+
+Source: [YuvrajSinghBhadoria2/opencode-voice-mcp](https://github.com/YuvrajSinghBhadoria2/opencode-voice-mcp)
