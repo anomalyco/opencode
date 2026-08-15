@@ -40,6 +40,8 @@ export const Info = Schema.Struct({
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     updated: DateTimeUtcFromMillis,
+    idle: DateTimeUtcFromMillis.pipe(optional),
+    viewed: DateTimeUtcFromMillis.pipe(optional),
     archived: DateTimeUtcFromMillis.pipe(optional),
   }),
   title: Schema.String.pipe(optional),

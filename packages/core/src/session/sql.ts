@@ -56,6 +56,8 @@ export const SessionTable = sqliteTable(
       variant?: string
     }>(),
     ...Timestamps,
+    time_idle: integer(),
+    time_viewed: integer(),
     time_compacting: integer(),
     time_archived: integer(),
     /** The execution claim timestamp (historical column name; see SessionStore.claim). */

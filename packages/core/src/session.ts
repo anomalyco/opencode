@@ -165,6 +165,7 @@ export interface Interface {
     input: ForkInput,
   ) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError | ForkEmptyError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
+  readonly view: (input: { sessionID: SessionSchema.ID }) => Effect.Effect<void, NotFoundError>
   readonly remove: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
@@ -307,6 +308,7 @@ const layer = Layer.effect(
     const scope = yield* Scope.Scope
     const activeShells = new Set<SessionSchema.ID>()
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
+    const viewLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
     const closeTransport = Effect.fn("Session.closeTransport")(function* (session: SessionSchema.Info) {
       const location = Location.Ref.make({
         directory: session.location.directory,
@@ -447,6 +449,21 @@ const layer = Layer.effect(
         if (!session) return yield* new NotFoundError({ sessionID })
         return session
       }),
+      view: Effect.fn("Session.view")((input) =>
+        viewLocks.withLock(input.sessionID)(
+          Effect.gen(function* () {
+            const row = yield* db
+              .select({ idle: SessionTable.time_idle, viewed: SessionTable.time_viewed })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, input.sessionID))
+              .get()
+              .pipe(Effect.orDie)
+            if (!row) return yield* new NotFoundError({ sessionID: input.sessionID })
+            if (row.idle === null || row.viewed === row.idle) return
+            yield* bus.publish(SessionEvent.Viewed, { sessionID: input.sessionID })
+          }),
+        ),
+      ),
       remove: Effect.fn("Session.remove")(function* (sessionID) {
         const session = yield* result.get(sessionID)
         yield* execution.interrupt(sessionID)

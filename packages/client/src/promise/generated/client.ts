@@ -22,6 +22,8 @@ import type {
   SessionActiveOutput,
   SessionGetInput,
   SessionGetOutput,
+  SessionViewInput,
+  SessionViewOutput,
   SessionRemoveInput,
   SessionRemoveOutput,
   SessionForkInput,
@@ -526,6 +528,17 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      view: (input: SessionViewInput, requestOptions?: RequestOptions) =>
+        request<SessionViewOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/view`,
+            successStatus: 204,
+            declaredStatuses: [404, 401, 400],
+            empty: true,
+          },
+          requestOptions,
+        ),
       remove: (input: SessionRemoveInput, requestOptions?: RequestOptions) =>
         request<SessionRemoveOutput>(
           {
