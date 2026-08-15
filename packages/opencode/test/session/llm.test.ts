@@ -1290,6 +1290,88 @@ describe("session.llm.stream", () => {
   )
 
   it.instance(
+    "carries D2 telemetry headers with consistent arithmetic",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(alibabaQwenFixture.providerID, alibabaQwenFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Hello"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(alibabaQwenFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-telemetry")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        yield* drain({
+          user: {
+            id: MessageID.make("msg_user-telemetry"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderV2.ID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
+          } satisfies SessionV1.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {
+            question: tool({
+              description: "Ask a question",
+              inputSchema: z.object({}),
+              execute: async () => ({ output: "" }),
+            }),
+          },
+          subagents: ["researcher", "reviewer"],
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        const header = (name: string) => capture.headers.get(name)
+        const num = (name: string) => Number(header(name))
+
+        expect(num("x-opencode-est-input-tokens")).toBeGreaterThan(0)
+        expect(num("x-opencode-history-tokens")).toBeGreaterThan(0)
+        expect(num("x-opencode-baseline-tokens")).toBeGreaterThan(0)
+        expect(num("x-opencode-tools-tokens")).toBeGreaterThan(0)
+        // est_input = history + baseline; baseline includes the tools figure.
+        expect(num("x-opencode-est-input-tokens")).toBe(
+          num("x-opencode-history-tokens") + num("x-opencode-baseline-tokens"),
+        )
+        expect(num("x-opencode-baseline-tokens")).toBeGreaterThanOrEqual(num("x-opencode-tools-tokens"))
+        expect(num("x-opencode-limit-context")).toBe(resolved.limit.context)
+        expect(num("x-opencode-limit-output")).toBeGreaterThan(0)
+        expect(num("x-opencode-usable")).toBeGreaterThan(0)
+        expect(header("x-opencode-tier")).toBe("default")
+        expect(header("x-opencode-session-id")).toBe(sessionID)
+        expect(header("x-opencode-agent")).toBe("test")
+        expect(header("x-opencode-subagents")).toBe("researcher,reviewer")
+      }),
+    {
+      config: () => ({
+        enabled_providers: [alibabaQwenFixture.providerID],
+        provider: {
+          [alibabaQwenFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
     "repairs malformed tool-call JSON arguments in-stream",
     () =>
       Effect.gen(function* () {

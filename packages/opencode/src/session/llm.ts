@@ -49,6 +49,9 @@ export type StreamInput = {
   // B1: the prompt loop's final permitted step. Request prep strips the tool
   // roster so the MAX_STEPS_PROMPT's "tools are disabled" claim is true on the wire.
   lastStep?: boolean
+  // D2: non-primary agent names available to the task tool, forwarded to the
+  // telemetry headers. Computed in the prompt loop where agents are in hand.
+  subagents?: readonly string[]
 }
 
 export type StreamRequest = StreamInput & {

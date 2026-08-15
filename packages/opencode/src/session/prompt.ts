@@ -1269,6 +1269,15 @@ const layer = Layer.effect(
             ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            // D2: the same roster the task tool description advertises
+            // (ToolRegistry.describeTask), carried on telemetry headers.
+            const subagents = (yield* agents.list())
+              .filter(
+                (item) =>
+                  item.mode !== "primary" &&
+                  Permission.evaluate("task", item.name, agent.permission).action !== "deny",
+              )
+              .map((item) => item.name)
             const result = yield* handle.process({
               user: lastUser,
               agent,
@@ -1284,6 +1293,7 @@ const layer = Layer.effect(
               model,
               toolChoice: format.type === "json_schema" ? "required" : isLastStep ? "none" : undefined,
               lastStep: isLastStep,
+              subagents,
             })
 
             if (structured !== undefined) {

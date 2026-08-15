@@ -13,6 +13,7 @@ import type { MessageV2 } from "../message-v2"
 import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "../system"
+import { SessionTier } from "../tier"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Record } from "effect"
 import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
@@ -39,6 +40,10 @@ type PrepareInput = {
   readonly cfg: ConfigV1.Info
   readonly isWorkflow: boolean
   readonly lastStep?: boolean
+  // D2: non-primary agent names available to the task tool, computed where
+  // agents are in hand (prompt loop) and carried on the telemetry headers so
+  // routers can tighten task.subagent_type without probing the engine.
+  readonly subagents?: readonly string[]
 }
 
 export type Prepared = {
@@ -188,20 +193,22 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   // Window-aware output clamp: never request more output than the usable
   // window leaves after the estimated input. This seam is where the fully
   // composed request (system + messages + resolved tools) first exists, so
-  // the input estimate lives here rather than in the prompt loop.
+  // the input estimate lives here rather than in the prompt loop. The same
+  // estimates feed the D2 telemetry headers: history is the message payload,
+  // baseline is everything else the request pays (system prompt + tools).
   const usableWindow = usable({
     cfg: input.cfg,
     model: input.model,
     outputTokenMax: input.flags.outputTokenMax,
     sessionID: input.sessionID,
   })
+  const historyTokens = Token.estimate(JSON.stringify(input.messages))
+  const toolsTokens = Token.estimate(
+    JSON.stringify(Object.entries(tools).map(([name, item]) => [name, item.description, item.inputSchema])),
+  )
+  const baselineTokens = Token.estimate(JSON.stringify(system)) + toolsTokens
+  const estimated = historyTokens + baselineTokens
   if (usableWindow > 0 && params.maxOutputTokens !== undefined) {
-    const estimated =
-      Token.estimate(JSON.stringify(system)) +
-      Token.estimate(JSON.stringify(input.messages)) +
-      Token.estimate(
-        JSON.stringify(Object.entries(tools).map(([name, item]) => [name, item.description, item.inputSchema])),
-      )
     params.maxOutputTokens = Math.min(params.maxOutputTokens, Math.max(256, usableWindow - estimated))
   }
 
@@ -230,6 +237,22 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
             ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
             "User-Agent": USER_AGENT,
           }),
+      // D2 telemetry: the engine's own context arithmetic for this request so
+      // proxies/routers gate on a header comparison instead of re-tokenizing
+      // the payload. est-input = history + baseline; baseline includes tools.
+      // Native values come first so the chat.headers plugin hook and per-model
+      // config headers may override, and can never silently lose them.
+      "x-opencode-est-input-tokens": estimated.toString(),
+      "x-opencode-history-tokens": historyTokens.toString(),
+      "x-opencode-baseline-tokens": baselineTokens.toString(),
+      "x-opencode-tools-tokens": toolsTokens.toString(),
+      "x-opencode-limit-context": (input.model.limit.context ?? 0).toString(),
+      "x-opencode-limit-output": ProviderTransform.maxOutputTokens(input.model, input.flags.outputTokenMax).toString(),
+      "x-opencode-usable": usableWindow.toString(),
+      "x-opencode-tier": SessionTier.resolve(input.model),
+      "x-opencode-session-id": input.sessionID,
+      "x-opencode-agent": input.agent.name,
+      ...(input.subagents?.length ? { "x-opencode-subagents": input.subagents.join(",") } : {}),
       ...input.model.headers,
       ...headers,
     },
