@@ -512,4 +512,25 @@ describe("session.message-v2.fromError", () => {
       message: "An error occurred while processing your request.",
     })
   })
+
+  test("converts top-level request_timeout stream chunks to retryable APIError", () => {
+    const result = MessageV2.fromError(
+      {
+        message: JSON.stringify({
+          type: "error",
+          sequence_number: 0,
+          code: "request_timeout",
+          message: "stream error: stream disconnected before completion: stream closed before response.completed",
+        }),
+      },
+      { providerID: ProviderV2.ID.make("cliproxyapi") },
+    )
+
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({
+      message: "stream error: stream disconnected before completion: stream closed before response.completed",
+    })
+  })
 })
