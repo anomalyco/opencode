@@ -161,7 +161,7 @@ export const admit = Effect.fn("SessionInbox.admit")(function* (
         const base = {
           id: request.id,
           sessionID: request.sessionID,
-          timeCreated: event.created,
+          timeCreated: DateTime.makeUnsafe(event.created),
         }
         return Effect.succeed(Info.make({ ...base, ...request.item }))
       }),
@@ -196,7 +196,7 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
     readonly item: Item
-    readonly timeCreated: DateTime.Utc
+    readonly timeCreated: number
   },
 ) {
   const message = yield* db
@@ -222,7 +222,7 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
               : encodeMove(request.item.payload),
       delivery: request.item.delivery,
       enqueued_seq: request.enqueuedSeq,
-      time_created: DateTime.toEpochMillis(request.timeCreated),
+      time_created: request.timeCreated,
     })
     .onConflictDoNothing()
     .returning({ id: SessionInboxTable.id })

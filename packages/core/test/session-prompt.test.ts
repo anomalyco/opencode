@@ -760,7 +760,7 @@ describe("Session.prompt", () => {
       yield* Effect.forEach(
         recorded.map((event) => ({
           id: event.id,
-          created: DateTime.makeUnsafe(event.created),
+          created: event.created,
           aggregateID: event.aggregate_id,
           seq: event.seq,
           type: event.type,

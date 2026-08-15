@@ -75,7 +75,7 @@ import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
 import { ID } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { Provider } from "@opencode-ai/core/provider"
-import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { asc, desc, eq } from "drizzle-orm"
@@ -672,7 +672,7 @@ const replaySessionProjection = (id: Session.ID) =>
     yield* Effect.forEach(
       recorded.map((event) => ({
         id: event.id,
-        created: DateTime.makeUnsafe(event.created),
+        created: event.created,
         aggregateID: event.aggregate_id,
         seq: event.seq,
         type: event.type,
@@ -1479,7 +1479,7 @@ describe("SessionRunnerLLM", () => {
       yield* Effect.forEach(
         recorded.map((event) => ({
           id: event.id,
-          created: DateTime.makeUnsafe(event.created),
+          created: event.created,
           aggregateID: event.aggregate_id,
           seq: event.seq,
           type: event.type,

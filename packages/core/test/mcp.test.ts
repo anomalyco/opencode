@@ -1002,7 +1002,7 @@ test("reconciles only changed MCP server config", async () => {
         const publishUpdate = () =>
           PubSub.publish(updates, {
             id: ID.create(),
-            created: DateTime.makeUnsafe(0),
+            created: 0,
             type: Event.Updated.type,
             data: {},
           } satisfies Payload<typeof Event.Updated>)
