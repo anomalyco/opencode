@@ -274,7 +274,7 @@ const waitForTitle = (sessionID: SessionID, title: string) =>
   )
 
 it.instance(
-  "writes the title once when the first turn completes",
+  "writes the title once from the first user message",
   () =>
     Effect.gen(function* () {
       const llm = yield* useServerConfig()
@@ -331,7 +331,7 @@ it.instance(
         agent: "build",
         parts: [{ type: "text", text: "more" }],
       })
-      // The retitle fork runs after the loop exits; give it room to (not) fire.
+      // The retitle fork runs at the first step of the turn; give it room to (not) fire.
       yield* Effect.sleep("500 millis")
 
       const session = yield* sessions.get(chat.id)
@@ -343,7 +343,7 @@ it.instance(
 )
 
 it.instance(
-  "titles the session on the next completed turn after an aborted first turn",
+  "titles the session on the next turn after an aborted first turn",
   () =>
     Effect.gen(function* () {
       const llm = yield* useServerConfig()
@@ -386,7 +386,7 @@ it.instance(
         agent: "build",
         parts: [{ type: "text", text: "hello" }],
       })
-      // The retitle fork runs after the loop exits; give it room to (not) fire.
+      // The retitle fork runs at the first step of the turn; give it room to (not) fire.
       yield* Effect.sleep("500 millis")
 
       const session = yield* sessions.get(chat.id)
