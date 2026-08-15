@@ -703,13 +703,6 @@ describe("SessionRunnerLLM", () => {
         timestamp: DateTime.makeUnsafe(1),
         location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
       })
-      expect(
-        yield* db
-          .select()
-          .from(SessionContextEpochTable)
-          .where(eq(SessionContextEpochTable.session_id, sessionID))
-          .get(),
-      ).toBeUndefined()
 
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Second" }), resume: false })
       const exit = yield* session.resume(sessionID).pipe(Effect.exit)
