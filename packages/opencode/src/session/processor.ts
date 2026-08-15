@@ -12,6 +12,7 @@ import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
+import { DoomLoop } from "./doom-loop"
 import { isOverflow, learnContextLimit } from "./overflow"
 import { Token } from "@/util/token"
 import { PartID } from "./schema"
@@ -372,6 +373,20 @@ const layer = Layer.effect(
             }
 
             const agent = yield* agents.get(ctx.assistantMessage.agent)
+            // B4: on the minimal tier a doom_loop "ask" becomes a structural
+            // stop — the tool is stripped from the session's next requests
+            // (see resolveTools in llm/request.ts) and the model gets exact
+            // recovery text instead of a human being asked.
+            const rule = Permission.evaluate("doom_loop", value.name, agent.permission)
+            if (DoomLoop.shouldStrip(rule.action, ctx.model)) {
+              DoomLoop.strip(ctx.sessionID, value.name)
+              yield* Effect.logWarning("doom loop tool stripped", {
+                "session.id": ctx.sessionID,
+                tool: value.name,
+              })
+              yield* failToolCall(value.id, new Error(DoomLoop.recovery(value.name)))
+              return
+            }
             yield* permission.ask({
               permission: "doom_loop",
               patterns: [value.name],

@@ -2,6 +2,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import type { Auth } from "@/auth"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { DoomLoop } from "../doom-loop"
 import { usable } from "../overflow"
 import { Token } from "@/util/token"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
@@ -233,12 +234,17 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   }
 })
 
-function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user">) {
+function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user" | "sessionID" | "small">) {
+  // B4: tools stripped by the structural doom-loop stop stay out of the
+  // roster for the session's next requests. Small-model calls (title,
+  // summary) share the session ID but are not agent turns, so they must not
+  // consume the strip budget.
+  const stripped = input.small ? new Set<string>() : DoomLoop.consume(input.sessionID)
   const disabled = Permission.disabled(
     Object.keys(input.tools),
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
-  return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+  return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k) && !stripped.has(k))
 }
 
 export function hasToolCalls(messages: ModelMessage[]): boolean {

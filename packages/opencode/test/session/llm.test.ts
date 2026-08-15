@@ -8,6 +8,7 @@ import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import z from "zod"
+import { DoomLoop } from "../../src/session/doom-loop"
 import { LLM } from "../../src/session/llm"
 import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
 import { Provider } from "@/provider/provider"
@@ -1203,6 +1204,78 @@ describe("session.llm.stream", () => {
         const capture = yield* Effect.promise(() => request)
         expect(capture.body.tools).toBeUndefined()
         expect(capture.body.tool_choice).toBeUndefined()
+      }),
+    {
+      config: () => ({
+        enabled_providers: [alibabaQwenFixture.providerID],
+        provider: {
+          [alibabaQwenFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
+    "excludes doom-loop stripped tools for the next two requests",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(alibabaQwenFixture.providerID, alibabaQwenFixture.modelID)
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(alibabaQwenFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-doom-strip")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-doom-strip"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
+        } satisfies SessionV1.User
+        const input = {
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }] satisfies ModelMessage[],
+          tools: {
+            question: tool({
+              description: "Ask a question",
+              inputSchema: z.object({}),
+              execute: async () => ({ output: "" }),
+            }),
+          },
+        }
+        const capture = () => {
+          const request = waitRequest(
+            "/chat/completions",
+            new Response(createChatStream("Hello"), {
+              status: 200,
+              headers: { "Content-Type": "text/event-stream" },
+            }),
+          )
+          return drain(input).pipe(Effect.andThen(Effect.promise(() => request)))
+        }
+
+        DoomLoop.strip(sessionID, "question")
+
+        const first = yield* capture()
+        expect(first.body.tools).toBeUndefined()
+        const second = yield* capture()
+        expect(second.body.tools).toBeUndefined()
+        const third = yield* capture()
+        const tools = third.body.tools as Array<{ function?: { name?: string } }> | undefined
+        expect(tools?.some((item) => item.function?.name === "question")).toBe(true)
       }),
     {
       config: () => ({

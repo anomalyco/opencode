@@ -11,6 +11,8 @@ import type { Agent } from "../../src/agent/agent"
 import { Provider } from "@/provider/provider"
 
 import { Session } from "@/session/session"
+import { DoomLoop } from "@/session/doom-loop"
+import { Permission } from "@/permission"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
@@ -208,6 +210,35 @@ const providerErrorLLM = Layer.succeed(
 )
 const providerErrorEnv = LayerNode.compile(root, [...replacements, [LLM.node, providerErrorLLM]])
 const itProviderError = testEffect(providerErrorEnv)
+
+// Three identical tool calls in one assistant message trip the doom-loop
+// detector on the third call.
+const doomLoopLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-1", name: "lookup", input: { query: "same" } }),
+        LLMEvent.toolResult({
+          id: "call-1",
+          name: "lookup",
+          result: { type: "json", value: { title: "Lookup", output: "result", metadata: {} } },
+        }),
+        LLMEvent.toolCall({ id: "call-2", name: "lookup", input: { query: "same" } }),
+        LLMEvent.toolResult({
+          id: "call-2",
+          name: "lookup",
+          result: { type: "json", value: { title: "Lookup", output: "result", metadata: {} } },
+        }),
+        LLMEvent.toolCall({ id: "call-3", name: "lookup", input: { query: "same" } }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ),
+  }),
+)
+const doomLoopEnv = LayerNode.compile(root, [...replacements, [LLM.node, doomLoopLLM]])
+const itDoomLoop = testEffect(doomLoopEnv)
 
 const fragmentFailureLLM = Layer.succeed(
   LLM.Service,
@@ -1055,6 +1086,118 @@ itProviderError.live("session.processor effect tests fail provider-executed erro
         expect(seen).toContain(MessageV2.Event.PartUpdated.type)
         expect(seen).toContain(MessageV2.Event.Updated.type)
         expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
+      }),
+    { config: cfg },
+  ),
+)
+
+itDoomLoop.live("session.processor effect tests strip doom-looped tools on the minimal tier", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "doom loop minimal")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const base = yield* provider.getModel(ref.providerID, ref.modelID)
+        // The parameter suffix resolves the minimal tier via the heuristic.
+        const mdl = { ...base, api: { ...base.api, id: "qwen-test-4b" } }
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "doom loop minimal" }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const calls = parts.filter((part): part is SessionV1.ToolPart => part.type === "tool")
+
+        expect(value).toBe("continue")
+        expect(calls).toHaveLength(3)
+        expect(calls[2]?.state.status).toBe("error")
+        if (calls[2]?.state.status === "error") {
+          expect(calls[2].state.error).toBe(DoomLoop.recovery("lookup"))
+        }
+        // The tool stays stripped for exactly the next two prepared requests.
+        expect(DoomLoop.consume(chat.id)).toEqual(new Set(["lookup"]))
+        expect(DoomLoop.consume(chat.id)).toEqual(new Set(["lookup"]))
+        expect(DoomLoop.consume(chat.id).size).toBe(0)
+      }),
+    { config: cfg },
+  ),
+)
+
+itDoomLoop.live("session.processor effect tests keep the doom-loop ask on the default tier", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const events = yield* EventV2Bridge.Service
+        const seen = defer<void>()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "doom loop default")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        // "test-model" has no parameter suffix and resolves the default tier.
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const asked: string[] = []
+        const off = yield* events.listen((evt) => {
+          if (evt.type !== Permission.Event.Asked.type) return Effect.void
+          const data = evt.data as typeof Permission.Event.Asked.data.Type
+          if (data.sessionID !== chat.id) return Effect.void
+          asked.push(data.permission)
+          seen.resolve()
+          return Effect.void
+        })
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const run = yield* handle
+          .process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionV1.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "doom loop default" }],
+            tools: {},
+          })
+          .pipe(Effect.forkChild)
+
+        yield* Effect.promise(() => seen.promise)
+        yield* Fiber.interrupt(run)
+        yield* Fiber.await(run)
+        yield* off
+
+        expect(asked).toEqual(["doom_loop"])
+        expect(DoomLoop.consume(chat.id).size).toBe(0)
       }),
     { config: cfg },
   ),
