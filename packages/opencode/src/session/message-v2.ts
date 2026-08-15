@@ -597,10 +597,19 @@ export function latest(msgs: WithParts[]) {
   return { user, assistant, finished, tasks }
 }
 
+// Compare the encoded timestamp bytes numerically instead of lexicographically.
+// The6-byte timestamp field overflows 2^48 since ~2023, so string comparison
+// of the hex-encoded bytes gives wrong results after wraparound.
+function compareIdTimestamps(a: string, b: string): number {
+  const aHex = a.slice(a.indexOf("_") + 1, a.indexOf("_") + 13)
+  const bHex = b.slice(b.indexOf("_") + 1, b.indexOf("_") + 13)
+  return Number(BigInt("0x" + aHex) - BigInt("0x" + bHex))
+}
+
 function isAfter(info: Info, other?: Info) {
   if (!other) return true
   if (info.time.created !== other.time.created) return info.time.created > other.time.created
-  return info.id > other.id
+  return compareIdTimestamps(info.id, other.id) > 0
 }
 
 export function fromError(
