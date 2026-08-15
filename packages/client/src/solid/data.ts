@@ -106,7 +106,7 @@ type Store = {
   location: Record<string, LocationData>
 }
 
-function locationKey(location: LocationRef) {
+export function locationKey(location: LocationRef) {
   return JSON.stringify([location.directory, location.workspaceID])
 }
 
@@ -364,6 +364,7 @@ export function createServerData(config: CreateServerDataInput) {
           .then((location) => {
             const key = locationKey(location)
             setStore("location", key, { ...store.location[key], info: location })
+            setDefaultLocation({ directory: location.directory, workspaceID: location.workspaceID })
           })
           .catch((error) => console.error("Failed to preload location", error))
         void result.location.vcs.sync().catch((error) => console.error("Failed to preload VCS info", error))

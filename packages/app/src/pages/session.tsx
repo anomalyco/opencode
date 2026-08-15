@@ -384,7 +384,6 @@ export default function Page() {
   const inputController = createPromptInputController({
     sessionKey: controller.identity.sessionKey,
     sessionID: () => controller.identity.params.id,
-    queryOptions: serverSync.queryOptions,
   })
 
   const sessionPanelKey = createMemo(() =>

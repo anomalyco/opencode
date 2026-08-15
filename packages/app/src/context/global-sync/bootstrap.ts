@@ -1,22 +1,12 @@
 import type { Config, Path, Project, ProviderAuthResponse } from "@/types"
 import type {
-  AgentListInput,
-  AgentListOutput,
   CatalogApi,
-  CommandInfo,
-  CommandListInput,
-  CommandListOutput,
-  IntegrationListInput,
-  IntegrationListOutput,
   LocationGetInput,
   LocationGetOutput,
   PermissionRequest,
   ProjectCurrentInput,
   ProjectCurrentOutput,
   ProjectListOutput,
-  ReferenceListInput,
-  ReferenceListOutput,
-  ReferenceInfo,
   QuestionRequest,
   SessionApi,
   SessionInfo,
@@ -28,10 +18,9 @@ import { batch } from "solid-js"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State } from "./types"
 import type { ServerSession } from "../server-session"
-import { cmp, directoryKey, normalizeAgentList, normalizeProjectInfo, normalizeProviderList } from "./utils"
+import { cmp, directoryKey, normalizeProjectInfo, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
-import { loadMcpQuery, loadMcpResourcesQuery } from "../server-sync"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
 import type { ServerApi } from "@/utils/server"
@@ -110,10 +99,8 @@ type ProjectApi = {
 type WorktreeApi = Pick<ServerApi["worktree"], "list">
 type LocationApi = { readonly get: (input?: LocationGetInput) => Promise<LocationGetOutput> }
 
-type McpApi = ServerApi["mcp"]
 type PermissionApi = ServerApi["permission"]
 type QuestionApi = ServerApi["question"]
-type VcsApi = ServerApi["vcs"]
 
 export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi, worktrees: WorktreeApi) =>
   queryOptions({
@@ -241,38 +228,6 @@ export const loadProvidersQuery = (scope: ServerScope, directory: string | null,
       }),
   })
 
-type AgentListApi = {
-  readonly list: (input?: AgentListInput) => Promise<AgentListOutput>
-}
-
-type CommandListApi = {
-  readonly list: (input?: CommandListInput) => Promise<CommandListOutput>
-}
-
-type IntegrationListApi = {
-  readonly list: (input?: IntegrationListInput) => Promise<IntegrationListOutput>
-}
-
-type ReferenceListApi = {
-  readonly list: (input?: ReferenceListInput) => Promise<ReferenceListOutput>
-}
-
-export const loadAgentsQuery = (scope: ServerScope, directory: string, sdk: AgentListApi) =>
-  queryOptions({
-    queryKey: [scope, directory, "agents"],
-    queryFn: () => retry(() => sdk.list({ location: { directory } }).then((result) => normalizeAgentList(result.data))),
-  })
-
-export const loadIntegrationsQuery = (scope: ServerScope, directory: string | null, sdk: IntegrationListApi) =>
-  queryOptions({
-    queryKey: [scope, directory, "integrations"] as const,
-    queryFn: () =>
-      retry(() => sdk.list(directory ? { location: { directory } } : undefined).then((result) => result.data)),
-  })
-
-export const loadCommands = (directory: string, api: CommandListApi): Promise<CommandInfo[]> =>
-  retry(() => api.list({ location: { directory } }).then((result) => result.data))
-
 export const loadPathQuery = (scope: ServerScope, directory: string | null, api: LocationApi) =>
   queryOptions<Path>({
     queryKey: [scope, directory, "path"],
@@ -286,28 +241,15 @@ export const loadPathQuery = (scope: ServerScope, directory: string | null, api:
       })),
   })
 
-export const loadReferencesQuery = (scope: ServerScope, directory: string, api: ReferenceListApi) =>
-  queryOptions<ReferenceInfo[]>({
-    queryKey: [scope, directory, "references"] as const,
-    queryFn: () => retry(() => api.list({ location: { directory } }).then((result) => result.data)).catch(() => []),
-    placeholderData: [],
-  })
-
 export async function bootstrapDirectory(input: {
   directory: string
   scope: ServerScope
   mcp: boolean
   api: CatalogApi & {
-    readonly agent: AgentListApi
-    readonly command: CommandListApi
-    readonly mcp: McpApi
     readonly permission: PermissionApi
     readonly project: ProjectApi
     readonly question: QuestionApi
-    readonly reference: ReferenceListApi
     readonly session: SessionApi
-    readonly vcs: VcsApi
-    readonly location: LocationApi
   }
   store: Store<State>
   setStore: SetStoreFunction<State>
@@ -324,9 +266,7 @@ export async function bootstrapDirectory(input: {
 }) {
   const loading = input.store.status !== "complete"
   const seededProject = projectID(input.directory, input.global.project)
-  const seededPath = input.global.path.directory === input.directory ? input.global.path : undefined
   if (seededProject) input.setStore("project", seededProject)
-  if (seededPath) input.setStore("path", seededPath)
   if (Object.keys(input.store.config).length === 0 && Object.keys(input.global.config).length > 0) {
     input.setStore("config", reconcile(input.global.config, { merge: false }))
   }
@@ -337,29 +277,11 @@ export async function bootstrapDirectory(input: {
   providerRev.set(revKey, rev)
   const slow = [
     () => Promise.resolve(input.loadSessions(input.directory)),
-    () =>
-      input.queryClient
-        .ensureQueryData(loadAgentsQuery(input.scope, directoryKey(input.directory), input.api.agent))
-        .then((data) => input.setStore("agent", data)),
     !seededProject &&
       (() =>
         retry(() => input.api.project.current({ location: { directory: input.directory } })).then((project) =>
           input.setStore("project", project.id),
         )),
-    !seededPath &&
-      (() =>
-        input.queryClient
-          .ensureQueryData(loadPathQuery(input.scope, directoryKey(input.directory), input.api.location))
-          .then((data) => {
-            const next = projectID(data.directory ?? input.directory, input.global.project)
-            if (next) input.setStore("project", next)
-          })),
-    input.mcp &&
-      (() => loadCommands(input.directory, input.api.command).then((commands) => input.setStore("command", commands))),
-    () =>
-      input.queryClient.fetchQuery(
-        loadReferencesQuery(input.scope, directoryKey(input.directory), input.api.reference),
-      ),
     () =>
       retry(() =>
         input.api.permission.request
@@ -429,11 +351,6 @@ export async function bootstrapDirectory(input: {
           }),
       ),
     () => Promise.resolve(input.loadSessions(input.directory)),
-    input.mcp &&
-      (() => input.queryClient.fetchQuery(loadMcpQuery(input.scope, directoryKey(input.directory), input.api.mcp))),
-    input.mcp &&
-      (() =>
-        input.queryClient.fetchQuery(loadMcpResourcesQuery(input.scope, directoryKey(input.directory), input.api.mcp))),
     () =>
       input.queryClient
         .fetchQuery(loadProvidersQuery(input.scope, directoryKey(input.directory), input.api))

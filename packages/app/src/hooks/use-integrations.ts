@@ -1,21 +1,18 @@
 import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
-import { pathKey } from "@/utils/path-key"
-import { createQuery } from "@tanstack/solid-query"
-import type { Accessor } from "solid-js"
+import { useData } from "@/context/server"
+import { createEffect, type Accessor } from "solid-js"
 
 export function useIntegrations(directory: Accessor<string | undefined>) {
   const serverSDK = useServerSDK()
-  const serverSync = useServerSync()
-  const query = createQuery(() => {
+  const data = useData()
+
+  createEffect(() => {
+    if (serverSDK.connection.status() !== "connected") return
     const value = directory()
-    return {
-      ...serverSync.queryOptions.integrations(value ? pathKey(value) : null),
-      enabled: serverSDK.connection.status() === "connected",
-    }
+    void data.location.integration.sync(value ? { directory: value } : undefined).catch(() => undefined)
   })
 
   return {
-    list: () => (query.isSuccess || query.isRefetchError ? query.data : []),
+    list: () => data.location.integration.list(directory() ? { directory: directory()! } : undefined) ?? [],
   }
 }

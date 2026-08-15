@@ -12,6 +12,8 @@ import { Schema } from "effect"
 import type { ServerConnection } from "@/context/servers"
 import { sessionHref } from "@/utils/session-route"
 import { useServerSync } from "@/context/server-sync"
+import { useData } from "@/context/server"
+import { useServerSDK } from "@/context/server-sdk"
 
 export function DirectoryDataProvider(
   props: ParentProps<{
@@ -25,6 +27,8 @@ export function DirectoryDataProvider(
   const params = useParams()
   const sync = useSync()
   const serverSync = useServerSync()
+  const data = useData()
+  const serverSDK = useServerSDK()
   const language = useLanguage()
   const directory = () => props.directory
   const slug = createMemo(() => base64Encode(directory()))
@@ -51,6 +55,21 @@ export function DirectoryDataProvider(
     () => params.id,
     (id) => serverSync.session.hydrate(id).catch(() => {}),
   )
+
+  createEffect(() => {
+    if (serverSDK.connection.status() !== "connected") return
+    const ref = { directory: directory() }
+    void data.location.sync(ref).catch(() => undefined)
+    const sessionID = params.id
+    if (!sessionID) return
+    void Promise.allSettled([
+      data.session.sync(sessionID, { children: true }),
+      data.session.pending.sync(sessionID),
+      data.session.message.sync(sessionID),
+      data.session.permission.sync(sessionID),
+      data.session.form.sync(sessionID),
+    ])
+  })
 
   createEffect(() => {
     const sessionID = params.id

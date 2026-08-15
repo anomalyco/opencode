@@ -11,7 +11,7 @@ import { usePermission } from "@/context/permission"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { sessionPermissionRequest, sessionQuestionForm } from "./session-request-tree"
-import { createQuery, useQueryClient } from "@tanstack/solid-query"
+import { useData } from "@/context/server"
 
 export const todoState = (input: {
   count: number
@@ -34,29 +34,13 @@ export function createSessionComposerController(options?: { closeMs?: number | (
   const sync = useSync()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
-  const queryClient = useQueryClient()
+  const data = useData()
   const language = useLanguage()
   const permission = usePermission()
-  const shellKey = () => [serverSDK.scope, sdk().directory, "shell"] as const
-  const shells = createQuery(() => ({
-    queryKey: shellKey(),
-    enabled: !!params.id && serverSDK.connection.status() === "connected",
-    queryFn: () =>
-      sdk()
-        .api.shell.list({ location: { directory: sdk().directory } })
-        .then((result) => result.data ?? []),
-  }))
-  onCleanup(
-    sdk().event.listen((event) => {
-      if (
-        event.details.type !== "shell.created" &&
-        event.details.type !== "shell.exited" &&
-        event.details.type !== "shell.deleted"
-      )
-        return
-      void queryClient.invalidateQueries({ queryKey: shellKey(), exact: true })
-    }),
-  )
+  createEffect(() => {
+    if (!params.id || serverSDK.connection.status() !== "connected") return
+    void data.shell.sync({ directory: sdk().directory }).catch(() => undefined)
+  })
 
   const questionRequest = createMemo((): FormInfo | undefined => {
     return sessionQuestionForm(sync().data.session, serverSync.session.data.form, params.id)
@@ -171,7 +155,7 @@ export function createSessionComposerController(options?: { closeMs?: number | (
         ]
       })
     })
-    const running = (shells.isSuccess || shells.isRefetchError ? shells.data : []).flatMap((shell) => {
+    const running = data.shell.list({ directory: sdk().directory }).flatMap((shell) => {
       if (shell.status !== "running" || shell.metadata.sessionID !== id) return []
       if (
         blocking.some(

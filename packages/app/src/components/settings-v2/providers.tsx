@@ -4,7 +4,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { showToast } from "@/utils/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { createMemo, type Component, For, Show, createEffect } from "solid-js"
+import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
@@ -14,7 +14,6 @@ import { SettingsServerScope } from "../settings-server-picker"
 import { InlineServerSelect } from "./parts/server-select"
 import { SettingsListV2 } from "./parts/list"
 import "./settings-v2.css"
-import { useData } from "@/context/server"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
@@ -36,7 +35,6 @@ export const SettingsProvidersV2: Component<{
   directory: string | undefined
   onBack?: () => void
 }> = (props) => {
-  const data = useData()
   const dialog = useDialog()
   const language = useLanguage()
   const serverSdk = useServerSDK()

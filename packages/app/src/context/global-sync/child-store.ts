@@ -1,7 +1,7 @@
 import { createRoot, createSignal, getOwner, onCleanup, runWithOwner, type Accessor, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
-import type { VcsInfo } from "@/types"
+import type { Path, VcsInfo } from "@/types"
 import {
   DIR_IDLE_TTL_MS,
   MAX_DIR_STORES,
@@ -19,6 +19,8 @@ import { QueryOptionsApi } from "../server-sync"
 import { directoryKey, type DirectoryKey } from "./utils"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import type { ServerScope } from "@/utils/server-scope"
+import type { Data } from "@opencode-ai/client/solid"
+import { normalizeAgentList } from "./utils"
 
 export function createChildStoreManager(input: {
   owner: Owner
@@ -32,7 +34,9 @@ export function createChildStoreManager(input: {
   onDispose: (directory: string) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
   queryOptions: QueryOptionsApi
+  data: Data
   global: {
+    path: Path
     provider: NormalizedProviderListResponse
   }
 }) {
@@ -45,7 +49,6 @@ export function createChildStoreManager(input: {
   const ownerPins = new WeakMap<object, Set<string>>()
   const disposers = new Map<string, () => void>()
   const mcpDirectories = new Set<string>()
-  const mcpToggles = new Map<string, (enabled: boolean) => void>()
   const activeDirectories = new Set<string>()
   const activationToggles = new Map<string, (enabled: boolean) => void>()
 
@@ -120,7 +123,6 @@ export function createChildStoreManager(input: {
     iconCache.delete(key)
     lifecycle.delete(key)
     mcpDirectories.delete(key)
-    mcpToggles.delete(key)
     activeDirectories.delete(key)
     activationToggles.delete(key)
     const dispose = disposers.get(key)
@@ -186,21 +188,7 @@ export function createChildStoreManager(input: {
         createRoot((dispose) => {
           const initialMeta = meta[0].value
           const initialIcon = icon[0].value
-          const [mcpEnabled, setMcpEnabled] = createSignal(false)
           const [instanceQueriesEnabled, setInstanceQueriesEnabled] = createSignal(false)
-
-          const pathQuery = useQuery(() => ({
-            ...input.queryOptions.path(key),
-            enabled: input.connected() && instanceQueriesEnabled(),
-          }))
-          const mcpQuery = useQuery(() => ({
-            ...input.queryOptions.mcp(key),
-            enabled: input.connected() && mcpEnabled(),
-          }))
-          const mcpResourceQuery = useQuery(() => ({
-            ...input.queryOptions.mcpResources(key),
-            enabled: input.connected() && mcpEnabled(),
-          }))
           const lspQuery = useQuery(() => ({
             ...input.queryOptions.lsp(key),
             enabled: input.connected() && instanceQueriesEnabled(),
@@ -209,11 +197,6 @@ export function createChildStoreManager(input: {
             ...input.queryOptions.providers(key),
             enabled: input.connected() && instanceQueriesEnabled(),
           }))
-          const referenceQuery = useQuery(() => ({
-            ...input.queryOptions.references(key),
-            enabled: input.connected() && instanceQueriesEnabled(),
-          }))
-
           const child = createStore<State>({
             project: "",
             projectMeta: initialMeta,
@@ -230,15 +213,24 @@ export function createChildStoreManager(input: {
             },
             config: {},
             get path() {
-              const EMPTY = { state: "", config: "", worktree: "", directory, home: "" }
-              if (pathQuery.isLoading) return EMPTY
-              return pathQuery.data ?? EMPTY
+              const location = input.data.location.info({ directory })
+              return {
+                state: "",
+                config: "",
+                worktree: location?.project.directory ?? "",
+                directory: location?.directory ?? directory,
+                home: input.global.path.home,
+              }
             },
             status: "loading" as const,
-            agent: [],
-            command: [],
+            get agent() {
+              return normalizeAgentList(input.data.location.agent.list({ directory }) ?? [])
+            },
+            get command() {
+              return input.data.location.command.list({ directory }) ?? []
+            },
             get reference() {
-              return referenceQuery.isLoading ? [] : (referenceQuery.data ?? [])
+              return input.data.location.reference.list({ directory }) ?? []
             },
             session: [],
             sessionTotal: 0,
@@ -252,13 +244,20 @@ export function createChildStoreManager(input: {
             permission: {},
             question: {},
             get mcp_ready() {
-              return !mcpQuery.isLoading
+              return input.data.location.mcp.server.list({ directory }) !== undefined
             },
             get mcp() {
-              return mcpQuery.isLoading ? {} : (mcpQuery.data ?? {})
+              return Object.fromEntries(
+                (input.data.location.mcp.server.list({ directory }) ?? []).map((server) => [server.name, server.status]),
+              )
             },
             get mcp_resource() {
-              return mcpResourceQuery.isLoading ? {} : (mcpResourceQuery.data ?? {})
+              return Object.fromEntries(
+                (input.data.location.mcp.resource.list({ directory }) ?? []).map((resource) => [
+                  `${resource.server}:${resource.uri}`,
+                  resource,
+                ]),
+              )
             },
             get lsp_ready() {
               return instanceQueriesEnabled() && !lspQuery.isLoading
@@ -266,7 +265,11 @@ export function createChildStoreManager(input: {
             get lsp() {
               return lspQuery.isLoading ? [] : (lspQuery.data ?? [])
             },
-            vcs: vcsStore.value,
+            get vcs() {
+              const vcs = input.data.location.vcs.info({ directory })
+              if (!vcs) return vcsStore.value
+              return { branch: vcs.branch.current, default_branch: vcs.branch.default }
+            },
             limit: 5,
             message: {},
             session_message: {},
@@ -275,7 +278,6 @@ export function createChildStoreManager(input: {
           })
           children[key] = child
           disposers.set(key, dispose)
-          mcpToggles.set(key, setMcpEnabled)
           activationToggles.set(key, setInstanceQueriesEnabled)
 
           const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
@@ -339,7 +341,6 @@ export function createChildStoreManager(input: {
   function enableMcp(directory: string, key: DirectoryKey, childStore: [Store<State>, SetStoreFunction<State>]) {
     if (mcpDirectories.has(key)) return
     mcpDirectories.add(key)
-    mcpToggles.get(key)?.(true)
     if (childStore[0].status !== "loading") input.onMcp(directory, childStore[1])
   }
 
@@ -356,7 +357,6 @@ export function createChildStoreManager(input: {
   function disableMcp(directory: string) {
     const key = directoryKey(directory)
     if (!mcpDirectories.delete(key)) return
-    mcpToggles.get(key)?.(false)
   }
 
   function projectMeta(directory: string, patch: ProjectMeta) {

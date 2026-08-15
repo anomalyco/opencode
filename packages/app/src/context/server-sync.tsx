@@ -10,14 +10,9 @@ import {
   bootstrapDirectory,
   bootstrapGlobal,
   clearProviderRev,
-  loadAgentsQuery,
-  loadCommands,
   loadGlobalConfigQuery,
-  loadIntegrationsQuery,
   loadPathQuery,
-  loadProjectsQuery,
   loadProvidersQuery,
-  loadReferencesQuery,
 } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent } from "./global-sync/event-reducer"
@@ -40,21 +35,15 @@ import { createHomeSessionIndexCache } from "./global-sync/home-session-index"
 import { persisted } from "@/utils/persist"
 import type { ServerApi } from "@/utils/server"
 import type {
-  McpListInput,
-  McpListOutput,
-  McpResource,
-  McpResourceCatalogInput,
-  McpResourceCatalogOutput,
-  McpServer,
   SessionActiveOutput,
   SessionStatus,
 } from "@opencode-ai/client/promise"
 import { toggleMcp } from "./global-sync/mcp"
 import { createServerSession, type ServerSession } from "./server-session"
-import { createCatalogSync } from "./server-sync/catalog"
 import { createConnectionSync } from "./server-sync/connection"
 import { usePlatform } from "./platform"
-import { useData, useServer } from "./server"
+import { useServer } from "./server"
+import type { Data } from "@opencode-ai/client/solid"
 
 export function shouldRefreshWorkspaceSessions(event: ServerEvent) {
   const type = event.current?.type ?? event.type
@@ -88,16 +77,6 @@ const SESSION_LIST_EVENTS = new Set([
   "session.usage.updated",
 ])
 
-type McpListApi = {
-  readonly list: (input?: McpListInput) => Promise<McpListOutput>
-}
-
-type McpResourceApi = {
-  readonly resource: {
-    readonly catalog: (input?: McpResourceCatalogInput) => Promise<McpResourceCatalogOutput>
-  }
-}
-
 type ApiQueryOptions<T, K extends readonly unknown[]> = SolidQueryOptions<T, Error, T, K> & {
   initialData?: undefined
   queryKey: K
@@ -106,47 +85,6 @@ type ApiQueryOptions<T, K extends readonly unknown[]> = SolidQueryOptions<T, Err
 type SessionActiveApi = {
   readonly active: () => Promise<SessionActiveOutput>
 }
-
-export const loadMcpQuery = (
-  scope: ServerScope,
-  directory: string,
-  api: McpListApi,
-): ApiQueryOptions<Record<string, McpServer["status"]>, readonly [ServerScope, string, "mcp"]> =>
-  queryOptions<
-    Record<string, McpServer["status"]>,
-    Error,
-    Record<string, McpServer["status"]>,
-    readonly [ServerScope, string, "mcp"]
-  >({
-    queryKey: [scope, directory, "mcp"] as const,
-    queryFn: async () => {
-      return api
-        .list({ location: { directory } })
-        .then((result) => Object.fromEntries(result.data.map((server) => [server.name, server.status])))
-    },
-  })
-
-export const loadMcpResourcesQuery = (
-  scope: ServerScope,
-  directory: string,
-  api: McpResourceApi,
-): ApiQueryOptions<Record<string, McpResource>, readonly [ServerScope, string, "mcpResources"]> =>
-  queryOptions<
-    Record<string, McpResource>,
-    Error,
-    Record<string, McpResource>,
-    readonly [ServerScope, string, "mcpResources"]
-  >({
-    queryKey: [scope, directory, "mcpResources"] as const,
-    queryFn: async () => {
-      return api.resource
-        .catalog({ location: { directory } })
-        .then((result) =>
-          Object.fromEntries(result.data.resources.map((resource) => [`${resource.server}:${resource.uri}`, resource])),
-        )
-    },
-    placeholderData: {},
-  })
 
 export const loadLspQuery = (scope: ServerScope, directory: string) =>
   queryOptions({
@@ -194,21 +132,15 @@ export function reconcileActiveSessionStatuses(
 function makeQueryOptionsApi(scope: ServerScope, serverAPI: ServerApi) {
   return {
     globalConfig: () => loadGlobalConfigQuery(scope),
-    projects: () => loadProjectsQuery(scope, serverAPI.project, serverAPI.worktree),
+    path: () => loadPathQuery(scope, null, serverAPI.location),
     providers: (directory: PathKey | null) => loadProvidersQuery(scope, directory, serverAPI),
-    integrations: (directory: PathKey | null) => loadIntegrationsQuery(scope, directory, serverAPI.integration),
-    path: (directory: PathKey | null) => loadPathQuery(scope, directory, serverAPI.location),
-    agents: (directory: PathKey) => loadAgentsQuery(scope, directory, serverAPI.agent),
-    references: (directory: PathKey) => loadReferencesQuery(scope, directory, serverAPI.reference),
-    mcp: (directory: PathKey) => loadMcpQuery(scope, directory, serverAPI.mcp),
-    mcpResources: (directory: PathKey) => loadMcpResourcesQuery(scope, directory, serverAPI.mcp),
     lsp: (directory: PathKey) => loadLspQuery(scope, directory),
     sessions: (directory: PathKey) => ({ queryKey: [scope, directory, "loadSessions"] as const }),
   }
 }
 export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
-export function createServerSyncContextInner(serverSDK: ServerSDK) {
+export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   const language = useLanguage()
   const platform = usePlatform()
   const owner = getOwner()
@@ -237,7 +169,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     queries: [
       { ...queryOptionsApi.globalConfig(), enabled: connected() },
       { ...queryOptionsApi.providers(null), enabled: connected() },
-      { ...queryOptionsApi.path(null), enabled: connected() },
+      { ...queryOptionsApi.path(), enabled: connected() },
     ],
   }))
   const activeSessionsQuery = useQuery(() => ({
@@ -338,16 +270,18 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       if (!connected()) return
       void bootstrapInstance(directory)
     },
-    onMcp: (directory, setStore) => {
-      void loadCommands(directory, serverSDK.api.command)
-        .then((commands) => setStore("command", commands))
-        .catch((err) => {
-          showToast({
-            variant: "error",
-            title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
-            description: formatServerError(err, language.t),
-          })
+    onMcp: (directory) => {
+      void Promise.all([
+        data.location.command.sync({ directory }),
+        data.location.mcp.server.sync({ directory }),
+        data.location.mcp.resource.sync({ directory }),
+      ]).catch((err) => {
+        showToast({
+          variant: "error",
+          title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
+          description: formatServerError(err, language.t),
         })
+      })
     },
     onDispose: (directory) => {
       const key = directoryKey(directory)
@@ -357,32 +291,16 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     },
     translate: language.t,
     queryOptions: queryOptionsApi,
+    data,
     global: {
+      get path() {
+        return globalStore.path
+      },
       get provider() {
         return globalStore.provider
       },
     },
   })
-  const catalog = createCatalogSync({
-    scope: serverSDK.scope,
-    queryClient,
-    active: () => Object.keys(children.children).filter(children.active).map(pathKey),
-    load: (directory) =>
-      Promise.all([
-        queryClient.fetchQuery(queryOptionsApi.providers(directory)),
-        queryClient.fetchQuery(queryOptionsApi.integrations(directory)),
-      ]).then(() => undefined),
-  })
-  const refreshVcs = (directory: string) =>
-    serverSDK.api.vcs
-      .get({ location: { directory } })
-      .then((result) =>
-        children.vcs(directory, {
-          branch: result.data.branch.current,
-          default_branch: result.data.branch.default,
-        }),
-      )
-      .catch(() => undefined)
   const connection = createConnectionSync({
     status: serverSDK.connection.status,
     invalidate: () => {
@@ -400,7 +318,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         .filter(children.active)
         .forEach((directory) => {
           queue.push(directory)
-          if (children.children[directory]?.[0].status !== "loading") void refreshVcs(directory)
+          void data.location.sync({ directory }).catch(() => undefined)
         })
     },
   })
@@ -498,8 +416,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     children.pin(key)
     const promise = Promise.resolve().then(async () => {
       const child = children.ensureChild(directory)
-      const initial = child[0].status === "loading"
       await Promise.all([
+        data.location.sync({ directory }),
         bootstrapDirectory({
           directory,
           scope: serverSDK.scope,
@@ -518,7 +436,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
           queryClient,
           session,
         }),
-        initial ? refreshVcs(directory) : Promise.resolve(),
       ])
     })
 
@@ -628,8 +545,10 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
           .catch(() => undefined)
     }
     homeSessions.refresh(event.type)
-    catalog.handleEvent({ type: eventType, directory })
     connection.handleEvent({ type: eventType, directory })
+    if (eventType === "catalog.updated" || eventType === "integration.updated") {
+      void queryClient.invalidateQueries(queryOptionsApi.providers(directory === "global" ? null : key))
+    }
 
     if (directory === "global") {
       applyGlobalEvent({
@@ -661,21 +580,10 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       eventType === "agent.updated"
     )
       queue.push(key)
-    if (eventType === "mcp.status.changed") void queryClient.invalidateQueries(queryOptionsApi.mcp(key))
-    if (eventType === "mcp.resources.changed") void queryClient.invalidateQueries(queryOptionsApi.mcpResources(key))
     const [store, setStore] = existing
-    if (eventType === "agent.updated")
-      void queryClient
-        .fetchQuery(queryOptionsApi.agents(key))
-        .then((data) => setStore("agent", data))
-        .catch(() => {})
-    if (eventType === "command.updated")
-      void loadCommands(directory, serverSDK.api.command)
-        .then((commands) => setStore("command", commands))
-        .catch(() => {})
     if (eventType === "worktree.updated") void bootstrap.refetch()
     const projected = toDirectoryEvent(event)
-    if (projected)
+    if (projected && eventType !== "vcs.branch.updated")
       applyDirectoryEvent({
         event: projected,
         directory,
@@ -694,7 +602,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         },
         loadReferences: () => {
           if (!children.active(key)) return
-          void queryClient.fetchQuery(queryOptionsApi.references(key))
+          void data.location.reference.sync({ directory: key }).catch(() => undefined)
         },
       })
   })
@@ -717,6 +625,26 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     icon(directory: string, value: string | undefined) {
       children.projectIcon(directory, value)
     },
+  }
+
+  const refreshProviders = () => {
+    const locations = Object.keys(children.children).filter(children.active)
+    if (locations.length === 0) locations.push(data.location.default().directory)
+    locations.filter(Boolean).forEach((directory) => {
+      data.location.provider.invalidate({ directory })
+      data.location.model.invalidate({ directory })
+    })
+    return Promise.all(
+      [
+        queryClient.refetchQueries({
+          predicate: (query) => query.queryKey[0] === serverSDK.scope && query.queryKey[2] === "providers",
+        }),
+        ...locations.filter(Boolean).flatMap((directory) => [
+          data.location.provider.sync({ directory }),
+          data.location.model.sync({ directory }),
+        ]),
+      ],
+    ).then(() => undefined)
   }
 
   const updateConfigMutation = useMutation(() => ({
@@ -749,7 +677,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     peek: children.peek,
     disableMcp: children.disableMcp,
     queryOptions: queryOptionsApi,
-    refreshProviders: catalog.refreshActive,
+    refreshProviders,
     // bootstrap,
     updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
@@ -788,8 +716,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
             platform.openExternal(attempt.data.url)
           },
           refresh: async () => {
-            await queryClient.refetchQueries(queryOptionsApi.mcp(key))
-            await queryClient.refetchQueries(queryOptionsApi.mcpResources(key))
+            data.location.mcp.server.invalidate({ directory: key })
+            data.location.mcp.resource.invalidate({ directory: key })
+            await Promise.all([
+              data.location.mcp.server.sync({ directory: key }),
+              data.location.mcp.resource.sync({ directory: key }),
+            ])
           },
         })
       },
@@ -797,8 +729,8 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   }
 }
 
-export function createServerSyncContext(serverSDK: ServerSDK) {
-  const inner = createServerSyncContextInner(serverSDK)
+export function createServerSyncContext(serverSDK: ServerSDK, data: Data) {
+  const inner = createServerSyncContextInner(serverSDK, data)
   return Object.assign(inner, {
     ensureDirSyncContext: createRefCountMap(
       (dir) => createDirSyncContext(dir, inner, serverSDK),

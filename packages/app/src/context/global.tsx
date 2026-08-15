@@ -100,15 +100,15 @@ function createServerController(
 ) {
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
-  const sync = createServerSyncContext(sdk)
-  const permission = createServerPermissionState({ sdk, sync })
-  const notification = createServerNotificationState({ sdk, sync, key: connKey })
   const data = createServerData({
     api: () => sdk.api,
     event: sdk.event,
     connection: sdk.connection,
     directory: "",
   })
+  const sync = createServerSyncContext(sdk, data)
+  const permission = createServerPermissionState({ sdk, sync })
+  const notification = createServerNotificationState({ sdk, sync, key: connKey })
 
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })

@@ -1,10 +1,11 @@
-import { Component, For, createMemo, createResource } from "solid-js"
+import { Component, For, createEffect, createMemo } from "solid-js"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { useLanguage } from "@/context/language"
-import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
+import { useData } from "@/context/server"
+import { useServerSDK } from "@/context/server-sdk"
 import { ExternalLink } from "../external-link"
 import { InlineServerSelect } from "./parts/server-select"
 import "./settings-v2.css"
@@ -22,6 +23,7 @@ export const SettingsExtensionsV2: Component = () => {
   const language = useLanguage()
   const serverSdk = useServerSDK()
   const serverSync = useServerSync()
+  const data = useData()
   const mcps = createMemo<McpRowItem[]>(() => {
     const configMcp = serverSync.data.config.mcp ?? {}
     return Object.entries(configMcp).map(([name, config]) => ({
@@ -47,9 +49,11 @@ export const SettingsExtensionsV2: Component = () => {
     })
   })
 
-  const [skills] = createResource(serverSdk, (sdk) => sdk.api.skill.list().then((result) => result.data), {
-    initialValue: [],
+  createEffect(() => {
+    if (serverSdk.connection.status() !== "connected") return
+    void data.location.skill.sync().catch(() => undefined)
   })
+  const skills = () => data.location.skill.list() ?? []
 
   return (
     <>

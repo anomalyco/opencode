@@ -1,18 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import type {
-  McpListInput,
-  McpResourceCatalogInput,
-  SessionApi,
-  SessionInfo,
-  SessionListInput,
-} from "@opencode-ai/client/promise"
+import type { SessionApi, SessionInfo, SessionListInput } from "@opencode-ai/client/promise"
 import { QueryClient } from "@tanstack/solid-query"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
 import { estimateRootSessionTotal, loadRootSessions } from "./global-sync/session-load"
 import {
   loadActiveSessionsQuery,
-  loadMcpQuery,
-  loadMcpResourcesQuery,
   reconcileActiveSessionStatuses,
   seedActiveSessionStatuses,
   shouldRefreshWorkspaceSessions,
@@ -20,56 +12,6 @@ import {
 import { ServerScope } from "@/utils/server-scope"
 import { createServerSession } from "./server-session"
 import type { ServerApi } from "@/utils/server"
-
-type McpApi = ServerApi["mcp"]
-
-describe("MCP queries", () => {
-  test("loads current servers for the requested location", async () => {
-    const calls: unknown[] = []
-    const queryClient = new QueryClient()
-    const result = await queryClient.fetchQuery(
-      loadMcpQuery(ServerScope.local, "/project", {
-        list: async (input: McpListInput = {}) => {
-          calls.push(input)
-          return {
-            location: { directory: "/project", project: { id: "project", directory: "/project" } },
-            data: [
-              { name: "docs", status: { status: "connected" } },
-              { name: "search", status: { status: "pending" } },
-            ],
-          }
-        },
-      } as unknown as McpApi),
-    )
-
-    expect(calls).toEqual([{ location: { directory: "/project" } }])
-    expect(result).toEqual({ docs: { status: "connected" }, search: { status: "pending" } })
-  })
-
-  test("loads and keys the current resource catalog", async () => {
-    const calls: unknown[] = []
-    const queryClient = new QueryClient()
-    const result = await queryClient.fetchQuery(
-      loadMcpResourcesQuery(ServerScope.local, "/project", {
-        resource: {
-          catalog: async (input: McpResourceCatalogInput = {}) => {
-            calls.push(input)
-            return {
-              location: { directory: "/project", project: { id: "project", directory: "/project" } },
-              data: {
-                resources: [{ server: "docs", name: "Guide", uri: "docs://guide" }],
-                templates: [],
-              },
-            }
-          },
-        },
-      } as unknown as McpApi),
-    )
-
-    expect(calls).toEqual([{ location: { directory: "/project" } }])
-    expect(result).toEqual({ "docs:docs://guide": { server: "docs", name: "Guide", uri: "docs://guide" } })
-  })
-})
 
 describe("active session query", () => {
   test("loads active sessions immediately and once per server cache", async () => {
