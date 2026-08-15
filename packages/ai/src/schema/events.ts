@@ -56,6 +56,8 @@ export class Usage extends Schema.Class<Usage>("AI.Usage")({
   cacheWriteInputTokens: Schema.optional(Schema.Number),
   reasoningTokens: Schema.optional(Schema.Number),
   totalTokens: Schema.optional(Schema.Number),
+  /** Provider-reported cost for this physical request, normalized to USD. */
+  cost: Schema.optional(Schema.Number),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {
   /**

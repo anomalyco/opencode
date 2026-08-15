@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
 import { Cause, Effect, Exit, Schema } from "effect"
 import { LLMEvent } from "@opencode-ai/ai"
-import { Money } from "@opencode-ai/schema/money"
 import { Bus } from "@opencode-ai/core/bus"
 import { Event } from "@opencode-ai/schema/event"
 import { Agent } from "@opencode-ai/core/agent"
@@ -13,6 +12,7 @@ import { Provider } from "@opencode-ai/core/provider"
 import { RelativePath } from "@opencode-ai/core/schema"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { createLLMEventPublisher } from "@opencode-ai/core/session/runner/publish-llm-event"
+import { SessionUsage } from "@opencode-ai/core/session/usage"
 
 const sessionID = Session.ID.make("ses_tool_event_test")
 const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
@@ -280,6 +280,7 @@ test("content-filter finish retains failure evidence until step closeout", async
           nonCachedInputTokens: 8,
           outputTokens: 3,
           reasoningTokens: 1,
+          cost: 1.25,
         },
       }),
     ),
@@ -289,13 +290,13 @@ test("content-filter finish retains failure evidence until step closeout", async
   const settlement = publisher.record().finish
   expect(settlement).toMatchObject({
     finish: "content-filter",
-    tokens: { input: 8, output: 2, reasoning: 1 },
+    usage: { nonCachedInputTokens: 8, outputTokens: 3, reasoningTokens: 1, cost: 1.25 },
   })
   if (!settlement) throw new Error("Expected content-filter settlement")
+  const recorded = SessionUsage.record(settlement.usage, [])
   await Effect.runPromise(
     publisher.publishStepFailure({
-      cost: Money.USD.make(1.25),
-      tokens: settlement.tokens,
+      ...recorded,
       snapshot: Snapshot.ID.make("tree-end"),
       files: [RelativePath.make("src/changed.ts")],
     }),

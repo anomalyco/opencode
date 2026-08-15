@@ -303,10 +303,8 @@ const layer = Layer.effect(
         snapshot: startSnapshot,
         assistantMessageID,
       })
-      const stepUsage = (finish: NonNullable<StepRecord["finish"]>) => ({
-        cost: SessionUsage.calculateCost(resolved.cost, finish.tokens),
-        tokens: finish.tokens,
-      })
+      const stepUsage = (finish: NonNullable<StepRecord["finish"]>) =>
+        SessionUsage.record(finish.usage, resolved.cost)
 
       const captureStepEnd = Effect.fnUntraced(function* () {
         const snapshot = yield* snapshots.capture()

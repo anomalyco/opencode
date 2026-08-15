@@ -246,6 +246,24 @@ describe("OpenRouter", () => {
     }),
   )
 
+  it.effect("reports OpenRouter's streamed USD cost", () =>
+    Effect.gen(function* () {
+      const model = OpenRouter.configure({ apiKey: "test-key" }).model("openai/gpt-4o-mini")
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              choices: [{ delta: { content: "Hello" }, finish_reason: "stop" }],
+              usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.00123 },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.usage?.cost).toBe(0.00123)
+    }),
+  )
+
   it.effect("fails on a mid-stream provider error", () =>
     Effect.gen(function* () {
       const model = OpenRouter.configure({ apiKey: "test-key" }).model("openai/gpt-4o-mini")

@@ -1,5 +1,5 @@
 import { APICallError } from "@ai-sdk/provider"
-import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
+import type { LanguageModelV3, LanguageModelV3CallOptions, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
@@ -23,21 +23,26 @@ const model = (packageName: string, settings: Record<string, unknown> = {}) =>
     limit: { context: 100, output: 20 },
   })
 
-const streamModel = (events: ReadonlyArray<LanguageModelV3StreamPart>): LanguageModelV3 => ({
+const streamModel = (
+  events: ReadonlyArray<LanguageModelV3StreamPart>,
+  inspect?: (options: LanguageModelV3CallOptions) => void,
+): LanguageModelV3 => ({
   specificationVersion: "v3",
   provider: "test",
   modelId: "test",
   supportedUrls: {},
   doGenerate: () => Promise.reject(new Error("Unexpected non-streaming request")),
-  doStream: () =>
-    Promise.resolve({
+  doStream: (options) => {
+    inspect?.(options)
+    return Promise.resolve({
       stream: new ReadableStream({
         start(controller) {
           events.forEach((event) => controller.enqueue(event))
           controller.close()
         },
       }),
-    }),
+    })
+  },
 })
 
 const usage = {
@@ -374,6 +379,41 @@ it.effect("emits malformed AI SDK tool input without executing it", () =>
     expect(response.events.some(LLMEvent.is.toolInputEnd)).toBeTrue()
     expect(response.events.some(LLMEvent.is.toolCall)).toBeFalse()
     expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_calls" })
+  }),
+)
+
+it.effect("normalizes Copilot billed usage to USD", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    let options: LanguageModelV3CallOptions | undefined
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel(
+            [
+              {
+                type: "raw",
+                rawValue: { type: "message_delta", copilot_usage: { total_nano_aiu: 4_473_525_000 } },
+              },
+              { type: "finish", finishReason: { unified: "stop", raw: "end_turn" }, usage },
+            ],
+            (input) => {
+              options = input
+            },
+          ),
+      }
+    })
+
+    const resolved = yield* aisdk.model({
+      ...model("@ai-sdk/github-copilot"),
+      providerID: Provider.ID.githubCopilot,
+    })
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(options?.includeRawChunks).toBeTrue()
+    expect(response.usage?.cost).toBeCloseTo(0.04473525)
   }),
 )
 

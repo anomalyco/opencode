@@ -157,6 +157,7 @@ const OpenAIChatUsage = Schema.StructWithRest(
     prompt_tokens: optionalNull(Schema.Number),
     completion_tokens: optionalNull(Schema.Number),
     total_tokens: optionalNull(Schema.Number),
+    cost: optionalNull(Schema.Number),
     prompt_tokens_details: optionalNull(
       Schema.StructWithRest(
         Schema.Struct({
@@ -595,6 +596,7 @@ const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(input, output, usage.total_tokens ?? undefined),
+    cost: usage.cost ?? undefined,
     providerMetadata: { openai: usage },
   })
 }

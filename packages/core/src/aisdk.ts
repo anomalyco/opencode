@@ -343,7 +343,8 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
     model: (input) =>
       LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : info.providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
-    streamPrepared: (prepared) => streamLanguage(language, prepared as LanguageModelV3CallOptions),
+    streamPrepared: (prepared) =>
+      streamLanguage(language, prepared as LanguageModelV3CallOptions, info.providerID === Provider.ID.githubCopilot),
   }
   return LanguageModel.make({
     id: info.modelID ?? info.id,
@@ -427,6 +428,7 @@ function callOptions(request: LLMRequest): LanguageModelV3CallOptions {
     toolChoice: toolChoice(request.toolChoice),
     headers: request.http?.headers,
     providerOptions: providerOptions(request.providerOptions),
+    includeRawChunks: request.model.provider === ProviderID.make(Provider.ID.githubCopilot),
   }
 }
 
@@ -547,8 +549,15 @@ function providerOptions(input: LLMRequest["providerOptions"]): SharedV3Provider
   return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, jsonObject(value)]))
 }
 
-function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions) {
-  const state = { step: 0, toolNames: {} as Record<string, string> }
+interface StreamState {
+  step: number
+  toolNames: Record<string, string>
+  copilot: boolean
+  cost?: number
+}
+
+function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions, copilot: boolean) {
+  const state: StreamState = { step: 0, toolNames: {}, copilot }
   return Stream.concat(
     Stream.make(LLMEvent.stepStart({ index: state.step })),
     Stream.unwrap(
@@ -571,16 +580,18 @@ function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallO
 }
 
 function streamPartEvents(
-  state: { step: number; toolNames: Record<string, string> },
+  state: StreamState,
   event: LanguageModelV3StreamPart,
 ): Effect.Effect<ReadonlyArray<LLMEvent>, AIError> {
   switch (event.type) {
     case "stream-start":
     case "response-metadata":
-    case "raw":
     case "file":
     case "source":
     case "tool-approval-request":
+      return Effect.succeed([])
+    case "raw":
+      if (state.copilot) state.cost = copilotCost(event.rawValue) ?? state.cost
       return Effect.succeed([])
     case "text-start":
       return Effect.succeed([
@@ -672,16 +683,18 @@ function streamPartEvents(
         }),
       ])
     case "finish":
+      const normalized = usage(event.usage, state.cost)
+      state.cost = undefined
       return Effect.succeed([
         LLMEvent.stepFinish({
           index: state.step++,
           reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
-          usage: usage(event.usage),
+          usage: normalized,
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
         LLMEvent.finish({
           reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
-          usage: usage(event.usage),
+          usage: normalized,
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
       ])
@@ -690,7 +703,10 @@ function streamPartEvents(
   }
 }
 
-function usage(input: Extract<LanguageModelV3StreamPart, { type: "finish" }>["usage"]): UsageInput | undefined {
+function usage(
+  input: Extract<LanguageModelV3StreamPart, { type: "finish" }>["usage"],
+  cost?: number,
+): UsageInput | undefined {
   const output = {
     inputTokens: input.inputTokens.total,
     nonCachedInputTokens: input.inputTokens.noCache,
@@ -702,8 +718,20 @@ function usage(input: Extract<LanguageModelV3StreamPart, { type: "finish" }>["us
       input.inputTokens.total === undefined || input.outputTokens.total === undefined
         ? undefined
         : input.inputTokens.total + input.outputTokens.total,
+    cost,
   }
   return Object.values(output).some((value) => value !== undefined) ? output : undefined
+}
+
+function copilotCost(input: unknown): number | undefined {
+  if (!ProviderShared.isRecord(input)) return undefined
+  const raw = input
+  const response = ProviderShared.isRecord(raw.response) ? raw.response : undefined
+  const usage = raw.copilot_usage ?? response?.copilot_usage
+  if (!ProviderShared.isRecord(usage)) return undefined
+  const total = usage.total_nano_aiu
+  if (typeof total !== "number" || !Number.isFinite(total) || total < 0) return undefined
+  return total / 100_000_000_000
 }
 
 function finishReason(value: LanguageModelV3FinishReason): FinishReason {
