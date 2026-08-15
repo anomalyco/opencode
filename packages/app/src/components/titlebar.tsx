@@ -11,11 +11,7 @@ import {
   untrack,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Button } from "@opencode-ai/ui/button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { useLocation, useNavigate } from "@solidjs/router"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
@@ -32,8 +28,8 @@ import { TitlebarTabStrip } from "@/components/titlebar-tab-strip"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
-import { useGlobal, useServerCtx } from "@/context/global"
-import { ServerConnection, useServers } from "@/context/servers"
+import { useGlobal } from "@/context/global"
+import { ServerConnection } from "@/context/servers"
 import { tabKey, useTabs } from "@/context/tabs"
 import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
@@ -65,7 +61,6 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
-  const servers = useServers()
   const navigate = useNavigate()
   const location = useLocation()
   const useV2Titlebar = createMemo(() => settings.general.newLayoutDesigns())
@@ -251,7 +246,11 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                     sessionId: activeSession.id,
                   }
                   const model = tabs.stateValue<PromptSession>(sessionTab, "prompt")?.model.current()
-                  tabs.newDraft({ server: sessionTab.server, directory: activeSession.location.directory }, "", model)
+                  void tabs.newDraft(
+                    { server: sessionTab.server, directory: activeSession.location.directory },
+                    "",
+                    model,
+                  )
                   return
                 }
                 case "draft": {
@@ -259,7 +258,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   if (activeTab?.type !== "draft") return
 
                   const model = tabs.stateValue<PromptSession>(activeTab, "prompt")?.model.current()
-                  tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "", model)
+                  void tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "", model)
                   return
                 }
                 case "home": {
@@ -272,7 +271,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                         .find((item) => item.worktree === selection.directory)
                     : undefined
                   if (conn && project) {
-                    tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+                    void tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
                     return
                   }
                 }
@@ -476,11 +475,14 @@ function ChannelIndicator(props: { debugTools?: { visible: boolean; toggle: () =
     )
   }
 
+  const label = channel && ["local", "beta", "dev"].includes(channel) ? channel.toUpperCase() : undefined
   return (
-    <Show when={["local", "beta", "dev"].includes(channel)}>
-      <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
-        {channel.toUpperCase()}
-      </div>
+    <Show when={label}>
+      {(value) => (
+        <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
+          {value()}
+        </div>
+      )}
     </Show>
   )
 }

@@ -1,18 +1,15 @@
 import "@/index.css"
-import * as Sentry from "@sentry/solid"
 import { I18nProvider } from "@opencode-ai/ui/context"
 import type { UiI18n } from "@opencode-ai/ui/context/i18n"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
-import { File } from "@opencode-ai/session-ui/file"
 import { Font } from "@opencode-ai/ui/font"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Navigate, Route, Router, useParams, useSearchParams } from "@solidjs/router"
+import { type BaseRouterProps, Navigate, Route, Router, useParams } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import {
   type Component,
-  createEffect,
   createMemo,
   createRenderEffect,
   ErrorBoundary,
@@ -23,46 +20,38 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
-import { CommentsProvider } from "@/context/comments"
-import { FileProvider } from "@/context/file"
 import { GlobalProvider, useGlobal } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
-import { ModelsProvider } from "@/context/models"
 import { usePlatform } from "@/context/platform"
-import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServersProvider, useServers } from "@/context/servers"
 import { SettingsProvider } from "@/context/settings"
-import { TabsProvider, useTabs, type DraftTab } from "@/context/tabs"
-import { SDKProvider } from "@/context/sdk"
+import { TabsProvider, useTabs } from "@/context/tabs"
 import { WslServersProvider } from "@/wsl/context"
-import { DirectoryDataProvider } from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
-import { decode64 } from "@/utils/base64"
 
-import { TargetSessionRouteContent } from "@/pages/session"
 import { Home } from "@/pages/home"
 import { ServerProvider } from "./context/server"
 
-const NewSession = lazy(() => import("@/pages/new-session"))
+const File = lazy(() => import("@opencode-ai/session-ui/file").then((module) => ({ default: module.File })))
+const loadDraftRoute = () => Promise.all([import("@/pages/draft-route"), File.preload()]).then(([module]) => module)
+const loadSessionRoute = () => Promise.all([import("@/pages/session"), File.preload()]).then(([module]) => module)
+const DirectoryDraftRedirect = lazy(() =>
+  loadDraftRoute().then((module) => ({ default: module.DirectoryDraftRedirect })),
+)
+const DraftRoute = lazy(() => loadDraftRoute().then((module) => ({ default: module.DraftRoute })))
+const TargetSessionRouteContent = lazy(() =>
+  loadSessionRoute().then((module) => ({ default: module.TargetSessionRouteContent })),
+)
 
-const DirectoryDraftRedirect = () => {
-  const params = useParams()
-  const [search] = useSearchParams<{ draftId?: string; prompt?: string }>()
-  const server = useServers()
-  const tabs = useTabs()
-
-  createEffect(() => {
-    if (search.draftId || !tabs.ready()) return
-    const directory = decode64(params.dir)
-    if (!directory) return
-    tabs.newDraft({ server: ServerConnection.key(server.list[0])!, directory }, search.prompt)
-  })
-
-  return null
+export function preloadRoute(pathname: string) {
+  if (pathname === "/") return Promise.resolve()
+  if (pathname.startsWith("/server/") || /\/session\/[^/]+$/.test(pathname))
+    return TargetSessionRouteContent.preload().then(() => undefined)
+  return Promise.all([DirectoryDraftRedirect.preload(), DraftRoute.preload()]).then(() => undefined)
 }
 
 function TargetServerRoute(props: ParentProps) {
@@ -78,47 +67,6 @@ function TargetServerRoute(props: ParentProps) {
     <Show when={requireServerKey(params.serverKey)} keyed>
       <Show when={conn()} keyed>
         {(conn) => <ServerProvider conn={conn}>{props.children}</ServerProvider>}
-      </Show>
-    </Show>
-  )
-}
-
-function DraftRoute() {
-  const [search] = useSearchParams<{ draftId?: string }>()
-  const tabs = useTabs()
-  return (
-    <Show when={tabs.ready()}>
-      <Show
-        when={tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)}
-        keyed
-        fallback={<Navigate href="/" />}
-      >
-        {(draft) => <ResolvedDraftRoute draft={draft} />}
-      </Show>
-    </Show>
-  )
-}
-
-function ResolvedDraftRoute(props: { draft: DraftTab }) {
-  const global = useGlobal()
-  const conn = createMemo(() => global.servers.list().find((item) => ServerConnection.key(item) === props.draft.server))
-
-  return (
-    <Show when={`${props.draft.server}\0${props.draft.directory}`} keyed>
-      <Show when={conn()} keyed>
-        {(conn) => (
-          <ServerProvider conn={conn}>
-            <ModelsProvider directory={props.draft.directory}>
-              <SDKProvider directory={props.draft.directory}>
-                <DirectoryDataProvider directory={props.draft.directory} server={props.draft.server}>
-                  <DraftProviders>
-                    <NewSession draftId={props.draft.draftID} />
-                  </DraftProviders>
-                </DirectoryDataProvider>
-              </SDKProvider>
-            </ModelsProvider>
-          </ServerProvider>
-        )}
       </Show>
     </Show>
   )
@@ -210,18 +158,6 @@ function AppLayout(props: ParentProps) {
   )
 }
 
-// The draft page only renders the prompt composer, so it drops TerminalProvider.
-// FileProvider and CommentsProvider stay because PromptInput uses file search and comment context.
-function DraftProviders(props: ParentProps) {
-  return (
-    <FileProvider>
-      <PromptProvider>
-        <CommentsProvider>{props.children}</CommentsProvider>
-      </PromptProvider>
-    </FileProvider>
-  )
-}
-
 export function AppBaseProviders(
   props: ParentProps<{
     locale?: Locale
@@ -240,7 +176,7 @@ export function AppBaseProviders(
           <UiI18nBridge>
             <ErrorBoundary
               fallback={(error) => {
-                Sentry.captureException(error)
+                void import("@sentry/solid").then(({ captureException }) => captureException(error))
                 return <ErrorPage error={error} />
               }}
             >
@@ -331,7 +267,7 @@ function LegacySessionRedirect() {
           legacySessionServer(
             tabs.store.filter((item) => item.type === "session"),
             params.id,
-            ServerConnection.key(server.list[0]!),
+            ServerConnection.key(server.list[0]),
           ),
           params.id,
         )}

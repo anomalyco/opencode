@@ -35,7 +35,7 @@ import {
   setDockIcon,
   restoreMainWindows,
 } from "./windows"
-import { registerWslIpcHandlers } from "./wsl/ipc"
+import { registerWslInitialization, registerWslIpcHandlers } from "./wsl/ipc"
 import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
@@ -105,28 +105,11 @@ const main = Effect.gen(function* () {
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
   const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
-  const onboardingTestRoot = ((): string | undefined => {
-    if (!TEST_ONBOARDING) return
-
-    const root = join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
-    rmSync(root, { recursive: true, force: true })
-    ;["data", "config", "cache", "state", "desktop", "session"].forEach((dir) =>
-      mkdirSync(join(root, dir), { recursive: true }),
-    )
-    process.env.OPENCODE_DB = ":memory:"
-    process.env.XDG_DATA_HOME = join(root, "data")
-    process.env.XDG_CONFIG_HOME = join(root, "config")
-    process.env.XDG_CACHE_HOME = join(root, "cache")
-    process.env.XDG_STATE_HOME = join(root, "state")
-    return root
-  })()
+  const testRoot = prepareTestRoot()
   app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
   app.setAppUserModelId(appId)
-  app.setPath(
-    "userData",
-    onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId),
-  )
-  if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
+  app.setPath("userData", testRoot ? join(testRoot, "desktop") : join(app.getPath("appData"), appId))
+  if (testRoot) app.setPath("sessionData", join(testRoot, "session"))
   initializeOldLayoutEligibility(app.getPath("userData"))
   logger = initLogging()
   initCrashReporter()
@@ -149,7 +132,7 @@ const main = Effect.gen(function* () {
   logger.log("app starting", {
     version: VERSION,
     packaged: app.isPackaged,
-    onboardingTest: Boolean(onboardingTestRoot),
+    onboardingTest: TEST_ONBOARDING,
   })
 
   ensureLoopbackNoProxy()
@@ -157,7 +140,8 @@ const main = Effect.gen(function* () {
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
-  if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
+  if (!app.isPackaged)
+    app.commandLine.appendSwitch("remote-debugging-port", process.env.OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT ?? "9222")
 
   if (!app.requestSingleInstanceLock()) {
     app.quit()
@@ -215,6 +199,8 @@ const main = Effect.gen(function* () {
   }
 
   const serverReady = Deferred.makeUnsafe<ServerReadyData, unknown>()
+  const wslReady = Promise.withResolvers<void>()
+  registerWslInitialization(wslReady.promise)
 
   yield* Effect.promise(() => app.whenReady())
 
@@ -232,10 +218,11 @@ const main = Effect.gen(function* () {
       }),
     ),
   )
-  app.setAsDefaultProtocolClient("opencode")
+  if (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
+    app.setAsDefaultProtocolClient("opencode")
   registerRendererProtocol()
   setDockIcon()
-  const updater = setupAutoUpdater(() => stopWslServers())
+  const updater = yield* Effect.promise(() => setupAutoUpdater(() => stopWslServers()))
   const menuDeps = {
     trigger: (id: string) => {
       const win = getLastFocusedWindow()
@@ -293,7 +280,6 @@ const main = Effect.gen(function* () {
 
     logger.log("starting v2 background service")
     const background = yield* Effect.promise(() => startBackgroundCli(logger))
-    stopWslServers = yield* Effect.promise(() => startWslServers(background))
 
     yield* Deferred.succeed(serverReady, {
       url: background.url,
@@ -302,9 +288,17 @@ const main = Effect.gen(function* () {
     })
 
     logger.log("loading task finished")
+    void startWslServers(background).then(
+      (stop) => {
+        stopWslServers = stop
+        wslReady.resolve()
+      },
+      (error) => {
+        logger.error("failed to start WSL manager", error)
+        wslReady.reject(error)
+      },
+    )
   }).pipe(forwardInitializationFailure(serverReady), Effect.forkChild)
-
-  yield* Fiber.await(loadingTask)
 
   app.on("window-all-closed", () => {
     if (process.platform === "darwin") return
@@ -317,7 +311,28 @@ const main = Effect.gen(function* () {
 
   const windows = restoreMainWindows()
   if (windows.length) createMenu(menuDeps)
+
+  yield* Fiber.await(loadingTask)
 })
+
+function prepareTestRoot(): string | undefined {
+  const root = TEST_ONBOARDING
+    ? join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
+    : app.isPackaged
+      ? undefined
+      : process.env.OPENCODE_DESKTOP_TEST_ROOT
+  if (!root) return undefined
+  if (TEST_ONBOARDING) rmSync(root, { recursive: true, force: true })
+  ;["data", "config", "cache", "state", "desktop", "session"].forEach((dir) =>
+    mkdirSync(join(root, dir), { recursive: true }),
+  )
+  if (TEST_ONBOARDING) process.env.OPENCODE_DB = ":memory:"
+  process.env.XDG_DATA_HOME = join(root, "data")
+  process.env.XDG_CONFIG_HOME = join(root, "config")
+  process.env.XDG_CACHE_HOME = join(root, "cache")
+  process.env.XDG_STATE_HOME = join(root, "state")
+  return root
+}
 
 async function startWslServers(cli: { version: string; wslBuild?: { script: string; output: string } }) {
   if (process.platform !== "win32") {

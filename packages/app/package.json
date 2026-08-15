@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./desktop": "./src/desktop.ts",
     "./desktop-menu": "./src/desktop-menu.ts",
     "./i18n/desktop-native": "./src/i18n/desktop-native.ts",
     "./updater": "./src/updater.ts",
@@ -28,7 +29,8 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report e2e/playwright-report",
     "test:stability": "bun test ./e2e/performance/unit/visual-stability.test.ts && playwright test --config e2e/performance/timeline-stability/playwright.config.ts",
-    "test:bench": "bun test ./e2e/performance/unit && playwright test --config e2e/performance/playwright.config.ts"
+    "test:bench": "bun test ./e2e/performance/unit && playwright test --config e2e/performance/playwright.config.ts",
+    "test:bench:devex": "bun test ./e2e/performance/unit/desktop-startup.test.ts && playwright test --config e2e/performance/devex/playwright.config.ts"
   },
   "license": "MIT",
   "devDependencies": {

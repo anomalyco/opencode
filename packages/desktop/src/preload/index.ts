@@ -9,31 +9,33 @@ const updaterHandler = (_: unknown, state: UpdaterState) => {
   updaterState = state
   updaterCallbacks.forEach((callback) => callback(state))
 }
+const invokeWsl = (channel: string, ...args: unknown[]) =>
+  ipcRenderer.invoke("wsl-servers-await-initialization").then(() => ipcRenderer.invoke(channel, ...args))
 
 const api: ElectronAPI = {
   killSidecar: () => ipcRenderer.invoke("kill-sidecar"),
   awaitInitialization: () => ipcRenderer.invoke("await-initialization"),
   wslServers: {
-    getState: () => ipcRenderer.invoke("wsl-servers-get-state"),
+    getState: () => invokeWsl("wsl-servers-get-state"),
     subscribe: (cb) => {
       const handler = (_: unknown, event: WslServersEvent) => cb(event)
       ipcRenderer.on("wsl-servers-event", handler)
-      void ipcRenderer.invoke("wsl-servers-subscribe")
+      const subscribed = invokeWsl("wsl-servers-subscribe")
       return () => {
         ipcRenderer.removeListener("wsl-servers-event", handler)
-        void ipcRenderer.invoke("wsl-servers-unsubscribe")
+        void subscribed.then(() => ipcRenderer.invoke("wsl-servers-unsubscribe"))
       }
     },
-    probeRuntime: () => ipcRenderer.invoke("wsl-servers-probe-runtime"),
-    refreshDistros: () => ipcRenderer.invoke("wsl-servers-refresh-distros"),
-    installWsl: () => ipcRenderer.invoke("wsl-servers-install-wsl"),
-    installDistro: (name) => ipcRenderer.invoke("wsl-servers-install-distro", name),
-    probeAddable: (distros) => ipcRenderer.invoke("wsl-servers-probe-addable", distros),
-    installOpencode: (name) => ipcRenderer.invoke("wsl-servers-install-opencode", name),
-    openTerminal: (name) => ipcRenderer.invoke("wsl-servers-open-terminal", name),
-    addServer: (distro) => ipcRenderer.invoke("wsl-servers-add", distro),
-    removeServer: (id) => ipcRenderer.invoke("wsl-servers-remove", id),
-    startServer: (id) => ipcRenderer.invoke("wsl-servers-start", id),
+    probeRuntime: () => invokeWsl("wsl-servers-probe-runtime"),
+    refreshDistros: () => invokeWsl("wsl-servers-refresh-distros"),
+    installWsl: () => invokeWsl("wsl-servers-install-wsl"),
+    installDistro: (name) => invokeWsl("wsl-servers-install-distro", name),
+    probeAddable: (distros) => invokeWsl("wsl-servers-probe-addable", distros),
+    installOpencode: (name) => invokeWsl("wsl-servers-install-opencode", name),
+    openTerminal: (name) => invokeWsl("wsl-servers-open-terminal", name),
+    addServer: (distro) => invokeWsl("wsl-servers-add", distro),
+    removeServer: (id) => invokeWsl("wsl-servers-remove", id),
+    startServer: (id) => invokeWsl("wsl-servers-start", id),
   },
   updater: {
     subscribe: async (cb) => {

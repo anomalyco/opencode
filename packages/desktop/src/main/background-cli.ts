@@ -19,18 +19,21 @@ type Logger = {
 export async function startBackgroundCli(logger: Logger) {
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const development = !app.isPackaged && process.env.OPENCODE_DESKTOP_CLI_DEV
+  const developmentEntry = !app.isPackaged && process.env.OPENCODE_DESKTOP_CLI_DEV_ENTRY
   const developmentVersion = process.env.OPENCODE_VERSION ?? "local"
   const cli = development
     ? {
         version: developmentVersion,
-        command: [
-          "bun",
-          "run",
-          "--cwd",
-          development,
-          `--define=OPENCODE_VERSION=${JSON.stringify(developmentVersion)}`,
-          "src/index.ts",
-        ],
+        command: developmentEntry
+          ? ["bun", "run", `--define=OPENCODE_VERSION=${JSON.stringify(developmentVersion)}`, developmentEntry]
+          : [
+              "bun",
+              "run",
+              "--cwd",
+              development,
+              `--define=OPENCODE_VERSION=${JSON.stringify(developmentVersion)}`,
+              "src/index.ts",
+            ],
         binary: undefined,
       }
     : await resolveBundledCli(isolated, logger)

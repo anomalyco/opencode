@@ -228,6 +228,7 @@ export function createMainWindow(id: string = randomUUID()) {
 
   win.once("ready-to-show", () => {
     win.show()
+    writeLog("window", "main window visible", { window: id })
   })
 
   return win
