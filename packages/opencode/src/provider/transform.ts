@@ -4,6 +4,7 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
+import { SessionTier } from "@/session/tier"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -1511,7 +1512,73 @@ function sanitizeOpenAISchema(value: unknown): unknown {
   return result
 }
 
+// Grammar-safe lowering for small local models (llama.cpp converts the whole
+// tools[] union to GBNF and 400s on unsupported keywords). Extends
+// sanitizeOpenAISchema with: $ref/$defs inlining, anyOf/oneOf/allOf flattening
+// to the first non-null variant, boolean-only additionalProperties, and typed
+// single-object items. `format`/`pattern` are already dropped because
+// sanitizeOpenAISchema only copies whitelisted keys.
+export function sanitizeGrammarSafeSchema(schema: JSONSchema7): JSONSchema7 {
+  const root = schema as unknown as JsonRecord
+  const defs = {
+    ...(isPlainObject(root.$defs) ? root.$defs : {}),
+    ...(isPlainObject(root.definitions) ? root.definitions : {}),
+  }
+
+  const inline = (value: unknown, seen: string[]): unknown => {
+    if (Array.isArray(value)) return value.map((item) => inline(item, seen))
+    if (!isPlainObject(value)) return value
+    if (typeof value.$ref === "string") {
+      const name = value.$ref.split("/").at(-1) ?? ""
+      const target = defs[name]
+      // Cyclic or unresolvable refs collapse to a permissive object.
+      if (!isPlainObject(target) || seen.includes(name)) return { type: "object", additionalProperties: true }
+      const description = typeof value.description === "string" ? { description: value.description } : {}
+      return inline({ ...target, ...description }, [...seen, name])
+    }
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => key !== "$defs" && key !== "definitions")
+        .map(([key, item]) => [key, inline(item, seen)]),
+    )
+  }
+
+  const compositionKeys = ["anyOf", "oneOf", "allOf"]
+  const lower = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(lower)
+    if (!isPlainObject(value)) return value
+    const flattened = iife(() => {
+      const variants = compositionKeys.flatMap((key) => (Array.isArray(value[key]) ? value[key] : []))
+      if (variants.length === 0) return value
+      const first = variants.find((item) => isPlainObject(item) && item.type !== "null") ?? variants[0]
+      const rest = Object.fromEntries(Object.entries(value).filter(([key]) => !compositionKeys.includes(key)))
+      return isPlainObject(first) ? { ...rest, ...first } : rest
+    })
+    // The chosen variant may itself carry a composition — flatten again until none remain.
+    if (compositionKeys.some((key) => Array.isArray(flattened[key])) && flattened !== value) return lower(flattened)
+    const result = Object.fromEntries(Object.entries(flattened).map(([key, item]) => [key, lower(item)]))
+    if ("additionalProperties" in result && typeof result.additionalProperties !== "boolean") {
+      result.additionalProperties = true
+    }
+    if (Array.isArray(result.items)) result.items = result.items[0] ?? { type: "string" }
+    if (isPlainObject(result.items) && result.items.type === undefined) {
+      result.items = { type: "string", ...result.items }
+    }
+    return result
+  }
+
+  const sanitized = lower(sanitizeOpenAISchema(inline(root, [])))
+  if (isPlainObject(sanitized)) return sanitized as JSONSchema7
+  return { type: "object", properties: {} }
+}
+
 export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 {
+  // Small-model tiers get the full grammar-safe lowering. Vendor-family ids
+  // (claude/gpt/gemini/kimi) never resolve to these tiers, so their schemas
+  // stay byte-identical — including kimi served over @ai-sdk/openai-compatible.
+  const tier = SessionTier.resolve(model)
+  if (tier === "minimal" || tier === "default") return sanitizeGrammarSafeSchema(schema)
+
   /*
   if (["openai", "azure"].includes(providerID)) {
     if (schema.type === "object" && schema.properties) {
