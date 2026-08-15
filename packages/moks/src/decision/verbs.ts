@@ -1,6 +1,6 @@
 import path from "path"
 import { CandidateCard, CANDIDATES_DIR } from "@/product/candidate-card"
-import { HIRING_FILE } from "@/product/req-workspace"
+import { ReqWorkspace } from "@/product/req-workspace"
 import { Filesystem } from "@/util/filesystem"
 import { applyWrites, type PlannedWrite } from "./ats"
 import { ATS_REF, DecisionGit } from "./git"
@@ -66,10 +66,15 @@ export type MoksCommit = {
 const LOG_FORMAT =
   "%H%x00%cI%x00%s%x00%(trailers:key=Moks-Action,valueonly)%x00%(trailers:key=Moks-Target,valueonly)%x00%(trailers:key=Moks-Adverse,valueonly)%x1e"
 
-const HIRING_PATHS = [HIRING_FILE, CANDIDATES_DIR]
+const HIRING_PATHS = [ReqWorkspace.HIRING_FILE, CANDIDATES_DIR]
+
+async function gitCwd(cwd?: string) {
+  const opened = cwd ?? process.cwd()
+  return (await ReqWorkspace.companyRoot(opened)) ?? opened
+}
 
 export async function commit(input: CommitInput): Promise<CommitResult> {
-  const cwd = input.cwd ?? process.cwd()
+  const cwd = await gitCwd(input.cwd)
   await DecisionGit.ensureRepo(cwd)
   if (input.target?.id) await applyActionToCard(cwd, input.target.id, input.action)
   if (!(await stageHiring(cwd))) throw new Error("nothing to commit")
@@ -105,7 +110,7 @@ export async function commit(input: CommitInput): Promise<CommitResult> {
 }
 
 export async function status(input: StatusInput = {}): Promise<StatusResult> {
-  const cwd = input.cwd ?? process.cwd()
+  const cwd = await gitCwd(input.cwd)
   const limit = input.limit ?? 20
   const all = await listMoksCommits(cwd, ["HEAD"])
   const openCommits = await listOpenCommits(cwd)
@@ -117,7 +122,7 @@ export async function status(input: StatusInput = {}): Promise<StatusResult> {
 }
 
 export async function push(input: PushInput): Promise<PushResult> {
-  const cwd = input.cwd ?? process.cwd()
+  const cwd = await gitCwd(input.cwd)
   const dry_run = input.dry_run ?? true
   const sha = await DecisionGit.revParse(cwd, input.commit_id)
   if (!sha) {

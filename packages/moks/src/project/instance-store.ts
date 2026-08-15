@@ -7,6 +7,7 @@ import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
 import { FSUtil } from "@moks/core/fs-util"
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from "effect"
+import { ReqWorkspace } from "@/product/req-workspace"
 import { type InstanceContext } from "./instance-context"
 import { InstanceBootstrap } from "./bootstrap-service"
 import * as Project from "./project"
@@ -44,17 +45,18 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
 
     const boot = (input: LoadInput & { directory: string }) =>
       Effect.gen(function* () {
+        const company = yield* Effect.promise(() => ReqWorkspace.companyRoot(input.directory))
         const ctx: InstanceContext =
           input.project && input.worktree
             ? {
                 directory: input.directory,
-                worktree: input.worktree,
+                worktree: company ?? input.worktree,
                 project: input.project,
               }
             : yield* project.fromDirectory(input.directory).pipe(
                 Effect.map((result) => ({
                   directory: input.directory,
-                  worktree: result.sandbox,
+                  worktree: company ?? result.sandbox,
                   project: result.project,
                 })),
               )

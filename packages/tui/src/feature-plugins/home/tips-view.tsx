@@ -66,6 +66,8 @@ function parse(tip: string): TipPart[] {
   return parts
 }
 
+const EMPTY_COMPANY_TIP = "This folder is the company. {highlight}/init{/highlight} to start."
+const EMPTY_COMPANY_PARTS = parse(EMPTY_COMPANY_TIP)
 const NO_MODELS_TIP =
   "Run {highlight}/connect{/highlight} to add an AI provider and start hiring — open a req with {highlight}/init{/highlight}"
 const NO_MODELS_PARTS = parse(NO_MODELS_TIP)
@@ -93,7 +95,7 @@ function configShortcut(api: TuiPluginApi, command: string): TipShortcut {
       .join(", ")
 }
 
-export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
+export function Tips(props: { api: TuiPluginApi; connected?: boolean; company?: boolean }) {
   const theme = useTheme().theme
   const tipOffset = Math.random()
   const shortcuts: Shortcuts = {
@@ -127,11 +129,12 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
     sessionQuickSwitch9: useCommandShortcut("session.quick_switch.9"),
     sessionSidebarToggle: configShortcut(props.api, "session.sidebar.toggle"),
     sessionTimeline: configShortcut(props.api, "session.timeline"),
-    statusView: useCommandShortcut("opencode.status"),
+    statusView: useCommandShortcut("opencode.system"),
     terminalSuspend: useCommandShortcut("terminal.suspend"),
     themeList: useCommandShortcut("theme.switch"),
   }
   const tip = createMemo(() => {
+    if (props.company === false) return EMPTY_COMPANY_TIP
     if (props.connected === false) return NO_MODELS_TIP
     const tips = [...TIPS, process.platform !== "win32" ? TERMINAL_SUSPEND_TIP : INPUT_UNDO_TIP].flatMap((item) => {
       const value = typeof item === "string" ? item : item(shortcuts)
@@ -143,8 +146,9 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
   const parts = createMemo(() => {
     const value = tip()
     if (typeof value === "string") return parse(value)
+    if (props.company === false) return EMPTY_COMPANY_PARTS
     return NO_MODELS_PARTS
-  }, NO_MODELS_PARTS)
+  }, props.company === false ? EMPTY_COMPANY_PARTS : NO_MODELS_PARTS)
 
   return (
     <box flexDirection="row" maxWidth="100%">
@@ -172,14 +176,14 @@ const TIPS: Tip[] = [
   "Watch the Diff panel for {highlight}HIRING.md{/highlight} and {highlight}candidates/{/highlight} changes",
   "Type {highlight}@{/highlight} to attach {highlight}HIRING.md{/highlight} or a candidate card",
   "Drag and drop resumes, JDs, or PDFs into the terminal as context",
-  "Use {highlight}/commit{/highlight} and {highlight}/push{/highlight} in the TUI; inspect with {highlight}/decisions{/highlight}",
+  "Use {highlight}/commit{/highlight} and {highlight}/push{/highlight} in the TUI; inspect with {highlight}/status{/highlight}",
   "Use {highlight}/skills{/highlight} to run req-context, score-candidate, draft-outreach, or commit-disposition",
   // Small harness set
   (shortcuts) => `Use ${commandText("/models", shortcuts.modelList())} to switch between available AI models`,
   "Run {highlight}/connect{/highlight} to add API keys for LLM providers",
   (shortcuts) => press(shortcuts.sessionSidebarToggle(), "in a session to show or hide the sidebar panel"),
   (shortcuts) => press(shortcuts.commandList(), "to see all available actions and commands"),
-  (shortcuts) => `Use ${commandText("/status", shortcuts.statusView())} to see system status (MCP, not decision commits)`,
+  (shortcuts) => `Use ${commandText("/system", shortcuts.statusView())} to see MCP and formatters`,
   (shortcuts) => `Use ${commandText("/help", shortcuts.helpShow())} to show the help dialog`,
 ]
 

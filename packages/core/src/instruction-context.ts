@@ -1,7 +1,7 @@
 export * as InstructionContext from "./instruction-context"
 
 import { Array, Effect, Layer, Schema } from "effect"
-import { isAbsolute, join, relative, sep } from "path"
+import { dirname, isAbsolute, join, relative, sep } from "path"
 import { FSUtil } from "./fs-util"
 import { Flag } from "./flag/flag"
 import { Global } from "./global"
@@ -12,6 +12,8 @@ import { SystemContextRegistry } from "./system-context/registry"
 import { makeLocationNode } from "./effect/app-node"
 
 const HIRING_FILE = "HIRING.md"
+const CANDIDATES_DIR = "candidates"
+const FOCUS_FILE = ".moks/focus"
 const MAX_INSTRUCTION_CHARS = 32_000
 
 class File extends Schema.Class<File>("InstructionContext.File")({
@@ -42,11 +44,39 @@ const layer = Layer.effectDiscard(
 
     const observe = Effect.fn("InstructionContext.observe")(function* () {
       const start = yield* fs.resolve(location.directory)
-      const stop = yield* fs.resolve(location.project.directory)
-      const fromProject = relative(stop, start)
+      const projectRoot = yield* fs.resolve(location.project.directory)
+      const fromProject = relative(projectRoot, start)
       const insideProject =
         fromProject === "" || (fromProject !== ".." && !fromProject.startsWith(`..${sep}`) && !isAbsolute(fromProject))
       const scanProject = !Flag.OPENCODE_DISABLE_PROJECT_CONFIG && insideProject
+      let stop = projectRoot
+      let company: string | undefined
+      if (scanProject) {
+        let current = start
+        while (true) {
+          if (yield* fs.existsSafe(join(current, HIRING_FILE))) {
+            company = current
+            break
+          }
+          if (current === projectRoot) break
+          const parent = dirname(current)
+          if (parent === current) break
+          current = parent
+        }
+        if (company) {
+          const parent = dirname(company)
+          if (
+            parent !== company &&
+            FSUtil.contains(projectRoot, parent) &&
+            (yield* fs.existsSafe(join(parent, HIRING_FILE))) &&
+            (yield* fs.isDir(join(company, CANDIDATES_DIR))) &&
+            !(yield* fs.isDir(join(parent, CANDIDATES_DIR)))
+          ) {
+            company = parent
+          }
+          stop = company
+        }
+      }
       const found = scanProject
         ? yield* fs.up({
             targets: [HIRING_FILE],
@@ -54,7 +84,25 @@ const layer = Layer.effectDiscard(
             stop,
           })
         : []
-      const discovered = new Set(yield* Effect.forEach(found, fs.resolve))
+      const slug = company ? ((yield* fs.readFileStringSafe(join(company, FOCUS_FILE)))?.trim() ?? "") : ""
+      const focused =
+        company &&
+        slug &&
+        !slug.includes("..") &&
+        !isAbsolute(slug) &&
+        !slug.includes("/") &&
+        !slug.includes("\\")
+          ? join(company, slug)
+          : undefined
+      const focusedHiring =
+        focused &&
+        (yield* fs.existsSafe(join(focused, HIRING_FILE))) &&
+        (yield* fs.isDir(join(focused, CANDIDATES_DIR)))
+          ? join(focused, HIRING_FILE)
+          : undefined
+      const discovered = new Set(
+        yield* Effect.forEach(focusedHiring ? [...found, focusedHiring] : found, fs.resolve),
+      )
       const paths = Array.dedupe([yield* fs.resolve(join(global.config, HIRING_FILE)), ...discovered])
       const files = yield* Effect.forEach(
         paths,

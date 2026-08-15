@@ -9,7 +9,7 @@ import {
   type Renderable,
 } from "@opentui/core"
 import type { CommandContext } from "@opentui/keymap"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, createResource, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import { registerOpencodeSpinner } from "../register-spinner"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -56,7 +56,8 @@ import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
-import { useLocation } from "../../context/location"
+import { DEFAULT_PLACEHOLDERS } from "./placeholders"
+import { countCards, countUnpushed, formatReqStatus, readReqTitle } from "./req-status"
 
 registerOpencodeSpinner()
 
@@ -149,7 +150,6 @@ export function Prompt(props: PromptProps) {
   const local = useLocal()
   const args = useArgs()
   const paths = useTuiPaths()
-  const location = useLocation()
   const terminalEnvironment = useTuiTerminalEnvironment()
   const clipboard = useClipboard()
   const sdk = useSDK()
@@ -172,8 +172,8 @@ export function Prompt(props: PromptProps) {
   const { theme, syntax } = useTheme()
   const kv = useKV()
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
-  const list = createMemo(() => props.placeholders?.normal ?? [])
-  const shell = createMemo(() => props.placeholders?.shell ?? [])
+  const list = createMemo(() => props.placeholders?.normal ?? DEFAULT_PLACEHOLDERS.normal)
+  const shell = createMemo(() => props.placeholders?.shell ?? DEFAULT_PLACEHOLDERS.shell)
   const fileContextEnabled = createMemo(() => kv.get("file_context_enabled", true))
   const [dismissedEditorSelectionKey, setDismissedEditorSelectionKey] = createSignal<string>()
   const editorContext = createMemo(() => {
@@ -279,6 +279,27 @@ export function Prompt(props: PromptProps) {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
     }
+  })
+
+  const reqDir = createMemo(() => {
+    if (!props.sessionID) return
+    return project.instance.path().directory || paths.cwd
+  })
+  const [reqMeta] = createResource(reqDir, async (dir) => {
+    const [title, cards] = await Promise.all([readReqTitle(dir), countCards(dir)])
+    return { title, cards }
+  })
+  const [unpushed] = createResource(reqDir, countUnpushed)
+  const reqStatus = createMemo(() => {
+    const dir = reqDir()
+    if (!dir) return
+    const meta = reqMeta()
+    return formatReqStatus({
+      title: meta?.title ?? path.basename(dir),
+      cards: meta?.cards,
+      unpushed: unpushed(),
+      agent: local.agent.current()?.name ?? "recruit",
+    })
   })
 
   const [store, setStore] = createStore<{
@@ -1646,7 +1667,7 @@ export function Prompt(props: PromptProps) {
               {props.hint ?? (
                 <Show when={props.sessionID}>
                   <box marginLeft={1}>
-                    <text fg={theme.textMuted}>{location()?.directory ?? paths.cwd}</text>
+                    <text fg={theme.textMuted}>{reqStatus()}</text>
                   </box>
                 </Show>
               )}
@@ -1661,20 +1682,17 @@ export function Prompt(props: PromptProps) {
               </Show>
               <Switch>
                 <Match when={store.mode === "normal"}>
-                  <Switch>
-                    <Match when={usage()}>
-                      {(item) => (
-                        <text fg={theme.textMuted} wrapMode="none">
-                          {[item().context, item().cost].filter(Boolean).join(" · ")}
-                        </text>
-                      )}
-                    </Match>
-                    <Match when={true}>
-                      <text fg={theme.text}>
-                        {agentShortcut()} <span style={{ fg: theme.textMuted }}>agents</span>
+                  <Show when={usage()}>
+                    {(item) => (
+                      <text fg={theme.textMuted}>
+                        {item().context}
+                        {item().cost ? ` · ${item().cost}` : ""}
                       </text>
-                    </Match>
-                  </Switch>
+                    )}
+                  </Show>
+                  <text fg={theme.text}>
+                    {agentShortcut()} <span style={{ fg: theme.textMuted }}>agents</span>
+                  </text>
                   <text fg={theme.text}>
                     {paletteShortcut()} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>

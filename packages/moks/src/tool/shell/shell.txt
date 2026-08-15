@@ -12,7 +12,6 @@ ${commandSection}
 
 # Shell policy
 - File operations: use Read, Edit, Write, Grep, and Glob — not this tool.
-- Hiring decision verbs: `moks commit` / `moks status` / `moks push` only when the user wants a recorded decision.
-- Git commit, push, or PR (`gh pr`) only when the user explicitly asked for git/PR work.
-- Never force-push, never skip hooks, never commit secrets.
-- Do not treat GitHub PRs as the product review path (packet review is `/review`).
+- Hiring decision verbs only when the user explicitly asked for a recorded decision. Example: `moks commit --action reject --target-id jordan-lee --reason "failed system design" && moks status`. Push with `moks push` only when asked.
+- Restricted git read (`status` / `diff` / `log`) is allowed. Never `git push`. Never force-push, skip hooks, or commit secrets.
+- Packet review is `/review`. Do not treat GitHub PRs as the product path.

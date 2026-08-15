@@ -1,12 +1,20 @@
 import type { TuiPlugin, TuiPluginApi } from "@moks/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
-import { createMemo, Show } from "solid-js"
+import path from "path"
+import { createMemo, createResource, Show } from "solid-js"
 import { Tips } from "./tips-view"
+import { useTuiPaths } from "../../context/runtime"
 import { useBindings } from "../../keymap"
 
 const id = "internal:home-tips"
 
-function View(props: { api: TuiPluginApi; hidden: boolean; show: boolean; connected: boolean }) {
+function View(props: {
+  api: TuiPluginApi
+  hidden: boolean
+  show: boolean
+  connected: boolean
+  company?: boolean
+}) {
   useBindings(() => ({
     commands: [
       {
@@ -26,7 +34,7 @@ function View(props: { api: TuiPluginApi; hidden: boolean; show: boolean; connec
   return (
     <box width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
       <Show when={props.show}>
-        <Tips api={props.api} connected={props.connected} />
+        <Tips api={props.api} connected={props.connected} company={props.company} />
       </Show>
     </box>
   )
@@ -37,6 +45,7 @@ const tui: TuiPlugin = async (api) => {
     order: 100,
     slots: {
       home_bottom() {
+        const paths = useTuiPaths()
         const hidden = createMemo(() => api.kv.get("tips_hidden", false))
         const first = createMemo(() => api.state.session.count() === 0)
         const connected = createMemo(() =>
@@ -44,8 +53,15 @@ const tui: TuiPlugin = async (api) => {
             (item) => item.id !== "opencode" || Object.values(item.models).some((model) => model.cost?.input !== 0),
           ),
         )
-        const show = createMemo(() => (!first() || !connected()) && !hidden())
-        return <View api={api} hidden={hidden()} show={show()} connected={connected()} />
+        const [company] = createResource(async () => {
+          const directory = api.state.path.directory || paths.cwd
+          return Bun.file(path.join(directory, "HIRING.md")).exists()
+        })
+        const show = createMemo(() => {
+          if (company() === false) return true
+          return (!first() || !connected()) && !hidden()
+        })
+        return <View api={api} hidden={hidden()} show={show()} connected={connected()} company={company()} />
       },
     },
   })

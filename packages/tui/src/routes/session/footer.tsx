@@ -78,7 +78,7 @@ export function Footer() {
                 {mcp()} MCP
               </text>
             </Show>
-            <text fg={theme.textMuted}>/status</text>
+            <text fg={theme.textMuted}>/system</text>
           </Match>
         </Switch>
       </box>

@@ -16,6 +16,79 @@ exports[`tool parameters JSON Schema (wire shape) apply_patch 1`] = `
 }
 `;
 
+exports[`tool parameters JSON Schema (wire shape) commit 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "action": {
+      "description": "Disposition action (e.g. advance, reject, offer, hire, note)",
+      "type": "string",
+    },
+    "reason": {
+      "description": "Human reason for the disposition",
+      "type": "string",
+    },
+    "target_id": {
+      "description": "Opaque target id (candidate id)",
+      "type": "string",
+    },
+    "target_kind": {
+      "description": "Opaque target kind (usually candidate)",
+      "type": "string",
+    },
+  },
+  "required": [
+    "action",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) push 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "commit_id": {
+      "description": "Git commit SHA to push",
+      "type": "string",
+    },
+    "confirm": {
+      "description": "Required for adverse actions (reject, offer, hire)",
+      "type": "boolean",
+    },
+    "dry_run": {
+      "description": "Dry-run (default true). Set false to write to the mock ATS",
+      "type": "boolean",
+    },
+  },
+  "required": [
+    "commit_id",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) status 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "commit_id": {
+      "description": "Filter by commit id",
+      "type": "string",
+    },
+    "id": {
+      "description": "Filter by receipt id",
+      "type": "string",
+    },
+    "limit": {
+      "description": "Max receipts to show (default 20)",
+      "type": "number",
+    },
+  },
+  "type": "object",
+}
+`;
+
 exports[`tool parameters JSON Schema (wire shape) bash 1`] = `
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",

@@ -14,11 +14,7 @@ function Directory(props: { api: TuiPluginApi }) {
   const dir = createMemo(() => {
     const selected = destination?.destination()
     if (!selected || selected.type === "new") return
-    const out = abbreviateHome(selected.directory, paths.home)
-    const branch =
-      selected.directory === (props.api.state.path.directory || paths.cwd) ? props.api.state.vcs?.branch : undefined
-    if (branch) return out + ":" + branch
-    return out
+    return abbreviateHome(selected.directory, paths.home)
   })
 
   return <Show when={dir()}>{(value) => <text fg={theme().textMuted}>{value()}</text>}</Show>
@@ -45,7 +41,7 @@ function Mcp(props: { api: TuiPluginApi }) {
           </Switch>
           {count()} MCP
         </text>
-        <text fg={theme().textMuted}>/status</text>
+        <text fg={theme().textMuted}>/system</text>
       </box>
     </Show>
   )

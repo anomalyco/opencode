@@ -44,7 +44,7 @@ export function DialogStatus() {
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
-          Status
+          System
         </text>
         <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
           esc

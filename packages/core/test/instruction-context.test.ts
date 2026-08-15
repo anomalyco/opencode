@@ -42,14 +42,12 @@ describe("InstructionContext", () => {
           const outside = path.join(tmp.path, "HIRING.md")
           const globalFile = path.join(global, "HIRING.md")
           const projectFile = path.join(project, "HIRING.md")
-          const packageFile = path.join(directory, "HIRING.md")
           yield* Effect.promise(async () => {
             await fs.mkdir(global, { recursive: true })
             await fs.mkdir(directory, { recursive: true })
             await fs.writeFile(outside, "outside")
             await fs.writeFile(globalFile, "global")
             await fs.writeFile(projectFile, "project")
-            await fs.writeFile(packageFile, "package")
           })
 
           const load = SystemContextRegistry.Service.pipe(
@@ -72,33 +70,28 @@ describe("InstructionContext", () => {
 
           const initialized = yield* SystemContext.initialize(yield* load)
           expect(initialized.baseline).toBe(
-            [
-              `Instructions from: ${globalFile}\nglobal`,
-              `Instructions from: ${packageFile}\npackage`,
-              `Instructions from: ${projectFile}\nproject`,
-            ].join("\n\n"),
+            [`Instructions from: ${globalFile}\nglobal`, `Instructions from: ${projectFile}\nproject`].join("\n\n"),
           )
           expect(initialized.baseline).not.toContain("outside")
 
-          yield* Effect.promise(() => fs.writeFile(packageFile, "changed"))
+          yield* Effect.promise(() => fs.writeFile(projectFile, "changed"))
           expect(yield* SystemContext.reconcile(yield* load, initialized.snapshot)).toMatchObject({
             _tag: "Updated",
-            text: expect.stringContaining(`Instructions from: ${packageFile}\nchanged`),
+            text: expect.stringContaining(`Instructions from: ${projectFile}\nchanged`),
           })
 
-          yield* Effect.promise(() => fs.rm(packageFile))
+          yield* Effect.promise(() => fs.rm(projectFile))
           const partial = yield* SystemContext.reconcile(yield* load, initialized.snapshot)
           expect(partial).toEqual({
             _tag: "Updated",
             text: [
               "These instructions replace all previously loaded ambient instructions.",
               `Instructions from: ${globalFile}\nglobal`,
-              `Instructions from: ${projectFile}\nproject`,
             ].join("\n\n"),
             snapshot: expect.any(Object),
           })
 
-          yield* Effect.promise(() => Promise.all([fs.rm(globalFile), fs.rm(projectFile)]))
+          yield* Effect.promise(() => Promise.all([fs.rm(globalFile)]))
           expect(yield* SystemContext.reconcile(yield* load, initialized.snapshot)).toEqual({
             _tag: "Updated",
             text: "Previously loaded instructions no longer apply.",
@@ -205,6 +198,138 @@ describe("InstructionContext", () => {
           expect(baseline).not.toContain(scorecard)
           expect(baseline).not.toContain(notes)
           expect(baseline).not.toContain(card)
+        }),
+      ),
+    ),
+  )
+
+  it.live("loads company and focused req HIRING.md, not a sibling req", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const company = path.join(tmp.path, "acme")
+          const focused = path.join(company, "senior-backend")
+          const sibling = path.join(company, "staff-platform")
+          const card = path.join(focused, "candidates", "alice.md")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(focused, "candidates"), { recursive: true })
+            await fs.mkdir(path.join(sibling, "candidates"), { recursive: true })
+            await fs.mkdir(path.join(company, ".moks"), { recursive: true })
+            await fs.writeFile(path.join(company, "HIRING.md"), "company")
+            await fs.writeFile(path.join(focused, "HIRING.md"), "focused")
+            await fs.writeFile(path.join(sibling, "HIRING.md"), "sibling")
+            await fs.writeFile(path.join(company, ".moks", "focus"), "senior-backend\n")
+            await fs.writeFile(card, "alice")
+          })
+
+          const context = yield* SystemContextRegistry.Service.pipe(
+            Effect.flatMap((service) => service.load()),
+            Effect.provide(
+              instructionLayer({
+                config: path.join(tmp.path, "global"),
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(
+                    location(
+                      { directory: AbsolutePath.make(company) },
+                      { projectDirectory: AbsolutePath.make(company) },
+                    ),
+                  ),
+                ),
+              }),
+            ),
+          )
+
+          const baseline = (yield* SystemContext.initialize(context)).baseline
+          expect(baseline).toContain(`Instructions from: ${path.join(company, "HIRING.md")}\ncompany`)
+          expect(baseline).toContain(`Instructions from: ${path.join(focused, "HIRING.md")}\nfocused`)
+          expect(baseline).not.toContain("sibling")
+          expect(baseline).not.toContain(card)
+        }),
+      ),
+    ),
+  )
+
+  it.live("loads company and req HIRING.md when the opened folder is the focused packet", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const software = path.join(tmp.path, "monorepo")
+          const company = path.join(software, "acme")
+          const req = path.join(company, "senior-backend")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(req, "candidates"), { recursive: true })
+            await fs.writeFile(path.join(software, "HIRING.md"), "software")
+            await fs.writeFile(path.join(company, "HIRING.md"), "company")
+            await fs.writeFile(path.join(req, "HIRING.md"), "req")
+          })
+
+          const context = yield* SystemContextRegistry.Service.pipe(
+            Effect.flatMap((service) => service.load()),
+            Effect.provide(
+              instructionLayer({
+                config: path.join(tmp.path, "global"),
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(
+                    location({ directory: AbsolutePath.make(req) }, { projectDirectory: AbsolutePath.make(software) }),
+                  ),
+                ),
+              }),
+            ),
+          )
+
+          const baseline = (yield* SystemContext.initialize(context)).baseline
+          expect(baseline).toContain(`Instructions from: ${path.join(company, "HIRING.md")}\ncompany`)
+          expect(baseline).toContain(`Instructions from: ${path.join(req, "HIRING.md")}\nreq`)
+          expect(baseline).not.toContain("software")
+        }),
+      ),
+    ),
+  )
+
+  it.live("does not load a parent software HIRING.md when the opened folder is a company", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const software = path.join(tmp.path, "monorepo")
+          const company = path.join(software, "acme")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(company, { recursive: true })
+            await fs.writeFile(path.join(software, "HIRING.md"), "software")
+            await fs.writeFile(path.join(company, "HIRING.md"), "company")
+          })
+
+          const context = yield* SystemContextRegistry.Service.pipe(
+            Effect.flatMap((service) => service.load()),
+            Effect.provide(
+              instructionLayer({
+                config: path.join(tmp.path, "global"),
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(
+                    location(
+                      { directory: AbsolutePath.make(company) },
+                      { projectDirectory: AbsolutePath.make(software) },
+                    ),
+                  ),
+                ),
+              }),
+            ),
+          )
+
+          const baseline = (yield* SystemContext.initialize(context)).baseline
+          expect(baseline).toBe(`Instructions from: ${path.join(company, "HIRING.md")}\ncompany`)
+          expect(baseline).not.toContain("software")
         }),
       ),
     ),

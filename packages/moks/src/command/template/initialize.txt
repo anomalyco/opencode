@@ -1,18 +1,22 @@
-Open recruiter intake for this directory as a requisition at `${path}`.
+Open recruiter intake at `${path}`.
 
-This is hiring intake for this requisition.
+This is hiring intake.
 
 Title: `${title}`
 Slug: `${slug}`
 
-This directory is the req. Do not create a subdirectory. Constitution is `HIRING.md`. Candidate files are `candidates/<id>.md` (YAML frontmatter). Git is the audit log.
+- Empty / no `HIRING.md`: this folder is the company. Company `HIRING.md` was written. Do not create `candidates/` at company root.
+- Company `HIRING.md` present, no root `candidates/`: `/init [title]` created or will create `<slug>/HIRING.md` + `<slug>/candidates/`. Intake updates the **req** `HIRING.md`.
+- Root already has `HIRING.md` + `candidates/`: this directory is the req. Do not nest a second req.
+
+Constitution is `HIRING.md`. Candidate files are `candidates/<id>.md` (YAML frontmatter). Git is the audit log.
 
 User notes (honor these; they are not a finished JD):
 $ARGUMENTS
 
 Stubs already exist if they were missing or empty:
-- `HIRING.md`
-- `candidates/.gitkeep`
+- company or req `HIRING.md`
+- req `candidates/.gitkeep` (never at company root)
 
 If `${title}` is `<title>` or looks like a placeholder (numeric like `00001`, not a role title), ask for the title. Do not overwrite non-empty user content.
 

@@ -9,6 +9,7 @@ import { ToolJsonSchema } from "../../src/tool/json-schema"
 // prompt.ts` uses to emit tool schemas to the LLM, so the snapshots stay
 // provider-compatible while tools use Effect Schema internally.
 
+import { CommitParameters, PushParameters, StatusParameters } from "../../src/tool/decision"
 import { Parameters as ApplyPatch } from "../../src/tool/apply_patch"
 import { Parameters as Edit } from "../../src/tool/edit"
 import { Parameters as Glob } from "../../src/tool/glob"
@@ -36,6 +37,9 @@ const toJsonSchema = ToolJsonSchema.fromSchema
 describe("tool parameters", () => {
   describe("JSON Schema (wire shape)", () => {
     test("apply_patch", () => expect(toJsonSchema(ApplyPatch)).toMatchSnapshot())
+    test("commit", () => expect(toJsonSchema(CommitParameters)).toMatchSnapshot())
+    test("push", () => expect(toJsonSchema(PushParameters)).toMatchSnapshot())
+    test("status", () => expect(toJsonSchema(StatusParameters)).toMatchSnapshot())
     test("bash", () => expect(toJsonSchema(Shell)).toMatchSnapshot())
     test("edit", () => expect(toJsonSchema(Edit)).toMatchSnapshot())
     test("glob", () => expect(toJsonSchema(Glob)).toMatchSnapshot())

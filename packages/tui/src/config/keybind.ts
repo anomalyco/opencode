@@ -80,7 +80,7 @@ export const Definitions = {
   theme_mode_lock: keybind("none", "Lock or unlock theme mode"),
   sidebar_toggle: keybind("<leader>b", "Toggle sidebar"),
   scrollbar_toggle: keybind("none", "Toggle session scrollbar"),
-  status_view: keybind("<leader>s", "View status"),
+  status_view: keybind("<leader>s", "Decision status"),
   debug_view: keybind("none", "View debug info"),
 
   session_export: keybind("<leader>x", "Export session to editor"),
@@ -288,7 +288,7 @@ export const CommandMap = {
   theme_mode_lock: "theme.mode.lock",
   sidebar_toggle: "session.sidebar.toggle",
   scrollbar_toggle: "session.toggle.scrollbar",
-  status_view: "opencode.status",
+  status_view: "decision.list",
   debug_view: "opencode.debug",
   session_export: "session.export",
   session_copy: "session.copy",

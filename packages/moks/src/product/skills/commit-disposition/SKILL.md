@@ -5,7 +5,7 @@ description: Recommend reject, offer, hire, or advance with rationale, then inst
 
 # commit-disposition
 
-Recommend a hiring disposition and show how to record it with `moks commit` then `moks push`. You never write ATS stages silently. `moks commit` is the audit (git). `moks push` is the ATS write (mock).
+Recommend a hiring disposition and record it with the native `commit` / `status` / `push` tools. You never write ATS stages silently. `commit` is the audit (git). `push` is the ATS write (mock). The CLI (`moks commit` / `moks status` / `moks push`) is the same implementation.
 
 ## Allowed actions (examples)
 
@@ -36,7 +36,13 @@ Look for `candidates/<id>.md` and cite its frontmatter `score` plus body. If the
 
 ## Record the decision (required)
 
-Run (dry-run default):
+Prefer the native `commit` / `status` / `push` tools (same verbs as the CLI). Do not use bash or raw `git commit`.
+
+commit: action=<action> target_kind=candidate target_id=<id> reason="<one line>"
+status
+push: commit_id=<id>   (dry_run defaults true; adverse needs confirm=true)
+
+CLI equivalent (implementation):
 
 moks commit --action <action> --target-kind candidate --target-id <id> --reason "<one line>" --meta '{"card":"candidates/<id>.md"}'
 
@@ -58,8 +64,8 @@ moks push --commit-id <id> --confirm   # reject | offer | hire
 
 ## Rules
 
+- Prefer the native `commit` / `status` / `push` tools when the user asks you to record it
 - Always end with the concrete `moks commit --action ...` command filled in for this case
 - The one-liner must include `--target-kind candidate --target-id <id>` and `--meta` with the card path
-- Prefer bash to run commit when the user asks you to record it
 - If evidence is thin, recommend gathering more context instead of adverse action
 - Mention that push for adverse actions needs `--confirm`

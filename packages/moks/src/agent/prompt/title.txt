@@ -36,9 +36,9 @@ Your output must be:
 "compare resumes against the scorecard" → Scorecard resume comparison
 "commit reject for candidate 4821" → Reject disposition commit
 "what's missing from this req brief" → Req brief gap check
-"debug 500 errors in production" → Debugging production 500 errors
-"refactor user service" → Refactoring user service
+"schedule onsite for Priya Shah" → Onsite schedule — Priya Shah
+"reject after phone screen" → Phone-screen reject
 "look at @HIRING.md" → HIRING.md review
 "@resume.md score against JD" → Resume vs JD score
-"how do I connect postgres to my API" → Postgres API connection
+"who is still at offer stage" → Offer-stage slate check
 </examples>

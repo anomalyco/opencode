@@ -10,6 +10,7 @@ import { Flag } from "@moks/core/flag/flag"
 import { FSUtil } from "@moks/core/fs-util"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@moks/core/global"
+import { ReqWorkspace } from "@/product/req-workspace"
 import type { MessageID } from "./schema"
 
 const MAX_INSTRUCTION_CHARS = 32_000
@@ -121,13 +122,25 @@ const layer: Layer.Layer<
       }
 
       if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-        for (const file of instructionFiles) {
-          const matches = yield* fs
-            .findUp(file, ctx.directory, ctx.worktree)
-            .pipe(Effect.catch(() => Effect.succeed([])))
-          if (matches.length > 0) {
-            matches.forEach((item) => paths.add(path.resolve(item)))
-            break
+        const company = yield* Effect.promise(() => ReqWorkspace.companyRoot(ctx.directory))
+        if (!company) {
+          for (const file of instructionFiles) {
+            const matches = yield* fs
+              .findUp(file, ctx.directory, ctx.worktree)
+              .pipe(Effect.catch(() => Effect.succeed([])))
+            if (matches.length > 0) {
+              matches.forEach((item) => paths.add(path.resolve(item)))
+              break
+            }
+          }
+        }
+        if (company) {
+          const companyHiring = path.join(company, "HIRING.md")
+          if (yield* fs.existsSafe(companyHiring)) paths.add(path.resolve(companyHiring))
+          const focused = yield* Effect.promise(() => ReqWorkspace.focusedReq(ctx.directory))
+          if (focused && focused !== company) {
+            const focusedHiring = path.join(focused, "HIRING.md")
+            if (yield* fs.existsSafe(focusedHiring)) paths.add(path.resolve(focusedHiring))
           }
         }
       }
@@ -185,12 +198,13 @@ const layer: Layer.Layer<
       const already = extract(messages)
       const results: { filepath: string; content: string }[] = []
       const s = yield* InstanceState.get(state)
-      const root = path.resolve(yield* InstanceState.directory)
+      const opened = path.resolve(yield* InstanceState.directory)
+      const company = yield* Effect.promise(() => ReqWorkspace.companyRoot(opened))
+      const root = company ?? opened
 
       const target = path.resolve(filepath)
       let current = path.dirname(target)
 
-      // Walk upward from the file being read and attach nearby instruction files once per message.
       while (current.startsWith(root) && current !== root) {
         const found = yield* find(current)
         if (!found || found === target || sys.has(found) || already.has(found)) {

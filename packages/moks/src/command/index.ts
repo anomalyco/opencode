@@ -69,7 +69,7 @@ const layer = Layer.effect(
 
       commands[Default.INIT] = {
         name: Default.INIT,
-        description: "scaffold this directory as a requisition (HIRING.md + candidates/)",
+        description: "scaffold a company or a req directory (HIRING.md + candidates/)",
         source: "command",
         get template() {
           return PROMPT_INITIALIZE.replace("${path}", ctx.directory)

@@ -34,7 +34,7 @@ describe("CommandPlugin.Plugin", () => {
 
       expect(yield* command.get("init")).toMatchObject({
         name: "init",
-        description: "scaffold this directory as a requisition (HIRING.md + candidates/)",
+        description: "scaffold a company or a req directory (HIRING.md + candidates/)",
       })
       expect((yield* command.get("init"))?.template).toContain("`/repo/packages/app`")
       expect((yield* command.get("init"))?.template).toContain("HIRING.md")

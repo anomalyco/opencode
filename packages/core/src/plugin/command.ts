@@ -13,7 +13,7 @@ export const Plugin = define({
     yield* ctx.command.transform((draft) => {
       draft.update("init", (command) => {
         command.template = PROMPT_INITIALIZE.replace("${path}", location.directory)
-        command.description = "scaffold this directory as a requisition (HIRING.md + candidates/)"
+        command.description = "scaffold a company or a req directory (HIRING.md + candidates/)"
       })
       draft.update("review", (command) => {
         command.template = PROMPT_REVIEW.replace("${path}", location.project.directory)

@@ -391,6 +391,59 @@ export function Autocomplete(props: {
     { initialValue: [] },
   )
 
+  const [reqDirs] = createResource(
+    () => location(),
+    async (loc) => {
+      const workspace = loc?.workspaceID ?? project.workspace.current()
+      const cwd = loc?.directory || sync.path.directory || paths.cwd
+      if (!cwd) return [] as { slug: string; absolute: string; company: string }[]
+      const here = await sdk.client.v2.fs.list({ path: ".", location: { directory: cwd, workspace } })
+      if (here.error || !here.data) return []
+      const names = here.data.data.map((item) => ({
+        name: path.basename(item.path.replace(/[/\\]+$/, "")),
+        type: item.type,
+      }))
+      if (!names.some((item) => item.name === "HIRING.md" && item.type === "file")) return []
+      const packet = names.some((item) => item.name === "candidates" && item.type === "directory")
+      let company = cwd
+      if (packet) {
+        const parent = path.dirname(cwd)
+        if (parent === cwd) return []
+        const up = await sdk.client.v2.fs.list({ path: ".", location: { directory: parent, workspace } })
+        if (up.error || !up.data) return []
+        const parentNames = up.data.data.map((item) => ({
+          name: path.basename(item.path.replace(/[/\\]+$/, "")),
+          type: item.type,
+        }))
+        if (
+          !parentNames.some((item) => item.name === "HIRING.md" && item.type === "file") ||
+          parentNames.some((item) => item.name === "candidates" && item.type === "directory")
+        ) {
+          return []
+        }
+        company = parent
+      }
+      const listed =
+        company === cwd ? here : await sdk.client.v2.fs.list({ path: ".", location: { directory: company, workspace } })
+      if (listed.error || !listed.data) return []
+      const root = listed.data.location.directory
+      const dirs: { slug: string; absolute: string; company: string }[] = []
+      for (const item of listed.data.data) {
+        if (item.type !== "directory") continue
+        const slug = path.basename(item.path.replace(/[/\\]+$/, ""))
+        if (!slug || slug.startsWith(".")) continue
+        if (!(await Bun.file(path.join(root, slug, "HIRING.md")).exists())) continue
+        dirs.push({
+          slug,
+          absolute: path.join(root, item.path),
+          company: root,
+        })
+      }
+      return dirs
+    },
+    { initialValue: [] },
+  )
+
   const mcpResources = createMemo(() => {
     if (!store.visible || store.visible === "/") return []
 
@@ -472,8 +525,29 @@ export function Autocomplete(props: {
       ),
   )
 
-  const reqAliases = createMemo(() =>
-    (reqs() ?? []).map(
+  const reqAliases = createMemo(() => [
+    ...(reqDirs() ?? []).map(
+      (req): AutocompleteOption => ({
+        display: "@" + req.slug,
+        description: " req",
+        path: req.slug,
+        onSelect: () => {
+          insertPart(req.slug, {
+            type: "file",
+            mime: "application/x-directory",
+            filename: req.slug,
+            url: pathToFileURL(req.absolute).href,
+            source: {
+              type: "file",
+              text: { start: 0, end: 0, value: "" },
+              path: req.slug,
+            },
+          })
+          void Bun.write(path.join(req.company, ".moks", "focus"), req.slug)
+        },
+      }),
+    ),
+    ...(reqs() ?? []).map(
       (req): AutocompleteOption => ({
         display: "@" + req.slug,
         description: " candidate",
@@ -493,7 +567,7 @@ export function Autocomplete(props: {
         },
       }),
     ),
-  )
+  ])
 
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...slashes()]

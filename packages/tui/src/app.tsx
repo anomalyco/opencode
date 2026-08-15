@@ -119,7 +119,8 @@ const appBindingCommands = [
   "variant.list",
   "provider.connect",
   "console.org.switch",
-  "opencode.status",
+  "decision.list",
+  "opencode.system",
   "opencode.debug",
   "theme.switch",
   "theme.switch_mode",
@@ -762,9 +763,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           ]
         : []),
       {
-        name: "opencode.status",
-        title: "View system status",
-        slashName: "status",
+        name: "opencode.system",
+        title: "View system",
+        slashName: "system",
         run: () => {
           dialog.replace(() => <DialogStatus />)
         },
@@ -798,9 +799,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "decision.list",
-        title: "Decision commits",
-        slashName: "decisions",
-        slashAliases: ["commits", "receipts"],
+        title: "Decision status",
+        slashName: "status",
+        slashAliases: ["decisions", "commits", "receipts"],
         category: "Decision",
         run: () => {
           void runDecisionsFlow({

@@ -229,8 +229,8 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
       commandSection: cmdCommandSection(chain, limits, defaultTimeoutMs),
       gitCommands: "git commands",
       gitCommandRestriction: "git commands",
-      createPrInstruction: "Create PR using a temporary body file so cmd.exe quoting stays simple.",
-      createPrExample: `(\n  echo ## Summary\n  echo - ^<1-3 bullet points^>\n) > pr-body.txt\ngh pr create --title "the pr title" --body-file pr-body.txt`,
+      decisionInstruction: "Record a hiring decision with moks commit, then check moks status. Push only when asked.",
+      decisionExample: "moks commit --action reject --target-id jordan-lee --reason \"failed system design\" && moks status",
     }
   }
   if (isPowerShell) {
@@ -247,11 +247,8 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
       ),
       gitCommands: "git commands",
       gitCommandRestriction: "git commands",
-      createPrInstruction: "Create PR using gh pr create with a PowerShell here-string to pass the body correctly.",
-      createPrExample: `gh pr create --title "the pr title" --body @'
-## Summary
-- <1-3 bullet points>
-'@`,
+      decisionInstruction: "Record a hiring decision with moks commit, then check moks status. Push only when asked.",
+      decisionExample: "moks commit --action reject --target-id jordan-lee --reason \"failed system design\"; if ($?) { moks status }",
     }
   }
   return {
@@ -262,11 +259,9 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
     commandSection: bashCommandSection(chain, limits, defaultTimeoutMs),
     gitCommands: "bash commands",
     gitCommandRestriction: "git bash commands",
-    createPrInstruction:
-      "Create PR using gh pr create with the format below. Use a HEREDOC to pass the body to ensure correct formatting.",
-    createPrExample: `gh pr create --title "the pr title" --body "$(cat <<'EOF'
-## Summary
-<1-3 bullet points>`,
+    decisionInstruction:
+      "Record a hiring decision with moks commit, then check moks status. Push only when asked.",
+    decisionExample: `moks commit --action reject --target-id jordan-lee --reason "failed system design" && moks status`,
   }
 }
 
@@ -283,8 +278,8 @@ export function render(name: string, platform: NodeJS.Platform, limits: Limits, 
       gitCommands: selected.gitCommands,
       toolName: ShellID.ToolID,
       gitCommandRestriction: selected.gitCommandRestriction,
-      createPrInstruction: selected.createPrInstruction,
-      createPrExample: selected.createPrExample,
+      decisionInstruction: selected.decisionInstruction,
+      decisionExample: selected.decisionExample,
     }),
     parameters: parameterSchema(),
   }

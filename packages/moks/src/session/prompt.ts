@@ -892,6 +892,15 @@ const layer = Layer.effect(
               }
 
               if (mime === "application/x-directory") {
+                const company = yield* Effect.promise(() => ReqWorkspace.companyRoot(filepath))
+                const slug = path.basename(path.resolve(filepath))
+                if (
+                  company &&
+                  path.resolve(company, slug) === path.resolve(filepath) &&
+                  (yield* Effect.promise(() => ReqWorkspace.isReqDir(filepath)))
+                ) {
+                  yield* Effect.promise(() => ReqWorkspace.writeFocus(company, slug))
+                }
                 const args = { filePath: filepath }
                 const exit = yield* execRead(args).pipe(Effect.exit)
                 if (Exit.isFailure(exit)) {

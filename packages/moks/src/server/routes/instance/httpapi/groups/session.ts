@@ -273,7 +273,7 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.init",
             summary: "Initialize session",
             description:
-              "Scaffold this directory as a requisition (HIRING.md + candidates/).",
+              "Scaffold a company or a req directory (HIRING.md + candidates/).",
           }),
         ),
         HttpApiEndpoint.post("share", SessionPaths.share, {

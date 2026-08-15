@@ -5,6 +5,7 @@ import { Effect, FileSystem, Layer } from "effect"
 import { CrossSpawnSpawner } from "@moks/core/cross-spawn-spawner"
 
 import { Instruction } from "../../src/session/instruction"
+import { ReqWorkspace } from "../../src/product/req-workspace"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { Global } from "@moks/core/global"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
@@ -191,6 +192,25 @@ describe("Instruction.resolve", () => {
     ),
   )
 
+  it.live("does not walk out of the company to attach a parent software HIRING.md", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpdirScoped()
+      const root = yield* tmpdirScoped()
+      yield* writeFiles(root, {
+        "HIRING.md": "# Software",
+        "acme/HIRING.md": "# Acme",
+        "acme/src/file.ts": "const x = 1",
+      })
+      const company = path.join(root, "acme")
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const results = yield* svc.resolve([], path.join(company, "src", "file.ts"), MessageID.make("msg_message-test-4"))
+        expect(results).toEqual([])
+      }).pipe(provideInstance(company), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
   it.live("skips instructions already reported by prior read metadata", () =>
     withFiles({ "subdir/HIRING.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
       Effect.gen(function* () {
@@ -270,6 +290,79 @@ describe("Instruction.system", () => {
         expect(yield* svc.system()).toEqual([])
       }),
     ),
+  )
+
+  it.live("loads company and focused req HIRING.md when the packet is cwd", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpdirScoped()
+      const root = yield* tmpdirScoped()
+      const company = path.join(root, "acme")
+      const focused = path.join(company, "senior-backend")
+      const sibling = path.join(company, "staff-platform")
+      yield* writeFiles(root, {
+        "HIRING.md": "# Software",
+        "acme/HIRING.md": "# Acme",
+        "acme/senior-backend/HIRING.md": "# SB",
+        "acme/senior-backend/candidates/.gitkeep": "",
+        "acme/senior-backend/candidates/alice.md": "# Alice",
+        "acme/staff-platform/HIRING.md": "# SP",
+        "acme/staff-platform/candidates/.gitkeep": "",
+      })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+        expect(paths.has(path.join(company, "HIRING.md"))).toBe(true)
+        expect(paths.has(path.join(focused, "HIRING.md"))).toBe(true)
+        expect(paths.has(path.join(sibling, "HIRING.md"))).toBe(false)
+        expect(paths.has(path.join(root, "HIRING.md"))).toBe(false)
+        expect(paths.has(path.join(focused, "candidates", "alice.md"))).toBe(false)
+      }).pipe(provideInstance(focused), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
+  it.live("loads company and focused req HIRING.md from writeFocus", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpdirScoped()
+      const company = yield* tmpdirScoped()
+      const focused = path.join(company, "senior-backend")
+      const sibling = path.join(company, "staff-platform")
+      yield* writeFiles(company, {
+        "HIRING.md": "# Acme",
+        "senior-backend/HIRING.md": "# SB",
+        "senior-backend/candidates/.gitkeep": "",
+        "staff-platform/HIRING.md": "# SP",
+        "staff-platform/candidates/.gitkeep": "",
+      })
+      yield* Effect.promise(() => ReqWorkspace.writeFocus(company, "senior-backend"))
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+        expect(paths.has(path.join(company, "HIRING.md"))).toBe(true)
+        expect(paths.has(path.join(focused, "HIRING.md"))).toBe(true)
+        expect(paths.has(path.join(sibling, "HIRING.md"))).toBe(false)
+      }).pipe(provideInstance(company), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
+  it.live("does not load a parent software HIRING.md when the tmp dir is a company", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpdirScoped()
+      const root = yield* tmpdirScoped()
+      const company = path.join(root, "acme")
+      yield* writeFiles(root, {
+        "HIRING.md": "# Software",
+        "acme/HIRING.md": "# Acme",
+      })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+        expect(paths.has(path.join(company, "HIRING.md"))).toBe(true)
+        expect(paths.has(path.join(root, "HIRING.md"))).toBe(false)
+      }).pipe(provideInstance(company), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
   )
 
   it.live("does not attach req materials or candidate cards", () =>
