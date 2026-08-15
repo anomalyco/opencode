@@ -58,7 +58,6 @@ const layer = Layer.effect(
       finalize: (draft) =>
         Effect.gen(function* () {
           materialized.clear()
-          const seen = new Map<string, string | undefined>()
           for (const [name, source] of draft.list()) {
             if (source.type === "local") {
               materialized.set(
@@ -82,14 +81,11 @@ const layer = Layer.effect(
                 continue
               }
             }
-            const target = Repository.cachePath(global.repos, repository)
-            if (seen.has(target) && seen.get(target) !== source.branch) continue
-            seen.set(target, source.branch)
             materialized.set(
               name,
               new Info({
                 name,
-                path: AbsolutePath.make(target),
+                path: AbsolutePath.make(Repository.cachePath(global.repos, repository, source.branch)),
                 ...(source.description === undefined ? {} : { description: source.description }),
                 ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
                 source,

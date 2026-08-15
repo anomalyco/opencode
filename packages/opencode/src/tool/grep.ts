@@ -69,7 +69,10 @@ export const GrepTool = Tool.define(
           if (result.length === 0) return empty
 
           const rows = result.map((item) => ({
-            path: path.resolve(cwd, item.entry.path),
+            path: path.resolve(
+              requestedInfo?.type === "Directory" ? requested : path.dirname(requested),
+              item.entry.path,
+            ),
             line: item.line,
             text: item.text,
           }))

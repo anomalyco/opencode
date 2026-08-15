@@ -102,10 +102,14 @@ export const dict = {
   "temp.logoDarkAlt": "โลโก้ opencode แบบมืด",
 
   "home.banner.badge": "ใหม่",
-  "home.banner.text": "แอปเดสก์ท็อปพร้อมใช้งานในเวอร์ชันเบต้า",
-  "home.banner.platforms": "บน macOS, Windows และ Linux",
+  "home.banner.text": "ขอแนะนำแท็บสำหรับเดสก์ท็อป.",
+  "home.banner.platforms": "พร้อมใช้งานบน macOS, Windows และ Linux",
   "home.banner.downloadNow": "ดาวน์โหลดตอนนี้",
   "home.banner.downloadBetaNow": "ดาวน์โหลดเบต้าเดสก์ท็อปตอนนี้",
+  "home.promo.title": "ขอแนะนำแท็บสำหรับเดสก์ท็อป",
+  "home.promo.body": "จัดระเบียบงานและเซสชันที่ใช้งานอยู่ด้วยแท็บ",
+  "home.promo.cta": "ดาวน์โหลดเวอร์ชันล่าสุดเพื่อเริ่มต้นใช้งาน",
+  "home.promo.close": "ปิดประกาศเกี่ยวกับแอปเดสก์ท็อป",
 
   "home.hero.title": "เอเจนต์เขียนโค้ดด้วย AI แบบโอเพนซอร์ส",
   "home.hero.subtitle.a": "มีโมเดลฟรีรวมอยู่ หรือเชื่อมต่อโมเดลใดก็ได้จากผู้ให้บริการรายใดก็ได้,",
@@ -249,8 +253,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "ข้อยกเว้นดังนี้",
 
   "go.title": "OpenCode Go | โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
+  "go.banner.text": "DeepSeek V4 Flash เพิ่มโควตาการใช้งานเป็น 2 เท่าในช่วงเวลาจำกัด",
   "go.meta.description":
-    "Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดคำขอ 5 ชั่วโมงที่เอื้อเฟื้อสำหรับ GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro และ DeepSeek V4 Flash",
+    "Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดการใช้งานที่เอื้อเฟื้อและการเข้าถึงโมเดลเขียนโค้ดชั้นนำอย่างเชื่อถือได้",
   "go.hero.title": "โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
   "go.hero.body":
     "Go นำการเขียนโค้ดแบบเอเจนต์มาสู่นักเขียนโปรแกรมทั่วโลก เสนอขีดจำกัดที่กว้างขวางและการเข้าถึงโมเดลโอเพนซอร์สที่มีความสามารถสูงสุดได้อย่างน่าเชื่อถือ เพื่อให้คุณสามารถสร้างสรรค์ด้วยเอเจนต์ที่ทรงพลังโดยไม่ต้องกังวลเรื่องค่าใช้จ่ายหรือความพร้อมใช้งาน",
@@ -266,7 +271,6 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "คำขอต่อ 5 ชั่วโมง",
   "go.graph.usageLimits": "ขีดจำกัดการใช้งาน",
-  "go.graph.tick": "{{n}}x",
   "go.graph.aria": "คำขอต่อ 5 ชม.: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
@@ -297,8 +301,7 @@ export const dict = {
   "go.problem.item1": "ราคาการสมัครสมาชิกที่ต่ำ",
   "go.problem.item2": "ขีดจำกัดที่กว้างขวางและการเข้าถึงที่เชื่อถือได้",
   "go.problem.item3": "สร้างขึ้นเพื่อโปรแกรมเมอร์จำนวนมากที่สุดเท่าที่จะเป็นไปได้",
-  "go.problem.item4":
-    "รวมถึง GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro และ DeepSeek V4 Flash",
+  "go.problem.item4": "ชุดโมเดลที่คัดสรรและผ่านการทดสอบสำหรับการเขียนโค้ดแบบเอเจนต์",
   "go.how.title": "Go ทำงานอย่างไร",
   "go.how.body": "Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน คุณสามารถใช้กับ OpenCode หรือเอเจนต์ใดก็ได้",
   "go.how.step1.title": "สร้างบัญชี",
@@ -323,7 +326,7 @@ export const dict = {
   "go.faq.a2": "Go รวมโมเดลด้านล่างนี้ พร้อมขีดจำกัดที่มากและการเข้าถึงที่เชื่อถือได้",
   "go.faq.q3": "Go เหมือนกับ Zen หรือไม่?",
   "go.faq.a3":
-    "ไม่ Zen เป็นแบบจ่ายตามการใช้งาน ในขณะที่ Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดที่เอื้อเฟื้อและการเข้าถึงโมเดลโอเพนซอร์ส GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro และ DeepSeek V4 Flash อย่างเชื่อถือได้",
+    "ไม่ Zen เป็นแบบจ่ายตามการใช้งาน ขณะที่ Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดที่เอื้อเฟื้อและการเข้าถึงชุดโมเดลที่คัดสรรอย่างเชื่อถือได้",
   "go.faq.q4": "Go ราคาเท่าไหร่?",
   "go.faq.a4.p1.beforePricing": "Go ราคา",
   "go.faq.a4.p1.pricingLink": "$5 เดือนแรก",
@@ -332,8 +335,21 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "บัญชีของคุณ",
   "go.faq.a4.p3": "ยกเลิกได้ตลอดเวลา",
   "go.faq.q5": "แล้วเรื่องข้อมูลและความเป็นส่วนตัวล่ะ?",
-  "go.faq.a5.body":
-    "แผนนี้ออกแบบมาเพื่อผู้ใช้งานระหว่างประเทศเป็นหลัก โดยมีโมเดลโฮสต์ในสหรัฐอเมริกา สหภาพยุโรป และสิงคโปร์ เพื่อการเข้าถึงทั่วโลกที่เสถียร ผู้ให้บริการของเราปฏิบัติตามนโยบายไม่เก็บรักษาข้อมูลและไม่ใช้ข้อมูลของคุณสำหรับการฝึกโมเดล",
+  "go.faq.a5.model": "โมเดล",
+  "go.faq.a5.training": "การฝึกโมเดล",
+  "go.faq.a5.retention": "การเก็บรักษาข้อมูล",
+  "go.faq.a5.retention30": "30 วัน",
+  "go.faq.a5.retention0": "0 วัน",
+  "go.faq.a5.used": "นำไปใช้",
+  "go.faq.a5.notUsed": "ไม่นำไปใช้",
+  "go.faq.a5.noAgreement": "ไม่มีข้อตกลง",
+  "go.faq.a5.grokRetention":
+    "ZDR ปิดใช้งานฟีเจอร์ API สำคัญที่ต้องอาศัยข้อมูลที่จัดเก็บไว้ ซึ่งรวมถึง Responses API แบบมีสถานะ, Files and Collections และ Batch API",
+  "go.faq.a5.gptRetention":
+    "ระบบจะสร้างบันทึกการตรวจสอบการใช้งานในทางที่ผิดสำหรับการใช้งานฟีเจอร์ API ทั้งหมด และเก็บรักษาไว้นานสูงสุด 30 วัน",
+  "go.faq.a5.learnMore": "ดูข้อมูลเพิ่มเติม",
+  "go.faq.a5.deepseekRetention": "ข้อตกลง ZDR จะต่ออายุทุกเดือน ข้อตกลงปัจจุบันมีผลใช้ถึงวันที่ 31 สิงหาคม 2026",
+
   "go.faq.a5.beforeExceptions":
     "โมเดล Go โฮสต์ในสหรัฐอเมริกา ผู้ให้บริการปฏิบัติตามนโยบายไม่เก็บรักษาข้อมูล (zero-retention policy) และไม่ใช้ข้อมูลของคุณสำหรับการฝึกโมเดล โดยมี",
   "go.faq.a5.exceptionsLink": "ข้อยกเว้นดังนี้",
@@ -346,7 +362,7 @@ export const dict = {
 
   "go.faq.q9": "ความแตกต่างระหว่างโมเดลฟรีและ Go คืออะไร?",
   "go.faq.a9":
-    "โมเดลฟรีรวมถึง Big Pickle บวกกับโมเดลโปรโมชั่นที่มีให้ในขณะนั้น ด้วยโควต้า 200 คำขอ/วัน Go รวมถึง GLM-5.2, GLM-5.1, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro และ DeepSeek V4 Flash ที่มีโควต้าคำขอสูงกว่า ซึ่งบังคับใช้ผ่านช่วงเวลาหมุนเวียน (5 ชั่วโมง, รายสัปดาห์ และรายเดือน) เทียบเท่าประมาณ $12 ต่อ 5 ชั่วโมง, $30 ต่อสัปดาห์ และ $60 ต่อเดือน (จำนวนคำขอจริงจะแตกต่างกันไปตามโมเดลและการใช้งาน)",
+    "โมเดลฟรีประกอบด้วย Big Pickle และโมเดลโปรโมชันที่มีให้บริการในขณะนั้น โดยมีโควตา 200 คำขอ/วัน Go นำเสนอชุดโมเดลที่คัดสรร พร้อมโควตาคำขอที่สูงกว่าซึ่งบังคับใช้ตามกรอบเวลาแบบต่อเนื่อง (5 ชั่วโมง, รายสัปดาห์ และรายเดือน) เทียบเท่าประมาณ $12 ต่อ 5 ชั่วโมง, $30 ต่อสัปดาห์ และ $60 ต่อเดือน (จำนวนคำขอจริงแตกต่างกันไปตามโมเดลและการใช้งาน)",
 
   "zen.api.error.rateLimitExceeded": "เกินขีดจำกัดอัตราการใช้งาน กรุณาลองใหม่ในภายหลัง",
   "zen.api.error.modelNotSupported": "ไม่รองรับโมเดล {{model}}",
@@ -355,6 +371,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "ไม่รองรับผู้ให้บริการ {{provider}}",
   "zen.api.error.missingApiKey": "ไม่มี API key",
   "zen.api.error.invalidApiKey": "API key ไม่ถูกต้อง",
+  "zen.api.error.requestBlockedByUpstreamProvider": "คำขอถูกบล็อกโดยผู้ให้บริการต้นทาง",
   "zen.api.error.subscriptionQuotaExceeded": "โควต้าการสมัครสมาชิกเกินขีดจำกัด ลองใหม่ในอีก {{retryIn}}",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "ถึงขีดจำกัดการใช้งานในรอบ 5 ชั่วโมงแล้ว จะรีเซ็ตในอีก {{retryIn}} หากต้องการใช้โมเดลนี้ต่อทันที ให้เปิดใช้งานจากยอดเงินคงเหลือของคุณ: {{consoleGoUrl}}",
@@ -370,7 +387,7 @@ export const dict = {
     "คุณถึงขีดจำกัดการใช้จ่ายรายเดือนที่ ${{amount}} แล้ว จัดการขีดจำกัดของคุณที่นี่: {{membersUrl}}",
   "zen.api.error.modelDisabled": "โมเดลถูกปิดใช้งาน",
   "zen.api.error.regionNotAllowed":
-    "โมเดลนี้โฮสต์อยู่ในประเทศจีน หากคุณต้องการใช้โมเดลนี้ ให้เปิดใช้งานในการตั้งค่าของคุณ: {{consoleGoUrl}}",
+    "โมเดลเวอร์ชันล่าสุดนี้ให้บริการเฉพาะผ่านระบบที่โฮสต์ในประเทศจีน และต้องให้ความยินยอมอย่างชัดแจ้งก่อนใช้งาน: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "โปรโมชันฟรีสำหรับ {{model}} สิ้นสุดแล้ว คุณสามารถใช้โมเดลต่อได้โดยสมัครสมาชิก OpenCode Go - {{link}}",
 
@@ -662,7 +679,7 @@ export const dict = {
   "workspace.lite.promo.price": "$5 สำหรับเดือนแรก",
   "workspace.lite.promo.modelsTitle": "สิ่งที่รวมอยู่ด้วย",
   "workspace.lite.promo.footer":
-    "แผนนี้ออกแบบมาสำหรับผู้ใช้งานต่างประเทศเป็นหลัก โดยมีโมเดลโฮสต์อยู่ในสหรัฐอเมริกา สหภาพยุโรป และสิงคโปร์ เพื่อการเข้าถึงที่เสถียรทั่วโลก ราคาและขีดจำกัดการใช้งานอาจมีการเปลี่ยนแปลงตามที่เราได้เรียนรู้จากการใช้งานในช่วงแรกและข้อเสนอแนะ",
+    "แผนนี้ออกแบบมาสำหรับผู้ใช้งานต่างประเทศเป็นหลักและให้การเข้าถึงที่เสถียรทั่วโลก ราคาและขีดจำกัดการใช้งานอาจเปลี่ยนแปลงได้ตามสิ่งที่เราเรียนรู้จากการใช้งานและข้อเสนอแนะในช่วงแรก",
   "workspace.lite.promo.subscribe": "สมัครสมาชิก Go",
   "workspace.lite.promo.subscribing": "กำลังเปลี่ยนเส้นทาง...",
   "workspace.lite.promo.otherMethods": "วิธีการชำระเงินอื่นๆ",
@@ -703,11 +720,11 @@ export const dict = {
 
   "download.title": "OpenCode | ดาวน์โหลด",
   "download.meta.description": "ดาวน์โหลด OpenCode สำหรับ macOS, Windows และ Linux",
-  "download.hero.title": "ดาวน์โหลด OpenCode",
+  "download.hero.title": "ดาวน์โหลด OpenCode สำหรับเดสก์ท็อป",
   "download.hero.subtitle": "พร้อมใช้งานในเวอร์ชันเบต้าสำหรับ macOS, Windows และ Linux",
   "download.hero.button": "ดาวน์โหลดสำหรับ {{os}}",
   "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Beta)",
+  "download.section.desktop": "OpenCode Desktop",
   "download.section.extensions": "ส่วนขยาย OpenCode",
   "download.section.integrations": "การเชื่อมต่อ OpenCode",
   "download.action.download": "ดาวน์โหลด",

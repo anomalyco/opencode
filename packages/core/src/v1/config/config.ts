@@ -81,6 +81,9 @@ export const Info = Schema.Struct({
     description:
       "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
   }),
+  subagent_depth: Schema.optional(NonNegativeInt).annotate({
+    description: "Maximum subagent nesting depth. Defaults to 1, which prevents subagents from launching subagents.",
+  }),
   username: Schema.optional(Schema.String).annotate({
     description: "Custom username to display in conversations instead of system username",
   }),
@@ -153,7 +156,7 @@ export const Info = Schema.Struct({
       }),
       tail_turns: Schema.optional(NonNegativeInt).annotate({
         description:
-          "Number of recent user turns, including their following assistant/tool responses, to keep verbatim during compaction (default: 2)",
+          "Maximum number of recent user turns, including their following assistant/tool responses, to keep verbatim during compaction. By default retention is limited only by the preserved token budget.",
       }),
       preserve_recent_tokens: Schema.optional(NonNegativeInt).annotate({
         description: "Maximum number of tokens from recent turns to preserve verbatim after compaction",

@@ -51,7 +51,7 @@ describe("reference HttpApi", () => {
       },
       {
         name: "effect",
-        path: path.join(Global.Path.repos, "github.com", "Effect-TS", "effect"),
+        path: path.join(Global.Path.repos, "github.com", "Effect-TS", "effect@main"),
         source: {
           type: "git",
           repository: "Effect-TS/effect",

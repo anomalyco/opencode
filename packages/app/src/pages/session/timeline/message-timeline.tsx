@@ -53,6 +53,7 @@ import type {
   UserMessage,
 } from "@opencode-ai/sdk/v2"
 import { showToast } from "@/utils/toast"
+import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { normalize } from "@opencode-ai/session-ui/session-diff"
@@ -72,6 +73,7 @@ import { useSync } from "@/context/sync"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { sessionTitle } from "@/utils/session-title"
 import { scheduleConnectedMeasure } from "./measure"
+import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { createTimelineProjection } from "./projection"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
 import { filterVirtualIndexes } from "./virtual-items"
@@ -160,10 +162,7 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
     >
       <div data-slot="session-turn-diffs-header">
         <span data-slot="session-turn-diffs-label">
-          {language.t(
-            props.diffs.length === 1 ? "ui.sessionTurn.diffs.changed.one" : "ui.sessionTurn.diffs.changed.other",
-            { count: String(props.diffs.length) },
-          )}
+          {language.plural("ui.sessionTurn.diffs.changed", props.diffs.length)}
         </span>
         <DiffChanges changes={props.diffs} />
         <Show when={overflow() > 0}>
@@ -282,6 +281,16 @@ export function MessageTimeline(props: {
     return sync().data.session_status[id] ?? idle
   })
   const sessionMessages = createMemo(() => (sessionID() ? (sync().data.message[sessionID()!] ?? []) : []))
+  const projectedMessages = createMemo(() => {
+    const id = sessionID()
+    if (!id) return []
+    const visible = new Set(props.userMessages.map((message) => message.id))
+    const boundary = sessionMessages().find((message) => message.role === "user" && !visible.has(message.id))?.id
+    const messages = sync().data.session_message[id] ?? []
+    if (!boundary) return messages
+    const index = messages.findIndex((message) => message.id === boundary)
+    return index < 0 ? messages : messages.slice(0, index)
+  })
   const info = createMemo(() => {
     const id = sessionID()
     if (!id) return
@@ -324,9 +333,11 @@ export function MessageTimeline(props: {
   const projection = createTimelineProjection({
     messages: sessionMessages,
     userMessages: () => props.userMessages,
+    sessionMessages: projectedMessages,
     parts: getMsgParts,
     status: sessionStatus,
     showReasoningSummaries: settings.general.showReasoningSummaries,
+    inlineComments: settings.general.newLayoutDesigns,
   })
   const activeMessageID = projection.activeMessageID
   const assistantMessagesByParent = projection.assistantMessagesByParent
@@ -407,6 +418,7 @@ export function MessageTimeline(props: {
       return timelineRows().length
     },
     getScrollElement: () => listRoot() ?? null,
+    observeElementOffset: observeElementOffsetReconnectAware,
     initialOffset: () => (props.shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0),
     initialMeasurementsCache: initialMeasurements,
     estimateSize: () => timelineFallbackItemSize,
@@ -634,7 +646,7 @@ export function MessageTimeline(props: {
   const viewShare = () => {
     const url = shareUrl()
     if (!url) return
-    platform.openLink(url)
+    platform.openExternal(url)
   }
 
   const errorMessage = (err: unknown) => {
@@ -662,7 +674,7 @@ export function MessageTimeline(props: {
 
   const titleMutation = useMutation(() => ({
     mutationFn: (input: { id: string; title: string }) =>
-      sdk().client.session.update({ sessionID: input.id, title: input.title }),
+      sdk().api.session.rename({ sessionID: input.id, title: input.title }),
     onSuccess: (_, input) => {
       sync().set(
         produce((draft) => {
@@ -797,16 +809,40 @@ export function MessageTimeline(props: {
     navigate(`/${params.dir}/session`)
   }
 
+  const exportSession = async (sessionID: string) => {
+    try {
+      const data = await fetchSessionExport({
+        sessionID,
+        client: sdk().client,
+      })
+      const filename = sessionExportFilename(data.info)
+      downloadSessionExport(filename, data)
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("toast.session.export.success.title"),
+        description: language.t("toast.session.export.success.description", { filename }),
+      })
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.session.export.failed.title"),
+        description: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
+      })
+    }
+  }
+
   const archiveSession = async (sessionID: string) => {
     const session = sync().session.get(sessionID)
     if (!session) return
+    if ((await sdk().protocol) !== "v1") return
 
     const sessions = sync().data.session ?? []
     const index = sessions.findIndex((s) => s.id === sessionID)
     const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
 
     await sdk()
-      .client.session.update({ sessionID, time: { archived: Date.now() } })
+      .client.session.update({ sessionID, directory: sdk().directory, time: { archived: Date.now() } })
       .then(() => {
         sync().set(
           produce((draft) => {
@@ -835,8 +871,8 @@ export function MessageTimeline(props: {
     const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
 
     const result = await sdk()
-      .client.session.delete({ sessionID })
-      .then((x) => x.data)
+      .api.session.remove({ sessionID })
+      .then(() => true)
       .catch((err) => {
         showToast({
           title: language.t("session.delete.failed.title"),
@@ -1093,7 +1129,7 @@ export function MessageTimeline(props: {
         return (
           <TimelineRowFrame row={commentStripRow}>
             <div class="w-full px-4 md:px-5 pb-2">
-              <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+              <div class="ms-auto max-w-[82%] overflow-x-auto no-scrollbar">
                 <div class="flex w-max min-w-full justify-end gap-2">
                   <Index each={comments()}>
                     {(comment) => (
@@ -1135,6 +1171,10 @@ export function MessageTimeline(props: {
           const m = messageByID().get(userMessageRow().userMessageID)
           if (m?.role === "user") return m
         })
+        const messageComments = createMemo(() => {
+          if (!settings.general.newLayoutDesigns()) return []
+          return getMsgParts(userMessageRow().userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? [])
+        })
         return (
           <TimelineRowFrame row={userMessageRow}>
             <Show when={message()}>
@@ -1146,6 +1186,7 @@ export function MessageTimeline(props: {
                       parts={getMsgParts(userMessageRow().userMessageID)}
                       actions={props.actions}
                       useV2Actions={settings.general.newLayoutDesigns()}
+                      comments={messageComments()}
                     />
                   </div>
                 </div>
@@ -1549,6 +1590,9 @@ export function MessageTimeline(props: {
                                     </DropdownMenu.ItemLabel>
                                   </DropdownMenu.Item>
                                 </Show>
+                                <DropdownMenu.Item onSelect={() => exportSession(id)}>
+                                  <DropdownMenu.ItemLabel>{language.t("common.export")}</DropdownMenu.ItemLabel>
+                                </DropdownMenu.Item>
                                 <DropdownMenu.Item onSelect={() => void archiveSession(id)}>
                                   <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
@@ -1620,6 +1664,9 @@ export function MessageTimeline(props: {
                                   {language.t("session.share.action.share")}...
                                 </MenuV2.Item>
                               </Show>
+                              <MenuV2.Item onSelect={() => exportSession(id)}>
+                                {language.t("common.export")}...
+                              </MenuV2.Item>
                               <MenuV2.Item onSelect={() => void archiveSession(id)}>
                                 {language.t("common.archive")}
                               </MenuV2.Item>

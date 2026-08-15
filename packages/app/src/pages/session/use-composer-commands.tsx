@@ -1,7 +1,6 @@
 import { useCommand, type CommandOption } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLocal, type ModelSelection } from "@/context/local"
-import { useSettings } from "@/context/settings"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { getCursorPosition, setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { useSessionLayout } from "./session-layout"
@@ -19,7 +18,6 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   const dialog = useDialog()
   const language = useLanguage()
   const local = useLocal()
-  const settings = useSettings()
   const { sessionKey } = useSessionLayout()
   const sessionOwnership = createSessionOwnership(sessionKey)
   const model = input.model ?? local.model
@@ -70,7 +68,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
       description: language.t("command.agent.cycle.description"),
       keybind: "mod+.",
       slash: "agent",
-      disabled: !settings.visibility.customAgents(),
+      disabled: !local.agent.visible(),
       onSelect: () => local.agent.move(1),
     }),
     agentCommand({
@@ -78,7 +76,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
       title: language.t("command.agent.cycle.reverse"),
       description: language.t("command.agent.cycle.reverse.description"),
       keybind: "shift+mod+.",
-      disabled: !settings.visibility.customAgents(),
+      disabled: !local.agent.visible(),
       onSelect: () => local.agent.move(-1),
     }),
   ])

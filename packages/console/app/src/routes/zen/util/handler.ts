@@ -136,16 +136,17 @@ export async function handler(
             Workspace.setDefaultRegion({ country: countryFromRequest(input.request) }),
           )
         })()
-    /*
-    if (true) {
-      if (!allowedRegions?.includes("unavailable"))
-        throw new RegionError(
-          t("zen.api.error.regionNotAllowed", {
-            consoleGoUrl: `https://opencode.ai/workspace/${authInfo.workspaceID}/go`,
-          }),
-        )
-    }
-    */
+    if (
+      authInfo &&
+      opts.modelList === "lite" &&
+      ["deepseek-v4-flash", "deepseek-v4-pro"].includes(modelInfo.id) &&
+      !allowedRegions?.includes("cn")
+    )
+      throw new RegionError(
+        t("zen.api.error.regionNotAllowed", {
+          consoleGoUrl: `https://opencode.ai/workspace/${authInfo.workspaceID}/go`,
+        }),
+      )
     const stickyId = sessionId ? sessionId : (authInfo?.workspaceID ?? ip)
     const stickyTracker = createStickyTracker(modelInfo.id, modelInfo.stickyProvider, stickyId)
     const stickyProvider = await stickyTracker?.get()
@@ -196,7 +197,9 @@ export async function handler(
                   if (Array.isArray(v)) return [[k, v]]
                   if (typeof v === "object") return [[k, replacer(v)]]
                   if (typeof v === "string") {
-                    if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
+                    if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo.workspaceID]] : []
+                    if (v === "$org")
+                      return authInfo?.workspaceID ? [[k, authInfo.workspaceID.replace("wrk_", "org_")]] : []
                     if (v === "$user") return stickyId ? [[k, stickyId]] : []
                     if (v.startsWith("$header.")) {
                       const headerValue = input.request.headers.get(v.slice(8))
@@ -212,7 +215,11 @@ export async function handler(
       )
       logger.debug("REQUEST URL: " + reqUrl)
       logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
-      const isNewInference = providerInfo.id.startsWith("console.") || providerInfo.id.startsWith("console-go.")
+      const isNewInference =
+        providerInfo.id.startsWith("console.") ||
+        providerInfo.id.startsWith("console-go.") ||
+        providerInfo.id.startsWith("inf.") ||
+        providerInfo.id.startsWith("inf-go.")
       const res = await fetchWithRetryableStatus(
         reqUrl,
         {
@@ -229,6 +236,10 @@ export async function handler(
               if (v === "$project") return headers.set(k, projectId)
               if (v === "$workspace") {
                 if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
+                return
+              }
+              if (v === "$org") {
+                if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID.replace("wrk_", "org_"))
                 return
               }
               headers.set(k, v)
@@ -697,6 +708,9 @@ export async function handler(
           workspace: {
             id: WorkspaceTable.id,
             region: WorkspaceTable.region,
+            isBlocked: WorkspaceTable.is_blocked,
+            isFlaggedByAnthropic: WorkspaceTable.is_flagged_by_anthropic,
+            isFlaggedByOpenAI: WorkspaceTable.is_flagged_by_openai,
           },
           billing: {
             balance: BillingTable.balance,
@@ -772,6 +786,12 @@ export async function handler(
     )
 
     if (!data) throw new AuthError(t("zen.api.error.invalidApiKey"))
+    if (
+      data.workspace.isBlocked ||
+      (data.workspace.isFlaggedByAnthropic && modelInfo.id.startsWith("claude-")) ||
+      (data.workspace.isFlaggedByOpenAI && modelInfo.id.startsWith("gpt-"))
+    )
+      throw new AuthError(t("zen.api.error.requestBlockedByUpstreamProvider"))
     if (
       modelInfo.id.startsWith("alpha-") &&
       Resource.App.stage === "production" &&
@@ -1168,28 +1188,29 @@ export async function handler(
             const week = getWeekBounds(new Date())
             const month = getMonthlyBounds(new Date(), authInfo.lite!.timeCreated)
             const rollingWindowSeconds = lite.rollingWindow * 3600
+            const quotaCost = Math.round(cost * modelInfo.costMultiplier)
             return [
               db
                 .update(LiteTable)
                 .set({
                   monthlyUsage: sql`
               CASE
-                WHEN ${LiteTable.timeMonthlyUpdated} >= ${month.start} THEN ${LiteTable.monthlyUsage} + ${cost}
-                ELSE ${cost}
+                WHEN ${LiteTable.timeMonthlyUpdated} >= ${month.start} THEN ${LiteTable.monthlyUsage} + ${quotaCost}
+                ELSE ${quotaCost}
               END
             `,
                   timeMonthlyUpdated: sql`now()`,
                   weeklyUsage: sql`
               CASE
-                WHEN ${LiteTable.timeWeeklyUpdated} >= ${week.start} THEN ${LiteTable.weeklyUsage} + ${cost}
-                ELSE ${cost}
+                WHEN ${LiteTable.timeWeeklyUpdated} >= ${week.start} THEN ${LiteTable.weeklyUsage} + ${quotaCost}
+                ELSE ${quotaCost}
               END
             `,
                   timeWeeklyUpdated: sql`now()`,
                   rollingUsage: sql`
               CASE
-                WHEN UNIX_TIMESTAMP(${LiteTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${LiteTable.rollingUsage} + ${cost}
-                ELSE ${cost}
+                WHEN UNIX_TIMESTAMP(${LiteTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${LiteTable.rollingUsage} + ${quotaCost}
+                ELSE ${quotaCost}
               END
             `,
                   timeRollingUpdated: sql`

@@ -11,6 +11,7 @@ import {
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { cloneSelectedLineRange, formatSelectedLineLabel } from "../../pierre/selection-bridge"
 import { LineCommentEditorV2, LineCommentV2 } from "@opencode-ai/ui/v2/line-comment-v2"
+import type { LineCommentEditorV2Mention } from "@opencode-ai/ui/v2/line-comment-v2"
 
 type LineCommentControllerV2Props<T extends LineCommentShape> = {
   comments: Accessor<T[]>
@@ -23,6 +24,7 @@ type LineCommentControllerV2Props<T extends LineCommentShape> = {
   onDelete?: (comment: T) => void
   renderCommentActions?: (comment: T, controls: { edit: VoidFunction; remove: VoidFunction }) => JSX.Element
   editSubmitLabel?: string
+  mention?: LineCommentEditorV2Mention
 }
 
 type CommentProps = {
@@ -43,6 +45,7 @@ type DraftProps = {
   onSubmit: (value: string) => void
   cancelLabel?: string
   submitLabel?: string
+  mention?: LineCommentEditorV2Mention
 }
 
 function lineCommentElementV2(view: Accessor<CommentProps>) {
@@ -70,6 +73,7 @@ function lineCommentElementV2(view: Accessor<CommentProps>) {
           onSubmit={view().editor!.onSubmit}
           cancelLabel={view().editor!.cancelLabel}
           submitLabel={view().editor!.submitLabel}
+          mention={view().editor!.mention}
         />
       </div>
     </Show>
@@ -87,6 +91,7 @@ function lineCommentDraftElementV2(view: Accessor<DraftProps>) {
         onSubmit={view().onSubmit}
         cancelLabel={view().cancelLabel}
         submitLabel={view().submitLabel}
+        mention={view().mention}
       />
     </div>
   )
@@ -142,10 +147,14 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
                 },
                 cancelLabel: i18n.t("ui.lineComment.cancel"),
                 submitLabel: props.editSubmitLabel,
+                mention: props.mention,
               }
             : undefined
         },
-        onMouseEnter: () => note.hoverComment(comment.selection),
+        onMouseEnter: () => {
+          if (note.commenting()) return
+          note.hoverComment(comment.selection)
+        },
         onClick: () => {
           if (note.isEditing(comment.id)) return
           note.toggleComment(comment.id, comment.selection)
@@ -158,13 +167,18 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
       },
       selection: formatSelectedLineLabel(range, i18n.t),
       onInput: note.setDraft,
-      onCancel: note.cancelDraft,
+      onCancel: () => {
+        note.cancelDraft()
+        note.select(null)
+      },
       onSubmit: (comment) => {
         props.onSubmit({ comment, selection: cloneSelectedLineRange(range) })
         note.cancelDraft()
+        note.select(null)
       },
       cancelLabel: i18n.t("ui.lineComment.cancel"),
       submitLabel: i18n.t("ui.lineComment.submit"),
+      mention: props.mention,
     }),
   })
 
@@ -202,6 +216,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
   }
 
   return {
+    note,
     annotations,
     renderAnnotation,
     renderGutterUtility,

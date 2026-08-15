@@ -114,7 +114,14 @@ export namespace FSUtil {
       })
 
       const ensureDir = Effect.fn("FileSystem.ensureDir")(function* (path: string) {
-        yield* fs.makeDirectory(path, { recursive: true })
+        yield* fs.makeDirectory(path, { recursive: true }).pipe(
+          // Bun on Windows can throw EEXIST here despite recursive mode.
+          // https://github.com/oven-sh/bun/issues/21901
+          Effect.catchIf(
+            (error) => error.reason._tag === "AlreadyExists",
+            (error) => isDir(path).pipe(Effect.flatMap((exists) => (exists ? Effect.void : Effect.fail(error)))),
+          ),
+        )
       })
 
       const writeWithDirs = Effect.fn("FileSystem.writeWithDirs")(function* (

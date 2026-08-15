@@ -1,6 +1,6 @@
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { expect, test, type Page } from "@playwright/test"
-import { mockOpenCodeServer } from "../utils/mock-server"
+import { currentSession, mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 
 const directory = "C:/OpenCode/SubagentNavigation"
@@ -72,16 +72,19 @@ async function setup(page: Page, events?: () => EventPayload[]) {
     events,
     eventRetry: events ? 16 : undefined,
   })
-  // The child session resolves via /session/:id but is absent from the /session list,
+  // The child session resolves by ID but is absent from the session list,
   // matching a subagent session that has not been loaded into the list cache yet.
   await page.route(
-    (url) => url.pathname === "/session" && url.port === (process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"),
+    (url) => url.pathname === "/api/session" && url.port === (process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"),
     (route) =>
       route.fulfill({
         status: 200,
         contentType: "application/json",
         headers: { "access-control-allow-origin": "*" },
-        body: JSON.stringify([session(parentID, parentTitle, 1700000000000)]),
+        body: JSON.stringify({
+          data: [currentSession(session(parentID, parentTitle, 1700000000000))],
+          cursor: {},
+        }),
       }),
   )
   await configurePage(page)
