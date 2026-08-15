@@ -42,6 +42,16 @@ type TriggerName = {
   [K in keyof Hooks]-?: NonNullable<Hooks[K]> extends (input: any, output: any) => Promise<void> ? K : never
 }[keyof Hooks]
 
+// B3: hooks where a throw is semantic — it blocks the action being asked
+// about — keep first-throw propagation. Every other trigger hook accumulates
+// output, so one plugin's failure is isolated (logged and skipped) instead of
+// cancelling the remaining plugins' hooks for the turn.
+const BLOCKING_HOOKS: ReadonlySet<TriggerName> = new Set<TriggerName>([
+  "tool.execute.before",
+  "permission.ask",
+  "command.execute.before",
+])
+
 export interface Interface {
   readonly trigger: <
     Name extends TriggerName,
@@ -289,7 +299,17 @@ const layer = Layer.effect(
       for (const hook of s.hooks) {
         const fn = hook[name] as any
         if (!fn) continue
-        yield* Effect.promise(async () => fn(input, output))
+        if (BLOCKING_HOOKS.has(name)) {
+          yield* Effect.promise(async () => fn(input, output))
+          continue
+        }
+        yield* Effect.tryPromise({
+          try: async () => fn(input, output),
+          catch: errorMessage,
+        }).pipe(
+          Effect.tapError((error) => Effect.logError("plugin hook failed", { hook: name, error })),
+          Effect.ignore,
+        )
       }
       return output
     })
