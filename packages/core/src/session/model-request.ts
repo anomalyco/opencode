@@ -18,6 +18,9 @@ import { SessionModelTransport } from "./model-transport.js"
 import { SessionPromptCacheKey } from "./prompt-cache-key.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
+import { SessionSystemPrompt } from "./system-prompt.js"
+import { toLLMMessages } from "./runner/to-llm-message.js"
+import type { SessionMessage } from "./message.js"
 import type { Agent } from "../agent.js"
 
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
@@ -64,8 +67,30 @@ interface PrepareInput {
     readonly messages: Array<Message>
   }
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
-  /** Stateful Session WebSocket channels are reserved for durable runner calls. */
-  readonly webSocket: boolean
+  /** Stateful Session WebSocket channels require an explicit durable-runner opt-in. */
+  readonly webSocket?: "session"
+}
+
+export const baseTranscript = (input: {
+  readonly agent: Agent.Info
+  readonly model: SessionRunnerModel.Resolved
+  readonly tools: Tool.Snapshot
+  readonly initial: string
+  readonly messages: ReadonlyArray<SessionMessage.Info>
+}) => {
+  const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
+  return {
+    providerMetadataKey,
+    system: [
+      input.agent.system
+        ? input.agent.system
+        : SessionSystemPrompt.make(input.tools.definitions.map((tool) => tool.name)),
+      input.initial,
+    ]
+      .filter((part) => part.length > 0)
+      .map(SystemPart.make),
+    messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
+  }
 }
 
 const mimeToModality = (mime: string) => {
@@ -234,7 +259,7 @@ export const layer = Layer.effect(
           })
       const options: StreamOptions = {
         ...(http ? { http } : {}),
-        ...(input.webSocket &&
+        ...(input.webSocket === "session" &&
         webSocket &&
         webSocketEligible &&
         resolved.ref.providerID === Provider.ID.openai &&

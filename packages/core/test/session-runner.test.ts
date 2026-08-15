@@ -1013,7 +1013,7 @@ describe("SessionRunnerLLM", () => {
           tools: loaded.tools,
         },
         transcript: { system: [], messages: [] },
-        webSocket: true,
+        webSocket: "session",
       })
       const http = prepared.options.http ?? (yield* Effect.die("Expected Session HTTP middleware"))
 

@@ -5,7 +5,6 @@ import {
   AIError,
   LLMEvent,
   Message,
-  SystemPart,
   isContextOverflowFailure,
   type ProviderErrorEvent,
   type ToolCall,
@@ -39,8 +38,6 @@ import { ToolOutput } from "../../tool-output.js"
 import { Tool } from "../../tool.js"
 import { PromptCacheDiagnostics } from "../prompt-cache-diagnostics.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
-import { SessionSystemPrompt } from "../system-prompt.js"
-import { toLLMMessages } from "./to-llm-message.js"
 
 /** How one model call ended: settled, awaiting retry/recovery, or restarted by compaction. */
 type CallOutcome = Data.TaggedEnum<{
@@ -312,25 +309,25 @@ const layer = Layer.effect(
         return yield* new StepFailedError({ error: compacted.error })
       }
       const stepLimitReached = agent.info.steps !== undefined && currentStep >= agent.info.steps
-      const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
-      const history = toLLMMessages(loaded.messages, resolved.ref, providerMetadataKey)
+      const transcript = SessionModelRequest.baseTranscript({
+        agent: agent.info,
+        model: resolved,
+        tools: loaded.tools,
+        initial: loaded.initial,
+        messages: loaded.messages,
+      })
       const prepared = yield* modelRequests.prepare({
         scope: { session, agentID: agent.id, model: resolved, tools: loaded.tools },
         transcript: {
-          system: [
-            agent.info.system
-              ? agent.info.system
-              : SessionSystemPrompt.make(loaded.tools.definitions.map((tool) => tool.name)),
-            loaded.initial,
-          ]
-            .filter((part) => part.length > 0)
-            .map(SystemPart.make),
-          messages: stepLimitReached ? [...history, Message.assistant(MAX_STEPS_PROMPT)] : history,
+          system: transcript.system,
+          messages: stepLimitReached
+            ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
+            : transcript.messages,
         },
         // The final Step keeps definitions available to protocols with native "none",
         // preserving their prompt cache prefix. Calls are still rejected at execution.
         toolChoice: stepLimitReached ? "none" : undefined,
-        webSocket: true,
+        webSocket: "session",
       })
       yield* diagnosePromptCache(session.id, prepared.request)
       const executeTool = (input: Parameters<typeof prepared.executeTool>[0]) => {
@@ -350,7 +347,7 @@ const layer = Layer.effect(
         // The selected catalog identity, not model.id: route-level ids are provider API
         // model ids (for example gpt-5.5-fast resolves to api id gpt-5.5).
         model: resolved.ref,
-        providerMetadataKey: model.route.providerMetadataKey ?? model.provider,
+        providerMetadataKey: transcript.providerMetadataKey,
         snapshot: startSnapshot,
         assistantMessageID,
       })
