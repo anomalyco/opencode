@@ -9,6 +9,7 @@ import {
   type LLMRequest,
 } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
+import type { StreamOptions } from "@opencode-ai/ai/route"
 import { Agent } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -51,15 +52,17 @@ import { Effect, Layer, Schema, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 const requests: LLMRequest[] = []
+const options: Array<StreamOptions | undefined> = []
 let instruction: string | Instructions.Unavailable = "Initial context"
 const sessionID = SessionSchema.ID.make("ses_generate_test")
 
 const model = LanguageModel.make({ id: "generate-model", provider: "test", route: OpenAIChat.route })
 const client = Layer.mock(LLMClient.Service)({
   stream: () => Stream.die(new Error("unused")),
-  generate: (request) =>
+  generate: (request, requestOptions) =>
     Effect.sync(() => {
       requests.push(request)
+      options.push(requestOptions)
       const response = LLMResponse.fromEvents([
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.textStart({ id: "generate" }),
@@ -221,6 +224,7 @@ const setup = Effect.gen(function* () {
 it.effect("generates from fresh settled Session context without durable mutation", () =>
   Effect.gen(function* () {
     requests.length = 0
+    options.length = 0
     instruction = "Initial context"
     const { db, bus, instructions } = yield* setup
     yield* InstructionState.prepare(db, bus, instructions, sessionID)
@@ -292,6 +296,7 @@ it.effect("generates from fresh settled Session context without durable mutation
         if (event.tools.lookup) event.tools.lookup.description = "Hooked lookup"
       }),
     )
+    yield* hooks.register("session", "http.request", () => Effect.void)
 
     const generate = yield* SessionGenerate.Service
     const result = yield* generate.generate({ sessionID, prompt: "Summarize privately" })
@@ -321,6 +326,8 @@ it.effect("generates from fresh settled Session context without durable mutation
     ).toEqual(["Settled partial answer"])
     expect(requests[0]?.tools).toMatchObject([{ name: "lookup", description: "Hooked lookup" }])
     expect(requests[0]?.toolChoice).toBeUndefined()
+    expect(options[0]?.http).toBeFunction()
+    expect(options[0]?.webSocket).toBeUndefined()
     expect(yield* durableState(db, sessionID)).toEqual(before)
   }),
 )

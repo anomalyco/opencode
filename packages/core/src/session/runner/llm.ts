@@ -4,11 +4,13 @@ import {
   LLMClient,
   AIError,
   LLMEvent,
+  Message,
+  SystemPart,
   isContextOverflowFailure,
   type ProviderErrorEvent,
   type ToolCall,
 } from "@opencode-ai/ai"
-import { Cause, Data, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schedule, Stream } from "effect"
+import { Cause, Config, Data, Effect, Exit, Fiber, FiberSet, Layer, Option, Pull, Schedule, Stream } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { Permission } from "../../permission.js"
@@ -34,6 +36,11 @@ import { toSessionError } from "../to-session-error.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { SessionUsage } from "../usage.js"
 import { ToolOutput } from "../../tool-output.js"
+import { Tool } from "../../tool.js"
+import { PromptCacheDiagnostics } from "../prompt-cache-diagnostics.js"
+import { MAX_STEPS_PROMPT } from "./max-steps.js"
+import { SessionSystemPrompt } from "../system-prompt.js"
+import { toLLMMessages } from "./to-llm-message.js"
 
 /** How one model call ended: settled, awaiting retry/recovery, or restarted by compaction. */
 type CallOutcome = Data.TaggedEnum<{
@@ -116,6 +123,32 @@ const layer = Layer.effect(
     const compaction = yield* SessionCompaction.Service
     const title = yield* SessionTitle.Service
     const toolOutput = yield* ToolOutput.Service
+    const diagnostics = yield* Config.boolean("OPENCODE_PROMPT_CACHE_DIAGNOSTICS").pipe(
+      Config.withDefault(false),
+      Effect.orDie,
+    )
+    const promptCacheSnapshots = diagnostics ? new Map<string, PromptCacheDiagnostics.Snapshot>() : undefined
+    const diagnosePromptCache = Effect.fn("SessionRunner.diagnosePromptCache")(function* (
+      sessionID: SessionSchema.ID,
+      request: Parameters<typeof PromptCacheDiagnostics.snapshot>[0],
+    ) {
+      if (!promptCacheSnapshots) return
+      const current = PromptCacheDiagnostics.snapshot(request)
+      const comparison = PromptCacheDiagnostics.compare(promptCacheSnapshots.get(sessionID), current)
+      promptCacheSnapshots.delete(sessionID)
+      promptCacheSnapshots.set(sessionID, current)
+      const oldest = promptCacheSnapshots.keys().next().value
+      if (promptCacheSnapshots.size > 100 && oldest !== undefined) promptCacheSnapshots.delete(oldest)
+      yield* Effect.logInfo("prompt cache prefix").pipe(
+        Effect.annotateLogs({
+          sessionID,
+          toolCount: current.tools.length,
+          systemParts: current.system.length,
+          messageCount: current.messages.length,
+          ...comparison,
+        }),
+      )
+    })
     // Title generation starts once input is visible and must not delay model execution.
     // The in-flight set coalesces overlapping prompts while title presence records success durably.
     const titlesRunning = new Set<SessionSchema.ID>()
@@ -278,10 +311,32 @@ const layer = Layer.effect(
           return CallOutcome.Restart({ step: currentStep, recoveredOverflow: false })
         return yield* new StepFailedError({ error: compacted.error })
       }
+      const stepLimitReached = agent.info.steps !== undefined && currentStep >= agent.info.steps
+      const providerMetadataKey = model.route.providerMetadataKey ?? model.provider
+      const history = toLLMMessages(loaded.messages, resolved.ref, providerMetadataKey)
       const prepared = yield* modelRequests.prepare({
-        context: loaded,
-        step: currentStep,
+        scope: { session, agentID: agent.id, model: resolved, tools: loaded.tools },
+        transcript: {
+          system: [
+            agent.info.system
+              ? agent.info.system
+              : SessionSystemPrompt.make(loaded.tools.definitions.map((tool) => tool.name)),
+            loaded.initial,
+          ]
+            .filter((part) => part.length > 0)
+            .map(SystemPart.make),
+          messages: stepLimitReached ? [...history, Message.assistant(MAX_STEPS_PROMPT)] : history,
+        },
+        // The final Step keeps definitions available to protocols with native "none",
+        // preserving their prompt cache prefix. Calls are still rejected at execution.
+        toolChoice: stepLimitReached ? "none" : undefined,
+        webSocket: true,
       })
+      yield* diagnosePromptCache(session.id, prepared.request)
+      const executeTool = (input: Parameters<typeof prepared.executeTool>[0]) => {
+        if (stepLimitReached) return new Tool.Error({ message: "Tools are disabled after the maximum agent steps" })
+        return prepared.executeTool(input)
+      }
       // Every local tool call forked here is owned until it reaches one durable settlement.
       const toolRuns: Array<{
         readonly call: ToolCall
@@ -356,7 +411,7 @@ const layer = Layer.effect(
               call: event,
               fiber: yield* Effect.uninterruptibleMask((restore) =>
                 restore(
-                  prepared.executeTool({
+                  executeTool({
                     sessionID: session.id,
                     agent: agent.id,
                     messageID: assistantMessageID,
@@ -504,7 +559,7 @@ const layer = Layer.effect(
             // A local call or malformed tool input requires another model step, unless
             // this step already exhausted the agent's allowance.
             needsContinuation:
-              !prepared.stepLimitReached &&
+              !stepLimitReached &&
               record.calls.some((call) => !call.providerExecuted && (call.called || call.settled)),
             step: currentStep,
           })
