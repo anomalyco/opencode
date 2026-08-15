@@ -5,6 +5,7 @@ import {
   extractAccountIdFromClaims,
   extractAccountId,
   renderOAuthError,
+  resolveCodexApiEndpoint,
   type IdTokenClaims,
 } from "../../src/plugin/openai/codex"
 
@@ -288,7 +289,188 @@ describe("plugin.codex", () => {
       { authorization: "Bearer access-new", accountId: "acc-123" },
     ])
   })
+
+  describe("resolveCodexApiEndpoint", () => {
+    test("returns provider.options.codexApiEndpoint when set", () => {
+      expect(
+        resolveCodexApiEndpoint({ options: { codexApiEndpoint: "https://gw.example/codex/responses" } }, undefined),
+      ).toBe("https://gw.example/codex/responses")
+    })
+
+    test("prefers provider.options.codexApiEndpoint over the plugin option fallback", () => {
+      expect(
+        resolveCodexApiEndpoint(
+          { options: { codexApiEndpoint: "https://gw.example/codex/responses" } },
+          "https://plugin.example/codex/responses",
+        ),
+      ).toBe("https://gw.example/codex/responses")
+    })
+
+    test("falls back to the plugin option when provider options omits codexApiEndpoint", () => {
+      expect(resolveCodexApiEndpoint({ options: {} }, "https://plugin.example/codex/responses")).toBe(
+        "https://plugin.example/codex/responses",
+      )
+    })
+
+    test("appends /responses when provider.options.baseURL ends in /codex", () => {
+      expect(resolveCodexApiEndpoint({ options: { baseURL: "https://gw.example/codex" } }, undefined)).toBe(
+        "https://gw.example/codex/responses",
+      )
+    })
+
+    test("trims a trailing slash before appending /responses", () => {
+      expect(resolveCodexApiEndpoint({ options: { baseURL: "https://gw.example/codex/" } }, undefined)).toBe(
+        "https://gw.example/codex/responses",
+      )
+    })
+
+    test("does not trigger the baseURL convenience when the baseURL does not end in /codex", () => {
+      expect(resolveCodexApiEndpoint({ options: { baseURL: "https://gw.example" } }, undefined)).toBe(
+        "https://chatgpt.com/backend-api/codex/responses",
+      )
+    })
+
+    test("falls back to the hardcoded CODEX_API_ENDPOINT when no option is set", () => {
+      expect(resolveCodexApiEndpoint({ options: {} }, undefined)).toBe(
+        "https://chatgpt.com/backend-api/codex/responses",
+      )
+      expect(resolveCodexApiEndpoint(undefined, undefined)).toBe("https://chatgpt.com/backend-api/codex/responses")
+    })
+  })
+
+  describe("codexApiEndpoint routing", () => {
+    const nonExpiringAuth = {
+      type: "oauth" as const,
+      access: "access-routing",
+      refresh: "refresh-routing",
+      expires: Number.MAX_SAFE_INTEGER,
+      accountId: "acc-routing",
+    }
+
+    test("routes to provider.options.codexApiEndpoint with WebSockets disabled", async () => {
+      const requests: Array<{ pathname: string; authorization: string | null; accountId: string | null }> = []
+      using server = Bun.serve({
+        port: 0,
+        async fetch(request) {
+          const url = new URL(request.url)
+          if (url.pathname === "/backend-api/codex/responses") {
+            requests.push({
+              pathname: url.pathname,
+              authorization: request.headers.get("authorization"),
+              accountId: request.headers.get("ChatGPT-Account-Id"),
+            })
+            return Response.json({})
+          }
+          return new Response("unexpected request", { status: 500 })
+        },
+      })
+
+      const codexApiEndpoint = new URL("/backend-api/codex/responses", server.url).toString()
+      const hooks = await CodexAuthPlugin(createPluginInput())
+      const loaded = await hooks.auth!.loader!(async () => nonExpiringAuth as never, {
+        options: { codexApiEndpoint },
+      } as never)
+
+      await loaded.fetch!("https://api.openai.com/v1/responses")
+
+      expect(requests).toEqual([
+        {
+          pathname: "/backend-api/codex/responses",
+          authorization: "Bearer access-routing",
+          accountId: "acc-routing",
+        },
+      ])
+    })
+
+    test("routes to baseURL /codex via /responses convenience with WebSockets disabled", async () => {
+      const requests: string[] = []
+      using server = Bun.serve({
+        port: 0,
+        async fetch(request) {
+          const url = new URL(request.url)
+          if (url.pathname === "/codex/responses") {
+            requests.push(url.pathname)
+            return Response.json({})
+          }
+          return new Response("unexpected request", { status: 500 })
+        },
+      })
+
+      const hooks = await CodexAuthPlugin(createPluginInput())
+      const loaded = await hooks.auth!.loader!(async () => nonExpiringAuth as never, {
+        options: { baseURL: new URL("/codex", server.url).toString() },
+      } as never)
+
+      await loaded.fetch!("https://api.openai.com/v1/responses")
+
+      expect(requests).toEqual(["/codex/responses"])
+    })
+
+    test("routes codexApiEndpoint through the websocket fetch when WebSockets are enabled", async () => {
+      let upgradePath: string | undefined
+      let upgradeHost: string | undefined
+      let wsSawMessage = false
+      using server = Bun.serve({
+        port: 0,
+        async fetch(request, ctx) {
+          const url = new URL(request.url)
+          if (url.pathname === "/backend-api/codex/responses") {
+            upgradePath = url.pathname
+            upgradeHost = request.headers.get("host") ?? undefined
+            if (ctx.upgrade(request)) return undefined
+            return new Response("upgrade failed", { status: 500 })
+          }
+          return new Response("unexpected request", { status: 500 })
+        },
+        websocket: {
+          open() {},
+          message(ws) {
+            wsSawMessage = true
+            ws.send(JSON.stringify({ type: "response.done", response: { id: "resp_ws" } }))
+            ws.close(1000, "done")
+          },
+          close() {},
+        },
+      })
+
+      const codexApiEndpoint = new URL("/backend-api/codex/responses", server.url).toString()
+      const serverHostPort = new URL(server.url).host
+      const hooks = await CodexAuthPlugin(createPluginInput(), { experimentalWebSockets: true })
+      const loaded = await hooks.auth!.loader!(async () => ({ ...nonExpiringAuth }) as never, {
+        options: { codexApiEndpoint },
+      } as never)
+
+      await loaded.fetch!("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: { "session-id": "session-ws" },
+        body: JSON.stringify({ stream: true, input: "hi" }),
+      })
+
+      expect(upgradePath).toBe("/backend-api/codex/responses")
+      expect(upgradeHost).toBe(serverHostPort)
+      expect(wsSawMessage).toBe(true)
+      await hooks.dispose?.()
+    })
+  })
 })
+
+function createPluginInput() {
+  return {
+    client: {
+      auth: {
+        async set() {},
+      },
+    } as never,
+    project: {} as never,
+    directory: "",
+    worktree: "",
+    experimental_workspace: {
+      register() {},
+    },
+    serverUrl: new URL("https://example.com"),
+    $: {} as never,
+  }
+}
 
 async function waitFor(predicate: () => boolean) {
   const started = Date.now()
