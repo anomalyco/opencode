@@ -349,6 +349,14 @@ export const nextSteer = Effect.fn("SessionInbox.nextSteer")(function* (
   return row ? fromRow(row) : undefined
 })
 
+export const nextPromotable = Effect.fn("SessionInbox.nextPromotable")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  promotable: Promotable,
+) {
+  return (yield* nextSteer(db, sessionID)) ?? (promotable === "input" ? yield* nextQueued(db, sessionID) : undefined)
+})
+
 /**
  * Which pending rows count: "any" counts every row, while "input" means any
  * item in either delivery mode.

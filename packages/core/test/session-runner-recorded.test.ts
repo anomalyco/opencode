@@ -126,6 +126,7 @@ const execution = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
         active: coordinator.active,
         resume: coordinator.run,
         wake: coordinator.wake,
+        wakeActive: coordinator.wakeActive,
         interrupt: (sessionID) => coordinator.interrupt(sessionID),
         awaitIdle: coordinator.awaitIdle,
       })

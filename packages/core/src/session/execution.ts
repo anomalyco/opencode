@@ -19,11 +19,10 @@ export interface Interface {
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   /** Starts execution while idle or joins the active execution. */
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, SessionRunner.RunError>
-  /** Registers newly recorded work. Repeated wakeups coalesce, with a full drain taking precedence. */
-  readonly wake: (
-    sessionID: SessionSchema.ID,
-    options?: { readonly scope?: SessionRunner.DrainScope | "active" },
-  ) => Effect.Effect<void>
+  /** Registers newly recorded work. Repeated wakeups may coalesce. */
+  readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  /** Wakes only an active execution, preserving its current input eligibility. */
+  readonly wakeActive: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   /** Interrupt active work owned by this process. Idle interruption is a no-op. */
   readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<void>
   /** Resolves once this process owns no active execution for the Session. Returns immediately when idle and never starts work. */
@@ -51,10 +50,6 @@ export const layer = Layer.effect(
     const locations = yield* LocationServiceMap.Service
     const bus = yield* Bus.Service
     const db = (yield* Database.Service).db
-    const wakeScopes = new Map<SessionSchema.ID, SessionRunner.DrainScope>()
-    const activeScopes = new Map<SessionSchema.ID, SessionRunner.DrainScope>()
-    const continuingInterrupts = new Map<SessionSchema.ID, Set<symbol>>()
-    const deferredWakes = new Set<SessionSchema.ID>()
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
         Effect.tapCause((cause) =>
@@ -81,13 +76,13 @@ export const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       force: boolean,
       continuation?: SessionRunner.Continuation,
-      scope: SessionRunner.DrainScope = "all",
+      promotable: SessionInbox.Promotable = "input",
     ): Effect.Effect<void, SessionRunner.RunError> {
       return Effect.gen(function* () {
         const session = yield* store.get(sessionID)
         if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
         const result = yield* SessionRunner.Service.use((runner) =>
-          runner.drain({ sessionID, force, continuation, scope }),
+          runner.drain({ sessionID, force, continuation, promotable }),
         ).pipe(
           Effect.provide(locations.get(session.location)),
           Effect.tapCause((cause) =>
@@ -97,7 +92,7 @@ export const layer = Layer.effect(
           ),
         )
         if (result.type === "complete") return
-        return yield* drain(sessionID, false, result.continuation, scope)
+        return yield* drain(sessionID, false, result.continuation, promotable)
       })
     }
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
@@ -106,19 +101,7 @@ export const layer = Layer.effect(
           sessionID,
           bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
         ),
-      drain: (sessionID, force) =>
-        Effect.sync(() => {
-          const scope = force ? "all" : (wakeScopes.get(sessionID) ?? "all")
-          wakeScopes.delete(sessionID)
-          return scope
-        }).pipe(
-          Effect.flatMap((scope) =>
-            Effect.sync(() => activeScopes.set(sessionID, scope)).pipe(
-              Effect.andThen(drain(sessionID, force, undefined, scope)),
-              Effect.ensuring(Effect.sync(() => activeScopes.delete(sessionID))),
-            ),
-          ),
-        ),
+      drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
       // One terminal observation per busy period, covering every coalesced drain.
       settled: (sessionID, exit, reason) =>
         reportLifecycle(
@@ -150,65 +133,20 @@ export const layer = Layer.effect(
           }),
         ),
     })
-    const scheduleWake = (sessionID: SessionSchema.ID, scope: SessionRunner.DrainScope) =>
-      Effect.sync(() => {
-        if (scope === "all" || !wakeScopes.has(sessionID)) wakeScopes.set(sessionID, scope)
-      }).pipe(Effect.andThen(coordinator.wake(sessionID)))
-
-    const wake = (sessionID: SessionSchema.ID, scope: SessionRunner.DrainScope) =>
-      Effect.suspend(() => {
-        if (!continuingInterrupts.has(sessionID)) return scheduleWake(sessionID, scope)
-        deferredWakes.add(sessionID)
-        return Effect.void
-      })
-
-    const interrupt = (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => {
-      if (!options?.continue) return coordinator.interrupt(sessionID, "user")
-      const token = Symbol()
-      const release = Effect.sync(() => {
-        const active = continuingInterrupts.get(sessionID)
-        active?.delete(token)
-        if (active?.size !== 0) return
-        continuingInterrupts.delete(sessionID)
-        deferredWakes.delete(sessionID)
-      })
-      return Effect.uninterruptible(
-        Effect.sync(() => {
-          const active = continuingInterrupts.get(sessionID)
-          if (active) {
-            active.add(token)
-            return
-          }
-          continuingInterrupts.set(sessionID, new Set([token]))
-          deferredWakes.delete(sessionID)
-          wakeScopes.delete(sessionID)
-        }).pipe(
-          Effect.andThen(coordinator.interrupt(sessionID, "user")),
-          Effect.andThen(SessionInbox.has(db, sessionID, "steer")),
-          Effect.flatMap((hasSteer) =>
-            Effect.sync(() => {
-              const deferred = deferredWakes.delete(sessionID)
-              return hasSteer || deferred
-            }).pipe(
-              Effect.flatMap((resume) =>
-                resume ? scheduleWake(sessionID, "steer").pipe(Effect.andThen(release)) : release,
-              ),
-            ),
-          ),
-          Effect.ensuring(release),
-        ),
-      )
-    }
 
     return Service.of({
       active: coordinator.active,
-      interrupt,
+      interrupt: (sessionID, options) =>
+        coordinator.interrupt(
+          sessionID,
+          "user",
+          options?.continue
+            ? { continue: { request: "steer", when: SessionInbox.has(db, sessionID, "steer") } }
+            : undefined,
+        ),
       resume: coordinator.run,
-      wake: (sessionID, options) => {
-        if (options?.scope !== "active") return wake(sessionID, options?.scope ?? "all")
-        const scope = activeScopes.get(sessionID)
-        return scope ? wake(sessionID, scope) : Effect.void
-      },
+      wake: coordinator.wake,
+      wakeActive: coordinator.wakeActive,
       awaitIdle: coordinator.awaitIdle,
     })
   }),
@@ -227,6 +165,7 @@ export const noopLayer = Layer.succeed(
     active: Effect.succeed(new Set()),
     resume: () => Effect.void,
     wake: () => Effect.void,
+    wakeActive: () => Effect.void,
     interrupt: () => Effect.void,
     awaitIdle: () => Effect.void,
   }),

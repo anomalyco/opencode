@@ -3,6 +3,7 @@ export * as SessionRunner from "./index.js"
 import type { AIError } from "@opencode-ai/ai"
 import { Context, Effect } from "effect"
 import { SessionSchema } from "../schema.js"
+import type { Promotable } from "../inbox.js"
 import type { AgentNotFoundError, MessageDecodeError, StepFailedError, UserInterruptedError } from "../error.js"
 import { SessionRunnerModel } from "./model.js"
 import type { Instructions } from "../../instructions/index.js"
@@ -18,9 +19,6 @@ export type RunError =
 
 export type Continuation = { readonly step: number }
 
-/** "steer" settles the active intent without promoting queued next-turn work. */
-export type DrainScope = "all" | "steer"
-
 export type DrainResult =
   | { readonly type: "complete" }
   | { readonly type: "moved"; readonly continuation?: Continuation }
@@ -32,7 +30,8 @@ export interface Interface {
     readonly sessionID: SessionSchema.ID
     readonly force: boolean
     readonly continuation?: Continuation
-    readonly scope?: DrainScope
+    /** "steer" settles the active intent without promoting queued next-turn work. */
+    readonly promotable?: Promotable
   }) => Effect.Effect<DrainResult, RunError>
 }
 

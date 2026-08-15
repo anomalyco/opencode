@@ -413,6 +413,7 @@ const execution = Layer.effect(
       active: coordinator.active,
       resume: coordinator.run,
       wake: coordinator.wake,
+      wakeActive: coordinator.wakeActive,
       interrupt: (sessionID) => coordinator.interrupt(sessionID),
       awaitIdle: coordinator.awaitIdle,
     })
@@ -3097,7 +3098,7 @@ describe("SessionRunnerLLM", () => {
       yield* TestLLM.push(TestLLM.stop())
 
       const runner = yield* SessionRunner.Service
-      yield* runner.drain({ sessionID, force: false, scope: "steer" })
+      yield* runner.drain({ sessionID, force: false, promotable: "steer" })
 
       expect(requests).toHaveLength(1)
       expect(userTexts(requests[0])).toEqual(["Steer now"])

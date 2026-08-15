@@ -790,7 +790,7 @@ const layer = Layer.effect(
           }),
         )
         if (recovered) {
-          yield* execution.wake(input.sessionID, { scope: "active" })
+          yield* execution.wakeActive(input.sessionID)
           return
         }
         yield* execution.wake(input.sessionID)

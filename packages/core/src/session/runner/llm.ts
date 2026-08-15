@@ -24,7 +24,7 @@ import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { SessionTitle } from "../title.js"
-import { Service, type Continuation, type DrainScope } from "./index.js"
+import { Service, type Continuation } from "./index.js"
 import { createLLMEventPublisher, type StepRecord } from "./publish-llm-event.js"
 import { Snapshot } from "../../snapshot.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -128,16 +128,12 @@ const layer = Layer.effect(
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
       readonly continuation?: Continuation
-      readonly scope?: DrainScope
+      readonly promotable?: SessionInbox.Promotable
     }) {
       let force = input.force
       let continuation = input.continuation
-      const promotable = input.scope === "steer" ? "steer" : "input"
-      if (
-        !force &&
-        !continuation &&
-        !(yield* SessionInbox.has(db, input.sessionID, input.scope === "steer" ? "steer" : "any"))
-      )
+      const promotable = input.promotable ?? "input"
+      if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
         return { type: "complete" as const }
       yield* settleStaleToolCalls(input.sessionID)
       while (true) {
@@ -150,7 +146,7 @@ const layer = Layer.effect(
           return { type: "complete" as const }
         const result = yield* runSteps(input.sessionID, continuation, promotable)
         if (result.type === "moved") return result
-        if (input.scope === "steer") return { type: "complete" as const }
+        if (promotable === "steer") return { type: "complete" as const }
         force = false
         continuation = undefined
       }
@@ -530,9 +526,7 @@ const layer = Layer.effect(
           const pending = yield* SessionInbox.serialized(
             sessionID,
             Effect.gen(function* () {
-              const selected =
-                (yield* SessionInbox.nextSteer(db, sessionID)) ??
-                (promotable === "input" ? yield* SessionInbox.nextQueued(db, sessionID) : undefined)
+              const selected = yield* SessionInbox.nextPromotable(db, sessionID, promotable)
               if (selected?.type !== "compaction") return
               yield* bus.publishAll([
                 [SessionEvent.InboxDelivered, { sessionID, inboxID: selected.id }],
@@ -574,9 +568,7 @@ const layer = Layer.effect(
       return yield* SessionInbox.serialized(
         sessionID,
         Effect.gen(function* () {
-          const pending =
-            (yield* SessionInbox.nextSteer(db, sessionID)) ??
-            (promotable === "input" ? yield* SessionInbox.nextQueued(db, sessionID) : undefined)
+          const pending = yield* SessionInbox.nextPromotable(db, sessionID, promotable)
           if (pending?.type !== "move") return false
           yield* modelTransport.close(sessionID)
           yield* bus.publishAll([

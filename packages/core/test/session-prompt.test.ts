@@ -51,6 +51,7 @@ const execution = Layer.succeed(
       Effect.sync(() => {
         wakeCalls.push(sessionID)
       }),
+    wakeActive: () => Effect.void,
     awaitIdle: () => Effect.void,
   }),
 )
@@ -191,20 +192,6 @@ describe("Session.prompt", () => {
 
       expect(interruptCalls).toEqual([sessionID])
       expect(interruptContinuations).toEqual([true])
-      expect(wakeCalls).toEqual([])
-    }),
-  )
-
-  it.effect("does not continue after interruption without pending work", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* Session.Service
-      interruptCalls.length = 0
-      wakeCalls.length = 0
-
-      yield* session.interrupt(sessionID, { continue: true })
-
-      expect(interruptCalls).toEqual([sessionID])
       expect(wakeCalls).toEqual([])
     }),
   )
