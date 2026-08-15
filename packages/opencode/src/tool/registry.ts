@@ -54,6 +54,13 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
+import type { SessionTier } from "@/session/tier"
+
+// Core roster for minimal-tier models: everything else (task, websearch,
+// webfetch, skill, question, apply_patch, lsp, plan_exit, custom tools) is
+// dropped by default. `invalid` stays because the LLM layer routes malformed
+// tool calls to it and it is never advertised to the model.
+const MINIMAL_TIER_TOOLS = new Set(["bash", "read", "write", "edit", "glob", "grep", "todowrite", "invalid"])
 
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
   return (
@@ -83,6 +90,7 @@ export interface Interface {
     modelID: ModelV2.ID
     agent: Agent.Info
     permission?: PermissionV1.Ruleset
+    tier?: SessionTier.ModelTier
   }) => Effect.Effect<Tool.Def[]>
 }
 
@@ -290,12 +298,19 @@ const layer = Layer.effect(
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
+        if (input.tier === "minimal") return MINIMAL_TIER_TOOLS.has(tool.id)
+
         if (tool.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }
 
+        // default tier keeps the standard roster minus apply_patch: usePatch is
+        // forced off so edit/write stay and apply_patch is excluded below.
         const usePatch =
-          input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
+          input.tier !== "default" &&
+          input.modelID.includes("gpt-") &&
+          !input.modelID.includes("oss") &&
+          !input.modelID.includes("gpt-4")
         if (tool.id === ApplyPatchTool.id) return usePatch
         if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
 

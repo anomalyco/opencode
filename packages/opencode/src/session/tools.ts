@@ -17,6 +17,7 @@ import { Effect } from "effect"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import { SessionProcessor } from "./processor"
+import { SessionTier } from "./tier"
 import { PartID } from "./schema"
 import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -94,6 +95,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     providerID: input.model.providerID,
     agent: input.agent,
     permission: input.session.permission,
+    tier: SessionTier.resolve(input.model),
   })) {
     const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
     tools[item.id] = tool({
