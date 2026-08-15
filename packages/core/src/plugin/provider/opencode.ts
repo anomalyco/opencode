@@ -89,14 +89,24 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
     const http = yield* HttpClient.HttpClient
     const loading = Semaphore.makeUnsafe(1)
     let connected = false
+    let savedConnection = false
     let providers: typeof ConfigV1.Info.Type.provider | undefined
 
     const load = Effect.fn("OpencodePlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active("opencode")
-      const credential = connection
+      const resolved = connection
         ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.catch(() => Effect.succeed(undefined)))
         : undefined
+      // Plugin activation batches transforms, so the first resolve can precede this plugin's OAuth registration.
+      const credential =
+        connection && resolved?.type === "oauth" && resolved.expires <= Date.now() + Duration.toMillis(Duration.minutes(5))
+          ? yield* ctx.integration.reload().pipe(
+              Effect.andThen(ctx.integration.connection.resolve(connection)),
+              Effect.catch(() => Effect.succeed(undefined)),
+            )
+          : resolved
       connected = connection !== undefined
+      savedConnection = connection?.type === "credential"
       providers = credential
         ? yield* fetchProviders(http, credential).pipe(
             Effect.catch((cause) =>
@@ -116,6 +126,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
 
     yield* load()
     yield* ctx.catalog.transform((catalog) => {
+      if (savedConnection && providers === undefined) catalog.provider.remove(Provider.ID.opencode)
       for (const [providerID, item] of Object.entries(providers ?? {})) {
         catalog.provider.update(providerID, (provider) => {
           provider.integrationID = Integration.ID.make("opencode")

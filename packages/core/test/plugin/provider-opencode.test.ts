@@ -10,6 +10,7 @@ import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { OpencodePlugin } from "@opencode-ai/core/plugin/provider/opencode"
 import { Provider } from "@opencode-ai/core/provider"
+import { State } from "@opencode-ai/core/state"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -295,6 +296,96 @@ describe("OpencodePlugin", () => {
           expect(yield* catalog.model.get(Provider.ID.make("remote"), Model.ID.make("stale"))).toBeDefined()
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("refreshes saved OAuth before loading the Console catalog on cold startup", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const requests: string[] = []
+        return {
+          requests,
+          server: Bun.serve({
+            port: 0,
+            fetch: (request) => {
+              const url = new URL(request.url)
+              if (url.pathname === "/auth/device/token") {
+                requests.push("refresh")
+                return Response.json({ access_token: "fresh", refresh_token: "next", expires_in: 600 })
+              }
+              if (url.pathname === "/api/config") {
+                requests.push(`config:${request.headers.get("authorization")}`)
+                return Response.json({
+                  config: {
+                    provider: {
+                      console: {
+                        name: "Console",
+                        npm: "@ai-sdk/openai-compatible",
+                        models: { current: { name: "Current" } },
+                      },
+                    },
+                  },
+                })
+              }
+              return new Response("Not found", { status: 404 })
+            },
+          }),
+        }
+      }),
+      ({ requests, server }) =>
+        Effect.gen(function* () {
+          yield* (yield* Credential.Service).create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.OAuth.make({
+              type: "oauth",
+              methodID: Integration.MethodID.make("device"),
+              access: "expired",
+              refresh: "refresh",
+              expires: 1,
+              metadata: { server: server.url.origin },
+            }),
+          })
+
+          yield* State.batch(addPlugin())
+
+          expect(requests).toEqual(["refresh", "config:Bearer fresh"])
+          expect(
+            yield* (yield* Catalog.Service).model.get(Provider.ID.make("console"), Model.ID.make("current")),
+          ).toBeDefined()
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("hides legacy fallback models when Console configuration fails", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: () => new Response("Unauthorized", { status: 401 }),
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          const catalog = yield* Catalog.Service
+          yield* catalog.transform((draft) => {
+            draft.provider.update(Provider.ID.opencode, () => {})
+            draft.model.update(Provider.ID.opencode, Model.ID.make("legacy"), () => {})
+          })
+          yield* (yield* Credential.Service).create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "console-key",
+              metadata: { server: server.url.origin },
+            }),
+          })
+
+          yield* State.batch(addPlugin())
+
+          expect(yield* catalog.model.get(Provider.ID.opencode, Model.ID.make("legacy"))).toBeUndefined()
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
     ),
   )
 
