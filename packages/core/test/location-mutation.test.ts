@@ -160,6 +160,20 @@ describe("LocationMutation", () => {
     ),
   )
 
+  it.live("uses an explicit file kind without treating an existing directory as the target boundary", () =>
+    withTmp((directory) =>
+      withTmp((outside) =>
+        Effect.gen(function* () {
+          const target = yield* (yield* LocationMutation.Service).resolve({ path: outside, kind: "file" })
+          expect(target.externalDirectory).toMatchObject({
+            directory: path.dirname(outside),
+            resource: path.join(path.dirname(outside), "*").replaceAll("\\", "/"),
+          })
+        }).pipe(provide(directory)),
+      ),
+    ),
+  )
+
   it.live("authorizes prospective external descendants at their lexical parent", () =>
     withTmp((directory) =>
       withTmp((outside) =>

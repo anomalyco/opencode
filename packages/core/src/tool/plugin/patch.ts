@@ -111,24 +111,25 @@ export const Plugin = {
                 return yield* new ToolFailure({ message: "patch rejected: empty patch" })
               }
               const prepared: Prepared[] = []
-              const targets: LocationMutation.Target[] = []
               const updates = new Map<string, string>()
+              const resolveTarget = Effect.fnUntraced(function* (value: string) {
+                const target = yield* mutation.resolve({ path: value, kind: "file" })
+                if (!target.externalDirectory) return target
+                yield* permission.assert({
+                  ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
+                  metadata: {
+                    filepath: target.absolute,
+                    parentDir: target.externalDirectory.directory,
+                  },
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source,
+                })
+                return target
+              })
               for (const hunk of hunks) {
                 yield* Effect.gen(function* () {
-                  const target = yield* mutation.resolve({ path: hunk.path, kind: "file" })
-                  targets.push(target)
-                  if (target.externalDirectory) {
-                    yield* permission.assert({
-                      ...LocationMutation.externalDirectoryPermission(target.externalDirectory),
-                      metadata: {
-                        filepath: target.absolute,
-                        parentDir: target.externalDirectory.directory,
-                      },
-                      sessionID: context.sessionID,
-                      agent: context.agent,
-                      source,
-                    })
-                  }
+                  const target = yield* resolveTarget(hunk.path)
                   if (hunk.type === "add") {
                     const content =
                       hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`
@@ -172,22 +173,7 @@ export const Plugin = {
                     try: () => Patch.derive(hunk.path, hunk.chunks, original),
                     catch: (error) => new ToolFailure({ message: `patch verification failed: ${errorMessage(error)}` }),
                   })
-                  const moveTarget = hunk.movePath
-                    ? yield* mutation.resolve({ path: hunk.movePath, kind: "file" })
-                    : undefined
-                  if (moveTarget) targets.push(moveTarget)
-                  if (moveTarget?.externalDirectory) {
-                    yield* permission.assert({
-                      ...LocationMutation.externalDirectoryPermission(moveTarget.externalDirectory),
-                      metadata: {
-                        filepath: moveTarget.absolute,
-                        parentDir: moveTarget.externalDirectory.directory,
-                      },
-                      sessionID: context.sessionID,
-                      agent: context.agent,
-                      source,
-                    })
-                  }
+                  const moveTarget = hunk.movePath ? yield* resolveTarget(hunk.movePath) : undefined
                   prepared.push({
                     ...hunk,
                     target,
@@ -207,6 +193,10 @@ export const Plugin = {
               }
 
               const patchFiles = prepared.map((change) => patchFile(change))
+              const targets = prepared.flatMap((change) => [
+                change.target,
+                ...(change.type === "update" && change.moveTarget ? [change.moveTarget] : []),
+              ])
               yield* permission.assert({
                 action: "edit",
                 resources: [...new Set(targets.map((target) => target.resource))],
