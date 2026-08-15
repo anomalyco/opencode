@@ -2,19 +2,21 @@ export * as SubagentTool from "./subagent.js"
 
 import { ToolFailure } from "@opencode-ai/ai"
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
-import { Effect, Schema, Scope } from "effect"
+import { Effect, Option, Schema, Scope } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
 import { PluginRuntime } from "../../plugin/runtime.js"
 import { Permission } from "../../permission.js"
 import { SessionSchema } from "../../session/schema.js"
+import { Workspace } from "../../workspace.js"
 
 export const name = "subagent"
 
 const NO_TEXT = "Subagent completed without a text response."
-const backgroundStarted = (sessionID: SessionSchema.ID) =>
+const backgroundStarted = (sessionID: SessionSchema.ID, workspaceID?: Workspace.ID) =>
   [
     `The subagent is working in the background (id: ${sessionID}). You will be notified automatically when it finishes.`,
+    ...(workspaceID ? [`It is isolated in workspace ${workspaceID}.`] : []),
     "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
     "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
   ].join("\n")
@@ -31,6 +33,7 @@ export const Input = Schema.Struct({
 
 export const Output = Schema.Struct({
   sessionID: SessionSchema.ID,
+  workspaceID: Schema.optionalKey(Workspace.ID),
   status: Schema.Literals(["completed", "running"]),
   output: Schema.String,
 })
@@ -49,6 +52,7 @@ export const Plugin = {
     const agents = yield* Agent.Service
     const config = yield* Config.Service
     const permission = yield* Permission.Service
+    const workspaces = Option.getOrUndefined(yield* Effect.serviceOption(Workspace.Service))
     const scope = yield* Scope.Scope
 
     // Concatenate the child's final completed assistant text. Distinguishes "completed with no
@@ -165,9 +169,24 @@ export const Plugin = {
 
               // Model selection is policy/config/session state, not an LLM-facing tool argument.
               const model = agent.model ?? parent.model
+              if (parent.location.workspaceID && !workspaces)
+                return yield* new ToolFailure({ message: "Workspace forking is unavailable in this server profile" })
+              const fork =
+                parent.location.workspaceID && workspaces
+                  ? yield* workspaces.fork(parent.location.workspaceID).pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new ToolFailure({
+                            message: `Failed to fork workspace ${parent.location.workspaceID}`,
+                            error,
+                          }),
+                      ),
+                    )
+                  : undefined
               const child = yield* runtime.session
                 .create({
                   parentID: context.sessionID,
+                  location: fork ? { ...parent.location, workspaceID: fork.id } : undefined,
                   title: input.description,
                   agent: Agent.ID.make(input.agent),
                   model,
@@ -175,6 +194,9 @@ export const Plugin = {
                   // session (V1 deriveSubagentSessionPermission). MVP uses the agent's own permissions.
                 })
                 .pipe(
+                  Effect.onError(() =>
+                    fork && workspaces ? workspaces.destroy(fork.id).pipe(Effect.ignore) : Effect.void,
+                  ),
                   Effect.mapError(
                     (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
                   ),
@@ -187,7 +209,15 @@ export const Plugin = {
                 // The child session owns its agent/model (set at create); prompt only admits input.
                 yield* runtime.session.prompt({
                   sessionID: child.id,
-                  text: ["You are a subagent spawned by another session.", input.prompt].join("\n"),
+                  text: [
+                    "You are a subagent spawned by another session.",
+                    ...(fork
+                      ? [
+                          `You are working in isolated workspace ${fork.id}. Commit all intended changes before your final response and include the commit hash.`,
+                        ]
+                      : []),
+                    input.prompt,
+                  ].join("\n"),
                   resume: false,
                 })
                 yield* runtime.session.resume(child.id)
@@ -207,8 +237,9 @@ export const Plugin = {
                 yield* notifyWhenDone(context.sessionID, child.id, agent.name, input.description)
                 return {
                   sessionID: child.id,
+                  ...(fork ? { workspaceID: fork.id } : {}),
                   status: "running" as const,
-                  output: backgroundStarted(child.id),
+                  output: backgroundStarted(child.id, fork?.id),
                 }
               }
 
@@ -223,19 +254,29 @@ export const Plugin = {
                 yield* notifyWhenDone(context.sessionID, child.id, agent.name, input.description)
                 return {
                   sessionID: child.id,
+                  ...(fork ? { workspaceID: fork.id } : {}),
                   status: "running" as const,
-                  output: backgroundStarted(child.id),
+                  output: backgroundStarted(child.id, fork?.id),
                 }
               }
               if (result?.info.status === "error")
                 return yield* new ToolFailure({ message: result.info.error ?? "Subagent failed" })
               if (result?.info.status === "cancelled") return yield* new ToolFailure({ message: "Subagent cancelled" })
-              return { sessionID: child.id, status: "completed" as const, output: result?.info.output ?? NO_TEXT }
+              return {
+                sessionID: child.id,
+                ...(fork ? { workspaceID: fork.id } : {}),
+                status: "completed" as const,
+                output: result?.info.output ?? NO_TEXT,
+              }
             }).pipe(
               Effect.map((output) => ({
                 output,
                 content: output.output,
-                metadata: { sessionID: output.sessionID, status: output.status },
+                metadata: {
+                  sessionID: output.sessionID,
+                  ...(output.workspaceID ? { workspaceID: output.workspaceID } : {}),
+                  status: output.status,
+                },
               })),
             ),
         }),

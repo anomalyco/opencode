@@ -27,6 +27,9 @@ export class NotFound extends Schema.TaggedErrorClass<NotFound>()("Workspace.Not
 
 export interface Interface {
   readonly create: (provider: string) => Effect.Effect<Info, WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
+  readonly fork: (
+    source: ID,
+  ) => Effect.Effect<Info, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
   readonly connect: (
     workspaceID: ID,
   ) => Effect.Effect<EnvironmentDriver, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
@@ -152,15 +155,12 @@ const layer = (options: Options) =>
       return Service.of({
         create: Effect.fn("Workspace.create")(function* (provider) {
           const driver = yield* registry.get(provider)
-          const workspaceID = ID.create()
-          const result = yield* driver.create({ workspaceID })
-          const now = yield* Clock.currentTimeMillis
-          yield* db
-            .insert(WorkspaceTable)
-            .values({ id: workspaceID, provider, binding: result.binding, created_at: now, last_used_at: now })
-            .run()
-            .pipe(Effect.orDie)
-          return new Info({ id: workspaceID, provider, binding: result.binding, createdAt: now, lastUsedAt: now })
+          return yield* createWorkspace(driver, provider)
+        }),
+        fork: Effect.fn("Workspace.fork")(function* (sourceID) {
+          const source = yield* load(sourceID)
+          const driver = yield* registry.get(source.provider)
+          return yield* createWorkspace(driver, source.provider, source)
         }),
         connect: Effect.fn("Workspace.connect")(function* (workspaceID) {
           const spawner = make((command) =>
@@ -209,6 +209,27 @@ const layer = (options: Options) =>
           )
         }),
       })
+
+      function createWorkspace(
+        driver: WorkspaceDriver.Interface,
+        provider: string,
+        source?: typeof WorkspaceTable.$inferSelect,
+      ) {
+        return Effect.gen(function* () {
+          const workspaceID = ID.create()
+          const result = yield* driver.create({
+            workspaceID,
+            source: source ? { workspaceID: ID.make(source.id), binding: source.binding } : undefined,
+          })
+          const now = yield* Clock.currentTimeMillis
+          yield* db
+            .insert(WorkspaceTable)
+            .values({ id: workspaceID, provider, binding: result.binding, created_at: now, last_used_at: now })
+            .run()
+            .pipe(Effect.orDie)
+          return new Info({ id: workspaceID, provider, binding: result.binding, createdAt: now, lastUsedAt: now })
+        })
+      }
     }),
   )
 
