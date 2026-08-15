@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { ProviderTransform } from "@/provider/transform"
 import { LLMRequestPrep } from "@/session/llm/request"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { jsonSchema } from "ai"
+
+const emptyConfig = Schema.decodeUnknownSync(ConfigV1.Info)({}) as ConfigV1.Info
 
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
@@ -577,6 +580,7 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
           init: () => Effect.void,
         } as any,
         flags: { outputTokenMax: 32_000, client: "test" } as any,
+        cfg: emptyConfig,
         isWorkflow: false,
       }),
     )
@@ -5664,5 +5668,115 @@ describe("ProviderTransform.options - kimi family adaptive thinking", () => {
     }
     const result = ProviderTransform.options({ model, sessionID: "s1", providerOptions: {} })
     expect(result.thinking).toBeUndefined()
+  })
+})
+
+describe("ProviderTransform.maxOutputTokens - window-aware fallback", () => {
+  const model = (limit: { context: number; output: number }) =>
+    ({
+      id: "test/test-model",
+      providerID: "test",
+      api: { id: "test-model", url: "https://example.com/v1", npm: "@ai-sdk/openai-compatible" },
+      name: "Test",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+      },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit,
+      options: {},
+      headers: {},
+    }) as any
+
+  test("explicit limit.output stays capped at OUTPUT_TOKEN_MAX", () => {
+    expect(ProviderTransform.maxOutputTokens(model({ context: 200_000, output: 64_000 }))).toBe(32_000)
+    expect(ProviderTransform.maxOutputTokens(model({ context: 200_000, output: 8_192 }))).toBe(8_192)
+  })
+
+  test("unset limit.output derives a proportional fallback from the window", () => {
+    expect(ProviderTransform.maxOutputTokens(model({ context: 8_192, output: 0 }))).toBe(2_048)
+    expect(ProviderTransform.maxOutputTokens(model({ context: 56_320, output: 0 }))).toBe(14_080)
+    expect(ProviderTransform.maxOutputTokens(model({ context: 2_048, output: 0 }))).toBe(1_024)
+  })
+
+  test("unset limit.output and unset limit.context keep the flat fallback", () => {
+    expect(ProviderTransform.maxOutputTokens(model({ context: 0, output: 0 }))).toBe(32_000)
+    expect(ProviderTransform.maxOutputTokens(model({ context: 200_000, output: 0 }))).toBe(32_000)
+  })
+})
+
+describe("LLMRequestPrep.prepare - output headroom clamp", () => {
+  const prepare = (input: { context: number; output: number; text: string }) =>
+    Effect.runPromise(
+      LLMRequestPrep.prepare({
+        user: {
+          id: "msg_user-clamp",
+          sessionID: "ses_clamp-test",
+          role: "user",
+          time: { created: Date.now() },
+          agent: "test",
+          model: { providerID: "test", modelID: "test-model" },
+        } as any,
+        sessionID: "ses_clamp-test",
+        model: {
+          id: "test/test-model",
+          providerID: "test",
+          api: { id: "test-model", url: "https://example.com/v1", npm: "@ai-sdk/openai-compatible" },
+          name: "Test",
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+          },
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: { context: input.context, output: input.output },
+          options: {},
+          headers: {},
+        } as any,
+        agent: { name: "test", mode: "primary", options: {}, permission: [] } as any,
+        system: [],
+        messages: [{ role: "user", content: input.text }],
+        tools: {},
+        provider: { id: "test", options: {} } as any,
+        auth: undefined,
+        plugin: {
+          trigger: (_name: string, _input: unknown, output: unknown) => Effect.succeed(output),
+          list: () => Effect.succeed([]),
+          init: () => Effect.void,
+        } as any,
+        flags: { client: "test" } as any,
+        cfg: emptyConfig,
+        isWorkflow: false,
+      }),
+    )
+
+  test("small requests keep the full output budget", async () => {
+    const result = await prepare({ context: 8_192, output: 0, text: "hello" })
+    expect(result.params.maxOutputTokens).toBe(2_048)
+  })
+
+  test("nearly-full window clamps output to the 256 floor", async () => {
+    // usable = 8_192 - 2_048 = 6_144; ~10k estimated input tokens exceed it
+    const result = await prepare({ context: 8_192, output: 0, text: "x".repeat(40_000) })
+    expect(result.params.maxOutputTokens).toBe(256)
+  })
+
+  test("partially-full window clamps output to remaining headroom", async () => {
+    const result = await prepare({ context: 56_320, output: 0, text: "x".repeat(160_000) })
+    // usable = 56_320 - 14_080 = 42_240; clamp lands between floor and budget
+    expect(result.params.maxOutputTokens).toBeLessThan(14_080)
+    expect(result.params.maxOutputTokens).toBeGreaterThan(256)
+  })
+
+  test("large explicit windows keep the configured budget", async () => {
+    const result = await prepare({ context: 200_000, output: 64_000, text: "hello" })
+    expect(result.params.maxOutputTokens).toBe(32_000)
   })
 })

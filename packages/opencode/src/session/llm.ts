@@ -109,6 +109,7 @@ const live: Layer.Layer<
         auth: info,
         plugin,
         flags,
+        cfg,
         isWorkflow,
       })
 

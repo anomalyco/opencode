@@ -1445,7 +1445,14 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
 }
 
 export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_TOKEN_MAX): number {
-  return Math.min(model.limit.output, outputTokenMax) || outputTokenMax
+  const capped = Math.min(model.limit.output, outputTokenMax)
+  if (capped) return capped
+  // Unset limit.output: derive a window-proportional fallback so small
+  // windows don't reserve most of the context for output. When limit.context
+  // is also unset, keep the flat fallback — the overflow layer applies its
+  // own conservative default and it must not be double-applied here.
+  if (!model.limit.context) return outputTokenMax
+  return Math.min(outputTokenMax, Math.max(1_024, Math.floor(model.limit.context * 0.25)))
 }
 
 type JsonRecord = Record<string, unknown>
