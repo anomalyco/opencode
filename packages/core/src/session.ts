@@ -51,6 +51,7 @@ import { Global } from "@opencode-ai/util/global"
 import { Shell as ShellSchema } from "@opencode-ai/schema/shell"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { fileURLToPath } from "url"
+import { Subagent } from "./subagent.js"
 
 // get project -> project.locations
 //
@@ -620,14 +621,33 @@ const layer = Layer.effect(
           })
         const evaluated = yield* commands.evaluate({ name: input.command, arguments: input.arguments })
 
-        // TODO(v2 commands): decide whether command-level subtask/background execution belongs in v2 commands.
+        const agents = yield* Agent.Service.pipe(Effect.provide(locations.get(session.location)))
+        const commandAgent = command.agent ? yield* agents.get(command.agent) : undefined
+        const model = command.model ?? commandAgent?.model ?? input.model ?? session.model
+        if (commandAgent?.mode === "subagent") {
+          const childAgent = command.agent ?? Agent.ID.make("general")
+          const title = command.description ?? input.command
+          const run = yield* Subagent.run({
+            runtime: { session: result, job: jobs },
+            scope,
+            parentID: input.sessionID,
+            agent: childAgent,
+            title,
+            prompt: evaluated.text,
+            id: input.id,
+            model,
+            files: input.files,
+            agents: input.agents,
+            skills: input.skills,
+            delivery: input.delivery,
+            background: true,
+            notifyStarted: true,
+            metadata: { source: "command", command: input.command, parentID: input.sessionID },
+          })
+          return run.admitted
+        }
+
         const agent = command.agent ?? input.agent
-        const commandAgent = yield* Effect.gen(function* () {
-          if (!command.agent) return undefined
-          const agents = yield* Agent.Service.pipe(Effect.provide(locations.get(session.location)))
-          return yield* agents.get(Agent.ID.make(command.agent))
-        })
-        const model = command.model ?? commandAgent?.model ?? input.model
         if (agent !== undefined && session.agent !== Agent.ID.make(agent))
           yield* result.switchAgent({ sessionID: input.sessionID, agent: Agent.ID.make(agent) })
         if (model !== undefined) yield* result.switchModel({ sessionID: input.sessionID, model })
