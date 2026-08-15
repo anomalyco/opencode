@@ -20,7 +20,7 @@ describe("session.llm.repair", () => {
   })
 
   test("normalizes smart quotes", () => {
-    expect(LLMRepair.repair('{“path”: “a.txt”}')).toBe('{"path": "a.txt"}')
+    expect(LLMRepair.repair("{“path”: “a.txt”}")).toBe('{"path": "a.txt"}')
     expect(LLMRepair.repair("{‘path’: ‘a.txt’}")).toBe('{"path": "a.txt"}')
   })
 

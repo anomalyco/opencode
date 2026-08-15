@@ -448,10 +448,7 @@ const layer = Layer.effect(
             content: [
               {
                 type: "text",
-                text: [
-                  nextPrompt,
-                  ...(override ? ["The following is the conversation history:", conversation] : []),
-                ]
+                text: [nextPrompt, ...(override ? ["The following is the conversation history:", conversation] : [])]
                   .filter(Boolean)
                   .join("\n\n"),
               },

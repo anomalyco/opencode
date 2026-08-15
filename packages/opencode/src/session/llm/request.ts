@@ -199,7 +199,9 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     const estimated =
       Token.estimate(JSON.stringify(system)) +
       Token.estimate(JSON.stringify(input.messages)) +
-      Token.estimate(JSON.stringify(Object.entries(tools).map(([name, item]) => [name, item.description, item.inputSchema])))
+      Token.estimate(
+        JSON.stringify(Object.entries(tools).map(([name, item]) => [name, item.description, item.inputSchema])),
+      )
     params.maxOutputTokens = Math.min(params.maxOutputTokens, Math.max(256, usableWindow - estimated))
   }
 

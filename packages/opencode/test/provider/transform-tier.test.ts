@@ -115,7 +115,9 @@ describe("provider.transform tier schemas", () => {
     } as unknown as JSONSchema7
 
     const claude = ProviderTransform.schema(
-      model("claude-sonnet-4-5", { api: { id: "claude-sonnet-4-5", url: "", npm: "@ai-sdk/anthropic" } } as Partial<Provider.Model>),
+      model("claude-sonnet-4-5", {
+        api: { id: "claude-sonnet-4-5", url: "", npm: "@ai-sdk/anthropic" },
+      } as Partial<Provider.Model>),
       input,
     )
     expect(claude).toEqual(input)
