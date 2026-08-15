@@ -1290,6 +1290,101 @@ describe("session.llm.stream", () => {
   )
 
   it.instance(
+    "repairs malformed tool-call JSON arguments in-stream",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(alibabaQwenFixture.providerID, alibabaQwenFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          createEventResponse(
+            [
+              {
+                id: "chatcmpl-repair",
+                object: "chat.completion.chunk",
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      role: "assistant",
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: "call-repair",
+                          type: "function",
+                          // Single quotes plus a trailing comma: invalid JSON
+                          // that the mechanical repair can fix.
+                          function: { name: "lookup", arguments: "{'query': 'weather',}" },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+              {
+                id: "chatcmpl-repair",
+                object: "chat.completion.chunk",
+                choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+              },
+            ],
+            true,
+          ),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(alibabaQwenFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-arg-repair")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        let executed: unknown
+
+        yield* drain({
+          user: {
+            id: MessageID.make("msg_user-arg-repair"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderV2.ID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
+          } satisfies SessionV1.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Use lookup" }],
+          tools: {
+            lookup: tool({
+              description: "Lookup data",
+              inputSchema: z.object({ query: z.string() }),
+              execute: async (args) => {
+                executed = args
+                return { output: "looked up" }
+              },
+            }),
+          },
+        })
+
+        yield* Effect.promise(() => request)
+        expect(executed).toEqual({ query: "weather" })
+      }),
+    {
+      config: () => ({
+        enabled_providers: [alibabaQwenFixture.providerID],
+        provider: {
+          [alibabaQwenFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
     "sends responses API payload for OpenAI models",
     () =>
       Effect.gen(function* () {

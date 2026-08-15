@@ -6,7 +6,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
-import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
+import { asSchema, streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
 import type { LLMEvent } from "@opencode-ai/llm"
 import { LLMClient } from "@opencode-ai/llm/route"
 import type { LLMClientService } from "@opencode-ai/llm/route"
@@ -28,6 +28,7 @@ import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
+import { LLMRepair } from "./llm/repair"
 import { LLMRequestPrep } from "./llm/request"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
@@ -299,10 +300,37 @@ const live: Layer.Layer<
           includeRawChunks: input.model.providerID.includes("github-copilot"),
           async experimental_repairToolCall(failed) {
             const lower = failed.toolCall.toolName.toLowerCase()
-            if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
-              return {
-                ...failed.toolCall,
-                toolName: lower,
+            const name = prepared.tools[failed.toolCall.toolName]
+              ? failed.toolCall.toolName
+              : prepared.tools[lower]
+                ? lower
+                : undefined
+            // B5: attempt mechanical JSON repair (smart quotes, single quotes,
+            // python literals, trailing commas, unbalanced brackets) before
+            // burning a provider round-trip on the invalid tool. Only a
+            // repaired input that also validates against the tool schema is
+            // returned — an invalid repaired call would otherwise degrade into
+            // the AI SDK's dynamic invalid path instead of ours below.
+            if (name) {
+              const repaired = LLMRepair.repair(failed.toolCall.input)
+              if (repaired !== undefined) {
+                const schema = asSchema(prepared.tools[name].inputSchema)
+                const validated = schema.validate
+                  ? await schema.validate(JSON.parse(repaired))
+                  : { success: true as const }
+                if (validated.success) {
+                  return {
+                    ...failed.toolCall,
+                    toolName: name,
+                    input: repaired,
+                  }
+                }
+              }
+              if (name !== failed.toolCall.toolName) {
+                return {
+                  ...failed.toolCall,
+                  toolName: name,
+                }
               }
             }
             return {
