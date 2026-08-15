@@ -142,6 +142,11 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
+const replayableReasoningState = (state: Record<string, unknown> | undefined) =>
+  state !== undefined &&
+  ((typeof state.signature === "string" && state.signature.length > 0) ||
+    (typeof state.redactedData === "string" && state.redactedData.length > 0))
+
 const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
   const sameProvider = String(message.model.providerID) === String(model.providerID)
   const sameModel = sameProvider && String(message.model.id) === String(model.id)
@@ -156,7 +161,10 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
         },
       ]
     if (item.type === "reasoning")
-      return reuseProviderMetadata
+      // Errored messages replay reasoning only when the provider state is
+      // replay-safe (signed thinking or redacted data); an interrupted
+      // thinking block without a signature must not be replayed as one.
+      return sameModel && (message.error === undefined || replayableReasoningState(item.state))
         ? [
             {
               type: "reasoning",
@@ -167,6 +175,11 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
         : item.text.length > 0
           ? [{ type: "text", text: item.text }]
           : []
+    // Never replay an unsettled tool call from an errored message: it was
+    // never executed, its replay would demand the preceding thinking block,
+    // and the missing tool_result would fail provider validation.
+    const unsettled = item.state.status === "streaming" || item.state.status === "running"
+    if (message.error !== undefined && unsettled) return []
     const reuseToolProviderMetadata =
       reuseProviderMetadata ||
       (sameModel && item.executed === true && (item.state.status === "completed" || item.state.status === "error"))
