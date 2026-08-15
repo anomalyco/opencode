@@ -93,18 +93,41 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
     )
     return result ? [call, result] : [call]
   })
-  const meaningful = content.filter((part) => {
+  const retained = content.filter((part) => {
     if (part.type === "text") return part.text !== ""
     if (part.type !== "reasoning") return true
     return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
   })
-  const results = message.content
-    .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true)
-    .map((item) =>
-      toolResult(item, reuseProviderMetadata ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined),
-    )
-    .filter((message) => message !== undefined)
-    .map(Message.tool)
+  // A turn that reasoned before calling a tool must keep the two together: Anthropic
+  // rejects a tool_use that is not preceded by its thinking block. The reasoning part is
+  // dropped above when it carries neither text nor provider state, which is what a failed
+  // step looks like once its provider metadata is stripped — and reasoning text is empty
+  // whenever thinking display is "omitted", the default on current Anthropic models. Drop
+  // the tool parts as well in that case so the replayed turn stays self-consistent rather
+  // than replaying orphaned calls.
+  // Only when replaying to the same model. A model switch lowers reasoning to plain text
+  // on purpose, so the tool calls stay valid and must be kept.
+  const droppedReasoning =
+    sameModel &&
+    message.content.some((item) => item.type === "reasoning") &&
+    !retained.some((part) => part.type === "reasoning")
+  const meaningful = droppedReasoning
+    ? retained.filter((part) => part.type !== "tool-call" && part.type !== "tool-result")
+    : retained
+  const results = droppedReasoning
+    ? []
+    : message.content
+        .filter(
+          (item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true,
+        )
+        .map((item) =>
+          toolResult(
+            item,
+            reuseProviderMetadata ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined,
+          ),
+        )
+        .filter((message) => message !== undefined)
+        .map(Message.tool)
   if (meaningful.length === 0) return results
   return [
     Message.make({ id: message.id, role: "assistant", content: meaningful, metadata: message.metadata }),
