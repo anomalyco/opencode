@@ -19,6 +19,7 @@
     ".": "./src/promise/index.ts",
     "./promise": "./src/promise/index.ts",
     "./promise/api": "./src/promise/api.ts",
+    "./contract": "./src/contract.ts",
     "./service": "./src/promise/service.ts",
     "./effect": "./src/effect/index.ts",
     "./effect/api": "./src/effect/api.ts",
