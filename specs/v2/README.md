@@ -35,9 +35,8 @@ Generated clients follow the assembled public `HttpApi`. GitHub issues own activ
 
 ## Historical Context
 
-| Document                                                                | Job                                                                                                 |
-| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| [Schema changelog](./schema-changelog.md)                               | Preserve the pre-release compatibility ledger. Names in older entries are intentionally historical. |
-| [Catalog/config/plugin lifecycle](./catalog-config-plugin-lifecycle.md) | Preserve the option comparison that led to replayable Location-scoped catalog transforms.           |
+| Document                                                                | Job                                                                                       |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [Catalog/config/plugin lifecycle](./catalog-config-plugin-lifecycle.md) | Preserve the option comparison that led to replayable Location-scoped catalog transforms. |
 
 Do not add implementation checklists here. Put actionable work in GitHub issues and package-specific contributor guidance next to the code it governs.
