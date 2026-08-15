@@ -3304,10 +3304,6 @@ export type SessionGetInput = { readonly sessionID: { readonly sessionID: string
 
 export type SessionGetOutput = { data: SessionInfo }["data"]
 
-export type SessionViewInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
-
-export type SessionViewOutput = void
-
 export type SessionRemoveInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
 export type SessionRemoveOutput = void
@@ -3969,6 +3965,10 @@ export type SessionMessageInput = {
 }
 
 export type SessionMessageOutput = { data: SessionMessageInfo }["data"]
+
+export type SessionViewInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionViewOutput = void
 
 export type MessageListInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]

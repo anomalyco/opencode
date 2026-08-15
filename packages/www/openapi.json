@@ -1306,67 +1306,6 @@
         "summary": "Delete session"
       }
     },
-    "/api/session/{sessionID}/view": {
-      "post": {
-        "tags": [
-          "session"
-        ],
-        "operationId": "v2.session.view",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionNotFoundError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Mark the latest recorded idle transition as viewed.",
-        "summary": "View session"
-      }
-    },
     "/api/session/{sessionID}/fork": {
       "post": {
         "tags": [
@@ -4373,6 +4312,67 @@
         },
         "description": "Retrieve one projected message owned by the Session.",
         "summary": "Get session message"
+      }
+    },
+    "/api/session/{sessionID}/view": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "operationId": "v2.session.view",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^ses"
+                }
+              ]
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Mark the latest recorded idle transition as viewed.",
+        "summary": "View session"
       }
     },
     "/api/session/{sessionID}/message": {

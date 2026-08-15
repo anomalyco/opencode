@@ -220,19 +220,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
       ),
     )
     .add(
-      HttpApiEndpoint.post("session.view", "/api/session/:sessionID/view", {
-        params: { sessionID: Session.ID },
-        success: HttpApiSchema.NoContent,
-        error: SessionNotFoundError,
-      }).annotateMerge(
-        OpenApi.annotations({
-          identifier: "v2.session.view",
-          summary: "View session",
-          description: "Mark the latest recorded idle transition as viewed.",
-        }),
-      ),
-    )
-    .add(
       HttpApiEndpoint.delete("session.remove", "/api/session/:sessionID", {
         params: { sessionID: Session.ID },
         success: HttpApiSchema.NoContent,
@@ -703,6 +690,19 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           identifier: "v2.session.message",
           summary: "Get session message",
           description: "Retrieve one projected message owned by the Session.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.view", "/api/session/:sessionID/view", {
+        params: { sessionID: Session.ID },
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.view",
+          summary: "View session",
+          description: "Mark the latest recorded idle transition as viewed.",
         }),
       ),
     )
