@@ -1282,7 +1282,8 @@ const layer = Layer.effect(
               ],
               tools,
               model,
-              toolChoice: format.type === "json_schema" ? "required" : undefined,
+              toolChoice: format.type === "json_schema" ? "required" : isLastStep ? "none" : undefined,
+              lastStep: isLastStep,
             })
 
             if (structured !== undefined) {

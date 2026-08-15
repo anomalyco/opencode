@@ -45,6 +45,9 @@ export type StreamInput = {
   tools: Record<string, Tool>
   retries?: number
   toolChoice?: "auto" | "required" | "none"
+  // B1: the prompt loop's final permitted step. Request prep strips the tool
+  // roster so the MAX_STEPS_PROMPT's "tools are disabled" claim is true on the wire.
+  lastStep?: boolean
 }
 
 export type StreamRequest = StreamInput & {

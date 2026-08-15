@@ -37,6 +37,7 @@ type PrepareInput = {
   readonly flags: RuntimeFlags.Info
   readonly cfg: ConfigV1.Info
   readonly isWorkflow: boolean
+  readonly lastStep?: boolean
 }
 
 export type Prepared = {
@@ -149,7 +150,12 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     },
   )
 
-  const tools = resolveTools(input)
+  // B1: on the last permitted step the MAX_STEPS_PROMPT tells the model tools
+  // are disabled — make that true on the wire instead of trusting prose. Only
+  // StructuredOutput survives so a json_schema turn can still deliver its
+  // result. With zero tools the AI SDK omits both tools and toolChoice.
+  const resolved = resolveTools(input)
+  const tools = input.lastStep ? Record.filter(resolved, (_, k) => k === "StructuredOutput") : resolved
   // Codex parity: OpenAI Responses-family providers hardcode `strict: false`
   // on every function tool so MCP-sourced and dynamic schemas that don't
   // satisfy OpenAI's structured-outputs constraints still register.
