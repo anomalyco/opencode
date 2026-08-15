@@ -876,11 +876,7 @@ const layer = Layer.effect(
         ),
       ),
       interrupt: Effect.fn("Session.interrupt")((sessionID, options) =>
-        Effect.uninterruptible(
-          Effect.gen(function* () {
-            yield* execution.interrupt(sessionID, options)
-          }),
-        ),
+        Effect.uninterruptible(execution.interrupt(sessionID, options)),
       ),
       revert: {
         stage: Effect.fn("Session.revert.stage")(function* (input) {

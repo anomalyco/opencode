@@ -71,8 +71,6 @@ export const make = <Key, E, Reason = never>(options: {
   Effect.gen(function* () {
     const executions = new Map<Key, Execution<E, Reason>>()
     const fork = yield* FiberSet.makeRuntime<never, void, never>()
-    const merge = (left: Request, right: Request): Request =>
-      left === "input" || right === "input" ? "input" : "steer"
 
     const loop = (key: Key, execution: Execution<E, Reason>, force: boolean): Effect.Effect<void, E> =>
       Effect.suspend(() => options.drain(key, force, execution.request)).pipe(
@@ -116,8 +114,8 @@ export const make = <Key, E, Reason = never>(options: {
 
     // A doorbell that survives the execution loop (rung after the loop decided to end, or
     // during failure or interruption cleanup) starts a fresh execution for the remaining work.
-    const settle = (key: Key, execution: Execution<E, Reason>, exit: Exit.Exit<void, E>, continuation: boolean) => {
-      if (continuation && execution.continuation) start(key, false, execution.continuation.request)
+    const settle = (key: Key, execution: Execution<E, Reason>, exit: Exit.Exit<void, E>, resume: boolean) => {
+      if (resume && execution.continuation) start(key, false, execution.continuation.request)
       else if (execution.pendingWake) start(key, false, execution.pendingWake)
       else executions.delete(key)
       Deferred.doneUnsafe(execution.done, exit)
@@ -152,7 +150,8 @@ export const make = <Key, E, Reason = never>(options: {
             else execution.continuation = { request, when: Effect.succeed(true), signaled: true }
             return
           }
-          execution.pendingWake = execution.pendingWake ? merge(execution.pendingWake, request) : request
+          // Coalesced wakes keep the widest request: "input" subsumes "steer".
+          execution.pendingWake = execution.pendingWake === "input" ? "input" : request
           return
         }
         start(key, false, request)
