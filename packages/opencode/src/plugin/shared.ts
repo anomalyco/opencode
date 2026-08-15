@@ -281,6 +281,8 @@ export function readV1Plugin(
     throw new TypeError(`Plugin ${spec} must default export an object with ${kind}()`)
   }
   if (mode === "detect" && !("id" in value) && !("server" in value) && !("tui" in value)) return
+  if (mode === "detect" && kind === "server" && !("server" in value)) return
+  if (mode === "detect" && kind === "tui" && !("tui" in value)) return
 
   const server = "server" in value ? value.server : undefined
   const tui = "tui" in value ? value.tui : undefined
