@@ -61,6 +61,12 @@ export const Model = Schema.Struct({
   ),
   experimental: Schema.optional(Schema.Boolean),
   status: Schema.optional(ModelStatus),
+  tier: Schema.optional(
+    Schema.Literals(["minimal", "default"]).annotate({
+      description:
+        "Capability tier for this model. Overrides the built-in size heuristic; frontier family models resolve their vendor behavior when unset.",
+    }),
+  ),
   provider: Schema.optional(
     Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) }),
   ),

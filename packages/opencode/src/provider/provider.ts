@@ -1039,6 +1039,7 @@ export const Model = Schema.Struct({
   api: ProviderApiInfo,
   name: Schema.String,
   family: optional(Schema.String),
+  tier: optional(Schema.Literals(["minimal", "default"])),
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
   limit: ProviderLimit,
@@ -1210,11 +1211,15 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
 }
 
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
+  // The catalog has no declared `model-tier` field yet (upstream issue #41372);
+  // read it defensively from the raw payload so it takes effect when it lands.
+  const catalogTier = (model as unknown as Record<string, unknown>)["model-tier"]
   const base: Model = {
     id: ModelV2.ID.make(model.id),
     providerID: ProviderV2.ID.make(provider.id),
     name: model.name,
     family: model.family,
+    tier: catalogTier === "minimal" || catalogTier === "default" ? catalogTier : undefined,
     api: {
       id: model.id,
       url: model.provider?.api ?? provider.api ?? "",
@@ -1502,6 +1507,7 @@ const layer = Layer.effect(
               },
               headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
               family: model.family ?? existingModel?.family ?? "",
+              tier: model.tier ?? existingModel?.tier,
               release_date: model.release_date ?? existingModel?.release_date ?? "",
               variants: {},
             }
