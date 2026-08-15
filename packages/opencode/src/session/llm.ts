@@ -109,6 +109,7 @@ const live: Layer.Layer<
         auth: info,
         plugin,
         flags,
+        samplingDefaults: cfg.experimental?.sampling_defaults,
         isWorkflow,
       })
 
