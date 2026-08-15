@@ -1,8 +1,6 @@
-import { ClientApi } from "@opencode-ai/client/contract"
 import { Tool } from "@opencode-ai/schema/tool"
-import { DateTime, Effect, Schema, SchemaAST, Scope, Stream } from "effect"
-import type { Brand } from "effect/Brand"
-import { HttpApiSchema } from "effect/unstable/httpapi"
+import { Effect, Schema, SchemaAST, Scope, Stream } from "effect"
+import { HttpApiEndpoint, HttpApiSchema } from "effect/unstable/httpapi"
 import { define } from "../effect/plugin.js"
 import type { Context, Plugin } from "./plugin.js"
 import type { Info } from "./tool.js"
@@ -10,18 +8,52 @@ import type { Info } from "./tool.js"
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
 type Registration = { readonly dispose: () => Promise<void> }
 type PromiseEvent = ReturnType<Context["event"]["subscribe"]> extends AsyncIterable<infer Event> ? Event : never
-type JsonValue = null | boolean | number | string | Array<JsonValue> | { [key: string]: JsonValue }
 
-const AgentEndpoints = ClientApi.groups["server.agent"].endpoints
-const CommandEndpoints = ClientApi.groups["server.command"].endpoints
-const IntegrationEndpoints = ClientApi.groups["server.integration"].endpoints
-const ModelEndpoints = ClientApi.groups["server.model"].endpoints
-const PluginEndpoints = ClientApi.groups["server.plugin"].endpoints
-const ProviderEndpoints = ClientApi.groups["server.provider"].endpoints
-const ReferenceEndpoints = ClientApi.groups["server.reference"].endpoints
-const SessionEndpoints = ClientApi.groups["server.session"].endpoints
-const SkillEndpoints = ClientApi.groups["server.skill"].endpoints
-const WebSearchEndpoints = ClientApi.groups["server.websearch"].endpoints
+interface CompiledEndpoint {
+  readonly decode: ReadonlyArray<(input: unknown) => Effect.Effect<unknown, Schema.SchemaError>>
+  readonly encode: (output: unknown) => Effect.Effect<unknown, Schema.SchemaError>
+  readonly noContent: boolean
+}
+
+const compiledEndpoints = new WeakMap<object, CompiledEndpoint>()
+
+function compileEndpoint(endpoint: HttpApiEndpoint.Top) {
+  const cached = compiledEndpoints.get(endpoint)
+  if (cached) return cached
+  const payloadSchemas = Array.from(endpoint.payload.values()).flatMap(({ schemas }) => schemas)
+  const successSchemas = Array.from(endpoint.success)
+  if (payloadSchemas.length > 1 || successSchemas.length > 1) {
+    throw new Error(`Unsupported API schema cardinality: ${endpoint.identifier}`)
+  }
+  const inputs = [
+    endpoint.params,
+    endpoint.query === undefined ? undefined : Schema.toType(endpoint.query),
+    endpoint.headers,
+    ...payloadSchemas,
+  ].filter((schema): schema is Schema.Top => schema !== undefined) as Array<RuntimeSchema>
+  const success = (successSchemas[0] ?? HttpApiSchema.NoContent) as RuntimeSchema
+  const noContent = HttpApiSchema.isNoContent(success.ast)
+  const type = Schema.toType(success).ast
+  const data = SchemaAST.isObjects(success.ast)
+    ? success.ast.propertySignatures.find((property) => property.name === "data")
+    : undefined
+  const output =
+    !noContent &&
+    SchemaAST.isObjects(type) &&
+    type.indexSignatures.length === 0 &&
+    type.propertySignatures.length === 1 &&
+    type.propertySignatures[0]?.name === "data" &&
+    data !== undefined
+      ? (Schema.make<Schema.Top>(data.type) as RuntimeSchema)
+      : success
+  const compiled = {
+    decode: inputs.map((schema) => Schema.decodeUnknownEffect(schema)),
+    encode: Schema.encodeUnknownEffect(output),
+    noContent,
+  } satisfies CompiledEndpoint
+  compiledEndpoints.set(endpoint, compiled)
+  return compiled
+}
 
 /**
  * Adapts a Promise plugin into an Effect plugin so the existing Effect-only
@@ -37,6 +69,19 @@ export function fromPromise(plugin: Plugin) {
     id: plugin.id,
     effect: (host) =>
       Effect.gen(function* () {
+        const [{ ClientApi }, { OpenCodeEvent }] = yield* Effect.promise(() =>
+          Promise.all([import("@opencode-ai/protocol/client"), import("@opencode-ai/protocol/groups/event")]),
+        )
+        const AgentEndpoints = ClientApi.groups["server.agent"].endpoints
+        const CommandEndpoints = ClientApi.groups["server.command"].endpoints
+        const IntegrationEndpoints = ClientApi.groups["server.integration"].endpoints
+        const ModelEndpoints = ClientApi.groups["server.model"].endpoints
+        const PluginEndpoints = ClientApi.groups["server.plugin"].endpoints
+        const ProviderEndpoints = ClientApi.groups["server.provider"].endpoints
+        const ReferenceEndpoints = ClientApi.groups["server.reference"].endpoints
+        const SessionEndpoints = ClientApi.groups["server.session"].endpoints
+        const SkillEndpoints = ClientApi.groups["server.skill"].endpoints
+        const WebSearchEndpoints = ClientApi.groups["server.websearch"].endpoints
         const scope = yield* Scope.Scope
         const context = yield* Effect.context<Scope.Scope>()
 
@@ -46,46 +91,20 @@ export function fromPromise(plugin: Plugin) {
             dispose: () => Effect.runPromiseWith(context)(registration.dispose),
           }))
 
-        const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(effect).then(wire)
+        const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(effect)
 
-        const adaptApiMethod = <Method extends (input: never) => Effect.Effect<unknown, unknown>>(
-          endpoint: ApiEndpoint,
-          method: Method,
+        const adaptApiMethod = <PromiseMethod>(
+          endpoint: HttpApiEndpoint.Top,
+          method: (input: never) => Effect.Effect<unknown, unknown>,
         ) => {
-          const payloadSchemas = Array.from(endpoint.payload.values()).flatMap(({ schemas }) => schemas)
-          const successSchemas = Array.from(endpoint.success)
-          if (payloadSchemas.length > 1 || successSchemas.length > 1) {
-            throw new Error(`Unsupported API schema cardinality: ${endpoint.identifier}`)
-          }
-          const inputs = [
-            endpoint.params,
-            endpoint.query === undefined ? undefined : Schema.toType(endpoint.query),
-            endpoint.headers,
-            ...payloadSchemas,
-          ].filter((schema): schema is Schema.Top => schema !== undefined) as Array<RuntimeSchema>
-          const success = (successSchemas[0] ?? HttpApiSchema.NoContent) as RuntimeSchema
-          const noContent = HttpApiSchema.isNoContent(success.ast)
-          const type = Schema.toType(success).ast
-          const data = SchemaAST.isObjects(success.ast)
-            ? success.ast.propertySignatures.find((property) => property.name === "data")
-            : undefined
-          const output =
-            !noContent &&
-            SchemaAST.isObjects(type) &&
-            type.indexSignatures.length === 0 &&
-            type.propertySignatures.length === 1 &&
-            type.propertySignatures[0]?.name === "data" &&
-            data !== undefined
-              ? (Schema.make<Schema.Top>(data.type) as RuntimeSchema)
-              : success
-
-          return (input?: PromiseInput<Parameters<Method>[0]>) =>
+          const compiled = compileEndpoint(endpoint)
+          return ((input?: unknown) =>
             Effect.gen(function* () {
-              const decoded = yield* Effect.forEach(inputs, (schema) => Schema.decodeUnknownEffect(schema)(input ?? {}))
+              const decoded = yield* Effect.forEach(compiled.decode, (decode) => decode(input ?? {}))
               const result = yield* method(Object.assign({}, ...decoded) as never)
-              if (noContent) return undefined
-              return yield* Schema.encodeUnknownEffect(output)(result)
-            }).pipe(Effect.runPromiseWith(context)) as Promise<Wire<EffectOutput<Method>>>
+              if (compiled.noContent) return undefined
+              return yield* compiled.encode(result)
+            }).pipe(Effect.runPromiseWith(context))) as PromiseMethod
         }
 
         const transform =
@@ -130,7 +149,13 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.command.reload()),
           },
           event: {
-            subscribe: () => Stream.toAsyncIterable(host.event.subscribe().pipe(Stream.map(wireEvent))),
+            subscribe: () =>
+              Stream.toAsyncIterable(
+                host.event.subscribe().pipe(
+                  Stream.mapEffect((event) => Schema.encodeUnknownEffect(OpenCodeEvent)(event)),
+                  Stream.map((event) => event as unknown as PromiseEvent),
+                ),
+              ),
           },
           integration: {
             list: adaptApiMethod(IntegrationEndpoints["integration.list"], host.integration.list),
@@ -268,6 +293,8 @@ export function fromPromise(plugin: Plugin) {
             command: adaptApiMethod(SessionEndpoints["session.command"], host.session.command),
             synthetic: adaptApiMethod(SessionEndpoints["session.synthetic"], host.session.synthetic),
             interrupt: adaptApiMethod(SessionEndpoints["session.interrupt"], host.session.interrupt),
+            rename: adaptApiMethod(SessionEndpoints["session.rename"], host.session.rename),
+            wait: adaptApiMethod(SessionEndpoints["session.wait"], host.session.wait),
           },
           shell: {
             hook: (name, callback) =>
@@ -286,85 +313,7 @@ function attempt<A>(evaluate: (signal: AbortSignal) => PromiseLike<A>) {
   return Effect.tryPromise({ try: evaluate, catch: (cause) => cause })
 }
 
-interface ApiEndpoint {
-  readonly identifier: string
-  readonly params: Schema.Top | undefined
-  readonly query: Schema.Top | undefined
-  readonly headers: Schema.Top | undefined
-  readonly payload: ReadonlyMap<string, { readonly schemas: ReadonlyArray<Schema.Top> }>
-  readonly success: ReadonlySet<Schema.Top>
-}
-
 type RuntimeSchema = Schema.Codec<unknown, unknown>
-
-type PromiseInput<Value> = Value extends object
-  ? {
-      [Key in keyof Value]: undefined extends Value[Key]
-        ? InputWire<Exclude<Value[Key], undefined>> | null
-        : InputWire<Value[Key]>
-    }
-  : InputWire<Value>
-
-type EffectOutput<Method> = Method extends (input: never) => Effect.Effect<infer Output, unknown> ? Output : never
-
-type InputWire<Value> = unknown extends Value
-  ? JsonValue
-  : Value extends Brand<string>
-    ? InputWire<Brand.Unbranded<Value>>
-    : Value extends string | number | boolean | bigint | symbol | null | undefined
-      ? Value
-      : Value extends DateTime.DateTime
-        ? number
-        : Value extends readonly [infer Head, ...infer Tail]
-          ? readonly [InputWire<Head>, ...InputWireTuple<Tail>]
-          : Value extends ReadonlyArray<infer Item>
-            ? ReadonlyArray<InputWire<Item>>
-            : Value extends object
-              ? { readonly [Key in keyof Value]: InputWire<Value[Key]> }
-              : Value
-
-type InputWireTuple<Value extends ReadonlyArray<unknown>> = {
-  readonly [Key in keyof Value]: InputWire<Value[Key]>
-}
-
-type Wire<Value> = unknown extends Value
-  ? JsonValue
-  : Value extends Brand<string>
-    ? Wire<Brand.Unbranded<Value>>
-    : Value extends string | number | boolean | bigint | symbol | null | undefined
-      ? Value
-      : Value extends DateTime.DateTime
-        ? number
-        : Value extends readonly [infer Head, ...infer Tail]
-          ? [Wire<Head>, ...WireTuple<Tail>]
-          : Value extends ReadonlyArray<infer Item>
-            ? Array<Wire<Item>>
-            : Value extends object
-              ? {
-                  -readonly [Key in keyof Value]: {} extends Pick<Value, Key>
-                    ? Wire<Value[Key]>
-                    : undefined extends Value[Key]
-                      ? Wire<Exclude<Value[Key], undefined>> | null
-                      : Wire<Value[Key]>
-                }
-              : Value
-
-type WireTuple<Value extends ReadonlyArray<unknown>> = {
-  -readonly [Key in keyof Value]: Wire<Value[Key]>
-}
-
-function wire<Value>(value: Value): Wire<Value>
-function wire(value: unknown): unknown {
-  if (DateTime.isDateTime(value)) return DateTime.toEpochMillis(value)
-  if (Array.isArray(value)) return value.map(wire)
-  if (typeof value !== "object" || value === null) return value
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, wire(item)]))
-}
-
-function wireEvent(value: unknown): PromiseEvent
-function wireEvent(value: unknown): unknown {
-  return wire(value)
-}
 
 const executePromiseTool = (tool: Info, input: any, context: Tool.Context) =>
   Effect.promise(() =>

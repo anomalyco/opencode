@@ -23,6 +23,7 @@
     "@ai-sdk/provider": "3.0.8",
     "@opencode-ai/ai": "workspace:*",
     "@opencode-ai/client": "workspace:*",
+    "@opencode-ai/protocol": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/sdk": "1.18.5",
     "@standard-schema/spec": "catalog:",

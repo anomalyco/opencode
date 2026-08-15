@@ -97,6 +97,7 @@ describe("fromPromise", () => {
 
   it.effect("preserves no-content and rejected Promise behavior", () =>
     Effect.gen(function* () {
+      const seen: unknown[] = []
       const host = testHost({
         session: {
           interrupt: (input) => {
@@ -106,6 +107,8 @@ describe("fromPromise", () => {
             expect(input.continue).toBe(true)
             return Effect.void
           },
+          rename: (input) => Effect.sync(() => seen.push(input)),
+          wait: (input) => Effect.sync(() => seen.push(input)),
         },
       })
 
@@ -115,9 +118,16 @@ describe("fromPromise", () => {
           setup: async (ctx) => {
             expect(await ctx.session.interrupt({ sessionID: "ses_success", continue: true })).toBeUndefined()
             await expect(ctx.session.interrupt({ sessionID: "ses_failure" })).rejects.toThrow("interrupt failed")
+            expect(await ctx.session.rename({ sessionID: "ses_success", title: "Renamed" })).toBeUndefined()
+            expect(await ctx.session.wait({ sessionID: "ses_success" })).toBeUndefined()
           },
         }),
       ).effect(host)
+
+      expect(seen).toEqual([
+        { sessionID: Session.ID.make("ses_success"), title: "Renamed" },
+        { sessionID: Session.ID.make("ses_success") },
+      ])
     }),
   )
 
