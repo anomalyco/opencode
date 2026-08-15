@@ -6,13 +6,12 @@ These documents explain V2 behavior that is difficult to recover from one source
 
 Authority follows the concern:
 
-| Concern                                          | Owner                                                                                      |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| HTTP operations and transport errors             | [Protocol](../../packages/protocol/src) endpoint definitions assembled by Server `HttpApi` |
-| Public domain shapes and durable event payloads  | [Schema](../../packages/schema/src)                                                        |
-| Runtime behavior and persistence                 | [Core](../../packages/core/src)                                                            |
-| Canonical vocabulary and cross-domain invariants | Root [CONTEXT.md](../../CONTEXT.md)                                                        |
-| Contributor-critical regression guardrails       | Root [AGENTS.md](../../AGENTS.md)                                                          |
+| Concern                                         | Owner                                                                                      |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| HTTP operations and transport errors            | [Protocol](../../packages/protocol/src) endpoint definitions assembled by Server `HttpApi` |
+| Public domain shapes and durable event payloads | [Schema](../../packages/schema/src)                                                        |
+| Runtime behavior and persistence                | [Core](../../packages/core/src)                                                            |
+| Contributor-critical regression guardrails      | Root [AGENTS.md](../../AGENTS.md)                                                          |
 
 Current specifications explain cross-module contracts without copying exact types. Decision records explain why a design was selected. Historical documents describe earlier states and may use obsolete names.
 
@@ -27,11 +26,10 @@ Generated clients follow the assembled public `HttpApi`. GitHub issues own activ
 
 ## Decision Records
 
-| Document                                                          | Status                     | Job                                                                         |
-| ----------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- |
-| [Event stream](./event-stream-architecture.md)                    | Accepted and implemented   | Record why public events use one encoded feed with independent queues.      |
-| [Managed restart continuation](./session-restart-continuation.md) | Superseded decision record | Preserve the graceful-only design replaced by write-ahead execution claims. |
-| [Provider policy](./provider-policy.md)                           | Accepted and implemented   | Record provider authorization independently from provider configuration.    |
+| Document                                       | Status                   | Job                                                                      |
+| ---------------------------------------------- | ------------------------ | ------------------------------------------------------------------------ |
+| [Event stream](./event-stream-architecture.md) | Accepted and implemented | Record why public events use one encoded feed with independent queues.   |
+| [Provider policy](./provider-policy.md)        | Accepted and implemented | Record provider authorization independently from provider configuration. |
 
 ## Historical Context
 
