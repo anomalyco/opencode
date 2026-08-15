@@ -23,14 +23,9 @@ Per-type constructors live on the type, not as top-level re-exports. Use `Messag
 
 This package is an Effect Schema-first LLM core. The Schema classes in `src/schema/` are the canonical runtime data model. Convenience functions in `src/llm.ts` are thin constructors that return those same Schema class instances; they should improve callsites without creating a second model.
 
-Primary in-repo integration point:
+Session integration lives in `packages/core/src/session`: `runner/llm.ts` owns orchestration, `model-request.ts` lowers Session state into `LLMRequest`, and `model-transport.ts` selects transport behavior.
 
-- `packages/opencode/src/session/llm.ts` is the session-owned orchestration layer that decides whether a request uses AI SDK or this package's native route runtime.
-- `packages/opencode/src/session/llm/native-request.ts` is the lowering adapter from opencode's session/AI SDK-shaped data into this package's `LLMRequest` model.
-- `packages/opencode/src/session/llm/native-runtime.ts` is the execution adapter that calls raw `LLMClient.stream(request)` and bridges one provider turn of opencode tool calls through this package's typed dispatcher.
-- `packages/opencode/src/session/llm/ai-sdk.ts` keeps the default AI SDK path compatible by converting AI SDK stream parts into this package's shared `LLMEvent`s.
-
-Keep this package independent of session concerns. Session auth, permissions, plugins, telemetry headers, and runtime selection belong in `packages/opencode/src/session/llm.ts` and its local adapters.
+Keep this package independent of Session concerns. Session auth, permissions, plugins, telemetry headers, and runtime selection belong in Core.
 
 ### Request Flow
 

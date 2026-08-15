@@ -9,7 +9,7 @@
 - Use parenthesized content folders for sidebar groups that must not add a URL segment. Keep ungrouped top-level pages directly under `content/docs/`.
 - Put static files in `public/` and reference them with root-relative paths.
 - The API reference is generated from `openapi.json`; do not duplicate endpoint documentation as hand-written MDX.
-- Keep documentation aligned with the V2 packages. Do not use `packages/opencode` as the source of truth unless the task explicitly concerns V1.
+- Keep documentation aligned with the current packages.
 
 ## Local development
 
