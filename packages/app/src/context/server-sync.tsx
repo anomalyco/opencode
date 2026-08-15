@@ -513,7 +513,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
           api: serverSDK.api,
           store: child[0],
           setStore: child[1],
-          setProjects,
           loadSessions,
           translate: language.t,
           queryClient,

@@ -149,23 +149,6 @@ export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi, work
       ),
   })
 
-export async function syncCurrentProject(input: {
-  directory: string
-  scope: ServerScope
-  projects: ProjectApi
-  worktrees: WorktreeApi
-  queryClient: QueryClient
-  setProject: (id: string) => void
-  setProjects: (projects: Project[]) => void
-}) {
-  const current = await retry(() => input.projects.current({ location: { directory: input.directory } }))
-  const projects = await input.queryClient.fetchQuery(loadProjectsQuery(input.scope, input.projects, input.worktrees))
-  batch(() => {
-    input.setProjects(projects)
-    input.setProject(current.id)
-  })
-}
-
 export async function bootstrapGlobal(input: {
   serverAPI: CatalogApi & {
     readonly location: LocationApi
@@ -322,11 +305,9 @@ export async function bootstrapDirectory(input: {
     readonly session: SessionApi
     readonly vcs: VcsApi
     readonly location: LocationApi
-    readonly worktree: WorktreeApi
   }
   store: Store<State>
   setStore: SetStoreFunction<State>
-  setProjects: (projects: Project[]) => void
   loadSessions: (directory: string) => Promise<void> | void
   translate: (key: string, vars?: Record<string, string | number>) => string
   global: {
@@ -359,15 +340,9 @@ export async function bootstrapDirectory(input: {
         .then((data) => input.setStore("agent", data)),
     !seededProject &&
       (() =>
-        syncCurrentProject({
-          directory: input.directory,
-          scope: input.scope,
-          projects: input.api.project,
-          worktrees: input.api.worktree,
-          queryClient: input.queryClient,
-          setProject: (id) => input.setStore("project", id),
-          setProjects: input.setProjects,
-        })),
+        retry(() => input.api.project.current({ location: { directory: input.directory } })).then((project) =>
+          input.setStore("project", project.id),
+        )),
     !seededPath &&
       (() =>
         input.queryClient
