@@ -10,6 +10,7 @@ import { Resource } from "@opencode-ai/console-resource"
 import { LiteData } from "@opencode-ai/console-core/lite.js"
 import { BlackData } from "@opencode-ai/console-core/black.js"
 import { Referral } from "@opencode-ai/console-core/referral.js"
+import { handleSubscriptionCancellation } from "./lite-cancellation.js"
 
 export async function POST(input: APIEvent) {
   const body = await Billing.stripe().webhooks.constructEventAsync(
@@ -184,27 +185,13 @@ export async function POST(input: APIEvent) {
         })
       }
     }
-    if (body.type === "customer.subscription.updated" && body.data.object.status === "incomplete_expired") {
-      const subscriptionID = body.data.object.id
-      if (!subscriptionID) throw new Error("Subscription ID not found")
-
-      const productID = body.data.object.items.data[0].price.product as string
-      if (productID === LiteData.productID()) {
-        await Billing.unsubscribeLite({ subscriptionID })
-      } else if (productID === BlackData.productID()) {
-        await Billing.unsubscribeBlack({ subscriptionID })
-      }
-    }
-    if (body.type === "customer.subscription.deleted") {
-      const subscriptionID = body.data.object.id
-      if (!subscriptionID) throw new Error("Subscription ID not found")
-
-      const productID = body.data.object.items.data[0].price.product as string
-      if (productID === LiteData.productID()) {
-        await Billing.unsubscribeLite({ subscriptionID })
-      } else if (productID === BlackData.productID()) {
-        await Billing.unsubscribeBlack({ subscriptionID })
-      }
+    if (body.type === "customer.subscription.updated" || body.type === "customer.subscription.deleted") {
+      await handleSubscriptionCancellation(body.type, body.data.object, {
+        liteProductID: LiteData.productID(),
+        blackProductID: BlackData.productID(),
+        unsubscribeLite: (subscriptionID) => Billing.unsubscribeLite({ subscriptionID }),
+        unsubscribeBlack: (subscriptionID) => Billing.unsubscribeBlack({ subscriptionID }),
+      })
     }
     if (body.type === "invoice.payment_succeeded") {
       if (
