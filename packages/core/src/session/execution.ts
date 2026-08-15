@@ -17,8 +17,11 @@ export interface Interface {
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   /** Starts execution while idle or joins the active execution. */
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, SessionRunner.RunError>
-  /** Registers newly recorded work. Repeated wakeups may coalesce. */
-  readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  /** Registers newly recorded work. Repeated wakeups coalesce, with a full drain taking precedence. */
+  readonly wake: (
+    sessionID: SessionSchema.ID,
+    options?: { readonly scope?: SessionRunner.DrainScope },
+  ) => Effect.Effect<void>
   /** Interrupt active work owned by this process. Idle interruption is a no-op. */
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   /** Resolves once this process owns no active execution for the Session. Returns immediately when idle and never starts work. */
@@ -45,6 +48,8 @@ export const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
     const bus = yield* Bus.Service
+    const wakeScopes = new Map<SessionSchema.ID, SessionRunner.DrainScope>()
+    const activeScopes = new Map<SessionSchema.ID, SessionRunner.DrainScope>()
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
         Effect.tapCause((cause) =>
@@ -71,12 +76,13 @@ export const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       force: boolean,
       continuation?: SessionRunner.Continuation,
+      scope: SessionRunner.DrainScope = "all",
     ): Effect.Effect<void, SessionRunner.RunError> {
       return Effect.gen(function* () {
         const session = yield* store.get(sessionID)
         if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
         const result = yield* SessionRunner.Service.use((runner) =>
-          runner.drain({ sessionID, force, continuation }),
+          runner.drain({ sessionID, force, continuation, scope }),
         ).pipe(
           Effect.provide(locations.get(session.location)),
           Effect.tapCause((cause) =>
@@ -86,7 +92,7 @@ export const layer = Layer.effect(
           ),
         )
         if (result.type === "complete") return
-        return yield* drain(sessionID, false, result.continuation)
+        return yield* drain(sessionID, false, result.continuation, scope)
       })
     }
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
@@ -95,7 +101,19 @@ export const layer = Layer.effect(
           sessionID,
           bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
         ),
-      drain: (sessionID, force) => drain(sessionID, force),
+      drain: (sessionID, force) =>
+        Effect.sync(() => {
+          const scope = force ? "all" : (wakeScopes.get(sessionID) ?? "all")
+          wakeScopes.delete(sessionID)
+          return scope
+        }).pipe(
+          Effect.flatMap((scope) =>
+            Effect.sync(() => activeScopes.set(sessionID, scope)).pipe(
+              Effect.andThen(drain(sessionID, force, undefined, scope)),
+              Effect.ensuring(Effect.sync(() => activeScopes.delete(sessionID))),
+            ),
+          ),
+        ),
       // One terminal observation per busy period, covering every coalesced drain.
       settled: (sessionID, exit, reason) =>
         reportLifecycle(
@@ -127,16 +145,22 @@ export const layer = Layer.effect(
           }),
         ),
     })
+    const wake = (sessionID: SessionSchema.ID, scope: SessionRunner.DrainScope) =>
+      Effect.sync(() => {
+        if (scope === "all" || !wakeScopes.has(sessionID)) wakeScopes.set(sessionID, scope)
+      }).pipe(Effect.andThen(coordinator.wake(sessionID)))
+
     yield* bus.subscribe(SessionEvent.Moved).pipe(
-      Stream.runForEach((event) => coordinator.wake(event.data.sessionID)),
+      Stream.runForEach((event) => wake(event.data.sessionID, activeScopes.get(event.data.sessionID) ?? "all")),
       Effect.forkScoped,
     )
 
     return Service.of({
       active: coordinator.active,
-      interrupt: (sessionID) => coordinator.interrupt(sessionID, "user"),
+      interrupt: (sessionID) =>
+        Effect.sync(() => wakeScopes.delete(sessionID)).pipe(Effect.andThen(coordinator.interrupt(sessionID, "user"))),
       resume: coordinator.run,
-      wake: coordinator.wake,
+      wake: (sessionID, options) => wake(sessionID, options?.scope ?? "all"),
       awaitIdle: coordinator.awaitIdle,
     })
   }),

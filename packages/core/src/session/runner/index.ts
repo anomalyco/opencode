@@ -18,6 +18,9 @@ export type RunError =
 
 export type Continuation = { readonly step: number }
 
+/** "steer" settles the active intent without promoting queued next-turn work. */
+export type DrainScope = "all" | "steer"
+
 export type DrainResult =
   | { readonly type: "complete" }
   | { readonly type: "moved"; readonly continuation?: Continuation }
@@ -29,6 +32,7 @@ export interface Interface {
     readonly sessionID: SessionSchema.ID
     readonly force: boolean
     readonly continuation?: Continuation
+    readonly scope?: DrainScope
   }) => Effect.Effect<DrainResult, RunError>
 }
 

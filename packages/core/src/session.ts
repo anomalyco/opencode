@@ -876,7 +876,8 @@ const layer = Layer.effect(
         Effect.uninterruptible(
           Effect.gen(function* () {
             yield* execution.interrupt(sessionID)
-            if (options?.continue && (yield* SessionInbox.has(db, sessionID, "any"))) yield* execution.wake(sessionID)
+            if (options?.continue && (yield* SessionInbox.has(db, sessionID, "steer")))
+              yield* execution.wake(sessionID, { scope: "steer" })
           }),
         ),
       ),

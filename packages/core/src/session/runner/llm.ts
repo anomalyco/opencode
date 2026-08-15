@@ -24,7 +24,7 @@ import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { SessionTitle } from "../title.js"
-import { Service, type Continuation } from "./index.js"
+import { Service, type Continuation, type DrainScope } from "./index.js"
 import { createLLMEventPublisher, type StepRecord } from "./publish-llm-event.js"
 import { Snapshot } from "../../snapshot.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
@@ -128,22 +128,29 @@ const layer = Layer.effect(
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
       readonly continuation?: Continuation
+      readonly scope?: DrainScope
     }) {
       let force = input.force
       let continuation = input.continuation
-      if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, "any")))
+      const promotable = input.scope === "steer" ? "steer" : "input"
+      if (
+        !force &&
+        !continuation &&
+        !(yield* SessionInbox.has(db, input.sessionID, input.scope === "steer" ? "steer" : "any"))
+      )
         return { type: "complete" as const }
       yield* settleStaleToolCalls(input.sessionID)
       while (true) {
-        if (yield* runPendingCompaction(input.sessionID)) {
+        if (yield* runPendingCompaction(input.sessionID, promotable)) {
           force = false
           continue
         }
-        if (yield* runPendingMove(input.sessionID, "input")) return { type: "moved" as const }
-        if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, "input")))
+        if (yield* runPendingMove(input.sessionID, promotable)) return { type: "moved" as const }
+        if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
           return { type: "complete" as const }
-        const result = yield* runSteps(input.sessionID, continuation)
+        const result = yield* runSteps(input.sessionID, continuation, promotable)
         if (result.type === "moved") return result
+        if (input.scope === "steer") return { type: "complete" as const }
         force = false
         continuation = undefined
       }
@@ -156,13 +163,14 @@ const layer = Layer.effect(
     const runSteps = Effect.fn("SessionRunner.runSteps")(function* (
       sessionID: SessionSchema.ID,
       continuation?: Continuation,
+      initialPromotable: SessionInbox.Promotable = continuation ? "steer" : "input",
     ) {
       // Fresh work may promote queued input; later steps absorb steers only.
-      let promotable: SessionInbox.Promotable = continuation ? "steer" : "input"
+      let promotable = initialPromotable
       let step = continuation?.step ?? 1
       let next = continuation
       while (true) {
-        if (yield* runPendingCompaction(sessionID)) continue
+        if (yield* runPendingCompaction(sessionID, "steer")) continue
         if (yield* runPendingMove(sessionID, "steer")) return { type: "moved" as const, continuation: next }
         const result = yield* runStep(sessionID, promotable, step)
         next = result.needsContinuation ? { step: result.step + 1 } : undefined
@@ -515,6 +523,7 @@ const layer = Layer.effect(
     /** Executes a previously admitted manual compaction request, if one is pending. */
     const runPendingCompaction = Effect.fn("SessionRunner.runPendingCompaction")(function* (
       sessionID: SessionSchema.ID,
+      promotable: SessionInbox.Promotable,
     ) {
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
@@ -522,7 +531,8 @@ const layer = Layer.effect(
             sessionID,
             Effect.gen(function* () {
               const selected =
-                (yield* SessionInbox.nextSteer(db, sessionID)) ?? (yield* SessionInbox.nextQueued(db, sessionID))
+                (yield* SessionInbox.nextSteer(db, sessionID)) ??
+                (promotable === "input" ? yield* SessionInbox.nextQueued(db, sessionID) : undefined)
               if (selected?.type !== "compaction") return
               yield* bus.publishAll([
                 [SessionEvent.InboxDelivered, { sessionID, inboxID: selected.id }],

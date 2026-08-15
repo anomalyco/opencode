@@ -133,6 +133,37 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
+  it.effect("a full wake upgrades a steer-scoped execution", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_wake_scope_upgrade")
+      yield* seedSessions(database, [sessionID])
+
+      const firstRunning = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const scopes: Array<SessionRunner.DrainScope | undefined> = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, (input) =>
+        Effect.gen(function* () {
+          scopes.push(input.scope)
+          if (scopes.length !== 1) return
+          yield* Deferred.succeed(firstRunning, undefined)
+          yield* Deferred.await(release)
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+
+      yield* execution.wake(sessionID, { scope: "steer" })
+      yield* Deferred.await(firstRunning)
+      yield* execution.wake(sessionID)
+      yield* Deferred.succeed(release, undefined)
+      yield* execution.awaitIdle(sessionID)
+
+      expect(scopes).toEqual(["steer", "all"])
+    }),
+  )
+
   it.effect("starts every claimed execution without waiting for earlier drains to finish", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service

@@ -3088,6 +3088,24 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("stops a steer-scoped drain before queued input", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const { db } = yield* Database.Service
+      yield* session.prompt({ sessionID, text: "Queue for later", delivery: "queue", resume: false })
+      yield* session.prompt({ sessionID, text: "Steer now", resume: false })
+      yield* TestLLM.push(TestLLM.stop())
+
+      const runner = yield* SessionRunner.Service
+      yield* runner.drain({ sessionID, force: false, scope: "steer" })
+
+      expect(requests).toHaveLength(1)
+      expect(userTexts(requests[0])).toEqual(["Steer now"])
+      expect(yield* SessionInbox.has(db, sessionID, "steer")).toBe(false)
+      expect(yield* SessionInbox.has(db, sessionID, "queue")).toBe(true)
+    }),
+  )
+
   it.effect("promotes queued input after steering continuation ends", () =>
     Effect.gen(function* () {
       const session = yield* setup
