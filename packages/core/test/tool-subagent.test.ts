@@ -297,7 +297,7 @@ describe("SubagentTool", () => {
           })
           const child = yield* sessions.get(outputSessionID(settled.metadata))
           expect(settled.metadata).toEqual({ sessionID: child.id, status: "completed" })
-          expect(progress[0]?.metadata).toEqual({ sessionID: child.id, status: "running" })
+          expect(progress[0]).toEqual({ sessionID: child.id, status: "running" })
           expect(child).toMatchObject({
             parentID: parent.id,
             location: parent.location,
