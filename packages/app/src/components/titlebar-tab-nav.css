@@ -68,7 +68,8 @@
   display: none;
 }
 
-[data-titlebar-tab][data-title-overflow="true"]:not([data-editing="true"]) [data-slot="tab-link"] {
+[data-titlebar-tab][data-title-overflow="true"]:not([data-editing="true"]) [data-slot="tab-link"],
+[data-titlebar-tab]:is(:hover, [data-active="true"]):not([data-editing="true"]) [data-slot="tab-link"] {
   --tab-title-fade-offset: 4px;
   -webkit-mask-image: linear-gradient(
     to right,
@@ -86,7 +87,8 @@
   );
 }
 
-[data-titlebar-tab][data-title-overflow="true"]:not([data-editing="true"]):dir(rtl) [data-slot="tab-link"] {
+[data-titlebar-tab][data-title-overflow="true"]:not([data-editing="true"]):dir(rtl) [data-slot="tab-link"],
+[data-titlebar-tab]:is(:hover, [data-active="true"]):not([data-editing="true"]):dir(rtl) [data-slot="tab-link"] {
   -webkit-mask-image: linear-gradient(
     to left,
     black 0,
@@ -103,8 +105,7 @@
   );
 }
 
-[data-titlebar-tab][data-title-overflow="true"]:is(:hover, [data-active="true"]):not([data-editing="true"])
-  [data-slot="tab-link"] {
+[data-titlebar-tab]:is(:hover, [data-active="true"]):not([data-editing="true"]) [data-slot="tab-link"] {
   --tab-title-fade-offset: 24px;
 }
 
