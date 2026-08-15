@@ -1799,6 +1799,22 @@ export type ProviderConfig = {
       }
       experimental?: boolean
       status?: "alpha" | "beta" | "deprecated" | "active"
+      /**
+       * Capability tier for this model. Overrides the built-in size heuristic; frontier family models resolve their vendor behavior when unset.
+       */
+      tier?: "minimal" | "default"
+      /**
+       * Replace the model-family system prompt with this text. Use {file:./path} to load it from a file resolved relative to the config file.
+       */
+      prompt?: string
+      /**
+       * Sampling defaults for this model. Consulted before the built-in per-family sampling ladders.
+       */
+      sampling?: {
+        temperature?: number
+        topP?: number
+        topK?: number
+      }
       provider?: {
         npm?: string
         api?: string
@@ -2017,6 +2033,7 @@ export type Config = {
     tail_turns?: number
     preserve_recent_tokens?: number
     reserved?: number
+    prompt?: string
   }
   experimental?: {
     disable_paste_summary?: boolean
@@ -2039,6 +2056,13 @@ export type Model = {
   }
   name: string
   family?: string
+  tier?: "minimal" | "default"
+  prompt?: string
+  sampling?: {
+    temperature?: number
+    topP?: number
+    topK?: number
+  }
   capabilities: {
     temperature: boolean
     reasoning: boolean

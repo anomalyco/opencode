@@ -1484,6 +1484,37 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
+    "compaction.prompt config replaces the built-in summary template",
+    () => {
+      const stub = llm()
+      let captured = ""
+      stub.push(reply("summary", (input) => (captured = JSON.stringify(input.messages))))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "older context")
+        yield* createCompactionMarker(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        expect(captured).toContain("CUSTOM COMPACTION TEMPLATE")
+        expect(captured).toContain("The following is the conversation history:")
+        expect(captured).toContain("[User]: older context")
+        expect(captured).not.toContain("Create a new anchored summary")
+      }).pipe(
+        withCompaction({
+          llm: stub.llmLayer,
+          config: cfg({ prompt: "CUSTOM COMPACTION TEMPLATE" }),
+        }),
+      )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
     "anchors repeated compactions with the previous summary",
     () => {
       const stub = llm()

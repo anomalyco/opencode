@@ -389,8 +389,11 @@ const layer = Layer.effect(
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const conversation = msgs.map(serialize).filter(Boolean).join("\n\n")
+      // Plugin prompt keeps precedence; compaction.prompt config replaces the
+      // built-in summary template ({file:./path} is expanded at config load).
+      const override = compacting.prompt ?? cfg.compaction?.prompt
       const nextPrompt =
-        compacting.prompt ??
+        override ??
         [
           buildPrompt({
             previousSummary,
@@ -447,7 +450,7 @@ const layer = Layer.effect(
                 type: "text",
                 text: [
                   nextPrompt,
-                  ...(compacting.prompt ? ["The following is the conversation history:", conversation] : []),
+                  ...(override ? ["The following is the conversation history:", conversation] : []),
                 ]
                   .filter(Boolean)
                   .join("\n\n"),

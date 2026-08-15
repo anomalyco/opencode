@@ -164,6 +164,10 @@ export const Info = Schema.Struct({
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
       }),
+      prompt: Schema.optional(Schema.String).annotate({
+        description:
+          "Custom prompt that replaces the built-in compaction summary instructions. Supports {file:./path} substitution to load the prompt from a file.",
+      }),
     }),
   ),
   experimental: Schema.optional(
