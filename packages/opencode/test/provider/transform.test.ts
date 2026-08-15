@@ -3215,6 +3215,51 @@ describe("ProviderTransform.temperature - Cohere North", () => {
   })
 })
 
+describe("ProviderTransform sampling defaults - Qwen", () => {
+  const model = (id: string) =>
+    ({
+      id: `alibaba/${id}`,
+      api: { id },
+    }) as any
+
+  test.each([
+    "qwen3-coder-next",
+    "qwen3.8",
+    "qwen3.8-max",
+  ])("uses 0.95 top_p and 1.0 temperature for %s", (id) => {
+    expect(ProviderTransform.topP(model(id))).toBe(0.95)
+    expect(ProviderTransform.temperature(model(id))).toBe(1.0)
+  })
+
+  test.each([
+    "qwen3",
+    "qwen-3",
+    "qwen3-max",
+    "qwen3.5-plus",
+    "qwen3.6-plus",
+    "qwen3.7-max",
+  ])("uses 0.95 top_p and 0.6 temperature for %s", (id) => {
+    expect(ProviderTransform.topP(model(id))).toBe(0.95)
+    expect(ProviderTransform.temperature(model(id))).toBe(0.6)
+  })
+
+  test.each([
+    "qwen2.5-coder",
+    "qwen2.5-coder-32b-instruct",
+  ])("uses 0.8 top_p and 0.7 temperature for %s", (id) => {
+    expect(ProviderTransform.topP(model(id))).toBe(0.8)
+    expect(ProviderTransform.temperature(model(id))).toBe(0.7)
+  })
+
+  test.each([
+    "qwen-plus",
+    "qwen-max",
+  ])("keeps 1 top_p and 0.55 temperature for %s", (id) => {
+    expect(ProviderTransform.topP(model(id))).toBe(1)
+    expect(ProviderTransform.temperature(model(id))).toBe(0.55)
+  })
+})
+
 describe("ProviderTransform sampling defaults - Gemini", () => {
   const model = (id: string) =>
     ({
