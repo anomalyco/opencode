@@ -714,6 +714,13 @@ export const dict = {
   "session.tab.session": "سیشن",
   "session.tab.review": "جائزہ لیں",
   "session.tab.context": "سیاق و سباق",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "نامعلوم سیشن",
   "session.panel.reviewAndFiles": "جائزہ اور فائلیں۔",
   "session.error.notFound": "یہ سیشن نہیں مل سکتا",
@@ -973,6 +980,12 @@ export const dict = {
     "کمپوزر میں ایجنٹس تبدیل کریں۔ چھپانے پر Build ایجنٹ بطور طے شدہ استعمال ہوگا۔",
   "settings.general.row.reasoningSummaries.title": "استدلال کے خلاصے دکھائیں۔",
   "settings.general.row.reasoningSummaries.description": "ٹائم لائن میں ماڈل استدلال کے خلاصے ڈسپلے کریں۔",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "شیل ٹول کے حصے پھیلائیں",
   "settings.general.row.shellToolPartsExpanded.description":
     "ٹائم لائن میں شیل ٹول کے حصے بطور طے شدہ پھیلے ہوئے دکھائیں۔",

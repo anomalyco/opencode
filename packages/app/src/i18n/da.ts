@@ -630,6 +630,13 @@ export const dict = {
   "session.tab.session": "Session",
   "session.tab.review": "Gennemgang",
   "session.tab.context": "Kontekst",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Ukendt session",
   "session.panel.reviewAndFiles": "Gennemgang og filer",
   "session.error.notFound": "Denne session kan ikke findes",
@@ -828,6 +835,12 @@ export const dict = {
     "Skift mellem agenter i promptfeltet. Når vælgeren er skjult, bruges Build-agenten som standard.",
   "settings.general.row.reasoningSummaries.title": "Vis ræsonneringsoversigter",
   "settings.general.row.reasoningSummaries.description": "Vis oversigter over modellens ræsonnering på tidslinjen",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
 
   "settings.general.row.shellToolPartsExpanded.title": "Udvid shell-værktøjsdele",
   "settings.general.row.shellToolPartsExpanded.description": "Vis shell-værktøjsdele udvidet som standard i tidslinjen",

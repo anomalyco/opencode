@@ -704,6 +704,13 @@ export const dict = {
   "session.tab.session": "Sesiune",
   "session.tab.review": "Revizuire",
   "session.tab.context": "Context",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Sesiune necunoscută",
   "session.panel.reviewAndFiles": "Revizuire și fișiere",
   "session.error.notFound": "Această sesiune nu poate fi găsită",
@@ -969,6 +976,12 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "Afișează rezumatele de raționament",
   "settings.general.row.reasoningSummaries.description":
     "Afișează rezumatele de raționament ale modelului în cronologie",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Extinde părțile shell",
   "settings.general.row.shellToolPartsExpanded.description": "Afișează implicit părțile shell extinse în cronologie",
   "settings.general.row.editToolPartsExpanded.title": "Extinde părțile de editare",

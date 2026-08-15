@@ -706,6 +706,13 @@ export const dict = {
   "session.tab.session": "Сессия",
   "session.tab.review": "Барраси",
   "session.tab.context": "Контекст",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Сеанси номаълум",
   "session.panel.reviewAndFiles": "Барраси ва файлҳо",
   "session.error.notFound": "Ин сессияро ёфтан мумкин нест",
@@ -969,6 +976,12 @@ export const dict = {
     "Гузариш байни агентҳо дар оҳангсоз. Ҳангоми пинҳон, пешфарз ба Сохтани агент.",
   "settings.general.row.reasoningSummaries.title": "Ҷамъбасти далелҳоро нишон диҳед",
   "settings.general.row.reasoningSummaries.description": "Дар ҷадвали вақт хулосаҳои далелҳои моделиро нишон диҳед",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Қисмҳои shell асбобро васеъ кунед",
   "settings.general.row.shellToolPartsExpanded.description":
     "Дар ҷадвали вақт қисмҳои асбобҳои shell васеъшударо нишон диҳед",

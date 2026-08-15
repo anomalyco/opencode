@@ -710,6 +710,13 @@ export const dict = {
   "session.tab.session": "Συνεδρία",
   "session.tab.review": "Επισκόπηση",
   "session.tab.context": "Πλαίσιο",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Άγνωστη συνεδρία",
   "session.panel.reviewAndFiles": "Επισκόπηση και αρχεία",
   "session.error.notFound": "Δεν μπορεί να βρεθεί αυτή η συνεδρία",
@@ -978,6 +985,12 @@ export const dict = {
     "Εναλλαγή μεταξύ πρακτόρων στον συνθέτη. Όταν είναι κρυφό, ορίζεται από προεπιλογή Build agent.",
   "settings.general.row.reasoningSummaries.title": "Εμφάνιση περιλήψεων συλλογισμών",
   "settings.general.row.reasoningSummaries.description": "Εμφάνιση περιλήψεων συλλογισμών μοντέλων στη γραμμή χρόνου",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Ανάπτυξη εξαρτημάτων εργαλείου κελύφους",
   "settings.general.row.shellToolPartsExpanded.description":
     "Εμφάνιση εξαρτημάτων εργαλείου κελύφους που έχουν αναπτυχθεί από προεπιλογή στη γραμμή χρόνου",

@@ -707,6 +707,13 @@ export const dict = {
   "session.tab.session": "Сесија",
   "session.tab.review": "Преглед",
   "session.tab.context": "Контекст",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Непозната сесија",
   "session.panel.reviewAndFiles": "Преглед и датотеки",
   "session.error.notFound": "Оваа сесија не може да се најде",
@@ -972,6 +979,12 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "Прикажи резимеа за расудување",
   "settings.general.row.reasoningSummaries.description":
     "Прикажи резимеа на расудувањето на моделите во временската линија",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Проширете ги shell делови од алатот",
   "settings.general.row.shellToolPartsExpanded.description":
     "Прикажи shell делови од алатката стандардно проширени во временската линија",

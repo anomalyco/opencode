@@ -376,6 +376,32 @@ export default function Page() {
   const sessionOwnership = createSessionOwnership(sessionKey)
   const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
 
+  createEffect(
+    on(
+      () => params.id,
+      (id) => {
+        if (!id) return
+        if (!settings.general.thinkingViewerDocked()) return
+        if (tabs().all().includes("thinking")) return
+        if (!view().reviewPanel.opened()) view().reviewPanel.open()
+        void tabs().open("thinking")
+      },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => settings.general.thinkingViewerDocked(),
+      (docked, prev) => {
+        if (!docked || prev === docked) return
+        if (!params.id) return
+        if (tabs().all().includes("thinking")) return
+        if (!view().reviewPanel.opened()) view().reviewPanel.open()
+        void tabs().open("thinking")
+      },
+    ),
+  )
+
   createEffect(() => {
     if (!prompt.ready()) return
     untrack(() => {

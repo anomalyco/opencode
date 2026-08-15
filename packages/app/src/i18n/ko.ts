@@ -476,6 +476,13 @@ export const dict = {
   "session.tab.session": "세션",
   "session.tab.review": "검토",
   "session.tab.context": "컨텍스트",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.panel.reviewAndFiles": "검토 및 파일",
   "session.review.filesChanged": "{{count}}개 파일 변경됨",
   "session.review.change.one": "변경",
@@ -610,6 +617,12 @@ export const dict = {
   "settings.general.row.followup.option.steer": "즉시 반영",
   "settings.general.row.reasoningSummaries.title": "추론 요약 표시",
   "settings.general.row.reasoningSummaries.description": "타임라인에 모델 추론 요약 표시",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "shell 도구 항목 펼치기",
   "settings.general.row.shellToolPartsExpanded.description":
     "타임라인에서 기본적으로 shell 도구 항목을 펼친 상태로 표시합니다",

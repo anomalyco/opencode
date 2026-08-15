@@ -768,6 +768,13 @@ export const dict = {
   "session.tab.session": "Sesi",
   "session.tab.review": "Tinjauan",
   "session.tab.context": "Konteks",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Sesi Tidak Dikenal",
   "session.panel.reviewAndFiles": "Tinjauan dan berkas",
   "session.error.notFound": "Sesi ini tidak dapat ditemukan",
@@ -1044,6 +1051,12 @@ export const dict = {
     "Beralih antaragen di penyusun. Saat disembunyikan, Agen Build digunakan sebagai bawaan.",
   "settings.general.row.reasoningSummaries.title": "Tampilkan ringkasan penalaran",
   "settings.general.row.reasoningSummaries.description": "Tampilkan ringkasan penalaran model di linimasa",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Bentangkan bagian alat shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Tampilkan bagian alat shell yang dibentangkan secara bawaan di linimasa",

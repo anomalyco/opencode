@@ -709,6 +709,13 @@ export const dict = {
   "session.tab.session": "Сесс",
   "session.tab.review": "Хяналт",
   "session.tab.context": "Контекст",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Үл мэдэгдэх сесс",
   "session.panel.reviewAndFiles": "Хяналт ба файлууд",
   "session.error.notFound": "Энэ сесс олдохгүй байна",
@@ -973,6 +980,12 @@ export const dict = {
     "Хөгжмийн зохиолч дахь агентуудын хооронд шилжих. Нуусан үед өгөгдмөл нь Build agent.",
   "settings.general.row.reasoningSummaries.title": "Шалтгаануудын хураангуйг харуул",
   "settings.general.row.reasoningSummaries.description": "Загварын үндэслэлийн хураангуйг цагийн хуваарьт харуул",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "shell хэрэгслийн хэсгүүдийг өргөжүүлэх",
   "settings.general.row.shellToolPartsExpanded.description":
     "Он цагийн хэлхээс дээр анхдагчаар өргөтгөсөн shell хэрэгслийн хэсгүүдийг харуул",

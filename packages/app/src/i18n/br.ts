@@ -697,6 +697,13 @@ export const dict = {
   "session.tab.session": "Sessão",
   "session.tab.review": "Revisão",
   "session.tab.context": "Contexto",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Sessão desconhecida",
   "session.panel.reviewAndFiles": "Revisão e arquivos",
   "session.error.notFound": "Esta sessão não foi encontrada",
@@ -888,6 +895,12 @@ export const dict = {
     "Alternar entre agentes na área de composição. Quando oculto, usa o agente Build como padrão.",
   "settings.general.row.reasoningSummaries.title": "Mostrar resumos de raciocínio",
   "settings.general.row.reasoningSummaries.description": "Exibir resumos de raciocínio do modelo na linha do tempo",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Expandir partes da ferramenta shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Mostrar partes da ferramenta shell expandidas por padrão na linha do tempo",

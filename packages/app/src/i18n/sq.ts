@@ -706,6 +706,13 @@ export const dict = {
   "session.tab.session": "Sesioni",
   "session.tab.review": "Rishikimi",
   "session.tab.context": "Konteksti",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Sesion i panjohur",
   "session.panel.reviewAndFiles": "Rishikimi dhe dosjet",
   "session.error.notFound": "Ky sesion nuk mund të gjendet",
@@ -970,6 +977,12 @@ export const dict = {
     "Kaloni ndërmjet agjentëve në kompozitor. Kur fshihet, si parazgjedhje është Build agent.",
   "settings.general.row.reasoningSummaries.title": "Trego përmbledhjet e arsyetimit",
   "settings.general.row.reasoningSummaries.description": "Shfaqni përmbledhjet e arsyetimit të modelit në afatin kohor",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Zgjeroni pjesët e veglave të guaskës",
   "settings.general.row.shellToolPartsExpanded.description":
     "Shfaq pjesët e veglës së guaskës të zgjeruara si parazgjedhje në afatin kohor",

@@ -346,6 +346,30 @@ export const SettingsGeneralV2: Component<{
         </SettingsRowV2>
 
         <SettingsRowV2
+          title={language.t("settings.general.row.thinkingViewerInline.title")}
+          description={language.t("settings.general.row.thinkingViewerInline.description")}
+        >
+          <div data-action="settings-feed-thinking-viewer-inline">
+            <Switch
+              checked={settings.general.thinkingViewerInline()}
+              onChange={(checked) => settings.general.setThinkingViewerInline(checked)}
+            />
+          </div>
+        </SettingsRowV2>
+
+        <SettingsRowV2
+          title={language.t("settings.general.row.thinkingViewerDocked.title")}
+          description={language.t("settings.general.row.thinkingViewerDocked.description")}
+        >
+          <div data-action="settings-feed-thinking-viewer-docked">
+            <Switch
+              checked={settings.general.thinkingViewerDocked()}
+              onChange={(checked) => settings.general.setThinkingViewerDocked(checked)}
+            />
+          </div>
+        </SettingsRowV2>
+
+        <SettingsRowV2
           title={language.t("settings.general.row.shellToolPartsExpanded.title")}
           description={language.t("settings.general.row.shellToolPartsExpanded.description")}
         >

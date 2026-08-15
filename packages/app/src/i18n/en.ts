@@ -668,7 +668,14 @@ export const dict = {
   "session.tab.session": "Session",
   "session.tab.review": "Review",
   "session.tab.context": "Context",
+  "session.tab.thinking": "Thinking",
   "session.tab.unknown": "Unknown Session",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.panel.reviewAndFiles": "Review and files",
   "session.error.notFound": "This session cannot be found",
   "session.error.notFound.description": "This tab points to a session that no longer exists on this server.",
@@ -945,6 +952,12 @@ export const dict = {
     "Switch between agents in the composer. When hidden, defaults to Build agent.",
   "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
   "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Expand shell tool parts",
   "settings.general.row.shellToolPartsExpanded.description":
     "Show shell tool parts expanded by default in the timeline",

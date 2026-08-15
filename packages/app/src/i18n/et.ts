@@ -699,6 +699,13 @@ export const dict = {
   "session.tab.session": "Seanss",
   "session.tab.review": "Ülevaade",
   "session.tab.context": "Kontekst",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Tundmatu seanss",
   "session.panel.reviewAndFiles": "Ülevaatus ja failid",
   "session.error.notFound": "Seda seanssi ei leitud",
@@ -959,6 +966,12 @@ export const dict = {
     "Helilooja agentide vahel vahetamine. Kui see on peidetud, on vaikimisi Agent.",
   "settings.general.row.reasoningSummaries.title": "Näita põhjenduste kokkuvõtteid",
   "settings.general.row.reasoningSummaries.description": "Kuva mudeli arutluskäigu kokkuvõtted ajaskaalal",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Laienda shellitööriista osi",
   "settings.general.row.shellToolPartsExpanded.description":
     "Kuva shellitööriista osad ajaskaalal vaikimisi laiendatuna",

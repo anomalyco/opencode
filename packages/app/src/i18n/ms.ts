@@ -702,6 +702,13 @@ export const dict = {
   "session.tab.session": "Sesi",
   "session.tab.review": "Semak",
   "session.tab.context": "Konteks",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Sesi Tidak Diketahui",
   "session.panel.reviewAndFiles": "Semak dan fail",
   "session.error.notFound": "Sesi ini tidak dapat ditemui",
@@ -963,6 +970,12 @@ export const dict = {
     "Tukar antara ejen dalam penyusun. Jika disembunyikan, lalai kepada ejen Build.",
   "settings.general.row.reasoningSummaries.title": "Papar ringkasan penaakulan",
   "settings.general.row.reasoningSummaries.description": "Papar ringkasan penaakulan model dalam garis masa",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Kembangkan bahagian alat shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Papar bahagian alat shell dikembangkan secara lalai dalam garis masa",

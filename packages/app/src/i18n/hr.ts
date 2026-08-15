@@ -711,6 +711,13 @@ export const dict = {
   "session.tab.session": "Sesija",
   "session.tab.review": "Pregled",
   "session.tab.context": "Kontekst",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Nepoznata sesija",
   "session.panel.reviewAndFiles": "Pregled i datoteke",
   "session.error.notFound": "Ovu sesiju nije moguće pronaći",
@@ -974,6 +981,12 @@ export const dict = {
     "Prebacivanje između agenata u skladatelju. Kada je skriven, zadana je Build agent.",
   "settings.general.row.reasoningSummaries.title": "Prikaži sažetke obrazloženja",
   "settings.general.row.reasoningSummaries.description": "Prikažite sažetke obrazloženja modela na vremenskoj traci",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Proširite dijelove alata školjke",
   "settings.general.row.shellToolPartsExpanded.description":
     "Prikažite dijelove alata ljuske proširene prema zadanim postavkama na vremenskoj traci",

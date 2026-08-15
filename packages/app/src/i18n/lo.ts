@@ -699,6 +699,13 @@ export const dict = {
   "session.tab.session": "ເຊດຊັນ",
   "session.tab.review": "ການທົບທວນຄືນ",
   "session.tab.context": "ບໍລິບົດ",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "ເຊດຊັນທີ່ບໍ່ຮູ້ຈັກ",
   "session.panel.reviewAndFiles": "ການທົບທວນຄືນແລະໄຟລ໌",
   "session.error.notFound": "ບໍ່ພົບເຊດຊັນນີ້",
@@ -956,6 +963,12 @@ export const dict = {
     "ສະຫຼັບລະຫວ່າງຕົວແທນໃນຕົວປະກອບ. ເມື່ອຖືກເຊື່ອງໄວ້, ເລີ່ມຕົ້ນທີ່ຈະສ້າງຕົວແທນ.",
   "settings.general.row.reasoningSummaries.title": "ສະແດງການສັງລວມເຫດຜົນ",
   "settings.general.row.reasoningSummaries.description": "ສະແດງສະຫຼຸບເຫດຜົນຂອງຕົວແບບໃນທາມລາຍ",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "ຂະຫຍາຍສ່ວນຂອງເຄື່ອງມື Shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "ສະແດງສ່ວນຂອງເຄື່ອງມື Shell ແບບຂະຫຍາຍເປັນຄ່າເລີ່ມຕົ້ນໃນໄທມ໌ລາຍ",

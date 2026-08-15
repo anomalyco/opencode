@@ -35,7 +35,7 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 const reviewTabID = "session-side-panel-review-tab"
 const reviewTabPanelID = "session-side-panel-review-tabpanel"
 const fileBrowserTabPanelID = "session-side-panel-file-browser-tabpanel"
-import { SessionContextTab, SortableTab, SortableTabV2, FileVisual } from "@/components/session"
+import { SessionContextTab, SessionThinkingTab, SortableTab, SortableTabV2, FileVisual } from "@/components/session"
 import { OpenInAppV2 } from "@/components/session/open-in-app-v2"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
@@ -182,6 +182,8 @@ export function SessionSidePanel(props: {
     fileBrowser: () => !!props.fileBrowserState,
   })
   const contextOpen = tabState.contextOpen
+  const thinkingOpen = tabState.thinkingOpen
+  const pinnedOpen = createMemo(() => contextOpen() || thinkingOpen())
   const openFileOpen = tabState.openFileOpen
   const panelTabs = tabState.panelTabs
   const openedTabs = tabState.openedTabs
@@ -345,7 +347,7 @@ export function SessionSidePanel(props: {
                           <div class="sticky top-0 shrink-0 flex">
                             <Tabs.List
                               ref={(el: HTMLDivElement) => {
-                                const stop = createFileTabListSync({ el, contextOpen })
+                                const stop = createFileTabListSync({ el, contextOpen: pinnedOpen })
                                 onCleanup(stop)
                               }}
                             >
@@ -388,6 +390,34 @@ export function SessionSidePanel(props: {
                                   <div class="flex items-center gap-2">
                                     <SessionContextUsage variant="indicator" />
                                     <div>{language.t("session.tab.context")}</div>
+                                  </div>
+                                </Tabs.Trigger>
+                              </Show>
+                              <Show when={thinkingOpen()}>
+                                <Tabs.Trigger
+                                  value="thinking"
+                                  closeButton={
+                                    <TooltipKeybind
+                                      title={language.t("common.closeTab")}
+                                      keybind={command.keybind("tab.close")}
+                                      placement="bottom"
+                                      gutter={10}
+                                    >
+                                      <IconButton
+                                        icon="close-small"
+                                        variant="ghost"
+                                        class="h-5 w-5"
+                                        onClick={() => tabs().close("thinking")}
+                                        aria-label={language.t("common.closeTab")}
+                                      />
+                                    </TooltipKeybind>
+                                  }
+                                  hideCloseButton
+                                  onMiddleClick={() => tabs().close("thinking")}
+                                >
+                                  <div class="flex items-center gap-2">
+                                    <Icon name="brain" size="small" />
+                                    <div>{language.t("session.tab.thinking")}</div>
                                   </div>
                                 </Tabs.Trigger>
                               </Show>
@@ -498,6 +528,14 @@ export function SessionSidePanel(props: {
                             </Tabs.Content>
                           </Show>
 
+                          <Show when={activeTab() === "thinking"}>
+                            <Tabs.Content value="thinking" class="flex flex-col h-full overflow-hidden contain-strict">
+                              <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                                <SessionThinkingTab />
+                              </div>
+                            </Tabs.Content>
+                          </Show>
+
                           <Show when={activeFileTab()} keyed>
                             {(tab) => <FileTabContent tab={tab} />}
                           </Show>
@@ -549,7 +587,7 @@ export function SessionSidePanel(props: {
                           <Tabs.List
                             ref={(el: HTMLDivElement) => {
                               tabList = el
-                              const stop = createFileTabListSync({ el, contextOpen })
+                              const stop = createFileTabListSync({ el, contextOpen: pinnedOpen })
                               onCleanup(stop)
                             }}
                           >
@@ -602,6 +640,40 @@ export function SessionSidePanel(props: {
                                 <div class="flex items-center gap-2">
                                   <SessionContextUsage variant="indicator" />
                                   <div>{language.t("session.tab.context")}</div>
+                                </div>
+                              </Tabs.Trigger>
+                            </Show>
+                            <Show when={thinkingOpen()}>
+                              <Tabs.Trigger
+                                value="thinking"
+                                closeButton={
+                                  <TooltipV2
+                                    value={
+                                      <>
+                                        {language.t("common.closeTab")}
+                                        <Show when={closeTabKeybind().length > 0}>
+                                          <KeybindV2 keys={closeTabKeybind()} variant="neutral" />
+                                        </Show>
+                                      </>
+                                    }
+                                    placement="bottom"
+                                    gutter={10}
+                                  >
+                                    <IconButton
+                                      icon="close-small"
+                                      variant="ghost"
+                                      class="h-5 w-5"
+                                      onClick={() => tabs().close("thinking")}
+                                      aria-label={language.t("common.closeTab")}
+                                    />
+                                  </TooltipV2>
+                                }
+                                hideCloseButton
+                                onMiddleClick={() => tabs().close("thinking")}
+                              >
+                                <div class="flex items-center gap-2">
+                                  <Icon name="brain" size="small" />
+                                  <div>{language.t("session.tab.thinking")}</div>
                                 </div>
                               </Tabs.Trigger>
                             </Show>
@@ -722,6 +794,14 @@ export function SessionSidePanel(props: {
                           <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
                             <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                               <SessionContextTab />
+                            </div>
+                          </Tabs.Content>
+                        </Show>
+
+                        <Show when={activeTab() === "thinking"}>
+                          <Tabs.Content value="thinking" class="flex flex-col h-full overflow-hidden contain-strict">
+                            <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                              <SessionThinkingTab />
                             </div>
                           </Tabs.Content>
                         </Show>

@@ -704,6 +704,13 @@ export const dict: Record<string, string> = {
   "session.tab.session": "सत्र",
   "session.tab.review": "समीक्षा गर्नुहोस्",
   "session.tab.context": "सन्दर्भ",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "अज्ञात सत्र",
   "session.panel.reviewAndFiles": "समीक्षा र फाइलहरू",
   "session.error.notFound": "यो सत्र फेला पार्न सकिँदैन",
@@ -963,6 +970,12 @@ export const dict: Record<string, string> = {
     "कम्पोजरमा एजेन्टहरू बीच स्विच गर्नुहोस्। लुकेको बेला, बिल्ड एजेन्टमा पूर्वनिर्धारित हुन्छ।",
   "settings.general.row.reasoningSummaries.title": "तर्क सारांशहरू देखाउनुहोस्",
   "settings.general.row.reasoningSummaries.description": "टाइमलाइनमा मोडेल तर्क सारांशहरू प्रदर्शन गर्नुहोस्",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "शेल उपकरणका भागहरू विस्तार गर्नुहोस्",
   "settings.general.row.shellToolPartsExpanded.description":
     "टाइमलाइनमा पूर्वनिर्धारित रूपमा विस्तारित शेल उपकरण भागहरू देखाउनुहोस्",

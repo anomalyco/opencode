@@ -707,6 +707,13 @@ export const dict = {
   "session.tab.session": "Sessiya",
   "session.tab.review": "Koʻrib chiqish",
   "session.tab.context": "Kontekst",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Noma'lum sessiya",
   "session.panel.reviewAndFiles": "Ko'rib chiqish va fayllar",
   "session.error.notFound": "Bu sessiya topilmadi",
@@ -974,6 +981,12 @@ export const dict = {
     "Kompozitorda agentlar o'rtasida almashish. Yashirin bo'lsa, birlamchi Build agenti bo'ladi.",
   "settings.general.row.reasoningSummaries.title": "Fikrlash xulosalarini ko'rsating",
   "settings.general.row.reasoningSummaries.description": "Vaqt jadvalida model asoslarini ko'rsatish",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Qobiq asboblari qismlarini kengaytiring",
   "settings.general.row.shellToolPartsExpanded.description":
     "Xronologiyada sukut bo'yicha kengaytirilgan qobiq asboblari qismlarini ko'rsatish",

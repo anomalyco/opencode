@@ -704,6 +704,13 @@ export const dict = {
   "session.tab.session": "სესია",
   "session.tab.review": "მიმოხილვა",
   "session.tab.context": "კონტექსტი",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "უცნობი სესია",
   "session.panel.reviewAndFiles": "მიმოხილვა და ფაილები",
   "session.error.notFound": "ეს სესია ვერ მოიძებნა",
@@ -963,6 +970,12 @@ export const dict = {
     "გადართვა კომპოზიტორში აგენტებს შორის. როდესაც დამალულია, ნაგულისხმევად არის Build აგენტი.",
   "settings.general.row.reasoningSummaries.title": "მსჯელობის შეჯამების ჩვენება",
   "settings.general.row.reasoningSummaries.description": "მოდელების მსჯელობის რეზიუმეების ჩვენება ვადებში",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Shell ხელსაწყოს ნაწილების გაფართოება",
   "settings.general.row.shellToolPartsExpanded.description":
     "Shell ხელსაწყოს ნაწილების ნაგულისხმევად გაფართოებული ჩვენება ქრონოლოგიაში",

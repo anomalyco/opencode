@@ -753,6 +753,13 @@ export const dict = {
   "session.tab.session": "Sesión",
   "session.tab.review": "Revisión",
   "session.tab.context": "Contexto",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Sesión desconocida",
   "session.panel.reviewAndFiles": "Revisión y archivos",
   "session.error.notFound": "No se encuentra esta sesión",
@@ -959,6 +966,12 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "Mostrar resúmenes de razonamiento",
   "settings.general.row.reasoningSummaries.description":
     "Mostrar resúmenes del razonamiento del modelo en la línea de tiempo",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Expandir partes de la herramienta shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Mostrar las partes de la herramienta shell expandidas por defecto en la línea de tiempo",

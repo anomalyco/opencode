@@ -703,6 +703,13 @@ export const dict = {
   "session.tab.session": "جلسه",
   "session.tab.review": "بررسی کنید",
   "session.tab.context": "زمینه",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "جلسه ناشناخته",
   "session.panel.reviewAndFiles": "بررسی و فایل ها",
   "session.error.notFound": "این جلسه یافت نمی شود",
@@ -961,6 +968,12 @@ export const dict = {
     "بین عوامل در آهنگساز جابجا شوید. هنگامی که مخفی می شود، به طور پیش فرض بر روی Build agent قرار می گیرد.",
   "settings.general.row.reasoningSummaries.title": "نمایش خلاصه های استدلال",
   "settings.general.row.reasoningSummaries.description": "نمایش خلاصه های استدلال مدل در جدول زمانی",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "قطعات ابزار پوسته را گسترش دهید",
   "settings.general.row.shellToolPartsExpanded.description":
     "نمایش قطعات ابزار پوسته که به طور پیش‌فرض در تایم لاین گسترش یافته‌اند",

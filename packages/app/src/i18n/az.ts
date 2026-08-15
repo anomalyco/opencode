@@ -713,6 +713,13 @@ export const dict = {
   "session.tab.session": "Sessiya",
   "session.tab.review": "İcmal",
   "session.tab.context": "Kontekst",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Naməlum sessiya",
   "session.panel.reviewAndFiles": "İcmal və fayllar",
   "session.error.notFound": "Bu sessiyanı tapmaq mümkün deyil",
@@ -975,6 +982,12 @@ export const dict = {
     "Mesaj sahəsində agentlər arasında keçid edin. Gizlədildikdə Build agenti seçilir.",
   "settings.general.row.reasoningSummaries.title": "Düşünmə xülasələrini göstər",
   "settings.general.row.reasoningSummaries.description": "Zaman xəttində modelin düşünmə xülasələrini göstər",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Shell alət hissələrini genişlət",
   "settings.general.row.shellToolPartsExpanded.description":
     "Zaman xəttində shell alət hissələrini standart olaraq genişlədilmiş göstər",

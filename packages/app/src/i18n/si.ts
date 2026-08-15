@@ -701,6 +701,13 @@ export const dict: Record<string, string> = {
   "session.tab.session": "සැසිය",
   "session.tab.review": "සමාලෝචනය කරන්න",
   "session.tab.context": "සන්දර්භය",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "නොදන්නා සැසිය",
   "session.panel.reviewAndFiles": "සමාලෝචනය සහ ගොනු",
   "session.error.notFound": "මෙම සැසිය සොයාගත නොහැක",
@@ -959,6 +966,12 @@ export const dict: Record<string, string> = {
     "නිර්මාපකයේ නියෝජිතයන් අතර මාරු වන්න. සැඟවුණු විට, බිල්ඩ් ඒජන්ත වෙත පෙරනිමි වේ.",
   "settings.general.row.reasoningSummaries.title": "තර්ක සාරාංශ පෙන්වන්න",
   "settings.general.row.reasoningSummaries.description": "කාලරේඛාව තුළ ආකෘති තර්ක සාරාංශ සංදර්ශන කරන්න",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "ෂෙල් මෙවලම් කොටස් පුළුල් කරන්න",
   "settings.general.row.shellToolPartsExpanded.description":
     "කාලරේඛාව තුළ පෙරනිමියෙන් පුළුල් කළ ෂෙල් මෙවලම් කොටස් පෙන්වන්න",

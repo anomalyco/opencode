@@ -43,8 +43,6 @@ import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { TextReveal } from "@opencode-ai/ui/text-reveal"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import type {
   AssistantMessage,
   Message as MessageType,
@@ -55,6 +53,7 @@ import type {
 import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { ThinkingViewer } from "@/components/thinking-viewer"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { normalize } from "@opencode-ai/session-ui/session-diff"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
@@ -129,16 +128,17 @@ const markBoundaryGesture = (input: {
   }
 }
 
-function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSummaries: boolean }) {
-  const language = useLanguage()
-
+function TimelineThinkingRow(props: {
+  userMessageID: string
+  reasoningHeading?: string
+  showReasoningSummaries: boolean
+}) {
   return (
-    <div data-slot="session-turn-thinking">
-      <TextShimmer text={language.t("ui.sessionTurn.status.thinking")} />
-      <Show when={!props.showReasoningSummaries}>
-        <TextReveal text={props.reasoningHeading} class="session-turn-thinking-heading" travel={25} duration={700} />
-      </Show>
-    </div>
+    <ThinkingViewer
+      userMessageID={props.userMessageID}
+      reasoningHeading={props.reasoningHeading}
+      showReasoningSummaries={props.showReasoningSummaries}
+    />
   )
 }
 
@@ -1232,6 +1232,7 @@ export function MessageTimeline(props: {
           <TimelineRowFrame row={thinkingRow}>
             <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
               <TimelineThinkingRow
+                userMessageID={thinkingRow().userMessageID}
                 reasoningHeading={thinkingRow().reasoningHeading}
                 showReasoningSummaries={settings.general.showReasoningSummaries()}
               />

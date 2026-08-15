@@ -715,6 +715,13 @@ export const dict = {
   "session.tab.session": "ސެޝަން",
   "session.tab.review": "ރިވިއު",
   "session.tab.context": "ކޮންޓެކްސްޓް",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "ނޭނގޭ ސެޝަނެއް",
   "session.panel.reviewAndFiles": "ރިވިއުކޮށް ފައިލްކުރުން",
   "session.error.notFound": "މި ސެޝަން ހޯދިފައެއް ނުވެއެވެ",
@@ -979,6 +986,12 @@ export const dict = {
     "ކޮމްޕޯސަރުގައި ތިބި އޭޖެންޓުންގެ މެދުގައި ބަދަލުވުން. ފޮރުވާއިރު، ޑިފޯލްޓް ވާނީ ބިލްޑް އޭޖެންޓަށެވެ.",
   "settings.general.row.reasoningSummaries.title": "ރިޒަނިންގ ސުމާރީސް ދައްކާށެވެ",
   "settings.general.row.reasoningSummaries.description": "ޓައިމްލައިންގައި މޮޑެލް ރިޒަނިންގ ސުމާރީތައް ދައްކާލުން",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "ޝެލް ޓޫލް ބައިތައް ފުޅާކުރުން",
   "settings.general.row.shellToolPartsExpanded.description":
     "ޓައިމްލައިންގައި ޑިފޯލްޓްކޮށް ފުޅާކޮށްފައިވާ ޝެލް ޓޫލް ބައިތައް ދައްކާށެވެ",

@@ -709,6 +709,13 @@ export const dict = {
   "session.tab.session": "Munkamenet",
   "session.tab.review": "Tekintse át",
   "session.tab.context": "Kontextus",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Ismeretlen munkamenet",
   "session.panel.reviewAndFiles": "Áttekintés és fájlok",
   "session.error.notFound": "Ez a munkamenet nem található",
@@ -973,6 +980,12 @@ export const dict = {
     "Váltás az ágensek között a zeneszerzőben. Ha rejtett, alapértelmezés szerint Build agent.",
   "settings.general.row.reasoningSummaries.title": "Mutasson érvelési összefoglalókat",
   "settings.general.row.reasoningSummaries.description": "Modell indoklási összefoglalók megjelenítése az idővonalon",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Shelleszköz részeinek kibontása",
   "settings.general.row.shellToolPartsExpanded.description":
     "Alapértelmezés szerint kibontott shell eszközrészek megjelenítése az idővonalon",

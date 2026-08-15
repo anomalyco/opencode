@@ -704,6 +704,13 @@ export const dict = {
   "session.tab.session": "Seja",
   "session.tab.review": "Pregled",
   "session.tab.context": "Kontekst",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Neznana seja",
   "session.panel.reviewAndFiles": "Pregled in datoteke",
   "session.error.notFound": "Te seje ni mogoče najti",
@@ -968,6 +975,12 @@ export const dict = {
     "Preklapljanje med agenti v skladatelju. Ko je skrit, je privzeto nastavljen na Build agent.",
   "settings.general.row.reasoningSummaries.title": "Prikažite povzetke sklepanja",
   "settings.general.row.reasoningSummaries.description": "Prikažite povzetke sklepanja modela na časovnici",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Razširite dele orodja lupine",
   "settings.general.row.shellToolPartsExpanded.description":
     "Pokaži privzeto razširjene dele orodja lupine na časovnici",

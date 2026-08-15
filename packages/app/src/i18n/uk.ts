@@ -773,6 +773,13 @@ export const dict = {
   "session.tab.session": "Сесія",
   "session.tab.review": "Огляд",
   "session.tab.context": "Контекст",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Невідома сесія",
   "session.panel.reviewAndFiles": "Огляд і файли",
   "session.error.notFound": "Цю сесію не знайдено",
@@ -1060,6 +1067,12 @@ export const dict = {
     "Перемикатися між агентами в редакторі запиту. Якщо приховано, типовим є агент Build.",
   "settings.general.row.reasoningSummaries.title": "Показувати підсумки мислення",
   "settings.general.row.reasoningSummaries.description": "Відображати підсумки мислення моделі на часовій шкалі",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Розгортати частини інструменту оболонки",
   "settings.general.row.shellToolPartsExpanded.description":
     "Показувати частини інструменту оболонки розгорнутими за замовчуванням на часовій шкалі",

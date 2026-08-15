@@ -715,6 +715,13 @@ export const dict: Record<string, string> = {
   "session.tab.session": "ལཱ་ཡུན།",
   "session.tab.review": "བསྐྱར་ཞིབ",
   "session.tab.context": "སྐབས་དོན།",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "མ་ཤེས་པའི་ལཱ་ཡུན།",
   "session.panel.reviewAndFiles": "བསྐྱར་ཞིབ་དང་ཡིག་སྣོད།",
   "session.error.notFound": "ལཱ་ཡུན་འདི་འཚོལ་མ་ཐོབ།",
@@ -983,6 +990,12 @@ export const dict: Record<string, string> = {
   "settings.general.row.reasoningSummaries.title": "རྒྱུ་མཚན་བཅུད་བསྡུས་ཚུ་སྟོན།",
   "settings.general.row.reasoningSummaries.description":
     "དུས་ཚོད་གྲལ་ཐིག་ནང་དཔེ་ཚད་དོན་དག་བཅུད་བསྡུས་ཚུ་བཀྲམ་སྟོན་འབད།",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Shell ལག་ཆས་ཆ་ཤས་ཚུ་རྒྱ་བསྐྱེད་འབད།",
   "settings.general.row.shellToolPartsExpanded.description":
     "དུས་ཚོད་གྲལ་ཐིག་ནང་སྔོན་སྒྲིག་གིས་རྒྱ་བསྐྱེད་འབད་ཡོད་མི་ Shell ལག་ཆས་ཆ་ཤས་ཚུ་སྟོན།",

@@ -713,6 +713,13 @@ export const dict = {
   "session.tab.session": "Phiên",
   "session.tab.review": "Xem lại",
   "session.tab.context": "Ngữ cảnh",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Phiên không xác định",
   "session.panel.reviewAndFiles": "Xem lại và tệp",
   "session.error.notFound": "Không thể tìm thấy phiên này",
@@ -976,6 +983,12 @@ export const dict = {
     "Chuyển đổi giữa các tác nhân trong trình soạn thảo. Khi ẩn, tác nhân mặc định là Build.",
   "settings.general.row.reasoningSummaries.title": "Hiển thị tóm tắt lý luận",
   "settings.general.row.reasoningSummaries.description": "Hiển thị tóm tắt lý luận mô hình trong dòng thời gian",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Mở rộng các phần của công cụ shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Hiển thị các phần công cụ shell được mở rộng theo mặc định trong dòng thời gian",

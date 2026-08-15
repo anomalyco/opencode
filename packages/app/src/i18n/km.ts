@@ -701,6 +701,13 @@ export const dict = {
   "session.tab.session": "សម័យ",
   "session.tab.review": "ពិនិត្យ",
   "session.tab.context": "បរិបទ",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "សម័យមិនស្គាល់",
   "session.panel.reviewAndFiles": "ពិនិត្យ និងឯកសារ",
   "session.error.notFound": "សម័យនេះមិនអាចរកឃើញទេ។",
@@ -959,6 +966,12 @@ export const dict = {
     "ប្តូររវាងភ្នាក់ងារនៅក្នុងកម្មវិធីតែង។ នៅពេលលាក់ វាកំណត់លំនាំដើមទៅភ្នាក់ងារបង្កើត។",
   "settings.general.row.reasoningSummaries.title": "បង្ហាញការសង្ខេបហេតុផល",
   "settings.general.row.reasoningSummaries.description": "បង្ហាញសេចក្តីសង្ខេបហេតុផលរបស់ម៉ូដែលក្នុងបន្ទាត់ពេលវេលា",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "ពង្រីកផ្នែកឧបករណ៍សែល",
   "settings.general.row.shellToolPartsExpanded.description":
     "បង្ហាញផ្នែកឧបករណ៍សែលដែលបានពង្រីកតាមលំនាំដើមនៅក្នុងបន្ទាត់ពេលវេលា",

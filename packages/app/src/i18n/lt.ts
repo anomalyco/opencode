@@ -710,6 +710,13 @@ export const dict = {
   "session.tab.session": "Seansas",
   "session.tab.review": "Apžvalga",
   "session.tab.context": "Kontekstas",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Nežinomas seansas",
   "session.panel.reviewAndFiles": "Apžvalga ir failai",
   "session.error.notFound": "Šios sesijos rasti nepavyko",
@@ -978,6 +985,12 @@ export const dict = {
     "Perjunkite tarp kompozitoriaus agentų. Kai paslėpta, numatytasis kūrimo agentas.",
   "settings.general.row.reasoningSummaries.title": "Rodyti samprotavimų santraukas",
   "settings.general.row.reasoningSummaries.description": "Rodyti modelio motyvų santraukas laiko juostoje",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Išskleiskite apvalkalo įrankių dalis",
   "settings.general.row.shellToolPartsExpanded.description":
     "Rodyti pagal numatytuosius nustatymus išplėstas apvalkalo įrankio dalis laiko juostoje",

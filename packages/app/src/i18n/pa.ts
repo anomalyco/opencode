@@ -713,6 +713,13 @@ export const dict = {
   "session.tab.session": "سیشن",
   "session.tab.review": "جائزہ",
   "session.tab.context": "تناظر",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "نامعلوم سیشن",
   "session.panel.reviewAndFiles": "جائزہ تے فائلاں",
   "session.error.notFound": "ایہہ سیشن نئیں لبیا جا سکدا",
@@ -968,6 +975,12 @@ export const dict = {
     "کمپوزر چ ایجنٹاں دے وچکار سوئچ کرو۔ جدوں لُکیا ہوندا اے، تے بلڈ ایجنٹ تے ڈیفالٹ ہوندا اے۔",
   "settings.general.row.reasoningSummaries.title": "استدلال دے خلاصے وکھاؤ",
   "settings.general.row.reasoningSummaries.description": "ٹائم لائن وچ ماڈل دی استدلال دے خلاصے وکھاؤ",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "شیل ٹول دے حصیاں نو ودھاؤ",
   "settings.general.row.shellToolPartsExpanded.description":
     "ٹائم لائن وچ ڈیفالٹ دے طور تے ودھائے گئے شیل ٹول دے حصے وکھاؤ",

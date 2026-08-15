@@ -30,6 +30,8 @@ export interface Settings {
     showStatus: boolean
     showTerminal: boolean
     showReasoningSummaries: boolean
+    thinkingViewerInline: boolean
+    thinkingViewerDocked: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
@@ -191,6 +193,8 @@ const defaultSettings: Settings = {
     showStatus: false,
     showTerminal: false,
     showReasoningSummaries: false,
+    thinkingViewerInline: false,
+    thinkingViewerDocked: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
     showCustomAgents: false,
@@ -402,6 +406,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setShowReasoningSummaries(value: boolean) {
           setStore("general", "showReasoningSummaries", value)
+        },
+        thinkingViewerInline: withFallback(() => store.general?.thinkingViewerInline, defaultSettings.general.thinkingViewerInline),
+        setThinkingViewerInline(value: boolean) {
+          setStore("general", "thinkingViewerInline", value)
+        },
+        thinkingViewerDocked: withFallback(() => store.general?.thinkingViewerDocked, defaultSettings.general.thinkingViewerDocked),
+        setThinkingViewerDocked(value: boolean) {
+          setStore("general", "thinkingViewerDocked", value)
         },
         shellToolPartsExpanded: withFallback(
           () => store.general?.shellToolPartsExpanded,

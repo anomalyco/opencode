@@ -713,6 +713,13 @@ export const dict = {
   "session.tab.session": "सेशन",
   "session.tab.review": "समीक्षा",
   "session.tab.context": "कॉन्टेक्स्ट",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "अज्ञात सेशन",
   "session.panel.reviewAndFiles": "समीक्षा और फ़ाइलें",
   "session.error.notFound": "यह सेशन नहीं मिल सका",
@@ -971,6 +978,12 @@ export const dict = {
     "कंपोज़र में एजेंट के बीच स्विच करें। छिपाए जाने पर, डिफ़ॉल्ट रूप से बिल्ड एजेंट हो जाता है।",
   "settings.general.row.reasoningSummaries.title": "तर्क सारांश दिखाएँ",
   "settings.general.row.reasoningSummaries.description": "टाइमलाइन में मॉडल तर्क सारांश प्रदर्शित करें",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "शेल टूल पार्ट्स का विस्तार करें",
   "settings.general.row.shellToolPartsExpanded.description":
     "टाइमलाइन में डिफ़ॉल्ट रूप से विस्तारित शेल टूल पार्ट्स दिखाएं",

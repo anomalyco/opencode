@@ -738,6 +738,13 @@ export const dict = {
   "session.tab.session": "工作階段",
   "session.tab.review": "檢閱",
   "session.tab.context": "上下文",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "未知的工作階段",
   "session.panel.reviewAndFiles": "檢閱與檔案",
   "session.error.notFound": "找不到此工作階段",
@@ -927,6 +934,12 @@ export const dict = {
   "settings.general.row.showCustomAgents.description": "在輸入區顯示代理程式選擇器",
   "settings.general.row.reasoningSummaries.title": "顯示推理摘要",
   "settings.general.row.reasoningSummaries.description": "在時間軸中顯示模型推理摘要",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
 
   "settings.general.row.shellToolPartsExpanded.title": "展開 shell 工具區塊",
   "settings.general.row.shellToolPartsExpanded.description": "在時間軸中預設展開 shell 工具區塊",

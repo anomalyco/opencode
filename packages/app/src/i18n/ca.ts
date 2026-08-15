@@ -709,6 +709,13 @@ export const dict = {
   "session.tab.session": "Sessió",
   "session.tab.review": "Revisió",
   "session.tab.context": "Context",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Sessió desconeguda",
   "session.panel.reviewAndFiles": "Revisió i arxius",
   "session.error.notFound": "No es pot trobar aquesta sessió",
@@ -974,6 +981,12 @@ export const dict = {
     "Canvia entre agents del compositor. Quan s'amaga, el valor predeterminat és Build agent.",
   "settings.general.row.reasoningSummaries.title": "Mostra resums de raonament",
   "settings.general.row.reasoningSummaries.description": "Mostra els resums de raonament del model a la línia de temps",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Amplieu les peces de l'eina de closca",
   "settings.general.row.shellToolPartsExpanded.description":
     "Mostra les parts de l'eina d'intèrpret d'ordres ampliades per defecte a la línia de temps",

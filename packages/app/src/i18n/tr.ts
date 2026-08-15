@@ -754,6 +754,13 @@ export const dict = {
   "session.tab.session": "Oturum",
   "session.tab.review": "İnceleme",
   "session.tab.context": "Bağlam",
+  "session.tab.thinking": "Thinking",
+  "thinkingViewer.title": "Thinking",
+  "thinkingViewer.empty": "No thinking yet",
+  "thinkingViewer.expand": "Show thinking",
+  "thinkingViewer.actions.fullscreen": "Fullscreen",
+  "thinkingViewer.actions.dock": "Dock in side panel",
+  "thinkingViewer.actions.collapse": "Collapse",
   "session.tab.unknown": "Bilinmeyen Oturum",
   "session.panel.reviewAndFiles": "İnceleme ve dosyalar",
   "session.error.notFound": "Bu oturum bulunamıyor",
@@ -958,6 +965,12 @@ export const dict = {
     "Düzenleyicide ajanlar arasında geçiş yapın. Gizlendiğinde varsayılan olarak Build ajanı kullanılır.",
   "settings.general.row.reasoningSummaries.title": "Akıl yürütme özetlerini göster",
   "settings.general.row.reasoningSummaries.description": "Zaman çizelgesinde model akıl yürütme özetlerini görüntüle",
+  "settings.general.row.thinkingViewerInline.title": "Auto-expand thinking viewer",
+  "settings.general.row.thinkingViewerInline.description":
+    "Show the live thinking stream inline for each active turn by default",
+  "settings.general.row.thinkingViewerDocked.title": "Keep thinking viewer docked",
+  "settings.general.row.thinkingViewerDocked.description":
+    "Keep the thinking viewer open in the side panel at all times",
   "settings.general.row.shellToolPartsExpanded.title": "Kabuk araç bileşenlerini genişlet",
   "settings.general.row.shellToolPartsExpanded.description":
     "Zaman çizelgesinde kabuk araç bileşenlerini varsayılan olarak genişletilmiş göster",
