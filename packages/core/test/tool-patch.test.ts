@@ -5,7 +5,6 @@ import { Effect, Exit, Layer, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Environment } from "@opencode-ai/core/environment/index"
-import { FSUtil } from "@opencode-ai/util/fs-util"
 import { Formatter } from "@opencode-ai/core/formatter"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { Location } from "@opencode-ai/core/location"
@@ -1093,9 +1092,7 @@ describe("PatchTool", () => {
                   "edit",
                 ])
                 expect(assertions[0]?.resources).toEqual([
-                  process.platform === "win32"
-                    ? FSUtil.normalizePathPattern(path.join(outside.path, "*"))
-                    : path.join(yield* Effect.promise(() => fs.realpath(outside.path)), "*").replaceAll("\\", "/"),
+                  path.join(yield* Effect.promise(() => fs.realpath(outside.path)), "*").replaceAll("\\", "/"),
                 ])
                 expect(assertions[1]?.resources).toEqual(assertions[0]?.resources)
               }),
