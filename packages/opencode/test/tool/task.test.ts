@@ -255,6 +255,69 @@ describe("tool.task", () => {
     }),
   )
 
+  it.instance("concurrent foreground resumes remain foreground", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const child = yield* sessions.create({ parentID: chat.id, title: "Existing child" })
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const firstStarted = yield* Deferred.make<void>()
+      const firstDone = yield* Deferred.make<void>()
+      const secondStarted = yield* Deferred.make<void>()
+      const secondDone = yield* Deferred.make<void>()
+      let prompts = 0
+      const promptOps: TaskPromptOps = {
+        ...stubOps(),
+        prompt: (input) => {
+          prompts++
+          if (prompts === 1)
+            return Deferred.succeed(firstStarted, undefined).pipe(
+              Effect.andThen(Deferred.await(firstDone)),
+              Effect.as(reply(input, "first done")),
+            )
+          return Deferred.succeed(secondStarted, undefined).pipe(
+            Effect.andThen(Deferred.await(secondDone)),
+            Effect.as(reply(input, "second done")),
+          )
+        },
+      }
+      const context = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      const execute = (prompt: string) =>
+        def.execute(
+          {
+            description: prompt,
+            prompt,
+            subagent_type: "general",
+            task_id: child.id,
+          },
+          context,
+        )
+
+      const first = yield* execute("first follow-up").pipe(Effect.forkChild)
+      yield* Deferred.await(firstStarted)
+      const second = yield* execute("second follow-up").pipe(Effect.forkChild)
+
+      yield* Deferred.succeed(firstDone, undefined)
+      yield* Deferred.await(secondStarted)
+      yield* Deferred.succeed(secondDone, undefined)
+
+      const results = yield* Effect.all([Fiber.join(first), Fiber.join(second)])
+      expect(prompts).toBe(2)
+      expect(results.every((result) => result.metadata.background !== true)).toBe(true)
+      expect(results.every((result) => result.output.includes('state="completed"'))).toBe(true)
+    }),
+  )
+
   it.instance("execute asks by default and skips checks when bypassed", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
@@ -721,6 +784,7 @@ describe("tool.task", () => {
           prompt: "also inspect cancellation",
           subagent_type: "general",
           task_id: started.metadata.sessionId,
+          background: true,
         },
         context,
       )

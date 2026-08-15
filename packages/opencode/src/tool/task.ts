@@ -253,7 +253,9 @@ export const TaskTool = Tool.define(
         )
       })
 
-      if (yield* background.extend({ id: nextSession.id, run: runTask() })) {
+      const extended = yield* background.extend({ id: nextSession.id, run: runTask() })
+      if (extended && runInBackground) {
+        yield* background.promote(nextSession.id)
         return {
           title: params.description,
           metadata: {
@@ -320,11 +322,11 @@ export const TaskTool = Tool.define(
         }),
         () =>
           Effect.gen(function* () {
-            const result = yield* Effect.raceFirst(
-              background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
-              background.waitForPromotion(nextSession.id),
-            )
-            if (result?.metadata?.background === true) return backgroundResult()
+            const wait = background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info))
+            const result = yield* (extended
+              ? wait
+              : Effect.raceFirst(wait, background.waitForPromotion(nextSession.id)))
+            if (!extended && result?.metadata?.background === true) return backgroundResult()
             if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
             return {
