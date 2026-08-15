@@ -1,7 +1,7 @@
 # Unattended work in opencode-skein
 
 Two things run work without you sitting there: **`/loop`** repeats one prompt, and
-**`/auto`** works a backlog of openspec changes to completion.
+**`/backlog`** works a backlog of openspec changes to completion.
 
 > **Removed 2026-08-07.** This document previously described auto-reply, pattern
 > detection, a webhook auto-reply hook system, and cron-style `/loop` scheduling
@@ -38,7 +38,11 @@ opencode loop cancel <id>
 
 In the TUI: `/loop <prompt>`, and `/loop` alone lists running loops.
 
-## `/auto` — work the openspec backlog to completion
+## `/backlog` — work the openspec backlog to completion
+
+> Named `/auto` until it collided with upstream's own "Auto mode" (permission
+> auto-approve, documented at opencode.ai/docs/permissions and unrelated to
+> this). `/queue` remains as an alias.
 
 ```bash
 opencode loop --queue                    # every eligible change
@@ -64,8 +68,8 @@ per change, not per run.
 | `--no-push` | leave completed branches local |
 | `--sync` | run specsync for each completed change (a dry run goes first) |
 
-In the TUI: `/auto` (or `/queue`). Note that `/auto foo bar` reads `foo` and `bar` as change
-**slugs** — use `--guidance` for prose.
+In the TUI: `/backlog` (or `/queue`). Note that `/backlog foo bar` reads `foo` and `bar` as
+change **slugs** — use `--guidance` for prose.
 
 ### Authority
 

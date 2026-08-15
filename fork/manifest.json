@@ -265,8 +265,8 @@
     },
     {
       "file": "packages/core/src/v1/config/config.ts",
-      "marker": "Independent",
-      "note": "Fork edit to an upstream file (+57/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify."
+      "marker": "auto_queue",
+      "note": "Fork edit to an upstream file (+57/-0 vs baseline). Marker is a string the fork's edit introduces and upstream does not contain, so a merge that reverts the edit fails fork:verify. Was \"Independent\", invalidated 2026-08-15 by a doc-comment rewrite that dropped that word; auto_queue is a field name rather than prose, so it's stable across future wording changes to the same block."
     },
     {
       "file": "packages/core/src/v1/config/mcp.ts",

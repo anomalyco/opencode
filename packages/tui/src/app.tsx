@@ -617,15 +617,21 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         // Relentless openspec queue run: implement -> test -> verify -> commit
         // per change, quarantining stuck changes rather than idling. Runs
         // under the no-push authority ceiling.
-        name: "loop.auto.start",
-        title: "Auto — work all planned tasks until none are left (never pushes)",
+        //
+        // fork: named /auto until now. Upstream's docs use "Auto mode" for
+        // permission auto-approve (permission.mode above) — a real, currently
+        // shipping feature, not something this fork invented — so /auto was a
+        // genuine collision, not just an internal naming preference. Renamed
+        // to /backlog: names what it works on, and doesn't re-litigate the
+        // original "queue is an implementation detail" complaint that /auto
+        // was trying to fix in the first place.
+        name: "loop.backlog.start",
+        title: "Backlog — work all planned tasks until none are left (never pushes)",
         category: "Loop",
-        // Auto is a verb, not a mode. It is loop + do not ask + find the
-        // planned work itself, and it is done when no planned task remains.
         // Selecting it here runs everything; typing arguments after it
-        // (`/auto <change> --sync`) is handled by the prompt's own intercept,
-        // the same way `/loop` works. `/queue` stays as an alias.
-        slashName: "auto",
+        // (`/backlog <change> --sync`) is handled by the prompt's own
+        // intercept, the same way `/loop` works. `/queue` stays as an alias.
+        slashName: "backlog",
         slashAliases: ["queue"],
         run: async () => {
           dialog.clear()
@@ -635,7 +641,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             toast.show({
               variant: "success",
               message:
-                `Auto started (${info.id}) — works planned tasks until none are left, and never pushes. ` +
+                `Backlog started (${info.id}) — works planned tasks until none are left, and never pushes. ` +
                 `Watch /loop for what it is on.`,
             })
           } catch (error) {
@@ -969,8 +975,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         // 2026-08-06 in ae9cc413d1 as collateral damage of tearing out a
         // fork-authored 4-state autonomy ladder (manual/skip-ask/continue/auto)
         // that this toggle had been folded into. The ladder's "continue" and
-        // "auto" states really were dead duplicates of /loop and /auto — this
-        // one wasn't; it's the same permission.toggle() upstream still ships.
+        // "auto" states really were dead duplicates of /loop and the queue
+        // command (then named /auto, since renamed to /backlog below because
+        // this command is the real owner of that word) — this one wasn't;
+        // it's the same permission.toggle() upstream still ships.
         name: "permission.mode",
         title:
           local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",

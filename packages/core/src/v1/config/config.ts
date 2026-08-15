@@ -55,7 +55,7 @@ export const Info = Schema.Struct({
   }),
   auto_mode: Schema.optional(Schema.Boolean).annotate({
     description:
-      "Enable or disable auto-approving tool permission prompts. When true, all tool permission prompts are automatically approved for the session. Independent of 'auto_continue'; the TUI's 'Toggle auto mode' command enables both together as a convenience. Defaults to false.",
+      "Enable or disable auto-approving tool permission prompts. When true, all tool permission prompts are automatically approved for the session. Toggle from the TUI command palette: 'Enable/Disable auto-approve permissions' (<leader>p). 'auto_continue' and 'auto_queue' are unrelated, deprecated, and no longer read. Defaults to false.",
   }),
   auto_continue: Schema.optional(Schema.Boolean).annotate({
     description:
@@ -64,7 +64,8 @@ export const Info = Schema.Struct({
   }),
   auto_queue: Schema.optional(Schema.Boolean).annotate({
     description:
-      "@deprecated No longer read. Working the planned backlog is what the /auto command does; the key is still " +
+      "@deprecated No longer read. Working the planned backlog is what the /backlog command does " +
+      "(named /auto until it collided with upstream's own 'Auto mode' permission setting); the key is still " +
       "accepted so config files written while it existed keep loading.",
   }),
   plugin: Schema.optional(Schema.mutable(Schema.Array(ConfigPluginV1.Spec))),
@@ -230,7 +231,7 @@ export const Info = Schema.Struct({
         Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Literal(false)])),
       ).annotate({
         description:
-          "Agent bound to each gate of `loop --queue` / `/auto`, e.g. {\"verify\": \"reviewer\"}. Defaults to " +
+          "Agent bound to each gate of `loop --queue` / `/backlog`, e.g. {\"verify\": \"reviewer\"}. Defaults to " +
           "implement→coder, test→tester, verify→reviewer where those agents exist. A gate bound to an agent " +
           "runs that agent as a subagent and takes its verdict; set a gate to false to keep the plain " +
           "command behaviour. Naming an agent that does not exist is reported when the run starts.",

@@ -73,7 +73,7 @@ export function DialogLoopList() {
       skipFilter={true}
       emptyView={
         <text>
-          Nothing has run yet. /loop &lt;prompt&gt; keeps working on that prompt until it is done. /auto works
+          Nothing has run yet. /loop &lt;prompt&gt; keeps working on that prompt until it is done. /backlog works
           the planned tasks itself — change by change, implement, test, verify, commit — and stops when none
           are left. Neither ever pushes. Set experimental.queue_gate so the test and verify commands run in
           the right directory for this repo.

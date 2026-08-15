@@ -276,7 +276,7 @@ function matchesVerb(input: string, verb: string): boolean {
  * like "/loopback is broken" is still sent to the model.
  */
 function isLoopCommand(input: string): boolean {
-  return matchesVerb(input, "/loop") || matchesVerb(input, "/auto") || matchesVerb(input, "/queue")
+  return matchesVerb(input, "/loop") || matchesVerb(input, "/backlog") || matchesVerb(input, "/queue")
 }
 
 /**
@@ -1251,15 +1251,15 @@ function isRunControlInput(input: string): boolean {
       // `/loop --queue` still works so nothing that already exists breaks.
       const firstLineEnd = inputText.indexOf("\n")
       const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
-      const verb = firstLine.startsWith("/auto")
-        ? "/auto"
+      const verb = firstLine.startsWith("/backlog")
+        ? "/backlog"
         : firstLine.startsWith("/queue")
           ? "/queue"
           : "/loop"
       const rest = firstLine.slice(verb.length).trim()
       try {
         const parsedArgs = parseLoopArgs(rest)
-        // `/auto …` (and its `/queue` alias) means "find the planned work
+        // `/backlog …` (and its `/queue` alias) means "find the planned work
         // yourself" even without the flag.
         const parsed = verb === "/loop" ? parsedArgs : { ...parsedArgs, queue: true }
         if (!parsed.prompt && !parsed.queue) {
@@ -1269,8 +1269,8 @@ function isRunControlInput(input: string): boolean {
           sdk.client.loop
             .create({
               prompt: parsed.queue ? "" : parsed.prompt,
-              // Runs in the session you are looking at, including /auto: work
-              // you cannot see is work you cannot supervise.
+              // Runs in the session you are looking at, including /backlog:
+              // work you cannot see is work you cannot supervise.
               sessionID: props.sessionID,
               interval: parsed.interval,
               maxIterations: parsed.max,
@@ -1294,7 +1294,7 @@ function isRunControlInput(input: string): boolean {
               toast.show({
                 variant: "success",
                 message: parsed.queue
-                  ? `Auto started (${result.data.id}) — works planned tasks until none are left, pushing each completed branch${parsed.push ? "" : " (push disabled)"}`
+                  ? `Backlog started (${result.data.id}) — works planned tasks until none are left, pushing each completed branch${parsed.push ? "" : " (push disabled)"}`
                   : `Loop ${result.data.id} started (max ${result.data.maxIterations} iterations, stops on ${result.data.completionToken})`,
               })
             })
@@ -1693,9 +1693,9 @@ function isRunControlInput(input: string): boolean {
                         <Show when={activeLoop()}>
                           {(live) => (
                             // No mode name here any more: there is nothing to
-                            // set. `/loop` and `/auto` are verbs, so the only
-                            // honest thing to show is what is running, and
-                            // nothing at all when nothing is.
+                            // set. `/loop` and `/backlog` are verbs, so the
+                            // only honest thing to show is what is running,
+                            // and nothing at all when nothing is.
                             // ClickText is the file's existing clickable-text
                             // idiom (mouse-up, as the retry link uses) rather
                             // than a hand-rolled handler — the hand-rolled one
@@ -1705,7 +1705,7 @@ function isRunControlInput(input: string): boolean {
                               onMouseUp={() => dialog.replace(() => <DialogLoopList />)}
                             >
                               {live().currentChange
-                                ? `● auto ${live().currentChange} [${live().currentGate ?? "?"}] ${live().iteration}/${live().maxIterations}`
+                                ? `● backlog ${live().currentChange} [${live().currentGate ?? "?"}] ${live().iteration}/${live().maxIterations}`
                                 : `● loop ${live().iteration}/${live().maxIterations}`}
                             </ClickText>
                           )}
