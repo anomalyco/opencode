@@ -10,16 +10,18 @@
   "dependencies": {
     "@cloudflare/vite-plugin": "1.15.2",
     "@opencode-ai/console-core": "workspace:*",
-    "@solidjs/meta": "catalog:",
-    "@solidjs/router": "catalog:",
-    "@solidjs/start": "catalog:",
+    "@solidjs/meta": "catalog:solid2",
+    "@solidjs/router": "catalog:solid2",
+    "@solidjs/web": "catalog:solid2",
     "nitro": "3.0.1-alpha.1",
-    "solid-js": "catalog:",
+    "solid-js": "catalog:solid2",
     "vite": "catalog:"
   },
   "devDependencies": {
+    "@solidjs/vite-plugin": "catalog:solid2",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "filesystem-routing": "catalog:solid2",
     "typescript": "catalog:",
     "wrangler": "4.50.0"
   },

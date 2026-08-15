@@ -1,21 +1,17 @@
-import { MetaProvider, Title } from "@solidjs/meta"
-import { Router } from "@solidjs/router"
-import { FileRoutes } from "@solidjs/start/router"
-import { Suspense } from "solid-js"
+import { Title } from "@solidjs/meta"
+import { Loading } from "solid-js"
+import { Router } from "./router"
 import "./app.css"
 
 export default function App() {
   return (
-    <Router
-      explicitLinks={true}
-      root={(props) => (
-        <MetaProvider>
+    <Router>
+      {(props) => (
+        <>
           <Title>opencode support</Title>
-          <Suspense>{props.children}</Suspense>
-        </MetaProvider>
+          <Loading>{props.children}</Loading>
+        </>
       )}
-    >
-      <FileRoutes />
     </Router>
   )
 }

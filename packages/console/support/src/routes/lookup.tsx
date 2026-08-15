@@ -1,7 +1,6 @@
 import { Title } from "@solidjs/meta"
-import { createAsync, query, useSearchParams, type RouteDefinition } from "@solidjs/router"
-import { Show } from "solid-js"
-import { ErrorBoundary } from "solid-js"
+import { query, useSearchParams, type RouteDefinition } from "@solidjs/router"
+import { createMemo, Errored, Loading, Show } from "solid-js"
 import { Result } from "~/component/result"
 import { lookup } from "~/lib/lookup"
 
@@ -20,7 +19,7 @@ export const route: RouteDefinition = {
 export default function LookupPage() {
   const [params] = useSearchParams()
   const identifier = () => String(params.identifier ?? "").trim()
-  const data = createAsync(() => (identifier() ? getLookup(identifier()) : Promise.resolve(undefined)))
+  const data = createMemo(() => (identifier() ? getLookup(identifier()) : undefined))
 
   return (
     <main data-page="support">
@@ -28,11 +27,11 @@ export default function LookupPage() {
       <h1>Lookup: {identifier() || "(no identifier)"}</h1>
 
       <Show when={identifier()} fallback={<div data-empty>Provide an `identifier` query parameter.</div>}>
-        <ErrorBoundary fallback={(err) => <div data-component="error">{(err as Error).message}</div>}>
-          <Show when={data()} fallback={<div data-empty>Loading...</div>}>
-            {(result) => <Result data={result()} />}
-          </Show>
-        </ErrorBoundary>
+        <Errored fallback={(err) => <div data-component="error">{(err() as Error).message}</div>}>
+          <Loading fallback={<div data-empty>Loading...</div>}>
+            <Show when={data()}>{(result) => <Result data={result()} />}</Show>
+          </Loading>
+        </Errored>
       </Show>
     </main>
   )
