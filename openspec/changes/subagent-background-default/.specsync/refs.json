@@ -1,0 +1,9 @@
+{
+  "github:androidand/opencode-skein": {
+    "provider": "github:androidand/opencode-skein",
+    "id": "76",
+    "url": "https://github.com/androidand/opencode-skein/issues/76",
+    "base_sha": "d4b7fd16d46ddbb196304f812cd28176f2a4f35370a45a406a56930366744533",
+    "base": "# Tasks\n\n- [x] 1. Identify why a weak local orchestrator delegated an entire large refactor to one foreground subagent and then sat idle\n- [x] 2. Flip `runInBackground` in `packages/opencode/src/tool/task.ts` from opt-in (`params.background === true`) to opt-out (`params.background !== false`), gated on `flags.experimentalBackgroundSubagents`\n- [x] 3. Preserve the flag-off fallback to foreground (background stripped from schema -\u003e `params.background` always undefined -\u003e must not default-trip the flag-required error)\n- [x] 4. Reword `BACKGROUND_DESCRIPTION` and the `background` parameter annotation to state the new default plainly\n- [x] 5. Typecheck (`bun run typecheck`)\n- [ ] 6. Verify in a real fleet run that a local orchestrator now fans work out across idle hosts instead of blocking on one subagent\n"
+  }
+}

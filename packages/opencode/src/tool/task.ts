@@ -37,17 +37,19 @@ const SUBAGENT_TASK_TIMEOUT_MS = 10 * 60 * 1000
 // fork: the original wording ("Foreground is the default; use background only
 // for independent work") reliably produced all-foreground fan-out — the model
 // took the stated default and blocked on every subagent in turn, which on a
-// multi-host local fleet means one host works while the rest sit idle. State
-// the preference the other way round: background is the norm, foreground is
-// the exception you justify.
+// multi-host local fleet means one host works while the rest sit idle. Stating
+// the preference the other way round ("PREFER background=true") still wasn't
+// enough for weaker local models, which just called the tool without setting
+// the parameter at all and got the (blocking) default. So background is now
+// the actual runtime default (see runInBackground above) — this text just
+// needs to tell the model how to opt back into foreground when it genuinely
+// needs the result before its next step.
 const BACKGROUND_DESCRIPTION = [
-  "Background mode: background=true launches the subagent asynchronously and returns immediately,",
-  "and you are notified automatically when it finishes.",
-  "PREFER background=true whenever the work is independent of your very next step —",
-  "several agents then run at once instead of one at a time, and you keep working meanwhile.",
-  "Launching N independent agents in one message with background=true is the normal way to fan out.",
-  "Foreground blocks this entire turn until the agent finishes; choose it only when you genuinely",
-  "cannot take another step without that agent's result.",
+  "Tasks run in the background by default: this call returns immediately and you are notified",
+  "automatically when it finishes, so you keep working on other things meanwhile.",
+  "Launching N independent agents in one message is the normal way to fan out — none of them block you.",
+  "Pass background=false only when you genuinely cannot take another step without this agent's result;",
+  "that blocks this entire turn until it finishes, so use it sparingly.",
 ].join(" ")
 const BACKGROUND_STARTED = [
   "The task is working in the background. You will be notified automatically when it finishes.",
@@ -82,7 +84,7 @@ export const Parameters = Schema.Struct({
   ...BaseParameterFields,
   background: Schema.optional(Schema.Boolean).annotate({
     description:
-      "Run the agent in the background. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress",
+      "Defaults to true (background). Pass false to block this turn until the agent completes. You will be notified when it completes either way. DO NOT sleep, poll, or proactively check on its progress",
   }),
 })
 
@@ -122,8 +124,17 @@ export const TaskTool = Tool.define(
       ctx: Tool.Context,
     ) {
       const cfg = yield* config.get()
-      const runInBackground = params.background === true
-      if (runInBackground && !flags.experimentalBackgroundSubagents) {
+      // fork: background is opt-out, not opt-in, once the experimental flag is
+      // on — weak local orchestrators reliably ignore a "prefer background=true"
+      // instruction in the tool description and just call the tool with its
+      // (blocking) default, which stalls the whole fleet behind one subagent.
+      // Making background the *default* means that failure mode requires no
+      // model cooperation at all. When the flag is off, `background` never
+      // appears in the schema (see jsonSchema below), so params.background is
+      // always undefined here and this must fall through to foreground rather
+      // than defaulting on and tripping the flag-required error below.
+      const runInBackground = flags.experimentalBackgroundSubagents && params.background !== false
+      if (params.background === true && !flags.experimentalBackgroundSubagents) {
         return yield* Effect.fail(
           new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
         )
