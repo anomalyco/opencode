@@ -15577,7 +15577,22 @@
             "$ref": "#/components/schemas/EventQuestionRejected"
           },
           {
+            "$ref": "#/components/schemas/EventSessionOverflowDetected"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionOutputClamped"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionToolStripped"
+          },
+          {
             "$ref": "#/components/schemas/EventSessionCompacted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionCompactionStarted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionCompactionCompleted"
           },
           {
             "$ref": "#/components/schemas/EventVcsBranchUpdated"
@@ -20283,6 +20298,106 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["session.overflow.detected"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "tokens": {
+                        "type": "number"
+                      },
+                      "usable": {
+                        "type": "number"
+                      },
+                      "reserve": {
+                        "type": "number"
+                      },
+                      "action": {
+                        "type": "string",
+                        "enum": ["compact"]
+                      }
+                    },
+                    "required": ["sessionID", "tokens", "usable", "reserve", "action"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.output.clamped"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "requested": {
+                        "type": "number"
+                      },
+                      "granted": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["sessionID", "requested", "granted"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.tool.stripped"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "tool": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["sessionID", "tool"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["session.compacted"]
                   },
                   "properties": {
@@ -20294,6 +20409,67 @@
                       }
                     },
                     "required": ["sessionID"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.compaction.started"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "before_tokens": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["sessionID", "before_tokens"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.compaction.completed"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "before_tokens": {
+                        "type": "number"
+                      },
+                      "after_tokens": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["sessionID", "before_tokens"],
                     "additionalProperties": false
                   }
                 },
@@ -24529,7 +24705,22 @@
             "$ref": "#/components/schemas/question.rejected"
           },
           {
+            "$ref": "#/components/schemas/SessionOverflowDetected"
+          },
+          {
+            "$ref": "#/components/schemas/SessionOutputClamped"
+          },
+          {
+            "$ref": "#/components/schemas/SessionToolStripped"
+          },
+          {
             "$ref": "#/components/schemas/SessionCompacted"
+          },
+          {
+            "$ref": "#/components/schemas/SessionCompactionStarted"
+          },
+          {
+            "$ref": "#/components/schemas/SessionCompactionCompleted"
           },
           {
             "$ref": "#/components/schemas/VcsBranchUpdated"
@@ -33570,6 +33761,172 @@
         "required": ["id", "type", "data"],
         "additionalProperties": false
       },
+      "SessionOverflowDetected": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.overflow.detected"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tokens": {
+                "type": "number"
+              },
+              "usable": {
+                "type": "number"
+              },
+              "reserve": {
+                "type": "number"
+              },
+              "action": {
+                "type": "string",
+                "enum": ["compact"]
+              }
+            },
+            "required": ["sessionID", "tokens", "usable", "reserve", "action"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "SessionOutputClamped": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.output.clamped"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "requested": {
+                "type": "number"
+              },
+              "granted": {
+                "type": "number"
+              }
+            },
+            "required": ["sessionID", "requested", "granted"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "SessionToolStripped": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.tool.stripped"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tool": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionID", "tool"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
       "SessionCompacted": {
         "type": "object",
         "properties": {
@@ -33612,6 +33969,111 @@
               }
             },
             "required": ["sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "SessionCompactionStarted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.compaction.started"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "before_tokens": {
+                "type": "number"
+              }
+            },
+            "required": ["sessionID", "before_tokens"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "SessionCompactionCompleted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.compaction.completed"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "before_tokens": {
+                "type": "number"
+              },
+              "after_tokens": {
+                "type": "number"
+              }
+            },
+            "required": ["sessionID", "before_tokens"],
             "additionalProperties": false
           }
         },
@@ -36748,6 +37210,106 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventSessionOverflowDetected": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.overflow.detected"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tokens": {
+                "type": "number"
+              },
+              "usable": {
+                "type": "number"
+              },
+              "reserve": {
+                "type": "number"
+              },
+              "action": {
+                "type": "string",
+                "enum": ["compact"]
+              }
+            },
+            "required": ["sessionID", "tokens", "usable", "reserve", "action"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionOutputClamped": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.output.clamped"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "requested": {
+                "type": "number"
+              },
+              "granted": {
+                "type": "number"
+              }
+            },
+            "required": ["sessionID", "requested", "granted"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionToolStripped": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.tool.stripped"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "tool": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionID", "tool"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventSessionCompacted": {
         "type": "object",
         "properties": {
@@ -36768,6 +37330,67 @@
               }
             },
             "required": ["sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionCompactionStarted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.compaction.started"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "before_tokens": {
+                "type": "number"
+              }
+            },
+            "required": ["sessionID", "before_tokens"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionCompactionCompleted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.compaction.completed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "before_tokens": {
+                "type": "number"
+              },
+              "after_tokens": {
+                "type": "number"
+              }
+            },
+            "required": ["sessionID", "before_tokens"],
             "additionalProperties": false
           }
         },

@@ -81,3 +81,22 @@ export function isOverflow(input: {
     input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
   return count >= usable(input)
 }
+
+// D3: payload for the session.overflow.detected event — the same reported
+// token count isOverflow compares, plus usable/reserve with context-budget
+// endpoint semantics (reserve is 0 when the model reports no context limit).
+export function overflowReport(input: {
+  cfg: ConfigV1.Info
+  tokens: SessionV1.Assistant["tokens"]
+  model: Provider.Model
+  outputTokenMax?: number
+  sessionID?: string
+}) {
+  return {
+    tokens:
+      input.tokens.total ||
+      input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write,
+    usable: usable(input),
+    reserve: input.model.limit.context ? reserved(input.cfg, input.model.limit.input || input.model.limit.context) : 0,
+  }
+}

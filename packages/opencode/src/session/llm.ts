@@ -19,6 +19,7 @@ import { Plugin } from "@/plugin"
 import { Permission } from "@/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
+import { SessionBudgetEvent } from "@opencode-ai/schema/session-budget-event"
 import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
@@ -119,6 +120,15 @@ const live: Layer.Layer<
         cfg,
         isWorkflow,
       })
+
+      // D3: surface the C6 output clamp on the bus.
+      if (prepared.outputClamp) {
+        yield* events.publish(SessionBudgetEvent.OutputClamped, {
+          sessionID: SessionID.make(input.sessionID),
+          requested: prepared.outputClamp.requested,
+          granted: prepared.outputClamp.granted,
+        })
+      }
 
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system

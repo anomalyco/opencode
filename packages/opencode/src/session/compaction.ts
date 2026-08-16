@@ -14,13 +14,14 @@ import { NotFoundError } from "@/storage/storage"
 
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { isOverflow as overflow, usable, shouldWarnUnsetLimit, DEFAULT_USABLE_CONTEXT } from "./overflow"
+import { isOverflow as overflow, overflowReport, usable, shouldWarnUnsetLimit, DEFAULT_USABLE_CONTEXT } from "./overflow"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { buildPrompt } from "@opencode-ai/core/session/compaction"
+import { SessionBudgetEvent } from "@opencode-ai/schema/session-budget-event"
 import { SessionCompactionEvent } from "@opencode-ai/schema/session-compaction-event"
 
 export const Event = SessionCompactionEvent
@@ -214,13 +215,23 @@ const layer = Layer.effect(
           usable: DEFAULT_USABLE_CONTEXT,
         })
       }
-      return overflow({
+      const check = {
         cfg,
         tokens: input.tokens,
         model: input.model,
         outputTokenMax: flags.outputTokenMax,
         sessionID: input.sessionID,
-      })
+      }
+      const result = overflow(check)
+      // D3: every positive overflow gate decision is visible on the bus.
+      if (result && input.sessionID) {
+        yield* events.publish(SessionBudgetEvent.OverflowDetected, {
+          sessionID: input.sessionID,
+          ...overflowReport(check),
+          action: "compact",
+        })
+      }
+      return result
     })
 
     const estimate = Effect.fn("SessionCompaction.estimate")(function* (input: {
@@ -375,11 +386,15 @@ const layer = Layer.effect(
       const prior = completedCompactions(history)
       const hidden = new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
       const previousSummary = prior.at(-1)?.summary
+      const visible = history.filter((_, index) => !hidden.has(index))
       const selected = yield* select({
-        messages: history.filter((_, index) => !hidden.has(index)),
+        messages: visible,
         cfg,
         model,
       })
+      // D3: compaction lifecycle with token figures for thrash observability.
+      const beforeTokens = yield* estimate({ messages: visible, model })
+      yield* events.publish(Event.Started, { sessionID: input.sessionID, before_tokens: beforeTokens })
       // Allow plugins to inject context or replace compaction prompt.
       const compacting = yield* plugin.trigger(
         "experimental.session.compacting",
@@ -576,6 +591,14 @@ const layer = Layer.effect(
       if (processor.message.error) return "stop"
       if (result === "continue") {
         yield* events.publish(Event.Compacted, { sessionID: input.sessionID })
+        // after_tokens approximates the retained tail; the fresh summary text
+        // is not counted (see the event schema note).
+        const tail = visible.slice(selected.head.length)
+        yield* events.publish(Event.Completed, {
+          sessionID: input.sessionID,
+          before_tokens: beforeTokens,
+          after_tokens: tail.length ? yield* estimate({ messages: tail, model }) : 0,
+        })
       }
       return result
     })

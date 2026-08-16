@@ -13,7 +13,8 @@ import { Session } from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { DoomLoop } from "./doom-loop"
-import { isOverflow, learnContextLimit } from "./overflow"
+import { isOverflow, learnContextLimit, overflowReport } from "./overflow"
+import { SessionBudgetEvent } from "@opencode-ai/schema/session-budget-event"
 import { Token } from "@/util/token"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
@@ -380,6 +381,11 @@ const layer = Layer.effect(
             const rule = Permission.evaluate("doom_loop", value.name, agent.permission)
             if (DoomLoop.shouldStrip(rule.action, ctx.model)) {
               DoomLoop.strip(ctx.sessionID, value.name)
+              // D3: augment the B4 log with a typed bus event.
+              yield* events.publish(SessionBudgetEvent.ToolStripped, {
+                sessionID: ctx.sessionID,
+                tool: value.name,
+              })
               yield* Effect.logWarning("doom loop tool stripped", {
                 "session.id": ctx.sessionID,
                 tool: value.name,
@@ -492,11 +498,22 @@ const layer = Layer.effect(
                 messageID: ctx.assistantMessage.parentID,
               })
               .pipe(Effect.ignore, Effect.forkIn(scope))
-            if (
-              !ctx.assistantMessage.summary &&
-              isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model, sessionID: ctx.sessionID })
-            ) {
-              ctx.needsCompaction = true
+            {
+              const check = {
+                cfg: yield* config.get(),
+                tokens: usage.tokens,
+                model: ctx.model,
+                sessionID: ctx.sessionID,
+              }
+              if (!ctx.assistantMessage.summary && isOverflow(check)) {
+                ctx.needsCompaction = true
+                // D3: the step-finish overflow gate decision, visible on the bus.
+                yield* events.publish(SessionBudgetEvent.OverflowDetected, {
+                  sessionID: ctx.sessionID,
+                  ...overflowReport(check),
+                  action: "compact",
+                })
+              }
             }
             return
           }

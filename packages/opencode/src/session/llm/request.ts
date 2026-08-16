@@ -59,6 +59,10 @@ export type Prepared = {
   }
   readonly messageTransformOptions: Record<string, any>
   readonly headers: Record<string, string>
+  // D3: set when the C6 window-aware clamp reduced the output budget below
+  // what was configured; the caller publishes session.output.clamped from it
+  // (prepare itself has no bus access).
+  readonly outputClamp?: { readonly requested: number; readonly granted: number }
 }
 
 const mergeOptions = (target: Record<string, any>, source: Record<string, any> | undefined): Record<string, any> =>
@@ -208,9 +212,13 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   )
   const baselineTokens = Token.estimate(JSON.stringify(system)) + toolsTokens
   const estimated = historyTokens + baselineTokens
-  if (usableWindow > 0 && params.maxOutputTokens !== undefined) {
-    params.maxOutputTokens = Math.min(params.maxOutputTokens, Math.max(256, usableWindow - estimated))
-  }
+  const outputClamp = (() => {
+    if (usableWindow <= 0 || params.maxOutputTokens === undefined) return undefined
+    const granted = Math.min(params.maxOutputTokens, Math.max(256, usableWindow - estimated))
+    if (granted >= params.maxOutputTokens) return undefined
+    return { requested: params.maxOutputTokens, granted }
+  })()
+  if (outputClamp) params.maxOutputTokens = outputClamp.granted
 
   const opencodeProjectID = input.model.providerID.startsWith("opencode")
     ? (yield* InstanceState.context).project.id
@@ -222,6 +230,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     tools: Object.fromEntries(Object.entries(tools).toSorted(([a], [b]) => a.localeCompare(b))),
     params,
     messageTransformOptions: options,
+    ...(outputClamp ? { outputClamp } : {}),
     headers: {
       ...(input.model.providerID.startsWith("opencode")
         ? {

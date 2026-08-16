@@ -84,7 +84,12 @@ export type Event =
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
+  | EventSessionOverflowDetected
+  | EventSessionOutputClamped
+  | EventSessionToolStripped
   | EventSessionCompacted
+  | EventSessionCompactionStarted
+  | EventSessionCompactionCompleted
   | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
@@ -1537,9 +1542,54 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.overflow.detected"
+        properties: {
+          sessionID: string
+          tokens: number
+          usable: number
+          reserve: number
+          action: "compact"
+        }
+      }
+    | {
+        id: string
+        type: "session.output.clamped"
+        properties: {
+          sessionID: string
+          requested: number
+          granted: number
+        }
+      }
+    | {
+        id: string
+        type: "session.tool.stripped"
+        properties: {
+          sessionID: string
+          tool: string
+        }
+      }
+    | {
+        id: string
         type: "session.compacted"
         properties: {
           sessionID: string
+        }
+      }
+    | {
+        id: string
+        type: "session.compaction.started"
+        properties: {
+          sessionID: string
+          before_tokens: number
+        }
+      }
+    | {
+        id: string
+        type: "session.compaction.completed"
+        properties: {
+          sessionID: string
+          before_tokens: number
+          after_tokens?: number
         }
       }
     | {
@@ -3057,7 +3107,12 @@ export type V2Event =
   | QuestionAsked
   | QuestionReplied2
   | QuestionRejected2
+  | SessionOverflowDetected
+  | SessionOutputClamped
+  | SessionToolStripped
   | SessionCompacted
+  | SessionCompactionStarted
+  | SessionCompactionCompleted
   | VcsBranchUpdated
   | WorkspaceReady
   | WorkspaceFailed
@@ -6075,6 +6130,64 @@ export type QuestionAsked = {
   }
 }
 
+export type SessionOverflowDetected = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.overflow.detected"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    tokens: number
+    usable: number
+    reserve: number
+    action: "compact"
+  }
+}
+
+export type SessionOutputClamped = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.output.clamped"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    requested: number
+    granted: number
+  }
+}
+
+export type SessionToolStripped = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.tool.stripped"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    tool: string
+  }
+}
+
 export type SessionCompacted = {
   id: string
   metadata?: {
@@ -6089,6 +6202,43 @@ export type SessionCompacted = {
   location?: LocationRef
   data: {
     sessionID: string
+  }
+}
+
+export type SessionCompactionStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.compaction.started"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    before_tokens: number
+  }
+}
+
+export type SessionCompactionCompleted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.compaction.completed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    before_tokens: number
+    after_tokens?: number
   }
 }
 
@@ -7103,11 +7253,61 @@ export type EventQuestionRejected = {
   }
 }
 
+export type EventSessionOverflowDetected = {
+  id: string
+  type: "session.overflow.detected"
+  properties: {
+    sessionID: string
+    tokens: number
+    usable: number
+    reserve: number
+    action: "compact"
+  }
+}
+
+export type EventSessionOutputClamped = {
+  id: string
+  type: "session.output.clamped"
+  properties: {
+    sessionID: string
+    requested: number
+    granted: number
+  }
+}
+
+export type EventSessionToolStripped = {
+  id: string
+  type: "session.tool.stripped"
+  properties: {
+    sessionID: string
+    tool: string
+  }
+}
+
 export type EventSessionCompacted = {
   id: string
   type: "session.compacted"
   properties: {
     sessionID: string
+  }
+}
+
+export type EventSessionCompactionStarted = {
+  id: string
+  type: "session.compaction.started"
+  properties: {
+    sessionID: string
+    before_tokens: number
+  }
+}
+
+export type EventSessionCompactionCompleted = {
+  id: string
+  type: "session.compaction.completed"
+  properties: {
+    sessionID: string
+    before_tokens: number
+    after_tokens?: number
   }
 }
 
