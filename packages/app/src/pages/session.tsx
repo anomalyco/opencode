@@ -94,6 +94,8 @@ import { TerminalPanelV2 } from "@/pages/session/terminal-panel-v2"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { createTimelineSearchController } from "@/pages/session/timeline/search-controller"
+import { TimelineSearchBar } from "@/pages/session/timeline/search-bar"
 import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
 import { Persist, persisted } from "@/utils/persist"
@@ -875,6 +877,7 @@ export default function Page() {
   let scrollToEnd = () => {}
   let scrollMark = 0
   let messageMark = 0
+  const [scrollRefEl, setScrollRefEl] = createSignal<HTMLDivElement | undefined>()
 
   const scrollGestureWindowMs = 250
 
@@ -1570,6 +1573,7 @@ export default function Page() {
 
   const setScrollRef = (el: HTMLDivElement | undefined) => {
     scroller = el
+    setScrollRefEl(el)
     autoScroll.scrollRef(el)
     if (!el) return
     scheduleScrollState(el)
@@ -1989,6 +1993,13 @@ export default function Page() {
     consumePendingMessage: layout.pendingMessage.consume,
   })
 
+  const timelineSearch = createTimelineSearchController({
+    sessionID: () => params.id,
+    scrollRef: scrollRefEl,
+    revealMessage: (id) => revealMessage(id),
+    pauseAutoScroll: autoScroll.pause,
+  })
+
   createEffect(
     on(
       () => params.id,
@@ -2083,42 +2094,45 @@ export default function Page() {
           <Match when={params.id}>
             <Show when={messagesReady() ? params.id : undefined} keyed>
               {(_id) => (
-                <MessageTimeline
-                  actions={actions}
-                  scroll={ui.scroll}
-                  onResumeScroll={resumeScroll}
-                  setScrollRef={setScrollRef}
-                  onScheduleScrollState={scheduleScrollState}
-                  onAutoScrollHandleScroll={autoScroll.handleScroll}
-                  onMarkScrollGesture={markScrollGesture}
-                  hasScrollGesture={hasScrollGesture}
-                  onUserScroll={markUserScroll}
-                  onHistoryScroll={onHistoryScroll}
-                  onAutoScrollInteraction={autoScroll.handleInteraction}
-                  shouldAnchorBottom={() =>
-                    !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
-                  }
-                  centered={centered()}
-                  setContentRef={(el) => {
-                    content = el
-                    autoScroll.contentRef(el)
+                <div class="relative h-full">
+                  <MessageTimeline
+                    actions={actions}
+                    scroll={ui.scroll}
+                    onResumeScroll={resumeScroll}
+                    setScrollRef={setScrollRef}
+                    onScheduleScrollState={scheduleScrollState}
+                    onAutoScrollHandleScroll={autoScroll.handleScroll}
+                    onMarkScrollGesture={markScrollGesture}
+                    hasScrollGesture={hasScrollGesture}
+                    onUserScroll={markUserScroll}
+                    onHistoryScroll={onHistoryScroll}
+                    onAutoScrollInteraction={autoScroll.handleInteraction}
+                    shouldAnchorBottom={() =>
+                      !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
+                    }
+                    centered={centered()}
+                    setContentRef={(el) => {
+                      content = el
+                      autoScroll.contentRef(el)
 
-                    const root = scroller
-                    if (root) scheduleScrollState(root)
-                  }}
-                  userMessages={visibleUserMessages()}
-                  setHistoryAnchor={(handlers) => {
-                    captureHistoryAnchor = handlers.capture
-                    restoreHistoryAnchor = handlers.restore
-                  }}
-                  anchor={anchor}
-                  setRevealMessage={(fn) => {
-                    revealMessage = fn
-                  }}
-                  setScrollToEnd={(fn) => {
-                    scrollToEnd = fn
-                  }}
-                />
+                      const root = scroller
+                      if (root) scheduleScrollState(root)
+                    }}
+                    userMessages={visibleUserMessages()}
+                    setHistoryAnchor={(handlers) => {
+                      captureHistoryAnchor = handlers.capture
+                      restoreHistoryAnchor = handlers.restore
+                    }}
+                    anchor={anchor}
+                    setRevealMessage={(fn) => {
+                      revealMessage = fn
+                    }}
+                    setScrollToEnd={(fn) => {
+                      scrollToEnd = fn
+                    }}
+                    search={<TimelineSearchBar controller={timelineSearch} />}
+                  />
+                </div>
               )}
             </Show>
           </Match>

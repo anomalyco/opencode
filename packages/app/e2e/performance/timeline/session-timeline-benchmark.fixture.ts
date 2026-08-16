@@ -134,6 +134,7 @@ export async function setupTimelineBenchmark(
             editToolPartsExpanded: true,
             shellToolPartsExpanded: true,
             showReasoningSummaries: true,
+            shouldDisplayTabsToast: false,
           },
         }),
       )
