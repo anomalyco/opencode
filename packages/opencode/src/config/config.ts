@@ -224,7 +224,12 @@ const layer = Layer.effect(
         ),
       )
       const parsed = ConfigParse.jsonc(expanded, source)
-      const data = ConfigParse.schema(ConfigV1.Info, normalizeLoadedConfig(parsed), source)
+      const normalized = normalizeLoadedConfig(parsed)
+      const unrecognized = ConfigParse.unrecognizedKeys(ConfigV1.Info, normalized)
+      if (unrecognized.length) {
+        yield* Effect.logWarning("ignoring unrecognized config fields", { source, fields: unrecognized })
+      }
+      const data = ConfigParse.schema(ConfigV1.Info, normalized, source)
       if (!("path" in options)) return data
 
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))

@@ -1347,6 +1347,7 @@ test("config parser preserves permission order while ignoring unknown top-level 
 
   expect(Object.keys(config.permission!)).toEqual(["bash", "*", "edit"])
   expect(config).not.toHaveProperty("plugins")
+  expect(ConfigParse.unrecognizedKeys(ConfigV1.Info, { plugins: ["example"] })).toEqual(["plugins"])
 })
 
 // MCP config merging tests
