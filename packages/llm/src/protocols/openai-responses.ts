@@ -40,6 +40,11 @@ const OpenAIResponsesInputImage = Schema.Struct({
   type: Schema.tag("input_image"),
   image_url: Schema.String,
 })
+const OpenAIResponsesOutputText = Schema.Struct({
+  type: Schema.tag("output_text"),
+  text: Schema.String,
+})
+const OpenAIResponsesAssistantContent = Schema.Union([OpenAIResponsesInputText, OpenAIResponsesOutputText])
 const OpenAIResponsesInputContent = Schema.Union([OpenAIResponsesInputText, OpenAIResponsesInputImage])
 type OpenAIResponsesInputContent = Schema.Schema.Type<typeof OpenAIResponsesInputContent>
 
@@ -73,7 +78,7 @@ const OpenAIResponsesFunctionCallOutput = Schema.Union([
 const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
   Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenAIResponsesInputContent) }),
-  Schema.Struct({ role: Schema.tag("assistant"), content: Schema.Array(OpenAIResponsesInputText) }),
+  Schema.Struct({ role: Schema.tag("assistant"), content: Schema.Array(OpenAIResponsesAssistantContent) }),
   OpenAIResponsesReasoningItem,
   OpenAIResponsesItemReference,
   Schema.Struct({
@@ -369,7 +374,8 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
       const hostedToolReferences = new Set<string>()
       const flushText = () => {
         if (content.length === 0) return
-        input.push({ role: "assistant", content: content.map((part) => ({ type: "input_text", text: part.text })) })
+        const textContentType = OpenAIOptions.assistantTextContentType(request)
+        input.push({ role: "assistant", content: content.map((part) => ({ type: textContentType, text: part.text })) })
         content.splice(0, content.length)
       }
       for (const part of message.content) {
