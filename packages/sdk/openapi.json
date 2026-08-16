@@ -21865,6 +21865,9 @@
               "continue_loop_on_deny": {
                 "type": "boolean"
               },
+              "omit_model_identity": {
+                "type": "boolean"
+              },
               "mcp_timeout": {
                 "type": "integer",
                 "exclusiveMinimum": 0
