@@ -1,6 +1,6 @@
 export * as SessionModelRequest from "./model-request.js"
 
-import { LLM, Message, SystemPart, type ContentPart, type LLMRequest } from "@opencode-ai/ai"
+import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import type { Content } from "@opencode-ai/schema/tool"
 import { Cause, Config, Context, Effect, Layer, Result } from "effect"
@@ -26,8 +26,6 @@ const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
-const TOOL_RESULT_MEDIA_PROMPT = "Attached media from tool result:"
-const TOOL_RESULT_MEDIA_MOVED = "Media attached in the following user message."
 
 /** Failures a prepared execution can surface: infrastructure errors plus user declines resurfaced from the defect tunnel. */
 export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError
@@ -103,31 +101,6 @@ export const unsupportedParts = (messages: LLMRequest["messages"], capabilities:
       }),
     }),
   )
-
-export const toolResultMediaFallback = (messages: LLMRequest["messages"], protocol: string) => {
-  if (protocol !== "ai-sdk") return messages
-  return messages.flatMap((message) => {
-    const media: ContentPart[] = []
-    const content = message.content.map((part) => {
-      if (part.type !== "tool-result" || part.result.type !== "content") return part
-      const value = part.result.value.filter((item) => {
-        if (item.type !== "file") return true
-        if (!item.mime.startsWith("image/") && item.mime !== "application/pdf") return true
-        const data = /^data:[^;,]+(?:;[^,]*)*;base64,(.*)$/s.exec(item.uri)?.[1] ?? item.uri
-        media.push({ type: "media", mediaType: item.mime, data, filename: item.name })
-        return false
-      })
-      return {
-        ...part,
-        result:
-          value.length === 0 ? { type: "text" as const, value: TOOL_RESULT_MEDIA_MOVED } : { ...part.result, value },
-      }
-    })
-    const transformed = Message.make({ ...message, content })
-    if (media.length === 0) return [transformed]
-    return [transformed, Message.user([Message.text(TOOL_RESULT_MEDIA_PROMPT), ...media])]
-  })
-}
 
 export const boundImages = (messages: LLMRequest["messages"]) => {
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
@@ -253,8 +226,6 @@ export const layer = Layer.effect(
           return [[name, { ...tool, description: definition.description, inputSchema: definition.input }] as const]
         }),
       )
-      const supported = unsupportedParts(context.messages, resolved.capabilities)
-      const preparedMessages = toolResultMediaFallback(supported, model.route.protocol)
       const request = LLM.request({
         model,
         http: {
@@ -262,7 +233,7 @@ export const layer = Layer.effect(
         },
         promptCacheKey: SessionPromptCacheKey.make(session.id),
         system: context.system,
-        messages: boundImages(preparedMessages),
+        messages: boundImages(unsupportedParts(context.messages, resolved.capabilities)),
         tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
         toolChoice: stepLimitReached ? "none" : undefined,
       })
