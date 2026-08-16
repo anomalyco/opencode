@@ -25,6 +25,36 @@ interface State {
   approved: PermissionV1.Rule[]
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null) return false
+  const proto = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
+}
+
+function sanitize(value: unknown, path: Set<unknown>): unknown {
+  if (!isPlainObject(value) && !Array.isArray(value)) return value
+  if (path.has(value)) return value
+  path.add(value)
+  const result = Array.isArray(value)
+    ? value.map((item) => sanitize(item, path))
+    : Object.fromEntries(
+        Object.entries(value)
+          .filter(([, item]) => item !== undefined)
+          .map(([key, item]) => [key, sanitize(item, path)]),
+      )
+  path.delete(value)
+  return result
+}
+
+function sanitizeMetadata(metadata: PermissionV1.Request["metadata"]): PermissionV1.Request["metadata"] {
+  const path = new Set<unknown>([metadata])
+  return Object.fromEntries(
+    Object.entries(metadata)
+      .filter(([, item]) => item !== undefined)
+      .map(([key, item]) => [key, sanitize(item, path)]),
+  )
+}
+
 export function evaluate(permission: string, pattern: string, ...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule {
   return (
     rulesets
@@ -89,7 +119,7 @@ const layer = Layer.effect(
         sessionID: request.sessionID,
         permission: request.permission,
         patterns: request.patterns,
-        metadata: request.metadata,
+        metadata: sanitizeMetadata(request.metadata),
         always: request.always,
         tool: request.tool,
       }
