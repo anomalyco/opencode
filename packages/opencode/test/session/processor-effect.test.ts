@@ -402,6 +402,99 @@ it.live("session.processor effect tests preserve text start time", () =>
   ),
 )
 
+it.live("session.processor effect tests scrub think tags from final text on the minimal tier", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.text("<think>internal reasoning</think>the answer")
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "think")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const base = yield* provider.getModel(ref.providerID, ref.modelID)
+        // The parameter suffix resolves the minimal tier via the heuristic.
+        const mdl = { ...base, api: { ...base.api, id: "qwen-test-4b" } }
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "think" }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const text = parts.find((part): part is SessionV1.TextPart => part.type === "text")
+
+        expect(value).toBe("continue")
+        expect(text?.text).toBe("the answer")
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests keep think tags in final text on other tiers", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.text("<think>internal reasoning</think>the answer")
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "think")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        // "test-model" has no parameter suffix and resolves the default tier.
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "think" }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const text = parts.find((part): part is SessionV1.TextPart => part.type === "text")
+
+        expect(value).toBe("continue")
+        expect(text?.text).toBe("<think>internal reasoning</think>the answer")
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
 it.live("session.processor effect tests stop after token overflow requests compaction", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>

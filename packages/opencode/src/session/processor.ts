@@ -19,6 +19,7 @@ import { Token } from "@/util/token"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
+import { SessionTier } from "./tier"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
@@ -561,6 +562,12 @@ const layer = Layer.effect(
               },
               { text: ctx.currentText.text },
             )).text
+            // E5: reasoning-in-text models leak <think> blocks into normal
+            // turns; on the minimal tier scrub them from the completed part
+            // (streaming deltas flow raw, the stored part is the record).
+            // Same regex the title generation uses.
+            if (SessionTier.resolve(ctx.model) === "minimal")
+              ctx.currentText.text = ctx.currentText.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "")
             {
               const end = Date.now()
               ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
