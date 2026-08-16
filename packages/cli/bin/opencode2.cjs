@@ -6,9 +6,7 @@ const path = require("path")
 const os = require("os")
 
 const forwardedSignals =
-  process.platform === "win32"
-    ? ["SIGINT", "SIGTERM", "SIGHUP"]
-    : ["SIGINT", "SIGTERM", "SIGHUP", "SIGUSR1"]
+  process.platform === "win32" ? ["SIGINT", "SIGTERM", "SIGHUP"] : ["SIGINT", "SIGTERM", "SIGHUP", "SIGUSR1"]
 
 function run(target) {
   const child = childProcess.spawn(target, process.argv.slice(2), { stdio: "inherit" })
