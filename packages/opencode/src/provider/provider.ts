@@ -1447,6 +1447,19 @@ const layer = Layer.effect(
               if (model.id && model.id !== modelID) return modelID
               return existingModel?.name ?? modelID
             })
+            const longContext = model.cost?.context_over_200k
+            const optionalLongContext = longContext
+              ? {
+                  experimentalOver200K: {
+                    input: longContext.input,
+                    output: longContext.output,
+                    cache: {
+                      read: longContext.cache_read ?? 0,
+                      write: longContext.cache_write ?? 0,
+                    },
+                  },
+                }
+              : {}
             const parsedModel: Model = {
               id: ModelV2.ID.make(modelID),
               api: {
@@ -1493,6 +1506,7 @@ const layer = Layer.effect(
                   read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
                   write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
                 },
+                ...optionalLongContext,
               },
               options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
               limit: {
