@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { SessionTier } from "@/session/tier"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
@@ -1739,6 +1740,21 @@ const layer = Layer.effect(
             ...options["headers"],
             ...model.headers,
           }
+
+        // E7: slow local decode needs a stall guard that tolerates long token
+        // gaps. When the provider config sets no explicit timeout values,
+        // minimal/default-tier models on openai-compatible endpoints default
+        // chunkTimeout to 300s. Scoped to @ai-sdk/openai-compatible so cloud
+        // SDK behavior is untouched; set before the cache key so tiered and
+        // vendor models on the same provider get distinct SDK instances.
+        if (
+          model.api.npm === "@ai-sdk/openai-compatible" &&
+          options["chunkTimeout"] === undefined &&
+          options["timeout"] === undefined &&
+          SessionTier.resolve(model) !== "vendor"
+        ) {
+          options["chunkTimeout"] = 300_000
+        }
 
         const key = Hash.fast(
           JSON.stringify({
