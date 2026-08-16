@@ -91,4 +91,79 @@
       margin-top: calc(var(--space-1) * -1);
     }
   }
+
+  [data-slot="empty-message"] {
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  [data-slot="invoice-summary"] {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+
+    p {
+      color: var(--color-text);
+      line-height: 1.5;
+      margin: 0;
+    }
+  }
+
+  [data-slot="invoice-form"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+
+    @media (max-width: 30rem) {
+      grid-template-columns: 1fr;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+
+      &[data-wide] {
+        grid-column: 1 / -1;
+      }
+
+      span {
+        color: var(--color-text-muted);
+        font-size: var(--font-size-sm);
+      }
+    }
+
+    input {
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius-sm);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      font-size: var(--font-size-sm);
+      line-height: 1.5;
+      min-width: 0;
+
+      &:focus {
+        outline: none;
+        border-color: var(--color-accent);
+        box-shadow: 0 0 0 3px var(--color-accent-alpha);
+      }
+    }
+
+    [data-slot="form-actions"],
+    [data-slot="form-error"] {
+      grid-column: 1 / -1;
+    }
+
+    [data-slot="form-actions"] {
+      display: flex;
+      gap: var(--space-2);
+    }
+
+    [data-slot="form-error"] {
+      color: var(--color-danger);
+      font-size: var(--font-size-sm);
+    }
+  }
 }

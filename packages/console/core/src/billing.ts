@@ -42,6 +42,59 @@ export namespace Billing {
     )
   }
 
+  export const getInvoiceDetails = async () => {
+    Actor.assertAdmin()
+    const billing = await get()
+    if (!billing?.customerID) return null
+
+    const customer = await stripe().customers.retrieve(billing.customerID)
+    if (customer.deleted) return null
+    return {
+      name: customer.name ?? "",
+      address: {
+        line1: customer.address?.line1 ?? "",
+        line2: customer.address?.line2 ?? "",
+        city: customer.address?.city ?? "",
+        state: customer.address?.state ?? "",
+        postalCode: customer.address?.postal_code ?? "",
+        country: customer.address?.country ?? "",
+      },
+    }
+  }
+
+  export const updateInvoiceDetails = fn(
+    z.object({
+      name: z.string().trim().min(1).max(255),
+      line1: z.string().trim().min(1).max(255),
+      line2: z.string().trim().max(255),
+      city: z.string().trim().min(1).max(255),
+      state: z.string().trim().max(255),
+      postalCode: z.string().trim().min(1).max(32),
+      country: z
+        .string()
+        .trim()
+        .length(2)
+        .transform((value) => value.toUpperCase()),
+    }),
+    async (input) => {
+      Actor.assertAdmin()
+      const billing = await get()
+      if (!billing?.customerID) throw new Error("Enable billing before updating invoice details.")
+
+      await stripe().customers.update(billing.customerID, {
+        name: input.name,
+        address: {
+          line1: input.line1,
+          line2: input.line2,
+          city: input.city,
+          state: input.state,
+          postal_code: input.postalCode,
+          country: input.country,
+        },
+      })
+    },
+  )
+
   export const payments = async () => {
     return await Database.use((tx) =>
       tx
