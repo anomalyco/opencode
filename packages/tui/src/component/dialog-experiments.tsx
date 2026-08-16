@@ -19,6 +19,11 @@ export const experiments: Experiment[] = [
     title: "Remember tab scroll",
     description: "Keep each open tab's reading position and show a shortcut back to the bottom.",
   },
+  {
+    id: "turn_summary_flash",
+    title: "Turn summary flash",
+    description: "Brighten the agent, model, and duration when a turn completes, then fade to their resting colors.",
+  },
 ]
 
 export function DialogExperiments() {

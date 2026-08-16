@@ -98,6 +98,7 @@ import {
   type SessionRow,
 } from "./rows"
 import { switchLabel } from "../../util/model"
+import { AssistantSummary } from "../../component/assistant-summary"
 import { findMessageBoundary, messageNavigationSlack } from "./message-navigation"
 import { stringWidth } from "../../util/string-width"
 import { useArgs } from "../../context/args"
@@ -1334,7 +1335,7 @@ function SessionRowView(props: SessionRowViewProps) {
             <Show when={props.message(row().messageID)}>
               {(message) => (
                 <Show when={message().type === "assistant"}>
-                  <AssistantFooter message={message() as SessionMessageAssistant} />
+                  <AssistantFooter message={message() as SessionMessageAssistant} flash={row().flash} />
                 </Show>
               )}
             </Show>
@@ -1794,11 +1795,10 @@ function SessionGroupView(props: {
   )
 }
 
-function AssistantFooter(props: { message: SessionMessageAssistant }) {
+function AssistantFooter(props: { message: SessionMessageAssistant; flash?: true }) {
   const ctx = use()
   const data = useData()
   const local = useLocal()
-  const dimensions = useTerminalDimensions()
   const theme = useTheme("elevated")
   const model = createMemo(
     () =>
@@ -1818,20 +1818,21 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
       </Show>
       <AssistantRetry retry={props.message.retry} />
       <box paddingLeft={3} marginTop={props.message.retry || (props.message.error && !interrupted()) ? 1 : 0}>
-        <text>
-          <span style={{ fg: props.message.error ? theme.text.subdued : local.agent.color(props.message.agent) }}>
-            {Locale.titlecase(props.message.agent)}
-          </span>
-          <Show when={dimensions().width >= 28}>
-            <span style={{ fg: theme.text.subdued }}> · {model()}</span>
-          </Show>
-          <Show when={duration() && (dimensions().width < 28 || dimensions().width >= 36)}>
-            <span style={{ fg: theme.text.subdued }}> · {Locale.duration(duration())}</span>
-          </Show>
-          <Show when={interrupted()}>
-            <span style={{ fg: theme.text.subdued }}> · interrupted</span>
-          </Show>
-        </text>
+        <AssistantSummary
+          agent={Locale.titlecase(props.message.agent)}
+          model={model()}
+          duration={duration() ? Locale.duration(duration()) : undefined}
+          interrupted={interrupted()}
+          agentColor={props.message.error ? theme.text.subdued : local.agent.color(props.message.agent)}
+          subduedColor={theme.text.subdued}
+          flashColor={theme.text.default}
+          animations={ctx.config.animations ?? true}
+          flash={
+            props.flash && ctx.config.experimental?.turn_summary_flash === true
+              ? { trigger: 1, duration: 0.8, intensity: 0.7 }
+              : undefined
+          }
+        />
       </box>
     </>
   )

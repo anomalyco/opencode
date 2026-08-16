@@ -32,7 +32,7 @@ export type SessionRow =
       pending: PartRef[]
       completed: boolean
     }
-  | { type: "assistant-footer"; messageID: string }
+  | { type: "assistant-footer"; messageID: string; flash?: true }
   | { type: "turn-usage"; messageIDs: string[]; previousCache?: CacheUsage }
 
 export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
@@ -176,13 +176,13 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       }),
     )
 
-  const appendFooter = (messageID: string) =>
+  const appendFooter = (messageID: string, flash?: true) =>
     setRows(
       produce((draft) => {
         if (draft.some((row) => row.type === "assistant-footer" && row.messageID === messageID)) return
         const index = queuedStart(draft)
         completePrevious(draft, index)
-        draft.splice(index, 0, { type: "assistant-footer", messageID })
+        draft.splice(index, 0, { type: "assistant-footer", messageID, ...(flash ? { flash } : {}) })
       }),
     )
 
@@ -268,12 +268,12 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     }),
     data.on("session.step.ended", (event) => {
       if (event.data.sessionID !== sessionID() || ["tool-calls", "unknown"].includes(event.data.finish)) return
-      appendFooter(event.data.assistantMessageID)
+      appendFooter(event.data.assistantMessageID, true)
       if (turnTokens()) setRows(reconcile(reduce()))
     }),
     data.on("session.step.failed", (event) => {
       if (event.data.sessionID !== sessionID()) return
-      appendFooter(event.data.assistantMessageID)
+      appendFooter(event.data.assistantMessageID, true)
       if (turnTokens()) setRows(reconcile(reduce()))
     }),
   ]
