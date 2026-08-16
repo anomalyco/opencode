@@ -18,7 +18,7 @@ import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
@@ -94,13 +94,14 @@ const layer = Layer.effect(
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
     const database = yield* Database.Service
+    const provider = yield* Provider.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
       // may execute tools internally before emitting start-step events,
       // so capturing inside the event handler can be too late.
       const initialSnapshot = yield* snapshot.track()
-      const ctx: ProcessorContext = {
+const ctx: ProcessorContext = {
         assistantMessage: input.assistantMessage,
         sessionID: input.sessionID,
         model: input.model,
@@ -111,6 +112,8 @@ const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        shouldFallback: false,
+        fallbackChain: [],
       }
       let aborted = false
 
@@ -596,7 +599,7 @@ const layer = Layer.effect(
         yield* session.updateMessage(ctx.assistantMessage)
       })
 
-      const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
+const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown, streamInput: LLM.StreamInput) {
         yield* Effect.logError("process", {
           "session.id": input.sessionID,
           messageID: input.assistantMessage.id,
@@ -616,15 +619,51 @@ const layer = Layer.effect(
           yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
         }
+        // Auth errors (bad credentials) should NOT fallback — they'll fail again.
+        if (SessionV1.AuthError.isInstance(error)) {
+          ctx.assistantMessage.error = error
+          yield* events.publish(Session.Event.Error, {
+            sessionID: ctx.assistantMessage.sessionID,
+            error: ctx.assistantMessage.error,
+          })
+          yield* status.set(ctx.sessionID, { type: "idle" })
+          return
+        }
+        // AbortedError (user cancelled) should NOT fallback.
+        if (SessionV1.AbortedError.isInstance(error)) {
+          ctx.assistantMessage.error = error
+          yield* events.publish(Session.Event.Error, {
+            sessionID: ctx.assistantMessage.sessionID,
+            error: ctx.assistantMessage.error,
+          })
+          yield* status.set(ctx.sessionID, { type: "idle" })
+          return
+        }
+        // APIError with isRetryable=false should NOT fallback (permanent failures).
+        if (SessionV1.APIError.isInstance(error) && !error.data.isRetryable) {
+          ctx.assistantMessage.error = error
+          yield* events.publish(Session.Event.Error, {
+            sessionID: ctx.assistantMessage.sessionID,
+            error: ctx.assistantMessage.error,
+          })
+          yield* status.set(ctx.sessionID, { type: "idle" })
+          return
+        }
         ctx.assistantMessage.error = error
         yield* events.publish(Session.Event.Error, {
           sessionID: ctx.assistantMessage.sessionID,
           error: ctx.assistantMessage.error,
         })
         yield* status.set(ctx.sessionID, { type: "idle" })
+        // Signal fallback if a chain is available on the stream input.
+        const chain = streamInput.fallbackModels
+        if (chain && chain.length > 0) {
+          ctx.shouldFallback = true
+          ctx.fallbackChain = [...chain]
+        }
       })
 
-      const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
+const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
         yield* Effect.logInfo("process", {
           "session.id": input.sessionID,
           messageID: input.assistantMessage.id,
@@ -632,53 +671,72 @@ const layer = Layer.effect(
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
+        let currentStreamInput = streamInput
         return yield* Effect.gen(function* () {
-          yield* Effect.gen(function* () {
-            ctx.currentText = undefined
-            ctx.reasoningMap = {}
-            yield* status.set(ctx.sessionID, { type: "busy" })
-            const stream = llm.stream(streamInput)
+          while (true) {
+            yield* Effect.gen(function* () {
+              ctx.currentText = undefined
+              ctx.reasoningMap = {}
+              yield* status.set(ctx.sessionID, { type: "busy" })
+              const stream = llm.stream(currentStreamInput)
 
-            yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
-              Stream.takeUntil(() => ctx.needsCompaction),
-              Stream.runDrain,
+              yield* stream.pipe(
+                Stream.tap((event) => handleEvent(event)),
+                Stream.takeUntil(() => ctx.needsCompaction),
+                Stream.runDrain,
+              )
+            }).pipe(
+              Effect.onInterrupt(() =>
+                Effect.gen(function* () {
+                  aborted = true
+                  if (!ctx.assistantMessage.error) {
+                    yield* halt(new DOMException("Aborted", "AbortError"), currentStreamInput)
+                  }
+                }),
+              ),
+              Effect.catchCauseIf(
+                (cause) => !Cause.hasInterruptsOnly(cause),
+                (cause) => Effect.fail(Cause.squash(cause)),
+              ),
+              Effect.retry(
+                SessionRetry.policy({
+                  provider: input.model.providerID,
+                  parse,
+                  set: (info) => {
+                    return status.set(ctx.sessionID, {
+                      type: "retry",
+                      attempt: info.attempt,
+                      message: info.message,
+                      action: info.action,
+                      next: info.next,
+                    })
+                  },
+                }),
+              ),
+              Effect.catch((e: unknown) => halt(e, currentStreamInput)),
+              Effect.ensuring(cleanup()),
             )
-          }).pipe(
-            Effect.onInterrupt(() =>
-              Effect.gen(function* () {
-                aborted = true
-                if (!ctx.assistantMessage.error) {
-                  yield* halt(new DOMException("Aborted", "AbortError"))
-                }
-              }),
-            ),
-            Effect.catchCauseIf(
-              (cause) => !Cause.hasInterruptsOnly(cause),
-              (cause) => Effect.fail(Cause.squash(cause)),
-            ),
-            Effect.retry(
-              SessionRetry.policy({
-                provider: input.model.providerID,
-                parse,
-                set: (info) => {
-                  return status.set(ctx.sessionID, {
-                    type: "retry",
-                    attempt: info.attempt,
-                    message: info.message,
-                    action: info.action,
-                    next: info.next,
-                  })
-                },
-              }),
-            ),
-            Effect.catch(halt),
-            Effect.ensuring(cleanup()),
-          )
 
-          if (ctx.needsCompaction) return "compact"
-          if (ctx.blocked || ctx.assistantMessage.error) return "stop"
-          return "continue"
+            // If halt signaled fallback and chain still has candidates, swap model and re-iterate.
+            if (ctx.shouldFallback && ctx.fallbackChain.length > 0) {
+              const resolved = yield* provider.resolveFallbackChain(ctx.fallbackChain)
+              if (resolved) {
+                currentStreamInput = {
+                  ...currentStreamInput,
+                  model: resolved.model,
+                  fallbackModels: resolved.remaining,
+                }
+                ctx.shouldFallback = false
+                ctx.fallbackChain = []
+                ctx.assistantMessage.error = undefined
+                continue
+              }
+              return "stop" as const
+            }
+            if (ctx.needsCompaction) return "compact" as const
+            if (ctx.blocked || ctx.assistantMessage.error) return "stop" as const
+            return "continue" as const
+          }
         })
       })
 
@@ -699,7 +757,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [
+deps: [
     Session.node,
     Config.node,
     Snapshot.node,
@@ -712,6 +770,7 @@ export const node = LayerNode.make({
     Image.node,
     EventV2Bridge.node,
     Database.node,
+    Provider.node,
   ],
 })
 

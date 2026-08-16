@@ -71,8 +71,19 @@ export namespace ProviderTest {
           getSmallModel: Effect.fn("TestProvider.getSmallModel")((providerID) =>
             Effect.succeed(providerID === row.id ? mdl : undefined),
           ),
-          defaultModel: Effect.fn("TestProvider.defaultModel")(() =>
+defaultModel: Effect.fn("TestProvider.defaultModel")(() =>
             Effect.succeed({ providerID: row.id, modelID: mdl.id }),
+          ),
+          resolveFallbackChain: Effect.fn("TestProvider.resolveFallbackChain")((chain) =>
+            Effect.gen(function* () {
+              for (let i = 0; i < chain.length; i++) {
+                const { providerID, modelID } = chain[i]
+                if (providerID === row.id && modelID === mdl.id) {
+                  return { model: mdl, remaining: chain.slice(i + 1) }
+                }
+              }
+              return undefined
+            }),
           ),
           ...override,
         }),

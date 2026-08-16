@@ -1,4 +1,4 @@
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+﻿import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import os from "os"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import fuzzysort from "fuzzysort"
@@ -18,7 +18,7 @@ import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Effect, Layer, Context, Schema, Types } from "effect"
+import { Effect, Exit, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
@@ -1161,6 +1161,11 @@ export interface Interface {
   ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderV2.ID) => Effect.Effect<Model | undefined>
   readonly defaultModel: () => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }, DefaultModelError>
+  readonly resolveFallbackChain: (
+    chain: ReadonlyArray<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }>,
+  ) => Effect.Effect<
+    { model: Model; remaining: Array<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }> } | undefined
+  >
 }
 
 interface State {
@@ -1979,7 +1984,27 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    const resolveFallbackChain = Effect.fn("Provider.resolveFallbackChain")(function* (
+      chain: ReadonlyArray<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }>,
+    ) {
+      for (let i = 0; i < chain.length; i++) {
+        const { providerID, modelID } = chain[i]
+        const exit = yield* getModel(providerID, modelID).pipe(Effect.exit)
+        if (Exit.isSuccess(exit)) return { model: exit.value, remaining: chain.slice(i + 1) }
+      }
+      return undefined
+    })
+
+    return Service.of({
+      list,
+      getProvider,
+      getModel,
+      getLanguage,
+      closest,
+      getSmallModel,
+      defaultModel,
+      resolveFallbackChain,
+    })
   }),
 )
 
@@ -2009,3 +2034,4 @@ export const node = LayerNode.make({
 })
 
 export * as Provider from "./provider"
+=======
