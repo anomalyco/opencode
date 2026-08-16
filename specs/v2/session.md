@@ -102,7 +102,6 @@ Current Context Epoch follow-ups:
 
 - Add configured, remote, and nested instruction sources with explicit precedence and removal semantics.
 - Add durable post-crash continuation recovery for promoted or provider-dispatched work.
-- Add explicit manual compaction on top of automatic request-budget compaction.
 - Add operational metrics for observation latency, unavailable sources, contention, baseline size, and chronological-update growth.
 - Consider watcher-backed per-file caching only if measurements show direct safe-boundary observation is too expensive.
 - Expose plugin-defined Context Sources only after plugin reload and scoped cleanup semantics are designed.
@@ -119,6 +118,14 @@ Compaction keeps the full transcript durable while replacing its active model re
 Repeated compactions update the previous structured summary with newly compacted messages. The runner then reloads projected history and executes the original pending turn.
 
 When a provider rejects a request as context overflow before durable assistant output or tool execution, the runner attempts one overflow-triggered compaction even when the local estimate did not predict pressure. A completed checkpoint rebuilds the same logical provider turn with one remaining physical attempt. A second overflow, unavailable compaction, or overflow after durable output becomes the ordinary terminal failure; recovery never loops or replays partial side effects. Deterministic old tool-result pruning remains a separate follow-up.
+
+## Manual Compaction
+
+An explicit compaction request summarizes recorded history without running a provider turn: it promotes no durable input, materializes no tools, and produces no assistant reply. It shares the checkpoint machinery with automatic compaction and durably records `reason: "manual"`, so the next provider attempt rebuilds the baseline from the completed checkpoint exactly as it does after automatic compaction.
+
+Two budget conditions do not apply, because the request is explicit rather than a response to context pressure. The request-budget estimate is skipped entirely, and a model that declares no context window still compacts. Manual compaction also retains no verbatim recent tail: automatic compaction keeps `compaction.keep.tokens` of recent context because it only needs to free enough budget to continue, while an explicit request summarizes the whole active history.
+
+Manual compaction is serialized against that Session's provider turns, so a request issued while a turn is streaming runs once that turn settles. Requests never coalesce with each other or with a pending wakeup. Summarization that produces no usable summary leaves the previous history boundary active, exactly as a failed automatic attempt does.
 
 ## V1 Runtime Context Parity
 
@@ -143,6 +150,7 @@ Status: `complete` is usable in the native V2 path, `partial` covers only part o
 | Per-turn request assembly  | Model variants and request settings                                      | partial  | Apply effective agent options and future plugin-mutated request settings.                                                              |
 | Per-turn request assembly  | Structured-output policy                                                 | missing  | Add prompt format, generated tool, tool choice, and model-visible policy together.                                                     |
 | Per-turn request assembly  | Automatic/context-pressure compaction                                    | complete | V2 initiates automatic and overflow-triggered compaction, then rebuilds the baseline from the completed checkpoint.                    |
+| Per-turn request assembly  | Explicit manual compaction                                               | complete | V2 summarizes on request outside the budget path, serialized against that Session's provider turns.                                    |
 | Prompt/reference expansion | Durable typed prompt attachments                                         | complete | None.                                                                                                                                  |
 | Prompt/reference expansion | Native template and `@` mention expansion                                | missing  | Parse and resolve native V2 prompt input before durable admission.                                                                     |
 | Prompt/reference expansion | File, directory, media, and MCP-resource materialization                 | partial  | Materialize and normalize sources instead of lowering unresolved attachment metadata.                                                  |

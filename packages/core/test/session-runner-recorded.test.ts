@@ -90,12 +90,14 @@ const execution = Layer.effect(
     const sessionRunner = yield* SessionRunner.Service
     const coordinator = yield* SessionRunCoordinator.make<SessionV2.ID, SessionRunner.RunError>({
       drain: (sessionID, force) => sessionRunner.run({ sessionID, force }),
+      aside: (sessionID) => sessionRunner.compact({ sessionID }),
     })
     return SessionExecution.Service.of({
       active: coordinator.active,
       resume: coordinator.run,
       wake: coordinator.wake,
       interrupt: coordinator.interrupt,
+      compact: coordinator.runAside,
     })
   }),
 ).pipe(Layer.provide(runnerLayer))

@@ -189,6 +189,9 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 }),
               ),
             ),
+            // Summarization failures are infrastructure faults with no actionable
+            // client response, matching how other runner-backed routes treat them.
+            Effect.orDie,
           )
           return HttpApiSchema.NoContent.make()
         }),
