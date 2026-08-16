@@ -1371,6 +1371,129 @@ describe("session.llm.stream", () => {
     },
   )
 
+  const localModelBase = {
+    name: "Local Model",
+    attachment: false,
+    reasoning: false,
+    temperature: true,
+    tool_call: true,
+    release_date: "2025-01-01",
+    limit: { context: 32_768, output: 8_192 },
+    cost: { input: 0, output: 0 },
+    options: {},
+  }
+  const localConfig = (models: Record<string, Record<string, unknown>>) => ({
+    enabled_providers: ["local"],
+    provider: {
+      local: {
+        name: "Local",
+        env: [],
+        npm: "@ai-sdk/openai-compatible",
+        models,
+        options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+      },
+    },
+  })
+  const textCallInput = (modelID: string, sessionSuffix: string) =>
+    Effect.gen(function* () {
+      const resolved = yield* Provider.use.getModel(ProviderV2.ID.make("local"), ModelV2.ID.make(modelID))
+      const sessionID = SessionID.make(`session-test-${sessionSuffix}`)
+      const agent = {
+        name: "test",
+        mode: "primary",
+        options: {},
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      } satisfies Agent.Info
+      const captured = { executed: undefined as unknown }
+      return {
+        captured,
+        input: {
+          user: {
+            id: MessageID.make(`msg_user-${sessionSuffix}`),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderV2.ID.make("local"), modelID: resolved.id },
+          } satisfies SessionV1.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Look up the weather" }] satisfies ModelMessage[],
+          tools: {
+            lookup: tool({
+              description: "Lookup data",
+              inputSchema: z.object({ query: z.string() }),
+              execute: async (args) => {
+                captured.executed = args
+                return { output: "looked up" }
+              },
+            }),
+          },
+        } satisfies LLM.StreamInput,
+      }
+    })
+
+  it.instance(
+    "lifts a text-format tool call into a native call on the minimal tier",
+    () =>
+      Effect.gen(function* () {
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream('<tool_call>{"name": "lookup", "arguments": {"query": "weather"}}</tool_call>'), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+        const { captured, input } = yield* textCallInput("qwen3-4b", "textcall-minimal")
+        yield* drain(input)
+        yield* Effect.promise(() => request)
+        expect(captured.executed).toEqual({ query: "weather" })
+      }),
+    { config: () => localConfig({ "qwen3-4b": { ...localModelBase, id: "qwen3-4b" } }) },
+  )
+
+  it.instance(
+    "lifts a fenced json tool call when capabilities.toolcall is false",
+    () =>
+      Effect.gen(function* () {
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream('```json\n{"tool": "lookup", "parameters": {"query": "weather"}}\n```'), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+        // No parameter suffix: the id resolves the default tier, so only the
+        // toolcall === false capability gates the middleware in.
+        const { captured, input } = yield* textCallInput("local-large", "textcall-notoolcall")
+        yield* drain(input)
+        yield* Effect.promise(() => request)
+        expect(captured.executed).toEqual({ query: "weather" })
+      }),
+    { config: () => localConfig({ "local-large": { ...localModelBase, id: "local-large", tool_call: false } }) },
+  )
+
+  it.instance(
+    "bypasses text tool-call lifting for toolcall-capable non-minimal models",
+    () =>
+      Effect.gen(function* () {
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream('<tool_call>{"name": "lookup", "arguments": {"query": "weather"}}</tool_call>'), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+        const { captured, input } = yield* textCallInput("local-large", "textcall-bypass")
+        yield* drain(input)
+        yield* Effect.promise(() => request)
+        expect(captured.executed).toBeUndefined()
+      }),
+    { config: () => localConfig({ "local-large": { ...localModelBase, id: "local-large" } }) },
+  )
+
   it.instance(
     "keeps the leading system message date-free and stable on the default tier",
     () =>

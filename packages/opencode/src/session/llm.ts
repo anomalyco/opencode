@@ -31,6 +31,8 @@ import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRepair } from "./llm/repair"
 import { LLMRequestPrep } from "./llm/request"
+import { LLMTextCall } from "./llm/textcall"
+import { SessionTier } from "./tier"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
@@ -396,6 +398,17 @@ const live: Layer.Layer<
                   return args.params
                 },
               },
+              // B6: models that cannot emit native tool calls, and minimal-tier
+              // models that habitually write calls as text, get stream-level
+              // text-format tool-call lifting. Everything else bypasses.
+              ...(() => {
+                const names = new Set(Object.keys(prepared.tools).filter((name) => name !== "invalid"))
+                const gated =
+                  (input.model.capabilities.toolcall === false ||
+                    SessionTier.resolve(input.model) === "minimal") &&
+                  names.size > 0
+                return gated ? [LLMTextCall.middleware(names)] : []
+              })(),
             ],
           }),
           experimental_telemetry: {
