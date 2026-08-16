@@ -25,6 +25,7 @@ const checkLoggedIn = query(async () => {
 const models = [
   { name: "Grok 4.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 5.6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
+  { name: "GLM-5.3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.2", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.1", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Kimi K3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -79,8 +80,7 @@ function LimitsGraph(props: { href: string }) {
     {
       id: "deepseek-v4-flash",
       name: "DeepSeek V4 Flash",
-      req: 63300,
-      baseReq: 31650,
+      req: 31650,
       edge: true,
       d: "340ms",
     },
@@ -258,12 +258,6 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
-            <div data-component="desktop-app-banner">
-              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
-              <div data-slot="content">
-                <span data-slot="text">{i18n.t("go.banner.text")}</span>
-              </div>
-            </div>
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={goLogoLight} alt="" />
               <img data-slot="zen logo dark" src={goLogoDark} alt="" />

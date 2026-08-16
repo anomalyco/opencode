@@ -253,7 +253,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "following exceptions",
 
   "go.title": "OpenCode Go | Low cost coding models for everyone",
-  "go.banner.text": "DeepSeek V4 Flash gets 2× usage limits for a limited time",
   "go.meta.description":
     "Go starts at $5 for your first month, then $10/month, with generous usage limits and reliable access to leading coding models.",
   "go.hero.title": "Low cost coding models for everyone",
@@ -373,7 +372,8 @@ export const dict = {
   "zen.api.error.providerNotSupported": "Provider {{provider}} not supported",
   "zen.api.error.missingApiKey": "Missing API key.",
   "zen.api.error.invalidApiKey": "Invalid API key.",
-  "zen.api.error.requestBlockedByUpstreamProvider": "Request blocked by upstream provider.",
+  "zen.api.error.requestBlockedByUpstreamProvider":
+    "This account has found to be committing fraud or is in breach of terms of services and has been blocked. If you believe this is a mistake please send an email to help@anoma.ly.",
   "zen.api.error.subscriptionQuotaExceeded": "Subscription quota exceeded. Retry in {{retryIn}}.",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "5-hour usage limit reached. Resets in {{retryIn}}. To continue using this model now, enable usage from your available balance: {{consoleGoUrl}}",

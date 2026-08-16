@@ -256,7 +256,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
-  "go.banner.text": "DeepSeek V4 Flash sınırlı bir süre için 2x kullanım limiti sunuyor",
   "go.meta.description":
     "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",

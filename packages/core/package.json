@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.18.15",
+  "version": "1.18.18",
   "name": "@opencode-ai/core",
   "type": "module",
   "license": "MIT",
@@ -101,7 +101,7 @@
     "@parcel/watcher": "2.5.1",
     "@silvia-odwyer/photon-node": "0.3.4",
     "@openrouter/ai-sdk-provider": "2.9.0",
-    "ai-gateway-provider": "3.1.2",
+    "ai-gateway-provider": "3.2.0",
     "bun-pty": "0.4.8",
     "cross-spawn": "catalog:",
     "diff": "catalog:",
