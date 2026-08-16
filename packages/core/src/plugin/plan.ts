@@ -41,9 +41,9 @@ export const Plugin = define({
     // Compaction and committed reverts can strip reminders while the session's agent stays
     // put. Reconcile per request, appending near the tail so the cached prefix stays warm.
     yield* ctx.session.hook("context", (event) => {
-      const believed = lastReminder(event.messages)
-      const missing = event.agent === plan && believed !== enter
-      const stale = event.agent !== plan && believed === enter
+      const reminder = lastReminder(event.messages)
+      const missing = event.agent === plan && reminder !== enter
+      const stale = event.agent !== plan && reminder === enter
       const text = missing ? enter : stale ? leave : undefined
       if (!text) return Effect.void
       // Before the user's prompt, matching where agent-switch reminders land.
@@ -64,7 +64,7 @@ export const Plugin = define({
           event.type === "session.created" || event.type === "session.agent.selected",
       ),
       Stream.runForEach((event) => {
-        const text = reminder(event)
+        const text = switchReminder(event)
         if (!text) return Effect.void
         return ctx.session
           .synthetic({
@@ -83,7 +83,7 @@ export const Plugin = define({
   }),
 })
 
-function reminder(event: SessionEvent.Created | SessionEvent.AgentSelected) {
+function switchReminder(event: SessionEvent.Created | SessionEvent.AgentSelected) {
   if (event.type === "session.created") {
     if (event.data.agent !== plan) return
     return enter
