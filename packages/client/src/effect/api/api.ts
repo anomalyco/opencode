@@ -1223,13 +1223,23 @@ export type Endpoint13_0Output = ReadonlyArray<Project.Info>
 export type ProjectListOperation<E = never> = () => Effect.Effect<Endpoint13_0Output, E>
 
 export type Endpoint13_1Input = {
+  readonly projectID: Project.ID
+  readonly name?: string | undefined
+  readonly icon?: Project.Icon | undefined
+  readonly commands?: Project.Commands | undefined
+}
+export type Endpoint13_1Output = Project.Info
+export type ProjectUpdateOperation<E = never> = (input: Endpoint13_1Input) => Effect.Effect<Endpoint13_1Output, E>
+
+export type Endpoint13_2Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
-export type Endpoint13_1Output = Project.Current
-export type ProjectCurrentOperation<E = never> = (input?: Endpoint13_1Input) => Effect.Effect<Endpoint13_1Output, E>
+export type Endpoint13_2Output = Project.Current
+export type ProjectCurrentOperation<E = never> = (input?: Endpoint13_2Input) => Effect.Effect<Endpoint13_2Output, E>
 
 export interface ProjectApi<E = never> {
   readonly list: ProjectListOperation<E>
+  readonly update: ProjectUpdateOperation<E>
   readonly current: ProjectCurrentOperation<E>
 }
 

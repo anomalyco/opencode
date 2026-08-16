@@ -2,11 +2,28 @@ import { Location } from "@opencode-ai/core/location"
 import { Project } from "@opencode-ai/core/project"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { ProjectNotFoundError } from "@opencode-ai/protocol/errors"
 import { Api } from "../api"
 
 export const ProjectHandler = HttpApiBuilder.group(Api, "server.project", (handlers) =>
   handlers
     .handle("project.list", () => Project.Service.use((project) => project.list()))
+    .handle(
+      "project.update",
+      Effect.fn(function* (ctx) {
+        const project = yield* Project.Service
+        return yield* project.update(ctx.params.projectID, ctx.payload).pipe(
+          Effect.catchTag(
+            "Project.NotFoundError",
+            () =>
+              new ProjectNotFoundError({
+                projectID: ctx.params.projectID,
+                message: `Project not found: ${ctx.params.projectID}`,
+              }),
+          ),
+        )
+      }),
+    )
     .handle("project.current", () =>
       Location.Service.use((location) =>
         Effect.succeed({

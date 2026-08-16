@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { Skill } from "@opencode-ai/schema/skill"
+import { Project } from "@opencode-ai/schema/project"
 
 export class InvalidRequestError extends Schema.TaggedErrorClass<InvalidRequestError>()(
   "InvalidRequestError",
@@ -57,6 +58,15 @@ export class ProviderNotFoundError extends Schema.TaggedErrorClass<ProviderNotFo
   "ProviderNotFoundError",
   {
     providerID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class ProjectNotFoundError extends Schema.TaggedErrorClass<ProjectNotFoundError>()(
+  "ProjectNotFoundError",
+  {
+    projectID: Project.ID,
     message: Schema.String,
   },
   { httpApiStatus: 404 },

@@ -139,6 +139,8 @@ import type {
   Endpoint13_0Output,
   Endpoint13_1Input,
   Endpoint13_1Output,
+  Endpoint13_2Input,
+  Endpoint13_2Output,
   Endpoint14_0Input,
   Endpoint14_0Output,
   Endpoint14_1Input,
@@ -863,12 +865,24 @@ const adaptGroup12 = (raw: RawClient["server.credential"]) => ({ update: Endpoin
 const Endpoint13_0 = (raw: RawClient["server.project"]) => () =>
   preserveEffect<Endpoint13_0Output>()(raw["project.list"]({}).pipe(Effect.mapError(mapClientError)))
 
-const Endpoint13_1 = (raw: RawClient["server.project"]) => (input?: Endpoint13_1Input) =>
+const Endpoint13_1 = (raw: RawClient["server.project"]) => (input: Endpoint13_1Input) =>
   preserveEffect<Endpoint13_1Output>()(
+    raw["project.update"]({
+      params: { projectID: input["projectID"] },
+      payload: { name: input["name"], icon: input["icon"], commands: input["commands"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const Endpoint13_2 = (raw: RawClient["server.project"]) => (input?: Endpoint13_2Input) =>
+  preserveEffect<Endpoint13_2Output>()(
     raw["project.current"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroup13 = (raw: RawClient["server.project"]) => ({ list: Endpoint13_0(raw), current: Endpoint13_1(raw) })
+const adaptGroup13 = (raw: RawClient["server.project"]) => ({
+  list: Endpoint13_0(raw),
+  update: Endpoint13_1(raw),
+  current: Endpoint13_2(raw),
+})
 
 const Endpoint14_0 = (raw: RawClient["server.form"]) => (input?: Endpoint14_0Input) =>
   preserveEffect<Endpoint14_0Output>()(
