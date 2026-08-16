@@ -250,7 +250,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "다음 예외",
 
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
-  "go.banner.text": "DeepSeek V4 Flash 사용 한도가 한시적으로 2배 확대됩니다",
   "go.meta.description":
     "Go는 첫 달 $5, 이후 $10/월로 시작하며, 넉넉한 사용 한도와 주요 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
