@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Project } from "@/project/project"
 import { $ } from "bun"
 import path from "path"
+import * as fs from "fs/promises"
 import { tmpdirScoped } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
@@ -359,6 +360,29 @@ describe("Project.fromDirectory with worktrees", () => {
       const next = yield* project.fromDirectory(clone)
 
       expect(next.project.id).toBe(result.project.id)
+    }),
+  )
+
+  it.live("adopts a moved checkout as the project worktree when the original is gone", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+      yield* Effect.promise(() => $`git remote add origin git@github.com:Test-Org/Moved-Repo.git`.cwd(tmp).quiet())
+
+      const result = yield* project.fromDirectory(tmp)
+      expect(result.project.worktree).toBe(tmp)
+
+      const moved = tmp + "-moved"
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => $`rm -rf ${moved}`.quiet().nothrow()).pipe(Effect.ignore),
+      )
+      yield* Effect.promise(() => fs.rename(tmp, moved))
+
+      const next = yield* project.fromDirectory(moved)
+
+      expect(next.project.id).toBe(result.project.id)
+      expect(next.project.worktree).toBe(moved)
+      expect(next.sandbox).toBe(moved)
     }),
   )
 

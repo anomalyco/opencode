@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Deferred, Effect, Fiber, Layer } from "effect"
+import path from "path"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -47,6 +48,19 @@ describe("InstanceStore", () => {
 
       expect(ctx.directory).toBe(dir)
       expect(ctx.worktree).toBe(dir)
+    }),
+  )
+
+  it.live("boots into the resolved worktree when the requested directory no longer exists", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped({ git: true })
+      const stale = path.join(tmp, "gone")
+      const store = yield* InstanceStore.Service
+
+      const ctx = yield* store.load({ directory: stale })
+
+      expect(ctx.directory).toBe(tmp)
+      expect(ctx.worktree).toBe(tmp)
     }),
   )
 

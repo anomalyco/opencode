@@ -232,9 +232,19 @@ const layer = Layer.effect(
 
       if (flags.experimentalIconDiscovery) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
 
+      // If the project's canonical worktree no longer exists on disk but the
+      // repository still resolves to a valid checkout, the repo has been moved
+      // or renamed. Adopt the resolved git worktree so the project stays usable
+      // and clients stop referencing the dead path.
+      const adoptWorktree =
+        projectID !== ProjectV2.ID.global &&
+        data.directory !== existing.worktree &&
+        !(yield* fs.exists(existing.worktree).pipe(Effect.orDie))
+
       const result: Info = {
         ...existing,
-        worktree: projectID === ProjectV2.ID.global ? worktree : existing.worktree,
+        worktree:
+          projectID === ProjectV2.ID.global ? worktree : adoptWorktree ? data.directory : existing.worktree,
         vcs: data.vcs?.type ?? fakeVcs,
         time: { ...existing.time, updated: Date.now() },
       }
@@ -293,6 +303,15 @@ const layer = Layer.effect(
           .update(SessionTable)
           .set({ project_id: projectID })
           .where(and(eq(SessionTable.project_id, ProjectV2.ID.global), eq(SessionTable.directory, data.directory)))
+          .run()
+          .pipe(Effect.orDie)
+      }
+
+      if (adoptWorktree) {
+        yield* db
+          .update(SessionTable)
+          .set({ directory: data.directory })
+          .where(and(eq(SessionTable.project_id, projectID), eq(SessionTable.directory, existing.worktree)))
           .run()
           .pipe(Effect.orDie)
       }

@@ -6,6 +6,8 @@ import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { existsSync } from "fs"
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from "effect"
 import { type InstanceContext } from "./instance-context"
 import { InstanceBootstrap } from "./bootstrap-service"
@@ -51,13 +53,23 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
                 worktree: input.worktree,
                 project: input.project,
               }
-            : yield* project.fromDirectory(input.directory).pipe(
-                Effect.map((result) => ({
-                  directory: input.directory,
+            : yield* Effect.gen(function* () {
+                const result = yield* project.fromDirectory(input.directory)
+                // If the requested directory no longer exists (e.g. the repository
+                // was moved after the project was created), boot into the directory
+                // the project actually resolved to instead of failing on the stale
+                // path. Only do this for resolved git projects, otherwise keep the
+                // requested directory untouched.
+                const directory =
+                  existsSync(input.directory) || result.project.id === ProjectV2.ID.global
+                    ? input.directory
+                    : result.sandbox
+                return {
+                  directory,
                   worktree: result.sandbox,
                   project: result.project,
-                })),
-              )
+                }
+              })
         yield* bootstrap.run.pipe(Effect.provideService(InstanceRef, ctx))
         return ctx
       }).pipe(Effect.withSpan("InstanceStore.boot"))
