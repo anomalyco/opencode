@@ -1,10 +1,10 @@
 export * as Sqlite from "./sqlite.js"
 
-import { Context, Effect, Fiber, Scope, Semaphore, Stream } from "effect"
+import { Context, Duration, Effect, Fiber, Schedule, Scope, Semaphore, Stream } from "effect"
 import { identity } from "effect/Function"
 import { SqlClient, Statement } from "effect/unstable/sql"
 import type { Connection } from "effect/unstable/sql/SqlConnection"
-import type { SqlError } from "effect/unstable/sql/SqlError"
+import { SqlError } from "effect/unstable/sql/SqlError"
 
 export class Native extends Context.Service<Native, unknown>()("@opencode-ai/core/database/SqliteNative") {}
 
@@ -24,19 +24,36 @@ type RunValues = (
   params?: ReadonlyArray<unknown>,
 ) => Effect.Effect<ReadonlyArray<ReadonlyArray<unknown>>, SqlError>
 
+// SQLITE_BUSY/SQLITE_LOCKED mean the statement never executed, so retrying it
+// is side-effect free. Native busy waiting (busy_timeout) blocks the whole
+// event loop, so locked statements retry cooperatively with a bounded,
+// jittered exponential schedule instead (roughly 25ms..800ms per attempt).
+const lockedStatementSchedule = Schedule.exponential(Duration.millis(25)).pipe(
+  Schedule.jittered,
+  Schedule.upTo({ times: 6 }),
+)
+
+const retryLocked = <A>(effect: Effect.Effect<A, SqlError>) =>
+  effect.pipe(
+    Effect.retry({
+      schedule: lockedStatementSchedule,
+      while: (error) => error.reason._tag === "LockTimeoutError",
+    }),
+  )
+
 export const makeConnection = <Extensions extends object>(run: Run, runValues: RunValues, extensions: Extensions) =>
   identity<Connection & Extensions>({
     execute(query, params, transformRows) {
-      return transformRows ? Effect.map(run(query, params), transformRows) : run(query, params)
+      return transformRows ? Effect.map(retryLocked(run(query, params)), transformRows) : retryLocked(run(query, params))
     },
     executeRaw(query, params) {
-      return run(query, params)
+      return retryLocked(run(query, params))
     },
     executeValues(query, params) {
-      return runValues(query, params)
+      return retryLocked(runValues(query, params))
     },
     executeValuesUnprepared(query, params) {
-      return runValues(query, params)
+      return retryLocked(runValues(query, params))
     },
     executeUnprepared(query, params, transformRows) {
       return this.execute(query, params, transformRows)
@@ -95,3 +112,4 @@ export const makeClient = <
         readonly updateValues: never
       } & Extensions
   })
+

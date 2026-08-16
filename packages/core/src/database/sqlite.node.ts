@@ -81,7 +81,9 @@ const nativeLayer = (config: Config) =>
     Effect.gen(function* () {
       const native = new DatabaseSync(config.filename, {
         readOnly: config.readonly,
-        timeout: config.timeout,
+        // Node's native busy wait would block the event loop; locked statements
+        // fail immediately and retry cooperatively in Sqlite.makeConnection.
+        timeout: config.timeout ?? 0,
         allowExtension: config.allowExtension,
         enableForeignKeyConstraints: true,
         open: true,
