@@ -636,8 +636,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         run: async () => {
           dialog.clear()
           try {
-            const result = await sdk.client.loop.create({ prompt: "", mode: "queue" }, { throwOnError: true })
+            // fork: run in the visible session, matching /backlog's prompt intercept
+            const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+            const result = await sdk.client.loop.create({ prompt: "", mode: "queue", sessionID }, { throwOnError: true })
             const info = result.data!
+            if (!sessionID) route.navigate({ type: "session", sessionID: info.sessionID })
             toast.show({
               variant: "success",
               message:
