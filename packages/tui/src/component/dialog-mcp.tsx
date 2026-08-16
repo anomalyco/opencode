@@ -6,6 +6,7 @@ import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "../
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "../context/sdk"
+import { Spinner } from "./spinner"
 
 function Status(props: { enabled: boolean; loading: boolean }) {
   const { theme } = useTheme()
@@ -24,6 +25,9 @@ export function DialogMcp() {
   const sdk = useSDK()
   const [, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [loading, setLoading] = createSignal<string | null>(null)
+  const [attention, setAttention] = createSignal(0)
+  const initialLoading = () => sync.data.mcp_status === "loading"
+  const failed = () => sync.data.mcp_status === "error"
 
   const options = createMemo(() => {
     // Track sync data and loading state to trigger re-render when they change
@@ -75,8 +79,21 @@ export function DialogMcp() {
     <DialogSelect
       ref={setRef}
       title="MCPs"
-      options={options()}
+      options={initialLoading() || failed() ? [] : options()}
       actions={actions()}
+      locked={initialLoading() || failed()}
+      onEmptySubmit={initialLoading() ? () => setAttention((value) => value + 1) : undefined}
+      emptyView={
+        initialLoading() ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <Spinner attention={attention()}>Loading MCPs</Spinner>
+          </box>
+        ) : failed() ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <text>Could not load MCP status</text>
+          </box>
+        ) : undefined
+      }
       onSelect={(_option) => {
         // Don't close on select, only on escape
       }}

@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { useSync } from "./sync"
 import { useEvent } from "./event"
 import path from "path"
@@ -32,6 +32,16 @@ export function parseModel(model: string) {
   }
 }
 
+export function resolveEarlyModel(input: {
+  argsModel?: string
+  configModel?: string
+  recent: { providerID: string; modelID: string }[]
+}): { providerID: string; modelID: string } | undefined {
+  if (input.argsModel) return parseModel(input.argsModel)
+  if (input.configModel) return parseModel(input.configModel)
+  return input.recent[0]
+}
+
 export function recentModels(
   model: { providerID: string; modelID: string },
   recent: { providerID: string; modelID: string }[],
@@ -46,6 +56,44 @@ export function recentModels(
     })
     .slice(0, 10)
     .map((item) => ({ providerID: item.providerID, modelID: item.modelID }))
+}
+
+export function resolveAgentSelection(
+  status: "loading" | "complete" | "error",
+  agents: readonly { name: string }[],
+  name: string,
+) {
+  if (status === "loading") return "pending" as const
+  if (status === "error") return "unavailable" as const
+  return agents.some((agent) => agent.name === name) ? ("available" as const) : ("missing" as const)
+}
+
+export function settlePendingAgentSelection(
+  status: "loading" | "complete" | "error",
+  agents: readonly { name: string }[],
+  state: { current: string | undefined; pending: boolean },
+): { current: string | undefined; pending: false; missing: string | undefined } | undefined {
+  if (!state.pending || status === "loading") return
+  if (status === "error") return { current: undefined, pending: false, missing: undefined }
+  const name = state.current
+  if (!name || resolveAgentSelection(status, agents, name) === "available") {
+    return { current: name, pending: false, missing: undefined }
+  }
+  return { current: undefined, pending: false, missing: name }
+}
+
+export function moveAgent<T extends { name: string }>(
+  direction: 1 | -1,
+  agents: T[],
+  current: T | undefined,
+  select: (agent: T) => void,
+) {
+  if (!current) return false
+  let next = agents.findIndex((agent) => agent.name === current.name) + direction
+  if (next < 0) next = agents.length - 1
+  if (next >= agents.length) next = 0
+  select(agents[next])
+  return true
 }
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
@@ -79,6 +127,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const visibleAgents = createMemo(() => sync.data.agent.filter((agent) => !agent.hidden))
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
+        pending: false,
       })
       const colors = createMemo(() => [
         theme.secondary,
@@ -89,31 +138,53 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.error,
         theme.info,
       ])
+
+      function warnMissing(name: string) {
+        toast.show({
+          variant: "warning",
+          message: `Agent not found: ${name}`,
+          duration: 3000,
+        })
+      }
+
+      createEffect(() => {
+        const settlement = settlePendingAgentSelection(sync.data.agent_status, agents(), {
+          current: agentStore.current,
+          pending: agentStore.pending,
+        })
+        if (!settlement) return
+        batch(() => {
+          setAgentStore("current", settlement.current)
+          setAgentStore("pending", settlement.pending)
+        })
+        if (settlement.missing) warnMissing(settlement.missing)
+      })
+
+      const current = () => agents().find((x) => x.name === agentStore.current) ?? agents().at(0)
       return {
         list() {
           return agents()
         },
-        current() {
-          return agents().find((x) => x.name === agentStore.current) ?? agents().at(0)
-        },
+        current,
         set(name: string) {
-          if (!agents().some((x) => x.name === name))
-            return toast.show({
-              variant: "warning",
-              message: `Agent not found: ${name}`,
-              duration: 3000,
+          const state = resolveAgentSelection(sync.data.agent_status, agents(), name)
+          if (state === "pending") {
+            batch(() => {
+              setAgentStore("current", name)
+              setAgentStore("pending", true)
             })
-          setAgentStore("current", name)
+            return
+          }
+          if (state === "unavailable") return
+          if (state === "missing") return warnMissing(name)
+          batch(() => {
+            setAgentStore("current", name)
+            setAgentStore("pending", false)
+          })
         },
         move(direction: 1 | -1) {
           batch(() => {
-            const current = this.current()
-            if (!current) return
-            let next = agents().findIndex((x) => x.name === current.name) + direction
-            if (next < 0) next = agents().length - 1
-            if (next >= agents().length) next = 0
-            const value = agents()[next]
-            setAgentStore("current", value.name)
+            moveAgent(direction, agents(), current(), (agent) => setAgentStore("current", agent.name))
           })
         },
         color(name: string) {
@@ -153,12 +224,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           modelID: string
         }[]
         variant: Record<string, string | undefined>
+        labels: Record<string, { providerName: string; modelName: string }>
       }>({
         ready: false,
         model: {},
         recent: [],
         favorite: [],
         variant: {},
+        labels: {},
       })
 
       const filePath = path.join(paths.state, "model.json")
@@ -176,6 +249,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           recent: modelStore.recent,
           favorite: modelStore.favorite,
           variant: modelStore.variant,
+          labels: modelStore.labels,
         })
       }
 
@@ -187,6 +261,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(value.favorite)) setModelStore("favorite", value.favorite)
           if (typeof value.variant === "object" && value.variant !== null)
             setModelStore("variant", value.variant as Record<string, string | undefined>)
+          if (typeof value.labels === "object" && value.labels !== null)
+            setModelStore("labels", value.labels as Record<string, { providerName: string; modelName: string }>)
         })
         .catch(() => {})
         .finally(() => {
@@ -195,6 +271,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
 
       const fallbackModel = createMemo(() => {
+        const catalogLoading = sync.data.provider.length === 0 && sync.status === "loading"
+        if (catalogLoading) {
+          const early = resolveEarlyModel({
+            argsModel: args.model,
+            configModel: sync.data.config.model,
+            recent: modelStore.recent,
+          })
+          if (early) return early
+        }
+
         if (args.model) {
           const { providerID, modelID } = parseModel(args.model)
           if (isModelValid({ providerID, modelID })) {
@@ -233,19 +319,40 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
       })
 
-      const currentModel = createMemo(() => {
+      const validatedModel = createMemo(() => {
         const a = agent.current()
-        return (
-          getFirstValidModel(
-            () => a && modelStore.model[a.name],
-            () => a && a.model,
-            fallbackModel,
-          ) ?? undefined
+        return getFirstValidModel(
+          () => a && modelStore.model[a.name],
+          () => a && a.model,
+          fallbackModel,
         )
+      })
+
+      const currentModel = createMemo(() => {
+        const validated = validatedModel()
+        if (validated) return validated
+        // While the catalog is still loading, surface the optimistic model
+        // (from config/recent) so the indicator is populated at first paint.
+        if (sync.data.provider.length === 0 && sync.status === "loading") return fallbackModel()
+        return undefined
+      })
+
+      createEffect(() => {
+        const value = currentModel()
+        if (!value) return
+        const provider = sync.data.provider.find((item) => item.id === value.providerID)
+        const info = provider?.models[value.modelID]
+        if (!provider?.name || !info?.name) return
+        const key = `${value.providerID}/${value.modelID}`
+        const cached = modelStore.labels[key]
+        if (cached && cached.providerName === provider.name && cached.modelName === info.name) return
+        setModelStore("labels", key, { providerName: provider.name, modelName: info.name })
+        save()
       })
 
       return {
         current: currentModel,
+        validated: validatedModel,
         get ready() {
           return modelStore.ready
         },
@@ -266,9 +373,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
           const provider = sync.data.provider.find((item) => item.id === value.providerID)
           const info = provider?.models[value.modelID]
+          const cached = modelStore.labels[`${value.providerID}/${value.modelID}`]
           return {
-            provider: provider?.name ?? value.providerID,
-            model: info?.name ?? value.modelID,
+            provider: provider?.name ?? cached?.providerName ?? value.providerID,
+            model: info?.name ?? cached?.modelName ?? value.modelID,
             reasoning: info?.capabilities?.reasoning ?? false,
           }
         }),

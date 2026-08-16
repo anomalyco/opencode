@@ -68,8 +68,14 @@ function parse(tip: string): TipPart[] {
   return parts
 }
 
+const STARTUP_TIP = "Type {highlight}@{/highlight} followed by a filename to fuzzy search and attach files"
 const NO_MODELS_TIP = "Run {highlight}/connect{/highlight} to add an AI provider and start coding"
 const NO_MODELS_PARTS = parse(NO_MODELS_TIP)
+
+export function selectTip(tips: string[], offset: number, connected?: boolean) {
+  if (connected === false) return NO_MODELS_TIP
+  return tips[Math.floor(offset * tips.length)] ?? NO_MODELS_TIP
+}
 
 function shortcutText(value: string) {
   return `{highlight}${value}{/highlight}`
@@ -132,20 +138,21 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
     terminalSuspend: useCommandShortcut("terminal.suspend"),
     themeList: useCommandShortcut("theme.switch"),
   }
-  const tip = createMemo(() => {
-    if (props.connected === false) return NO_MODELS_TIP
+  const select = () => {
     const tips = [...TIPS, process.platform !== "win32" ? TERMINAL_SUSPEND_TIP : INPUT_UNDO_TIP].flatMap((item) => {
       const value = typeof item === "string" ? item : item(shortcuts)
       return value ? [value] : []
     })
-    return tips[Math.floor(tipOffset * tips.length)] ?? NO_MODELS_TIP
-  }, NO_MODELS_TIP)
+    return selectTip(tips, tipOffset, props.connected)
+  }
+  const initial = select()
+  const tip = createMemo(select, initial)
   // Solid can expose a memo's initial value while a pure computation is pending.
   const parts = createMemo(() => {
     const value = tip()
     if (typeof value === "string") return parse(value)
     return NO_MODELS_PARTS
-  }, NO_MODELS_PARTS)
+  }, parse(initial))
 
   return (
     <box flexDirection="row" maxWidth="100%">
@@ -162,7 +169,7 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
 }
 
 const TIPS: Tip[] = [
-  "Type {highlight}@{/highlight} followed by a filename to fuzzy search and attach files",
+  STARTUP_TIP,
   "Start a message with {highlight}!{/highlight} to run shell commands (e.g., {highlight}!ls -la{/highlight})",
   (shortcuts) => press(shortcuts.agentCycle(), "to cycle between Build and Plan agents"),
   "Use {highlight}/undo{/highlight} to revert the last message and file changes",

@@ -61,6 +61,10 @@ mise use -g opencode               # Any OS
 nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
 ```
 
+The TUI renders before background synchronization completes. Set
+`OPENCODE_NO_FAST_BOOT=1` to restore the initial synchronization gate when
+diagnosing startup or plugin issues.
+
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
 

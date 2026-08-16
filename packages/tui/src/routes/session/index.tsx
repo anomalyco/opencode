@@ -194,6 +194,7 @@ export function Session() {
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
+  const hydrated = createMemo(() => sync.data.session_hydration[route.sessionID] === "complete")
   const location = createMemo(() => {
     const current = session()
     return current ? { directory: current.directory, workspaceID: current.workspaceID } : undefined
@@ -238,8 +239,10 @@ export function Session() {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.question[x.id] ?? [])
   })
-  const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
-  const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
+  const visible = createMemo(
+    () => hydrated() && !session()?.parentID && permissions().length === 0 && questions().length === 0,
+  )
+  const disabled = createMemo(() => !hydrated() || permissions().length > 0 || questions().length > 0)
 
   const pending = createMemo(() => {
     const completed = messages().findLastIndex((message) => message.role === "assistant" && message.time.completed)
@@ -312,6 +315,7 @@ export function Session() {
       }
       editor.reconnect(result.data.directory)
       await sync.session.sync(sessionID)
+      if (sync.data.session_hydration[sessionID] === "error") throw new Error("Failed to load session data")
       if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
@@ -1085,14 +1089,18 @@ export function Session() {
   ])
 
   const sessionCommands = createMemo(() =>
-    sessionCommandList().map((command) => ({
-      namespace: "palette",
-      name: command.value,
-      desc: "description" in command ? command.description : undefined,
-      slashName: "slash" in command ? command.slash?.name : undefined,
-      slashAliases: "slash" in command ? command.slash?.aliases : undefined,
-      ...command,
-    })),
+    sessionCommandList().map((command) => {
+      const enabled = "enabled" in command ? command.enabled : true
+      return {
+        namespace: "palette",
+        name: command.value,
+        desc: "description" in command ? command.description : undefined,
+        slashName: "slash" in command ? command.slash?.name : undefined,
+        slashAliases: "slash" in command ? command.slash?.aliases : undefined,
+        ...command,
+        enabled: hydrated() && enabled,
+      }
+    }),
   )
 
   useBindings(() => ({
@@ -1295,6 +1303,11 @@ export function Session() {
                 </For>
               </scrollbox>
               <box flexShrink={0}>
+                <Show when={!hydrated()}>
+                  <box paddingLeft={1}>
+                    <Spinner>Loading session</Spinner>
+                  </box>
+                </Show>
                 <Show when={permissions().length > 0}>
                   <PermissionPrompt
                     request={permissions()[0]}

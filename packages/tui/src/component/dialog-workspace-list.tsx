@@ -10,8 +10,19 @@ import { createStore } from "solid-js/store"
 import { errorMessage } from "../util/error"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
+import { Spinner } from "./spinner"
 
 type WorkspaceOption = { workspace: Workspace }
+
+export async function loadDialogWorkspaceList(input: {
+  syncList: () => Promise<{ error?: unknown }>
+  sync: () => Promise<boolean>
+}) {
+  const listed = await input.syncList().catch((error) => ({ error }))
+  if (listed.error) return listed.error
+  const synced = await input.sync().catch(() => false)
+  if (!synced) return new Error("Workspace list returned no data")
+}
 
 export function DialogWorkspaceList() {
   const dialog = useDialog()
@@ -23,6 +34,9 @@ export function DialogWorkspaceList() {
   const { theme } = useTheme()
   const [deleting, setDeleting] = createSignal<string>()
   const [removing, setRemoving] = createSignal<string>()
+  const [loading, setLoading] = createSignal(true)
+  const [loadError, setLoadError] = createSignal<unknown>()
+  const [attention, setAttention] = createSignal(0)
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
 
   const current = createMemo(() => {
@@ -88,15 +102,35 @@ export function DialogWorkspaceList() {
 
   onMount(() => {
     dialog.setSize("large")
-    void sdk.client.experimental.workspace.syncList().catch(() => undefined)
-    void project.workspace.sync()
+    void loadDialogWorkspaceList({
+      syncList: () => sdk.client.experimental.workspace.syncList(),
+      sync: project.workspace.sync,
+    })
+      .then(setLoadError)
+      .finally(() => setLoading(false))
   })
+
+  const failed = () => loadError() !== undefined
 
   return (
     <DialogSelect
       title="Workspaces"
-      options={options()}
-      onMove={(option) => {
+      options={loading() || failed() ? [] : options()}
+      locked={loading() || failed()}
+      onEmptySubmit={loading() ? () => setAttention((value) => value + 1) : undefined}
+      emptyView={
+        loading() ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <Spinner attention={attention()}>Loading workspaces</Spinner>
+          </box>
+        ) : failed() ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <text fg={theme.error}>Could not load workspaces</text>
+            <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
+          </box>
+        ) : undefined
+      }
+      onMove={() => {
         setDeleting(undefined)
       }}
       onSelect={(option) => showDetails(option.value.workspace)}

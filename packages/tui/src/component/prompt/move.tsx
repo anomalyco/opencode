@@ -66,8 +66,16 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   }
 
   function open() {
+    if (progress()) return
     const projectID = input.projectID()
-    if (!projectID) return
+    if (!projectID) {
+      toast.show({
+        title: "Project is still loading",
+        message: "Wait for project metadata before moving this session.",
+        variant: "info",
+      })
+      return
+    }
     const sessionID = input.sessionID()
     const session = sessionID ? sync.session.get(sessionID) : undefined
     dialog.replace(() => (
@@ -115,10 +123,15 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   }
 
   async function moveExistingSession(sessionID: string, selection: MoveSessionSelection) {
+    if (progress()) return
+    setProgress("Preparing move")
     const session = sync.session.get(sessionID)
     const status = await sdk.client.vcs.status({ directory: session?.directory }).catch(() => undefined)
     const choice = status?.data?.length ? await DialogWorkspaceFileChanges.show(dialog, status.data) : "no"
-    if (!choice) return
+    if (!choice) {
+      setProgress(undefined)
+      return
+    }
     dialog.clear()
     const directory = selection.type === "new" ? await create(sessionContext(sessionID)) : selection.directory
     if (!directory) {

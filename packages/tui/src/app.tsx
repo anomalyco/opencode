@@ -24,7 +24,8 @@ import {
   Show,
   on,
 } from "solid-js"
-import { TuiPathsProvider, TuiStartupProvider, TuiTerminalEnvironmentProvider, useTuiStartup } from "./context/runtime"
+import { TuiPathsProvider, TuiStartupProvider, TuiTerminalEnvironmentProvider } from "./context/runtime"
+import { createPasteSummaryEnabled, resolveSkipInitialLoading } from "./app-state"
 import { DialogProvider, useDialog } from "./ui/dialog"
 import { DialogProvider as DialogProviderList } from "./component/dialog-provider"
 import { ErrorComponent } from "./component/error-component"
@@ -275,7 +276,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                       <TuiStartupProvider
                         value={{
                           initialRoute: process.env.OPENCODE_ROUTE ? JSON.parse(process.env.OPENCODE_ROUTE) : undefined,
-                          skipInitialLoading: Boolean(process.env.OPENCODE_FAST_BOOT),
+                          skipInitialLoading: resolveSkipInitialLoading(process.env.OPENCODE_NO_FAST_BOOT),
                         }}
                       >
                         <ClipboardProvider>
@@ -363,7 +364,6 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
 })
 
 function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPluginHost }) {
-  const startup = useTuiStartup()
   const tuiConfig = useTuiConfig()
   const route = useRoute()
   const dimensions = useTerminalDimensions()
@@ -404,7 +404,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       Slot: pluginRuntime.Slot,
     }),
   )
-  const [ready, setReady] = createSignal(false)
+  const [pluginReady, setPluginReady] = createSignal(false)
+  const startupReady = createMemo(() => pluginReady() && sync.status === "complete")
   props.pluginHost
     .start({
       api,
@@ -416,7 +417,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       console.error("Failed to load TUI plugins", error)
     })
     .finally(() => {
-      setReady(true)
+      setPluginReady(true)
     })
 
   // Let selection copy/dismiss win ahead of normal bindings when explicit copy is required.
@@ -445,8 +446,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
-  const [pasteSummaryEnabled, setPasteSummaryEnabled] = createSignal(
-    kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
+  const pasteSummaryEnabled = createPasteSummaryEnabled(
+    () => kv.get("paste_summary_enabled"),
+    () => sync.data.config.experimental?.disable_paste_summary,
   )
 
   // Update terminal window title based on current route and session
@@ -549,6 +551,18 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   )
 
   const connected = useConnected()
+  function requireModelMetadata() {
+    if (sync.data.provider_status === "complete" && sync.data.agent_status === "complete") return true
+    const loading = sync.data.provider_status === "loading" || sync.data.agent_status === "loading"
+    toast.show({
+      title: loading ? "Models are still loading" : "Models are unavailable",
+      message: loading
+        ? "Wait for model and agent metadata before changing models or variants."
+        : "Model metadata could not be loaded. Try again after reconnecting.",
+      variant: loading ? "info" : "error",
+    })
+    return false
+  }
   const currentWorktreeWorkspace = createMemo(() => {
     const workspaceID = project.workspace.current()
     if (!workspaceID) return
@@ -644,6 +658,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "Agent",
         hidden: true,
         run: () => {
+          if (!requireModelMetadata()) return
           local.model.cycle(1)
         },
       },
@@ -653,6 +668,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "Agent",
         hidden: true,
         run: () => {
+          if (!requireModelMetadata()) return
           local.model.cycle(-1)
         },
       },
@@ -662,6 +678,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "Agent",
         hidden: true,
         run: () => {
+          if (!requireModelMetadata()) return
           local.model.cycleFavorite(1)
         },
       },
@@ -671,6 +688,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "Agent",
         hidden: true,
         run: () => {
+          if (!requireModelMetadata()) return
           local.model.cycleFavorite(-1)
         },
       },
@@ -706,6 +724,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         title: "Variant cycle",
         category: "Agent",
         run: () => {
+          if (!requireModelMetadata()) return
           local.model.variant.cycle()
         },
       },
@@ -713,9 +732,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         name: "variant.list",
         title: "Switch model variant",
         category: "Agent",
-        hidden: local.model.variant.list().length === 0,
+        hidden:
+          sync.data.provider_status === "complete" &&
+          sync.data.agent_status === "complete" &&
+          local.model.variant.list().length === 0,
         slashName: "variants",
         run: () => {
+          if (!requireModelMetadata()) return
           if (local.model.variant.list().length === 0) {
             return toast.show({
               title: "No variants available",
@@ -923,11 +946,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         title: pasteSummaryEnabled() ? "Disable paste summary" : "Enable paste summary",
         category: "System",
         run: () => {
-          setPasteSummaryEnabled((prev) => {
-            const next = !prev
-            kv.set("paste_summary_enabled", next)
-            return next
-          })
+          kv.set("paste_summary_enabled", !pasteSummaryEnabled())
           dialog.clear()
         },
       },
@@ -1077,7 +1096,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   })
 
   const plugin = createMemo(() => {
-    if (!ready()) return
+    if (!pluginReady()) return
     if (route.data.type !== "plugin") return
     const render = pluginRuntime.routes.get(route.data.id)
     if (!render) return <PluginRouteMissing id={route.data.id} onHome={() => route.navigate({ type: "home" })} />
@@ -1107,7 +1126,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       <Show when={Flag.OPENCODE_SHOW_TTFD}>
         <TimeToFirstDraw />
       </Show>
-      <Show when={ready()}>
+      <Show when={pluginReady()}>
         <box flexGrow={1} minHeight={0} flexDirection="column">
           <Switch>
             <Match when={route.data.type === "home"}>
@@ -1126,9 +1145,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         </box>
         <pluginRuntime.Slot name="app" />
       </Show>
-      <Show when={!startup.skipInitialLoading}>
-        <StartupLoading ready={ready} />
-      </Show>
+      <StartupLoading pluginsReady={pluginReady} ready={startupReady} />
     </box>
   )
 }

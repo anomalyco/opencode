@@ -4,7 +4,7 @@ import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { useSync } from "../context/sync"
 import { useProject } from "../context/project"
 import { useRoute } from "../context/route"
-import { createMemo, createSignal, onMount } from "solid-js"
+import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { errorMessage } from "../util/error"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
@@ -76,13 +76,15 @@ export async function openWorkspaceSelect(input: {
   project: ReturnType<typeof useProject>
   toast: ReturnType<typeof useToast>
   onSelect: (selection: WorkspaceSelection) => Promise<void> | void
+  onClose?: () => void
 }) {
   input.dialog.clear()
   await input.sdk.client.experimental.workspace.syncList().catch(() => undefined)
   await input.project.workspace.sync().catch(() => undefined)
   const adapters = await loadWorkspaceAdapters(input)
-  if (!adapters) return
-  input.dialog.replace(() => <DialogWorkspaceSelect adapters={adapters} onSelect={input.onSelect} />)
+  if (!adapters) return false
+  input.dialog.replace(() => <DialogWorkspaceSelect adapters={adapters} onSelect={input.onSelect} />, input.onClose)
+  return true
 }
 
 export async function warpWorkspaceSession(input: {
@@ -178,6 +180,7 @@ export async function confirmWorkspaceFileChanges(input: {
 export function DialogWorkspaceSelect(props: {
   adapters?: Adapter[]
   onSelect: (selection: WorkspaceSelection) => Promise<void> | void
+  controller?: (controller: { showAll(): void; showingAll(): boolean }) => void
 }) {
   const dialog = useDialog()
   const project = useProject()
@@ -186,6 +189,8 @@ export function DialogWorkspaceSelect(props: {
   const sdk = useSDK()
   const toast = useToast()
   const [adapters, setAdapters] = createSignal<Adapter[] | undefined>(props.adapters)
+  const [showAll, setShowAll] = createSignal(false)
+  props.controller?.({ showAll: () => setShowAll(true), showingAll: showAll })
   const omittedWorkspaceID = createMemo(() => (route.data.type === "session" ? project.workspace.current() : undefined))
 
   onMount(() => {
@@ -245,31 +250,34 @@ export function DialogWorkspaceSelect(props: {
 
   if (!adapters()) return null
   return (
-    <DialogSelect<WorkspaceSelectValue>
-      title="Warp"
-      skipFilter={true}
-      renderFilter={false}
-      options={options()}
-      onSelect={(option) => {
-        if (!option.value) return
-        if (option.value.type === "none") {
-          void props.onSelect(option.value)
-          return
-        }
-        if (option.value.type === "new") {
-          void props.onSelect(option.value)
-          return
-        }
-        if (option.value.type === "existing") {
-          void props.onSelect(option.value)
-          return
-        }
+    <Show
+      when={!showAll()}
+      fallback={<DialogExistingWorkspaceSelect omitWorkspaceID={omittedWorkspaceID()} onSelect={props.onSelect} />}
+    >
+      <DialogSelect<WorkspaceSelectValue>
+        title="Warp"
+        skipFilter={true}
+        renderFilter={false}
+        options={options()}
+        onSelect={(option) => {
+          if (!option.value) return
+          if (option.value.type === "none") {
+            void props.onSelect(option.value)
+            return
+          }
+          if (option.value.type === "new") {
+            void props.onSelect(option.value)
+            return
+          }
+          if (option.value.type === "existing") {
+            void props.onSelect(option.value)
+            return
+          }
 
-        dialog.replace(() => (
-          <DialogExistingWorkspaceSelect omitWorkspaceID={omittedWorkspaceID()} onSelect={props.onSelect} />
-        ))
-      }}
-    />
+          setShowAll(true)
+        }}
+      />
+    </Show>
   )
 }
 

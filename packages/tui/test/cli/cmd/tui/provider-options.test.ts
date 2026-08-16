@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { normalizeCustomProviderID, providerOptions } from "../../../../src/component/dialog-provider"
+import {
+  normalizeCustomProviderID,
+  providerOptions,
+  resolveProviderDialogStatus,
+} from "../../../../src/component/dialog-provider"
 
 describe("providerOptions", () => {
   test("includes a synthetic Other option for custom providers", () => {
@@ -37,5 +41,18 @@ describe("providerOptions", () => {
     expect(normalizeCustomProviderID("@ai-sdk/custom-provider")).toBe("custom-provider")
     expect(normalizeCustomProviderID("-custom-provider")).toBeUndefined()
     expect(normalizeCustomProviderID("Custom Provider")).toBeUndefined()
+  })
+})
+
+describe("resolveProviderDialogStatus", () => {
+  test("waits for both the provider list and authentication methods", () => {
+    expect(resolveProviderDialogStatus("loading", "complete")).toBe("loading")
+    expect(resolveProviderDialogStatus("complete", "loading")).toBe("loading")
+    expect(resolveProviderDialogStatus("complete", "complete")).toBe("ready")
+  })
+
+  test("does not unlock the API fallback after a loading failure", () => {
+    expect(resolveProviderDialogStatus("error", "complete")).toBe("error")
+    expect(resolveProviderDialogStatus("complete", "error")).toBe("error")
   })
 })

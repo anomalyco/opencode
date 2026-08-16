@@ -13,6 +13,18 @@ import {
 } from "../dialog-workspace-create"
 import type { WorkspaceStatus } from "../workspace-label"
 
+export function createWorkspaceSelectionGate<T>(run: (value: T) => Promise<void>) {
+  let selected = false
+  return {
+    selected: () => selected,
+    async select(value: T) {
+      if (selected) return
+      selected = true
+      await run(value)
+    },
+  }
+}
+
 export function usePromptWorkspace(sessionID?: string) {
   const dialog = useDialog()
   const sdk = useSDK()
@@ -21,6 +33,7 @@ export function usePromptWorkspace(sessionID?: string) {
   const toast = useToast()
   const [selection, setSelection] = createSignal<WorkspaceSelection>()
   const [creating, setCreating] = createSignal(false)
+  const [busy, setBusy] = createSignal(false)
   const [creatingDots, setCreatingDots] = createSignal(3)
   const [notice, setNotice] = createSignal<string>()
 
@@ -62,7 +75,7 @@ export function usePromptWorkspace(sessionID?: string) {
     if (!sessionID) {
       setSelection(selection)
       dialog.clear()
-      if (selection.type === "new") void create(selection)
+      if (selection.type === "new") await create(selection)
       return
     }
     const sourceWorkspaceID = project.workspace.current()
@@ -102,8 +115,28 @@ export function usePromptWorkspace(sessionID?: string) {
     setNotice(undefined)
   }
 
-  function open() {
-    void openWorkspaceSelect({ dialog, sdk, sync, project, toast, onSelect: warp })
+  async function open() {
+    if (busy()) return
+    setBusy(true)
+    const selection = createWorkspaceSelectionGate(async (value: WorkspaceSelection) => {
+      try {
+        await warp(value)
+      } finally {
+        setBusy(false)
+      }
+    })
+    const opened = await openWorkspaceSelect({
+      dialog,
+      sdk,
+      sync,
+      project,
+      toast,
+      onSelect: selection.select,
+      onClose: () => {
+        if (!selection.selected()) setBusy(false)
+      },
+    })
+    if (!opened) setBusy(false)
   }
 
   createEffect(() => {
@@ -133,5 +166,5 @@ export function usePromptWorkspace(sessionID?: string) {
     }
   })
 
-  return { selection, creating, creatingDots, notice, label, open, warp, clearNotice }
+  return { selection, creating, busy, creatingDots, notice, label, open, warp, clearNotice }
 }

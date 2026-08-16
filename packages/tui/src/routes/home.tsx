@@ -12,6 +12,7 @@ import { useEditorContext } from "../context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../config"
 import { HomeSessionDestinationProvider } from "./home/session-destination"
+import { startupPromptReady } from "../app-state"
 
 let once = false
 const placeholder = {
@@ -63,6 +64,16 @@ export function Home() {
     if (!sync.ready || !local.model.ready) return
     if (!args.prompt) return
     if (r.current.input !== args.prompt) return
+    if (
+      !startupPromptReady({
+        prompt: args.prompt,
+        provider: sync.data.provider_status,
+        agent: sync.data.agent_status,
+        command: sync.data.command_status,
+        hasModel: !!local.model.validated(),
+      })
+    )
+      return
     sent = true
     r.submit()
   })

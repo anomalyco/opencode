@@ -3,10 +3,13 @@ import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, Show } from "solid-js"
 import { Tips } from "./tips-view"
 import { useBindings } from "../../keymap"
+import { useConnected } from "../../component/use-connected"
 
 const id = "internal:home-tips"
 
-function View(props: { api: TuiPluginApi; hidden: boolean; show: boolean; connected: boolean }) {
+function View(props: { api: TuiPluginApi; hidden: boolean; first: boolean }) {
+  const connected = useConnected()
+  const show = createMemo(() => (!props.first || !connected()) && !props.hidden)
   useBindings(() => ({
     commands: [
       {
@@ -25,8 +28,8 @@ function View(props: { api: TuiPluginApi; hidden: boolean; show: boolean; connec
 
   return (
     <box width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
-      <Show when={props.show}>
-        <Tips api={props.api} connected={props.connected} />
+      <Show when={show()}>
+        <Tips api={props.api} connected={connected()} />
       </Show>
     </box>
   )
@@ -39,13 +42,7 @@ const tui: TuiPlugin = async (api) => {
       home_bottom() {
         const hidden = createMemo(() => api.kv.get("tips_hidden", false))
         const first = createMemo(() => api.state.session.count() === 0)
-        const connected = createMemo(() =>
-          api.state.provider.some(
-            (item) => item.id !== "opencode" || Object.values(item.models).some((model) => model.cost?.input !== 0),
-          ),
-        )
-        const show = createMemo(() => (!first() || !connected()) && !hidden())
-        return <View api={api} hidden={hidden()} show={show()} connected={connected()} />
+        return <View api={api} hidden={hidden()} first={first()} />
       },
     },
   })

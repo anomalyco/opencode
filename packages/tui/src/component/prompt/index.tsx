@@ -108,6 +108,44 @@ function randomIndex(count: number) {
   return Math.floor(Math.random() * count)
 }
 
+export function resolvePromptMetadata(input: {
+  agentStatus: "loading" | "complete" | "error"
+  hasAgent: boolean
+  hasModel: boolean
+}): {
+  agent: "agent" | "empty"
+  visible: boolean
+  separator: boolean
+} {
+  const agent = input.agentStatus === "complete" && input.hasAgent ? "agent" : "empty"
+  return {
+    agent,
+    visible: agent === "agent" || input.hasModel,
+    separator: agent === "agent" && input.hasModel,
+  }
+}
+
+export function resolvePromptAgentGate(input: {
+  hasInput: boolean
+  agentStatus: "loading" | "complete" | "error"
+  hasAgent: boolean
+}): "empty" | "loading" | "unavailable" | "ready" {
+  if (!input.hasInput) return "empty"
+  if (input.agentStatus === "error") return "unavailable"
+  if (input.hasAgent) return "ready"
+  return input.agentStatus === "loading" ? "loading" : "unavailable"
+}
+
+export function resolveSlashCommandGate(input: {
+  mode: "normal" | "shell"
+  text: string
+  commandStatus: "loading" | "complete" | "error"
+}) {
+  if (input.mode !== "normal" || !input.text.startsWith("/")) return "normal" as const
+  if (input.commandStatus === "complete") return "ready" as const
+  return input.commandStatus
+}
+
 function fadeColor(color: RGBA, alpha: number) {
   return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
 }
@@ -219,7 +257,7 @@ export function Prompt(props: PromptProps) {
       message: "Connect a provider to send prompts",
       duration: 3000,
     })
-    if (sync.data.provider.length === 0) {
+    if (sync.status !== "loading" && sync.data.provider.length === 0) {
       dialog.replace(() => <DialogProviderConnect />)
     }
   }
@@ -954,18 +992,40 @@ export function Prompt(props: PromptProps) {
       setStore("prompt", "input", input.plainText)
       syncExtmarksWithPromptParts()
     }
-    if (props.disabled) return false
-    if (workspace.creating() || move.creating()) return false
-    if (auto()?.visible) return false
-    if (!store.prompt.input) return false
     const agent = local.agent.current()
+    if (props.disabled) return false
+    if (workspace.busy() || move.progress()) return false
+    if (auto()?.visible) return false
+    const agentGate = resolvePromptAgentGate({
+      hasInput: !!store.prompt.input,
+      agentStatus: sync.data.agent_status,
+      hasAgent: !!agent,
+    })
+    if (agentGate === "empty") return false
+    if (agentGate === "loading") return false
     if (!agent) return false
+    const commandGate = resolveSlashCommandGate({
+      mode: store.mode,
+      text: store.prompt.input,
+      commandStatus: sync.data.command_status,
+    })
+    if (commandGate === "loading" || commandGate === "error") {
+      toast.show({
+        title: commandGate === "loading" ? "Commands are still loading" : "Commands are unavailable",
+        message:
+          commandGate === "loading"
+            ? "Wait for the server command catalog before submitting a slash command."
+            : "The server command catalog could not be loaded. Try again after reconnecting.",
+        variant: commandGate === "loading" ? "info" : "error",
+      })
+      return false
+    }
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       void exit()
       return true
     }
-    const selectedModel = local.model.current()
+    const selectedModel = local.model.validated()
     if (!selectedModel) {
       void promptModelWarning()
       return false
@@ -1300,10 +1360,17 @@ export function Prompt(props: PromptProps) {
     return !!current
   })
 
+  const promptMetadata = createMemo(() =>
+    resolvePromptMetadata({
+      agentStatus: sync.data.agent_status,
+      hasAgent: !!local.agent.current(),
+      hasModel: !!local.model.current(),
+    }),
+  )
   const agentMetaAlpha = createFadeIn(() => !!local.agent.current(), animationsEnabled)
-  const modelMetaAlpha = createFadeIn(() => !!local.agent.current() && store.mode === "normal", animationsEnabled)
+  const modelMetaAlpha = createFadeIn(() => !!local.model.current() && store.mode === "normal", animationsEnabled)
   const variantMetaAlpha = createFadeIn(
-    () => !!local.agent.current() && store.mode === "normal" && showVariant(),
+    () => !!local.model.current() && store.mode === "normal" && showVariant(),
     animationsEnabled,
   )
   const borderHighlight = createMemo(() => tint(theme.border, highlight(), agentMetaAlpha()))
@@ -1443,18 +1510,27 @@ export function Prompt(props: PromptProps) {
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
               <box flexDirection="row" gap={1}>
-                <Show when={local.agent.current()} fallback={<box height={1} />}>
-                  {(agent) => (
-                    <>
-                      <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                        {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
-                      </text>
-                      <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
-                        <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
+                <Show
+                  when={store.mode === "shell"}
+                  fallback={
+                    <Show when={promptMetadata().visible} fallback={<box height={1} />}>
+                      <Show when={promptMetadata().agent === "agent"}>
+                        <Show when={local.agent.current()}>
+                          {(agent) => (
+                            <>
+                              <text fg={fadeColor(highlight(), agentMetaAlpha())}>{Locale.titlecase(agent().name)}</text>
+                              <Show when={local.permission.mode === "auto"}>
+                                <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
+                              </Show>
+                            </>
+                          )}
+                        </Show>
                       </Show>
-                      <Show when={store.mode === "normal"}>
+                      <Show when={local.model.current()}>
                         <box flexDirection="row" gap={1}>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                          <Show when={promptMetadata().separator}>
+                            <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                          </Show>
                           <text
                             flexShrink={0}
                             fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
@@ -1472,8 +1548,10 @@ export function Prompt(props: PromptProps) {
                           </Show>
                         </box>
                       </Show>
-                    </>
-                  )}
+                    </Show>
+                  }
+                >
+                  <text fg={fadeColor(highlight(), agentMetaAlpha())}>Shell</text>
                 </Show>
               </box>
               <Show when={hasRightContent()}>
@@ -1598,6 +1676,11 @@ export function Prompt(props: PromptProps) {
                   <text fg={theme.accent}>{notice()}</text>
                 </box>
               )}
+            </Match>
+            <Match when={workspace.busy()}>
+              <box paddingLeft={3}>
+                <Spinner color={theme.accent}>Updating workspace</Spinner>
+              </box>
             </Match>
             <Match when={workspace.label()}>
               {(label) => (

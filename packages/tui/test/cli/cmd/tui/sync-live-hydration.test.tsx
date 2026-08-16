@@ -78,6 +78,7 @@ test("stale session hydration does not overwrite live message parts", async () =
   try {
     const hydrate = sync.session.sync(sessionID)
     await wait(() => requested)
+    expect(sync.data.session_hydration[sessionID]).toBe("loading")
     emit(global({ id: "evt_message", type: "message.updated", properties: { sessionID, info: assistant } }))
     emit(
       global({
@@ -102,6 +103,7 @@ test("stale session hydration does not overwrite live message parts", async () =
     )
     await hydrate
 
+    expect(sync.data.session_hydration[sessionID]).toBe("complete")
     expect(sync.data.part[messageID][0]).toMatchObject({ text: "visible live content" })
   } finally {
     app.renderer.destroy()

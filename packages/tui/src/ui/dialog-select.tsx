@@ -32,6 +32,7 @@ export interface DialogSelectProps<T> {
   onMove?: (option: DialogSelectOption<T>) => void
   onFilter?: (query: string) => void
   onSelect?: (option: DialogSelectOption<T>) => void
+  onEmptySubmit?: () => void
   skipFilter?: boolean
   renderFilter?: boolean
   locked?: boolean
@@ -75,6 +76,15 @@ export type DialogSelectRef<T> = {
   filter: string
   filtered: DialogSelectOption<T>[]
   moveTo(value: T): void
+}
+
+export function canSubmitDialogSelection<T>(
+  option: DialogSelectOption<T> | undefined,
+  onEmptySubmit?: () => void,
+): option is DialogSelectOption<T> {
+  if (option) return true
+  onEmptySubmit?.()
+  return false
 }
 
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
@@ -342,7 +352,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   function submit() {
-    if (props.locked) return
+    if (props.locked) {
+      props.onEmptySubmit?.()
+      return
+    }
     setStore("input", "keyboard")
     const index = focusedAction()
     if (index !== undefined) {
@@ -350,7 +363,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       return
     }
     const option = selected()
-    if (!option) return
+    if (!canSubmitDialogSelection(option, props.onEmptySubmit)) return
     option.onSelect?.(dialog)
     props.onSelect?.(option)
   }

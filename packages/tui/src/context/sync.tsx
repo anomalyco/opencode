@@ -69,6 +69,13 @@ export const {
     const permission = usePermission()
     const [store, setStore] = createStore<{
       status: "loading" | "partial" | "complete"
+      agent_status: "loading" | "complete" | "error"
+      provider_status: "loading" | "complete" | "error"
+      command_status: "loading" | "complete" | "error"
+      provider_auth_status: "loading" | "complete" | "error"
+      mcp_status: "loading" | "complete" | "error"
+      lsp_status: "loading" | "complete" | "error"
+      formatter_status: "loading" | "complete" | "error"
       provider: Provider[]
       provider_default: Record<string, string>
       provider_next: ProviderListResponse
@@ -89,6 +96,9 @@ export const {
       session: Session[]
       session_status: {
         [sessionID: string]: SessionStatus
+      }
+      session_hydration: {
+        [sessionID: string]: "loading" | "complete" | "error"
       }
       session_diff: {
         [sessionID: string]: SnapshotFileDiff[]
@@ -124,6 +134,13 @@ export const {
       provider_auth: {},
       config: {},
       status: "loading",
+      agent_status: "loading",
+      provider_status: "loading",
+      command_status: "loading",
+      provider_auth_status: "loading",
+      mcp_status: "loading",
+      lsp_status: "loading",
+      formatter_status: "loading",
       agent: [],
       permission: {},
       question: {},
@@ -132,6 +149,7 @@ export const {
       provider_default: {},
       session: [],
       session_status: {},
+      session_hydration: {},
       session_diff: {},
       todo: {},
       message: {},
@@ -150,6 +168,7 @@ export const {
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    let bootstrapGeneration = 0
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
@@ -451,6 +470,33 @@ export const {
     async function bootstrap(input: { fatal?: boolean } = {}) {
       const fatal = input.fatal ?? true
       const workspace = project.workspace.current()
+      const generation = ++bootstrapGeneration
+      const current = () => generation === bootstrapGeneration
+      batch(() => {
+        setStore("agent_status", "loading")
+        setStore("agent", reconcile([]))
+        setStore("provider_status", "loading")
+        setStore("command_status", "loading")
+        setStore("command", reconcile([]))
+        setStore("provider_auth_status", "loading")
+        setStore("mcp_status", "loading")
+        setStore("lsp_status", "loading")
+        setStore("formatter_status", "loading")
+      })
+      void sdk.client.app
+        .agents({ workspace }, { throwOnError: true })
+        .then((response) => {
+          if (!current()) return
+          if (!response.data) {
+            setStore("agent_status", "error")
+            return
+          }
+          batch(() => {
+            setStore("agent", reconcile(response.data))
+            setStore("agent_status", "complete")
+          })
+        })
+        .catch(() => current() && setStore("agent_status", "error"))
       const projectPromise = project.sync()
       const sessionListPromise = projectPromise.then(() => listSessions())
 
@@ -465,13 +511,11 @@ export const {
         .get({ workspace }, { throwOnError: true })
         .then((x) => x.data)
         .catch(() => emptyConsoleState)
-      const agentsPromise = sdk.client.app.agents({ workspace }, { throwOnError: true })
       const configPromise = sdk.client.config.get({ workspace }, { throwOnError: true })
       await Promise.all([
         providersPromise,
         providerListPromise,
         capabilitiesPromise,
-        agentsPromise,
         configPromise,
         projectPromise,
         ...(args.continue ? [sessionListPromise] : []),
@@ -481,7 +525,6 @@ export const {
           const providerListResponse = providerListPromise.then((x) => x.data!)
           const capabilitiesResponse = capabilitiesPromise
           const consoleStateResponse = consoleStatePromise
-          const agentsResponse = agentsPromise.then((x) => x.data ?? [])
           const configResponse = configPromise.then((x) => x.data!)
           const sessionListResponse = args.continue ? sessionListPromise : undefined
 
@@ -490,7 +533,6 @@ export const {
             providerListResponse,
             capabilitiesResponse,
             consoleStateResponse,
-            agentsResponse,
             configResponse,
             ...(sessionListResponse ? [sessionListResponse] : []),
           ]).then((responses) => {
@@ -498,17 +540,18 @@ export const {
             const providerList = responses[1]
             const capabilities = responses[2]
             const consoleState = responses[3]
-            const agents = responses[4]
-            const config = responses[5]
-            const sessions = responses[6]
+            const config = responses[4]
+            const sessions = responses[5]
 
             batch(() => {
-              setStore("provider", reconcile(providers.providers))
-              setStore("provider_default", reconcile(providers.default))
-              setStore("provider_next", reconcile(providerList))
+              if (current()) {
+                setStore("provider", reconcile(providers.providers))
+                setStore("provider_default", reconcile(providers.default))
+                setStore("provider_next", reconcile(providerList))
+                setStore("provider_status", "complete")
+              }
               setStore("capabilities", "experimentalBackgroundSubagents", capabilities?.backgroundSubagents === true)
               setStore("console_state", reconcile(consoleState))
-              setStore("agent", reconcile(agents))
               setStore("config", reconcile(config))
               if (sessions !== undefined) setStore("session", reconcile(sessions))
             })
@@ -520,17 +563,62 @@ export const {
           void Promise.all([
             ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
             consoleStatePromise.then((consoleState) => setStore("console_state", reconcile(consoleState))),
-            sdk.client.command.list({ workspace }).then((x) => setStore("command", reconcile(x.data ?? []))),
-            sdk.client.lsp.status({ workspace }).then((x) => setStore("lsp", reconcile(x.data ?? []))),
-            sdk.client.mcp.status({ workspace }).then((x) => setStore("mcp", reconcile(x.data ?? {}))),
+            sdk.client.command
+              .list({ workspace }, { throwOnError: true })
+              .then((x) => {
+                if (!current()) return
+                batch(() => {
+                  setStore("command", reconcile(x.data ?? []))
+                  setStore("command_status", "complete")
+                })
+              })
+              .catch(() => current() && setStore("command_status", "error")),
+            sdk.client.lsp
+              .status({ workspace }, { throwOnError: true })
+              .then((x) => {
+                if (!current()) return
+                batch(() => {
+                  setStore("lsp", reconcile(x.data ?? []))
+                  setStore("lsp_status", "complete")
+                })
+              })
+              .catch(() => current() && setStore("lsp_status", "error")),
+            sdk.client.mcp
+              .status({ workspace }, { throwOnError: true })
+              .then((x) => {
+                if (!current()) return
+                batch(() => {
+                  setStore("mcp", reconcile(x.data ?? {}))
+                  setStore("mcp_status", "complete")
+                })
+              })
+              .catch(() => current() && setStore("mcp_status", "error")),
             sdk.client.experimental.resource
               .list({ workspace })
               .then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
-            sdk.client.formatter.status({ workspace }).then((x) => setStore("formatter", reconcile(x.data ?? []))),
+            sdk.client.formatter
+              .status({ workspace }, { throwOnError: true })
+              .then((x) => {
+                if (!current()) return
+                batch(() => {
+                  setStore("formatter", reconcile(x.data ?? []))
+                  setStore("formatter_status", "complete")
+                })
+              })
+              .catch(() => current() && setStore("formatter_status", "error")),
             sdk.client.session.status({ workspace }).then((x) => {
               setStore("session_status", reconcile(x.data ?? {}))
             }),
-            sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
+            sdk.client.provider
+              .auth({ workspace }, { throwOnError: true })
+              .then((x) => {
+                if (!current()) return
+                batch(() => {
+                  setStore("provider_auth", reconcile(x.data ?? {}))
+                  setStore("provider_auth_status", "complete")
+                })
+              })
+              .catch(() => current() && setStore("provider_auth_status", "error")),
             sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
             project.workspace.sync(),
           ]).then(() => {
@@ -538,6 +626,16 @@ export const {
           })
         })
         .catch(async (e) => {
+          if (current()) {
+            batch(() => {
+              setStore("provider_status", "error")
+              setStore("command_status", "error")
+              setStore("provider_auth_status", "error")
+              setStore("mcp_status", "error")
+              setStore("lsp_status", "error")
+              setStore("formatter_status", "error")
+            })
+          }
           console.error("tui bootstrap failed", {
             error: e instanceof Error ? e.message : String(e),
             name: e instanceof Error ? e.name : undefined,
@@ -595,14 +693,15 @@ export const {
           if (fullSyncedSessions.has(sessionID)) return
           const syncing = syncingSessions.get(sessionID)
           if (syncing) return syncing
+          setStore("session_hydration", sessionID, "loading")
           const tracker = { messages: new Set<string>(), parts: new Set<string>() }
           hydratingSessions.set(sessionID, tracker)
           const task = (async () => {
             const [session, messages, todo, diff] = await Promise.all([
               sdk.client.session.get({ sessionID }, { throwOnError: true }),
-              sdk.client.session.messages({ sessionID, limit: 100 }),
-              sdk.client.session.todo({ sessionID }),
-              sdk.client.session.diff({ sessionID }),
+              sdk.client.session.messages({ sessionID, limit: 100 }, { throwOnError: true }),
+              sdk.client.session.todo({ sessionID }, { throwOnError: true }),
+              sdk.client.session.diff({ sessionID }, { throwOnError: true }),
             ])
             setStore(
               produce((draft) => {
@@ -658,10 +757,15 @@ export const {
               }),
             )
             fullSyncedSessions.add(sessionID)
-          })().finally(() => {
-            syncingSessions.delete(sessionID)
-            hydratingSessions.delete(sessionID)
-          })
+          })()
+            .then(() => setStore("session_hydration", sessionID, "complete"))
+            .catch(() => {
+              setStore("session_hydration", sessionID, "error")
+            })
+            .finally(() => {
+              syncingSessions.delete(sessionID)
+              hydratingSessions.delete(sessionID)
+            })
           syncingSessions.set(sessionID, task)
           return task
         },

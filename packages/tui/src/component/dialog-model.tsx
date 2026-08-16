@@ -8,12 +8,32 @@ import { DialogVariant } from "./dialog-variant"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useSync } from "../context/sync"
+import { Spinner } from "./spinner"
+
+export function isModelCatalogLoading(
+  status: "loading" | "partial" | "complete",
+  agentStatus: "loading" | "complete" | "error" = "complete",
+  providerStatus: "loading" | "complete" | "error" = status === "loading" ? "loading" : "complete",
+) {
+  return providerStatus === "loading" || agentStatus === "loading"
+}
+
+export function modelCatalogAttentionHandler(
+  status: "loading" | "partial" | "complete",
+  trigger: () => void,
+  agentStatus: "loading" | "complete" | "error" = "complete",
+  providerStatus: "loading" | "complete" | "error" = status === "loading" ? "loading" : "complete",
+) {
+  return isModelCatalogLoading(status, agentStatus, providerStatus) ? trigger : undefined
+}
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
   const [query, setQuery] = createSignal("")
+  const [attention, setAttention] = createSignal(0)
+  const triggerAttention = () => setAttention((value) => value + 1)
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
@@ -154,9 +174,30 @@ export function DialogModel(props: { providerID?: string }) {
     dialog.clear()
   }
 
+  const loading = () => isModelCatalogLoading(sync.status, sync.data.agent_status, sync.data.provider_status)
+  const failed = () => sync.data.provider_status === "error" || sync.data.agent_status === "error"
+
   return (
     <DialogSelect<ReturnType<typeof options>[number]["value"]>
-      options={options()}
+      options={loading() || failed() ? [] : options()}
+      locked={loading() || failed()}
+      onEmptySubmit={modelCatalogAttentionHandler(
+        sync.status,
+        triggerAttention,
+        sync.data.agent_status,
+        sync.data.provider_status,
+      )}
+      emptyView={
+        loading() ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <Spinner attention={attention()}>Loading</Spinner>
+          </box>
+        ) : failed() ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <text>Could not load models</text>
+          </box>
+        ) : undefined
+      }
       actions={[
         {
           command: "model.dialog.provider",

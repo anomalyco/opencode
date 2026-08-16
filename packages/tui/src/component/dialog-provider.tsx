@@ -15,6 +15,7 @@ import { isConsoleManagedProvider } from "../util/provider-origin"
 import { useConnected } from "./use-connected"
 import { useBindings } from "../keymap"
 import { useClipboard } from "../context/clipboard"
+import { Spinner } from "./spinner"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -81,6 +82,15 @@ export function normalizeCustomProviderID(value: string) {
   const providerID = value.trim().replace(/^@ai-sdk\//, "")
   if (!CUSTOM_PROVIDER_ID.test(providerID)) return
   return providerID
+}
+
+export function resolveProviderDialogStatus(
+  providerStatus: "loading" | "complete" | "error",
+  authStatus: "loading" | "complete" | "error",
+) {
+  if (providerStatus === "error" || authStatus === "error") return "error" as const
+  if (providerStatus === "loading" || authStatus === "loading") return "loading" as const
+  return "ready" as const
 }
 
 export function createDialogProviderOptions() {
@@ -227,7 +237,31 @@ export function createDialogProviderOptions() {
 
 export function DialogProvider() {
   const options = createDialogProviderOptions()
-  return <DialogSelect title="Connect a provider" options={options()} />
+  const sync = useSync()
+  const { theme } = useTheme()
+  const [attention, setAttention] = createSignal(0)
+  const status = () => resolveProviderDialogStatus(sync.data.provider_status, sync.data.provider_auth_status)
+  const loading = () => status() === "loading"
+  const failed = () => status() === "error"
+  return (
+    <DialogSelect
+      title="Connect a provider"
+      options={loading() || failed() ? [] : options()}
+      locked={loading() || failed()}
+      onEmptySubmit={loading() ? () => setAttention((value) => value + 1) : undefined}
+      emptyView={
+        loading() ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <Spinner attention={attention()}>Loading providers</Spinner>
+          </box>
+        ) : failed() ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <text fg={theme.error}>Could not load provider authentication methods</text>
+          </box>
+        ) : undefined
+      }
+    />
+  )
 }
 
 interface AutoMethodProps {
