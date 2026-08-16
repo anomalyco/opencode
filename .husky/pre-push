@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+# Check if bun version matches package.json
+# keep in sync with packages/script/src/index.ts semver qualifier
+bun -e '
+import { semver } from "bun";
+const pkg = await Bun.file("package.json").json();
+const expectedBunVersion = pkg.packageManager?.split("@")[1];
+if (!expectedBunVersion) {
+  throw new Error("packageManager field not found in root package.json");
+}
+const expectedBunVersionRange = `^${expectedBunVersion}`;
+if (!semver.satisfies(process.versions.bun, expectedBunVersionRange)) {
+  throw new Error(`This script requires bun@${expectedBunVersionRange}, but you are using bun@${process.versions.bun}`);
+}
+if (process.versions.bun !== expectedBunVersion) {
+  console.warn(`Warning: Bun version ${process.versions.bun} differs from expected ${expectedBunVersion}`);
+}
+'
+bun typecheck

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "gemini/streams-tool-call",
+    "recordedAt": "2026-04-28T21:18:48.285Z",
+    "tags": ["prefix:gemini", "provider:google", "protocol:gemini", "tool"]
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"Call get_weather with city exactly Paris.\"}]}],\"systemInstruction\":{\"parts\":[{\"text\":\"Call tools exactly as requested.\"}]},\"tools\":[{\"functionDeclarations\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"required\":[\"city\"],\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}}]}],\"toolConfig\":{\"functionCallingConfig\":{\"mode\":\"ANY\",\"allowedFunctionNames\":[\"get_weather\"]}},\"generationConfig\":{\"maxOutputTokens\":80,\"temperature\":0}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"get_weather\",\"args\": {\"city\": \"Paris\"}},\"thoughtSignature\": \"CiQBDDnWx5RcSsS1UMbykQ5HWlrMu6wrxXGUhmZ0uRKLaMhDZaEKXwEMOdbHVoJAlfbOQyKB378pDZ/gkjWr3HP+dWw1us1kMG22g4G3oJvuTq/SrWS+7KYtSlvOxCKhW2l/2/TczpyGyGmANmsusDcxF1SKOYA5/8Hg0nI24MAlT3+91V/MCoUBAQw51seClFLy3E71v2H44F1kpmjgz8FeTRZofrjbaazfrT+w8Yxgdr3UgGagLMY4OadZemQTWckq9IAqRum78hrBg6NGtQvn15SbtfTNqI4PcxX/+qPo4/g4/ZT5kVORDhVqO8BVP/RA5GQ3ce3sRK8hSkvQlXSoXIPpHh6x7hBezIGXzw==\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated function call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 55,\"candidatesTokenCount\": 15,\"totalTokenCount\": 115,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 55}],\"thoughtsTokenCount\": 45},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"NyTxaYuTJ_OW_uMPgIPKgAg\"}\r\n\r\n"
+      }
+    }
+  ]
+}

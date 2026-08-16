@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Disallow shared content pages
+Disallow: /s/
+Disallow: /share/
+
+Sitemap: https://opencode.ai/sitemap.xml
+Sitemap: https://opencode.ai/data/sitemap.xml

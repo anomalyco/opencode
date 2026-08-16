@@ -1,0 +1,183 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON schema reference for configuration validation"
+    },
+    "defs": {
+      "type": "object",
+      "description": "Color definitions that can be referenced in the theme",
+      "patternProperties": {
+        "^[a-zA-Z][a-zA-Z0-9_]*$": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$",
+              "description": "Hex color value"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255,
+              "description": "ANSI color code (0-255)"
+            },
+            {
+              "type": "string",
+              "enum": ["none"],
+              "description": "No color (uses terminal default)"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "theme": {
+      "type": "object",
+      "description": "Theme color definitions",
+      "properties": {
+        "primary": { "$ref": "#/definitions/colorValue" },
+        "secondary": { "$ref": "#/definitions/colorValue" },
+        "accent": { "$ref": "#/definitions/colorValue" },
+        "error": { "$ref": "#/definitions/colorValue" },
+        "warning": { "$ref": "#/definitions/colorValue" },
+        "success": { "$ref": "#/definitions/colorValue" },
+        "info": { "$ref": "#/definitions/colorValue" },
+        "text": { "$ref": "#/definitions/colorValue" },
+        "textMuted": { "$ref": "#/definitions/colorValue" },
+        "selectedListItemText": { "$ref": "#/definitions/colorValue" },
+        "background": { "$ref": "#/definitions/colorValue" },
+        "backgroundPanel": { "$ref": "#/definitions/colorValue" },
+        "backgroundElement": { "$ref": "#/definitions/colorValue" },
+        "border": { "$ref": "#/definitions/colorValue" },
+        "borderActive": { "$ref": "#/definitions/colorValue" },
+        "borderSubtle": { "$ref": "#/definitions/colorValue" },
+        "diffAdded": { "$ref": "#/definitions/colorValue" },
+        "diffRemoved": { "$ref": "#/definitions/colorValue" },
+        "diffContext": { "$ref": "#/definitions/colorValue" },
+        "diffHunkHeader": { "$ref": "#/definitions/colorValue" },
+        "diffHighlightAdded": { "$ref": "#/definitions/colorValue" },
+        "diffHighlightRemoved": { "$ref": "#/definitions/colorValue" },
+        "diffAddedBg": { "$ref": "#/definitions/colorValue" },
+        "diffRemovedBg": { "$ref": "#/definitions/colorValue" },
+        "diffContextBg": { "$ref": "#/definitions/colorValue" },
+        "diffLineNumber": { "$ref": "#/definitions/colorValue" },
+        "diffAddedLineNumberBg": { "$ref": "#/definitions/colorValue" },
+        "diffRemovedLineNumberBg": { "$ref": "#/definitions/colorValue" },
+        "markdownText": { "$ref": "#/definitions/colorValue" },
+        "markdownHeading": { "$ref": "#/definitions/colorValue" },
+        "markdownLink": { "$ref": "#/definitions/colorValue" },
+        "markdownLinkText": { "$ref": "#/definitions/colorValue" },
+        "markdownCode": { "$ref": "#/definitions/colorValue" },
+        "markdownBlockQuote": { "$ref": "#/definitions/colorValue" },
+        "markdownEmph": { "$ref": "#/definitions/colorValue" },
+        "markdownStrong": { "$ref": "#/definitions/colorValue" },
+        "markdownHorizontalRule": { "$ref": "#/definitions/colorValue" },
+        "markdownListItem": { "$ref": "#/definitions/colorValue" },
+        "markdownListEnumeration": { "$ref": "#/definitions/colorValue" },
+        "markdownImage": { "$ref": "#/definitions/colorValue" },
+        "markdownImageText": { "$ref": "#/definitions/colorValue" },
+        "markdownCodeBlock": { "$ref": "#/definitions/colorValue" },
+        "syntaxComment": { "$ref": "#/definitions/colorValue" },
+        "syntaxKeyword": { "$ref": "#/definitions/colorValue" },
+        "syntaxFunction": { "$ref": "#/definitions/colorValue" },
+        "syntaxVariable": { "$ref": "#/definitions/colorValue" },
+        "syntaxString": { "$ref": "#/definitions/colorValue" },
+        "syntaxNumber": { "$ref": "#/definitions/colorValue" },
+        "syntaxType": { "$ref": "#/definitions/colorValue" },
+        "syntaxOperator": { "$ref": "#/definitions/colorValue" },
+        "syntaxPunctuation": { "$ref": "#/definitions/colorValue" }
+      },
+      "required": ["primary", "secondary", "accent", "text", "textMuted", "background"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["theme"],
+  "additionalProperties": false,
+  "definitions": {
+    "colorValue": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "description": "Hex color value (same for dark and light)"
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "ANSI color code (0-255, same for dark and light)"
+        },
+        {
+          "type": "string",
+          "enum": ["none"],
+          "description": "No color (uses terminal default)"
+        },
+        {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+          "description": "Reference to another color in the theme or defs"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "dark": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^#[0-9a-fA-F]{6}$",
+                  "description": "Hex color value for dark mode"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255,
+                  "description": "ANSI color code for dark mode"
+                },
+                {
+                  "type": "string",
+                  "enum": ["none"],
+                  "description": "No color (uses terminal default)"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+                  "description": "Reference to another color for dark mode"
+                }
+              ]
+            },
+            "light": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^#[0-9a-fA-F]{6}$",
+                  "description": "Hex color value for light mode"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255,
+                  "description": "ANSI color code for light mode"
+                },
+                {
+                  "type": "string",
+                  "enum": ["none"],
+                  "description": "No color (uses terminal default)"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+                  "description": "Reference to another color for light mode"
+                }
+              ]
+            }
+          },
+          "required": ["dark", "light"],
+          "additionalProperties": false,
+          "description": "Separate colors for dark and light modes"
+        }
+      ]
+    }
+  }
+}

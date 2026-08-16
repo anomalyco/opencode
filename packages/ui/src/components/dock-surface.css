@@ -1,0 +1,37 @@
+[data-dock-surface="shell"] {
+  background-color: var(--surface-raised-stronger-non-alpha);
+  box-shadow: var(--shadow-xs-border);
+  position: relative;
+  z-index: 10;
+  border-radius: 12px;
+  overflow: clip;
+}
+
+[data-dock-border-underlay] {
+  /* Later shadows paint underneath, so this solid ring masks overlapping surfaces without changing border geometry. */
+  box-shadow:
+    var(--dock-shell-visual-shadow, var(--shadow-xs-border)),
+    0 0 0 var(--dock-shell-border-underlay-width, 1px)
+      var(--dock-shell-border-underlay-background, var(--surface-raised-stronger-non-alpha));
+}
+
+[data-dock-border-underlay="v2"] {
+  --dock-shell-visual-shadow: var(--v2-elevation-raised);
+  --dock-shell-border-underlay-width: 0.5px;
+  --dock-shell-border-underlay-background: var(--v2-background-bg-base);
+}
+
+[data-dock-surface="tray"] {
+  background-color: var(--background-base);
+  border: 1px solid var(--border-weak-base);
+  position: relative;
+  z-index: 0;
+  border-radius: 12px;
+  overflow: clip;
+}
+
+[data-dock-surface="tray"][data-dock-attach="top"] {
+  margin-top: -0.875rem;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}

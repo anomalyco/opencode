@@ -1,0 +1,185 @@
+.root {
+  [data-slot="reload-error"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+
+    p {
+      color: var(--color-danger);
+      font-size: var(--font-size-sm);
+      line-height: 1.4;
+      margin: 0;
+      flex: 1;
+    }
+
+    [data-slot="create-form"] {
+      display: flex;
+      gap: var(--space-2);
+      margin: 0;
+      flex-shrink: 0;
+    }
+  }
+
+  [data-slot="section-content"] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  [data-slot="balance-display"] {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+
+    @media (max-width: 30rem) {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-2);
+    }
+
+    [data-slot="balance-amount"] {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: var(--space-4);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius-sm);
+      background-color: var(--color-bg-surface);
+      align-self: stretch;
+
+      [data-slot="balance-label"] {
+        font-size: var(--font-size-sm);
+        color: var(--color-text-muted);
+        margin-top: var(--space-2);
+        font-weight: 400;
+      }
+
+      [data-slot="balance-value"] {
+        font-size: var(--font-size-2xl);
+        font-weight: 600;
+        color: var(--color-text);
+      }
+    }
+
+    [data-slot="balance-right-section"] {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      flex: 1;
+    }
+
+    [data-slot="add-balance-form-container"] {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    [data-slot="add-balance-form"] {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: var(--space-3);
+
+      label {
+        font-size: var(--font-size-sm);
+        font-weight: 500;
+        color: var(--color-text-muted);
+        white-space: nowrap;
+      }
+
+      input[data-component="input"] {
+        padding: var(--space-2) var(--space-3);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius-sm);
+        background-color: var(--color-bg);
+        color: var(--color-text);
+        font-size: var(--font-size-sm);
+        line-height: 1.5;
+
+        &:focus {
+          outline: none;
+          border-color: var(--color-accent);
+          box-shadow: 0 0 0 3px var(--color-accent-alpha);
+        }
+
+        &::placeholder {
+          color: var(--color-text-disabled);
+        }
+      }
+
+      [data-slot="form-actions"] {
+        display: flex;
+        gap: var(--space-2);
+      }
+    }
+
+    [data-slot="form-error"] {
+      color: var(--color-danger);
+      font-size: var(--font-size-sm);
+      line-height: 1.4;
+    }
+
+    [data-slot="credit-card"] {
+      padding: var(--space-2) var(--space-4);
+      background-color: var(--color-bg-surface);
+      border-radius: var(--border-radius-sm);
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      min-width: 150px;
+      align-self: flex-start;
+
+      [data-slot="card-icon"] {
+        display: flex;
+        align-items: center;
+        color: var(--color-text-muted);
+      }
+
+      [data-slot="card-details"] {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-1);
+        flex: 1;
+        justify-content: flex-end;
+
+        [data-slot="secret"] {
+          font-size: var(--font-size-sm);
+          color: var(--color-text-muted);
+          font-weight: 400;
+        }
+
+        [data-slot="number"] {
+          font-size: var(--font-size-sm);
+          font-weight: 500;
+          color: var(--color-text-muted);
+        }
+
+        [data-slot="type"] {
+          font-size: var(--font-size-sm);
+          font-weight: 400;
+          color: var(--color-text-muted);
+        }
+      }
+
+      button {
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+    }
+
+    button {
+      align-self: flex-start;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+  }
+
+  [data-slot="enable-billing-button"] {
+    align-self: flex-start;
+    padding: var(--space-4);
+    min-width: 150px;
+  }
+}

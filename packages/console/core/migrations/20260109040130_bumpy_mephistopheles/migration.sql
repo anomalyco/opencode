@@ -1,0 +1,1 @@
+ALTER TABLE `payment` ADD `enrichment` json;
