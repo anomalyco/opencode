@@ -64,6 +64,7 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionHref, legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
 import { createSessionLineage } from "@/pages/session/session-lineage"
+import { ConnectIntentHandler } from "@/components/connect-intent-handler"
 
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { NewHome } from "@/pages/home"
@@ -314,6 +315,7 @@ function SharedProviders(props: ParentProps) {
   return (
     <>
       <BodyDesignClass />
+      <ConnectIntentHandler />
       <CommandProvider>
         <DesktopCommands />
         <HighlightsProvider>{props.children}</HighlightsProvider>

@@ -287,7 +287,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (state.active !== input) setState("active", input)
     }
 
-    function add(input: ServerConnection.Http) {
+    function add(input: ServerConnection.Http, options?: { activate?: boolean }) {
       const url_ = normalizeServerUrl(input.http.url)
       if (!url_) return
       const conn: ServerConnection.Http = { ...input, authToken: undefined, http: { ...input.http, url: url_ } }
@@ -298,7 +298,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         } else {
           setStore("list", store.list.length, conn)
         }
-        setState("active", ServerConnection.key(conn))
+        if (options?.activate !== false) setState("active", ServerConnection.key(conn))
         return conn
       })
     }

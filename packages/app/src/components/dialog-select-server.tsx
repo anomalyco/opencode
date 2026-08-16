@@ -9,7 +9,7 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@/utils/toast"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, createResource, Show } from "solid-js"
+import { createEffect, createMemo, createResource, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useGlobal } from "@/context/global"
@@ -175,9 +175,19 @@ function ServerForm(props: ServerFormProps) {
   )
 }
 
-export function DialogSelectServer() {
+export function DialogSelectServer(
+  props: { url?: string; onAdded?: (conn: ServerConnection.Http, signal: AbortSignal) => void | Promise<void> } = {},
+) {
   const dialog = useDialog()
-  const controller = useServerManagementController({ onSelect: dialog.close })
+  const controller = useServerManagementController({
+    onSelect: dialog.close,
+    onAdded: props.onAdded,
+    navigateOnAdd: props.onAdded ? false : undefined,
+  })
+
+  onMount(() => {
+    if (props.url) controller.startAdd(props.url)
+  })
 
   return (
     <Dialog title={controller.formTitle()}>
@@ -190,7 +200,13 @@ export function DialogSelectServer() {
   )
 }
 
-export function useServerManagementController(options: { onSelect?: () => void; navigateOnAdd?: boolean } = {}) {
+export function useServerManagementController(
+  options: {
+    onSelect?: () => void
+    onAdded?: (conn: ServerConnection.Http, signal: AbortSignal) => void | Promise<void>
+    navigateOnAdd?: boolean
+  } = {},
+) {
   const navigate = useNavigate()
   const server = useServer()
   const tabs = useTabs()
@@ -200,6 +216,14 @@ export function useServerManagementController(options: { onSelect?: () => void; 
   const { defaultKey, canDefault, setDefault } = useDefaultServer()
   const { previewStatus } = useServerPreview()
   const checkServerHealth = useCheckServerHealth()
+  let addGeneration = 0
+  let editGeneration = 0
+  let addAbort: AbortController | undefined
+  const invalidateAdd = () => {
+    addGeneration++
+    addAbort?.abort()
+    addAbort = undefined
+  }
   const [store, setStore] = createStore({
     addServer: {
       url: "",
@@ -222,6 +246,7 @@ export function useServerManagementController(options: { onSelect?: () => void; 
   })
 
   const resetAdd = () => {
+    invalidateAdd()
     setStore("addServer", {
       url: "",
       name: "",
@@ -233,6 +258,7 @@ export function useServerManagementController(options: { onSelect?: () => void; 
     })
   }
   const resetEdit = () => {
+    editGeneration++
     setStore("editServer", {
       id: undefined,
       value: "",
@@ -245,10 +271,18 @@ export function useServerManagementController(options: { onSelect?: () => void; 
   }
 
   const addMutation = useMutation(() => ({
-    mutationFn: async (value: string) => {
-      const normalized = normalizeServerUrl(value)
+    mutationFn: async (input: {
+      value: string
+      name: string
+      username: string
+      password: string
+      generation: number
+      signal: AbortSignal
+    }) => {
+      const active = () => input.generation === addGeneration && !input.signal.aborted
+      const normalized = normalizeServerUrl(input.value)
       if (!normalized) {
-        resetAdd()
+        if (active()) resetAdd()
         return
       }
 
@@ -256,10 +290,11 @@ export function useServerManagementController(options: { onSelect?: () => void; 
         type: "http",
         http: { url: normalized },
       }
-      if (store.addServer.name.trim()) conn.displayName = store.addServer.name.trim()
-      if (store.addServer.password) conn.http.password = store.addServer.password
-      if (store.addServer.password && store.addServer.username) conn.http.username = store.addServer.username
+      if (input.name.trim()) conn.displayName = input.name.trim()
+      if (input.password) conn.http.password = input.password
+      if (input.password && input.username) conn.http.username = input.username
       const result = await checkServerHealth(conn.http)
+      if (!active()) return
       if (!result.healthy) {
         setStore("addServer", { error: language.t("dialog.server.add.error") })
         return
@@ -268,22 +303,38 @@ export function useServerManagementController(options: { onSelect?: () => void; 
         !settings.general.newLayoutDesigns() &&
         (await detectServerProtocol(conn.http, platform.fetch ?? globalThis.fetch)) === "v2"
       ) {
+        if (!active()) return
         setStore("addServer", { error: language.t("dialog.server.add.error") })
         return
       }
+      if (!active()) return
 
-      resetAdd()
       if (options.navigateOnAdd === false) {
-        server.add(conn)
+        const added = server.add(conn, { activate: !options.onAdded })
+        if (!added) return
+        if (options.onAdded) {
+          await options.onAdded(added, input.signal)
+          return
+        }
+        resetAdd()
         options.onSelect?.()
         return
       }
+      resetAdd()
       await select(conn, true)
     },
   }))
 
   const editMutation = useMutation(() => ({
-    mutationFn: async (input: { original: ServerConnection.Any; value: string }) => {
+    mutationFn: async (input: {
+      original: ServerConnection.Any
+      value: string
+      name: string
+      username: string
+      password: string
+      generation: number
+    }) => {
+      const active = () => input.generation === editGeneration
       if (input.original.type !== "http") return
       const normalized = normalizeServerUrl(input.value)
       if (!normalized) {
@@ -291,9 +342,9 @@ export function useServerManagementController(options: { onSelect?: () => void; 
         return
       }
 
-      const name = store.editServer.name.trim() || undefined
-      const username = store.editServer.username || undefined
-      const password = store.editServer.password || undefined
+      const name = input.name.trim() || undefined
+      const username = input.username || undefined
+      const password = input.password || undefined
       const existingName = input.original.displayName
       if (
         normalized === input.original.http.url &&
@@ -311,6 +362,7 @@ export function useServerManagementController(options: { onSelect?: () => void; 
         http: { url: normalized, username, password },
       }
       const result = await checkServerHealth(conn.http)
+      if (!active()) return
       if (!result.healthy) {
         setStore("editServer", { error: language.t("dialog.server.add.error") })
         return
@@ -319,9 +371,11 @@ export function useServerManagementController(options: { onSelect?: () => void; 
         !settings.general.newLayoutDesigns() &&
         (await detectServerProtocol(conn.http, platform.fetch ?? globalThis.fetch)) === "v2"
       ) {
+        if (!active()) return
         setStore("editServer", { error: language.t("dialog.server.add.error") })
         return
       }
+      if (!active()) return
       if (normalized === input.original.http.url) {
         server.add(conn)
       } else {
@@ -395,59 +449,70 @@ export function useServerManagementController(options: { onSelect?: () => void; 
 
   const handleAddChange = (value: string) => {
     if (addMutation.isPending) return
+    invalidateAdd()
+    const generation = addGeneration
     setStore("addServer", { url: value, error: "" })
     void previewStatus(value, store.addServer.username, store.addServer.password, (next) =>
-      setStore("addServer", { status: next }),
+      generation === addGeneration && setStore("addServer", { status: next }),
     )
   }
 
   const handleAddNameChange = (value: string) => {
     if (addMutation.isPending) return
+    invalidateAdd()
     setStore("addServer", { name: value, error: "" })
   }
 
   const handleAddUsernameChange = (value: string) => {
     if (addMutation.isPending) return
+    invalidateAdd()
+    const generation = addGeneration
     setStore("addServer", { username: value, error: "" })
     void previewStatus(store.addServer.url, value, store.addServer.password, (next) =>
-      setStore("addServer", { status: next }),
+      generation === addGeneration && setStore("addServer", { status: next }),
     )
   }
 
   const handleAddPasswordChange = (value: string) => {
     if (addMutation.isPending) return
+    invalidateAdd()
+    const generation = addGeneration
     setStore("addServer", { password: value, error: "" })
     void previewStatus(store.addServer.url, store.addServer.username, value, (next) =>
-      setStore("addServer", { status: next }),
+      generation === addGeneration && setStore("addServer", { status: next }),
     )
   }
 
   const handleEditChange = (value: string) => {
     if (editMutation.isPending) return
+    const generation = ++editGeneration
     setStore("editServer", { value, error: "" })
     void previewStatus(value, store.editServer.username, store.editServer.password, (next) =>
-      setStore("editServer", { status: next }),
+      generation === editGeneration && setStore("editServer", { status: next }),
     )
   }
 
   const handleEditNameChange = (value: string) => {
     if (editMutation.isPending) return
+    editGeneration++
     setStore("editServer", { name: value, error: "" })
   }
 
   const handleEditUsernameChange = (value: string) => {
     if (editMutation.isPending) return
+    const generation = ++editGeneration
     setStore("editServer", { username: value, error: "" })
     void previewStatus(store.editServer.value, value, store.editServer.password, (next) =>
-      setStore("editServer", { status: next }),
+      generation === editGeneration && setStore("editServer", { status: next }),
     )
   }
 
   const handleEditPasswordChange = (value: string) => {
     if (editMutation.isPending) return
+    const generation = ++editGeneration
     setStore("editServer", { password: value, error: "" })
     void previewStatus(store.editServer.value, store.editServer.username, value, (next) =>
-      setStore("editServer", { status: next }),
+      generation === editGeneration && setStore("editServer", { status: next }),
     )
   }
 
@@ -467,11 +532,12 @@ export function useServerManagementController(options: { onSelect?: () => void; 
     resetEdit()
   }
 
-  const startAdd = () => {
+  const startAdd = (url = "") => {
+    invalidateAdd()
     resetEdit()
     setStore("addServer", {
       showForm: true,
-      url: "",
+      url,
       name: "",
       username: DEFAULT_USERNAME,
       password: "",
@@ -481,6 +547,7 @@ export function useServerManagementController(options: { onSelect?: () => void; 
   }
 
   const startEdit = (conn: ServerConnection.Http) => {
+    editGeneration++
     resetAdd()
     setStore("editServer", {
       id: conn.http.url,
@@ -497,14 +564,31 @@ export function useServerManagementController(options: { onSelect?: () => void; 
     if (mode() === "add") {
       if (addMutation.isPending) return
       setStore("addServer", { error: "" })
-      addMutation.mutate(store.addServer.url)
+      const abort = new AbortController()
+      addAbort?.abort()
+      addAbort = abort
+      addMutation.mutate({
+        value: store.addServer.url,
+        name: store.addServer.name,
+        username: store.addServer.username,
+        password: store.addServer.password,
+        generation: addGeneration,
+        signal: abort.signal,
+      })
       return
     }
     const original = editing()
     if (!original) return
     if (editMutation.isPending) return
     setStore("editServer", { error: "" })
-    editMutation.mutate({ original, value: store.editServer.value })
+    editMutation.mutate({
+      original,
+      value: store.editServer.value,
+      name: store.editServer.name,
+      username: store.editServer.username,
+      password: store.editServer.password,
+      generation: editGeneration,
+    })
   }
 
   const isFormMode = createMemo(() => mode() !== "list")
@@ -525,6 +609,11 @@ export function useServerManagementController(options: { onSelect?: () => void; 
     if (!store.editServer.id) return
     if (editing()) return
     resetEdit()
+  })
+
+  onCleanup(() => {
+    invalidateAdd()
+    editGeneration++
   })
 
   async function handleRemove(key: ServerConnection.Key) {

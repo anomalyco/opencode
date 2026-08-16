@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import {
+  collectConnectIntents,
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
   drainPendingDeepLinks,
+  parseConnectIntent,
   parseDeepLink,
   parseNewSessionDeepLink,
+  takePendingDeepLinks,
 } from "./deep-links"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
@@ -100,6 +103,48 @@ describe("layout deep links", () => {
     expect(result).toEqual([{ directory: "/a" }, { directory: "/c", prompt: "ship it" }])
   })
 
+  test("parses web and desktop connect links", () => {
+    const query = "server=https%3A%2F%2Fdemo.example.com&directory=%2Fworkspace%2Fdemo"
+    const expected = { server: "https://demo.example.com", directory: "/workspace/demo" }
+
+    expect(parseConnectIntent(`https://app.opencode.ai/#connect?${query}`)).toEqual(expected)
+    expect(parseConnectIntent(`opencode://connect?${query}`)).toEqual(expected)
+  })
+
+  test("allows remote home-relative directories", () => {
+    expect(
+      parseConnectIntent(
+        "https://app.opencode.ai/#connect?server=http%3A%2F%2Flocalhost%3A8888&directory=%7E%2Fworkspace%2Fdemo",
+      ),
+    ).toEqual({ server: "http://localhost:8888", directory: "~/workspace/demo" })
+  })
+
+  test("parses connect links without a directory", () => {
+    expect(parseConnectIntent("opencode://connect?server=https%3A%2F%2Fdemo.example.com")).toEqual({
+      server: "https://demo.example.com",
+    })
+  })
+
+  test("rejects unsafe connect server URLs", () => {
+    expect(parseConnectIntent("opencode://connect?server=file%3A%2F%2F%2Ftmp%2Fserver")).toBeUndefined()
+    expect(parseConnectIntent("opencode://connect?server=https%3A%2F%2Fuser%3Apass%40example.com")).toBeUndefined()
+    expect(parseConnectIntent("opencode://connect?server=https%3A%2F%2Fexample.com%3Ftoken%3Dsecret")).toBeUndefined()
+    expect(parseConnectIntent("opencode://connect")).toBeUndefined()
+    expect(
+      parseConnectIntent("opencode://connect?server=https%3A%2F%2Fexample.com&directory=relative%2Fproject"),
+    ).toBeUndefined()
+  })
+
+  test("collects only connect intents", () => {
+    expect(
+      collectConnectIntents([
+        "opencode://open-project?directory=/a",
+        "opencode://connect?server=https%3A%2F%2Fone.example.com",
+        "opencode://connect?server=ssh%3A%2F%2Ftwo.example.com",
+      ]),
+    ).toEqual([{ server: "https://one.example.com" }])
+  })
+
   test("drains global deep links once", () => {
     const target = {
       __OPENCODE__: {
@@ -109,6 +154,22 @@ describe("layout deep links", () => {
 
     expect(drainPendingDeepLinks(target)).toEqual(["opencode://open-project?directory=/a"])
     expect(drainPendingDeepLinks(target)).toEqual([])
+  })
+
+  test("takes matching pending deep links without discarding the rest", () => {
+    const target = {
+      __OPENCODE__: {
+        deepLinks: [
+          "opencode://connect?server=https%3A%2F%2Fdemo.example.com",
+          "opencode://open-project?directory=/a",
+        ],
+      },
+    } as unknown as Window & { __OPENCODE__?: { deepLinks?: string[] } }
+
+    expect(takePendingDeepLinks(target, (input) => !!parseConnectIntent(input))).toEqual([
+      "opencode://connect?server=https%3A%2F%2Fdemo.example.com",
+    ])
+    expect(drainPendingDeepLinks(target)).toEqual(["opencode://open-project?directory=/a"])
   })
 })
 

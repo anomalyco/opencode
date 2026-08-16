@@ -16,6 +16,7 @@ interface DialogSelectDirectoryProps {
   multiple?: boolean
   onSelect: (result: string | string[] | null) => void
   server: ServerConnection.Any
+  start?: string
 }
 
 const RECENT_PROJECT_LIMIT = 5
@@ -56,7 +57,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const dialog = useDialog()
   const language = useLanguage()
 
-  const [filter, setFilter] = createSignal("")
+  const [filter, setFilter] = createSignal(props.start ?? "")
   let list: ListRef | undefined
 
   const missingHome = createMemo(() => !sync.data.path.home)
@@ -133,6 +134,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
       <List
         class="px-3"
         search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: true }}
+        filter={filter()}
         emptyMessage={language.t("dialog.directory.empty")}
         loadingMessage={language.t("common.loading")}
         items={items}
