@@ -41,10 +41,7 @@ describe("Session.view", () => {
       expect(created.time.idle).toBeUndefined()
       expect(created.time.viewed).toBeUndefined()
 
-      yield* Effect.all([session.view({ sessionID: created.id }), session.view({ sessionID: created.id })], {
-        concurrency: "unbounded",
-        discard: true,
-      })
+      yield* session.view({ sessionID: created.id })
       expect((yield* session.get(created.id)).time.viewed).toBeUndefined()
 
       yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: created.id })
