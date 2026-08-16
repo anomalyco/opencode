@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
+import type { SessionInboxEnqueued, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
 import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useConfig } from "../../config"
@@ -17,7 +17,7 @@ export type CacheUsage = {
 
 export type SessionRow =
   | { type: "message"; messageID: string }
-  | { type: "compaction-queued"; inputID: string }
+  | { type: "compaction-queued"; inboxID: string }
   | { type: "part"; ref: PartRef }
   | {
       type: "group"
@@ -35,7 +35,7 @@ export type SessionRow =
   | { type: "assistant-footer"; messageID: string }
   | { type: "turn-usage"; messageIDs: string[]; previousCache?: CacheUsage }
 
-export function createSessionRows(sessionID: Accessor<string>) {
+export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
   const data = useData()
   const client = useClient()
   const config = useConfig()
@@ -64,7 +64,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
       0,
       ...pending
         .filter((item) => item.type === "compaction")
-        .map((item): SessionRow => ({ type: "compaction-queued", inputID: item.id })),
+        .map((item): SessionRow => ({ type: "compaction-queued", inboxID: item.id })),
     )
     return rows
   }
@@ -95,6 +95,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
         () => {
           if (sessionID() !== id) return
           setRows(reconcile(reduce()))
+          onSynced?.(id)
         },
         () => undefined,
       )
@@ -201,9 +202,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
 
   const queuedStart = (rows: SessionRow[]) => {
     const index = rows.findIndex(
-      (row) =>
-        row.type === "compaction-queued" ||
-        (row.type === "message" && isPending(row.messageID)),
+      (row) => row.type === "compaction-queued" || (row.type === "message" && isPending(row.messageID)),
     )
     return index === -1 ? rows.length : index
   }
@@ -211,21 +210,16 @@ export function createSessionRows(sessionID: Accessor<string>) {
   const message = (event: { id: string; data: { sessionID: string } }) => {
     if (event.data.sessionID === sessionID()) appendMessage(event.id.replace(/^evt_/, "msg_"))
   }
-  const input = (event: {
-    data: {
-      sessionID: string
-      inputID: string
-      input: { type: "user" } | { type: "synthetic"; data: { description?: string } }
-    }
-  }) => {
+  const input = (event: SessionInboxEnqueued) => {
     if (
       event.data.sessionID === sessionID() &&
-      (event.data.input.type === "user" || event.data.input.data.description?.trim())
+      (event.data.item.type === "user" ||
+        (event.data.item.type === "synthetic" && event.data.item.payload.description?.trim()))
     )
-      appendMessage(event.data.inputID)
+      appendMessage(event.data.inboxID)
   }
   const subscriptions = [
-    data.on("session.input.admitted", input),
+    data.on("session.inbox.enqueued", input),
     data.on("session.compaction.started", (event) => {
       if (event.data.sessionID === sessionID()) appendMessage(event.data.inputID ?? event.id.replace(/^evt_/, "msg_"))
     }),
@@ -288,11 +282,7 @@ export function createSessionRows(sessionID: Accessor<string>) {
   return rows
 }
 
-export function reduceSessionRows(
-  messages: SessionMessageInfo[],
-  inputs = new Set<string>(),
-  turnTokens = false,
-) {
+export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new Set<string>(), turnTokens = false) {
   const isInput = (message: SessionMessageInfo) => inputs.has(message.id)
   const pendingCompactions = messages.filter((message) => message.type === "compaction" && message.status === "running")
   const pending = new Set([...pendingCompactions.map((message) => message.id), ...inputs])
@@ -306,8 +296,7 @@ export function reduceSessionRows(
   ].reduce<SessionRow[]>((rows, message) => {
     if (message.type !== "assistant") {
       if (message.type === "synthetic" && !message.description?.trim()) return rows
-      if (message.type === "compaction" && message.status === "completed" && usage)
-        usage.previousTurnCache = undefined
+      if (message.type === "compaction" && message.status === "completed" && usage) usage.previousTurnCache = undefined
       if (!pending.has(message.id)) completePrevious(rows)
       rows.push({ type: "message", messageID: message.id })
       return rows
@@ -355,6 +344,15 @@ export function cacheReuseDrop(previous: CacheUsage | undefined, current: CacheU
   return drop > 0 ? drop : undefined
 }
 
+export function turnDuration(message: SessionMessageAssistant, messages: SessionMessageInfo[]) {
+  if (message.time.completed === undefined) return 0
+  const index = messages.findIndex((item) => item.id === message.id)
+  const input = messages
+    .slice(0, index === -1 ? messages.length : index)
+    .findLast((item) => item.type === "user" || item.type === "synthetic")
+  return Math.max(0, message.time.completed - (input?.time.created ?? message.time.created))
+}
+
 function hasTokenUsage(
   message: SessionMessageAssistant,
 ): message is SessionMessageAssistant & { tokens: NonNullable<SessionMessageAssistant["tokens"]> } {
@@ -391,7 +389,7 @@ function rowBoundaryMessageID(row: SessionRow, messages: Map<string, SessionMess
           ? row.messageID
           : row.type === "turn-usage"
             ? row.messageIDs[0]
-          : undefined
+            : undefined
   if (!messageID) return undefined
   const message = messages.get(messageID)
   if (message?.type === "assistant") return message.id

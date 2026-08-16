@@ -1,11 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:openai-responses-images",
-      "provider:openai",
-      "protocol:openai-responses"
-    ],
+    "tags": ["prefix:openai-responses-images", "provider:openai", "protocol:openai-responses"],
     "name": "openai-responses-images/generates-and-edits-an-image-with-the-hosted-tool",
     "recordedAt": "2026-07-19T14:57:16.284Z"
   },

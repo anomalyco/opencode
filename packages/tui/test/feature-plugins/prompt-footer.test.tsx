@@ -11,7 +11,8 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
     location: { directory: "/workspace" },
     theme: { text: { default: color, subdued: color } },
     keymap: {
-      shortcuts: (id: string) => (id === "session.child.first" ? ["ctrl+j"] : id === "command.palette.show" ? ["ctrl+p"] : []),
+      shortcuts: (id: string) =>
+        id === "session.child.first" ? ["ctrl+j"] : id === "command.palette.show" ? ["ctrl+p"] : [],
     },
     data: {
       session: {

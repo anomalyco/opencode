@@ -1,56 +1,58 @@
 import { Effect, Layer, LayerMap } from "effect"
-import { Agent } from "./agent"
-import { AISDK } from "./aisdk"
-import { Catalog } from "./catalog"
-import { Command } from "./command"
-import { Config } from "./config"
+import path from "path"
+import { Agent } from "./agent.js"
+import { AISDK } from "./aisdk.js"
+import { Catalog } from "./catalog.js"
+import { Command } from "./command.js"
+import { Config } from "./config.js"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Node } from "@opencode-ai/util/effect/app-node"
-import { Bus } from "./bus"
-import { FileMutation } from "./file-mutation"
-import { Environment } from "./environment"
-import { Formatter } from "./formatter"
-import { FileSystem } from "./filesystem"
-import { FileSystemSearch } from "./filesystem/search"
-import { Generate } from "./generate"
-import { Form } from "./form"
-import { Image } from "./image"
-import { LocationWatcher } from "./filesystem/location-watcher"
-import { Integration } from "./integration"
-import { Location } from "./location"
-import { LocationMutation } from "./location-mutation"
-import { LocationServiceMap } from "./location-service-map"
-import { ModelResolver } from "./model-resolver"
-import { MCP } from "./mcp/index"
-import { Permission } from "./permission"
-import { Plugin } from "./plugin"
-import { PluginSupervisor } from "./plugin/supervisor"
-import { ProjectCopy } from "./project/copy"
-import { Pty } from "./pty"
-import { Question } from "./question"
-import { Shell } from "./shell"
-import { Reference } from "./reference"
-import { WebSearch } from "./websearch"
-import { ReferenceInstructions } from "./reference/instructions"
-import { SessionRunnerLLM } from "./session/runner/llm"
-import { SessionRunnerModel } from "./session/runner/model"
-import { SessionCompaction } from "./session/compaction"
-import { SessionTitle } from "./session/title"
-import { Skill } from "./skill"
-import { SkillInstructions } from "./skill/instructions"
-import { Snapshot } from "./snapshot"
-import { InstructionDiscovery } from "./instruction-discovery"
-import { InstructionBuiltIns } from "./instructions/builtins"
-import { InstructionEntry } from "./session/instruction-entry"
-import { SessionInstructions } from "./session/instructions"
-import { SessionGenerateNode } from "./session/generate-node"
-import { McpTool } from "./tool/mcp"
-import { ReadToolFileSystem } from "./tool/read-filesystem"
-import { Tool } from "./tool"
-import { ToolOutput } from "./tool-output"
-import { Vcs } from "./vcs"
+import { Bus } from "./bus.js"
+import { FileMutation } from "./file-mutation.js"
+import { Environment } from "./environment/index.js"
+import { Formatter } from "./formatter.js"
+import { FileSystem } from "./filesystem.js"
+import { FileSystemSearch } from "./filesystem/search.js"
+import { Generate } from "./generate.js"
+import { Form } from "./form.js"
+import { Image } from "./image.js"
+import { LocationWatcher } from "./filesystem/location-watcher.js"
+import { Integration } from "./integration.js"
+import { Location } from "./location.js"
+import { LocationMutation } from "./location-mutation.js"
+import { LocationServiceMap } from "./location-service-map.js"
+import { ModelResolver } from "./model-resolver.js"
+import { MCP } from "./mcp/index.js"
+import { Permission } from "./permission.js"
+import { Plugin } from "./plugin.js"
+import { PluginSupervisor } from "./plugin/supervisor.js"
+import { Worktree } from "./worktree.js"
+import { Pty } from "./pty.js"
+import { Shell } from "./shell.js"
+import { Reference } from "./reference.js"
+import { WebSearch } from "./websearch.js"
+import { ReferenceInstructions } from "./reference/instructions.js"
+import { SessionRunnerLLM } from "./session/runner/llm.js"
+import { SessionRunnerModel } from "./session/runner/model.js"
+import { SessionModelTransport } from "./session/model-transport.js"
+import { SessionCompaction } from "./session/compaction.js"
+import { SessionTitle } from "./session/title.js"
+import { Skill } from "./skill.js"
+import { SkillInstructions } from "./skill/instructions.js"
+import { Snapshot } from "./snapshot.js"
+import { InstructionDiscovery } from "./instruction-discovery.js"
+import { InstructionBuiltIns } from "./instructions/builtins.js"
+import { InstructionEntry } from "./session/instruction-entry.js"
+import { SessionInstructions } from "./session/instructions.js"
+import { SessionGenerateNode } from "./session/generate-node.js"
+import { McpTool } from "./tool/mcp.js"
+import { ReadToolFileSystem } from "./tool/read-filesystem.js"
+import { Tool } from "./tool.js"
+import { ToolOutput } from "./tool-output.js"
+import { Vcs } from "./vcs.js"
+import { AbsolutePath } from "./schema.js"
 
-export { LocationServiceMap } from "./location-service-map"
+export { LocationServiceMap } from "./location-service-map.js"
 
 const locationServiceNodes = [
   Location.node,
@@ -66,8 +68,7 @@ const locationServiceNodes = [
   AISDK.node,
   Plugin.node,
   PluginSupervisor.node,
-  ProjectCopy.node,
-  ProjectCopy.refreshNode,
+  Worktree.refreshNode,
   FileSystemSearch.node,
   FileSystem.node,
   Pty.node,
@@ -87,13 +88,13 @@ const locationServiceNodes = [
   ReferenceInstructions.node,
   InstructionEntry.node,
   Form.node,
-  Question.node,
   Generate.node,
   SessionGenerateNode.node,
   ReadToolFileSystem.node,
   McpTool.node,
   SessionInstructions.node,
   SessionRunnerModel.node,
+  SessionModelTransport.node,
   SessionCompaction.node,
   SessionTitle.node,
   Snapshot.node,
@@ -111,11 +112,13 @@ export type LocationError = LayerNode.Error<typeof locationServices>
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
 ): Layer.Layer<LocationServiceMap.Service> {
-  // Structural Equal is own-key-set sensitive, so `{ directory }` (schema-decoded
-  // payloads omit optional keys) and `{ directory, workspaceID: undefined }` are
-  // different RcMap keys. The RcMap caches by the raw key before the build
-  // callback runs, so canonicalize at the map boundary to the key-present shape.
-  const canonical = (ref: Location.Ref) => Location.Ref.make({ directory: ref.directory, workspaceID: ref.workspaceID })
+  // Structural Equal distinguishes optional-key shape and Windows separator style.
+  // The RcMap caches the raw key before the build callback, so normalize both here.
+  const canonical = (ref: Location.Ref) =>
+    Location.Ref.make({
+      directory: AbsolutePath.make(process.platform === "win32" ? path.normalize(ref.directory) : ref.directory),
+      workspaceID: ref.workspaceID,
+    })
   return Layer.effect(
     LocationServiceMap.Service,
     Effect.map(

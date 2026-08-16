@@ -13,7 +13,7 @@ Go funziona come qualsiasi altro provider in OpenCode. Ti abboni a OpenCode Go e
 ottieni la tua chiave API. È **completamente facoltativo** e non hai bisogno di usarlo per
 utilizzare OpenCode.
 
-È progettato principalmente per gli utenti internazionali, con modelli ospitati negli Stati Uniti, nell'Unione Europea e a Singapore per un accesso globale stabile.
+È progettato principalmente per gli utenti internazionali e garantisce un accesso globale stabile.
 
 ---
 
@@ -60,6 +60,7 @@ L'elenco attuale dei modelli include:
 - **Grok 4.5**
 - **GLM-5.2**
 - **GLM-5.1**
+- **GPT 5.6 Luna**
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
@@ -67,6 +68,7 @@ L'elenco attuale dei modelli include:
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
 - **MiniMax M2.7**
+- **Qwen3.8 Max**
 - **Qwen3.7 Max**
 - **Qwen3.7 Plus**
 - **Qwen3.6 Plus**
@@ -93,6 +95,7 @@ La tabella seguente fornisce una stima del conteggio delle richieste in base a p
 | Model             | richieste ogni 5 ore | richieste a settimana | richieste al mese |
 | ----------------- | -------------------- | --------------------- | ----------------- |
 | Grok 4.5          | 120                  | 300                   | 600               |
+| GPT 5.6 Luna      | 2,050                | 5,100                 | 10,250            |
 | GLM-5.2           | 880                  | 2,150                 | 4,300             |
 | GLM-5.1           | 880                  | 2,150                 | 4,300             |
 | Kimi K3           | 110                  | 250                   | 490               |
@@ -102,7 +105,8 @@ La tabella seguente fornisce una stima del conteggio delle richieste in base a p
 | MiMo-V2.5-Pro     | 3,250                | 8,150                 | 16,300            |
 | MiniMax M3        | 3,200                | 8,000                 | 16,000            |
 | MiniMax M2.7      | 3,400                | 8,500                 | 17,000            |
-| Qwen3.7 Max       | 950                  | 2,390                 | 4,770             |
+| Qwen3.8 Max       | 160                  | 400                   | 810               |
+| Qwen3.7 Max       | 340                  | 840                   | 1,690             |
 | Qwen3.7 Plus      | 4,300                | 10,800                | 21,600            |
 | Qwen3.6 Plus      | 3,300                | 8,200                 | 16,300            |
 | DeepSeek V4 Pro   | 3,450                | 8,550                 | 17,150            |
@@ -113,12 +117,14 @@ Le stime si basano sui pattern di richieste osservati:
 
 - Grok 4.5 — 1.100 di input, 71.500 in cache, 220 token di output per richiesta
 - GLM-5.2/5.1 — 700 di input, 52.000 in cache, 150 token di output per richiesta
+- GPT 5.6 Luna — 1.000 token di input, 50.000 in cache, 220 token di output per richiesta
 - Kimi K3 — 1.050 di input, 76.500 in cache, 300 token di output per richiesta
 - Kimi K2.7/K2.6 — 870 di input, 55.000 in cache, 200 token di output per richiesta
 - DeepSeek V4 Pro — 750 di input, 82.000 in cache, 290 token di output per richiesta
 - DeepSeek V4 Flash — 790 di input, 68.000 in cache, 280 token di output per richiesta
 - MiniMax M3 — 510 di input, 56.000 in cache, 190 token di output per richiesta
 - MiniMax M2.7 — 300 di input, 55.000 in cache, 125 token di output per richiesta
+- Qwen3.8 Max — 420 di input, 66.000 in cache, 200 token di output per richiesta
 - Qwen3.7 Max — 420 di input, 66.000 in cache, 200 token di output per richiesta
 - Qwen3.7 Plus — 500 di input, 57.000 in cache, 190 token di output per richiesta
 - Qwen3.6 Plus — 500 di input, 57.000 in cache, 190 token di output per richiesta
@@ -131,6 +137,8 @@ Le stime si basano anche sui seguenti prezzi per 1M token e sull'utilizzo mensil
 | Modello                      | Input  | Output | Cached Read | Cached Write | Utilizzo |
 | ---------------------------- | ------ | ------ | ----------- | ------------ | -------- |
 | Grok 4.5                     | $2.00  | $6.00  | $0.30       | -            | $15      |
+| GPT 5.6 Luna (≤ 272K tokens) | $0.20  | $1.20  | $0.02       | $0.25        | $15      |
+| GPT 5.6 Luna (> 272K tokens) | $0.40  | $1.80  | $0.04       | $0.50        | $15      |
 | GLM-5.2                      | $1.40  | $4.40  | $0.26       | -            | $60      |
 | GLM-5.1                      | $1.40  | $4.40  | $0.26       | -            | $60      |
 | Kimi K3                      | $3.00  | $15.00 | $0.30       | -            | $15      |
@@ -141,6 +149,7 @@ Le stime si basano anche sui seguenti prezzi per 1M token e sull'utilizzo mensil
 | MiniMax M3                   | $0.30  | $1.20  | $0.06       | -            | $60      |
 | MiniMax M2.7                 | $0.30  | $1.20  | $0.06       | $0.375       | $60      |
 | MiniMax M2.5                 | $0.30  | $1.20  | $0.06       | $0.375       | $60      |
+| Qwen3.8 Max                  | $2.00  | $6.00  | $0.25       | $2.50        | $15      |
 | Qwen3.7 Max                  | $2.50  | $7.50  | $0.50       | $3.125       | $60      |
 | Qwen3.7 Plus (≤ 256K tokens) | $0.40  | $1.60  | $0.04       | $0.50        | $60      |
 | Qwen3.7 Plus (> 256K tokens) | $1.20  | $4.80  | $0.12       | $1.50        | $60      |
@@ -187,6 +196,7 @@ Puoi anche accedere ai modelli Go tramite i seguenti endpoint API.
 | Modello           | ID Modello        | Endpoint                                         | Pacchetto AI SDK            |
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
 | Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GPT 5.6 Luna      | gpt-5.6-luna      | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K3           | kimi-k3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -199,6 +209,7 @@ Puoi anche accedere ai modelli Go tramite i seguenti endpoint API.
 | MiniMax M3        | minimax-m3        | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.7      | minimax-m2.7      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5      | minimax-m2.5      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| Qwen3.8 Max       | qwen3.8-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max       | qwen3.7-max       | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -222,7 +233,30 @@ https://opencode.ai/zen/go/v1/models
 
 ## Privacy
 
-Il piano è pensato principalmente per gli utenti internazionali, con modelli ospitati negli US, nell’EU e a Singapore per un accesso globale stabile. I nostri provider seguono una politica di zero-retention e non utilizzano i tuoi dati per l’addestramento dei modelli.
+| Modello           | Addestramento del modello | Conservazione dei dati |
+| ----------------- | ------------------------- | ---------------------- |
+| Grok 4.5          | Non utilizzato            | 30 giorni              |
+| GPT 5.6 Luna      | Non utilizzato            | 30 giorni              |
+| GLM-5.2           | Non utilizzato            | 0 giorni               |
+| GLM-5.1           | Non utilizzato            | 0 giorni               |
+| Kimi K3           | Non utilizzato            | 0 giorni               |
+| Kimi K2.7 Code    | Non utilizzato            | 0 giorni               |
+| Kimi K2.6         | Non utilizzato            | 0 giorni               |
+| MiMo-V2.5-Pro     | Non utilizzato            | 0 giorni               |
+| MiMo-V2.5         | Non utilizzato            | 0 giorni               |
+| Qwen3.8 Max       | Non utilizzato            | 0 giorni               |
+| Qwen3.7 Max       | Non utilizzato            | 0 giorni               |
+| Qwen3.7 Plus      | Non utilizzato            | 0 giorni               |
+| Qwen3.6 Plus      | Non utilizzato            | 0 giorni               |
+| MiniMax M3        | Non utilizzato            | 0 giorni               |
+| MiniMax M2.7      | Non utilizzato            | 0 giorni               |
+| DeepSeek V4 Pro   | Non utilizzato            | 0 giorni               |
+| DeepSeek V4 Flash | Non utilizzato            | 0 giorni               |
+| Hy3               | Non utilizzato            | 0 giorni               |
+
+- **Grok 4.5:** ZDR disabilita importanti funzionalità API che dipendono dai dati archiviati, tra cui la Responses API con stato, Files and Collections e Batch API. [Scopri di più](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **GPT 5.6 Luna:** I log di monitoraggio degli abusi vengono generati per l'utilizzo di tutte le funzionalità API e conservati per un massimo di 30 giorni. [Scopri di più](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **DeepSeek V4 Flash:** L'accordo ZDR viene rinnovato mensilmente. L'accordo attuale è valido fino al 31 agosto 2026.
 
 ---
 

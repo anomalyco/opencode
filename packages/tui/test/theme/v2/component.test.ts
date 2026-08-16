@@ -59,9 +59,7 @@ test("provides reactive properties, states, contexts, and color operations", () 
     resolved().contextual.elevated.background.action.primary.focused,
   )
   expect(current().background.action.primary.hovered).toBe(resolved().background.surface.overlay)
-  expect(current().background.formfield.selected).toBe(
-    resolved().contextual.elevated.background.formfield.selected,
-  )
+  expect(current().background.formfield.selected).toBe(resolved().contextual.elevated.background.formfield.selected)
 
   setResolved(resolveTheme(selectTheme(DEFAULT_THEME, "dark")))
   setMode("dark")

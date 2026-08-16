@@ -1,12 +1,13 @@
-export * as WebSearchTool from "./websearch"
+export * as WebSearchTool from "./websearch.js"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Effect, Schema, Semaphore } from "effect"
-import { Form } from "../../form"
-import { KV } from "../../kv"
-import { Permission } from "../../permission"
-import { WebSearch } from "../../websearch"
+import { HttpClientError } from "effect/unstable/http"
+import { Config } from "../../config.js"
+import { Form } from "../../form.js"
+import { Permission } from "../../permission.js"
+import { WebSearch } from "../../websearch.js"
 
 export const name = "websearch"
 export const NO_RESULTS = "No search results found. Please try a different query."
@@ -29,7 +30,7 @@ export const Plugin = {
   effect: Effect.fn("WebSearchTool.Plugin")(function* (ctx: PluginContext) {
     const permission = yield* Permission.Service
     const forms = yield* Form.Service
-    const kv = yield* KV.Service
+    const config = yield* Config.Service
     const websearch = yield* WebSearch.Service
 
     yield* ctx.tool
@@ -52,13 +53,19 @@ export const Plugin = {
                 source: { type: "tool", messageID: context.messageID, id: context.id },
               })
               const search = (): Effect.Effect<Effect.Success<ReturnType<typeof ctx.websearch.query>>, unknown> =>
-                ctx.websearch.query(input).pipe(
+                websearch.default().pipe(
+                  Effect.flatMap((provider) => {
+                    if (!provider) return ctx.websearch.query(input)
+                    return context
+                      .progress({ provider: provider.id })
+                      .pipe(Effect.andThen(ctx.websearch.query({ ...input, providerID: provider.id })))
+                  }),
                   Effect.catch((error) => {
                     if (!Schema.is(WebSearch.ProviderRequiredError)(error)) return Effect.fail(error)
                     return providerSelectionLock
                       .withPermit(
                         Effect.gen(function* () {
-                          if (yield* websearch.default()) return yield* Effect.void
+                          if (yield* websearch.default()) return
                           const providers = (yield* ctx.websearch.providers()).data
                           const defaultProvider = providers[0]
                           if (!defaultProvider) return yield* new WebSearch.ProviderRequiredError()
@@ -76,7 +83,7 @@ export const Plugin = {
                                 options: [
                                   {
                                     value: "allow",
-                                    label: `Allow web search via ${defaultProvider.name}`,
+                                    label: `Allow search via ${providers.map((provider) => provider.name).join(", ")}`,
                                   },
                                   {
                                     value: "choose",
@@ -90,7 +97,9 @@ export const Plugin = {
                           if (response.status === "cancelled")
                             return yield* Effect.fail(new Error("Web search cancelled"))
                           if (response.answer.choice === "disable") {
-                            yield* kv.set("websearch:provider", false)
+                            yield* config.update((draft) => {
+                              draft.websearch = false
+                            })
                             return yield* new WebSearch.DisabledError()
                           }
                           const selection =
@@ -116,13 +125,19 @@ export const Plugin = {
                               : undefined
                           if (selection?.status === "cancelled")
                             return yield* Effect.fail(new Error("Web search cancelled"))
-                          const providerID = selection?.answer.provider ?? defaultProvider.id
+                          const providerID = selection?.answer.provider ?? "random"
                           if (
                             typeof providerID !== "string" ||
-                            !providers.some((provider) => provider.id === providerID)
+                            (providerID !== "random" && !providers.some((provider) => provider.id === providerID))
                           )
                             return yield* new WebSearch.ProviderRequiredError()
-                          return yield* kv.set("websearch:provider", providerID)
+                          yield* config.update((draft) => {
+                            draft.websearch = {
+                              provider: providerID === "random" ? "random" : WebSearch.ID.make(providerID),
+                            }
+                          })
+                          if (providerID !== "random") return WebSearch.ID.make(providerID)
+                          return providers[Math.floor(Math.random() * providers.length)]?.id
                         }),
                       )
                       .pipe(
@@ -130,7 +145,12 @@ export const Plugin = {
                           duration: "1 minute",
                           orElse: () => Effect.fail(new Error("Web search cancelled")),
                         }),
-                        Effect.andThen(Effect.suspend(search)),
+                        Effect.flatMap((providerID) => {
+                          if (!providerID) return Effect.suspend(search)
+                          return context
+                            .progress({ provider: providerID })
+                            .pipe(Effect.andThen(ctx.websearch.query({ ...input, providerID })))
+                        }),
                       )
                   }),
                 )
@@ -152,9 +172,33 @@ export const Plugin = {
                 : NO_RESULTS
               return { output, content, metadata: { provider: output.provider } }
             }).pipe(
-              Effect.mapError(
-                (error) => new ToolFailure({ message: `Unable to search the web for ${input.query}`, error }),
-              ),
+              Effect.mapError((error) => {
+                const fallback = `Unable to search the web for ${input.query}`
+                if (!Schema.is(WebSearch.RequestError)(error)) return new ToolFailure({ message: fallback, error })
+                const status = HttpClientError.isHttpClientError(error.cause) ? error.cause.response?.status : undefined
+                switch (status) {
+                  case 429:
+                    return new ToolFailure({
+                      message: "Web search rate limited (HTTP 429)",
+                      error,
+                      metadata: { provider: error.providerID },
+                    })
+                  case 401:
+                    return new ToolFailure({
+                      message: "Web search authentication failed (HTTP 401)",
+                      error,
+                      metadata: { provider: error.providerID },
+                    })
+                  case undefined:
+                    return new ToolFailure({ message: fallback, error, metadata: { provider: error.providerID } })
+                  default:
+                    return new ToolFailure({
+                      message: `Web search request failed (HTTP ${status})`,
+                      error,
+                      metadata: { provider: error.providerID },
+                    })
+                }
+              }),
             ),
         }),
       )
@@ -162,7 +206,8 @@ export const Plugin = {
 
     yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {
-        if ((yield* kv.get("websearch:provider")) === false) delete event.tools[name]
+        const disabled = Config.latest(yield* config.entries(), "websearch") === false
+        if (disabled) delete event.tools[name]
       }),
     )
   }),

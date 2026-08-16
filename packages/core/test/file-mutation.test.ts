@@ -5,15 +5,16 @@ import { Deferred, Effect, Fiber, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
-import { Environment } from "@opencode-ai/core/environment"
+import { Environment } from "@opencode-ai/core/environment/index"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { type EnvironmentFilesTransform, transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
-function provide(directory: string, environmentLayer = LayerNode.compile(Environment.node)) {
+function provide(directory: string, transformFiles: EnvironmentFilesTransform = () => ({})) {
   const activeLocation = Layer.succeed(
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
@@ -21,7 +22,7 @@ function provide(directory: string, environmentLayer = LayerNode.compile(Environ
   return Effect.provide(
     AppNodeBuilder.build(LayerNode.group([LocationMutation.node, FileMutation.node]), [
       [Location.node, activeLocation],
-      [Environment.node, environmentLayer],
+      [Environment.node, transformEnvironmentFiles(activeLocation, transformFiles)],
     ]),
   )
 }
@@ -240,18 +241,8 @@ describe("FileMutation", () => {
   )
 })
 
-function instrumentWrites(run: <E>(write: Effect.Effect<void, E>, target: string) => Effect.Effect<void, E>) {
-  return Layer.effect(
-    Environment.Service,
-    Effect.gen(function* () {
-      const environment = yield* Environment.Service
-      return Environment.Service.of({
-        ...environment,
-        files: {
-          ...environment.files,
-          write: (target, content) => run(environment.files.write(target, content), target),
-        },
-      })
-    }),
-  ).pipe(Layer.provide(LayerNode.compile(Environment.node)))
+function instrumentWrites(
+  run: <E>(write: Effect.Effect<void, E>, target: string) => Effect.Effect<void, E>,
+): EnvironmentFilesTransform {
+  return (files) => ({ write: (target, content) => run(files.write(target, content), target) })
 }

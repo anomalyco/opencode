@@ -140,7 +140,11 @@ describe("Integration", () => {
       yield* integrations.transform((editor) =>
         editor.method.update({
           integrationID,
-          method: { type: "key", label: "API key" },
+          method: {
+            type: "key",
+            label: "API key",
+            form: [{ type: "string", key: "accountId", title: "Account ID", required: true }],
+          },
         }),
       )
       const updated = yield* bus
@@ -148,9 +152,17 @@ describe("Integration", () => {
         .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
+      expect(
+        yield* integrations.connection.key({ integrationID, key: "secret" }).pipe(
+          Effect.flip,
+          Effect.map((error) => error.cause),
+        ),
+      ).toEqual(expect.objectContaining({ message: "Missing required form field: accountId" }))
+
       yield* integrations.connection.key({
         integrationID,
         key: "secret",
+        answer: { accountId: "account" },
         label: "Work",
       })
 
@@ -158,7 +170,7 @@ describe("Integration", () => {
         expect.objectContaining({
           integrationID,
           label: "Work",
-          value: Credential.Key.make({ type: "key", key: "secret" }),
+          value: Credential.Key.make({ type: "key", key: "secret", configuration: { accountId: "account" } }),
         }),
       ])
       expect((yield* Fiber.join(updated)).length).toBe(1)
@@ -243,7 +255,6 @@ describe("Integration", () => {
       const attempt = yield* integrations.oauth.connect({
         integrationID,
         methodID,
-        inputs: {},
         label: "Personal",
       })
       expect(attempt.mode).toBe("code")
@@ -289,7 +300,7 @@ describe("Integration", () => {
         }),
       )
 
-      const attempt = yield* integrations.oauth.connect({ integrationID, methodID, inputs: {} })
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
       expect(
         yield* integrations.oauth.complete({ integrationID, attemptID: attempt.attemptID }).pipe(Effect.flip),
       ).toBeInstanceOf(Integration.CodeRequiredError)
@@ -327,7 +338,7 @@ describe("Integration", () => {
         }),
       )
 
-      const attempt = yield* integrations.oauth.connect({ integrationID, methodID, inputs: {} })
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
       yield* Effect.yieldNow
       expect(yield* integrations.oauth.status({ integrationID, attemptID: attempt.attemptID })).toEqual({
         status: "complete",
@@ -365,7 +376,7 @@ describe("Integration", () => {
         }),
       )
 
-      const attempt = yield* integrations.oauth.connect({ integrationID, methodID, inputs: {} })
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
       const exit = yield* integrations.oauth
         .complete({ integrationID, attemptID: attempt.attemptID, code: "1234" })
         .pipe(Effect.exit)
@@ -401,7 +412,7 @@ describe("Integration", () => {
         }),
       )
 
-      const attempt = yield* integrations.oauth.connect({ integrationID, methodID, inputs: {} })
+      const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
       expect(attempt.time.expires - attempt.time.created).toBe(Duration.toMillis(Duration.minutes(10)))
       yield* TestClock.adjust(Duration.minutes(10))
       yield* Effect.yieldNow
@@ -442,7 +453,7 @@ describe("Integration", () => {
             }),
           )
 
-          const attempt = yield* integrations.oauth.connect({ integrationID, methodID, inputs: {} })
+          const attempt = yield* integrations.oauth.connect({ integrationID, methodID })
           expect(attempt.time).toEqual({ created, expires: expiresAt })
         })
       })

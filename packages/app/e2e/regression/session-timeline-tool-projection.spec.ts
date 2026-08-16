@@ -83,6 +83,40 @@ test("labels all web search provider variants", async ({ page }) => {
   await expect(page.getByRole("button", { name: /^Web Search/ })).toBeVisible()
 })
 
+test("labels V2 read tools from their path input", async ({ page }) => {
+  const id = "prt_read_path"
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([toolPart(id, "read", "completed", { path: "src/a.ts" })])],
+  })
+
+  const group = page.locator(`[data-timeline-part-ids="${id}"]`)
+  await group.locator('[data-slot="collapsible-trigger"]').click()
+  await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("a.ts")
+})
+
+test("labels V2 skill tools from IDs and result metadata", async ({ page }) => {
+  const pending = "prt_skill_id"
+  const completed = "prt_skill_name"
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        toolPart(pending, "skill", "running", { id: "sample-skill" }),
+        toolPart(completed, "skill", "completed", { id: "opencode" }, { metadata: { name: "OpenCode" } }),
+      ]),
+    ],
+  })
+
+  await expect(page.locator(`[data-timeline-part-id="${pending}"] [data-component="text-shimmer"]`)).toHaveAttribute(
+    "aria-label",
+    "sample-skill",
+  )
+  await expect(page.locator(`[data-timeline-part-id="${completed}"] [data-component="text-shimmer"]`)).toHaveAttribute(
+    "aria-label",
+    "OpenCode",
+  )
+})
+
 function questionInput() {
   return { questions: [{ header: "Stability", question: "Keep it stable?", options: [] }] }
 }

@@ -1,10 +1,9 @@
 import whichPkg from "which"
 import path from "path"
-import { Global } from "@opencode-ai/util/global"
 
-export function which(cmd: string, env?: NodeJS.ProcessEnv) {
+export function which(cmd: string, env?: NodeJS.ProcessEnv, bin?: string) {
   const base = env?.PATH ?? env?.Path ?? process.env.PATH ?? process.env.Path ?? ""
-  const full = base ? base + path.delimiter + Global.Path.bin : Global.Path.bin
+  const full = base && bin ? base + path.delimiter + bin : base || bin
   const result = whichPkg.sync(cmd, {
     nothrow: true,
     path: full,

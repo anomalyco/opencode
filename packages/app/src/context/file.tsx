@@ -66,7 +66,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const scope = createMemo(() => sdk().directory)
     const path = createPathHelpers(scope)
     const tabs = layout.tabs(() =>
-      SessionStateKey.from(serverSDK().scope, SessionRouteKey.fromRoute(base64Encode(sdk().directory), params.id)),
+      SessionStateKey.from(serverSDK.scope, SessionRouteKey.fromRoute(base64Encode(sdk().directory), params.id)),
     )
 
     const inflight = new Map<string, Promise<void>>()
@@ -123,7 +123,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       })
     })
 
-    const viewCache = createFileViewCache(serverSDK().scope)
+    const viewCache = createFileViewCache(serverSDK.scope)
     const view = createMemo(() => viewCache.load(scope(), params.id))
 
     const ensure = (file: string) => {
@@ -211,8 +211,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     const search = (query: string, dirs: "true" | "false", options?: { limit?: number; signal?: AbortSignal }) =>
-      serverSDK()
-        .api.file.find(
+      serverSDK.api.file
+        .find(
           {
             location: { directory: sdk().directory },
             query,

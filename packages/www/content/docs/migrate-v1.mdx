@@ -4,8 +4,8 @@ description: "Move from OpenCode V1 to the OpenCode 2.0 beta."
 ---
 
 <Callout type="note">
-  OpenCode 1 and OpenCode 2 can be installed side by side. V1 runs as `opencode`, while V2 installs and runs separately as
-  `opencode2`.
+  OpenCode 1 and OpenCode 2 can be installed side by side. V1 runs as `opencode`, while V2 installs and runs separately
+  as `opencode2`.
 </Callout>
 
 ## Breaking changes
@@ -30,16 +30,15 @@ beta compatibility bug rather than an expected migration requirement.
 </Callout>
 
 <Callout type="warning">
-  OpenCode 2.0 is in beta. Beta data may be wiped, features may break unintentionally, and the server and plugin APIs may
-  continue to change.
+  OpenCode 2.0 is in beta. Features may break unintentionally, and the server and plugin APIs may continue to change.
 </Callout>
 
 ## Install the beta
 
-Install the beta from the `next` distribution tag:
+Install the beta from the `beta` distribution tag:
 
 ```bash
-npm install -g @opencode-ai/cli@next
+npm install -g @opencode-ai/cli@beta
 ```
 
 Start it in your project with:
@@ -365,10 +364,10 @@ V1 `npm` becomes `package`, and AI SDK packages receive the `aisdk:` prefix. `ap
 
 V2 consolidated two legacy provider namespaces:
 
-| V1 provider ID | Canonical V2 provider ID |
-| --- | --- |
-| `azure-cognitive-services` | `azure` |
-| `google-vertex-anthropic` | `google-vertex` |
+| V1 provider ID             | Canonical V2 provider ID |
+| -------------------------- | ------------------------ |
+| `azure-cognitive-services` | `azure`                  |
+| `google-vertex-anthropic`  | `google-vertex`          |
 
 Migration of unambiguous V1 provider, agent, command, and provider-filter fields uses these canonical IDs. The shared
 top-level `model` field keeps its exact provider ID because the same syntax is valid in native V2 config; update that field
@@ -504,8 +503,8 @@ require a V2 rewrite. See [Skills](/skills).
 
 ### Instruction files
 
-Existing `AGENTS.md` files stay in place. V2 discovers the global `~/.config/opencode/AGENTS.md` and project `AGENTS.md`
-files from the current directory up to the project root.
+Existing `AGENTS.md` files stay in place. V2 discovers the global `~/.config/opencode/AGENTS.md` and ambient `AGENTS.md`
+files from the current directory up to home. For projects outside home, discovery stops at the project root.
 
 If a V1 setup relied on a `CLAUDE.md` fallback, move that guidance into the applicable `AGENTS.md`. V2 currently only
 discovers `AGENTS.md`; because non-API V1 behavior is intended to remain compatible, also run `/report` with the affected

@@ -1,8 +1,12 @@
-import { ServerConnection, useServer, useTabs } from "@opencode-ai/app"
+import { ServerConnection, useServers, useTabs } from "@opencode-ai/app"
 import { onMount } from "solid-js"
 
-export function DesktopFirstLaunchOnboarding(props: { initialUrl: string; onLoaded: () => void }) {
-  const server = useServer()
+export function DesktopFirstLaunchOnboarding(props: {
+  serverKey: ServerConnection.Key
+  initialUrl: string
+  onLoaded: () => void
+}) {
+  const server = useServers()
   const tabs = useTabs()
 
   onMount(() => {
@@ -11,11 +15,8 @@ export function DesktopFirstLaunchOnboarding(props: { initialUrl: string; onLoad
 
   async function runFirstLaunchOnboarding() {
     try {
-      await Promise.all(
-        [server.ready.promise, tabs.ready.promise, tabs.recentReady.promise].map((p) => p ?? Promise.resolve()),
-      )
+      await Promise.all([tabs.ready.promise, tabs.recentReady.promise].map((p) => p ?? Promise.resolve()))
       const existingInstall = await window.api.isOldLayoutEligible()
-      if (!server.isLocal()) return
 
       const pending = await window.api.isFirstLaunchOnboardingPending()
       if (!pending) return
@@ -39,9 +40,10 @@ export function DesktopFirstLaunchOnboarding(props: { initialUrl: string; onLoad
       if (!shouldTrigger || !directory) return
 
       console.info("[desktop-onboarding] starting first launch draft", { directory })
-      server.projects.open(directory)
-      server.projects.touch(directory)
-      tabs.select(await tabs.newDraft({ server: server.key, directory }))
+      const projects = server.projects.forServer(props.serverKey)
+      projects.open(directory)
+      projects.touch(directory)
+      tabs.select(await tabs.newDraft({ server: props.serverKey, directory }))
     } catch (error) {
       console.error("[desktop-onboarding] first launch onboarding failed", error)
     }

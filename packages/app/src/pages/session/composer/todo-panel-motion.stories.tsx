@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createEffect, createMemo, onCleanup } from "solid-js"
+import { createEffect, createMemo, For, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Todo } from "@/types"
 import { useServerSync } from "@/context/global-sync"
@@ -326,11 +326,13 @@ export const Playground = {
           <button onClick={cycle} style={btn(step() > 0)}>
             Cycle progress ({step()}/3 done)
           </button>
-          {[0, 1, 2, 3].map((value) => (
-            <button onClick={() => setCfg("step", value)} style={btn(step() === value)}>
-              {value} done
-            </button>
-          ))}
+          <For each={[0, 1, 2, 3]}>
+            {(value) => (
+              <button onClick={() => setCfg("step", value)} style={btn(step() === value)}>
+                {value} done
+              </button>
+            )}
+          </For>
         </div>
 
         <div style={{ display: "grid", gap: "10px", "max-width": "560px" }}>

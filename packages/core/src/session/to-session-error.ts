@@ -1,11 +1,10 @@
 import { AIError, ToolFailure } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
 import { SessionError } from "@opencode-ai/schema/session-error"
-import { Permission } from "../permission"
-import { Question } from "../question"
-import { Integration } from "../integration"
-import { AgentNotFoundError, StepFailedError, UserInterruptedError } from "./error"
-import { SessionRunnerModel } from "./runner/model"
+import { Permission } from "../permission.js"
+import { Integration } from "../integration.js"
+import { AgentNotFoundError, StepFailedError, UserInterruptedError } from "./error.js"
+import { SessionRunnerModel } from "./runner/model.js"
 
 export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof AIError) {
@@ -37,7 +36,6 @@ export function toSessionError(cause: unknown): SessionError.Error {
     }
   }
   if (cause instanceof Permission.BlockedError) return { type: "permission.rejected", message: cause.message }
-  if (cause instanceof Question.RejectedError) return { type: "aborted", message: cause.message }
   if (cause instanceof ToolFailure || cause instanceof Tool.Error) {
     if (cause.error === undefined) return { type: "tool.execution", message: cause.message }
     // The canonical error is the sole model-visible representation, so a cause
@@ -52,7 +50,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
     cause instanceof SessionRunnerModel.ModelNotSelectedError ||
     cause instanceof SessionRunnerModel.ModelUnavailableError ||
     cause instanceof SessionRunnerModel.VariantUnavailableError ||
-    cause instanceof SessionRunnerModel.UnsupportedPackageError
+    cause instanceof SessionRunnerModel.UnsupportedPackageError ||
+    cause instanceof SessionRunnerModel.UnresolvedProviderVariablesError
   )
     return { type: "provider.no-route", message: cause.message }
   if (cause instanceof Integration.AuthorizationError) return { type: "provider.auth", message: cause.message }

@@ -4,62 +4,83 @@
   "name": "@opencode-ai/core",
   "type": "module",
   "license": "MIT",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/core"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "db": "bun drizzle-kit",
     "migration": "bun run script/migration.ts",
     "fix-node-pty": "bun run script/fix-node-pty.ts",
     "benchmark:location": "bun run script/benchmark-location.ts",
+    "build": "bun run script/build.ts",
+    "update-models-snapshot": "bun run script/update-models-snapshot.ts",
     "test": "bun test --only-failures",
     "typecheck": "tsgo -b tsconfig.json tsconfig.tests.json"
   },
-  "bin": {
-    "opencode": "./bin/opencode"
-  },
   "exports": {
-    "./environment": "./src/environment/index.ts",
-    "./session/runner": "./src/session/runner/index.ts",
-    "./instructions": "./src/instructions/index.ts",
     "./*": "./src/*.ts"
   },
   "imports": {
     "#sqlite": {
+      "workerd": "./src/database/sqlite.workerd.ts",
       "bun": "./src/database/sqlite.bun.ts",
       "node": "./src/database/sqlite.node.ts",
-      "default": "./src/database/sqlite.bun.ts"
+      "default": "./src/database/sqlite.node.ts"
     },
     "#pty": {
+      "workerd": "./src/pty/pty.workerd.ts",
       "bun": "./src/pty/pty.bun.ts",
       "node": "./src/pty/pty.node.ts",
       "default": "./src/pty/pty.bun.ts"
     },
     "#fff": {
+      "workerd": "./src/filesystem/fff.workerd.ts",
       "bun": "./src/filesystem/fff.bun.ts",
       "node": "./src/filesystem/fff.node.ts",
       "default": "./src/filesystem/fff.bun.ts"
     },
     "#photon-wasm": {
+      "workerd": "./src/image/photon-wasm.workerd.ts",
       "bun": "./src/image/photon-wasm.bun.ts",
       "node": "./src/image/photon-wasm.node.ts",
       "default": "./src/image/photon-wasm.bun.ts"
     },
     "#shell-parser-wasm": {
+      "workerd": "./src/shell/parser-wasm.workerd.ts",
       "bun": "./src/shell/parser-wasm.bun.ts",
       "node": "./src/shell/parser-wasm.node.ts",
       "default": "./src/shell/parser-wasm.bun.ts"
     },
     "#process-lock-ffi": {
+      "workerd": "./src/util/process-lock-ffi.workerd.ts",
       "bun": "./src/util/process-lock-ffi.bun.ts",
       "node": "./src/util/process-lock-ffi.node.ts",
       "default": "./src/util/process-lock-ffi.bun.ts"
+    },
+    "#v1-migration": {
+      "types": "./src/database/v1-migration.bun.ts",
+      "bun": "./src/database/v1-migration.bun.ts",
+      "node": "./src/database/v1-migration.noop.ts",
+      "workerd": "./src/database/v1-migration.noop.ts",
+      "default": "./src/database/v1-migration.noop.ts"
     }
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/sql-sqlite-bun": "catalog:",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@types/turndown": "5.0.5",
     "@types/which": "3.0.4",
+    "@opencode-ai/shell-scan": "workspace:*",
     "@parcel/watcher-darwin-arm64": "2.5.1",
     "@parcel/watcher-darwin-x64": "2.5.1",
     "@parcel/watcher-linux-arm64-glibc": "2.5.1",
@@ -90,14 +111,11 @@
     "@ai-sdk/togetherai": "2.0.41",
     "@ai-sdk/vercel": "2.0.39",
     "@aws-sdk/credential-providers": "3.1057.0",
-    "@effect/platform-node": "catalog:",
-    "@effect/sql-sqlite-bun": "catalog:",
     "@lydell/node-pty": "catalog:",
     "@modelcontextprotocol/sdk": "1.29.0",
     "@ff-labs/fff-bun": "0.10.1",
     "@ff-labs/fff-node": "0.10.1",
     "@opencode-ai/codemode": "workspace:*",
-    "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
     "@opencode-ai/ai": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
@@ -111,7 +129,7 @@
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "3.1.0",
-    "gitlab-ai-provider": "6.11.1",
+    "gitlab-ai-provider": "6.12.1",
     "google-auth-library": "10.5.0",
     "gray-matter": "4.0.3",
     "htmlparser2": "8.0.2",
@@ -119,15 +137,11 @@
     "ignore": "7.0.5",
     "jsonc-parser": "3.3.1",
     "mime-types": "3.0.2",
-    "turndown": "7.2.0",
     "tree-sitter-bash": "0.25.0",
     "tree-sitter-powershell": "0.25.10",
     "venice-ai-sdk-provider": "2.1.1",
     "web-tree-sitter": "0.25.10",
     "which": "6.0.1",
     "zod": "catalog:"
-  },
-  "overrides": {
-    "drizzle-orm": "catalog:"
   }
 }

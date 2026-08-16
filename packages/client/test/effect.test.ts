@@ -213,7 +213,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(Object.getPrototypeOf(result.created)).toBe(Object.prototype)
   expect(result.created.id).toBe("ses_test")
   expect(Object.getPrototypeOf(result.admitted)).toBe(Object.prototype)
-  expect(Object.getPrototypeOf(result.admitted.data)).toBe(Object.prototype)
+  expect(Object.getPrototypeOf(result.admitted.payload)).toBe(Object.prototype)
   expect(DateTime.toEpochMillis(result.admitted.timeCreated)).toBe(1_717_171_717_000)
   expect(result.context).toEqual([])
   expect(logQueries[0]).toEqual({ after: "0" })
@@ -271,7 +271,7 @@ const admission = {
     id: "msg_test",
     sessionID: "ses_test",
     type: "user",
-    data: { text: "Hello" },
+    payload: { text: "Hello" },
     delivery: "steer",
     timeCreated: 1_717_171_717_000,
   },
@@ -280,6 +280,8 @@ const admission = {
 const compactionAdmission = {
   data: {
     type: "compaction",
+    payload: {},
+    delivery: "queue",
     id: "msg_compaction",
     sessionID: "ses_test",
     timeCreated: 1_717_171_717_000,

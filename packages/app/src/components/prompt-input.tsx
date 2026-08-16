@@ -45,7 +45,6 @@ import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover, ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
-import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
 import { useCommand } from "@/context/command"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
@@ -77,7 +76,7 @@ import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
-import { promptDesignPlaceholder, promptPlaceholder } from "./prompt-input/placeholder"
+import { promptPlaceholder } from "./prompt-input/placeholder"
 import { createPromptInputTransientState } from "./prompt-input/transient-state"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
@@ -1489,10 +1488,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         <PromptImageAttachments
           attachments={imageAttachments()}
           onOpen={(attachment) =>
-            dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
+            dialog.show(() => <ImagePreview src={attachment.blob.url} alt={attachment.filename} />)
           }
           onRemove={removeAttachment}
           removeLabel={language.t("prompt.attachment.remove")}
+          fileLabel={language.t("ui.common.file")}
           newLayoutDesigns={false}
         />
         <div
@@ -1517,6 +1517,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               role="textbox"
               aria-multiline="true"
               aria-label={placeholder()}
+              dir={store.mode === "normal" ? "auto" : "ltr"}
               contenteditable="true"
               autocapitalize={store.mode === "normal" ? "sentences" : "off"}
               autocorrect={store.mode === "normal" ? "on" : "off"}
@@ -1538,7 +1539,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 "[&_[data-type=agent]]:text-syntax-type": true,
                 "font-mono!": store.mode === "shell",
               }}
-              style={{ "padding-bottom": space }}
+              style={{
+                "padding-bottom": space,
+                "unicode-bidi": store.mode === "normal" ? "plaintext" : undefined,
+                "text-align": "start",
+              }}
             />
             <div
               class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"

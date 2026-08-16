@@ -1,17 +1,29 @@
 import type { Plugin } from "@opencode-ai/plugin/tui"
-import { batch, createContext, createEffect, on, onCleanup, onMount, useContext, type ParentProps } from "solid-js"
+import { createMarkdownCodeBlockRenderer, type MarkdownCodeBlockRenderer, type MarkdownOptions } from "@opentui/core"
+import {
+  batch,
+  createContext,
+  createEffect,
+  createMemo,
+  on,
+  onCleanup,
+  onMount,
+  useContext,
+  type ParentProps,
+} from "solid-js"
 import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
-import type { Page, Slot, SlotName } from "@opencode-ai/plugin/tui/context"
-import { createStore, produce, reconcile as reconcileStore } from "solid-js/store"
+import type { Page } from "@opencode-ai/plugin/tui/context"
+import { resolveSlots, type Claim } from "./structure"
+import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
 import { isDeepEqual } from "remeda"
 import "#runtime-plugin-support"
 import { useConfig } from "../config"
 import { useTuiLifecycle } from "../context/runtime"
 import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
-import { createPluginContext, usePluginHost, type Dispose } from "./api"
+import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, type SlotRender } from "./api"
 import { createSourceWatcher } from "./watch"
 import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
 
@@ -22,7 +34,7 @@ export interface PackageResolver {
 type State =
   | { readonly target: string; readonly id: string; readonly status: "active" | "inactive" }
   | { readonly target: string; readonly status: "unsupported" }
-  | { readonly target: string; readonly status: "failed"; readonly error: string }
+  | { readonly target: string; readonly id?: string; readonly status: "failed"; readonly error: string }
 
 type RegisteredPlugin = {
   readonly id: string
@@ -35,7 +47,12 @@ type Value = {
   readonly list: () => ReadonlyArray<State>
   readonly registered: () => ReadonlyArray<RegisteredPlugin>
   readonly route: (id: string, name: string) => Page["render"] | undefined
-  readonly slot: <Name extends SlotName>(name: Name) => ReadonlyArray<{ readonly id: string; readonly render: Slot<Name> }>
+  readonly slots: {
+    // A mounted <Slot> instance registers its path; the disposer unregisters.
+    readonly register: (path: string) => () => void
+    readonly resolved: () => ReturnType<typeof resolveSlots<SlotRender>>
+  }
+  readonly markdown: () => MarkdownOptions["renderNode"]
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
 }
@@ -48,7 +65,8 @@ type Registration = {
   options?: Readonly<Record<string, any>>
   active: boolean
   routes: Record<string, Page>
-  slots: Record<string, Slot>
+  slots: Record<string, RegisteredSlot>
+  markdown: Record<string, MarkdownCodeBlockRenderer>
   cleanups: Dispose[]
 }
 
@@ -56,6 +74,17 @@ type Registration = {
 type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "options"> & { enabled: boolean }
 
 const PluginContext = createContext<Value>()
+
+export function combineMarkdownRenderers(
+  sources: ReadonlyArray<Readonly<Record<string, MarkdownCodeBlockRenderer>>>,
+): MarkdownOptions["renderNode"] {
+  const renderers = new Map<string, MarkdownCodeBlockRenderer>()
+  for (const source of sources) {
+    for (const [language, render] of Object.entries(source)) renderers.set(language, render)
+  }
+  if (renderers.size === 0) return undefined
+  return createMarkdownCodeBlockRenderer(renderers)
+}
 
 export function PluginProvider(props: ParentProps<{ packages: PackageResolver; directories: string[] }>) {
   const host = usePluginHost()
@@ -67,6 +96,13 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     states: [] as ReadonlyArray<State>,
     registrations: {} as Record<string, Registration>,
   })
+  const markdown = createMemo(() =>
+    combineMarkdownRenderers(
+      Object.values(store.registrations).flatMap((registration) =>
+        registration.active ? [registration.markdown] : [],
+      ),
+    ),
+  )
 
   const activate = async (id: string) => {
     const item = store.registrations[id]
@@ -75,6 +111,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     batch(() => {
       setStore("registrations", id, "routes", reconcileStore({}))
       setStore("registrations", id, "slots", reconcileStore({}))
+      setStore("registrations", id, "markdown", reconcileStore({}))
       setStore("registrations", id, "cleanups", [])
     })
     const owned: Dispose[] = []
@@ -85,8 +122,11 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       owned,
       registry: {
         has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
-        set: (kind: "routes" | "slots", name: string, value: Page | Slot) =>
-          setStore("registrations", id, kind, name, () => value),
+        set: (
+          kind: "routes" | "slots" | "markdown",
+          name: string,
+          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer,
+        ) => setStore("registrations", id, kind, name, () => value),
         remove: (kind, name) =>
           setStore(
             "registrations",
@@ -101,6 +141,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     const cleanup = await setup(item.plugin, context, owned).catch((error) => {
       setStore("registrations", id, "routes", reconcileStore({}))
       setStore("registrations", id, "slots", reconcileStore({}))
+      setStore("registrations", id, "markdown", reconcileStore({}))
       throw error
     })
     if (cleanup) owned.push(async () => cleanup())
@@ -129,6 +170,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         if (store.registrations[id]) {
           setStore("registrations", id, "routes", reconcileStore({}))
           setStore("registrations", id, "slots", reconcileStore({}))
+          setStore("registrations", id, "markdown", reconcileStore({}))
         }
         setStore("states", (items) =>
           items.map((state) =>
@@ -193,7 +235,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     // Resolve: fold entries into one desired generation. A source that fails
     // to import keeps its running previous version and only reports failure.
     const desired = new Map<string, Desired>()
-    for (const plugin of builtins) desired.set(plugin.id, { plugin, source: "builtin", version: "builtin", enabled: true })
+    for (const plugin of builtins)
+      desired.set(plugin.id, { plugin, source: "builtin", version: "builtin", enabled: true })
     const failures: State[] = []
     for (const entry of entries) {
       const target = typeof entry === "string" ? entry : entry.package
@@ -228,6 +271,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         if (!local && !previous) npmFailures.set(target, resolved.error)
         failures.push({
           target,
+          id: previous?.plugin.id,
           status: "failed",
           error: previous?.active ? `${resolved.error} (previous version still active)` : resolved.error,
         })
@@ -256,7 +300,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     // generation is a no-op, so spurious watch events cost nothing.
     const currentIds = Object.keys(store.registrations)
     const desiredIds = [...desired.keys()]
-    const structural = currentIds.length !== desiredIds.length || currentIds.some((id, index) => desiredIds[index] !== id)
+    const structural =
+      currentIds.length !== desiredIds.length || currentIds.some((id, index) => desiredIds[index] !== id)
     if (structural) {
       await Promise.all(
         Object.entries(store.registrations)
@@ -332,7 +377,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         // A failed reload keeps this item running; the failure entry covers it.
         if (failedTargets.has(item.target)) return []
         const error = errors.get(item.plugin.id)
-        if (error) return [{ target: item.target, status: "failed", error }]
+        if (error) return [{ target: item.target, id: item.plugin.id, status: "failed", error }]
         const status = store.registrations[item.plugin.id]?.active ? "active" : "inactive"
         return [{ target: item.target, id: item.plugin.id, status }]
       }),
@@ -342,12 +387,56 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     for (const state of states)
       if (
         state.status === "failed" &&
-        !store.states.some((prev) => prev.status === "failed" && prev.target === state.target && prev.error === state.error)
+        !store.states.some(
+          (prev) => prev.status === "failed" && prev.target === state.target && prev.error === state.error,
+        )
       )
-        host.toast.show({ variant: "error", title: "Plugin", message: `${state.target}: ${state.error}` })
+        host.toast.show({
+          variant: "error",
+          title: `Plugin failed: ${state.target}`,
+          message: "Run /plugins to view details.",
+          action: { label: "Open plugins", run: () => host.keymap.dispatch("plugins.list") },
+        })
     setStore("states", reconcileStore(states))
   }
-  const slotItems = new WeakMap<Slot, { readonly id: string; readonly render: Slot }>()
+  const slotItems = new WeakMap<SlotRender, Claim<SlotRender>>()
+  // The mounted slot tree: path -> live <Slot> instance count. Reference
+  // counted because the same path can be mounted several times (one composer
+  // footer per session tab); a path exists while any instance is mounted.
+  const [mounted, setMounted] = createStore<Record<string, number>>({})
+  const registerSlot = (slotPath: string) => {
+    setMounted(slotPath, (count) => (count ?? 0) + 1)
+    return () =>
+      setMounted(
+        produce((counts) => {
+          const count = counts[slotPath]
+          if (count && count > 1) counts[slotPath] = count - 1
+          else delete counts[slotPath]
+        }),
+      )
+  }
+  // Claims come back in enable order: registration-store key order across
+  // plugins (generations preserve key positions in place), then registration
+  // order within one plugin. The resolver's last-wins rules depend on it.
+  const claims = createMemo(() =>
+    Object.entries(store.registrations).flatMap(([id, registration]) =>
+      Object.entries(registration.active ? registration.slots : {}).map(([key, slot]) => {
+        // Rows downstream diff by reference; a stable claim per render
+        // function keeps untouched plugins' slot rows (and their state)
+        // alive across other plugins' reloads.
+        const cached = slotItems.get(slot.render)
+        if (cached) return cached
+        // Placements are immutable once registered; unwrap the store proxy
+        // so resolver reads don't subscribe tracked scopes.
+        const item = { key: `${id}/${key}`, plugin: id, placement: unwrap(slot.placement), render: slot.render }
+        slotItems.set(slot.render, item)
+        return item
+      }),
+    ),
+  )
+  // Object.keys tracks the store's keys node only: refcount changes on an
+  // already-mounted path (a second tab's composer) skip re-resolution.
+  const resolved = createMemo(() => resolveSlots({ paths: new Set(Object.keys(mounted)), claims: claims() }))
   createEffect(
     on(
       () => JSON.stringify(config.data.plugins ?? []),
@@ -390,21 +479,14 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
         ready: () => store.ready,
         list: () => store.states,
         registered: () =>
-          Object.entries(store.registrations).map(([id, plugin]) => ({ id, source: plugin.source, active: plugin.active })),
+          Object.entries(store.registrations).map(([id, plugin]) => ({
+            id,
+            source: plugin.source,
+            active: plugin.active,
+          })),
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
-        slot: (name) =>
-          Object.entries(store.registrations).flatMap(([id, registration]) => {
-            const render = registration.active ? registration.slots[name] : undefined
-            if (!render) return []
-            // <For> diffs rows by reference; a stable wrapper per render
-            // function keeps untouched plugins' slot rows (and their state)
-            // alive across other plugins' reloads.
-            const cached = slotItems.get(render)
-            if (cached) return [cached]
-            const item = { id, render }
-            slotItems.set(render, item)
-            return [item]
-          }),
+        slots: { register: registerSlot, resolved },
+        markdown,
         // Manual dialog toggles join the same chain as reconciles so a
         // toggle mid-reload cannot mix registrations across generations.
         activate: (id) => enqueue(() => activate(id)),
@@ -468,6 +550,7 @@ function toRegistration(item: Desired): Registration {
     active: false,
     routes: {},
     slots: {},
+    markdown: {},
     cleanups: [],
   }
 }

@@ -17,7 +17,6 @@ import { ServerHandler } from "./handlers/server"
 import { DebugHandler } from "./handlers/debug"
 import { PtyHandler } from "./handlers/pty"
 import { ShellHandler } from "./handlers/shell"
-import { QuestionHandler } from "./handlers/question"
 import { ReferenceHandler } from "./handlers/reference"
 import { LocationHandler } from "./handlers/location"
 import { IntegrationHandler } from "./handlers/integration"
@@ -25,7 +24,7 @@ import { WebSearchHandler } from "./handlers/websearch"
 import { McpHandler } from "./handlers/mcp"
 import { CredentialHandler } from "./handlers/credential"
 import { ProjectHandler } from "./handlers/project"
-import { ProjectCopyHandler } from "./handlers/project-copy"
+import { WorktreeHandler } from "./handlers/worktree"
 import { VcsHandler } from "./handlers/vcs"
 import { EventFeed } from "./event-feed"
 import { MigrationHandler } from "./handlers/migration"
@@ -57,9 +56,8 @@ export const handlers = Layer.mergeAll(
   EventHandler.pipe(Layer.provide(EventFeed.layer)),
   PtyHandler,
   ShellHandler,
-  QuestionHandler,
   ReferenceHandler,
-  ProjectCopyHandler,
+  WorktreeHandler,
   VcsHandler,
   ConfigHandler,
 )

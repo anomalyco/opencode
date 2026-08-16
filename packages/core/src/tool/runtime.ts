@@ -44,7 +44,8 @@ const encodeOutput = (schema: Tool.ValueSchema<any>, value: unknown) => {
   if (Schema.isSchema(schema))
     return Schema.encodeEffect(schema)(value).pipe(
       Effect.mapError(
-        (error) => new Tool.Error({ message: `Tool returned an invalid value for its output schema: ${error.message}` }),
+        (error) =>
+          new Tool.Error({ message: `Tool returned an invalid value for its output schema: ${error.message}` }),
       ),
     )
   if (isStandardSchema(schema))

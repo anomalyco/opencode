@@ -12,29 +12,35 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js"
-import { Document, Info } from "@opencode-ai/schema/config"
+import { Document, Event, Info } from "@opencode-ai/schema/config"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { Config } from "@opencode-ai/core/config"
 import { Credential } from "@opencode-ai/core/credential"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
-import { Event } from "@opencode-ai/schema/event"
+import { ID, type Payload } from "@opencode-ai/schema/event"
 import { Form } from "@opencode-ai/core/form"
 import { Integration } from "@opencode-ai/core/integration"
+import { Environment } from "@opencode-ai/core/environment/index"
+import { EnvironmentUnavailable } from "@opencode-ai/core/environment/unavailable"
 import { Location } from "@opencode-ai/core/location"
 import { MCP } from "@opencode-ai/core/mcp/index"
 import { MCPClient } from "@opencode-ai/core/mcp/client"
+import { MCPStdio } from "@opencode-ai/core/mcp/stdio"
 import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { Tool } from "@opencode-ai/core/tool"
-import { Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Exit, Fiber, Layer, PubSub, Schedule, Schema, Sink, Stream } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ExitCode, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
 import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
+import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import { executeTool, toolDefinitions, toolIdentity, waitForCodeModeTool, waitForTool } from "./lib/tool"
 
 let assertion: Deferred.Deferred<Permission.AssertInput> | undefined
@@ -67,6 +73,8 @@ function resourceServer(
         ] as Array<{ uri: string; text: string; mimeType?: string } | { uri: string; blob: string; mimeType?: string }>,
         resourceLists: 0,
         templateLists: 0,
+        toolLists: 0,
+        initializations: 0,
       }
       const protocol = new Server(
         { name: "mcp-resources", version: "1.0.0" },
@@ -77,15 +85,16 @@ function resourceServer(
           },
         },
       )
-      protocol.setRequestHandler(ListToolsRequestSchema, () =>
-        Promise.resolve({
+      protocol.setRequestHandler(ListToolsRequestSchema, () => {
+        state.toolLists += 1
+        return Promise.resolve({
           tools: input.emptyElicitation
             ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
             : input.urlElicitation
               ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
               : [],
-        }),
-      )
+        })
+      })
       if (input.emptyElicitation) {
         protocol.setRequestHandler(CallToolRequestSchema, async () => {
           const result = await protocol.elicitInput({
@@ -133,7 +142,13 @@ function resourceServer(
       await protocol.connect(transport)
       const http = Bun.serve({
         port: 0,
-        fetch: (request) => transport.handleRequest(request),
+        fetch: async (request) => {
+          const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
+          if (typeof body === "object" && body !== null && "method" in body && body.method === "initialize") {
+            state.initializations += 1
+          }
+          return transport.handleRequest(request)
+        },
       })
       return {
         state,
@@ -155,6 +170,11 @@ function resourceMcpLayer(
   server: string | typeof ConfigMCP.Server.Type,
   onFormCreated?: (form: Form.Info) => Effect.Effect<void>,
   options?: MCP.Options,
+  overrides?: {
+    entries?: Config.Interface["entries"]
+    subscribe?: Bus.Interface["subscribe"]
+    environment?: Layer.Layer<Environment.Service>
+  },
 ) {
   const directory = AbsolutePath.make(import.meta.dir)
   const unusedIntegration = () => Effect.die("unused integration service")
@@ -162,30 +182,39 @@ function resourceMcpLayer(
     Layer.provideMerge(Form.layer),
     Layer.provide(
       Layer.mergeAll(
-        Config.testLayer([
-          new Document({
-            type: "document",
-            info: new Info({
-              mcp: new ConfigMCP.Info({
-                servers: {
-                  resources:
-                    typeof server === "string"
-                      ? new ConfigMCP.Remote({ type: "remote", url: server, oauth: false })
-                      : server,
-                },
+        overrides?.entries
+          ? Layer.succeed(
+              Config.Service,
+              Config.Service.of({
+                entries: overrides.entries,
+                update: () => Effect.die("unused config update"),
+                changes: () => Stream.never,
               }),
-            }),
-          }),
-        ]),
+            )
+          : Config.testLayer([
+              new Document({
+                type: "document",
+                info: new Info({
+                  mcp: new ConfigMCP.Info({
+                    servers: {
+                      resources:
+                        typeof server === "string"
+                          ? new ConfigMCP.Remote({ type: "remote", url: server, oauth: false })
+                          : server,
+                    },
+                  }),
+                }),
+              }),
+            ]),
         Layer.succeed(Location.Service, Location.Service.of(location({ directory }))),
         Layer.mock(Bus.Service, {
-          subscribe: () => Stream.never,
+          subscribe: overrides?.subscribe ?? (() => Stream.never),
           publish: (definition, data) => {
             const event = {
-              id: Event.ID.create(),
+              id: ID.create(),
               type: definition.type,
               data,
-            } as Event.Payload<typeof definition>
+            } as Payload<typeof definition>
             if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
             return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
           },
@@ -211,10 +240,14 @@ function resourceMcpLayer(
           },
         }),
         Layer.mock(Credential.Service, {}),
+        overrides?.environment ?? hostEnvironmentLayer,
       ),
     ),
   )
 }
+
+const connect = (server: string, config: typeof ConfigMCP.Server.Type, directory: string) =>
+  MCPClient.connect(server, config, directory).pipe(Effect.provide(hostEnvironmentLayer))
 
 const mcp = Layer.mock(MCP.Service, {
   tools: () =>
@@ -229,6 +262,12 @@ const mcp = Layer.mock(MCP.Service, {
           properties: { ok: { type: "boolean" } },
           required: ["ok"],
         },
+      }),
+      new MCP.Tool({
+        server: MCP.ServerName.make("demo"),
+        name: "status",
+        description: "Status",
+        inputSchema: { type: "object", properties: {} },
       }),
       new MCP.Tool({
         server: MCP.ServerName.make("direct"),
@@ -271,6 +310,13 @@ const mcp = Layer.mock(MCP.Service, {
             { type: "text", text: "rendered chart" },
             { type: "media", data: "aGVsbG8=", mimeType: "image/png" },
           ],
+        })
+      if (input.name === "status")
+        return new MCP.ToolResult({
+          server: MCP.ServerName.make(input.server),
+          tool: input.name,
+          isError: false,
+          content: [{ type: "text", text: "hello" }],
         })
       return new MCP.ToolResult({
         server: MCP.ServerName.make(input.server),
@@ -376,7 +422,7 @@ test("retains output schemas across paginated MCP discovery", async () => {
   const tools = await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "pagination",
           new ConfigMCP.Local({
             type: "local",
@@ -409,11 +455,160 @@ test("retains output schemas across paginated MCP discovery", async () => {
   ])
 })
 
+test("spawns local MCP servers through the location environment", async () => {
+  const spawns: Array<ChildProcess.Command> = []
+  const cwd = path.join(import.meta.dir, "fixture")
+  const config = new ConfigMCP.Local({
+    type: "local",
+    command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+    cwd: "fixture",
+    environment: { MCP_LOCATION_TEST: "configured" },
+  })
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* MCPClient.connect("environment", config, import.meta.dir)
+        yield* connection.tools()
+      }),
+    ).pipe(Effect.provide(recordingEnvironmentLayer(spawns))),
+  )
+
+  expect(spawns).toHaveLength(1)
+  const command = spawns[0]
+  if (!command || !ChildProcess.isStandardCommand(command)) throw new Error("Expected a standard process command")
+  expect(command.command).toBe(process.execPath)
+  expect(command.options.cwd).toBe(cwd)
+  expect(command.options.extendEnv).toBe(true)
+  expect(command.options.env).toEqual({ MCP_LOCATION_TEST: "configured" })
+})
+
+test("reports a local MCP server as failed when the location has no execution plane", async () => {
+  const config = new ConfigMCP.Local({ type: "local", command: ["example-mcp"] })
+  const driver = Environment.makeMemoryDriver()
+  const environment = Layer.succeed(
+    Environment.Service,
+    Environment.Service.of({ files: Environment.makeFiles(driver), spawner: EnvironmentUnavailable.spawner }),
+  )
+
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const service = yield* MCP.Service
+      yield* service.tools()
+      const status = (yield* service.servers()).find((server) => server.name === "resources")?.status
+      expect(status).toEqual({
+        status: "failed",
+        error: expect.stringContaining("location has no execution plane"),
+      })
+    }).pipe(Effect.provide(resourceMcpLayer(config, undefined, undefined, { environment }))),
+  )
+})
+
+test("rejects sends before the stdio transport is started", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const transport = yield* MCPStdio.make({
+          server: "not-started",
+          command: process.execPath,
+          args: [path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+          cwd: import.meta.dir,
+          environment: {},
+        })
+        yield* Effect.tryPromise({
+          try: () => transport.send({ jsonrpc: "2.0", method: "notifications/initialized" }),
+          catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+        }).pipe(
+          Effect.flip,
+          Effect.tap((error) => Effect.sync(() => expect(error.message).toBe("Not connected"))),
+        )
+      }).pipe(Effect.provide(hostEnvironmentLayer)),
+    ),
+  )
+})
+
+test("joins concurrent stdio transport closes", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const transport = yield* MCPStdio.make({
+          server: "concurrent-close",
+          command: "unused",
+          args: [],
+          cwd: import.meta.dir,
+          environment: {},
+        })
+        const first = transport.close()
+        expect(transport.close()).toBe(first)
+        yield* Effect.promise(() => first)
+      }).pipe(Effect.provide(hostEnvironmentLayer)),
+    ),
+  )
+})
+
+test("closes a stdio process that finishes spawning after close", async () => {
+  const spawning = Deferred.makeUnsafe<void>()
+  const release = Deferred.makeUnsafe<void>()
+  const exited = Deferred.makeUnsafe<ExitCode>()
+  const signals: Array<string> = []
+  const driver = Environment.makeMemoryDriver()
+  const environment = Layer.succeed(
+    Environment.Service,
+    Environment.Service.of({
+      files: Environment.makeFiles(driver),
+      spawner: ChildProcessSpawner.make(() =>
+        Effect.gen(function* () {
+          yield* Deferred.succeed(spawning, undefined)
+          yield* Deferred.await(release)
+          return makeHandle({
+            pid: ProcessId(1),
+            exitCode: Deferred.await(exited),
+            isRunning: Deferred.isDone(exited).pipe(Effect.map((done) => !done)),
+            kill: (options) =>
+              Effect.gen(function* () {
+                signals.push(options?.killSignal ?? "SIGTERM")
+                yield* Deferred.succeed(exited, ExitCode(143))
+              }),
+            stdin: Sink.drain,
+            stdout: Stream.never,
+            stderr: Stream.empty,
+            all: Stream.never,
+            getInputFd: () => Sink.drain,
+            getOutputFd: () => Stream.empty,
+            unref: Effect.succeed(Effect.void),
+          })
+        }),
+      ),
+    }),
+  )
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const transport = yield* MCPStdio.make({
+          server: "close-during-spawn",
+          command: "unused",
+          args: [],
+          cwd: import.meta.dir,
+          environment: {},
+        })
+        const start = transport.start()
+        yield* Deferred.await(spawning)
+        const close = transport.close()
+        yield* Deferred.succeed(release, undefined)
+        yield* Effect.promise(() => Promise.all([start, close]))
+      }).pipe(Effect.provide(environment)),
+    ),
+  )
+
+  expect(signals).toEqual(["SIGTERM"])
+})
+
 test("applies the configured MCP catalog timeout", async () => {
   const result = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "catalog-timeout",
           new ConfigMCP.Local({
             type: "local",
@@ -435,7 +630,7 @@ test("applies the configured MCP execution timeout", async () => {
   const result = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "execution-timeout",
           new ConfigMCP.Local({
             type: "local",
@@ -456,7 +651,7 @@ test("applies the configured MCP execution timeout to prompts", async () => {
   const result = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "prompt-timeout",
           new ConfigMCP.Local({
             type: "local",
@@ -477,7 +672,7 @@ test("applies configured MCP timeouts to resource operations", async () => {
   const catalog = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "resource-catalog-timeout",
           new ConfigMCP.Local({
             type: "local",
@@ -496,7 +691,7 @@ test("applies configured MCP timeouts to resource operations", async () => {
   const read = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "resource-read-timeout",
           new ConfigMCP.Local({
             type: "local",
@@ -531,7 +726,7 @@ test("lists, reads, and reports MCP resource changes", async () => {
           },
           "templates-2": { items: [{ name: "Issue", uriTemplate: "issue://{id}", description: "Issue" }] },
         }
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "resources",
           new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
           import.meta.dir,
@@ -602,7 +797,7 @@ test("skips MCP resource requests when the capability is absent", async () => {
     Effect.scoped(
       Effect.gen(function* () {
         const server = yield* resourceServer({ resources: false })
-        const connection = yield* MCPClient.connect(
+        const connection = yield* connect(
           "resources",
           new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
           import.meta.dir,
@@ -785,6 +980,125 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
   )
 })
 
+test("reconciles only changed MCP server config", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer()
+        const updates = yield* PubSub.unbounded<Payload>()
+        const resources = (codemode?: boolean) =>
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, codemode })
+        const added = new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })
+        const dynamic = new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })
+        const document = (servers: Record<string, typeof ConfigMCP.Server.Type>, username?: string) =>
+          new Document({
+            type: "document",
+            info: new Info({
+              username,
+              mcp: new ConfigMCP.Info({ servers }),
+            }),
+          })
+        let entries = [document({ resources: resources() })]
+        const publishUpdate = () =>
+          PubSub.publish(updates, {
+            id: ID.create(),
+            created: 0,
+            type: Event.Updated.type,
+            data: {},
+          } satisfies Payload<typeof Event.Updated>)
+
+        yield* Effect.gen(function* () {
+          const service = yield* MCP.Service
+          yield* service.tools()
+          expect(server.state.toolLists).toBe(1)
+          expect(server.state.initializations).toBe(1)
+
+          yield* service.add("dynamic", dynamic)
+          entries = [document({ resources: resources() }, "unrelated")]
+          yield* publishUpdate()
+          entries = [document({ resources: resources(), added }, "unrelated")]
+          yield* publishUpdate()
+          const appended = yield* service.servers().pipe(
+            Effect.filterOrFail(
+              (items) => items.some((item) => item.name === "added"),
+              () => new Error("MCP config addition was not applied"),
+            ),
+            Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
+          )
+          expect(appended.map((item) => String(item.name)).toSorted()).toEqual(["added", "dynamic", "resources"])
+          expect(server.state.toolLists).toBe(1)
+          expect(server.state.initializations).toBe(1)
+
+          entries = [
+            document(
+              {
+                resources: resources(false),
+                added,
+              },
+              "unrelated",
+            ),
+          ]
+          yield* publishUpdate()
+          yield* Effect.sync(() => server.state.initializations).pipe(
+            Effect.filterOrFail(
+              (count) => count === 2,
+              () => new Error("MCP config change did not reconnect the server"),
+            ),
+            Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
+          )
+
+          entries = [document({ added }, "unrelated")]
+          yield* publishUpdate()
+          const removed = yield* service.servers().pipe(
+            Effect.filterOrFail(
+              (items) => !items.some((item) => item.name === "resources"),
+              () => new Error("MCP config removal was not applied"),
+            ),
+            Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
+          )
+          expect(removed.map((item) => String(item.name)).toSorted()).toEqual(["added", "dynamic"])
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(resources(), undefined, undefined, {
+              entries: () => Effect.sync(() => entries),
+              subscribe: (() => Stream.fromPubSub(updates)) as Bus.Interface["subscribe"],
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+})
+
+test("reconciles MCP config changed during startup", async () => {
+  const server = new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })
+  let reads = 0
+  const entries = () =>
+    Effect.sync(() => {
+      reads += 1
+      return [
+        new Document({
+          type: "document",
+          info: new Info({
+            mcp: new ConfigMCP.Info({
+              servers: reads === 1 ? { initial: server } : { initial: server, added: server },
+            }),
+          }),
+        }),
+      ]
+    })
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = yield* MCP.Service
+        expect((yield* service.servers()).map((item) => String(item.name))).toEqual(["added", "initial"])
+        expect(reads).toBeGreaterThanOrEqual(2)
+      }).pipe(Effect.provide(resourceMcpLayer(server, undefined, undefined, { entries }))),
+    ),
+  )
+})
+
 test("serializes concurrent MCP lifecycle operations", async () => {
   await Effect.runPromise(
     Effect.scoped(
@@ -844,6 +1158,31 @@ it.effect("advertises MCP output schemas to Code Mode", () =>
     ])
     expect(toolSet.codeModeCatalog?.find((tool) => tool.path === "demo.search")?.signature).toContain("ok: boolean")
     expect(execute?.description).not.toContain("tools.demo.search")
+  }),
+)
+
+it.effect("returns content-only MCP results through Code Mode", () =>
+  Effect.gen(function* () {
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    decision = Effect.void
+    const registry = yield* Tool.Service
+    const toolSet = yield* waitForCodeModeTool(registry, "demo.status")
+
+    const execution = yield* toolSet.execute({
+      sessionID: Session.ID.make("ses_mcp_content_only"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_content_only",
+        name: "execute",
+        input: { code: "return await tools.demo.status({})" },
+      },
+    })
+
+    expect(execution).toMatchObject({
+      output: { output: "hello", toolCalls: [{ tool: "demo.status", status: "completed" }] },
+      content: [{ type: "text", text: "hello" }],
+    })
   }),
 )
 
@@ -909,16 +1248,18 @@ it.effect("waits for permission before calling an MCP tool", () =>
     const registry = yield* Tool.Service
     const toolSet = yield* waitForCodeModeTool(registry, "demo.search")
 
-    const fiber = yield* toolSet.execute({
-      sessionID: Session.ID.make("ses_mcp_permission"),
-      ...toolIdentity,
-      call: {
-        type: "tool-call",
-        id: "call_mcp_permission",
-        name: "execute",
-        input: { code: "return await tools.demo.search({})" },
-      },
-    }).pipe(Effect.forkScoped)
+    const fiber = yield* toolSet
+      .execute({
+        sessionID: Session.ID.make("ses_mcp_permission"),
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call_mcp_permission",
+          name: "execute",
+          input: { code: "return await tools.demo.search({})" },
+        },
+      })
+      .pipe(Effect.forkScoped)
     expect(yield* Deferred.await(assertion)).toEqual({
       action: "demo_search",
       resources: ["*"],

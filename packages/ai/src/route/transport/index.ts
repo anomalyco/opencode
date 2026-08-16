@@ -1,19 +1,33 @@
-import type { Effect, Stream } from "effect"
-import { Endpoint } from "../endpoint"
-import { Auth } from "../auth"
-import type { HttpMiddleware, Interface as RequestExecutorInterface } from "../executor"
-import type { Interface as WebSocketExecutorInterface } from "./websocket"
-import type { AIError, LLMRequest } from "../../schema"
+import type { Effect, Scope, Stream } from "effect"
+import { Endpoint } from "../endpoint.js"
+import { Auth } from "../auth.js"
+import type { HttpMiddleware, Interface as RequestExecutorInterface } from "../executor.js"
+import type { WebSocketChannelExecutor } from "./websocket-channel.js"
+import type { AIError, LLMRequest } from "../../schema/index.js"
 
 export interface TransportRuntime {
   readonly http: RequestExecutorInterface
-  readonly webSocket?: WebSocketExecutorInterface
+}
+
+export interface TransportExecution<Frame> {
+  readonly frames: Stream.Stream<Frame, AIError>
+  /** Optional successful-consumption acknowledgement. HTTP leaves this absent. */
+  readonly complete?: Effect.Effect<void>
+}
+
+export interface TransportExecuteOptions {
+  readonly webSocket?: WebSocketChannelExecutor
 }
 
 export interface Transport<Body, Prepared, Frame> {
   readonly id: string
   readonly prepare: (input: TransportPrepareInput<Body>) => Effect.Effect<Prepared, AIError>
-  readonly frames: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => Stream.Stream<Frame, AIError>
+  readonly execute: (
+    prepared: Prepared,
+    request: LLMRequest,
+    runtime: TransportRuntime,
+    options?: TransportExecuteOptions,
+  ) => Effect.Effect<TransportExecution<Frame>, AIError, Scope.Scope>
 }
 
 export interface TransportPrepareInput<Body> {
@@ -24,8 +38,19 @@ export interface TransportPrepareInput<Body> {
   readonly encodeBody: (body: Body) => string
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
   readonly middleware?: HttpMiddleware
+  readonly webSocket?: WebSocketChannelExecutor
 }
 
-export * as HttpTransport from "./http"
-export type { HttpHandler, HttpMiddleware } from "../executor"
-export { WebSocketExecutor, WebSocketTransport } from "./websocket"
+export * as HttpTransport from "./http.js"
+export type { HttpHandler, HttpMiddleware } from "../executor.js"
+export type {
+  ChannelCheckpoint,
+  ChannelCreate,
+  ChannelObservation,
+  WebSocketChannelDriver,
+  WebSocketChannelExchange,
+  WebSocketChannelExecution,
+  WebSocketChannelExecutor,
+} from "./websocket-channel.js"
+export type { WebSocketConnection, WebSocketConnector, WebSocketRequest } from "./websocket.js"
+export { WebSocketTransport } from "./websocket.js"

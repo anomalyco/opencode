@@ -8,7 +8,7 @@
     "binding": "ASSETS",
     "directory": "./dist/client",
     "html_handling": "drop-trailing-slash",
-    "not_found_handling": "404-page"
+    "not_found_handling": "404-page",
   },
   "env": {
     "dev": {
@@ -16,18 +16,18 @@
       "routes": [
         {
           "pattern": "dev.opencode.ai/v2*",
-          "zone_name": "opencode.ai"
-        }
-      ]
+          "zone_name": "opencode.ai",
+        },
+      ],
     },
     "production": {
       "name": "opencode-www-production",
       "routes": [
         {
           "pattern": "opencode.ai/v2*",
-          "zone_name": "opencode.ai"
-        }
-      ]
-    }
-  }
+          "zone_name": "opencode.ai",
+        },
+      ],
+    },
+  },
 }

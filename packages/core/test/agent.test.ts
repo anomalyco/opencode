@@ -68,6 +68,26 @@ describe("Agent", () => {
     }),
   )
 
+  it.effect("lists the selected default agent first", () =>
+    Effect.gen(function* () {
+      const agent = yield* Agent.Service
+      yield* agent.transform((editor) => {
+        editor.update(Agent.ID.make("build"), (info) => {
+          info.mode = "primary"
+        })
+        editor.update(Agent.ID.make("reviewer"), (info) => {
+          info.mode = "primary"
+        })
+        editor.update(Agent.ID.make("explore"), (info) => {
+          info.mode = "subagent"
+        })
+        editor.default(Agent.ID.make("reviewer"))
+      })
+
+      expect((yield* agent.list()).map((info) => String(info.id))).toEqual(["reviewer", "build", "explore"])
+    }),
+  )
+
   it.effect("rebuilds state when a transform is replaced", () =>
     Effect.gen(function* () {
       const agent = yield* Agent.Service
@@ -130,18 +150,20 @@ describe("Agent", () => {
       expect(info?.permissions.slice(0, Agent.Info.default(id).permissions.length)).toEqual(
         Agent.Info.default(id).permissions,
       )
-      expect(Permission.evaluate("external_directory", path.join(global.data, "shell", "*", "*"), info?.permissions ?? []).effect).toBe(
-        "allow",
-      )
-      expect(Permission.evaluate("external_directory", path.join(global.data, "tool-output", "*"), info?.permissions ?? []).effect).toBe(
-        "allow",
-      )
-      expect(Permission.evaluate("external_directory", path.join(global.config, "*"), info?.permissions ?? []).effect).toBe(
-        "allow",
-      )
-      expect(Permission.evaluate("external_directory", path.join(global.tmp, "*"), info?.permissions ?? []).effect).toBe(
-        "allow",
-      )
+      expect(
+        Permission.evaluate("external_directory", path.join(global.data, "shell", "*", "*"), info?.permissions ?? [])
+          .effect,
+      ).toBe("allow")
+      expect(
+        Permission.evaluate("external_directory", path.join(global.data, "tool-output", "*"), info?.permissions ?? [])
+          .effect,
+      ).toBe("allow")
+      expect(
+        Permission.evaluate("external_directory", path.join(global.config, "*"), info?.permissions ?? []).effect,
+      ).toBe("allow")
+      expect(
+        Permission.evaluate("external_directory", path.join(global.tmp, "*"), info?.permissions ?? []).effect,
+      ).toBe("allow")
 
       yield* agent.transform((editor) => editor.remove(id))
       expect(yield* agent.get(id)).toBeUndefined()
@@ -163,7 +185,6 @@ describe("Agent", () => {
         "compaction",
         "explore",
         "general",
-        "plan",
         "summary",
         "title",
       ])

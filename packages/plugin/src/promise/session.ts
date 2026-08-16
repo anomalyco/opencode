@@ -38,7 +38,7 @@ export interface SessionHooks {
 
 export type SessionDomain = Pick<
   SessionApi,
-  "create" | "get" | "prompt" | "generate" | "command" | "synthetic" | "interrupt"
+  "create" | "get" | "prompt" | "generate" | "command" | "synthetic" | "interrupt" | "rename" | "wait"
 > & {
   readonly hook: Hooks<SessionHooks>
 }

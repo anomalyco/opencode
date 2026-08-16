@@ -1,16 +1,14 @@
 import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
-import * as Option from "effect/Option"
-import { Auth } from "./auth"
-import { Endpoint, type EndpointPatch } from "./endpoint"
-import { RequestExecutor } from "./executor"
-import { Framing } from "./framing"
-import { HttpTransport } from "./transport"
-import type { HttpMiddleware, Transport, TransportRuntime } from "./transport"
-import { WebSocketExecutor } from "./transport"
-import type { Protocol } from "./protocol"
-import { applyCachePolicy } from "../cache-policy"
-import * as ProviderShared from "../protocols/shared"
-import type { ProtocolID, ProviderOptions } from "../schema"
+import { Auth } from "./auth.js"
+import { Endpoint, type EndpointPatch } from "./endpoint.js"
+import { RequestExecutor } from "./executor.js"
+import { Framing } from "./framing.js"
+import { HttpTransport } from "./transport/index.js"
+import type { HttpMiddleware, Transport, TransportRuntime, WebSocketChannelExecutor } from "./transport/index.js"
+import type { Protocol } from "./protocol.js"
+import { applyCachePolicy } from "../cache-policy.js"
+import * as ProviderShared from "../protocols/shared.js"
+import type { ProtocolID, ProviderOptions } from "../schema/index.js"
 import {
   AIError,
   GenerationOptions,
@@ -25,7 +23,7 @@ import {
   mergeGenerationOptions,
   mergeHttpOptions,
   mergeProviderOptions,
-} from "../schema"
+} from "../schema/index.js"
 
 export interface RouteBody<Body> {
   /** Schema for the validated provider-native body sent as the JSON request. */
@@ -58,6 +56,7 @@ export interface Route<Body, Prepared = unknown> {
     prepared: Prepared,
     request: LLMRequest,
     runtime: TransportRuntime,
+    options?: StreamOptions,
   ) => Stream.Stream<LLMEvent, AIError>
 }
 
@@ -157,6 +156,7 @@ export interface Interface {
 
 export interface StreamOptions {
   readonly http?: HttpMiddleware
+  readonly webSocket?: WebSocketChannelExecutor
 }
 
 export interface StreamMethod {
@@ -255,13 +255,7 @@ const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent,
         if (LLMEvent.is.finish(event) || LLMEvent.is.providerError(event)) terminal = true
         return Effect.succeed(event)
       }),
-      Stream.onEnd(
-        Effect.suspend(() =>
-          terminal
-            ? Effect.void
-            : Effect.fail(incompleteStreamError(route)),
-        ),
-      ),
+      Stream.onEnd(Effect.suspend(() => (terminal ? Effect.void : Effect.fail(incompleteStreamError(route))))),
     )
   })
 
@@ -320,23 +314,29 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           encodeBody,
           headers: routeInput.headers,
           middleware: options?.http,
+          webSocket: options?.webSocket,
         }),
-      streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => {
+      streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime, options?: StreamOptions) => {
         const route = `${request.model.provider}/${request.model.route.id}`
-        const events = routeInput.transport
-          .frames(prepared, request, runtime)
-          .pipe(
-            Stream.mapEffect(decodeEvent(route)),
-            protocol.stream.terminal ? Stream.takeUntil(protocol.stream.terminal) : (stream) => stream,
-          )
-        return events.pipe(
-          Stream.mapAccumEffect(
-            () => protocol.stream.initial(request),
-            protocol.stream.step,
-            protocol.stream.onHalt ? { onHalt: protocol.stream.onHalt } : undefined,
+        return Stream.unwrap(
+          routeInput.transport.execute(prepared, request, runtime, options).pipe(
+            Effect.map((execution) => {
+              const events = execution.frames.pipe(
+                Stream.mapEffect(decodeEvent(route)),
+                protocol.stream.terminal ? Stream.takeUntil(protocol.stream.terminal) : (stream) => stream,
+              )
+              const stream = events.pipe(
+                Stream.mapAccumEffect(
+                  () => protocol.stream.initial(request),
+                  protocol.stream.step,
+                  protocol.stream.onHalt ? { onHalt: protocol.stream.onHalt } : undefined,
+                ),
+                Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
+                requireTerminalEvent(route),
+              )
+              return execution.complete ? stream.pipe(Stream.onEnd(execution.complete)) : stream
+            }),
           ),
-          Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
-          requireTerminalEvent(route),
         )
       },
     } satisfies Route<Body, Prepared>
@@ -419,7 +419,7 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest, o
   Stream.unwrap(
     Effect.gen(function* () {
       const compiled = yield* compile(request, options)
-      return compiled.route.streamPrepared(compiled.prepared, compiled.request, runtime)
+      return compiled.route.streamPrepared(compiled.prepared, compiled.request, runtime, options)
     }),
   )
 
@@ -457,7 +457,6 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
   Effect.gen(function* () {
     const stream = streamRequestWith({
       http: yield* RequestExecutor.Service,
-      webSocket: Option.getOrUndefined(yield* Effect.serviceOption(WebSocketExecutor.Service)),
     })
     return Service.of({ stream, generate: generateWith(stream) })
   }),

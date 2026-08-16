@@ -1,10 +1,10 @@
 import { Binary } from "@opencode-ai/core/util/binary"
-import type { Message, Part } from "@/types"
-import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { SessionInboxInfo, SessionInfo } from "@opencode-ai/client/promise"
 import { createMemo } from "solid-js"
 import { produce, reconcile, type SetStoreFunction } from "solid-js/store"
 import type { createServerSdkContext } from "./server-sdk"
 import type { createServerSyncContextInner } from "./server-sync"
+import type { PromptEcho } from "./server-session"
 import type { State } from "./global-sync/types"
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
@@ -82,34 +82,16 @@ export const createDirSyncContext = (
         const session = serverSync.session.get(sessionID)
         if (session?.location.directory === directory) return session
       },
-      optimistic: {
-        add(input: { directory?: string; sessionID: string; message: Message; parts: Part[] }) {
-          serverSync.session.optimistic.add(input)
+      inbox: {
+        echo(input: PromptEcho & { directory?: string }) {
+          serverSync.session.inbox.echo(input)
         },
-        remove(input: { directory?: string; sessionID: string; messageID: string }) {
-          serverSync.session.optimistic.remove(input)
+        confirm(input: SessionInboxInfo) {
+          return serverSync.session.inbox.confirm(input)
         },
-      },
-      addOptimisticMessage(input: {
-        sessionID: string
-        messageID: string
-        parts: Part[]
-        agent: string
-        model: { providerID: string; modelID: string }
-        variant?: string
-      }) {
-        serverSync.session.optimistic.add({
-          sessionID: input.sessionID,
-          message: {
-            id: input.messageID,
-            sessionID: input.sessionID,
-            role: "user",
-            time: { created: Date.now() },
-            agent: input.agent,
-            model: { ...input.model, variant: input.variant },
-          },
-          parts: input.parts,
-        })
+        clearEcho(input: { directory?: string; sessionID: string; messageID: string }) {
+          return serverSync.session.inbox.clearEcho(input)
+        },
       },
       async sync(sessionID: string, options?: { force?: boolean }) {
         await serverSync.session.sync(sessionID, options)
@@ -124,9 +106,7 @@ export const createDirSyncContext = (
         const [store, setStore] = current()
         setStore("limit", (value) => value + count)
         const response = await serverSDK.api.session.list({ directory, limit: store.limit, order: "desc" })
-        const sessions = response.data
-          .sort((a, b) => cmp(a.id, b.id))
-          .slice(0, store.limit)
+        const sessions = response.data.sort((a, b) => cmp(a.id, b.id)).slice(0, store.limit)
         sessions.forEach(serverSync.session.remember)
         setStore("session", reconcile(sessions, { key: "id" }))
       },

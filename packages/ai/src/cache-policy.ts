@@ -10,8 +10,8 @@
 //
 // Manual `cache: CacheHint` placements on individual parts are preserved and
 // count against the four-breakpoint budget; auto only fills remaining slots.
-import { CacheHint, type CachePolicy, type CachePolicyObject } from "./schema/options"
-import { LLMRequest, Message, ToolDefinition, type ContentPart } from "./schema/messages"
+import { CacheHint, type CachePolicy, type CachePolicyObject } from "./schema/options.js"
+import { LLMRequest, Message, ToolDefinition, type ContentPart } from "./schema/messages.js"
 
 const AUTO: CachePolicyObject = {
   tools: true,
@@ -133,7 +133,8 @@ const countHints = (request: LLMRequest) =>
 
 export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   if (!RESPECTS_INLINE_HINTS.has(request.model.route.id)) return request
-  if (request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto")) return request
+  if (request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto"))
+    return request
   const policy = resolve(request.cache)
   if (!policy.tools && !policy.system && !policy.messages) return request
 

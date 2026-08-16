@@ -9,6 +9,7 @@ import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Global } from "@opencode-ai/util/global"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
 import { Plugin } from "@opencode-ai/core/plugin"
@@ -21,6 +22,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { tmpdir } from "./fixture/tmpdir"
+import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
 import { toolDefinitions, waitForTool } from "./lib/tool"
 import { Database } from "../src/database/database"
@@ -28,9 +30,15 @@ import { Bus } from "../src/bus"
 import { Reference } from "../src/reference"
 import { Tool } from "../src/tool"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node])))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
+    [Global.node, tempGlobalLayer],
+  ]),
+)
 const itWithSdk = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node])),
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
+    [Global.node, tempGlobalLayer],
+  ]),
 )
 
 describe("LocationServiceMap", () => {
@@ -305,11 +313,13 @@ describe("LocationServiceMap", () => {
           )
           yield* Deferred.await(started)
 
-          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
+          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
             Effect.provide(context),
-            Effect.timeout("1 second"),
+            Effect.forkChild({ startImmediately: true }),
           )
+          expect(flushFiber.pollUnsafe()).toBeUndefined()
           yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(flushFiber)
           yield* Deferred.await(completed)
         }),
       ),
@@ -500,7 +510,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  it.live("normalizes ref key shapes to one cached location graph", () =>
+  it.live("normalizes equivalent refs to one cached location graph", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -510,16 +520,20 @@ describe("LocationServiceMap", () => {
           Effect.gen(function* () {
             const locations = yield* LocationServiceMap.Service
             const directory = AbsolutePath.make(dir.path)
-            const absent = Location.Ref.make({ directory })
+            const alternate = AbsolutePath.make(directory.replaceAll("\\", "/"))
+            const absent = Location.Ref.make({ directory: alternate })
             const present = Location.Ref.make({ directory, workspaceID: undefined })
             // The two shapes are not structurally Equal: own-key sets differ.
             expect(Object.keys(absent)).toEqual(["directory"])
             expect(Object.keys(present)).toEqual(["directory", "workspaceID"])
             expect(Equal.equals(absent, present)).toBe(false)
+            if (process.platform === "win32") expect(absent.directory).not.toBe(present.directory)
 
             const first = yield* locations.contextEffect(absent)
             expect(yield* locations.contextEffect(present)).toBe(first)
-            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(1)
+            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([
+              Location.Ref.make({ directory, workspaceID: undefined }),
+            ])
 
             // Invalidating with the shape opposite to the one that booted must evict.
             yield* locations.invalidate(present)

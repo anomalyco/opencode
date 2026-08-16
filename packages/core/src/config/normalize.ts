@@ -1,4 +1,4 @@
-export * as ConfigNormalize from "./normalize"
+export * as ConfigNormalize from "./normalize.js"
 
 import { isDeepStrictEqual } from "node:util"
 import { Option, Schema } from "effect"
@@ -16,15 +16,15 @@ import { ConfigProvider } from "@opencode-ai/schema/config/provider"
 import { ConfigReference } from "@opencode-ai/schema/config/reference"
 import { ConfigExperimental } from "@opencode-ai/schema/config/experimental"
 import { Permission } from "@opencode-ai/schema/permission"
-import { ConfigAgentV1 } from "../v1/config/agent"
-import { ConfigAttachmentV1 } from "../v1/config/attachment"
-import { ConfigCommandV1 } from "../v1/config/command"
-import { ConfigMCPV1 } from "../v1/config/mcp"
-import { ConfigPermissionV1 } from "../v1/config/permission"
-import { ConfigPluginV1 } from "../v1/config/plugin"
-import { ConfigProviderV1 } from "../v1/config/provider"
-import { ConfigMigrateV1 } from "../v1/config/migrate"
-import { PositiveInt } from "../schema"
+import { ConfigAgentV1 } from "../v1/config/agent.js"
+import { ConfigAttachmentV1 } from "../v1/config/attachment.js"
+import { ConfigCommandV1 } from "../v1/config/command.js"
+import { ConfigMCPV1 } from "../v1/config/mcp.js"
+import { ConfigPermissionV1 } from "../v1/config/permission.js"
+import { ConfigPluginV1 } from "../v1/config/plugin.js"
+import { ConfigProviderV1 } from "../v1/config/provider.js"
+import { ConfigMigrateV1 } from "../v1/config/migrate.js"
+import { PositiveInt } from "../schema.js"
 
 export interface Diagnostic {
   readonly kind: "conflict" | "invalid" | "unsupported"
@@ -83,8 +83,14 @@ export function normalize(input: unknown): Result {
   if (legacySnapshots !== undefined) encoded.snapshots = legacySnapshots
   if (legacyShare !== undefined) encoded.share = legacyShare
 
-  const legacyReferences = decodeEncodedMap(input.reference, ConfigReference.Entry, ["reference"], diagnostics)
-  const nativeReferences = decodeEncodedMap(input.references, ConfigReference.Entry, ["references"], diagnostics)
+  const legacyReferences = decodeMap(input.reference, ConfigReference.Entry, ["reference"], diagnostics, decodeEncoded)
+  const nativeReferences = decodeMap(
+    input.references,
+    ConfigReference.Entry,
+    ["references"],
+    diagnostics,
+    decodeEncoded,
+  )
   mergeMap(
     encoded,
     "references",
@@ -94,13 +100,13 @@ export function normalize(input: unknown): Result {
     diagnostics,
   )
 
-  const legacyCommands = decodeMap(input.command, ConfigCommandV1.Info, ["command"], diagnostics)
+  const legacyCommands = decodeMap(input.command, ConfigCommandV1.Info, ["command"], diagnostics, decodeValue)
   diagnoseSelectionMap(input.command, ["command"], diagnostics)
   const migratedCommands = mapValues(legacyCommands, (value) => {
     const migrated = ConfigMigrateV1.commands({ value })?.value
     return migrated === undefined ? undefined : canonical(ConfigCommand.Info, migrated)
   })
-  const nativeCommands = decodeEncodedMap(input.commands, ConfigCommand.Info, ["commands"], diagnostics)
+  const nativeCommands = decodeMap(input.commands, ConfigCommand.Info, ["commands"], diagnostics, decodeEncoded)
   mergeMap(
     encoded,
     "commands",
@@ -110,8 +116,9 @@ export function normalize(input: unknown): Result {
     diagnostics,
   )
 
-  const legacyAgents = mapValues(decodeMap(input.agent, ConfigAgentV1.Info, ["agent"], diagnostics), (value) =>
-    canonical(ConfigAgent.Info, ConfigMigrateV1.migrateAgent(value)),
+  const legacyAgents = mapValues(
+    decodeMap(input.agent, ConfigAgentV1.Info, ["agent"], diagnostics, decodeValue),
+    (value) => canonical(ConfigAgent.Info, ConfigMigrateV1.migrateAgent(value)),
   )
   const legacySmallModel = own(input, "small_model")
     ? decodeValue(Schema.String, input.small_model, ["small_model"], diagnostics)
@@ -130,11 +137,11 @@ export function normalize(input: unknown): Result {
       model: migratedSmallModel,
       ...legacyAgents.title,
     }
-  const modeAgents = mapValues(decodeMap(input.mode, ConfigAgentV1.Info, ["mode"], diagnostics), (value) =>
+  const modeAgents = mapValues(decodeMap(input.mode, ConfigAgentV1.Info, ["mode"], diagnostics, decodeValue), (value) =>
     canonical(ConfigAgent.Info, ConfigMigrateV1.migrateAgent({ ...value, mode: "primary" })),
   )
   const migratedAgents = mergeMaps(legacyAgents, modeAgents, ["agents"], diagnostics)
-  const nativeAgents = decodeEncodedMap(input.agents, ConfigAgent.Info, ["agents"], diagnostics)
+  const nativeAgents = decodeMap(input.agents, ConfigAgent.Info, ["agents"], diagnostics, decodeEncoded)
   diagnoseAgentUnsupported(input.agent, ["agent"], diagnostics)
   diagnoseAgentUnsupported(input.mode, ["mode"], diagnostics)
   mergeMap(
@@ -147,7 +154,7 @@ export function normalize(input: unknown): Result {
   )
 
   const legacyProviders = migrateProviders(input.provider, diagnostics)
-  const nativeProviders = decodeEncodedMap(input.providers, ConfigProvider.Info, ["providers"], diagnostics)
+  const nativeProviders = decodeMap(input.providers, ConfigProvider.Info, ["providers"], diagnostics, decodeEncoded)
   mergeMap(
     encoded,
     "providers",
@@ -159,14 +166,14 @@ export function normalize(input: unknown): Result {
 
   const toolRules = migrateTools(input.tools, diagnostics)
   const permissionRules = migratePermissions(input.permission, diagnostics)
-  const nativePermissions = decodeEncodedList(input.permissions, Permission.Rule, ["permissions"], diagnostics)
+  const nativePermissions = decodeList(input.permissions, Permission.Rule, ["permissions"], diagnostics, decodeEncoded)
   const permissions = [...toolRules, ...permissionRules, ...nativePermissions]
   if (permissions.length || Array.isArray(input.permissions)) encoded.permissions = permissions
 
-  const legacyPlugins = decodeList(input.plugin, ConfigPluginV1.Spec, ["plugin"], diagnostics).map((plugin) =>
-    typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] },
+  const legacyPlugins = decodeList(input.plugin, ConfigPluginV1.Spec, ["plugin"], diagnostics, decodeValue).map(
+    (plugin) => (typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] }),
   )
-  const nativePlugins = decodeEncodedList(input.plugins, ConfigPlugin.Plugin, ["plugins"], diagnostics)
+  const nativePlugins = decodeList(input.plugins, ConfigPlugin.Plugin, ["plugins"], diagnostics, decodeEncoded)
   if (legacyPlugins.length || nativePlugins.length || Array.isArray(input.plugin) || Array.isArray(input.plugins))
     encoded.plugins = [...legacyPlugins, ...nativePlugins]
 
@@ -200,7 +207,7 @@ export function normalize(input: unknown): Result {
     overlay(encoded, key, value, [key], diagnostics)
   })
 
-  const instructions = decodeEncodedList(input.instructions, Schema.String, ["instructions"], diagnostics)
+  const instructions = decodeList(input.instructions, Schema.String, ["instructions"], diagnostics, decodeEncoded)
   if (instructions.length || Array.isArray(input.instructions)) encoded.instructions = instructions
 
   return { type: "normalized", encoded, diagnostics }
@@ -209,7 +216,7 @@ export function normalize(input: unknown): Result {
 function normalizeSkills(input: Record<string, unknown>, encoded: Record<string, unknown>, diagnostics: Diagnostic[]) {
   if (!own(input, "skills")) return
   if (Array.isArray(input.skills)) {
-    encoded.skills = decodeEncodedList(input.skills, Schema.String, ["skills"], diagnostics)
+    encoded.skills = decodeList(input.skills, Schema.String, ["skills"], diagnostics, decodeEncoded)
     return
   }
   if (!isRecord(input.skills)) {
@@ -217,8 +224,8 @@ function normalizeSkills(input: Record<string, unknown>, encoded: Record<string,
     return
   }
   encoded.skills = [
-    ...decodeEncodedList(input.skills.paths, Schema.String, ["skills", "paths"], diagnostics),
-    ...decodeEncodedList(input.skills.urls, Schema.String, ["skills", "urls"], diagnostics),
+    ...decodeList(input.skills.paths, Schema.String, ["skills", "paths"], diagnostics, decodeEncoded),
+    ...decodeList(input.skills.urls, Schema.String, ["skills", "urls"], diagnostics, decodeEncoded),
   ]
 }
 
@@ -248,8 +255,8 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
           return
         }
         if (name === "servers" && !isDirectLegacyMcp(value)) {
-          Object.entries(decodeEncodedMap(value, ConfigMCP.Server, path, diagnostics)).forEach(([key, server]) =>
-            setOwn(nativeServers, key, server),
+          Object.entries(decodeMap(value, ConfigMCP.Server, path, diagnostics, decodeEncoded)).forEach(
+            ([key, server]) => setOwn(nativeServers, key, server),
           )
           return
         }
@@ -394,6 +401,15 @@ function normalizeExperimental(
       unsupportedExperimental.forEach((key) =>
         unsupportedIfPresent(experimental, key, ["experimental", key], diagnostics),
       )
+      if (own(experimental, "portable_shell_scanner")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.portable_shell_scanner,
+          experimental.portable_shell_scanner,
+          ["experimental", "portable_shell_scanner"],
+          diagnostics,
+        )
+        if (value !== undefined) result.portable_shell_scanner = value
+      }
       if (own(experimental, "subagent_depth")) {
         const value = decodeEncoded(
           ConfigExperimental.Info.fields.subagent_depth,
@@ -404,7 +420,13 @@ function normalizeExperimental(
         if (value !== undefined) result.subagent_depth = value
       }
       native.push(
-        ...decodeEncodedList(experimental.policies, ConfigPolicy.Info, ["experimental", "policies"], diagnostics),
+        ...decodeList(
+          experimental.policies,
+          ConfigPolicy.Info,
+          ["experimental", "policies"],
+          diagnostics,
+          decodeEncoded,
+        ),
       )
     }
   }
@@ -420,7 +442,7 @@ function normalizeWatcher(input: Record<string, unknown>, encoded: Record<string
     invalid(["watcher"], diagnostics)
     return
   }
-  const ignore = decodeEncodedList(input.watcher.ignore, Schema.String, ["watcher", "ignore"], diagnostics)
+  const ignore = decodeList(input.watcher.ignore, Schema.String, ["watcher", "ignore"], diagnostics, decodeEncoded)
   encoded.watcher = ignore.length || Array.isArray(input.watcher.ignore) ? { ignore } : {}
 }
 
@@ -435,7 +457,7 @@ function normalizeFormatter(
     if (value !== undefined) encoded.formatter = value
     return
   }
-  const entries = decodeEncodedMap(input.formatter, ConfigFormatter.Entry, ["formatter"], diagnostics)
+  const entries = decodeMap(input.formatter, ConfigFormatter.Entry, ["formatter"], diagnostics, decodeEncoded)
   if (isRecord(input.formatter) && (!Object.keys(input.formatter).length || Object.keys(entries).length))
     encoded.formatter = entries
 }
@@ -447,7 +469,7 @@ function normalizeLsp(input: Record<string, unknown>, encoded: Record<string, un
     if (value !== undefined) encoded.lsp = value
     return
   }
-  const entries = decodeEncodedMap(input.lsp, ConfigLSP.Entry, ["lsp"], diagnostics)
+  const entries = decodeMap(input.lsp, ConfigLSP.Entry, ["lsp"], diagnostics, decodeEncoded)
   if (isRecord(input.lsp) && (!Object.keys(input.lsp).length || Object.keys(entries).length)) encoded.lsp = entries
 }
 
@@ -597,78 +619,44 @@ function decodeProviderList(
   return {
     present: true,
     nonEmpty: input[key].length > 0,
-    values: decodeList(input[key], Schema.String, [key], diagnostics),
+    values: decodeList(input[key], Schema.String, [key], diagnostics, decodeValue),
   }
 }
 
-function decodeEncodedMap<S extends Schema.Codec<unknown, unknown, never, never>>(
+function decodeMap<S extends Schema.Codec<unknown, unknown, never>, A>(
   value: unknown,
   schema: S,
   path: string[],
   diagnostics: Diagnostic[],
-) {
+  decode: (schema: S, value: unknown, path: string[], diagnostics: Diagnostic[]) => A | undefined,
+): Record<string, A> {
   if (value === undefined) return {}
   if (!isRecord(value)) {
     invalid(path, diagnostics)
     return {}
   }
   return Object.fromEntries(
-    Object.entries(value).flatMap(([name, raw]) => {
-      const decoded = decodeEncoded(schema, raw, [...path, name], diagnostics)
+    Object.entries(value).flatMap(([name, raw]): [string, A][] => {
+      const decoded = decode(schema, raw, [...path, name], diagnostics)
       return decoded === undefined ? [] : [[name, decoded]]
     }),
   )
 }
 
-function decodeMap<S extends Schema.Codec<unknown, unknown, never, never>>(
+function decodeList<S extends Schema.Codec<unknown, unknown, never>, A>(
   value: unknown,
   schema: S,
   path: string[],
   diagnostics: Diagnostic[],
-) {
-  if (value === undefined) return {} as Record<string, S["Type"]>
-  if (!isRecord(value)) {
-    invalid(path, diagnostics)
-    return {} as Record<string, S["Type"]>
-  }
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([name, raw]) => {
-      const decoded = decodeValue(schema, raw, [...path, name], diagnostics)
-      return decoded === undefined ? [] : [[name, decoded]]
-    }),
-  ) as Record<string, S["Type"]>
-}
-
-function decodeEncodedList<S extends Schema.Codec<unknown, unknown, never, never>>(
-  value: unknown,
-  schema: S,
-  path: string[],
-  diagnostics: Diagnostic[],
-) {
-  if (value === undefined) return [] as S["Encoded"][]
+  decode: (schema: S, value: unknown, path: string[], diagnostics: Diagnostic[]) => A | undefined,
+): A[] {
+  if (value === undefined) return []
   if (!Array.isArray(value)) {
     invalid(path, diagnostics)
-    return [] as S["Encoded"][]
+    return []
   }
   return value.flatMap((item, index) => {
-    const decoded = decodeEncoded(schema, item, [...path, String(index)], diagnostics)
-    return decoded === undefined ? [] : [decoded]
-  })
-}
-
-function decodeList<S extends Schema.Codec<unknown, unknown, never, never>>(
-  value: unknown,
-  schema: S,
-  path: string[],
-  diagnostics: Diagnostic[],
-) {
-  if (value === undefined) return [] as S["Type"][]
-  if (!Array.isArray(value)) {
-    invalid(path, diagnostics)
-    return [] as S["Type"][]
-  }
-  return value.flatMap((item, index) => {
-    const decoded = decodeValue(schema, item, [...path, String(index)], diagnostics)
+    const decoded = decode(schema, item, [...path, String(index)], diagnostics)
     return decoded === undefined ? [] : [decoded]
   })
 }

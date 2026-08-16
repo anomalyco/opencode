@@ -1,5 +1,5 @@
-import { Provider } from "../src/provider"
-import { ProviderID, type LanguageModel } from "../src/schema"
+import { Provider } from "../src/provider.js"
+import { ProviderID, type LanguageModel } from "../src/schema/index.js"
 
 declare const model: (id: string) => LanguageModel
 declare const requiredModel: (id: string, options: { readonly baseURL: string }) => LanguageModel

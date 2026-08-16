@@ -2,7 +2,7 @@ id: no-json-parse-cast
 snapshots:
   const value = JSON.parse(input) as Record<string, unknown>:
     labels:
-    - source: JSON.parse(input) as Record<string, unknown>
-      style: primary
-      start: 14
-      end: 58
+      - source: JSON.parse(input) as Record<string, unknown>
+        style: primary
+        start: 14
+        end: 58

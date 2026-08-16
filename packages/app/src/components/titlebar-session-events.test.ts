@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { ServerConnection } from "@/context/server"
+import type { ServerConnection } from "@/context/servers"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "./titlebar-session-events"
 
 const remote = "remote" as ServerConnection.Key

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { isContextOverflow } from "../src"
-import { classifyProviderFailure } from "../src/provider-error"
+import { isContextOverflow } from "../src/index.js"
+import { classifyProviderFailure } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
   test("classifies provider token limit messages as context overflow", () => {
@@ -69,10 +69,10 @@ describe("provider error classification", () => {
 
   test("classifies V1 overloaded provider codes", () => {
     expect(
-      ['{"code":"resource_exhausted"}', '{"code":"service_unavailable"}'].map(
+      ['{"code":"resource_exhausted"}', '{"code":"service_unavailable"}', '{"code":"slow_down"}'].map(
         (message) => classifyProviderFailure({ message })._tag,
       ),
-    ).toEqual(["ProviderInternal", "ProviderInternal"])
+    ).toEqual(["ProviderInternal", "ProviderInternal", "ProviderInternal"])
   })
 
   test("classifies transient client statuses as provider internal", () => {

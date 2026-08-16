@@ -4,8 +4,9 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMutation } from "@tanstack/solid-query"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { useGlobal } from "@/context/global"
-import { ServerConnection, serverName } from "@/context/server"
+import { useGlobal, useServerCtx } from "@/context/global"
+import { useLanguage } from "@/context/language"
+import { ServerConnection, serverName, useServers } from "@/context/servers"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
 import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import type { SessionInfo } from "@opencode-ai/client/promise"
@@ -21,14 +22,14 @@ export function TabNavItem(props: {
   ref?: Ref<HTMLDivElement>
   href: string
   server: ServerConnection.Key
-  session: () => SessionInfo | undefined
+  session: SessionInfo | undefined
   fallbackTitle?: string
   onRename: (title: string) => Promise<void>
   onClose: () => void
   onNavigate: () => void
   active?: boolean
   forceTruncate?: boolean
-  suppressNavigation?: () => boolean
+  suppressNavigation?: boolean
   dragging?: boolean
   pressed?: boolean
   hidden?: boolean
@@ -45,41 +46,38 @@ export function TabNavItem(props: {
     event.stopPropagation()
     props.onClose()
   }
-  const global = useGlobal()
-  const serverCtx = createMemo(() => {
-    const conn = global.servers.list().find((item) => ServerConnection.key(item) === props.server)
-    if (conn) return global.ensureServerCtx(conn)
-  })
+  const servers = useServers()
+  const serverCtx = useServerCtx(() => servers.list.find((item) => ServerConnection.key(item) === props.server))
   const project = createMemo(() => {
-    const session = props.session()
+    const session = props.session
     if (!session) return
     return projectForSession(session, serverCtx()?.projects.list() ?? [])
   })
   const title = createMemo(() => {
-    const session = props.session()
+    const session = props.session
     return session ? sessionLabel(session) : props.fallbackTitle
   })
 
   const projectName = createMemo(() => {
-    const session = props.session()
+    const session = props.session
     if (!session) return
     return displayName(project() ?? { worktree: session.location.directory })
   })
   const previewPath = createMemo(() => {
-    const session = props.session()
+    const session = props.session
     if (!session) return
     const home = serverCtx()?.sync.data.path.home
     return home ? session.location.directory.replace(home, "~") : session.location.directory
   })
   // Only label the server when multiple servers are connected.
   const serverLabel = createMemo(() => {
-    if (global.servers.list().length <= 1) return
-    const conn = global.servers.list().find((item) => ServerConnection.key(item) === props.server)
+    if (servers.list.length <= 1) return
+    const conn = servers.list.find((item) => ServerConnection.key(item) === props.server)
     return conn ? serverName(conn) : undefined
   })
 
   const [popoverOpen, setPopoverOpen] = createSignal(false)
-  const previewBlocked = () => !!props.dragging || editing() || !!props.pressed || !props.session()
+  const previewBlocked = () => !!props.dragging || editing() || !!props.pressed || !props.session
 
   const measureTitleOverflow = () => {
     if (!titleEl || editing()) {
@@ -120,7 +118,7 @@ export function TabNavItem(props: {
   const closeRename = async (save: boolean) => {
     if (rename.isPending || !editing()) return
 
-    const original = props.session()?.title ?? ""
+    const original = props.session?.title ?? ""
     const next = (titleEl.textContent ?? "").trim()
 
     titleEl.scrollLeft = 0
@@ -145,7 +143,7 @@ export function TabNavItem(props: {
     event.preventDefault()
     event.stopPropagation()
     if (!canOpenTabRename(props.dragging, editing(), rename.isPending)) return
-    const session = props.session()
+    const session = props.session
     if (!session) return
     titleEl.textContent = session.title ?? ""
     setEditing(true)
@@ -184,11 +182,11 @@ export function TabNavItem(props: {
       data-slot="titlebar-tab-item"
       data-title-overflow={titleOverflowing()}
       data-editing={editing()}
-      class="group relative flex h-7 w-full min-w-0 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] px-1.5 [container-type:inline-size] [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[editing='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      class="group relative flex h-7 w-full min-w-0 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] px-1.5 [container-type:inline-size]"
       classList={{ invisible: props.hidden }}
       data-active={props.active}
       data-dragging={props.dragging}
-      data-pressed={props.pressed}
+      data-state={props.active || props.pressed ? "pressed" : undefined}
       onMouseDown={(event) => {
         if (event.button !== MIDDLE_MOUSE_BUTTON) return
         event.preventDefault()
@@ -212,7 +210,7 @@ export function TabNavItem(props: {
           // Navigate on mousedown to shave the press-release delay off tab switches.
           if (event.button !== 0) return
           if (editing()) return
-          if (props.suppressNavigation?.()) return
+          if (props.suppressNavigation) return
           props.onNavigate()
         }}
         onClick={(event) => {
@@ -220,14 +218,15 @@ export function TabNavItem(props: {
           // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
           if (event.detail > 0) return
           if (editing()) return
-          if (props.suppressNavigation?.()) return
+          if (props.suppressNavigation) return
           props.onNavigate()
         }}
         class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base group-data-[editing='true']:text-v2-text-text-base [-webkit-user-drag:none]"
       >
         <span data-slot="project-avatar-slot" class="flex size-4 shrink-0 items-center justify-center">
           <Show
-            when={props.session()}
+            when={props.session}
+            keyed
             fallback={
               <span class="block size-4 rounded-[3px] border border-v2-border-border-muted" aria-hidden="true" />
             }
@@ -235,8 +234,8 @@ export function TabNavItem(props: {
             {(session) => (
               <SessionTabAvatar
                 project={project()}
-                directory={session().location.directory}
-                sessionId={session().id}
+                directory={session.location.directory}
+                sessionId={session.id}
                 server={props.server}
               />
             )}
@@ -249,6 +248,7 @@ export function TabNavItem(props: {
           }}
           data-slot="tab-title"
           data-titlebar-tab-title
+          dir="auto"
           class="min-w-0 flex-1 outline-none leading-4"
           classList={{
             "overflow-hidden text-clip whitespace-nowrap": !editing(),
@@ -265,7 +265,7 @@ export function TabNavItem(props: {
             }
             if (event.key !== "Escape") return
             event.preventDefault()
-            titleEl.textContent = props.session()?.title ?? ""
+            titleEl.textContent = props.session?.title ?? ""
             void closeRename(false)
           }}
           onBlur={() => void closeRename(true)}
@@ -280,7 +280,7 @@ export function TabNavItem(props: {
         />
       </a>
 
-      <div data-slot="tab-close" class="group-hover:bg-[var(--tab-bg)] group-data-[active=true]:bg-[var(--tab-bg)]">
+      <div data-slot="tab-close">
         <IconButtonV2
           size="small"
           variant="ghost-muted"
@@ -306,7 +306,7 @@ export function TabNavItem(props: {
       }}
       data={{
         projectName: projectName(),
-        title: props.session()?.title,
+        title: props.session?.title,
         path: previewPath(),
         serverName: serverLabel(),
       }}
@@ -321,11 +321,12 @@ export function DraftTabItem(props: {
   active?: boolean
   onNavigate: () => void
   onClose: () => void
-  suppressNavigation?: () => boolean
+  suppressNavigation?: boolean
   dragging?: boolean
   pressed?: boolean
   hidden?: boolean
 }) {
+  const language = useLanguage()
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
@@ -338,8 +339,8 @@ export function DraftTabItem(props: {
       data-slot="titlebar-tab-item"
       data-active={props.active}
       data-dragging={props.dragging}
-      data-pressed={props.pressed}
-      class="group relative flex h-7 w-full min-w-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--tab-bg)] px-1.5 [container-type:inline-size] whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] has-[>a:focus-visible]:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[dragging='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[pressed='true']:[--tab-bg:var(--v2-background-bg-layer-02)] data-[editing='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      data-state={props.active || props.pressed ? "pressed" : undefined}
+      class="group relative flex h-7 w-full min-w-0 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] px-1.5 [container-type:inline-size] whitespace-nowrap"
       classList={{ invisible: props.hidden }}
       onMouseDown={(event) => {
         if (event.button !== MIDDLE_MOUSE_BUTTON) return
@@ -363,14 +364,14 @@ export function DraftTabItem(props: {
         onMouseDown={(event) => {
           // Navigate on mousedown to shave the press-release delay off tab switches.
           if (event.button !== 0) return
-          if (props.suppressNavigation?.()) return
+          if (props.suppressNavigation) return
           props.onNavigate()
         }}
         onClick={(event) => {
           event.preventDefault()
           // Mouse navigation already happened on mousedown; detail 0 means keyboard activation.
           if (event.detail > 0) return
-          if (props.suppressNavigation?.()) return
+          if (props.suppressNavigation) return
           props.onNavigate()
         }}
         class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base [-webkit-user-drag:none]"
@@ -385,7 +386,7 @@ export function DraftTabItem(props: {
           {props.title}
         </span>
       </a>
-      <div data-slot="tab-close" class="group-hover:bg-[var(--tab-bg)] group-data-[active=true]:bg-[var(--tab-bg)]">
+      <div data-slot="tab-close">
         <IconButtonV2
           size="small"
           variant="ghost-muted"
@@ -400,7 +401,7 @@ export function DraftTabItem(props: {
           class="hover-reveal relative z-10 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
           onClick={closeTab}
           icon={<IconV2 name="xmark-small" />}
-          aria-label="Close tab"
+          aria-label={language.t("common.closeTab")}
         />
       </div>
     </div>

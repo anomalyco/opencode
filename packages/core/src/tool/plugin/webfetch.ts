@@ -1,16 +1,16 @@
-export * as WebFetchTool from "./webfetch"
+export * as WebFetchTool from "./webfetch.js"
 
 import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
 import { ToolFailure } from "@opencode-ai/ai"
 import { Duration, Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
-import TurndownService from "turndown"
-import { Permission } from "../../permission"
-import { collectBoundedResponseBody } from "../http-body"
+import { Permission } from "../../permission.js"
+import { convertHTMLToMarkdown, MAX_MARKDOWN_BYTES } from "../html-markdown.js"
+import { collectBoundedResponseBody } from "../http-body.js"
 
 export const name = "webfetch"
-export const MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+export const MAX_RESPONSE_BYTES = MAX_MARKDOWN_BYTES
 export const DEFAULT_TIMEOUT_SECONDS = 30
 export const MAX_TIMEOUT_SECONDS = 120
 
@@ -118,62 +118,60 @@ export const Plugin = {
 
     yield* ctx.tool
       .transform((draft) =>
-        draft.add(
-          ({
-            name,
-            options: { codemode: false },
-            description,
-            input: Input,
-            output: Output,
-            execute: (input, context) =>
-              Effect.gen(function* () {
-                yield* Effect.try({
-                  try: () => assertHttpUrl(new URL(input.url)),
-                  catch: (error) => error,
-                })
+        draft.add({
+          name,
+          options: { codemode: false },
+          description,
+          input: Input,
+          output: Output,
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              yield* Effect.try({
+                try: () => assertHttpUrl(new URL(input.url)),
+                catch: (error) => error,
+              })
 
-                yield* permission.assert({
-                  action: name,
-                  resources: [input.url],
-                  save: ["*"],
-                  metadata: input,
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source: { type: "tool", messageID: context.messageID, id: context.id },
-                })
+              yield* permission.assert({
+                action: name,
+                resources: [input.url],
+                save: ["*"],
+                metadata: input,
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.messageID, id: context.id },
+              })
 
-                const { body, contentType } = yield* Effect.gen(function* () {
-                  const response = yield* execute(http, input.url, input.format).pipe(
-                    Effect.catchIf(isCloudflareChallenge, () => execute(http, input.url, input.format, "opencode")),
-                  )
-                  const contentType = response.headers["content-type"] || ""
-                  const mime = mimeFrom(contentType)
-                  if (isImageAttachment(mime))
-                    return yield* Effect.fail(new Error(`Unsupported fetched image content type: ${mime}`))
-                  if (!isTextualMime(mime))
-                    return yield* Effect.fail(new Error(`Unsupported fetched file content type: ${mime}`))
-                  return { body: yield* collectBody(response), contentType }
-                }).pipe(
-                  Effect.timeoutOrElse({
-                    duration: Duration.seconds(input.timeout ?? DEFAULT_TIMEOUT_SECONDS),
-                    orElse: () => Effect.fail(new Error("Request timed out")),
-                  }),
+              const { body, contentType } = yield* Effect.gen(function* () {
+                const response = yield* execute(http, input.url, input.format).pipe(
+                  Effect.catchIf(isCloudflareChallenge, () => execute(http, input.url, input.format, "opencode")),
                 )
-                const content = new TextDecoder().decode(body)
-                const output = yield* Effect.try({
-                  try: () => convert(content, contentType, input.format),
-                  catch: (error) => error,
-                })
-                const result = {
-                  url: input.url,
-                  contentType,
-                  format: input.format,
-                  output,
-                }
-                return { output: result, content: result.output, metadata: { contentType: result.contentType } }
-              }).pipe(Effect.mapError((error) => new ToolFailure({ message: `Unable to fetch ${input.url}`, error }))),
-          }),
-        ),
+                const contentType = response.headers["content-type"] || ""
+                const mime = mimeFrom(contentType)
+                if (isImageAttachment(mime))
+                  return yield* Effect.fail(new Error(`Unsupported fetched image content type: ${mime}`))
+                if (!isTextualMime(mime))
+                  return yield* Effect.fail(new Error(`Unsupported fetched file content type: ${mime}`))
+                return { body: yield* collectBody(response), contentType }
+              }).pipe(
+                Effect.timeoutOrElse({
+                  duration: Duration.seconds(input.timeout ?? DEFAULT_TIMEOUT_SECONDS),
+                  orElse: () => Effect.fail(new Error("Request timed out")),
+                }),
+              )
+              const content = new TextDecoder().decode(body)
+              const output = yield* Effect.try({
+                try: () => convert(content, contentType, input.format),
+                catch: (error) => error,
+              })
+              const result = {
+                url: input.url,
+                contentType,
+                format: input.format,
+                output,
+              }
+              return { output: result, content: result.output, metadata: { contentType: result.contentType } }
+            }).pipe(Effect.mapError((error) => new ToolFailure({ message: `Unable to fetch ${input.url}`, error }))),
+        }),
       )
       .pipe(Effect.orDie)
   }),
@@ -198,14 +196,4 @@ export function extractTextFromHTML(html: string) {
   return text.trim()
 }
 
-export function convertHTMLToMarkdown(html: string) {
-  const turndown = new TurndownService({
-    headingStyle: "atx",
-    hr: "---",
-    bulletListMarker: "-",
-    codeBlockStyle: "fenced",
-    emDelimiter: "*",
-  })
-  turndown.remove(["script", "style", "meta", "link"])
-  return turndown.turndown(html)
-}
+export { convertHTMLToMarkdown }

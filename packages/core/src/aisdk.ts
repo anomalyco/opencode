@@ -1,6 +1,7 @@
-export * as AISDK from "./aisdk"
+export * as AISDK from "./aisdk.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { APICallError } from "@ai-sdk/provider"
 import type {
   JSONSchema7,
   JSONValue,
@@ -22,6 +23,7 @@ import {
   LanguageModel,
   ProviderID,
   ProviderMetadata,
+  TransportReason,
   ToolResultValue,
   UnknownProviderReason,
   type ContentPart,
@@ -29,12 +31,12 @@ import {
   type ToolDefinition,
   type UsageInput,
 } from "@opencode-ai/ai"
-import { Auth, Endpoint, type AnyRoute } from "@opencode-ai/ai/route"
+import { Auth, Endpoint, RequestExecutor, type AnyRoute } from "@opencode-ai/ai/route"
 import { ProviderShared } from "@opencode-ai/ai/protocols/shared"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
-import type { ID, Info } from "./model"
-import { Provider } from "./provider"
-import { State } from "./state"
+import type { ID, Info } from "./model.js"
+import { Provider } from "./provider.js"
+import { State } from "./state.js"
 
 type SDK = any
 type UserContent = Extract<LanguageModelV3Message, { role: "user" }>["content"]
@@ -319,7 +321,7 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
     transport: {
       id: "ai-sdk",
       prepare: (input) => Effect.succeed(input.body),
-      frames: () => Stream.empty,
+      execute: () => Effect.succeed({ frames: Stream.empty }),
     },
     defaults: {
       headers: info.headers,
@@ -433,7 +435,22 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
     .map((part) => part.text)
     .filter(Boolean)
     .join("\n\n")
-  const messages = request.messages.flatMap(message)
+  const pending: UserContent = []
+  const messages = request.messages.flatMap((input, index) => {
+    if (input.role !== "tool") return message(input)
+    const lowered = toolMessage(input)
+    pending.push(...lowered.media)
+    if (request.messages[index + 1]?.role === "tool" || pending.length === 0) return lowered.messages
+    const media = [...pending]
+    pending.length = 0
+    return [
+      ...lowered.messages,
+      {
+        role: "user" as const,
+        content: [{ type: "text" as const, text: "Attached media from tool result:" }, ...media],
+      },
+    ]
+  })
   if (!system.length) return messages
   return [{ role: "system", content: system }, ...messages]
 }
@@ -446,10 +463,33 @@ function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[
       return [{ role: "user", content: input.content.flatMap(userPart) }]
     case "assistant":
       return [{ role: "assistant", content: input.content.flatMap(assistantPart) }]
-    case "tool": {
-      const content = input.content.flatMap(toolResultPart)
-      return content.length ? [{ role: "tool", content }] : []
-    }
+    case "tool":
+      return toolMessage(input).messages
+  }
+}
+
+function toolMessage(input: LLMRequest["messages"][number]) {
+  const media: UserContent = []
+  const content = input.content.flatMap((part) => {
+    if (part.type !== "tool-result" || part.result.type !== "content") return toolResultPart(part)
+    const value = part.result.value.filter((item) => {
+      if (item.type !== "file") return true
+      if (!item.mime.startsWith("image/") && item.mime !== "application/pdf") return true
+      const data = /^data:[^;,]+(?:;[^,]*)*;base64,(.*)$/s.exec(item.uri)?.[1] ?? item.uri
+      media.push({ type: "file", mediaType: item.mime, data, filename: item.name })
+      return false
+    })
+    return toolResultPart({
+      ...part,
+      result:
+        value.length === 0
+          ? { type: "text", value: "Media attached in the following user message." }
+          : { ...part.result, value },
+    })
+  })
+  return {
+    messages: content.length ? ([{ role: "tool", content }] satisfies LanguageModelV3Message[]) : [],
+    media,
   }
 }
 
@@ -506,8 +546,23 @@ function toolOutput(result: ToolResultValue) {
     case "text":
     case "error":
       return { type: "text" as const, value: messageValue(result.value) }
+    case "content":
+      return {
+        type: "content" as const,
+        value: result.value.map((item) => {
+          if (item.type === "text") return { type: "text" as const, text: item.text }
+          const data = /^data:[^;,]+(?:;[^,]*)*;base64,(.*)$/s.exec(item.uri)?.[1]
+          const image = item.mime.toLowerCase().startsWith("image/")
+          if (data !== undefined)
+            return image
+              ? { type: "image-data" as const, data, mediaType: item.mime }
+              : { type: "file-data" as const, data, mediaType: item.mime, filename: item.name }
+          return image ? { type: "image-url" as const, url: item.uri } : { type: "file-url" as const, url: item.uri }
+        }),
+      }
+    case "json":
+      return { type: "json" as const, value: jsonValue(result.value) }
   }
-  return { type: "json" as const, value: jsonValue(result.value) }
 }
 
 function tool(input: ToolDefinition): LanguageModelV3FunctionTool {
@@ -723,12 +778,69 @@ function llmError(method: string, error: unknown) {
   const reason =
     error instanceof AIError
       ? new InvalidProviderOutputReason({ message: error.message })
-      : new UnknownProviderReason({ message: error instanceof Error ? error.message : String(error) })
+      : APICallError.isInstance(error)
+        ? apiCallErrorReason(error)
+        : new UnknownProviderReason({ message: unknownErrorMessage(error) })
   return new AIError({
     module: "AISDK",
     method,
     reason,
   })
+}
+
+function apiCallErrorReason(error: APICallError) {
+  const details = providerErrorDetails(error)
+  const reason = RequestExecutor.classifyHttpFailure({
+    message: details.message,
+    url: error.url,
+    status: error.statusCode,
+    code: details.code,
+    responseHeaders: error.responseHeaders,
+    responseBody: error.responseBody,
+  })
+  if (error.statusCode !== undefined || !error.isRetryable) return reason
+  return new TransportReason({
+    message: reason.message,
+    transport: "http",
+    operation: "request",
+    code: error.name,
+    url: error.url,
+    http: "http" in reason ? reason.http : undefined,
+  })
+}
+
+const ProviderErrorCode = Schema.Union([Schema.String, Schema.Finite])
+const ProviderErrorDetail = Schema.Struct({
+  message: Schema.optionalKey(Schema.String),
+  code: Schema.optionalKey(ProviderErrorCode),
+})
+const ProviderErrorBody = Schema.Struct({
+  ...ProviderErrorDetail.fields,
+  error: Schema.optionalKey(ProviderErrorDetail),
+})
+const decodeProviderError = Schema.decodeUnknownOption(
+  Schema.Union([ProviderErrorBody, Schema.fromJsonString(ProviderErrorBody)]),
+)
+
+function unknownErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.trim() === "" ? "Provider request failed" : message
+}
+
+function providerErrorDetails(error: APICallError) {
+  const data = Option.getOrUndefined(decodeProviderError(error.data))
+  const body = Option.getOrUndefined(decodeProviderError(error.responseBody))
+  const details = [data?.error, data, body?.error, body]
+  const message = details.map((detail) => detail?.message).find((value) => value?.trim())
+  const value = details.map((detail) => detail?.code).find((value) => value !== undefined)
+  const code = value === undefined ? undefined : String(value)
+  const prefix =
+    error.statusCode === undefined ? "Provider request failed" : `Provider request failed with HTTP ${error.statusCode}`
+  return {
+    code,
+    message:
+      error.message.trim() !== "" ? error.message : (message ?? (code === undefined ? prefix : `${prefix}: ${code}`)),
+  }
 }
 
 export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [] })

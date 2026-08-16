@@ -1,6 +1,64 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { Backend, Frontend, Handshake } from "../src/protocol"
+import { Backend, Frontend, Handshake, JsonRpc } from "../src/protocol"
+
+const successResponse: Schema.Schema.Type<typeof JsonRpc.Response> = { jsonrpc: "2.0", id: 1, result: null }
+// @ts-expect-error responses require one outcome
+const missingResponse: Schema.Schema.Type<typeof JsonRpc.Response> = { jsonrpc: "2.0", id: 1 }
+// @ts-expect-error responses cannot contain both outcomes
+const invalidResponse: Schema.Schema.Type<typeof JsonRpc.Response> = {
+  jsonrpc: "2.0",
+  id: 1,
+  result: null,
+  error: { code: -32600, message: "Invalid request" },
+}
+void [successResponse, missingResponse, invalidResponse]
+
+test("normalizes an omitted finish reason", () => {
+  expect(Backend.decodeRequest({ jsonrpc: "2.0", id: 1, method: "llm.finish", params: { id: "inv_1" } })).toMatchObject(
+    { params: { id: "inv_1", reason: "stop" } },
+  )
+})
+
+test("decodes typed backend notifications", () => {
+  expect(
+    Backend.decodeNotification({
+      jsonrpc: "2.0",
+      method: "tool.cancel",
+      params: { id: "tool_1", reason: "interrupted" },
+    }),
+  ).toEqual({
+    jsonrpc: "2.0",
+    method: "tool.cancel",
+    params: { id: "tool_1", reason: "interrupted" },
+  })
+  expect(() =>
+    Backend.decodeNotification({
+      jsonrpc: "2.0",
+      method: "tool.cancel",
+      params: { id: "tool_1", reason: "unknown" },
+    }),
+  ).toThrow()
+})
+
+test("requires exactly one JSON-RPC response outcome", () => {
+  const decode = Schema.decodeUnknownSync(JsonRpc.Response)
+  expect(decode({ jsonrpc: "2.0", id: 1, result: null })).toEqual({ jsonrpc: "2.0", id: 1, result: null })
+  expect(decode({ jsonrpc: "2.0", id: 1, error: { code: -32600, message: "Invalid request" } })).toEqual({
+    jsonrpc: "2.0",
+    id: 1,
+    error: { code: -32600, message: "Invalid request" },
+  })
+  expect(() => decode({ jsonrpc: "2.0", id: 1 })).toThrow()
+  expect(() =>
+    decode({
+      jsonrpc: "2.0",
+      id: 1,
+      result: null,
+      error: { code: -32600, message: "Invalid request" },
+    }),
+  ).toThrow()
+})
 
 test("decodes ui.matches text params", () => {
   expect(

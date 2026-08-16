@@ -49,5 +49,4 @@ describe("run stream bridge", () => {
       "stream.view",
     ])
   })
-
 })

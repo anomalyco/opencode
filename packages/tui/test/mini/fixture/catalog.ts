@@ -1,15 +1,11 @@
 import { spyOn } from "bun:test"
-import type {
-  LocationRef,
-  ModelListOutput,
-  OpenCodeClient,
-  ProviderListOutput,
-} from "@opencode-ai/client/promise"
+import type { LocationRef, ModelListOutput, OpenCodeClient, ProviderListOutput } from "@opencode-ai/client/promise"
 
 export function catalogProvider(id: string, name: string): ProviderListOutput["data"][number] {
   return {
     id,
     name,
+    activation: "auto",
     package: "",
   }
 }

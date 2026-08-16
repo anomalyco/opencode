@@ -1,5 +1,5 @@
-/** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
+/** @jsxImportSource @opentui/solid */
 import { RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
@@ -8,49 +8,44 @@ import {
   blendTabPulseColor,
   completionPulseOpacity,
   glowIgnitionLevel,
+  tabFlashIntensity,
   unreadGlowIntensity,
 } from "../../src/component/tab-pulse"
 import { tint } from "../../src/theme/color"
 
-test("a prompt pulse restarts the neutral edge flash while the tab remains busy", async () => {
+test("a disabled pulse stays idle when it becomes active", async () => {
   const background = RGBA.fromHex("#101010")
-  const flash = RGBA.fromHex("#f0f0f0")
-  const [promptPulse, setPromptPulse] = createSignal(0)
+  const [active, setActive] = createSignal(false)
   const app = await testRender(
-    () => (
-      <box width={8} height={1} backgroundColor={background}>
-        <TabPulse
-          active={true}
-          promptPulse={promptPulse()}
-          color={background}
-          flashColor={flash}
-          backgroundColor={background}
-        />
-      </box>
-    ),
+    () => <TabPulse enabled={false} active={active()} color={background} backgroundColor={background} />,
     { width: 8, height: 1 },
   )
 
-  const firstBackground = () => app.captureSpans().lines[0]?.spans[0]?.bg
+  try {
+    await app.renderOnce()
+    expect(app.renderer.root.liveCount).toBe(0)
+
+    setActive(true)
+    await app.renderOnce()
+    expect(app.renderer.root.liveCount).toBe(0)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("an attention glow becomes idle after ignition", async () => {
+  const background = RGBA.fromHex("#101010")
+  const app = await testRender(
+    () => <TabPulse active={false} glow color={RGBA.fromHex("#ffcc00")} backgroundColor={background} />,
+    { width: 8, height: 1 },
+  )
 
   try {
     await app.renderOnce()
-    expect(firstBackground()?.equals(background)).toBeTrue()
-
-    setPromptPulse(1)
-    await Bun.sleep(80)
+    expect(app.renderer.root.liveCount).toBe(1)
+    await Bun.sleep(650)
     await app.renderOnce()
-    expect(firstBackground()?.equals(background)).toBeFalse()
-    expect(firstBackground()?.r ?? 0).toBeGreaterThan(0.17)
-
-    await Bun.sleep(800)
-    await app.renderOnce()
-    expect(firstBackground()?.equals(background)).toBeTrue()
-
-    setPromptPulse(2)
-    await Bun.sleep(80)
-    await app.renderOnce()
-    expect(firstBackground()?.equals(background)).toBeFalse()
+    expect(app.renderer.root.liveCount).toBe(0)
   } finally {
     app.renderer.destroy()
   }
@@ -85,6 +80,16 @@ test("unread glow peaks behind the tab number and fades to the normal background
 test("unread glow reaches the normal background on compact tabs", () => {
   expect(unreadGlowIntensity(0, 8)).toBe(1)
   expect(unreadGlowIntensity(7, 8)).toBe(0)
+})
+
+test("tab flash holds behind the shortcut then feathers to the background", () => {
+  const intensities = Array.from({ length: 10 }, (_, index) => tabFlashIntensity(index, 8))
+
+  expect(intensities[0]).toBe(1)
+  expect(intensities[1]).toBe(1)
+  expect(intensities[2]).toBeLessThan(1)
+  expect(intensities.slice(1)).toEqual(intensities.slice(1).sort((a, b) => b - a))
+  expect(intensities.at(-1)).toBe(0)
 })
 
 test("reuses a color while preserving the original glow and pulse blend stages", () => {

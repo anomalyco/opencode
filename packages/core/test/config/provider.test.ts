@@ -342,7 +342,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
           names: ["CUSTOM_API_KEY"],
         })
         expect((yield* integrations.get(Integration.ID.make("custom")))?.name).toBe("Renamed")
-        expect(provider.disabled).toBeUndefined()
+        expect(provider.activation).toBe("enabled")
         expect(provider.package).toBe("aisdk:custom-sdk")
         expect(provider.settings).toEqual({ baseURL: "https://example.test" })
         expect(provider.headers).toEqual({ first: "first", shared: "last", last: "last" })

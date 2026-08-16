@@ -1,5 +1,5 @@
-import { LLM } from "../../src"
-import { Anthropic } from "../../src/providers"
+import { LLM } from "../../src/index.js"
+import { Anthropic } from "../../src/providers.js"
 
 const model = Anthropic.provider.model("claude-sonnet-4-5")
 

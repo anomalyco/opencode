@@ -1,9 +1,9 @@
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Integration } from "@opencode-ai/schema/integration"
 import { Effect, Stream } from "effect"
-import { Bus } from "../bus"
-import { ModelsDev } from "../models-dev"
-import { Provider } from "../provider"
+import { Bus } from "../bus.js"
+import { ModelsDev } from "../models-dev.js"
+import { Provider } from "../provider.js"
 
 export const ModelsDevPlugin = define({
   id: "opencode.models-dev",
@@ -36,6 +36,7 @@ export const ModelsDevPlugin = define({
           draft.integrationID = Integration.ID.make(provider.info.id)
         })
         for (const model of provider.models) {
+          if (model.status === "deprecated") continue
           catalog.model.update(provider.info.id, model.id, (draft) => Object.assign(draft, model))
         }
       }
@@ -60,6 +61,7 @@ function environmentNames(provider: ModelsDev.Snapshot) {
 
 function snapshots(data: readonly ModelsDev.Snapshot[]) {
   return structuredClone(data).filter(
+    // These deprecated aliases are replaced by the canonical Azure and Google Vertex providers.
     (provider) => provider.info.id !== "azure-cognitive-services" && provider.info.id !== "google-vertex-anthropic",
   )
 }

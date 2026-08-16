@@ -38,6 +38,9 @@ await prepareReleaseFiles()
 console.log("\n=== schema ===\n")
 await $`bun ./packages/schema/script/publish.ts`
 
+console.log("\n=== codemode ===\n")
+await $`bun ./packages/codemode/script/publish.ts`
+
 console.log("\n=== theme ===\n")
 await $`bun ./packages/theme/script/publish.ts`
 
@@ -58,6 +61,9 @@ await $`bun ./packages/cli/script/publish.ts`
 
 console.log("\n=== plugin ===\n")
 await $`bun ./packages/plugin/script/publish.ts`
+
+console.log("\n=== core ===\n")
+await $`bun ./packages/core/script/publish.ts`
 
 console.log("\n=== ui ===\n")
 await $`bun ./packages/ui/script/publish.ts`

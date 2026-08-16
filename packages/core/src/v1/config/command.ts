@@ -1,4 +1,4 @@
-export * as ConfigCommandV1 from "./command"
+export * as ConfigCommandV1 from "./command.js"
 
 import { Schema } from "effect"
 

@@ -1,8 +1,12 @@
+import { APICallError } from "@ai-sdk/provider"
 import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
+import { createMistral } from "@ai-sdk/mistral"
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
+import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { Model } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
-import { LLM, AIError, LLMEvent, Message } from "@opencode-ai/ai"
+import { LLM, AIError, LLMEvent, Message, isContextOverflowFailure } from "@opencode-ai/ai"
 import { LLMClient, RequestExecutor } from "@opencode-ai/ai/route"
 import { compileRequest } from "@opencode-ai/ai/route/client"
 import { expect } from "bun:test"
@@ -46,7 +50,9 @@ const client = LLMClient.layer.pipe(
   Layer.provide(
     Layer.succeed(
       RequestExecutor.Service,
-      RequestExecutor.Service.of({ execute: () => Effect.die("Unexpected HTTP request") }),
+      RequestExecutor.Service.of({
+        execute: () => Effect.die("Unexpected HTTP request"),
+      }),
     ),
   ),
 )
@@ -272,6 +278,94 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
   }),
 )
 
+it.effect("moves a tool image through the real Mistral provider as a user message", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    let body: { messages?: unknown[] } | undefined
+    const mockFetch = Object.assign(
+      async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        body = JSON.parse(String(init?.body))
+        const chunks = [
+          {
+            id: "response-1",
+            created: 0,
+            model: "pixtral-large-latest",
+            choices: [{ index: 0, delta: { content: [{ type: "text", text: "I see it." }] } }],
+          },
+          {
+            id: "response-1",
+            created: 0,
+            model: "pixtral-large-latest",
+            choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          },
+        ]
+        return new Response(chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join(""), {
+          headers: { "Content-Type": "text/event-stream" },
+        })
+      },
+      { preconnect: fetch.preconnect },
+    )
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = createMistral({ apiKey: "test", fetch: mockFetch })
+    })
+
+    const resolved = yield* aisdk.model({
+      ...model("@ai-sdk/mistral"),
+      modelID: Model.ID.make("pixtral-large-latest"),
+    })
+    yield* LLMClient.generate(
+      LLM.request({
+        model: resolved,
+        messages: [
+          Message.user("Inspect the screenshot."),
+          Message.assistant({ type: "tool-call", id: "call_1", name: "screenshot", input: {} }),
+          Message.tool({
+            type: "tool-result",
+            id: "call_1",
+            name: "screenshot",
+            result: {
+              type: "content",
+              value: [
+                { type: "text", text: "Screenshot captured" },
+                { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png", name: "screen.png" },
+              ],
+            },
+          }),
+        ],
+      }),
+    ).pipe(Effect.provide(client))
+
+    expect(body?.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "Inspect the screenshot." }] },
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            function: { name: "screenshot", arguments: "{}" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        name: "screenshot",
+        tool_call_id: "call_1",
+        content: '[{"type":"text","text":"Screenshot captured"}]',
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached media from tool result:" },
+          { type: "image_url", image_url: "data:image/png;base64,AAAA" },
+        ],
+      },
+    ])
+  }),
+)
+
 it.effect("emits malformed AI SDK tool input without executing it", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
@@ -335,5 +429,177 @@ it.effect("keeps malformed provider-executed AI SDK input terminal", () =>
 
     expect(error).toBeInstanceOf(AIError)
     expect(error.message).toContain("Invalid JSON input for aisdk tool call web_search")
+  }),
+)
+
+const failingModel = (failure: unknown): LanguageModelV3 => ({
+  specificationVersion: "v3",
+  provider: "test",
+  modelId: "test",
+  supportedUrls: {},
+  doGenerate: () => Promise.reject(new Error("Unexpected non-streaming request")),
+  doStream: () => Promise.reject(failure),
+})
+
+const streamFailure = (failure: unknown) =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => failingModel(failure) }
+    })
+    const resolved = yield* aisdk.model(model("test-ai-sdk"))
+    return yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+      Effect.provide(client),
+      Effect.flip,
+    )
+  })
+
+it.effect("preserves non-empty AI SDK error messages", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(new Error("Bad Request"))
+    expect(error).toBeInstanceOf(AIError)
+    expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "Bad Request" })
+  }),
+)
+
+const apiCallError = (input: Partial<ConstructorParameters<typeof APICallError>[0]>) =>
+  new APICallError({
+    message: "",
+    url: "https://api.example.com/chat",
+    requestBodyValues: { messages: [{ role: "user", content: "private prompt" }] },
+    responseHeaders: { authorization: "Bearer secret-token" },
+    ...input,
+  })
+
+it.effect("derives status and code when the AI SDK error message is empty", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 404,
+        responseBody: '{"error":{"message":"","code":"not_found"}}',
+        data: { error: { message: "", code: "not_found" } },
+      }),
+    )
+    expect(error.reason.message).toBe("Provider request failed with HTTP 404: not_found")
+    expect(error.reason.message).not.toContain("secret-token")
+    expect(error.reason.message).not.toContain("private prompt")
+    const projected = toSessionError(error)
+    expect(projected.type).toBe("provider.invalid-request")
+    expect(projected.status).toBe(404)
+    expect(projected.message).not.toBe("")
+  }),
+)
+
+it.effect("preserves complete HTTP context on AI SDK call errors", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 404,
+        responseBody: '{"error":{"message":"","code":"not_found"}}',
+      }),
+    )
+    expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
+    const http = "http" in error.reason ? error.reason.http : undefined
+    expect(http?.request.url).toBe("https://api.example.com/chat")
+    expect(http?.response?.status).toBe(404)
+    expect(http?.response?.headers["authorization"]).toBe("Bearer secret-token")
+    expect(http?.body).toBe('{"error":{"message":"","code":"not_found"}}')
+  }),
+)
+
+it.effect("classifies retryable AI SDK failures with retry-after details", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 429,
+        responseHeaders: { "retry-after": "7" },
+      }),
+    )
+    expect(error.reason).toMatchObject({ _tag: "RateLimit", retryAfterMs: 7000 })
+  }),
+)
+
+it.effect("classifies data-only AI SDK provider codes", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 400,
+        data: { error: { code: "api_error" } },
+      }),
+    )
+    expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status: 400 })
+    expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
+  }),
+)
+
+it.effect("classifies data-only AI SDK authentication errors", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 400,
+        data: { error: { code: "authentication_error" } },
+      }),
+    )
+    expect(error.reason).toMatchObject({ _tag: "Authentication", kind: "invalid" })
+    expect(SessionRunnerRetry.isRetryable(error)).toBeFalse()
+  }),
+)
+
+it.effect("detects context overflow from data-only AI SDK errors", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 400,
+        data: { error: { code: "context_length_exceeded" } },
+      }),
+    )
+    expect(error.reason).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
+    expect(isContextOverflowFailure(error)).toBeTrue()
+  }),
+)
+
+it.effect("retries status-less AI SDK transport failures", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        message: "Cannot connect to API: connection refused",
+        isRetryable: true,
+      }),
+    )
+    expect(error.reason).toMatchObject({
+      _tag: "Transport",
+      transport: "http",
+      operation: "request",
+      code: "AI_APICallError",
+    })
+    expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
+    expect("http" in error.reason ? error.reason.http?.request.url : undefined).toBe("https://api.example.com/chat")
+  }),
+)
+
+it.effect("prefers a structured provider message over the code fallback", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 404,
+        data: { error: { code: "not_found" } },
+        responseBody: '{"message":"The requested model does not exist"}',
+      }),
+    )
+    expect(error.reason.message).toBe("The requested model does not exist")
+  }),
+)
+
+it.effect("falls back to the status alone for malformed response bodies", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 502,
+        isRetryable: false,
+        responseBody: "<html>Bad Gateway</html>",
+      }),
+    )
+    expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status: 502 })
+    expect(error.reason.message).toBe("Provider request failed with HTTP 502")
   }),
 )

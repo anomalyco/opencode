@@ -1,11 +1,11 @@
-export * as PermissionSaved from "./saved"
+export * as PermissionSaved from "./saved.js"
 
 import { eq } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Database } from "../database/database"
+import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { Project } from "../project"
-import { PermissionTable } from "./sql"
+import { Project } from "../project.js"
+import { PermissionTable } from "./sql.js"
 import { PermissionSaved } from "@opencode-ai/schema/permission-saved"
 
 export const ID = PermissionSaved.ID
@@ -47,7 +47,12 @@ const layer = Layer.effect(
         .all()
         .pipe(Effect.orDie)
       return rows.map(
-        (row): Info => ({ id: row.id, projectID: row.project_id, action: row.action, resource: row.resource }),
+        (row): Info => ({
+          id: row.id,
+          projectID: row.project_id,
+          action: row.action,
+          resource: row.resource,
+        }),
       )
     })
 

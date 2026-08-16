@@ -11,10 +11,8 @@ import {
   type Accessor,
   type JSX,
 } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
-import { useNavigate } from "@solidjs/router"
-import { useMutation } from "@tanstack/solid-query"
 import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualItem } from "@tanstack/solid-virtual"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { Button } from "@opencode-ai/ui/button"
@@ -35,8 +33,8 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { DialogFooter, DialogHeader, DialogTitleGroup, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
@@ -45,57 +43,36 @@ import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
-import type {
-  AssistantMessage,
-  Message as MessageType,
-  Part as PartType,
-  ToolPart,
-  UserMessage,
-} from "@/types"
-import { showToast } from "@/utils/toast"
+import type { AssistantMessage, Project, ToolPart, UserMessage } from "@/types"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { normalize } from "@opencode-ai/session-ui/session-diff"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
-import { useSessionKey } from "@/pages/session/session-layout"
-import { useServerSDK } from "@/context/server-sdk"
-import { usePlatform } from "@/context/platform"
-import { useSettings } from "@/context/settings"
-import { useTabs } from "@/context/tabs"
-import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { useServerSync } from "@/context/server-sync"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
-import { sessionTitle } from "@/utils/session-title"
 import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
-import { createTimelineProjection } from "./projection"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
 import { filterVirtualIndexes } from "./virtual-items"
+import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
+import { containsDirectory, isWorkspaceDirectory, workspaceDirectories } from "@/utils/workspace"
+import { SessionWorkspaceMenu } from "@/components/session-workspace-menu"
+import { getProjectAvatarVariant } from "@/context/layout"
+import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
+import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 
-const emptyMessages: MessageType[] = []
-const emptyParts: PartType[] = []
 const emptyTools: ToolPart[] = []
 const emptyAssistantMessages: AssistantMessage[] = []
-const idle = { type: "idle" as const }
 
 type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "TurnGap" }>
 type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<TimelineRow.TimelineRow, { _tag: T }>
 
 const timelineFallbackItemSize = 60
 const timelineCache = new Map<string, { measurements: VirtualItem[]; toolOpen: Record<string, boolean | undefined> }>()
-
-const taskDescription = (part: PartType, sessionID: string) => {
-  if (part.type !== "tool" || part.tool !== "task") return
-  const metadata = "metadata" in part.state ? part.state.metadata : undefined
-  if (metadata?.sessionId !== sessionID) return
-  const value = part.state.input?.description
-  if (typeof value === "string" && value) return value
-}
 
 const boundaryTarget = (root: HTMLElement, target: EventTarget | null) => {
   const current = target instanceof Element ? target : undefined
@@ -141,7 +118,7 @@ function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSu
   )
 }
 
-function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
+function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[]; action?: JSX.Element }) {
   const language = useLanguage()
   const maxFiles = 10
   const [state, setState] = createStore({
@@ -161,10 +138,7 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
     >
       <div data-slot="session-turn-diffs-header">
         <span data-slot="session-turn-diffs-label">
-          {language.t(
-            props.diffs.length === 1 ? "ui.sessionTurn.diffs.changed.one" : "ui.sessionTurn.diffs.changed.other",
-            { count: String(props.diffs.length) },
-          )}
+          {language.plural("ui.sessionTurn.diffs.changed", props.diffs.length)}
         </span>
         <DiffChanges changes={props.diffs} />
         <Show when={overflow() > 0}>
@@ -172,6 +146,7 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
             {showAll() ? language.t("ui.sessionTurn.diffs.showLess") : language.t("ui.sessionTurn.diffs.showAll")}
           </span>
         </Show>
+        {props.action}
       </div>
       <div data-component="session-turn-diffs-content">
         <Accordion
@@ -226,6 +201,165 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
   )
 }
 
+function WorkspaceMoveAction(props: {
+  variant: "inline" | "panel"
+  eligible: boolean
+  sessionID: string
+  project: Project
+  directory: string
+  dismissed: boolean
+  onDismiss: () => void
+}) {
+  const language = useLanguage()
+  const inline = () => props.variant === "inline"
+  return (
+    <div
+      classList={{
+        "group/workspace-move relative shrink-0": true,
+        "ms-auto h-5 w-[167px]": inline(),
+        "-mt-2.5 h-[46px] w-full rounded-b-[6px] bg-v2-background-bg-layer-02 hover:bg-v2-background-bg-layer-03 transition-colors":
+          !inline(),
+        hidden: props.dismissed,
+      }}
+    >
+      <SessionWorkspaceMenu
+        eligible={props.eligible}
+        sessionID={props.sessionID}
+        project={props.project}
+        directory={props.directory}
+        placement={inline() ? "bottom-end" : language.direction() === "rtl" ? "right-start" : "left-start"}
+        gutter={inline() ? 4 : -22}
+        contentClass={inline() ? undefined : "relative top-3.5"}
+        class={
+          inline()
+            ? "flex h-5 w-full items-center gap-1.5 rounded-[4px] pe-6 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed"
+            : "flex h-[46px] w-full items-center gap-2 rounded-b-[6px] px-3 pe-9 pt-2.5 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted focus-visible:outline-none"
+        }
+      >
+        <IconV2 name="workspace-new" class="shrink-0 text-v2-icon-icon-muted" />
+        <span class="min-w-0 truncate">{language.t("workspace.move.title")}</span>
+      </SessionWorkspaceMenu>
+      <button
+        type="button"
+        class={`absolute flex size-5 -translate-y-1/2 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-icon-icon-base focus-visible:outline-none ${
+          inline()
+            ? "end-0 top-1/2"
+            : "hover-reveal end-3 top-[calc(50%+5px)] group-hover/workspace-move:opacity-100 group-focus-within/workspace-move:opacity-100"
+        }`}
+        aria-label={language.t("common.dismiss")}
+        onClick={(event) => {
+          event.stopPropagation()
+          props.onDismiss()
+        }}
+      >
+        <IconV2 name="xmark-small" />
+      </button>
+    </div>
+  )
+}
+
+function SessionSummaryPanel(props: {
+  project: Project
+  directory: string
+  local: boolean
+  branch?: string
+  baseBranch?: string
+  diffs?: { additions: number; deletions: number }[]
+  sessionID: string
+  moveEligible: boolean
+  moveDismissed: boolean
+  onMoveDismiss: () => void
+  onReview: () => void
+}) {
+  const language = useLanguage()
+  const location = () => {
+    if (props.local) return language.t("session.new.workspace.local")
+    const workspace = workspaceDirectories(props.project).find((item) => containsDirectory(item, props.directory))
+    return getFilename(workspace ?? props.directory)
+  }
+  const branch = () => props.branch ?? props.baseBranch
+  const row =
+    "flex h-7 w-full items-center gap-2 rounded-[4px] px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
+
+  return (
+    <div data-component="session-summary-panel" class="w-[280px]">
+      <div class="relative z-10 flex flex-col gap-1 overflow-hidden rounded-[6px] bg-v2-background-bg-base px-0.5 py-1.5 shadow-[var(--v2-elevation-raised)]">
+        <div class={row}>
+          <ProjectAvatar
+            fallback={displayName(props.project)}
+            src={getProjectAvatarSource(props.project.id, props.project.icon)}
+            variant={getProjectAvatarVariant(props.project.icon?.color)}
+          />
+          <span class="min-w-0 flex-1 truncate text-v2-text-text-muted">{displayName(props.project)}</span>
+        </div>
+        <SessionWorkspaceMenu
+          eligible={props.moveEligible}
+          sessionID={props.sessionID}
+          project={props.project}
+          directory={props.directory}
+          placement={language.direction() === "rtl" ? "right-start" : "left-start"}
+          gutter={-22}
+          class={`${row} hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed`}
+        >
+          <IconV2 name={props.local ? "monitor" : "workspace-isolated"} class="shrink-0 text-v2-icon-icon-muted" />
+          <span class="min-w-0 flex-1 truncate text-start">{location()}</span>
+          <IconV2 name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+        </SessionWorkspaceMenu>
+        <div class={row}>
+          <IconV2 name="branch" class="shrink-0 text-v2-icon-icon-muted" />
+          <Show
+            when={props.branch}
+            fallback={
+              <span class="flex min-w-0 items-center gap-1.5">
+                <span>{language.t("session.summary.noBranch")}</span>
+                <Show when={props.baseBranch}>
+                  {(base) => (
+                    <>
+                      <span class="text-v2-text-text-muted">·</span>
+                      <span class="truncate text-v2-text-text-faint">
+                        {language.t("session.summary.basedOn", { branch: base() })}
+                      </span>
+                    </>
+                  )}
+                </Show>
+              </span>
+            }
+          >
+            <span class="min-w-0 truncate">{branch()}</span>
+          </Show>
+        </div>
+        <button
+          type="button"
+          class={`${row} hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none`}
+          onClick={props.onReview}
+        >
+          <IconV2 name="review" class="shrink-0 text-v2-icon-icon-muted" />
+          <Show when={props.diffs} fallback={<span>{language.t("session.review.loadingChanges")}</span>}>
+            {(diffs) => (
+              <Show when={diffs().length > 0} fallback={<span>{language.t("session.review.noChanges")}</span>}>
+                <span>{language.plural("ui.sessionTurn.diffs.changed", diffs().length)}</span>
+                <span class="text-v2-text-text-muted">·</span>
+                <DiffChanges changes={diffs()} />
+              </Show>
+            )}
+          </Show>
+        </button>
+      </div>
+      <Show when={props.local && props.diffs && props.diffs.length > 0 && props.moveEligible}>
+        <WorkspaceMoveAction
+          variant="panel"
+          eligible={props.moveEligible}
+          sessionID={props.sessionID}
+          project={props.project}
+          directory={props.directory}
+          dismissed={props.moveDismissed}
+          onDismiss={props.onMoveDismiss}
+        />
+      </Show>
+    </div>
+  )
+}
+
 function TimelineDiffView(props: { diff: SummaryDiff }) {
   const fileComponent = useFileComponent()
   const view = normalize(props.diff)
@@ -237,7 +371,8 @@ function TimelineDiffView(props: { diff: SummaryDiff }) {
   )
 }
 
-export function MessageTimeline(props: {
+type MessageTimelineProps = {
+  session: TimelineSessionSource
   actions?: UserActions
   scroll: { overflow: boolean; bottom: boolean; jump: boolean }
   onResumeScroll: () => void
@@ -245,102 +380,79 @@ export function MessageTimeline(props: {
   onScheduleScrollState: (el: HTMLDivElement) => void
   onAutoScrollHandleScroll: () => void
   onMarkScrollGesture: (target?: EventTarget | null) => void
-  hasScrollGesture: () => boolean
+  hasScrollGesture: boolean
   onUserScroll: () => void
   onHistoryScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
-  shouldAnchorBottom: () => boolean
+  shouldAnchorBottom: boolean
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   userMessages: UserMessage[]
+  diffs: Accessor<{ additions: number; deletions: number }[] | undefined>
+  onReview: () => void
+  workspaceMoveEligible: boolean
+  onSummaryOpenChange: (open: boolean) => void
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
   setHistoryAnchor?: (handlers: { capture: () => void; restore: (done: boolean) => void }) => void
-}) {
-  let touchGesture: number | undefined
+}
 
-  const navigate = useNavigate()
-  const serverSDK = useServerSDK()
+export function MessageTimeline(props: MessageTimelineProps) {
+  const controller = createTimelineController({ session: props.session, userMessages: () => props.userMessages })
+  return (
+    <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
+  )
+}
+
+function MessageTimelineView(
+  props: MessageTimelineProps & {
+    data: TimelineController["data"]
+    action: TimelineController["action"]
+    pending: TimelineController["pending"]
+  },
+) {
+  let touchGesture: number | undefined
+  const language = useLanguage()
+  const serverSync = useServerSync()
   const sdk = useSDK()
   const sync = useSync()
-  const settings = useSettings()
-  const tabs = useTabs()
-  const dialog = useDialog()
-  const language = useLanguage()
-  const { params, sessionKey } = useSessionKey()
-  const ownerSessionKey = sessionKey()
+  const shouldAnchorBottom = createMemo(() => props.shouldAnchorBottom)
+  const hasScrollGesture = createMemo(() => props.hasScrollGesture)
+  const ownerSessionKey = props.data.sessionKey()
   const cached = timelineCache.get(ownerSessionKey)
   const initialMeasurements = cached?.measurements
-  const coldBottomMount = !initialMeasurements?.length && props.shouldAnchorBottom()
-  const platform = usePlatform()
+  const coldBottomMount = !initialMeasurements?.length && shouldAnchorBottom()
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
-  const sessionID = createMemo(() => params.id)
-  const sessionStatus = createMemo(() => {
-    const id = sessionID()
-    if (!id) return idle
-    return sync().data.session_status[id] ?? idle
-  })
-  const sessionMessages = createMemo(() => (sessionID() ? (sync().data.message[sessionID()!] ?? []) : []))
-  const projectedMessages = createMemo(() => {
-    const id = sessionID()
-    if (!id) return []
-    const visible = new Set(props.userMessages.map((message) => message.id))
-    const boundary = sessionMessages().find((message) => message.role === "user" && !visible.has(message.id))?.id
-    const messages = sync().data.session_message[id] ?? []
-    return boundary ? messages.filter((message) => message.id < boundary) : messages
-  })
-  const info = createMemo(() => {
-    const id = sessionID()
-    if (!id) return
-    return sync().session.get(id)
-  })
-  const titleValue = createMemo(() => info()?.title)
-  const titleLabel = createMemo(() => sessionTitle(titleValue()))
-  const shareUrl = (): string | undefined => undefined
-  // TODO: Restore these actions when the V2 client exposes session sharing.
-  // const shareEnabled = createMemo(() => sync().data.config.share !== "disabled")
-  const shareEnabled = () => false
-  const parentID = createMemo(() => info()?.parentID)
-  const parent = createMemo(() => {
-    const id = parentID()
-    if (!id) return
-    return sync().session.get(id)
-  })
-  const parentMessages = createMemo(() => {
-    const id = parentID()
-    if (!id) return emptyMessages
-    return sync().data.message[id] ?? emptyMessages
-  })
-  const parentTitle = createMemo(() => sessionTitle(parent()?.title) ?? language.t("command.session.new"))
-  const getMsgParts = (msgId: string) => sync().data.part[msgId] ?? emptyParts
-  const getMsgPart = (messageID: string, partID: string) => getMsgParts(messageID).find((part) => part.id === partID)
-  const childTaskDescription = createMemo(() => {
-    const id = sessionID()
-    if (!id) return
-    return parentMessages()
-      .flatMap((message) => getMsgParts(message.id))
-      .map((part) => taskDescription(part, id))
-      .findLast((value): value is string => !!value)
-  })
-  const childTitle = createMemo(() => {
-    if (!parentID()) return titleLabel() ?? ""
-    if (childTaskDescription()) return childTaskDescription()
-    const value = titleLabel()?.replace(/\s+\(@[^)]+ subagent\)$/, "")
-    if (value) return value
-    return language.t("command.session.new")
-  })
-  const showHeader = createMemo(() => !!(titleValue() || parentID()))
-  const projection = createTimelineProjection({
-    messages: sessionMessages,
-    userMessages: () => props.userMessages,
-    sessionMessages: projectedMessages,
-    parts: getMsgParts,
-    status: sessionStatus,
-    showReasoningSummaries: settings.general.showReasoningSummaries,
-    inlineComments: settings.general.newLayoutDesigns,
-  })
+  const sessionID = props.data.sessionID
+  const sessionStatus = props.data.status
+  const titleLabel = props.data.titleLabel
+  const shareUrl = props.data.shareUrl
+  const shareEnabled = props.data.shareEnabled
+  const parentID = props.data.parentID
+  const parentTitle = props.data.parentTitle
+  const childTitle = props.data.childTitle
+  const getMsgParts = props.data.parts
+  const getMsgPart = props.data.part
+  const projection = props.data.projection
+  const sessionDirectory = createMemo(() => props.session.data.info()?.location.directory ?? sdk().directory)
+  const workspaceSession = createMemo(() => isWorkspaceDirectory(sync().project, sessionDirectory()))
+  const [workspaceSuggestionDismissed, setWorkspaceSuggestionDismissed] = createSignal(false)
+  const [summaryOpen, setSummaryOpen] = createSignal(false)
+  const setSummary = (open: boolean) => {
+    setSummaryOpen(open)
+    props.onSummaryOpenChange(open)
+  }
+  const sessionDiffs = createMemo(props.diffs)
+  createEffect(
+    on(sessionID, () => {
+      setSummary(false)
+      setWorkspaceSuggestionDismissed(false)
+    }),
+  )
+  const turnPadding = () => "px-4 md:px-5"
+  const showHeader = createMemo(() => props.data.showHeader() || workspaceSession())
   const activeMessageID = projection.activeMessageID
   const assistantMessagesByParent = projection.assistantMessagesByParent
   const lastAssistantGroupKey = projection.lastAssistantGroupKey
@@ -349,6 +461,42 @@ export function MessageTimeline(props: {
   const messageRowIndex = projection.messageRowIndex
   const timelineRowByKey = projection.rowByKey
   const timelineRows = projection.rows
+  const sessionMessageByID = projection.sessionMessageByID
+  const noticeContent = (message: SessionMessageInfo) => {
+    if (message.type === "agent-switched")
+      return {
+        label: language.t("ui.tool.agent.default"),
+        data: message.previous ? `${message.previous} → ${message.agent}` : message.agent,
+      }
+    if (message.type === "model-switched")
+      return {
+        label: language.t("command.category.model"),
+        data: `${message.model.providerID}/${message.model.id}`,
+      }
+    if (message.type === "location-switched")
+      return { label: language.t("ui.patch.action.moved"), data: message.location.directory }
+    if (message.type === "skill") return { label: language.t("ui.tool.skill"), data: message.name }
+    if (message.type === "system") return { label: message.description ?? message.text }
+    if (message.type === "compaction") return { label: language.t("ui.messagePart.compaction"), data: message.status }
+    if (message.type !== "synthetic") return
+    if (message.description === "Continuing after restart") return { label: message.description }
+    const source = typeof message.metadata?.source === "string" ? message.metadata.source : undefined
+    const state = typeof message.metadata?.state === "string" ? message.metadata.state : undefined
+    if (source === "subagent" || source === "shell") {
+      const agent = typeof message.metadata?.agent === "string" ? message.metadata.agent : undefined
+      const actor = source === "shell" ? language.t("ui.tool.shell") : (agent ?? language.t("ui.tool.agent.default"))
+      const label = language.t(
+        state === "error"
+          ? "session.timeline.notice.failed"
+          : state === "cancelled"
+            ? "session.timeline.notice.cancelled"
+            : "session.timeline.notice.finished",
+        { actor },
+      )
+      return { label, data: message.description }
+    }
+    return { label: message.description ?? message.text }
+  }
 
   let prependAnchor: { key: string; offset: number } | undefined
   let prependAnchorFrame: number | undefined
@@ -421,7 +569,7 @@ export function MessageTimeline(props: {
     },
     getScrollElement: () => listRoot() ?? null,
     observeElementOffset: observeElementOffsetReconnectAware,
-    initialOffset: () => (props.shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0),
+    initialOffset: () => (shouldAnchorBottom() ? Number.MAX_SAFE_INTEGER : 0),
     initialMeasurementsCache: initialMeasurements,
     estimateSize: () => timelineFallbackItemSize,
     scrollToFn: (offset, options, instance) => {
@@ -459,11 +607,11 @@ export function MessageTimeline(props: {
   const resizeItem = virtualizer.resizeItem
   let resizeAnchorScheduled = false
   const anchorResizedBottom = () => {
-    if (resizeAnchorScheduled || props.hasScrollGesture()) return
+    if (resizeAnchorScheduled || hasScrollGesture()) return
     resizeAnchorScheduled = true
     queueMicrotask(() => {
       resizeAnchorScheduled = false
-      if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
+      if (!shouldAnchorBottom() || hasScrollGesture()) return
       virtualizer.scrollToEnd()
     })
   }
@@ -488,10 +636,10 @@ export function MessageTimeline(props: {
       })
     }
     resizeItem(index, size)
-    if (root && props.shouldAnchorBottom()) anchorResizedBottom()
+    if (root && shouldAnchorBottom()) anchorResizedBottom()
   }
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item) => {
-    if (props.shouldAnchorBottom()) return false
+    if (shouldAnchorBottom()) return false
     const first = virtualizer.range?.startIndex
     return first !== undefined && item.index < first
   }
@@ -512,27 +660,27 @@ export function MessageTimeline(props: {
   let overscanFrame: number | undefined
   onMount(() => {
     overscanFrame = requestAnimationFrame(() => {
-      if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
+      if (shouldAnchorBottom()) virtualizer.scrollToEnd()
       overscanFrame = requestAnimationFrame(() => {
         overscanFrame = undefined
         if (renderOverscan() < 20) setRenderOverscan(20)
-        if (props.shouldAnchorBottom()) virtualizer.scrollToEnd()
+        if (shouldAnchorBottom()) virtualizer.scrollToEnd()
       })
     })
   })
 
   const maybeAnchorBottom = () => {
     if (timelineRows().length === 0) return
-    if (!props.shouldAnchorBottom() || props.hasScrollGesture()) return
+    if (!shouldAnchorBottom() || hasScrollGesture()) return
     if (resizePinFrame !== undefined) cancelAnimationFrame(resizePinFrame)
     clearPrependAnchor()
     if (prependAnchorFrame !== undefined) cancelAnimationFrame(prependAnchorFrame)
     virtualizer.scrollToEnd()
   }
 
-  let measuredSessionKey = sessionKey()
+  let measuredSessionKey = props.data.sessionKey()
   createEffect(() => {
-    const key = sessionKey()
+    const key = props.data.sessionKey()
     timelineRows().length
     if (measuredSessionKey !== key) {
       measuredSessionKey = key
@@ -635,7 +783,7 @@ export function MessageTimeline(props: {
     if (prependLoading) updatePrependAnchor()
     props.onScheduleScrollState(event.currentTarget)
     props.onHistoryScroll()
-    if (!props.hasScrollGesture()) return
+    if (!props.hasScrollGesture) return
     props.onUserScroll()
     props.onAutoScrollHandleScroll()
     props.onMarkScrollGesture(event.currentTarget)
@@ -645,90 +793,6 @@ export function MessageTimeline(props: {
     props.setScrollRef(undefined)
   })
 
-  const viewShare = () => {
-    const url = shareUrl()
-    if (!url) return
-    platform.openLink(url)
-  }
-
-  const errorMessage = (err: unknown) => {
-    if (err && typeof err === "object" && "data" in err) {
-      const data = (err as { data?: { message?: string } }).data
-      if (data?.message) return data.message
-    }
-    if (err instanceof Error) return err.message
-    return language.t("common.requestFailed")
-  }
-
-  const shareMutation = useMutation(() => ({
-    // TODO: Restore sharing when the V2 client exposes a session sharing API.
-    mutationFn: async (_id: string) => Promise.reject(new Error("Session sharing is unavailable")),
-    onError: (err) => {
-      console.error("Failed to share session", err)
-    },
-  }))
-
-  const unshareMutation = useMutation(() => ({
-    // TODO: Restore unsharing when the V2 client exposes a session sharing API.
-    mutationFn: async (_id: string) => Promise.reject(new Error("Session sharing is unavailable")),
-    onError: (err) => {
-      console.error("Failed to unshare session", err)
-    },
-  }))
-
-  const titleMutation = useMutation(() => ({
-    mutationFn: (input: { id: string; title: string }) =>
-      sdk().api.session.rename({ sessionID: input.id, title: input.title }),
-    onSuccess: (_, input) => {
-      sync().set(
-        produce((draft) => {
-          const index = draft.session.findIndex((s) => s.id === input.id)
-          if (index !== -1) draft.session[index].title = input.title
-        }),
-      )
-      setTitle("editing", false)
-    },
-    onError: (err) => {
-      showToast({
-        title: language.t("common.requestFailed"),
-        description: errorMessage(err),
-      })
-    },
-  }))
-
-  const shareSession = () => {
-    const id = sessionID()
-    if (!id || shareMutation.isPending) return
-    if (!shareEnabled()) return
-    shareMutation.mutate(id)
-  }
-
-  const unshareSession = () => {
-    const id = sessionID()
-    if (!id || unshareMutation.isPending) return
-    if (!shareEnabled()) return
-    unshareMutation.mutate(id)
-  }
-  const copyShareUrl = () => {
-    const url = shareUrl()
-    if (!url) return
-    void navigator.clipboard
-      .writeText(url)
-      .then(() =>
-        showToast({
-          variant: "success",
-          icon: "circle-check",
-          title: language.t("session.share.copy.copied"),
-          description: url,
-        }),
-      )
-      .catch((err: unknown) =>
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: errorMessage(err),
-        }),
-      )
-  }
   const selectShareUrlText: JSX.EventHandler<HTMLDivElement, MouseEvent> = (event) => {
     const selection = window.getSelection()
     if (!selection) return
@@ -740,7 +804,7 @@ export function MessageTimeline(props: {
 
   createEffect(
     on(
-      sessionKey,
+      props.data.sessionKey,
       () =>
         setTitle({
           draft: "",
@@ -749,18 +813,6 @@ export function MessageTimeline(props: {
           pendingRename: false,
           pendingShare: false,
         }),
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => [parentID(), childTaskDescription()] as const,
-      ([id, description]) => {
-        if (!id || description) return
-        if (sync().data.message[id] !== undefined) return
-        void sync().session.sync(id)
-      },
       { defer: true },
     ),
   )
@@ -776,191 +828,12 @@ export function MessageTimeline(props: {
   }
 
   const closeTitleEditor = () => {
-    if (titleMutation.isPending) return
+    if (props.pending.rename()) return
     setTitle("editing", false)
   }
 
-  const saveTitleEditor = () => {
-    const id = sessionID()
-    if (!id) return
-    if (titleMutation.isPending) return
-
-    const next = title.draft.trim()
-    if (!next || next === (titleLabel() ?? "")) {
-      setTitle("editing", false)
-      return
-    }
-
-    titleMutation.mutate({ id, title: next })
-  }
-
-  const navigateAfterSessionRemoval = (sessionID: string, parentID?: string, nextSessionID?: string) => {
-    if (params.id !== sessionID) return
-    const href = (id: string) =>
-      params.serverKey ? sessionHref(requireServerKey(params.serverKey), id) : legacySessionHref(sdk().directory, id)
-    if (parentID) {
-      navigate(href(parentID))
-      return
-    }
-    if (nextSessionID) {
-      navigate(href(nextSessionID))
-      return
-    }
-    if (params.serverKey) {
-      tabs.newDraft({ server: requireServerKey(params.serverKey), directory: sdk().directory })
-      return
-    }
-    navigate(`/${params.dir}/session`)
-  }
-
-  const archiveSession = async (sessionID: string) => {
-    const session = sync().session.get(sessionID)
-    if (!session) return
-    const sessions = sync().data.session ?? []
-    const index = sessions.findIndex((s) => s.id === sessionID)
-    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-
-    // TODO: Restore archiving when the V2 client exposes a session archive API.
-    await Promise.reject(new Error("Session archiving is unavailable"))
-      .then(() => {
-        sync().set(
-          produce((draft) => {
-            const index = draft.session.findIndex((s) => s.id === sessionID)
-            if (index !== -1) draft.session.splice(index, 1)
-          }),
-        )
-        sync().session.evict(sessionID)
-        navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
-        notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [sessionID] })
-      })
-      .catch((err) => {
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: errorMessage(err),
-        })
-      })
-  }
-
-  const deleteSession = async (sessionID: string) => {
-    const session = sync().session.get(sessionID)
-    if (!session) return false
-
-    const sessions = (sync().data.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
-    const index = sessions.findIndex((s) => s.id === sessionID)
-    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-
-    const result = await sdk()
-      .api.session.remove({ sessionID })
-      .then(() => true)
-      .catch((err) => {
-        showToast({
-          title: language.t("session.delete.failed.title"),
-          description: errorMessage(err),
-        })
-        return false
-      })
-
-    if (!result) return false
-
-    const removed = new Set<string>([sessionID])
-    const byParent = new Map<string, string[]>()
-    for (const item of sync().data.session) {
-      const parentID = item.parentID
-      if (!parentID) continue
-      const existing = byParent.get(parentID)
-      if (existing) {
-        existing.push(item.id)
-        continue
-      }
-      byParent.set(parentID, [item.id])
-    }
-
-    const stack = [sessionID]
-    while (stack.length) {
-      const parentID = stack.pop()
-      if (!parentID) continue
-
-      const children = byParent.get(parentID)
-      if (!children) continue
-
-      for (const child of children) {
-        if (removed.has(child)) continue
-        removed.add(child)
-        stack.push(child)
-      }
-    }
-
-    navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
-
-    sync().set(
-      produce((draft) => {
-        draft.session = draft.session.filter((s) => !removed.has(s.id))
-      }),
-    )
-
-    for (const id of removed) {
-      sync().session.evict(id)
-    }
-    notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [...removed] })
-    return true
-  }
-
-  const navigateParent = () => {
-    const id = parentID()
-    if (!id) return
-    navigate(
-      params.serverKey ? sessionHref(requireServerKey(params.serverKey), id) : legacySessionHref(sdk().directory, id),
-    )
-  }
-
-  function DialogDeleteSession(props: { sessionID: string }) {
-    const name = createMemo(
-      () => sessionTitle(sync().session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
-    )
-    const handleDelete = async () => {
-      await deleteSession(props.sessionID)
-      dialog.close()
-    }
-
-    if (settings.general.newLayoutDesigns())
-      return (
-        <DialogV2 fit>
-          <DialogHeader hideClose>
-            <DialogTitleGroup
-              title={language.t("session.delete.title")}
-              description={language.t("session.delete.confirm", { name: name() })}
-            />
-          </DialogHeader>
-          <DialogFooter>
-            <ButtonV2 variant="ghost" onClick={() => dialog.close()}>
-              {language.t("common.cancel")}
-            </ButtonV2>
-            <ButtonV2 variant="danger" onClick={handleDelete}>
-              {language.t("session.delete.button")}
-            </ButtonV2>
-          </DialogFooter>
-        </DialogV2>
-      )
-
-    return (
-      <Dialog title={language.t("session.delete.title")} fit>
-        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
-          <div class="flex flex-col gap-1">
-            <span class="text-14-regular text-text-strong">
-              {language.t("session.delete.confirm", { name: name() })}
-            </span>
-          </div>
-          <div class="flex justify-end gap-2">
-            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
-              {language.t("common.cancel")}
-            </Button>
-            <Button variant="primary" size="large" onClick={handleDelete}>
-              {language.t("session.delete.button")}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
-    )
+  const saveTitleEditor = async () => {
+    if (await props.action.rename(title.draft)) setTitle("editing", false)
   }
 
   const workingTurn = (userMessageID: string) => sessionStatus().type !== "idle" && activeMessageID() === userMessageID
@@ -1039,7 +912,7 @@ export function MessageTimeline(props: {
     const defaultOpen = createMemo(() => {
       const item = part()
       if (!item) return
-      return partDefaultOpen(item, settings.general.shellToolPartsExpanded(), settings.general.editToolPartsExpanded())
+      return partDefaultOpen(item, props.data.shellToolPartsExpanded(), props.data.editToolPartsExpanded())
     })
 
     return (
@@ -1052,7 +925,7 @@ export function MessageTimeline(props: {
                 message={message()}
                 showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
                 turnDurationMs={turnDurationMs(row().userMessageID)}
-                useV2Actions={settings.general.newLayoutDesigns()}
+                useV2Actions={props.data.newLayoutDesigns()}
                 defaultOpen={defaultOpen()}
                 toolOpen={toolOpen[part().id] ?? defaultOpen()}
                 onToolOpenChange={(open) => setToolOpen(part().id, open)}
@@ -1067,21 +940,21 @@ export function MessageTimeline(props: {
     )
   }
 
-  function TimelineRowFrame(input: { row: Accessor<FramedTimelineRow>; children: JSX.Element }) {
+  function TimelineRowFrame(input: { row: FramedTimelineRow; children: JSX.Element }) {
     const anchor = () => {
-      const row = input.row()
+      const row = input.row
       return row._tag === "CommentStrip" || (row._tag === "UserMessage" && row.anchor)
     }
     const previousAssistantPart = () => {
-      const row = input.row()
+      const row = input.row
       return row._tag === "AssistantPart" && row.previousAssistantPart
     }
 
     return (
       <div
-        id={anchor() ? props.anchor(input.row().userMessageID) : undefined}
-        data-message-id={input.row().userMessageID}
-        data-timeline-row={input.row()._tag}
+        id={anchor() ? props.anchor(input.row.userMessageID) : undefined}
+        data-message-id={input.row.userMessageID}
+        data-timeline-row={input.row._tag}
         classList={{
           "min-w-0 w-full max-w-full": true,
           "md:max-w-200 2xl:max-w-[1000px]": props.centered,
@@ -1106,17 +979,17 @@ export function MessageTimeline(props: {
           getMsgParts(commentStripRow().userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? []),
         )
         return (
-          <TimelineRowFrame row={commentStripRow}>
-            <div class="w-full px-4 md:px-5 pb-2">
-              <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+          <TimelineRowFrame row={commentStripRow()}>
+            <div class={`w-full pb-2 ${turnPadding()}`}>
+              <div class="ms-auto max-w-[82%] overflow-x-auto no-scrollbar">
                 <div class="flex w-max min-w-full justify-end gap-2">
                   <Index each={comments()}>
                     {(comment) => (
                       <div
                         classList={{
                           "shrink-0 max-w-[260px] rounded-[6px] border-border-weak-base bg-background-stronger px-2.5 py-2": true,
-                          "border-[0.5px]": settings.general.newLayoutDesigns(),
-                          border: !settings.general.newLayoutDesigns(),
+                          "border-[0.5px]": props.data.newLayoutDesigns(),
+                          border: !props.data.newLayoutDesigns(),
                         }}
                       >
                         <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
@@ -1151,20 +1024,20 @@ export function MessageTimeline(props: {
           if (m?.role === "user") return m
         })
         const messageComments = createMemo(() => {
-          if (!settings.general.newLayoutDesigns()) return []
+          if (!props.data.newLayoutDesigns()) return []
           return getMsgParts(userMessageRow().userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? [])
         })
         return (
-          <TimelineRowFrame row={userMessageRow}>
+          <TimelineRowFrame row={userMessageRow()}>
             <Show when={message()}>
               {(message) => (
-                <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+                <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
                   <div data-slot="session-turn-message-content" aria-live="off">
                     <Message
                       message={message()}
                       parts={getMsgParts(userMessageRow().userMessageID)}
                       actions={props.actions}
-                      useV2Actions={settings.general.newLayoutDesigns()}
+                      useV2Actions={props.data.newLayoutDesigns()}
                       comments={messageComments()}
                     />
                   </div>
@@ -1174,11 +1047,30 @@ export function MessageTimeline(props: {
           </TimelineRowFrame>
         )
       }
+      case "Notice": {
+        const noticeRow = row as Accessor<TimelineRowByTag<"Notice">>
+        const content = createMemo(() => {
+          const message = sessionMessageByID().get(noticeRow().messageID)
+          return message ? noticeContent(message) : undefined
+        })
+        return (
+          <TimelineRowFrame row={noticeRow()}>
+            <Show when={content()}>
+              {(content) => (
+                <div data-slot="session-timeline-notice" class={`w-full pt-3 pb-1 text-13-regular ${turnPadding()}`}>
+                  <span class="text-13-medium text-text-strong">{content().label}</span>
+                  <Show when={content().data}>{(data) => <span class="text-text-weak"> · {data()}</span>}</Show>
+                </div>
+              )}
+            </Show>
+          </TimelineRowFrame>
+        )
+      }
       case "TurnDivider": {
         const turnDividerRow = row as Accessor<TimelineRowByTag<"TurnDivider">>
         return (
-          <TimelineRowFrame row={turnDividerRow}>
-            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+          <TimelineRowFrame row={turnDividerRow()}>
+            <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
               <div data-slot="session-turn-compaction">
                 <MessageDivider
                   label={language.t(
@@ -1193,8 +1085,8 @@ export function MessageTimeline(props: {
       case "AssistantPart": {
         const assistantPartRow = row as Accessor<TimelineRowByTag<"AssistantPart">>
         return (
-          <TimelineRowFrame row={assistantPartRow}>
-            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+          <TimelineRowFrame row={assistantPartRow()}>
+            <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
               <div
                 data-slot="session-turn-assistant-content"
                 aria-hidden={workingTurn(assistantPartRow().userMessageID)}
@@ -1208,11 +1100,11 @@ export function MessageTimeline(props: {
       case "Thinking": {
         const thinkingRow = row as Accessor<TimelineRowByTag<"Thinking">>
         return (
-          <TimelineRowFrame row={thinkingRow}>
-            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+          <TimelineRowFrame row={thinkingRow()}>
+            <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
               <TimelineThinkingRow
                 reasoningHeading={thinkingRow().reasoningHeading}
-                showReasoningSummaries={settings.general.showReasoningSummaries()}
+                showReasoningSummaries={props.data.showReasoningSummaries()}
               />
             </div>
           </TimelineRowFrame>
@@ -1221,8 +1113,8 @@ export function MessageTimeline(props: {
       case "Retry": {
         const retryRow = row as Accessor<TimelineRowByTag<"Retry">>
         return (
-          <TimelineRowFrame row={retryRow}>
-            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+          <TimelineRowFrame row={retryRow()}>
+            <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
               <SessionRetry status={sessionStatus()} show={activeMessageID() === retryRow().userMessageID} />
             </div>
           </TimelineRowFrame>
@@ -1230,10 +1122,34 @@ export function MessageTimeline(props: {
       }
       case "DiffSummary": {
         const diffSummaryRow = row as Accessor<TimelineRowByTag<"DiffSummary">>
+        const canMove = () =>
+          props.data.newLayoutDesigns() &&
+          diffSummaryRow().userMessageID === props.userMessages.at(-1)?.id &&
+          !workspaceSession() &&
+          props.workspaceMoveEligible &&
+          sync().project?.vcs === "git" &&
+          sessionStatus().type === "idle"
         return (
-          <TimelineRowFrame row={diffSummaryRow}>
-            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-              <TimelineDiffSummaryRow diffs={diffSummaryRow().diffs} />
+          <TimelineRowFrame row={diffSummaryRow()}>
+            <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
+              <TimelineDiffSummaryRow
+                diffs={diffSummaryRow().diffs}
+                action={
+                  <Show when={canMove() && sync().project}>
+                    {(project) => (
+                      <WorkspaceMoveAction
+                        variant="inline"
+                        eligible={props.workspaceMoveEligible}
+                        sessionID={sessionID()!}
+                        project={project()}
+                        directory={sessionDirectory()}
+                        dismissed={workspaceSuggestionDismissed()}
+                        onDismiss={() => setWorkspaceSuggestionDismissed(true)}
+                      />
+                    )}
+                  </Show>
+                }
+              />
             </div>
           </TimelineRowFrame>
         )
@@ -1241,8 +1157,8 @@ export function MessageTimeline(props: {
       case "Error": {
         const errorRow = row as Accessor<TimelineRowByTag<"Error">>
         return (
-          <TimelineRowFrame row={errorRow}>
-            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+          <TimelineRowFrame row={errorRow()}>
+            <div data-slot="session-turn-message-container" class={`w-full ${turnPadding()}`}>
               <Card variant="error" class="error-card">
                 {errorRow().text}
               </Card>
@@ -1287,6 +1203,8 @@ export function MessageTimeline(props: {
 
     onCleanup(() => {
       if (contentMeasureFrame !== undefined) cancelAnimationFrame(contentMeasureFrame)
+      // Solid runs cleanup before it disconnects the row, so defer TanStack's null-ref cleanup.
+      queueMicrotask(() => virtualizer.measureElement(null))
     })
 
     return (
@@ -1324,20 +1242,20 @@ export function MessageTimeline(props: {
   }
 
   return (
-    <div class="relative w-full h-full min-w-0">
+    <div class="relative w-full h-full min-w-0" data-workspace-session={workspaceSession() ? "" : undefined}>
       <div
         class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-200 ease-out"
         classList={{
-          "bottom-8": settings.general.newLayoutDesigns(),
-          "bottom-6": !settings.general.newLayoutDesigns(),
+          "bottom-8": props.data.newLayoutDesigns(),
+          "bottom-6": !props.data.newLayoutDesigns(),
           "opacity-100 translate-y-0 scale-100": props.scroll.overflow && props.scroll.jump,
           "opacity-0 translate-y-2 pointer-events-none": !props.scroll.overflow || !props.scroll.jump,
-          "scale-[0.8]": (!props.scroll.overflow || !props.scroll.jump) && settings.general.newLayoutDesigns(),
-          "scale-95": (!props.scroll.overflow || !props.scroll.jump) && !settings.general.newLayoutDesigns(),
+          "scale-[0.8]": (!props.scroll.overflow || !props.scroll.jump) && props.data.newLayoutDesigns(),
+          "scale-95": (!props.scroll.overflow || !props.scroll.jump) && !props.data.newLayoutDesigns(),
         }}
       >
         <Show
-          when={settings.general.newLayoutDesigns()}
+          when={props.data.newLayoutDesigns()}
           fallback={
             <button
               type="button"
@@ -1400,31 +1318,55 @@ export function MessageTimeline(props: {
             classList={{
               "sticky top-0 z-30": true,
               "bg-[linear-gradient(to_bottom,var(--v2-background-bg-base)_48px,transparent)]":
-                settings.general.newLayoutDesigns(),
+                props.data.newLayoutDesigns(),
               "bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]":
-                !settings.general.newLayoutDesigns(),
+                !props.data.newLayoutDesigns(),
               "w-full": true,
               "pb-4": true,
               "pr-3": true,
-              "pl-2.5": settings.general.newLayoutDesigns(),
-              "pl-2 md:pl-4": !settings.general.newLayoutDesigns(),
-              "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered && !settings.general.newLayoutDesigns(),
+              "pl-2.5": props.data.newLayoutDesigns(),
+              "pl-2 md:pl-4": !props.data.newLayoutDesigns(),
+              "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered && !props.data.newLayoutDesigns(),
             }}
           >
             <div class="h-12 w-full flex items-center justify-between gap-2">
               <div
                 classList={{
                   "flex items-center gap-1 min-w-0 flex-1": true,
-                  "pr-3": !settings.general.newLayoutDesigns(),
+                  "pr-3": !props.data.newLayoutDesigns(),
                 }}
               >
                 <div class="flex items-center min-w-0 flex-1 w-full">
+                  <Show when={props.data.newLayoutDesigns()}>
+                    <Show
+                      when={workspaceSession()}
+                      fallback={
+                        <span class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-muted">
+                          <IconV2 name="monitor" />
+                        </span>
+                      }
+                    >
+                      <TooltipV2
+                        placement="bottom-start"
+                        value={sessionDirectory()}
+                        contentClass="max-w-[calc(100vw-32px)] break-all"
+                      >
+                        <span
+                          tabIndex={0}
+                          aria-label={sessionDirectory()}
+                          class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-accent"
+                        >
+                          <IconV2 name="workspace-isolated" />
+                        </span>
+                      </TooltipV2>
+                    </Show>
+                  </Show>
                   <Show when={parentID()}>
                     <button
                       type="button"
                       data-slot="session-title-parent"
                       class="min-w-0 max-w-[40%] truncate pl-2 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
-                      onClick={navigateParent}
+                      onClick={props.action.navigateParent}
                     >
                       {parentTitle()}
                     </button>
@@ -1445,8 +1387,8 @@ export function MessageTimeline(props: {
                           classList={{
                             "truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
                             "w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover":
-                              settings.general.newLayoutDesigns(),
-                            "grow-1 min-w-0": !settings.general.newLayoutDesigns(),
+                              props.data.newLayoutDesigns(),
+                            "grow-1 min-w-0": !props.data.newLayoutDesigns(),
                           }}
                           onClick={openTitleEditor}
                         >
@@ -1459,18 +1401,19 @@ export function MessageTimeline(props: {
                           titleRef = el
                         }}
                         data-slot="session-title-child"
+                        dir="auto"
                         value={title.draft}
-                        disabled={titleMutation.isPending}
+                        disabled={props.pending.rename()}
                         classList={{
                           "block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
-                          "w-full flex-1 grow-1 min-w-0 pl-1 -ml-1 rounded-[6px]": !settings.general.newLayoutDesigns(),
-                          "field-sizing-content self-start rounded-[6px] px-2 py-1 ":
-                            settings.general.newLayoutDesigns(),
+                          "w-full flex-1 grow-1 min-w-0 pl-1 -ml-1 rounded-[6px]": !props.data.newLayoutDesigns(),
+                          "field-sizing-content self-start rounded-[6px] px-2 py-1 ": props.data.newLayoutDesigns(),
                         }}
                         style={{
-                          "--inline-input-shadow": settings.general.newLayoutDesigns()
+                          "--inline-input-shadow": props.data.newLayoutDesigns()
                             ? "none"
                             : "var(--shadow-xs-border-select)",
+                          "text-align": "start",
                         }}
                         onInput={(event) => setTitle("draft", event.currentTarget.value)}
                         onKeyDown={(event) => {
@@ -1496,17 +1439,57 @@ export function MessageTimeline(props: {
                   <div
                     classList={{
                       "shrink-0 flex items-center": true,
-                      "gap-2": settings.general.newLayoutDesigns(),
-                      "gap-3": !settings.general.newLayoutDesigns(),
+                      "gap-2": props.data.newLayoutDesigns(),
+                      "gap-3": !props.data.newLayoutDesigns(),
                     }}
                   >
                     <SessionContextUsage
                       placement="bottom"
-                      buttonAppearance={settings.general.newLayoutDesigns() ? "v2" : "default"}
+                      buttonAppearance={props.data.newLayoutDesigns() ? "v2" : "default"}
                     />
+                    <Show when={props.data.newLayoutDesigns() && !parentID() && sync().project}>
+                      {(project) => (
+                        <KobaltePopover
+                          open={summaryOpen()}
+                          placement="bottom-end"
+                          gutter={6}
+                          onOpenChange={setSummary}
+                        >
+                          <KobaltePopover.Trigger
+                            as={IconButtonV2}
+                            icon={<IconV2 name="window-analytics" />}
+                            variant="ghost-muted"
+                            size="large"
+                            state={summaryOpen() ? "pressed" : undefined}
+                            aria-label={language.t("session.summary.title")}
+                            aria-expanded={summaryOpen()}
+                          />
+                          <KobaltePopover.Portal>
+                            <KobaltePopover.Content class="z-50 border-0 bg-transparent p-0 outline-none">
+                              <SessionSummaryPanel
+                                project={project()}
+                                directory={sessionDirectory()}
+                                local={!workspaceSession()}
+                                branch={sync().data.vcs?.branch}
+                                baseBranch={serverSync.child(project().worktree)[0].vcs?.branch}
+                                diffs={sessionDiffs()}
+                                sessionID={id}
+                                moveEligible={props.workspaceMoveEligible}
+                                moveDismissed={workspaceSuggestionDismissed()}
+                                onMoveDismiss={() => setWorkspaceSuggestionDismissed(true)}
+                                onReview={() => {
+                                  setSummary(false)
+                                  props.onReview()
+                                }}
+                              />
+                            </KobaltePopover.Content>
+                          </KobaltePopover.Portal>
+                        </KobaltePopover>
+                      )}
+                    </Show>
                     <Show when={!parentID()}>
                       <Show
-                        when={settings.general.newLayoutDesigns()}
+                        when={props.data.newLayoutDesigns()}
                         fallback={
                           <DropdownMenu
                             gutter={4}
@@ -1569,11 +1552,12 @@ export function MessageTimeline(props: {
                                     </DropdownMenu.ItemLabel>
                                   </DropdownMenu.Item>
                                 </Show>
-                                {/* TODO: Restore archive when the V2 client exposes session archive. */}
+                                <DropdownMenu.Item onSelect={() => void props.action.export(id)}>
+                                  <DropdownMenu.ItemLabel>{language.t("common.export")}</DropdownMenu.ItemLabel>
+                                </DropdownMenu.Item>
+                                {/* TODO: Need a V2 session archive API. */}
                                 <DropdownMenu.Separator />
-                                <DropdownMenu.Item
-                                  onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}
-                                >
+                                <DropdownMenu.Item onSelect={() => props.action.showDelete(id)}>
                                   <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
                               </DropdownMenu.Content>
@@ -1638,9 +1622,12 @@ export function MessageTimeline(props: {
                                   {language.t("session.share.action.share")}...
                                 </MenuV2.Item>
                               </Show>
-                              {/* TODO: Restore archive when the V2 client exposes session archive. */}
+                              <MenuV2.Item onSelect={() => void props.action.export(id)}>
+                                {language.t("common.export")}...
+                              </MenuV2.Item>
+                              {/* TODO: Need a V2 session archive API. */}
                               <MenuV2.Separator />
-                              <MenuV2.Item onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}>
+                              <MenuV2.Item onSelect={() => props.action.showDelete(id)}>
                                 {language.t("common.delete")}...
                               </MenuV2.Item>
                             </MenuV2.Content>
@@ -1652,7 +1639,7 @@ export function MessageTimeline(props: {
                         open={share.open}
                         anchorRef={() => more}
                         placement="bottom-end"
-                        gutter={settings.general.newLayoutDesigns() ? 6 : 4}
+                        gutter={props.data.newLayoutDesigns() ? 6 : 4}
                         modal={false}
                         onOpenChange={(open) => {
                           if (open) setShare("dismiss", null)
@@ -1664,7 +1651,7 @@ export function MessageTimeline(props: {
                             data-component="popover-content"
                             classList={{
                               "flex w-80 max-w-none flex-col items-start gap-3 rounded-[10px] border-0 bg-v2-background-bg-layer-01 p-3 shadow-[var(--v2-elevation-floating)]":
-                                settings.general.newLayoutDesigns(),
+                                props.data.newLayoutDesigns(),
                             }}
                             style={{ "min-width": "320px" }}
                             onEscapeKeyDown={(event) => {
@@ -1684,7 +1671,7 @@ export function MessageTimeline(props: {
                             }}
                           >
                             <Show
-                              when={settings.general.newLayoutDesigns()}
+                              when={props.data.newLayoutDesigns()}
                               fallback={
                                 <div class="flex flex-col p-3">
                                   <div class="flex flex-col gap-1">
@@ -1705,10 +1692,10 @@ export function MessageTimeline(props: {
                                           size="large"
                                           variant="primary"
                                           class="w-full"
-                                          onClick={shareSession}
-                                          disabled={shareMutation.isPending}
+                                          onClick={() => void props.action.share()}
+                                          disabled={props.pending.share()}
                                         >
-                                          {shareMutation.isPending
+                                          {props.pending.share()
                                             ? language.t("session.share.action.publishing")
                                             : language.t("session.share.action.publish")}
                                         </Button>
@@ -1728,10 +1715,10 @@ export function MessageTimeline(props: {
                                             size="large"
                                             variant="secondary"
                                             class="w-full shadow-none border border-border-weak-base"
-                                            onClick={unshareSession}
-                                            disabled={unshareMutation.isPending}
+                                            onClick={() => void props.action.unshare()}
+                                            disabled={props.pending.unshare()}
                                           >
-                                            {unshareMutation.isPending
+                                            {props.pending.unshare()
                                               ? language.t("session.share.action.unpublishing")
                                               : language.t("session.share.action.unpublish")}
                                           </Button>
@@ -1739,8 +1726,8 @@ export function MessageTimeline(props: {
                                             size="large"
                                             variant="primary"
                                             class="w-full"
-                                            onClick={viewShare}
-                                            disabled={unshareMutation.isPending}
+                                            onClick={props.action.viewShare}
+                                            disabled={props.pending.unshare()}
                                           >
                                             {language.t("session.share.action.view")}
                                           </Button>
@@ -1768,10 +1755,10 @@ export function MessageTimeline(props: {
                                     <ButtonV2
                                       variant="contrast"
                                       class="w-full"
-                                      onClick={shareSession}
-                                      disabled={shareMutation.isPending}
+                                      onClick={() => void props.action.share()}
+                                      disabled={props.pending.share()}
                                     >
-                                      {shareMutation.isPending
+                                      {props.pending.share()
                                         ? language.t("session.share.action.publishing")
                                         : language.t("session.share.action.publish")}
                                     </ButtonV2>
@@ -1797,7 +1784,7 @@ export function MessageTimeline(props: {
                                         variant="ghost-muted"
                                         icon={<IconV2 name="outline-copy" />}
                                         aria-label={language.t("session.share.copy.copyLink")}
-                                        onClick={copyShareUrl}
+                                        onClick={() => void props.action.copyShareUrl()}
                                       />
                                       <IconButtonV2
                                         type="button"
@@ -1805,18 +1792,18 @@ export function MessageTimeline(props: {
                                         variant="ghost-muted"
                                         icon={<IconV2 name="outline-square-arrow" />}
                                         aria-label={language.t("session.share.action.view")}
-                                        onClick={viewShare}
-                                        disabled={unshareMutation.isPending}
+                                        onClick={props.action.viewShare}
+                                        disabled={props.pending.unshare()}
                                       />
                                     </div>
                                     <div class="flex w-full">
                                       <ButtonV2
                                         variant="outline"
                                         class="w-full"
-                                        onClick={unshareSession}
-                                        disabled={unshareMutation.isPending}
+                                        onClick={() => void props.action.unshare()}
+                                        disabled={props.pending.unshare()}
                                       >
-                                        {unshareMutation.isPending
+                                        {props.pending.unshare()
                                           ? language.t("session.share.action.unpublishing")
                                           : language.t("session.share.action.unpublish")}
                                       </ButtonV2>

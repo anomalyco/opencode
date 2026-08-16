@@ -1,14 +1,14 @@
-export * as ConfigCommandPlugin from "./command"
+export * as ConfigCommandPlugin from "./command.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Info, type Entry } from "@opencode-ai/schema/config"
 import { ConfigCommand } from "@opencode-ai/schema/config/command"
 import path from "path"
 import { Effect, Option, Schema, Stream } from "effect"
-import { Command } from "../../command"
-import { Config } from "../../config"
+import { Command } from "../../command.js"
+import { Config } from "../../config.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { ConfigMarkdown } from "../markdown"
+import { ConfigMarkdown } from "../markdown.js"
 
 const decodeCommand = Schema.decodeUnknownOption(ConfigCommand.Info)
 

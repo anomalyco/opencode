@@ -1,21 +1,22 @@
-export * as ConfigAgentPlugin from "./agent"
+export * as ConfigAgentPlugin from "./agent.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Document, Info, type Entry } from "@opencode-ai/schema/config"
 import { ConfigAgent } from "@opencode-ai/schema/config/agent"
 import path from "path"
 import { Effect, Option, Schema, Stream } from "effect"
-import { Agent } from "../../agent"
-import { Config } from "../../config"
-import { ConfigMarkdown } from "../markdown"
+import { Agent } from "../../agent.js"
+import { Config } from "../../config.js"
+import { ConfigMarkdown } from "../markdown.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
-import { ConfigAgentV1 } from "../../v1/config/agent"
-import { ConfigMigrateV1 } from "../../v1/config/migrate"
+import { ConfigAgentV1 } from "../../v1/config/agent.js"
+import { ConfigMigrateV1 } from "../../v1/config/migrate.js"
 import { Global } from "@opencode-ai/util/global"
-import { Permission } from "../../permission"
-import type { LocationMutation } from "../../location-mutation"
-import type { ReadTool } from "../../tool/plugin/read"
-import type { EditTool } from "../../tool/plugin/edit"
+import { Permission } from "../../permission.js"
+import type { LocationMutation } from "../../location-mutation.js"
+import type { ReadTool } from "../../tool/plugin/read.js"
+import type { EditTool } from "../../tool/plugin/edit.js"
+import { AbsolutePath } from "../../schema.js"
 
 const legacySources = [
   { pattern: "{agent,agents}/**/*.md", primary: false },
@@ -63,9 +64,7 @@ export const Plugin = define({
               Effect.catch(() => Effect.succeed(undefined)),
             ),
           ).pipe(
-            Effect.map((documents) =>
-              documents.filter((document): document is Document => document !== undefined),
-            ),
+            Effect.map((documents) => documents.filter((document): document is Document => document !== undefined)),
           )
         })
       }).pipe(Effect.map((documents) => documents.flat()))
@@ -212,5 +211,5 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
     }),
   )
   if (!info) return
-  return new Document({ type: "document", path: file.filepath, info })
+  return new Document({ type: "document", path: AbsolutePath.make(file.filepath), info })
 }

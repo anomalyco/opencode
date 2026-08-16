@@ -1,13 +1,13 @@
-export * as SessionRunnerModel from "./model"
+export * as SessionRunnerModel from "./model.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { LanguageModel } from "@opencode-ai/ai"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Catalog } from "../../catalog"
-import { ModelResolver } from "../../model-resolver"
-import { Capabilities, ID, Info, Ref, VariantID } from "../../model"
-import { Provider } from "../../provider"
-import { SessionSchema } from "../schema"
+import { Catalog } from "../../catalog.js"
+import { ModelResolver } from "../../model-resolver.js"
+import { Capabilities, ID, Info, Ref, VariantID } from "../../model.js"
+import { Provider } from "../../provider.js"
+import { SessionSchema } from "../schema.js"
 
 export class ModelNotSelectedError extends Schema.TaggedErrorClass<ModelNotSelectedError>()(
   "SessionRunnerModel.ModelNotSelectedError",
@@ -34,6 +34,8 @@ export const VariantUnavailableError = ModelResolver.VariantUnavailableError
 export type VariantUnavailableError = ModelResolver.VariantUnavailableError
 export const UnsupportedPackageError = ModelResolver.UnsupportedPackageError
 export type UnsupportedPackageError = ModelResolver.UnsupportedPackageError
+export const UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
+export type UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
 
 export type Error = ModelNotSelectedError | ModelUnavailableError | ModelResolver.Error
 export type Resolved = ModelResolver.Resolved

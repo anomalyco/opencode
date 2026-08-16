@@ -1,13 +1,13 @@
-export * as InstructionState from "./instruction-state"
+export * as InstructionState from "./instruction-state.js"
 
 import { eq, inArray, sql } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
-import type { Database } from "../database/database"
-import type { Bus } from "../bus"
-import { Instructions } from "../instructions/index"
-import { SessionEvent } from "./event"
-import { SessionSchema } from "./schema"
-import { InstructionBlobTable, InstructionStateTable } from "./sql"
+import type { Database } from "../database/database.js"
+import type { Bus } from "../bus.js"
+import { Instructions } from "../instructions/index.js"
+import { SessionEvent } from "./event.js"
+import { SessionSchema } from "./schema.js"
+import { InstructionBlobTable, InstructionStateTable } from "./sql.js"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -66,7 +66,10 @@ const renderUpdateText = Effect.fnUntraced(function* (
   observation: Observation,
 ) {
   const replaced = Object.entries(observation.previous).filter(([key]) => Object.hasOwn(observation.delta, key))
-  const blobs = yield* loadBlobs(db, replaced.map(([, hash]) => hash))
+  const blobs = yield* loadBlobs(
+    db,
+    replaced.map(([, hash]) => hash),
+  )
   const previous = Object.fromEntries(replaced.map(([key, hash]) => [key, requireBlob(blobs, hash)]))
   const admitted = new Map(
     Object.entries(observation.blobs).map(([hash, value]) => [Instructions.Hash.make(hash), value]),
@@ -193,10 +196,7 @@ export const preview = Effect.fn("InstructionState.preview")(function* (
     const values = dereference(result.current, observedBlobs)
     return { initial: Instructions.renderInitial(instructions, values), update: "" }
   }
-  const stored = yield* loadBlobs(db, [
-    ...Object.values(state.initial_values),
-    ...Object.values(state.current_values),
-  ])
+  const stored = yield* loadBlobs(db, [...Object.values(state.initial_values), ...Object.values(state.current_values)])
   return {
     initial: Instructions.renderInitial(instructions, dereference(state.initial_values, stored)),
     update: Instructions.renderUpdate(

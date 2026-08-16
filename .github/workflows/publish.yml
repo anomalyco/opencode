@@ -6,8 +6,8 @@ on:
     branches:
       - ci
       - dev
-      - v2
       - beta
+      - v2
       - fix/npm-native-binary-install
       - snapshot-*
   workflow_dispatch:
@@ -33,7 +33,7 @@ permissions:
   packages: write
 
 env:
-  OPENCODE_CHANNEL: ${{ (github.ref_name == 'v2' && 'next') || '' }}
+  OPENCODE_CHANNEL: ${{ (github.ref_name == 'v2' && 'dev') || '' }}
 
 jobs:
   version:
@@ -45,6 +45,13 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-bun
+
+      - name: Deploy update service
+        if: github.ref_name == 'v2' || github.ref_name == 'beta'
+        working-directory: packages/updates
+        run: bun run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
       - name: Setup git committer
         id: committer
@@ -82,6 +89,8 @@ jobs:
           fetch-tags: true
 
       - uses: ./.github/actions/setup-bun
+        with:
+          bun-version: canary # Bun 1.4 until its stable release is published
 
       - name: Setup git committer
         id: committer
@@ -91,7 +100,7 @@ jobs:
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Build legacy CLI
-        if: github.ref_name != 'v2'
+        if: github.ref_name != 'v2' && github.ref_name != 'beta'
         run: ./packages/opencode/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
@@ -103,13 +112,14 @@ jobs:
         id: build
         run: ./packages/cli/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
         env:
+          BUN_COMPILE_RELEASE: canary
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           GH_REPO: ${{ needs.version.outputs.repo }}
           GH_TOKEN: ${{ steps.committer.outputs.token }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: github.ref_name != 'v2'
+        if: github.ref_name != 'v2' && github.ref_name != 'beta'
         with:
           name: opencode-cli
           path: |
@@ -117,18 +127,72 @@ jobs:
             packages/opencode/dist/opencode-linux*
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: github.ref_name != 'v2'
+        if: github.ref_name != 'v2' && github.ref_name != 'beta'
         with:
           name: opencode-cli-windows
           path: packages/opencode/dist/opencode-windows*
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: opencode-preview-cli
+          name: opencode-preview-cli-unsigned
           path: packages/cli/dist/cli-*
 
     outputs:
       version: ${{ needs.version.outputs.version }}
+
+  sign-cli-macos:
+    needs: build-cli
+    runs-on: macos-26
+    if: github.repository == 'anomalyco/opencode'
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
+        with:
+          keychain: build
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-preview-cli-unsigned
+          path: packages/cli/dist
+
+      - name: Sign macOS CLI binaries
+        run: |
+          identity=$(security find-identity -v -p codesigning build.keychain | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)
+          if [ -z "$identity" ]; then
+            echo "Developer ID Application identity not found"
+            exit 1
+          fi
+
+          found=0
+          for file in packages/cli/dist/cli-darwin-*/bin/opencode2; do
+            if [ ! -f "$file" ]; then
+              continue
+            fi
+            found=1
+            codesign \
+              --force \
+              --timestamp \
+              --options runtime \
+              --entitlements packages/cli/script/entitlements.plist \
+              --sign "$identity" \
+              "$file"
+            codesign --verify --deep --strict --verbose=4 "$file"
+            codesign --display --requirements - "$file"
+          done
+
+          if [ "$found" -eq 0 ]; then
+            echo "No macOS CLI binaries found"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-preview-cli
+          path: packages/cli/dist/cli-*
+          if-no-files-found: error
 
   build-node-cli:
     needs: version
@@ -184,7 +248,7 @@ jobs:
       - build-cli
       - version
     runs-on: blacksmith-4vcpu-windows-2025
-    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'v2'
+    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'v2' && github.ref_name != 'beta'
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -281,8 +345,8 @@ jobs:
 
   build-electron:
     needs:
-      - build-cli
       - version
+      - sign-cli-macos
     if: github.repository == 'anomalyco/opencode' && github.ref_name != 'v2'
     continue-on-error: false
     env:
@@ -320,6 +384,12 @@ jobs:
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: github.ref_name == 'beta'
+        with:
+          name: opencode-preview-cli
+          path: packages/cli/dist
 
       - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
         if: runner.os == 'macOS'
@@ -378,16 +448,15 @@ jobs:
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
-          OPENCODE_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'opencode-cli-windows') || 'opencode-cli' }}
-          RUST_TARGET: ${{ matrix.settings.target }}
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
+          OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
+          OPENCODE_CLI_DIST: ${{ (github.ref_name == 'beta' && format('{0}/packages/cli/dist', github.workspace)) || '' }}
 
       - name: Build
         run: bun run build
         working-directory: packages/desktop
         env:
           NODE_OPTIONS: --max-old-space-size=4096
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
@@ -396,6 +465,8 @@ jobs:
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: ${{ (github.ref_name == 'beta' && 'beta') || 'production' }}
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
+          OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
+          OPENCODE_CLI_DIST: ${{ github.workspace }}/packages/cli/dist
 
       - name: Package
         if: needs.version.outputs.release
@@ -405,8 +476,7 @@ jobs:
         env:
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
           GH_TOKEN: ${{ steps.committer.outputs.token }}
-          CSC_LINK: ${{ secrets.APPLE_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          CSC_KEYCHAIN: build.keychain
           APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
@@ -471,6 +541,7 @@ jobs:
     needs:
       - version
       - build-cli
+      - sign-cli-macos
       - build-node-cli
       - sign-cli-windows
       - build-electron
@@ -500,19 +571,19 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'v2'
+        if: github.ref_name != 'v2' && github.ref_name != 'beta'
         with:
           name: opencode-cli
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'v2'
+        if: github.ref_name != 'v2' && github.ref_name != 'beta'
         with:
           name: opencode-cli-windows
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'v2'
+        if: github.ref_name != 'v2' && github.ref_name != 'beta'
         with:
           name: opencode-cli-signed-windows
           path: packages/opencode/dist

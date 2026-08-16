@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, ImageInput } from "../../src"
-import { OpenAI } from "../../src/providers"
-import { dimensions } from "../lib/image"
-import { recordedTests } from "../recorded-test"
+import { Image, ImageInput } from "../../src/index.js"
+import { OpenAI } from "../../src/providers.js"
+import { dimensions } from "../lib/image.js"
+import { recordedTests } from "../recorded-test.js"
 
 const model = OpenAI.configure({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",

@@ -28,7 +28,8 @@ export namespace UpdateArtifact {
     const tokenResponse = await fetch(url, { headers: { Authorization: `Bearer ${requestToken}` } })
     if (!tokenResponse.ok) throw new Error(`Failed to request GitHub OIDC token: ${tokenResponse.status}`)
     const token: unknown = await tokenResponse.json()
-    if (!isRecord(token) || typeof token.value !== "string") throw new Error("GitHub OIDC response did not include a token")
+    if (!isRecord(token) || typeof token.value !== "string")
+      throw new Error("GitHub OIDC response did not include a token")
 
     const response = await fetch("https://update.opencode.ai/api/publish", {
       method: "POST",
@@ -64,7 +65,10 @@ export namespace UpdateArtifact {
 
 function parseDesktop(content: string, version: string, repo: string) {
   const lines = content.split("\n")
-  const found = lines.find((line) => line.startsWith("version:"))?.slice("version:".length).trim()
+  const found = lines
+    .find((line) => line.startsWith("version:"))
+    ?.slice("version:".length)
+    .trim()
   if (found !== version) throw new Error(`Desktop metadata version mismatch: expected ${version}, got ${found}`)
   const releaseDate = lines
     .find((line) => line.startsWith("releaseDate:"))

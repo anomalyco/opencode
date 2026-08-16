@@ -7,7 +7,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import type { Path } from "@/types"
 import {
   absoluteTreePath,

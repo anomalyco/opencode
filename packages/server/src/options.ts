@@ -1,6 +1,5 @@
 import { Database } from "@opencode-ai/core/database/database"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
-import { Observability } from "@opencode-ai/util/observability"
 import { Schema } from "effect"
 
 export const ServerOptions = Schema.Struct({
@@ -12,9 +11,7 @@ export const ServerOptions = Schema.Struct({
     }),
   ),
   hostname: Schema.optional(Schema.String),
-  port: Schema.optional(
-    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(65_535)),
-  ),
+  port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(65_535))),
   password: Schema.optional(Schema.String),
   simulation: Schema.optional(Schema.Boolean),
   database: Schema.optional(Database.Options),
@@ -24,7 +21,6 @@ export const ServerOptions = Schema.Struct({
     }),
   ),
   models: Schema.optional(ModelsDev.Options),
-  observability: Schema.optional(Observability.Options),
   config: Schema.optional(
     Schema.Struct({
       directory: Schema.optional(Schema.String),

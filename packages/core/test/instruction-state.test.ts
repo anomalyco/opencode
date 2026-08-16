@@ -7,14 +7,19 @@ import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Bus } from "@opencode-ai/core/bus"
 import { Event } from "@opencode-ai/schema/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
-import { Instructions } from "@opencode-ai/core/instructions"
+import { Instructions } from "@opencode-ai/core/instructions/index"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstructionState } from "@opencode-ai/core/session/instruction-state"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
-import { InstructionBlobTable, InstructionStateTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import {
+  InstructionBlobTable,
+  InstructionStateTable,
+  SessionMessageTable,
+  SessionTable,
+} from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(

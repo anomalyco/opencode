@@ -164,12 +164,12 @@ export function SubagentsTab(props: { sessionID: string }) {
   Keymap.createLayer(() => ({
     mode: "composer",
     enabled: () => composer.active("subagents"),
+    priority: 1,
     commands: [
       {
         id: "composer.subagent.up",
         title: "Previous subagent",
         group: "Composer",
-        bind: "up",
         run() {
           if (store.selected === 0) {
             composer.close()
@@ -182,7 +182,6 @@ export function SubagentsTab(props: { sessionID: string }) {
         id: "composer.subagent.down",
         title: "Next subagent",
         group: "Composer",
-        bind: "down",
         run() {
           const list = entries()
           if (list.length === 0) return
@@ -193,7 +192,6 @@ export function SubagentsTab(props: { sessionID: string }) {
         id: "composer.subagent.select",
         title: "Navigate to subagent",
         group: "Composer",
-        bind: "return",
         run() {
           const entry = entries()[store.selected]
           if (entry) navigate({ type: "session", sessionID: entry.sessionID })
@@ -213,7 +211,6 @@ export function SubagentsTab(props: { sessionID: string }) {
         id: "composer.subagent.interrupt",
         title: "Interrupt subagent",
         group: "Composer",
-        bind: "ctrl+d",
         run() {
           const entry = selectedEntry()
           if (!entry || entry.status !== "running") return

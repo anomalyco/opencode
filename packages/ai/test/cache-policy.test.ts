@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, Message } from "../src"
-import { Auth } from "../src/route"
-import { compileRequest } from "../src/route/client"
-import { AmazonBedrock } from "../src/providers"
-import * as AnthropicMessages from "../src/protocols/anthropic-messages"
-import * as Gemini from "../src/protocols/gemini"
-import * as OpenAIChat from "../src/protocols/openai-chat"
-import { applyCachePolicy } from "../src/cache-policy"
-import { it } from "./lib/effect"
+import { CacheHint, LLM, Message } from "../src/index.js"
+import { Auth } from "../src/route.js"
+import { compileRequest } from "../src/route/client.js"
+import { AmazonBedrock } from "../src/providers.js"
+import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
+import * as Gemini from "../src/protocols/gemini.js"
+import * as OpenAIChat from "../src/protocols/openai-chat.js"
+import { applyCachePolicy } from "../src/cache-policy.js"
+import { it } from "./lib/effect.js"
 
 const anthropicModel = AnthropicMessages.route
   .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })

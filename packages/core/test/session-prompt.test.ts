@@ -21,8 +21,8 @@ import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionPending } from "@opencode-ai/core/session/pending"
-import { SessionPendingTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionInbox } from "@opencode-ai/core/session/inbox"
+import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
@@ -31,6 +31,7 @@ import { testEffect } from "./lib/effect"
 
 const executionCalls: Session.ID[] = []
 const interruptCalls: Session.ID[] = []
+const interruptContinuations: Array<boolean | undefined> = []
 const wakeCalls: Session.ID[] = []
 const activeSessions = new Set<Session.ID>()
 const execution = Layer.succeed(
@@ -41,14 +42,16 @@ const execution = Layer.succeed(
       Effect.sync(() => {
         executionCalls.push(sessionID)
       }),
-    interrupt: (sessionID) =>
+    interrupt: (sessionID, options) =>
       Effect.sync(() => {
         interruptCalls.push(sessionID)
+        interruptContinuations.push(options?.continue)
       }),
     wake: (sessionID) =>
       Effect.sync(() => {
         wakeCalls.push(sessionID)
       }),
+    wakeActive: () => Effect.void,
     awaitIdle: () => Effect.void,
   }),
 )
@@ -100,11 +103,11 @@ const setup = Effect.gen(function* () {
     .pipe(Effect.orDie)
 })
 
-const admitted = (id: SessionMessage.ID) => Database.Service.use(({ db }) => SessionPending.find(db, id))
+const admitted = (id: SessionMessage.ID) => Database.Service.use(({ db }) => SessionInbox.find(db, id))
 const admittedCount = Database.Service.use(({ db }) =>
   db
     .select()
-    .from(SessionPendingTable)
+    .from(SessionInboxTable)
     .all()
     .pipe(
       Effect.orDie,
@@ -168,10 +171,28 @@ describe("Session.prompt", () => {
       yield* setup
       const session = yield* Session.Service
       interruptCalls.length = 0
+      wakeCalls.length = 0
 
       yield* session.interrupt(sessionID)
       expect(interruptCalls).toEqual([sessionID])
+      expect(wakeCalls).toEqual([])
       expect(yield* session.messages({ sessionID })).toEqual([])
+    }),
+  )
+
+  it.effect("forwards interrupt continuation policy", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      interruptCalls.length = 0
+      interruptContinuations.length = 0
+      wakeCalls.length = 0
+
+      yield* session.interrupt(sessionID, { continue: true })
+
+      expect(interruptCalls).toEqual([sessionID])
+      expect(interruptContinuations).toEqual([true])
+      expect(wakeCalls).toEqual([])
     }),
   )
 
@@ -196,13 +217,13 @@ describe("Session.prompt", () => {
         resume: false,
       })
 
-      expect(message.data.text).toBe("Fix the failing tests")
+      expect(message.payload.text).toBe("Fix the failing tests")
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(yield* admitted(message.id)).toMatchObject({
         id: message.id,
         sessionID,
         type: "user",
-        data: { text: "Fix the failing tests" },
+        payload: { text: "Fix the failing tests" },
         delivery: "steer",
       })
     }),
@@ -220,7 +241,7 @@ describe("Session.prompt", () => {
         text: "boundary",
         resume: false,
       })
-      yield* SessionPending.promote(db, bus, sessionID, "steer")
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
       const stale = SessionMessage.ID.make("msg_stale_assistant")
       yield* db.insert(SessionMessageTable).values(assistantRow(stale, 100)).run().pipe(Effect.orDie)
       yield* bus.publish(SessionEvent.RevertEvent.Staged, {
@@ -237,7 +258,7 @@ describe("Session.prompt", () => {
           (row) => row.id,
         ),
       ).not.toContainAnyValues([boundary.id, stale])
-      expect(yield* SessionPending.find(db, boundary.id)).toBeUndefined()
+      expect(yield* SessionInbox.find(db, boundary.id)).toBeUndefined()
     }),
   )
 
@@ -252,7 +273,7 @@ describe("Session.prompt", () => {
         text: "boundary",
         resume: false,
       })
-      yield* SessionPending.promote(db, bus, sessionID, "steer")
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
       yield* bus.publish(SessionEvent.RevertEvent.Staged, {
         sessionID,
         revert: { messageID: boundary.id, files: [] },
@@ -262,11 +283,11 @@ describe("Session.prompt", () => {
       const completion = yield* session.synthetic({ sessionID, text: "stale completion" })
 
       expect(wakeCalls).toEqual([])
-      expect(yield* SessionPending.find(db, completion.id)).toMatchObject({ type: "synthetic" })
+      expect(yield* SessionInbox.find(db, completion.id)).toMatchObject({ type: "synthetic" })
 
       yield* session.revert.commit(sessionID)
 
-      expect(yield* SessionPending.find(db, completion.id)).toBeUndefined()
+      expect(yield* SessionInbox.find(db, completion.id)).toBeUndefined()
     }),
   )
 
@@ -284,7 +305,7 @@ describe("Session.prompt", () => {
         resume: false,
       })
 
-      expect(message.data.files).toEqual([
+      expect(message.payload.files).toEqual([
         {
           data: uri.slice(uri.indexOf(",") + 1),
           mime: "image/png",
@@ -295,7 +316,7 @@ describe("Session.prompt", () => {
       ])
       const stored = yield* admitted(message.id)
       expect(stored?.type).toBe("user")
-      if (stored?.type === "user") expect(stored.data.files).toEqual(message.data.files)
+      if (stored?.type === "user") expect(stored.payload.files).toEqual(message.payload.files)
     }),
   )
 
@@ -316,14 +337,14 @@ describe("Session.prompt", () => {
         resume: false,
       })
 
-      expect(message.data.files).toHaveLength(1)
-      expect(message.data.files?.[0]).toMatchObject({
+      expect(message.payload.files).toHaveLength(1)
+      expect(message.payload.files?.[0]).toMatchObject({
         mime: "text/plain",
         source: { type: "uri", uri: sourceUri.href },
         name: "main.ts",
       })
       expect(
-        Buffer.from(message.data.files?.[0]?.data ?? "", "base64")
+        Buffer.from(message.payload.files?.[0]?.data ?? "", "base64")
           .toString("utf8")
           .replace(/\r$/, ""),
       ).toBe('import { describe, expect } from "bun:test"')
@@ -343,13 +364,13 @@ describe("Session.prompt", () => {
         resume: false,
       })
 
-      expect(message.data.files).toHaveLength(1)
-      expect(message.data.files?.[0]).toMatchObject({
+      expect(message.payload.files).toHaveLength(1)
+      expect(message.payload.files?.[0]).toMatchObject({
         mime: "application/x-directory",
         source: { type: "uri", uri },
         name: "source",
       })
-      expect(Buffer.from(message.data.files?.[0]?.data ?? "", "base64").toString("utf8")).toContain(
+      expect(Buffer.from(message.payload.files?.[0]?.data ?? "", "base64").toString("utf8")).toContain(
         "session-prompt.test.ts",
       )
     }),
@@ -377,7 +398,7 @@ describe("Session.prompt", () => {
         resume: false,
       })
 
-      expect(message.data.files).toEqual([
+      expect(message.payload.files).toEqual([
         {
           data: bytes.toString("base64"),
           mime: "image/png",
@@ -386,7 +407,7 @@ describe("Session.prompt", () => {
         },
       ])
       const stored = yield* admitted(message.id)
-      expect(stored?.type === "user" ? stored.data.files : undefined).toEqual(message.data.files)
+      expect(stored?.type === "user" ? stored.payload.files : undefined).toEqual(message.payload.files)
     }),
   )
 
@@ -409,7 +430,7 @@ describe("Session.prompt", () => {
         resume: false,
       })
 
-      expect(message.data.files).toEqual([
+      expect(message.payload.files).toEqual([
         {
           data: "AA==",
           mime: "image/png",
@@ -432,7 +453,7 @@ describe("Session.prompt", () => {
         resume: false,
       })
 
-      expect(message.data.files).toEqual([
+      expect(message.payload.files).toEqual([
         {
           data: Buffer.from("export const value = 1\n").toString("base64"),
           mime: "text/plain",
@@ -481,20 +502,20 @@ describe("Session.prompt", () => {
 
       yield* session.prompt({ sessionID, text: "First", resume: false })
       yield* session.prompt({ sessionID, text: "Second", resume: false })
-      yield* SessionPending.promote(db, bus, sessionID, "steer")
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
       const streamed = Array.from(yield* Fiber.join(fiber))
 
       expect(streamed.map((event): [number | undefined, string] => [event.durable?.seq, event.type])).toEqual([
-        [0, "session.input.admitted"],
-        [1, "session.input.admitted"],
-        [2, "session.input.promoted"],
-        [3, "session.input.promoted"],
+        [0, "session.inbox.enqueued"],
+        [1, "session.inbox.enqueued"],
+        [2, "session.inbox.delivered"],
+        [3, "session.inbox.delivered"],
       ])
       expect(
         Array.from(
           yield* publicEvents({ sessionID, after: streamed[0].durable?.seq }).pipe(Stream.take(1), Stream.runCollect),
         ).map((event): [number | undefined, string] => [event.durable?.seq, event.type]),
-      ).toEqual([[1, "session.input.admitted"]])
+      ).toEqual([[1, "session.inbox.enqueued"]])
     }),
   )
 
@@ -562,16 +583,12 @@ describe("Session.prompt", () => {
       const { db } = yield* Database.Service
       const input = { sessionID, id: messageID, text: "Fix the failing tests", resume: false }
       const first = yield* session.prompt(input)
-      yield* SessionPending.promote(db, bus, sessionID, "steer")
-      yield* db
-        .delete(EventTable)
-        .where(eq(EventTable.aggregate_id, sessionID))
-        .run()
-        .pipe(Effect.orDie)
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      yield* db.delete(EventTable).where(eq(EventTable.aggregate_id, sessionID)).run().pipe(Effect.orDie)
 
       const retried = yield* session.prompt(input)
 
-      expect(retried).toMatchObject({ id: first.id, type: "user", data: { text: first.data.text } })
+      expect(retried).toMatchObject({ id: first.id, type: "user", payload: { text: first.payload.text } })
       expect(yield* session.messages({ sessionID })).toMatchObject([
         { id: messageID, type: "user", text: "Fix the failing tests" },
       ])
@@ -586,11 +603,11 @@ describe("Session.prompt", () => {
       const { db } = yield* Database.Service
       const input = { sessionID, id: messageID, text: "Fix the failing tests", resume: false }
       yield* session.prompt(input)
-      yield* SessionPending.promote(db, bus, sessionID, "steer")
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
 
       const retried = yield* session.prompt({ ...input, delivery: "queue" })
 
-      expect(retried).toMatchObject({ id: messageID, type: "user", data: { text: input.text } })
+      expect(retried).toMatchObject({ id: messageID, type: "user", payload: { text: input.text } })
       expect(yield* admitted(messageID)).toBeUndefined()
     }),
   )
@@ -681,7 +698,7 @@ describe("Session.prompt", () => {
       expect(messages[1]).toEqual(messages[0])
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(yield* admittedCount).toBe(1)
-      expect(yield* eventCount(Bus.versionedType(SessionEvent.InputAdmitted.type, 1))).toBe(1)
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxEnqueued.type, 1))).toBe(1)
     }),
   )
 
@@ -699,11 +716,11 @@ describe("Session.prompt", () => {
       })
 
       yield* Effect.all(
-        [SessionPending.promote(db, bus, sessionID, "steer"), SessionPending.promote(db, bus, sessionID, "steer")],
+        [SessionInbox.promote(db, bus, sessionID, "steer"), SessionInbox.promote(db, bus, sessionID, "steer")],
         { concurrency: "unbounded" },
       )
 
-      expect(yield* eventCount(Bus.versionedType(SessionEvent.InputPromoted.type, 1))).toBe(1)
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxDelivered.type, 1))).toBe(1)
       expect(yield* admitted(messageID)).toBeUndefined()
       expect(yield* session.messages({ sessionID })).toMatchObject([
         { id: messageID, type: "user", text: "Promote once" },
@@ -734,36 +751,34 @@ describe("Session.prompt", () => {
         .pipe(Effect.orDie)
 
       yield* bus.remove(sessionID)
-      yield* db
-        .delete(SessionPendingTable)
-        .where(eq(SessionPendingTable.session_id, sessionID))
-        .run()
-        .pipe(Effect.orDie)
+      yield* db.delete(SessionInboxTable).where(eq(SessionInboxTable.session_id, sessionID)).run().pipe(Effect.orDie)
       yield* db
         .delete(SessionMessageTable)
         .where(eq(SessionMessageTable.session_id, sessionID))
         .run()
         .pipe(Effect.orDie)
-      yield* bus.replayAll(
+      yield* Effect.forEach(
         recorded.map((event) => ({
           id: event.id,
-          created: DateTime.makeUnsafe(event.created),
+          created: event.created,
           aggregateID: event.aggregate_id,
           seq: event.seq,
           type: event.type,
           data: event.data,
         })),
+        (event) => bus.replay(event),
+        { discard: true },
       )
 
       expect(yield* admitted(messageID)).toMatchObject({
         id: messageID,
         type: "user",
-        data: { text: "Replay pending" },
+        payload: { text: "Replay pending" },
       })
       expect(yield* admitted(syntheticID)).toMatchObject({
         id: syntheticID,
         type: "synthetic",
-        data: { text: "Replay synthetic" },
+        payload: { text: "Replay synthetic" },
       })
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(wakeCalls).toEqual([])
@@ -896,7 +911,7 @@ describe("Session.prompt", () => {
       const failure = yield* session.prompt({ ...input, metadata: { source: "plugin" } }).pipe(Effect.flip)
 
       expect(retried).toEqual(first)
-      expect(first.data.metadata).toEqual({ source: "api" })
+      expect(first.payload.metadata).toEqual({ source: "api" })
       expect(failure._tag).toBe("Session.PromptConflictError")
     }),
   )
@@ -922,14 +937,14 @@ describe("Session.prompt", () => {
         type: "synthetic",
         sessionID,
         delivery: "steer",
-        data: {
+        payload: {
           text: "Background work completed",
           description: "shell completion",
           metadata: { job: "shell" },
         },
       })
 
-      yield* SessionPending.promote(db, bus, sessionID, "steer")
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
 
       expect(yield* session.messages({ sessionID })).toMatchObject([
         {
@@ -954,15 +969,15 @@ describe("Session.prompt", () => {
       const entries = yield* Effect.all([session.synthetic(input), session.synthetic(input)], {
         concurrency: "unbounded",
       })
-      yield* SessionPending.promote(database.db, bus, sessionID, "steer")
+      yield* SessionInbox.promote(database.db, bus, sessionID, "steer")
       const promotedRetry = yield* session.synthetic(input)
       const failure = yield* session.synthetic({ ...input, text: "Different completion" }).pipe(Effect.flip)
 
       expect(entries[1]).toEqual(entries[0])
-      expect(promotedRetry).toMatchObject({ id: messageID, type: "synthetic", data: { text: "Completed" } })
+      expect(promotedRetry).toMatchObject({ id: messageID, type: "synthetic", payload: { text: "Completed" } })
       expect(failure).toMatchObject({ _tag: "Session.SyntheticConflictError", sessionID, inputID: messageID })
       expect(yield* admittedCount).toBe(0)
-      expect(yield* eventCount(Bus.versionedType(SessionEvent.InputAdmitted.type, 1))).toBe(1)
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxEnqueued.type, 1))).toBe(1)
     }),
   )
 
@@ -981,15 +996,11 @@ describe("Session.prompt", () => {
       })
 
       expect(input.delivery).toBe("queue")
-      expect(yield* SessionPending.has(db, sessionID, "input")).toBe(true)
-      expect(
-        yield* SessionPending.promote(db, bus, sessionID, "steer"),
-      ).toBe(0)
+      expect(yield* SessionInbox.has(db, sessionID, "input")).toBe(true)
+      expect(yield* SessionInbox.promote(db, bus, sessionID, "steer")).toBe(0)
       expect(yield* session.messages({ sessionID })).toEqual([])
-      expect(
-        yield* SessionPending.promote(db, bus, sessionID, "input"),
-      ).toBe(1)
-      expect(yield* SessionPending.has(db, sessionID, "input")).toBe(false)
+      expect(yield* SessionInbox.promote(db, bus, sessionID, "input")).toBe(1)
+      expect(yield* SessionInbox.has(db, sessionID, "input")).toBe(false)
       expect(yield* session.messages({ sessionID })).toMatchObject([
         { id: input.id, type: "synthetic", text: "Queued completion" },
       ])
@@ -1015,7 +1026,7 @@ describe("Session.prompt", () => {
         resume: false,
       })
 
-      yield* SessionPending.promote(db, bus, sessionID, "steer")
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
 
       expect(
         (yield* session.messages({ sessionID, order: "asc" })).map((message) =>
@@ -1026,11 +1037,11 @@ describe("Session.prompt", () => {
   )
 })
 
-describe("Session.pending", () => {
+describe("Session.inbox", () => {
   it.effect("fails for an unknown session", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
-      expect(yield* session.pending(Session.ID.make("ses_missing")).pipe(Effect.flip)).toMatchObject({
+      expect(yield* session.inbox(Session.ID.make("ses_missing")).pipe(Effect.flip)).toMatchObject({
         _tag: "Session.NotFoundError",
       })
     }),
@@ -1052,38 +1063,34 @@ describe("Session.pending", () => {
       })
       const second = yield* session.prompt({ sessionID, text: "Second steer", resume: false })
 
-      expect(yield* session.pending(sessionID)).toMatchObject([
+      expect(yield* session.inbox(sessionID)).toMatchObject([
         { id: first.id, type: "user", delivery: "steer" },
         { id: queued.id, type: "synthetic", delivery: "queue" },
         { id: second.id, type: "user", delivery: "steer" },
       ])
 
-      expect(
-        yield* SessionPending.promote(db, bus, sessionID, "input"),
-      ).toBe(2)
-      expect(yield* session.pending(sessionID)).toMatchObject([{ id: queued.id, type: "synthetic" }])
+      expect(yield* SessionInbox.promote(db, bus, sessionID, "input")).toBe(2)
+      expect(yield* session.inbox(sessionID)).toMatchObject([{ id: queued.id, type: "synthetic" }])
 
-      expect(
-        yield* SessionPending.promote(db, bus, sessionID, "input"),
-      ).toBe(1)
-      expect(yield* session.pending(sessionID)).toEqual([])
+      expect(yield* SessionInbox.promote(db, bus, sessionID, "input")).toBe(1)
+      expect(yield* session.inbox(sessionID)).toEqual([])
     }),
   )
 
-  it.effect("lists an unhandled compaction barrier until it settles", () =>
+  it.effect("lists an unhandled compaction until it is cancelled", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
       const { db } = yield* Database.Service
 
       const barrier = yield* session.compact({ sessionID })
-      expect(yield* SessionPending.has(db, sessionID, "any")).toBe(true)
-      expect(yield* SessionPending.has(db, sessionID, "input")).toBe(false)
-      expect(yield* session.pending(sessionID)).toMatchObject([{ id: barrier.id, type: "compaction" }])
+      expect(yield* SessionInbox.has(db, sessionID, "any")).toBe(true)
+      expect(yield* SessionInbox.has(db, sessionID, "input")).toBe(true)
+      expect(yield* session.inbox(sessionID)).toMatchObject([{ id: barrier.id, type: "compaction" }])
 
-      yield* SessionPending.settleCompaction(db, { sessionID })
-      expect(yield* SessionPending.has(db, sessionID, "any")).toBe(false)
-      expect(yield* session.pending(sessionID)).toEqual([])
+      yield* session.cancelInbox({ sessionID, inboxID: barrier.id })
+      expect(yield* SessionInbox.has(db, sessionID, "any")).toBe(false)
+      expect(yield* session.inbox(sessionID)).toEqual([])
     }),
   )
 
@@ -1100,14 +1107,16 @@ describe("Session.pending", () => {
         resume: false,
       })
 
-      yield* session.cancelPending({ sessionID, inputID })
+      yield* session.cancelInbox({ sessionID, inboxID: inputID })
 
-      expect(yield* session.pending(sessionID)).toEqual([])
-      expect(yield* eventCount(Bus.versionedType(SessionEvent.InputCancelled.type, 1))).toBe(1)
-      expect(
-        yield* session.cancelPending({ sessionID, inputID }).pipe(Effect.flip),
-      ).toMatchObject({ _tag: "Session.PendingInputConflictError", sessionID, inputID })
-      expect(yield* eventCount(Bus.versionedType(SessionEvent.InputCancelled.type, 1))).toBe(1)
+      expect(yield* session.inbox(sessionID)).toEqual([])
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxCancelled.type, 1))).toBe(1)
+      expect(yield* session.cancelInbox({ sessionID, inboxID: inputID }).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.InboxConflictError",
+        sessionID,
+        inboxID: inputID,
+      })
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxCancelled.type, 1))).toBe(1)
 
       const retried = yield* session.prompt({
         id: inputID,
@@ -1133,31 +1142,33 @@ describe("Session.pending", () => {
       const alreadySteered = yield* session.prompt({ sessionID, text: "Already steer", resume: false })
       wakeCalls.length = 0
 
-      yield* session.steerPending({ sessionID, inputID: queued.id })
+      yield* session.steerInbox({ sessionID, inboxID: queued.id })
 
-      expect(yield* session.pending(sessionID)).toMatchObject([
+      expect(yield* session.inbox(sessionID)).toMatchObject([
         { id: queued.id, delivery: "steer" },
         { id: alreadySteered.id, delivery: "steer" },
       ])
       expect(wakeCalls).toEqual([sessionID])
-      expect(yield* eventCount(Bus.versionedType(SessionEvent.InputSteered.type, 1))).toBe(1)
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxDeliveryChanged.type, 1))).toBe(1)
 
       wakeCalls.length = 0
-      yield* session.queuePending({ sessionID, inputID: queued.id })
-      expect(yield* session.pending(sessionID)).toMatchObject([
+      yield* session.queueInbox({ sessionID, inboxID: queued.id })
+      expect(yield* session.inbox(sessionID)).toMatchObject([
         { id: queued.id, delivery: "queue" },
         { id: alreadySteered.id, delivery: "steer" },
       ])
       expect(wakeCalls).toEqual([])
-      expect(yield* eventCount(Bus.versionedType(SessionEvent.InputQueued.type, 1))).toBe(1)
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxDeliveryChanged.type, 1))).toBe(2)
 
-      expect(
-        yield* session.steerPending({ sessionID, inputID: alreadySteered.id }).pipe(Effect.flip),
-      ).toMatchObject({ _tag: "Session.PendingInputConflictError", sessionID, inputID: alreadySteered.id })
-      yield* session.cancelPending({ sessionID, inputID: alreadySteered.id })
+      expect(yield* session.steerInbox({ sessionID, inboxID: alreadySteered.id }).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.InboxConflictError",
+        sessionID,
+        inboxID: alreadySteered.id,
+      })
+      yield* session.cancelInbox({ sessionID, inboxID: alreadySteered.id })
       expect(wakeCalls).toEqual([])
-      expect(yield* eventCount(Bus.versionedType(SessionEvent.InputSteered.type, 1))).toBe(1)
-      expect(yield* eventCount(Bus.versionedType(SessionEvent.InputCancelled.type, 1))).toBe(1)
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxDeliveryChanged.type, 1))).toBe(2)
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxCancelled.type, 1))).toBe(1)
     }),
   )
 })

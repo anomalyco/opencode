@@ -1,4 +1,4 @@
-export * as CodeModeCatalog from "./catalog"
+export * as CodeModeCatalog from "./catalog.js"
 
 import { Schema } from "effect"
 
@@ -46,9 +46,7 @@ export function summarize(entries: ReadonlyArray<Entry>, budget = INLINE_BUDGET)
         .map((entry) => {
           const firstLine = entry.description.split("\n", 1)[0]?.trim() ?? ""
           const description =
-            firstLine.length > DESCRIPTION_LIMIT
-              ? firstLine.slice(0, DESCRIPTION_LIMIT - 3) + "..."
-              : firstLine
+            firstLine.length > DESCRIPTION_LIMIT ? firstLine.slice(0, DESCRIPTION_LIMIT - 3) + "..." : firstLine
           const suffix = description.length === 0 ? "" : ` // ${description}`
           return { path: entry.path, line: `  - ${entry.signature}${suffix}` }
         })

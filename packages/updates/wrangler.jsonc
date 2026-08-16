@@ -8,18 +8,18 @@
   "routes": [
     {
       "pattern": "update.opencode.ai",
-      "custom_domain": true
-    }
+      "custom_domain": true,
+    },
   ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "opencode-updates",
       "database_id": "058debd8-1572-4c4a-8781-2c5a0e33cb46",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
   "observability": {
-    "enabled": true
-  }
+    "enabled": true,
+  },
 }

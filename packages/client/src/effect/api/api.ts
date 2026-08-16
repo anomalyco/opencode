@@ -11,30 +11,28 @@ import type { RelativePath } from "@opencode-ai/schema/schema"
 import type { Brand } from "effect"
 import type { Model } from "@opencode-ai/schema/model"
 import type { SessionMessage } from "@opencode-ai/schema/session-message"
+import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import type { PromptInput } from "@opencode-ai/schema/prompt-input"
 import type { AgentAttachment } from "@opencode-ai/schema/prompt"
-import type { SessionPending } from "@opencode-ai/schema/session-pending"
 import type { Skill } from "@opencode-ai/schema/skill"
 import type { Event } from "@opencode-ai/schema/event"
 import type { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
 import type { Schema } from "effect"
 import type { EventLog } from "@opencode-ai/schema/event-log"
 import type { Shell } from "@opencode-ai/schema/shell"
-import type { DateTime } from "effect"
 import type { Provider } from "@opencode-ai/schema/provider"
 import type { Integration } from "@opencode-ai/schema/integration"
+import type { Form } from "@opencode-ai/schema/form"
 import type { Mcp } from "@opencode-ai/schema/mcp"
 import type { Credential } from "@opencode-ai/schema/credential"
-import type { Form } from "@opencode-ai/schema/form"
 import type { Permission } from "@opencode-ai/schema/permission"
 import type { PermissionSaved } from "@opencode-ai/schema/permission-saved"
 import type { FileSystem } from "@opencode-ai/schema/filesystem"
 import type { Command } from "@opencode-ai/schema/command"
 import type { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
 import type { Pty } from "@opencode-ai/schema/pty"
-import type { Question } from "@opencode-ai/schema/question"
 import type { Reference } from "@opencode-ai/schema/reference"
-import type { ProjectCopy } from "@opencode-ai/schema/project-copy"
+import type { Worktree } from "@opencode-ai/schema/worktree"
 import type { Vcs } from "@opencode-ai/schema/vcs"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
 import type { WebSearch } from "@opencode-ai/schema/websearch"
@@ -170,6 +168,7 @@ export type Endpoint5_11Input = {
   readonly sessionID: Session.ID
   readonly directory: AbsolutePath
   readonly workspaceID?: Workspace.ID | undefined
+  readonly delivery?: SessionInbox.Delivery | undefined
 }
 export type Endpoint5_11Output = void
 export type SessionMoveOperation<E = never> = (input: Endpoint5_11Input) => Effect.Effect<Endpoint5_11Output, E>
@@ -180,11 +179,12 @@ export type Endpoint5_12Input = {
   readonly text: string
   readonly files?: ReadonlyArray<PromptInput.FileAttachment> | undefined
   readonly agents?: ReadonlyArray<AgentAttachment> | undefined
+  readonly skills?: ReadonlyArray<PromptInput.SkillAttachment> | undefined
   readonly metadata?: { readonly [x: string]: unknown } | undefined
-  readonly delivery?: "steer" | "queue" | undefined
+  readonly delivery?: SessionInbox.Delivery | undefined
   readonly resume?: boolean | undefined
 }
-export type Endpoint5_12Output = SessionPending.User
+export type Endpoint5_12Output = SessionInbox.User
 export type SessionPromptOperation<E = never> = (input: Endpoint5_12Input) => Effect.Effect<Endpoint5_12Output, E>
 
 export type Endpoint5_13Input = {
@@ -196,10 +196,11 @@ export type Endpoint5_13Input = {
   readonly model?: Model.Ref | undefined
   readonly files?: ReadonlyArray<PromptInput.FileAttachment> | undefined
   readonly agents?: ReadonlyArray<AgentAttachment> | undefined
-  readonly delivery?: "steer" | "queue" | undefined
+  readonly skills?: ReadonlyArray<PromptInput.SkillAttachment> | undefined
+  readonly delivery?: SessionInbox.Delivery | undefined
   readonly resume?: boolean | undefined
 }
-export type Endpoint5_13Output = SessionPending.User
+export type Endpoint5_13Output = SessionInbox.User
 export type SessionCommandOperation<E = never> = (input: Endpoint5_13Input) => Effect.Effect<Endpoint5_13Output, E>
 
 export type Endpoint5_14Input = {
@@ -217,10 +218,10 @@ export type Endpoint5_15Input = {
   readonly text: string
   readonly description?: string | undefined
   readonly metadata?: { readonly [x: string]: unknown } | undefined
-  readonly delivery?: "steer" | "queue" | undefined
+  readonly delivery?: SessionInbox.Delivery | undefined
   readonly resume?: boolean | undefined
 }
-export type Endpoint5_15Output = SessionPending.Synthetic
+export type Endpoint5_15Output = SessionInbox.Synthetic
 export type SessionSyntheticOperation<E = never> = (input: Endpoint5_15Input) => Effect.Effect<Endpoint5_15Output, E>
 
 export type Endpoint5_16Input = {
@@ -231,8 +232,12 @@ export type Endpoint5_16Input = {
 export type Endpoint5_16Output = void
 export type SessionShellOperation<E = never> = (input: Endpoint5_16Input) => Effect.Effect<Endpoint5_16Output, E>
 
-export type Endpoint5_17Input = { readonly sessionID: Session.ID; readonly id?: SessionMessage.ID | undefined }
-export type Endpoint5_17Output = SessionPending.Compaction
+export type Endpoint5_17Input = {
+  readonly sessionID: Session.ID
+  readonly id?: SessionMessage.ID | undefined
+  readonly delivery?: SessionInbox.Delivery | undefined
+}
+export type Endpoint5_17Output = SessionInbox.Compaction
 export type SessionCompactOperation<E = never> = (input: Endpoint5_17Input) => Effect.Effect<Endpoint5_17Output, E>
 
 export type Endpoint5_18Input = { readonly sessionID: Session.ID }
@@ -260,22 +265,20 @@ export type Endpoint5_22Output = ReadonlyArray<SessionMessage.Info>
 export type SessionContextOperation<E = never> = (input: Endpoint5_22Input) => Effect.Effect<Endpoint5_22Output, E>
 
 export type Endpoint5_23Input = { readonly sessionID: Session.ID }
-export type Endpoint5_23Output = ReadonlyArray<SessionPending.Info>
-export type SessionPendingListOperation<E = never> = (input: Endpoint5_23Input) => Effect.Effect<Endpoint5_23Output, E>
+export type Endpoint5_23Output = ReadonlyArray<SessionInbox.Info>
+export type SessionInboxListOperation<E = never> = (input: Endpoint5_23Input) => Effect.Effect<Endpoint5_23Output, E>
 
-export type Endpoint5_24Input = { readonly sessionID: Session.ID; readonly inputID: SessionMessage.ID }
+export type Endpoint5_24Input = { readonly sessionID: Session.ID; readonly inboxID: SessionMessage.ID }
 export type Endpoint5_24Output = void
-export type SessionPendingCancelOperation<E = never> = (
-  input: Endpoint5_24Input,
-) => Effect.Effect<Endpoint5_24Output, E>
+export type SessionInboxCancelOperation<E = never> = (input: Endpoint5_24Input) => Effect.Effect<Endpoint5_24Output, E>
 
-export type Endpoint5_25Input = { readonly sessionID: Session.ID; readonly inputID: SessionMessage.ID }
+export type Endpoint5_25Input = { readonly sessionID: Session.ID; readonly inboxID: SessionMessage.ID }
 export type Endpoint5_25Output = void
-export type SessionPendingSteerOperation<E = never> = (input: Endpoint5_25Input) => Effect.Effect<Endpoint5_25Output, E>
+export type SessionInboxSteerOperation<E = never> = (input: Endpoint5_25Input) => Effect.Effect<Endpoint5_25Output, E>
 
-export type Endpoint5_26Input = { readonly sessionID: Session.ID; readonly inputID: SessionMessage.ID }
+export type Endpoint5_26Input = { readonly sessionID: Session.ID; readonly inboxID: SessionMessage.ID }
 export type Endpoint5_26Output = void
-export type SessionPendingQueueOperation<E = never> = (input: Endpoint5_26Input) => Effect.Effect<Endpoint5_26Output, E>
+export type SessionInboxQueueOperation<E = never> = (input: Endpoint5_26Input) => Effect.Effect<Endpoint5_26Output, E>
 
 export type Endpoint5_27Input = { readonly sessionID: Session.ID }
 export type Endpoint5_27Output = ReadonlyArray<InstructionEntry.Info>
@@ -312,7 +315,7 @@ export type Endpoint5_31Output =
   | (
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.created"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -332,25 +335,33 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.agent.selected"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
-          readonly data: { readonly sessionID: Session.ID; readonly agent: Agent.ID }
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly agent: Agent.ID
+            readonly previous?: Agent.ID | undefined
+          }
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.model.selected"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
-          readonly data: { readonly sessionID: Session.ID; readonly model: Model.Ref }
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly model: Model.Ref
+            readonly previous?: Model.Ref | undefined
+          }
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.moved"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -358,13 +369,13 @@ export type Endpoint5_31Output =
           readonly data: {
             readonly sessionID: Session.ID
             readonly location: Location.Ref
-            readonly projectID?: Project.ID | undefined
+            readonly projectID: Project.ID
             readonly subpath?: RelativePath | undefined
           }
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.renamed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -373,7 +384,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.deleted"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -382,7 +393,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.forked"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -398,56 +409,51 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
-          readonly type: "session.input.promoted"
+          readonly type: "session.inbox.delivered"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
-          readonly data: { readonly sessionID: Session.ID; readonly inputID: SessionMessage.ID }
+          readonly data: { readonly sessionID: Session.ID; readonly inboxID: SessionMessage.ID }
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
-          readonly type: "session.input.admitted"
+          readonly type: "session.inbox.enqueued"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
           readonly data: {
             readonly sessionID: Session.ID
-            readonly inputID: SessionMessage.ID
-            readonly input: SessionPending.Message
+            readonly inboxID: SessionMessage.ID
+            readonly item: SessionInbox.Item
           }
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
-          readonly type: "session.input.cancelled"
+          readonly type: "session.inbox.cancelled"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
-          readonly data: { readonly sessionID: Session.ID; readonly inputID: SessionMessage.ID }
+          readonly data: { readonly sessionID: Session.ID; readonly inboxID: SessionMessage.ID }
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
-          readonly type: "session.input.steered"
+          readonly type: "session.inbox.delivery.changed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?: Location.Ref | undefined
-          readonly data: { readonly sessionID: Session.ID; readonly inputID: SessionMessage.ID }
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly inboxID: SessionMessage.ID
+            readonly delivery: SessionInbox.Delivery
+          }
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
-          readonly metadata?: { readonly [x: string]: unknown } | undefined
-          readonly type: "session.input.queued"
-          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
-          readonly location?: Location.Ref | undefined
-          readonly data: { readonly sessionID: Session.ID; readonly inputID: SessionMessage.ID }
-        }
-      | {
-          readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.execution.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -456,7 +462,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.execution.succeeded"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -465,7 +471,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.execution.failed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -477,7 +483,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.execution.interrupted"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -486,7 +492,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.instructions.updated"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -499,7 +505,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.synthetic"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -513,7 +519,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.skill.activated"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -527,7 +533,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.shell.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -536,7 +542,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.shell.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -554,7 +560,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.step.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -569,7 +575,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.step.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -591,7 +597,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.step.failed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -615,7 +621,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.text.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -628,7 +634,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.text.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -643,7 +649,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.reasoning.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -657,7 +663,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.reasoning.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -672,7 +678,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.tool.input.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -686,7 +692,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.tool.input.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -700,7 +706,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.tool.called"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -716,7 +722,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.tool.success"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -752,7 +758,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.tool.failed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -791,7 +797,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.retry.scheduled"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -806,16 +812,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
-          readonly metadata?: { readonly [x: string]: unknown } | undefined
-          readonly type: "session.compaction.admitted"
-          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
-          readonly location?: Location.Ref | undefined
-          readonly data: { readonly sessionID: Session.ID; readonly inputID: SessionMessage.ID }
-        }
-      | {
-          readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.compaction.started"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -829,7 +826,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.compaction.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -843,7 +840,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.compaction.failed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -857,7 +854,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.revert.staged"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -866,7 +863,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.revert.cleared"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -875,7 +872,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.revert.committed"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -884,7 +881,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.usage.recorded"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
@@ -905,7 +902,7 @@ export type Endpoint5_31Output =
   | EventLog.Synced
 export type SessionLogOperation<E = never> = (input: Endpoint5_31Input) => Stream.Stream<Endpoint5_31Output, E>
 
-export type Endpoint5_32Input = { readonly sessionID: Session.ID }
+export type Endpoint5_32Input = { readonly sessionID: Session.ID; readonly continue?: boolean | undefined }
 export type Endpoint5_32Output = void
 export type SessionInterruptOperation<E = never> = (input: Endpoint5_32Input) => Effect.Effect<Endpoint5_32Output, E>
 
@@ -943,11 +940,11 @@ export interface SessionApi<E = never> {
     readonly commit: SessionRevertCommitOperation<E>
   }
   readonly context: SessionContextOperation<E>
-  readonly pending: {
-    readonly list: SessionPendingListOperation<E>
-    readonly cancel: SessionPendingCancelOperation<E>
-    readonly steer: SessionPendingSteerOperation<E>
-    readonly queue: SessionPendingQueueOperation<E>
+  readonly inbox: {
+    readonly list: SessionInboxListOperation<E>
+    readonly cancel: SessionInboxCancelOperation<E>
+    readonly steer: SessionInboxSteerOperation<E>
+    readonly queue: SessionInboxQueueOperation<E>
   }
   readonly instructions: {
     readonly entry: {
@@ -1052,6 +1049,7 @@ export type Endpoint10_3Input = {
   readonly integrationID: Integration.ID
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly key: string
+  readonly answer?: Form.Answer | undefined
   readonly label?: string | undefined
 }
 export type Endpoint10_3Output = void
@@ -1063,7 +1061,7 @@ export type Endpoint10_4Input = {
   readonly integrationID: Integration.ID
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly methodID: Integration.MethodID
-  readonly inputs: { readonly [x: string]: string }
+  readonly answer?: Form.Answer | undefined
   readonly label?: string | undefined
 }
 export type Endpoint10_4Output = { readonly location: Location.Info; readonly data: Integration.Attempt }
@@ -1230,17 +1228,9 @@ export type Endpoint13_1Input = {
 export type Endpoint13_1Output = Project.Current
 export type ProjectCurrentOperation<E = never> = (input?: Endpoint13_1Input) => Effect.Effect<Endpoint13_1Output, E>
 
-export type Endpoint13_2Input = {
-  readonly projectID: Project.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
-export type Endpoint13_2Output = Project.Directories
-export type ProjectDirectoriesOperation<E = never> = (input: Endpoint13_2Input) => Effect.Effect<Endpoint13_2Output, E>
-
 export interface ProjectApi<E = never> {
   readonly list: ProjectListOperation<E>
   readonly current: ProjectCurrentOperation<E>
-  readonly directories: ProjectDirectoriesOperation<E>
 }
 
 export type Endpoint14_0Input = {
@@ -1511,95 +1501,65 @@ export interface ShellApi<E = never> {
 export type Endpoint22_0Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
-export type Endpoint22_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Question.Request> }
-export type QuestionRequestListOperation<E = never> = (
-  input?: Endpoint22_0Input,
-) => Effect.Effect<Endpoint22_0Output, E>
-
-export type Endpoint22_1Input = { readonly sessionID: Session.ID }
-export type Endpoint22_1Output = ReadonlyArray<Question.Request>
-export type QuestionListOperation<E = never> = (input: Endpoint22_1Input) => Effect.Effect<Endpoint22_1Output, E>
-
-export type Endpoint22_2Input = {
-  readonly sessionID: Session.ID
-  readonly requestID: Question.ID
-  readonly answers: ReadonlyArray<Question.Answer>
-}
-export type Endpoint22_2Output = void
-export type QuestionReplyOperation<E = never> = (input: Endpoint22_2Input) => Effect.Effect<Endpoint22_2Output, E>
-
-export type Endpoint22_3Input = { readonly sessionID: Session.ID; readonly requestID: Question.ID }
-export type Endpoint22_3Output = void
-export type QuestionRejectOperation<E = never> = (input: Endpoint22_3Input) => Effect.Effect<Endpoint22_3Output, E>
-
-export interface QuestionApi<E = never> {
-  readonly request: { readonly list: QuestionRequestListOperation<E> }
-  readonly list: QuestionListOperation<E>
-  readonly reply: QuestionReplyOperation<E>
-  readonly reject: QuestionRejectOperation<E>
-}
-
-export type Endpoint23_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
-export type Endpoint23_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Reference.Info> }
-export type ReferenceListOperation<E = never> = (input?: Endpoint23_0Input) => Effect.Effect<Endpoint23_0Output, E>
+export type Endpoint22_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Reference.Info> }
+export type ReferenceListOperation<E = never> = (input?: Endpoint22_0Input) => Effect.Effect<Endpoint22_0Output, E>
 
 export interface ReferenceApi<E = never> {
   readonly list: ReferenceListOperation<E>
 }
 
-export type Endpoint24_0Input = {
+export type Endpoint23_0Input = { readonly projectID: Project.ID }
+export type Endpoint23_0Output = Worktree.List
+export type WorktreeListOperation<E = never> = (input: Endpoint23_0Input) => Effect.Effect<Endpoint23_0Output, E>
+
+export type Endpoint23_1Input = {
   readonly projectID: Project.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  readonly strategy: ProjectCopy.StrategyID
+  readonly strategy: Worktree.StrategyID
+  readonly from?: AbsolutePath | undefined
   readonly directory: AbsolutePath
   readonly name?: string | undefined
 }
-export type Endpoint24_0Output = ProjectCopy.Copy
-export type ProjectCopyCreateOperation<E = never> = (input: Endpoint24_0Input) => Effect.Effect<Endpoint24_0Output, E>
+export type Endpoint23_1Output = Worktree.Info
+export type WorktreeCreateOperation<E = never> = (input: Endpoint23_1Input) => Effect.Effect<Endpoint23_1Output, E>
 
-export type Endpoint24_1Input = {
+export type Endpoint23_2Input = {
   readonly projectID: Project.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly directory: AbsolutePath
   readonly force: boolean
 }
-export type Endpoint24_1Output = void
-export type ProjectCopyRemoveOperation<E = never> = (input: Endpoint24_1Input) => Effect.Effect<Endpoint24_1Output, E>
+export type Endpoint23_2Output = void
+export type WorktreeRemoveOperation<E = never> = (input: Endpoint23_2Input) => Effect.Effect<Endpoint23_2Output, E>
+
+export type Endpoint23_3Input = { readonly projectID: Project.ID }
+export type Endpoint23_3Output = void
+export type WorktreeRefreshOperation<E = never> = (input: Endpoint23_3Input) => Effect.Effect<Endpoint23_3Output, E>
+
+export interface WorktreeApi<E = never> {
+  readonly list: WorktreeListOperation<E>
+  readonly create: WorktreeCreateOperation<E>
+  readonly remove: WorktreeRemoveOperation<E>
+  readonly refresh: WorktreeRefreshOperation<E>
+}
+
+export type Endpoint24_0Input = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
+export type Endpoint24_0Output = { readonly location: Location.Info; readonly data: Vcs.Info }
+export type VcsGetOperation<E = never> = (input?: Endpoint24_0Input) => Effect.Effect<Endpoint24_0Output, E>
+
+export type Endpoint24_1Input = {
+  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
+}
+export type Endpoint24_1Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Vcs.FileStatus> }
+export type VcsStatusOperation<E = never> = (input?: Endpoint24_1Input) => Effect.Effect<Endpoint24_1Output, E>
 
 export type Endpoint24_2Input = {
-  readonly projectID: Project.ID
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
-export type Endpoint24_2Output = void
-export type ProjectCopyRefreshOperation<E = never> = (input: Endpoint24_2Input) => Effect.Effect<Endpoint24_2Output, E>
-
-export interface ProjectCopyApi<E = never> {
-  readonly create: ProjectCopyCreateOperation<E>
-  readonly remove: ProjectCopyRemoveOperation<E>
-  readonly refresh: ProjectCopyRefreshOperation<E>
-}
-
-export type Endpoint25_0Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
-export type Endpoint25_0Output = { readonly location: Location.Info; readonly data: Vcs.Info }
-export type VcsGetOperation<E = never> = (input?: Endpoint25_0Input) => Effect.Effect<Endpoint25_0Output, E>
-
-export type Endpoint25_1Input = {
-  readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-}
-export type Endpoint25_1Output = { readonly location: Location.Info; readonly data: ReadonlyArray<Vcs.FileStatus> }
-export type VcsStatusOperation<E = never> = (input?: Endpoint25_1Input) => Effect.Effect<Endpoint25_1Output, E>
-
-export type Endpoint25_2Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly mode: Vcs.Mode
   readonly context?: number | undefined
 }
-export type Endpoint25_2Output = { readonly location: Location.Info; readonly data: ReadonlyArray<FileDiff.Info> }
-export type VcsDiffOperation<E = never> = (input: Endpoint25_2Input) => Effect.Effect<Endpoint25_2Output, E>
+export type Endpoint24_2Output = { readonly location: Location.Info; readonly data: ReadonlyArray<FileDiff.Info> }
+export type VcsDiffOperation<E = never> = (input: Endpoint24_2Input) => Effect.Effect<Endpoint24_2Output, E>
 
 export interface VcsApi<E = never> {
   readonly get: VcsGetOperation<E>
@@ -1607,20 +1567,20 @@ export interface VcsApi<E = never> {
   readonly diff: VcsDiffOperation<E>
 }
 
-export type Endpoint26_0Output = ReadonlyArray<Location.Ref>
-export type DebugLocationListOperation<E = never> = () => Effect.Effect<Endpoint26_0Output, E>
+export type Endpoint25_0Output = ReadonlyArray<Location.Ref>
+export type DebugLocationListOperation<E = never> = () => Effect.Effect<Endpoint25_0Output, E>
 
-export type Endpoint26_1Input = {
+export type Endpoint25_1Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
-export type Endpoint26_1Output = void
-export type DebugLocationEvictOperation<E = never> = (input?: Endpoint26_1Input) => Effect.Effect<Endpoint26_1Output, E>
+export type Endpoint25_1Output = void
+export type DebugLocationEvictOperation<E = never> = (input?: Endpoint25_1Input) => Effect.Effect<Endpoint25_1Output, E>
 
 export interface DebugApi<E = never> {
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
 }
 
-export type Endpoint27_0Output =
+export type Endpoint26_0Output =
   | { readonly status: "required" | "completed" }
   | {
       readonly status: "running"
@@ -1631,36 +1591,36 @@ export type Endpoint27_0Output =
       }
     }
   | { readonly status: "error"; readonly error: string }
-export type MigrationV1StatusOperation<E = never> = () => Effect.Effect<Endpoint27_0Output, E>
+export type MigrationV1StatusOperation<E = never> = () => Effect.Effect<Endpoint26_0Output, E>
 
 export interface MigrationApi<E = never> {
   readonly v1: { readonly status: MigrationV1StatusOperation<E> }
 }
 
-export type Endpoint28_0Input = {
+export type Endpoint27_0Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
-export type Endpoint28_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<WebSearch.Provider> }
-export type WebsearchProvidersOperation<E = never> = (input?: Endpoint28_0Input) => Effect.Effect<Endpoint28_0Output, E>
+export type Endpoint27_0Output = { readonly location: Location.Info; readonly data: ReadonlyArray<WebSearch.Provider> }
+export type WebsearchProvidersOperation<E = never> = (input?: Endpoint27_0Input) => Effect.Effect<Endpoint27_0Output, E>
 
-export type Endpoint28_1Input = {
+export type Endpoint27_1Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
   readonly query: string
   readonly providerID?: WebSearch.ID | undefined
 }
-export type Endpoint28_1Output = { readonly location: Location.Info; readonly data: WebSearch.Response }
-export type WebsearchQueryOperation<E = never> = (input: Endpoint28_1Input) => Effect.Effect<Endpoint28_1Output, E>
+export type Endpoint27_1Output = { readonly location: Location.Info; readonly data: WebSearch.Response }
+export type WebsearchQueryOperation<E = never> = (input: Endpoint27_1Input) => Effect.Effect<Endpoint27_1Output, E>
 
 export interface WebsearchApi<E = never> {
   readonly providers: WebsearchProvidersOperation<E>
   readonly query: WebsearchQueryOperation<E>
 }
 
-export type Endpoint29_0Input = {
+export type Endpoint28_0Input = {
   readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
 }
-export type Endpoint29_0Output = ReadonlyArray<Config.Entry>
-export type ConfigGetOperation<E = never> = (input?: Endpoint29_0Input) => Effect.Effect<Endpoint29_0Output, E>
+export type Endpoint28_0Output = ReadonlyArray<Config.Entry>
+export type ConfigGetOperation<E = never> = (input?: Endpoint28_0Input) => Effect.Effect<Endpoint28_0Output, E>
 
 export interface ConfigApi<E = never> {
   readonly get: ConfigGetOperation<E>
@@ -1689,9 +1649,8 @@ export interface AppApi<E = never> {
   readonly event: EventApi<E>
   readonly pty: PtyApi<E>
   readonly shell: ShellApi<E>
-  readonly question: QuestionApi<E>
   readonly reference: ReferenceApi<E>
-  readonly projectCopy: ProjectCopyApi<E>
+  readonly worktree: WorktreeApi<E>
   readonly vcs: VcsApi<E>
   readonly debug: DebugApi<E>
   readonly migration: MigrationApi<E>

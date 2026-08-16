@@ -1,4 +1,4 @@
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import type { Platform } from "@/context/platform"
 
 export function directoryPickerKind(platform: Platform["platform"], server: ServerConnection.Any) {

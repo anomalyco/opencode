@@ -131,6 +131,7 @@ test("allows paint rounding for every framed row but not fixed turn gaps", async
               file: "src/summary.ts",
               additions: 1,
               deletions: 1,
+              status: "modified",
               patch: "@@ -1 +1 @@\n-export const value = 1\n+export const value = 2",
             },
           ],

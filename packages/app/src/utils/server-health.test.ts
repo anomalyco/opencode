@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { ServerConnection } from "@/context/server"
+import type { ServerConnection } from "@/context/servers"
 import { checkServerHealth } from "./server-health"
 
 const server: ServerConnection.HttpBase = {

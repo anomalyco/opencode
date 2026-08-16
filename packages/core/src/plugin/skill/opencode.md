@@ -63,12 +63,39 @@ examples, but do not fetch it to determine the V2 configuration shape.
 See the [full configuration guide](https://opencode.ai/v2/docs/config) for
 every field, examples, config locations, and links to dedicated feature guides.
 
+## [MCP servers](https://opencode.ai/v2/docs/mcp-servers)
+
+Configure MCP servers under `mcp.servers`. Prefer the CLI because it preserves
+unrelated configuration. Use `--global` when the user asks to set up a service
+for themselves without limiting it to the current project; omit it when they
+explicitly want project-local configuration.
+
+```sh
+opencode2 mcp add <name> --global --url <remote-url>
+opencode2 mcp list
+```
+
+Remote servers use OAuth by default. If `mcp list` reports that a server needs
+authentication, run the OAuth flow and then verify the connection:
+
+```sh
+opencode2 mcp auth <name>
+opencode2 mcp list
+```
+
+The auth command prints an authorization URL, waits for the browser redirect,
+and stores credentials outside the OpenCode configuration. Do not ask for or
+store an API key when the server supports OAuth. Use header-based credentials
+only when OAuth is unavailable or the user explicitly requires them, and use an
+environment substitution such as `{env:MCP_API_KEY}` instead of writing a
+secret into configuration.
+
 ## [V1 to V2 migration](https://opencode.ai/v2/docs/migrate-v1)
 
 For any request to migrate OpenCode configuration, agents, commands, skills,
 plugins, integrations, or other behavior from V1 to V2, read the full
 [migration guide](https://opencode.ai/v2/docs/migrate-v1) before acting. In
-the repository, its source is `packages/www/content/docs/(Get started)/migrate-v1.mdx`.
+the repository, its source is `packages/www/content/docs/migrate-v1.mdx`.
 
 V1 config files and `.opencode/` definitions are intended to remain compatible.
 The only intentional breaking changes are the server API and plugin API. Native

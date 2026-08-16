@@ -20,7 +20,8 @@ export default Runtime.handler(
               return response.text()
             })
           : Bun.file(input.file).text(),
-      catch: (cause) => new Error(`Failed to read session data: ${cause instanceof Error ? cause.message : String(cause)}`),
+      catch: (cause) =>
+        new Error(`Failed to read session data: ${cause instanceof Error ? cause.message : String(cause)}`),
     })
     const data = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SessionTransfer.Data))(text)
     const encoded = Schema.encodeSync(SessionTransfer.Data)(data)
@@ -52,9 +53,9 @@ export default Runtime.handler(
       return
     }
     if (!response.ok) yield* Effect.fail(new Error(`Failed to import session: ${response.statusText}`))
-    const imported = yield* Schema.decodeUnknownEffect(
-      Schema.fromJsonString(Schema.Struct({ data: Session.Info })),
-    )(yield* Effect.promise(() => response.text()))
+    const imported = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ data: Session.Info })))(
+      yield* Effect.promise(() => response.text()),
+    )
     process.stdout.write(`Imported session: ${imported.data.id}${EOL}`)
   }),
 )

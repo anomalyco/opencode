@@ -1,6 +1,6 @@
-import { ZAIImages } from "../protocols/zai-images"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
-import { HttpOptions, ProviderID, type ModelID } from "../schema"
+import { ZAIImages } from "../protocols/zai-images.js"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import { HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
 
 export const id = ProviderID.make("zai")
 
@@ -10,7 +10,7 @@ export type Config = ProviderAuthOption<"optional"> & {
   readonly http?: HttpOptions.Input
 }
 
-export type { ZAIImageOptions } from "../protocols/zai-images"
+export type { ZAIImageOptions } from "../protocols/zai-images.js"
 
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "ZAI_API_KEY")
 

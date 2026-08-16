@@ -124,7 +124,7 @@ test.describe("smoke: session timeline", () => {
       provider: fixture.provider,
       directory: fixture.directory,
       project: fixture.project,
-      pageMessages: (sessionID) => ({ items: fixture.messages[sessionID as keyof typeof fixture.messages] ?? [] }),
+      pageMessages: (sessionID) => ({ items: fixture.messages[sessionID] ?? [] }),
     })
     await configureSmokePage(page, fixture.directory)
     await page.addInitScript(
@@ -188,8 +188,17 @@ test.describe("smoke: session timeline", () => {
               const bottom = root
                 .querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')
                 ?.getBoundingClientRect()
-              samples.push({ ids: visible, last: visible.includes(last), bottomError: bottom?.bottom - view.bottom })
-              if (!firstPaint && visible.includes(last) && Math.abs((bottom?.bottom ?? Infinity) - view.bottom) <= 1) {
+              samples.push({
+                ids: visible,
+                last: visible.includes(last),
+                bottomError: bottom ? bottom.bottom - view.bottom : undefined,
+              })
+              if (
+                !firstPaint &&
+                visible.includes(last) &&
+                Math.abs((bottom?.bottom ?? Infinity) - view.bottom) <= 1 &&
+                !root.querySelector('[data-markdown-key="initial"]')
+              ) {
                 firstPaint = true
                 root.querySelectorAll<HTMLElement>("[data-timeline-key]").forEach((row) => {
                   const rect = row.getBoundingClientRect()
@@ -204,10 +213,16 @@ test.describe("smoke: session timeline", () => {
         }
         ;(
           window as Window & {
-            __sessionTabPaint?: { samples: typeof samples; removed: () => number; stop: () => void }
+            __sessionTabPaint?: {
+              samples: typeof samples
+              painted: () => boolean
+              removed: () => number
+              stop: () => void
+            }
           }
         ).__sessionTabPaint = {
           samples,
+          painted: () => firstPaint,
           removed: () => removedFirstPaintNodes,
           stop: () => {
             running = false
@@ -219,17 +234,19 @@ test.describe("smoke: session timeline", () => {
     )
 
     await switchTitlebarSession(page, fixture.targetID, fixture.expected.targetTitle)
-    await page.waitForFunction(() =>
-      (
-        window as Window & { __sessionTabPaint?: { samples: Array<{ ids: string[] }> } }
-      ).__sessionTabPaint?.samples.some((sample) => sample.ids.length > 0),
-    )
+    await page.waitForFunction(() => {
+      const probe = (
+        window as Window & { __sessionTabPaint?: { samples: Array<{ ids: string[] }>; painted: () => boolean } }
+      ).__sessionTabPaint
+      return probe?.painted() && probe.samples.some((sample) => sample.ids.length > 0)
+    })
     await page.waitForTimeout(200)
     const first = await page.evaluate(() => {
       const probe = (
         window as Window & {
           __sessionTabPaint?: {
             samples: Array<{ ids: string[]; last: boolean; bottomError?: number }>
+            painted: () => boolean
             removed: () => number
             stop: () => void
           }
@@ -250,7 +267,7 @@ test.describe("smoke: session timeline", () => {
       provider: fixture.provider,
       directory: fixture.directory,
       project: fixture.project,
-      pageMessages: (sessionID) => ({ items: fixture.messages[sessionID as keyof typeof fixture.messages] ?? [] }),
+      pageMessages: (sessionID) => ({ items: fixture.messages[sessionID] ?? [] }),
     })
     await configureSmokePage(page, fixture.directory)
     await page.addInitScript(
@@ -710,7 +727,7 @@ function expectCompleteScroll(
   ).toEqual([])
   expect(new Set(expectedPartIDs).size).toBe(expectedPartIDs.length)
   expect(new Set(expectedMessageIDs).size).toBe(expectedMessageIDs.length)
-  expect(expectedPartIDs.length).toBe(331)
+  expect(expectedPartIDs.length).toBe(465)
 }
 
 async function selectHomeProject(page: Page, projectName: string) {

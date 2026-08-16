@@ -4,8 +4,8 @@ import type {
   ToolCallPart,
   ToolDefinition as ToolDefinitionClass,
   ToolOutput as ToolOutputType,
-} from "./schema"
-import { ToolDefinition, ToolFailure, ToolOutput } from "./schema"
+} from "./schema/index.js"
+import { ToolDefinition, ToolFailure, ToolOutput } from "./schema/index.js"
 
 /**
  * Schema constraint for tool parameters / success values: no decoding or
@@ -244,10 +244,9 @@ const project = (
 ): ToolOutputType =>
   ToolOutput.make(
     toStructuredOutput?.(output) ?? output,
-    toModelOutput?.({ id, parameters, output }) ??
-      (typeof output === "string" ? [{ type: "text", text: output }] : []),
+    toModelOutput?.({ id, parameters, output }) ?? (typeof output === "string" ? [{ type: "text", text: output }] : []),
   )
 
 export { ToolFailure }
 
-export * as Tool from "./tool"
+export * as Tool from "./tool.js"

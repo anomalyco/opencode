@@ -11,18 +11,23 @@ const title = "Request dock regression"
 
 test("shows a pending question dock", async ({ page }) => {
   await mockServer(page, {
-    questions: [
+    forms: [
       {
-        id: "question-request",
+        id: "frm_question_request",
         sessionID,
-        questions: [
+        title: "Questions",
+        metadata: { kind: "question" },
+        fields: [
           {
-            header: "Implementation",
-            question: "Which implementation should be used?",
+            key: "q0",
+            type: "string",
+            title: "Implementation",
+            description: "Which implementation should be used?",
             options: [
-              { label: "Minimal", description: "Use the smallest correct change" },
-              { label: "Extended", description: "Include additional behavior" },
+              { value: "minimal", label: "Minimal", description: "Use the smallest correct change" },
+              { value: "extended", label: "Extended", description: "Include additional behavior" },
             ],
+            custom: true,
           },
         ],
       },
@@ -42,7 +47,7 @@ test("shows a pending question dock", async ({ page }) => {
   const rejectRequests: string[] = []
   page.on("request", (request) => {
     if (request.method() !== "POST") return
-    if (new URL(request.url()).pathname === `/api/session/${sessionID}/question/question-request/reject`)
+    if (new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_request/cancel`)
       rejectRequests.push(request.url())
   })
 
@@ -67,10 +72,10 @@ test("shows a pending question dock", async ({ page }) => {
   const reply = page.waitForRequest(
     (request) =>
       request.method() === "POST" &&
-      new URL(request.url()).pathname === `/api/session/${sessionID}/question/question-request/reply`,
+      new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_request/reply`,
   )
   await question.getByRole("button", { name: "Submit" }).click()
-  expect((await reply).postDataJSON()).toEqual({ answers: [["Minimal"]] })
+  expect((await reply).postDataJSON()).toEqual({ answer: { q0: "minimal" } })
 })
 
 test("shows a pending permission dock", async ({ page }) => {
@@ -109,7 +114,7 @@ test("restores the draft caret before typing after a request dock closes", async
     server: `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`,
     retry: 20,
   })
-  await mockServer(page, { questions: [] })
+  await mockServer(page, { forms: [] })
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   await transport.waitForConnection()
   await expectSessionTitle(page, title)
@@ -135,18 +140,24 @@ test("restores the draft caret before typing after a request dock closes", async
   await transport.send({
     directory,
     payload: {
-      type: "question.asked",
+      type: "form.created",
       properties: {
-        id: "question-caret",
-        sessionID,
-        questions: [
-          {
-            header: "Continue",
-            question: "Continue?",
-            options: [{ label: "Yes", description: "Continue the session" }],
-          },
-        ],
-        tool: { messageID: "message-caret", callID: "call-caret" },
+        form: {
+          id: "frm_question_caret",
+          sessionID,
+          title: "Questions",
+          metadata: { kind: "question", tool: { messageID: "message-caret", id: "call-caret" } },
+          fields: [
+            {
+              key: "q0",
+              type: "string",
+              title: "Continue",
+              description: "Continue?",
+              options: [{ value: "yes", label: "Yes", description: "Continue the session" }],
+              custom: true,
+            },
+          ],
+        },
       },
     },
   })
@@ -156,7 +167,10 @@ test("restores the draft caret before typing after a request dock closes", async
 
   await transport.send({
     directory,
-    payload: { type: "question.rejected", properties: { sessionID, requestID: "question-caret" } },
+    payload: {
+      type: "form.cancelled",
+      properties: { sessionID, id: "frm_question_caret" },
+    },
   })
   await expect(question).toHaveCount(0)
   await expect(editor).toBeVisible()
@@ -170,6 +184,8 @@ async function mockServer(
   requests: {
     permissions?: unknown[] | (() => unknown[])
     questions?: unknown[] | (() => unknown[])
+    forms?: unknown[] | (() => unknown[])
+    sessionStatus?: Record<string, unknown>
   },
 ) {
   await mockOpenCodeServer(page, {
@@ -214,6 +230,8 @@ async function mockServer(
     pageMessages: () => ({ items: [] }),
     permissions: requests.permissions,
     questions: requests.questions,
+    forms: requests.forms,
+    sessionStatus: requests.sessionStatus,
   })
   await page.addInitScript(() => {
     localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))

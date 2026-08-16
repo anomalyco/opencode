@@ -124,9 +124,11 @@ export function normalizeProviderList(
 }
 
 export function normalizeProjectInfo(project: Project | CurrentProject): Project {
+  const worktree = "canonical" in project ? project.canonical : project.worktree
   return {
     ...project,
-    worktree: "canonical" in project ? project.canonical : project.worktree,
+    worktree,
+    worktrees: "worktrees" in project ? project.worktrees : [{ directory: worktree }],
     vcs: project.vcs === "git" ? "git" : undefined,
   }
 }

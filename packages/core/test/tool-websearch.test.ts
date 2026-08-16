@@ -1,20 +1,25 @@
 import { beforeEach, describe, expect } from "bun:test"
-import { Deferred, Effect, Layer } from "effect"
+import { Deferred, Effect, Layer, Stream } from "effect"
+import { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Permission } from "@opencode-ai/core/permission"
+import { Config } from "@opencode-ai/core/config"
 import { Form } from "@opencode-ai/core/form"
-import { KV } from "@opencode-ai/core/kv"
 import { WebSearch } from "@opencode-ai/core/websearch"
+import { Document, Info } from "@opencode-ai/schema/config"
 import { Session } from "@opencode-ai/core/session"
+import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { Tool } from "@opencode-ai/core/tool"
 import { WebSearchTool } from "@opencode-ai/core/tool/plugin/websearch"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Image } from "@opencode-ai/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
+import { permissionLayer } from "./lib/permission"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 import { webSearchHost } from "./plugin/host"
+import { produce } from "immer"
 
 const webSearchToolNode = makeLocationNode({
   name: "test/websearch-tool-plugin",
@@ -24,14 +29,14 @@ const webSearchToolNode = makeLocationNode({
       yield* registerToolPlugin(WebSearchTool.Plugin, { websearch: webSearchHost(websearch) })
     }),
   ),
-  deps: [Tool.node, Permission.node, WebSearch.node, Form.node, KV.node],
+  deps: [Tool.node, Permission.node, WebSearch.node, Form.node, Config.node],
 })
 
 const sessionID = Session.ID.make("ses_websearch_test")
 const assertions: Permission.AssertInput[] = []
 const queries: WebSearch.Input[] = []
 const formRequests: Form.CreateInput[] = []
-const values = new Map<string, KV.Value>()
+let selection: WebSearch.ID | "random" | false | undefined
 const providers = [
   { id: WebSearch.ID.make("exa"), name: "Exa" },
   { id: WebSearch.ID.make("parallel"), name: "Parallel" },
@@ -41,6 +46,7 @@ let formResponse: Form.TerminalState = { status: "cancelled" }
 const formResponses: Form.TerminalState[] = []
 let queryBarrier: Deferred.Deferred<void> | undefined
 let synchronizedQueries = 0
+let queryError: WebSearch.Error | undefined
 let result = new WebSearch.Response({
   providerID: WebSearch.ID.make("exa"),
   results: [{ url: "https://example.com", title: "Search results", content: "search results", time: {} }],
@@ -50,53 +56,58 @@ beforeEach(() => {
   assertions.length = 0
   queries.length = 0
   formRequests.length = 0
-  values.clear()
+  selection = undefined
   providerRequired = false
   formResponse = { status: "cancelled" }
   formResponses.length = 0
   queryBarrier = undefined
   synchronizedQueries = 0
+  queryError = undefined
   result = new WebSearch.Response({
     providerID: WebSearch.ID.make("exa"),
     results: [{ url: "https://example.com", title: "Search results", content: "search results", time: {} }],
   })
 })
 
-const permission = Layer.succeed(
-  Permission.Service,
-  Permission.Service.of({
-    assert: (input) => Effect.sync(() => assertions.push(input)),
-    ask: () => Effect.die("unused"),
-    reply: () => Effect.die("unused"),
-    get: () => Effect.die("unused"),
-    forSession: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-  }),
-)
+const permission = permissionLayer({
+  assert: (input) => Effect.sync(() => assertions.push(input)),
+})
 const websearch = Layer.succeed(
   WebSearch.Service,
   WebSearch.Service.of({
-    transform: () => Effect.die("unused"),
+    transform: (transform) =>
+      Effect.sync(() => {
+        transform({
+          add: () => undefined,
+          default: {
+            get: () => selection,
+            set: (next) => (selection = next),
+          },
+        })
+        return { dispose: Effect.void }
+      }),
     reload: () => Effect.die("unused"),
     providers: () => Effect.succeed(providers),
     default: () =>
       Effect.gen(function* () {
-        const stored = values.get("websearch:provider")
-        if (stored === false) return yield* new WebSearch.DisabledError()
-        return typeof stored === "string" ? providers.find((provider) => provider.id === stored) : undefined
+        if (selection === false) return yield* new WebSearch.DisabledError()
+        return selection ? providers.find((provider) => provider.id === selection) : undefined
       }),
     query: (input) =>
       Effect.gen(function* () {
         queries.push(input)
-        const stored = values.get("websearch:provider")
         if (queryBarrier && synchronizedQueries < 5) {
           synchronizedQueries++
           if (synchronizedQueries === 5) yield* Deferred.succeed(queryBarrier, undefined)
           yield* Deferred.await(queryBarrier)
         }
-        if (providerRequired && typeof stored !== "string") return yield* new WebSearch.ProviderRequiredError()
-        if (typeof stored === "string")
-          return new WebSearch.Response({ providerID: WebSearch.ID.make(stored), results: result.results })
+        if (queryError) return yield* queryError
+        if (providerRequired && !selection) return yield* new WebSearch.ProviderRequiredError()
+        if (selection)
+          return new WebSearch.Response({
+            providerID: selection === "random" ? result.providerID : WebSearch.ID.make(selection),
+            results: result.results,
+          })
         return result
       }),
   }),
@@ -117,12 +128,30 @@ const form = Layer.succeed(
     cancel: () => Effect.die("unused"),
   }),
 )
-const kv = Layer.succeed(
-  KV.Service,
-  KV.Service.of({
-    get: (key) => Effect.succeed(values.get(key)),
-    set: (key, value) => Effect.sync(() => values.set(key, value)).pipe(Effect.asVoid),
-    remove: (key) => Effect.sync(() => values.delete(key)).pipe(Effect.asVoid),
+const config = Layer.succeed(
+  Config.Service,
+  Config.Service.of({
+    entries: () =>
+      Effect.succeed([
+        new Document({
+          type: "document",
+          info: new Info({
+            websearch: selection === undefined ? undefined : selection === false ? false : { provider: selection },
+          }),
+        }),
+      ]),
+    update: (update) =>
+      Effect.sync(() => {
+        const info = produce(
+          new Info({
+            websearch: selection === undefined ? undefined : selection === false ? false : { provider: selection },
+          }),
+          update,
+        )
+        selection = info.websearch === false ? false : info.websearch?.provider
+        return info
+      }),
+    changes: () => Stream.never,
   }),
 )
 const it = testEffect(
@@ -130,7 +159,7 @@ const it = testEffect(
     [Permission.node, permission],
     [WebSearch.node, websearch],
     [Form.node, form],
-    [KV.node, kv],
+    [Config.node, config],
     [Image.node, imagePassthrough],
   ]),
 )
@@ -249,7 +278,7 @@ describe("WebSearchTool registration", () => {
           call: { type: "tool-call", id: "call-enable", name: "websearch", input: { query: "effect" } },
         }),
       ).toMatchObject({ status: "completed", metadata: { provider: "exa" } })
-      expect(values.get("websearch:provider")).toBe("exa")
+      expect(selection).toBe("random")
       expect(queries).toHaveLength(2)
       expect(formRequests).toEqual([
         {
@@ -266,7 +295,7 @@ describe("WebSearchTool registration", () => {
               options: [
                 {
                   value: "allow",
-                  label: "Allow web search via Exa",
+                  label: "Allow search via Exa, Parallel",
                 },
                 {
                   value: "choose",
@@ -307,7 +336,7 @@ describe("WebSearchTool registration", () => {
           call: { type: "tool-call", id: "call-choose", name: "websearch", input: { query: "effect" } },
         }),
       ).toMatchObject({ status: "completed", metadata: { provider: "parallel" } })
-      expect(values.get("websearch:provider")).toBe("parallel")
+      expect(selection).toBe(WebSearch.ID.make("parallel"))
       expect(queries).toHaveLength(2)
       expect(formRequests[1]).toEqual({
         sessionID,
@@ -355,7 +384,7 @@ describe("WebSearchTool registration", () => {
 
       expect(results.every((item) => item.status === "completed")).toBe(true)
       expect(formRequests).toHaveLength(1)
-      expect(values.get("websearch:provider")).toBe("exa")
+      expect(selection).toBe("random")
     }),
   )
 
@@ -372,8 +401,59 @@ describe("WebSearchTool registration", () => {
           call: { type: "tool-call", id: "call-disable", name: "websearch", input: { query: "effect" } },
         }),
       ).toMatchObject({ status: "error" })
-      expect(values.get("websearch:provider")).toBe(false)
+      expect(selection).toBe(false)
       expect(queries).toHaveLength(1)
+    }),
+  )
+
+  it.effect("reports safe HTTP failures with the attempted provider", () =>
+    Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const tools = yield* registry.snapshot()
+      selection = WebSearch.ID.make("exa")
+
+      yield* Effect.forEach(
+        [
+          { status: 403, message: "Web search request failed (HTTP 403)" },
+          { status: 429, message: "Web search rate limited (HTTP 429)" },
+          { status: 401, message: "Web search authentication failed (HTTP 401)" },
+        ],
+        ({ status, message }, index) =>
+          Effect.gen(function* () {
+            const request = HttpClientRequest.post("https://mcp.exa.ai/mcp?exaApiKey=secret")
+            queryError = new WebSearch.RequestError({
+              providerID: WebSearch.ID.make("exa"),
+              cause: new HttpClientError.HttpClientError({
+                reason: new HttpClientError.StatusCodeError({
+                  request,
+                  response: HttpClientResponse.fromWeb(request, new Response(null, { status })),
+                  description: "non 2xx status code",
+                }),
+              }),
+            })
+            const progress: Tool.Metadata[] = []
+            const error = yield* tools
+              .execute({
+                sessionID,
+                ...toolIdentity,
+                call: {
+                  type: "tool-call",
+                  id: `call-http-${index}`,
+                  name: "websearch",
+                  input: { query: "effect" },
+                },
+                progress: (metadata) => Effect.sync(() => progress.push(metadata)),
+              })
+              .pipe(Effect.flip)
+
+            const sessionError = toSessionError(error)
+            expect(sessionError).toEqual({ type: "tool.execution", message })
+            expect(sessionError.message).not.toContain("secret")
+            expect(error.metadata).toEqual({ provider: "exa" })
+            expect(progress).toEqual([{ provider: "exa" }])
+          }),
+        { discard: true },
+      )
     }),
   )
 })

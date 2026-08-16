@@ -22,10 +22,9 @@ export type Info<
 }
 
 interface ToolDraft {
-  add<
-    Input extends Tool.ValueSchema<any>,
-    Output extends Tool.ValueSchema<any> | undefined,
-  >(tool: Info<Input, Output>): void
+  add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
+    tool: Info<Input, Output>,
+  ): void
 }
 
 interface ToolHooks {

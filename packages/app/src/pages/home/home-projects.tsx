@@ -6,16 +6,16 @@ export function HomeProjects(props: { projects: HomeProjectsController; scroll: 
   return (
     <HomeProjectsView
       language={props.projects.copy.language}
-      servers={props.projects.server.list}
-      projects={props.projects.project.list}
-      recentlyClosed={props.projects.project.recentlyClosed}
-      selection={props.projects.selection.value}
-      homedir={props.projects.project.homedir}
+      servers={props.projects.server.list()}
+      projects={props.projects.project.list()}
+      recentlyClosed={props.projects.project.recentlyClosed()}
+      selection={props.projects.selection.value()}
+      homedir={props.projects.project.homedir()}
       serverHealth={props.projects.server.health}
       projectsForServer={props.projects.server.projects}
       collapsed={props.projects.server.collapsed}
-      canDefaultServer={props.projects.server.canDefault}
-      defaultServerKey={props.projects.server.defaultKey}
+      canDefaultServer={props.projects.server.canDefault()}
+      defaultServerKey={props.projects.server.defaultKey()}
       canRevealProject={props.projects.project.canReveal}
       unseenCount={props.projects.project.unseenCount}
       onWheel={props.scroll.viewport.containWheel}

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { For } from "solid-js"
 import { iconNames } from "./provider-icons/types"
 import * as mod from "./provider-icon"
 import { create } from "../storybook/scaffold"
@@ -58,12 +59,14 @@ export const AllIcons = {
         "grid-template-columns": "repeat(auto-fill, minmax(80px, 1fr))",
       }}
     >
-      {iconNames.map((id) => (
-        <div style={{ display: "grid", gap: "6px", "justify-items": "center" }}>
-          <mod.ProviderIcon id={id} width="28" height="28" aria-label={id} />
-          <div style={{ "font-size": "10px", color: "var(--text-weak)", "text-align": "center" }}>{id}</div>
-        </div>
-      ))}
+      <For each={iconNames}>
+        {(id) => (
+          <div style={{ display: "grid", gap: "6px", "justify-items": "center" }}>
+            <mod.ProviderIcon id={id} width="28" height="28" aria-label={id} />
+            <div style={{ "font-size": "10px", color: "var(--text-weak)", "text-align": "center" }}>{id}</div>
+          </div>
+        )}
+      </For>
     </div>
   ),
 }

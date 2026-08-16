@@ -4,7 +4,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Environment } from "@opencode-ai/core/environment"
+import { Environment } from "@opencode-ai/core/environment/index"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { Formatter } from "@opencode-ai/core/formatter"
 import { Location } from "@opencode-ai/core/location"
@@ -14,10 +14,12 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { Tool } from "@opencode-ai/core/tool"
 import { EditTool } from "@opencode-ai/core/tool/plugin/edit"
+import { transformEnvironmentFiles } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { testEffect } from "./lib/effect"
+import { permissionLayer } from "./lib/permission"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const editToolNode = makeLocationNode({
@@ -42,30 +44,22 @@ let denyAction: string | undefined
 let afterRead = (_target: string, _content: Uint8Array): Effect.Effect<void> => Effect.void
 let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
 
-const permission = Layer.succeed(
-  Permission.Service,
-  Permission.Service.of({
-    assert: (input) =>
-      Effect.sync(() => assertions.push(input)).pipe(
-        Effect.andThen(
-          input.action === denyAction
-            ? Effect.fail(
-                new Permission.BlockedError({
-                  rules: [],
-                  permission: input.action,
-                  resources: input.resources,
-                }),
-              )
-            : Effect.void,
-        ),
+const permission = permissionLayer({
+  assert: (input) =>
+    Effect.sync(() => assertions.push(input)).pipe(
+      Effect.andThen(
+        input.action === denyAction
+          ? Effect.fail(
+              new Permission.BlockedError({
+                rules: [],
+                permission: input.action,
+                resources: input.resources,
+              }),
+            )
+          : Effect.void,
       ),
-    ask: () => Effect.die("unused"),
-    reply: () => Effect.die("unused"),
-    get: () => Effect.die("unused"),
-    forSession: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-  }),
-)
+    ),
+})
 
 const formatter = Layer.mock(Formatter.Service, {
   file: (target) => formatFile(target),
@@ -80,29 +74,6 @@ const reset = () => {
   formatFile = () => Effect.succeed(false)
 }
 
-const environment = Layer.effect(
-  Environment.Service,
-  Effect.gen(function* () {
-    const current = yield* Environment.Service
-    return Environment.Service.of({
-      ...current,
-      files: {
-        ...current.files,
-        read: (target, range) =>
-          current.files
-            .read(target, range)
-            .pipe(
-              Effect.tap((result) =>
-                Effect.sync(() => reads++).pipe(Effect.andThen(Effect.suspend(() => afterRead(target, result.bytes)))),
-              ),
-            ),
-        write: (target, content) =>
-          Effect.sync(() => writes.push(target)).pipe(Effect.andThen(current.files.write(target, content))),
-      },
-    })
-  }),
-).pipe(Layer.provide(LayerNode.compile(Environment.node)))
-
 const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) => Effect.Effect<A, E, R>) => {
   const activeLocation = Layer.succeed(
     Location.Service,
@@ -115,7 +86,23 @@ const withTool = <A, E, R>(directory: string, body: (registry: Tool.Interface) =
       AppNodeBuilder.build(
         LayerNode.group([Tool.node, Tool.node, LocationMutation.node, FileMutation.node, editToolNode]),
         [
-          [Environment.node, environment],
+          [
+            Environment.node,
+            transformEnvironmentFiles(activeLocation, (files) => ({
+              read: (target, range) =>
+                files
+                  .read(target, range)
+                  .pipe(
+                    Effect.tap((result) =>
+                      Effect.sync(() => reads++).pipe(
+                        Effect.andThen(Effect.suspend(() => afterRead(target, result.bytes))),
+                      ),
+                    ),
+                  ),
+              write: (target, content) =>
+                Effect.sync(() => writes.push(target)).pipe(Effect.andThen(files.write(target, content))),
+            })),
+          ],
           [Location.node, activeLocation],
           [Formatter.node, formatter],
           [Permission.node, permission],

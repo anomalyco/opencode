@@ -5,9 +5,7 @@ export interface PatchHunk {
 }
 
 export function splitPatchHunks(patch: string): PatchHunk[] {
-  const starts = [
-    ...patch.matchAll(/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@.*$/gm),
-  ].map((match) => match.index)
+  const starts = [...patch.matchAll(/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@.*$/gm)].map((match) => match.index)
   if (starts.length <= 1) return [{ patch }]
 
   const prefix = patch.slice(0, starts[0])
@@ -41,10 +39,7 @@ function splitRows(hunk: string) {
 
     let additions = 0
     let deletions = 0
-    while (
-      index < lines.length &&
-      (lines[index][0] === "+" || lines[index][0] === "-")
-    ) {
+    while (index < lines.length && (lines[index][0] === "+" || lines[index][0] === "-")) {
       if (lines[index][0] === "+") additions++
       if (lines[index][0] === "-") deletions++
       index++

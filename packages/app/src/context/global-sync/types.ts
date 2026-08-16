@@ -1,17 +1,7 @@
-import type {
-  Agent,
-  Config,
-  LspStatus,
-  Message,
-  Part,
-  Path,
-  Todo,
-  VcsInfo,
-} from "@/types"
+import type { Agent, Config, LspStatus, Message, Part, Path, Todo, VcsInfo } from "@/types"
 import type {
   FileDiffInfo,
   PermissionRequest,
-  QuestionRequest,
   ReferenceInfo,
   SessionInfo,
   SessionStatus,
@@ -58,9 +48,6 @@ export type State = {
   }
   permission: {
     [sessionID: string]: PermissionRequest[]
-  }
-  question: {
-    [sessionID: string]: QuestionRequest[]
   }
   mcp_ready: boolean
   mcp: {

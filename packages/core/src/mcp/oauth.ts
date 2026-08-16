@@ -1,13 +1,12 @@
-export * as MCPOAuth from "./oauth"
+export * as MCPOAuth from "./oauth.js"
 
 import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js"
-import { createServer } from "node:http"
 import { Deferred, Effect } from "effect"
 import { Credential } from "@opencode-ai/schema/credential"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
-import { OauthCallbackPage } from "../oauth/page"
-import type { Integration } from "../integration"
+import { OauthCallbackPage } from "../oauth/page.js"
+import type { Integration } from "../integration.js"
 
 /** Persists the OAuth artifacts for one MCP server session: DCR client info, PKCE verifier, and tokens. */
 export interface Store {
@@ -152,6 +151,8 @@ export const authorize = (input: {
     const redirectPath = oauth?.redirect_uri ? new URL(oauth.redirect_uri).pathname : "/callback"
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
 
+    // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
+    const { createServer } = yield* Effect.promise(() => import("node:http"))
     const server = createServer((request, response) => {
       const url = new URL(request.url ?? "/", "http://127.0.0.1")
       if (url.pathname !== redirectPath) {
@@ -160,7 +161,9 @@ export const authorize = (input: {
       }
       const fail = (reason: string) => {
         Effect.runFork(Deferred.fail(code, new Error(reason)))
-        response.writeHead(400, { "Content-Type": "text/html" }).end(OauthCallbackPage.error(reason, { provider: input.name }))
+        response
+          .writeHead(400, { "Content-Type": "text/html" })
+          .end(OauthCallbackPage.error(reason, { provider: input.name }))
       }
       const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
       if (error) return fail(error)
@@ -216,7 +219,12 @@ export const authorize = (input: {
 
     // The provider may already hold valid tokens (e.g. a re-auth), in which case there is no browser step.
     if (result === "AUTHORIZED") {
-      return { url: input.config.url, instructions: `Connected to ${input.name}.`, mode: "auto" as const, callback: finalize }
+      return {
+        url: input.config.url,
+        instructions: `Connected to ${input.name}.`,
+        mode: "auto" as const,
+        callback: finalize,
+      }
     }
     if (!authorizationUrl)
       return yield* Effect.fail(new Error(`MCP server "${input.name}" did not provide an authorization URL`))
@@ -228,7 +236,8 @@ export const authorize = (input: {
       callback: Deferred.await(code).pipe(
         Effect.flatMap((value) =>
           Effect.tryPromise({
-            try: () => auth(oauthProvider, { serverUrl: input.config.url, authorizationCode: value, scope: oauth?.scope }),
+            try: () =>
+              auth(oauthProvider, { serverUrl: input.config.url, authorizationCode: value, scope: oauth?.scope }),
             catch: (error) => (error instanceof Error ? error : new Error(String(error))),
           }),
         ),

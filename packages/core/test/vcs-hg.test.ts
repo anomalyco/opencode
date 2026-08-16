@@ -46,7 +46,10 @@ const withHg = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
   )
 
 async function hg(directory: string, ...args: string[]) {
-  await $`hg ${args}`.cwd(directory).env({ ...process.env, HGPLAIN: "1" }).quiet()
+  await $`hg ${args}`
+    .cwd(directory)
+    .env({ ...process.env, HGPLAIN: "1" })
+    .quiet()
 }
 
 async function commitAll(directory: string, message: string) {
@@ -117,11 +120,9 @@ describeHg("Vcs mercurial", () => {
         const bus = yield* Bus.Service
         expect(yield* vcs.info()).toEqual({ branch: { current: "default", default: "default" } })
 
-        const updated = yield* bus.subscribe(VcsEvent.BranchUpdated).pipe(
-          Stream.take(1),
-          Stream.runHead,
-          Effect.forkScoped({ startImmediately: true }),
-        )
+        const updated = yield* bus
+          .subscribe(VcsEvent.BranchUpdated)
+          .pipe(Stream.take(1), Stream.runHead, Effect.forkScoped({ startImmediately: true }))
         yield* Effect.promise(() => hg(directory, "branch", "-q", "feature"))
         expect(yield* vcs.info()).toEqual({ branch: { current: "default", default: "default" } })
 

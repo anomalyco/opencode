@@ -1,4 +1,4 @@
-import { isRecord } from "../../utils/record"
+import { isRecord } from "../../utils/record.js"
 
 // Gemini accepts a JSON Schema-like dialect for tool parameters, but rejects a
 // handful of common JSON Schema shapes. Keep this projection isolated so the
@@ -116,4 +116,4 @@ const projectNode = (schema: unknown, nested = false): Record<string, unknown> |
 
 export const convert = (schema: unknown) => projectNode(sanitizeNode(schema))
 
-export * as GeminiToolSchema from "./gemini-tool-schema"
+export * as GeminiToolSchema from "./gemini-tool-schema.js"

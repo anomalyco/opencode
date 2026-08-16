@@ -4,17 +4,17 @@ import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/eff
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import type { CredentialValue } from "@opencode-ai/sdk/v2/types"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { Bus } from "../../bus"
-import { Credential } from "../../credential"
-import { Integration } from "../../integration"
-import { Model } from "../../model"
-import { Provider } from "../../provider"
-import { ConfigProviderV1 } from "../../v1/config/provider"
+import { Bus } from "../../bus.js"
+import { Credential } from "../../credential.js"
+import { Integration } from "../../integration.js"
+import { Model } from "../../model.js"
+import { Provider } from "../../provider.js"
+import { ConfigProviderV1 } from "../../v1/config/provider.js"
 import { Money } from "@opencode-ai/schema/money"
-import { ConfigProviderOptionsV1 } from "../../v1/config/provider-options"
-import { ConfigV1 } from "../../v1/config/config"
+import { ConfigProviderOptionsV1 } from "../../v1/config/provider-options.js"
+import { ConfigV1 } from "../../v1/config/config.js"
 
-const defaultServer = "https://console.opencode.ai"
+const defaultServer = "https://opencode.ai/console"
 const clientID = "opencode-cli"
 const methodID = Integration.MethodID.make("device")
 const RemoteResponse = Schema.Struct({ config: ConfigV1.Info })
@@ -43,9 +43,9 @@ function oauth(http: HttpClient.HttpClient) {
       type: "oauth",
       label: "OpenCode Console account",
     },
-    authorize: (inputs) =>
+    authorize: (answer) =>
       Effect.gen(function* () {
-        const server = yield* normalizeServer(inputs.server ?? defaultServer)
+        const server = yield* normalizeServer(answer.server ?? defaultServer)
         const device = yield* post(http, `${server}/auth/device/code`, { client_id: clientID }, Device)
         const verification = URL.canParse(device.verification_uri_complete)
           ? new URL(device.verification_uri_complete)
@@ -178,7 +178,10 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
       if (!item) return
       const hasKey = Boolean(process.env.OPENCODE_API_KEY || connected || item.provider.settings?.apiKey)
       catalog.provider.update(item.provider.id, (provider) => {
-        if (!hasKey) provider.settings = { ...provider.settings, apiKey: "public" }
+        if (!hasKey) {
+          provider.activation = "enabled"
+          provider.settings = { ...provider.settings, apiKey: "public" }
+        }
       })
       if (hasKey) return
       for (const model of item.models.values()) {
@@ -226,9 +229,10 @@ function withoutCredentials(body: Readonly<Record<string, unknown>> | undefined)
   return Object.fromEntries(Object.entries(body ?? {}).filter(([key]) => key !== "apiKey" && key !== "headers"))
 }
 
-function normalizeServer(input: string) {
+function normalizeServer(input: unknown) {
   return Effect.try({
     try: () => {
+      if (typeof input !== "string") throw new Error("expected string")
       const url = new URL(input)
       if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("expected HTTP(S)")
       return `${url.origin}${url.pathname.replace(/\/+$/, "")}`

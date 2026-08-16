@@ -4,7 +4,7 @@ export type UpdaterState =
   | { status: "disabled" }
   | { status: "idle" }
   | { status: "checking" }
-  | { status: "downloading"; version: string; percent?: number }
+  | { status: "downloading"; version: string }
   | { status: "ready"; version: string }
   | { status: "up-to-date" }
   | { status: "installing"; version: string }

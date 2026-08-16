@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Message, Part, Project } from "@/types"
-import type { PermissionRequest, QuestionRequest, SessionInfo } from "@opencode-ai/client/promise"
+import type { PermissionRequest, SessionInfo } from "@opencode-ai/client/promise"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
@@ -16,12 +16,12 @@ const rootSession = (input: { id: string; parentID?: string; archived?: number }
     },
   }) as SessionInfo
 
-const userMessage = (id: string, sessionID: string) =>
+const userMessage = (id: string, sessionID: string, created = 1) =>
   ({
     id,
     sessionID,
     role: "user",
-    time: { created: 1 },
+    time: { created },
     agent: "assistant",
     model: { providerID: "openai", modelID: "gpt" },
   }) as Message
@@ -45,19 +45,6 @@ const permissionRequest = (id: string, sessionID: string, title = id) =>
     save: [],
   }) as PermissionRequest
 
-const questionRequest = (id: string, sessionID: string, title = id) =>
-  ({
-    id,
-    sessionID,
-    questions: [
-      {
-        question: title,
-        header: title,
-        options: [{ label: title, description: title }],
-      },
-    ],
-  }) as QuestionRequest
-
 const baseState = (input: Partial<State> = {}) =>
   ({
     status: "complete",
@@ -75,7 +62,6 @@ const baseState = (input: Partial<State> = {}) =>
     session_diff: {},
     todo: {},
     permission: {},
-    question: {},
     mcp: {},
     lsp: [],
     vcs: undefined,
@@ -120,7 +106,7 @@ describe("applyGlobalEvent", () => {
     expect(refreshCount).toBe(1)
   })
 
-  test("handles server.connected by triggering refresh", () => {
+  test("leaves server.connected refresh to the connection sync", () => {
     let refreshCount = 0
     applyGlobalEvent({
       event: { type: "server.connected" },
@@ -131,7 +117,7 @@ describe("applyGlobalEvent", () => {
       setGlobalProject() {},
     })
 
-    expect(refreshCount).toBe(1)
+    expect(refreshCount).toBe(0)
   })
 })
 
@@ -220,7 +206,6 @@ describe("applyDirectoryEvent", () => {
         session_diff: { ses_1: [] },
         todo: { ses_1: [] },
         permission: { ses_1: [] },
-        question: { ses_1: [] },
         session_status: { ses_1: { type: "busy" } },
       }),
     )
@@ -241,7 +226,6 @@ describe("applyDirectoryEvent", () => {
     expect(store.session_diff.ses_1).toBeUndefined()
     expect(store.todo.ses_1).toBeUndefined()
     expect(store.permission.ses_1).toBeUndefined()
-    expect(store.question.ses_1).toBeUndefined()
     expect(store.session_status.ses_1).toBeUndefined()
   })
 
@@ -282,7 +266,6 @@ describe("applyDirectoryEvent", () => {
           session_diff: { [item.info.id]: [] },
           todo: { [item.info.id]: [] },
           permission: { [item.info.id]: [] },
-          question: { [item.info.id]: [] },
           session_status: { [item.info.id]: { type: "busy" } },
         }),
       )
@@ -306,7 +289,6 @@ describe("applyDirectoryEvent", () => {
       expect(store.session_diff[item.info.id]).toBeUndefined()
       expect(store.todo[item.info.id]).toBeUndefined()
       expect(store.permission[item.info.id]).toBeUndefined()
-      expect(store.question[item.info.id]).toBeUndefined()
       expect(store.session_status[item.info.id]).toBeUndefined()
     }
   })
@@ -325,7 +307,6 @@ describe("applyDirectoryEvent", () => {
         session_diff: { [dropped.id]: [] },
         todo: { [dropped.id]: [] },
         permission: { [dropped.id]: [] },
-        question: { [dropped.id]: [] },
         session_status: { [dropped.id]: { type: "busy" } },
       }),
     )
@@ -349,7 +330,6 @@ describe("applyDirectoryEvent", () => {
     expect(store.session_diff[dropped.id]).toBeUndefined()
     expect(store.todo[dropped.id]).toBeUndefined()
     expect(store.permission[dropped.id]).toBeUndefined()
-    expect(store.question[dropped.id]).toBeUndefined()
     expect(store.session_status[dropped.id]).toBeUndefined()
     expect(todos).toEqual([dropped.id])
   })
@@ -371,13 +351,13 @@ describe("applyDirectoryEvent", () => {
     const sessionID = "ses_1"
     const [store, setStore] = createStore(
       baseState({
-        message: { [sessionID]: [userMessage("msg_1", sessionID), userMessage("msg_3", sessionID)] },
-        part: { msg_2: [textPart("prt_1", sessionID, "msg_2")] },
+        message: { [sessionID]: [userMessage("msg_z", sessionID, 1), userMessage("msg_b", sessionID, 3)] },
+        part: { msg_a: [textPart("prt_1", sessionID, "msg_a")] },
       }),
     )
 
     applyDirectoryEvent({
-      event: { type: "message.updated", properties: { info: userMessage("msg_2", sessionID) } },
+      event: { type: "message.updated", properties: { info: userMessage("msg_a", sessionID, 2) } },
       store,
       setStore,
       push() {},
@@ -385,14 +365,14 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
 
-    expect(store.message[sessionID]?.map((x) => x.id)).toEqual(["msg_1", "msg_2", "msg_3"])
+    expect(store.message[sessionID]?.map((x) => x.id)).toEqual(["msg_z", "msg_a", "msg_b"])
 
     applyDirectoryEvent({
       event: {
         type: "message.updated",
         properties: {
           info: {
-            ...userMessage("msg_2", sessionID),
+            ...userMessage("msg_a", sessionID, 2),
             role: "assistant",
           } as Message,
         },
@@ -404,10 +384,10 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
 
-    expect(store.message[sessionID]?.find((x) => x.id === "msg_2")?.role).toBe("assistant")
+    expect(store.message[sessionID]?.find((x) => x.id === "msg_a")?.role).toBe("assistant")
 
     applyDirectoryEvent({
-      event: { type: "message.removed", properties: { sessionID, messageID: "msg_2" } },
+      event: { type: "message.removed", properties: { sessionID, messageID: "msg_a" } },
       store,
       setStore,
       push() {},
@@ -415,8 +395,8 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
 
-    expect(store.message[sessionID]?.map((x) => x.id)).toEqual(["msg_1", "msg_3"])
-    expect(store.part.msg_2).toBeUndefined()
+    expect(store.message[sessionID]?.map((x) => x.id)).toEqual(["msg_z", "msg_b"])
+    expect(store.part.msg_a).toBeUndefined()
   })
 
   test("upserts and prunes message parts", () => {
@@ -486,12 +466,11 @@ describe("applyDirectoryEvent", () => {
     expect(store.part[messageID]).toBeUndefined()
   })
 
-  test("tracks permission and question request lifecycles", () => {
+  test("tracks permission request lifecycles", () => {
     const sessionID = "ses_1"
     const [store, setStore] = createStore(
       baseState({
         permission: { [sessionID]: [permissionRequest("perm_1", sessionID), permissionRequest("perm_3", sessionID)] },
-        question: { [sessionID]: [questionRequest("q_1", sessionID), questionRequest("q_3", sessionID)] },
       }),
     )
 
@@ -524,36 +503,6 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
     expect(store.permission[sessionID]?.map((x) => x.id)).toEqual(["perm_1", "perm_3"])
-
-    applyDirectoryEvent({
-      event: { type: "question.asked", properties: questionRequest("q_2", sessionID) },
-      store,
-      setStore,
-      push() {},
-      directory: "/tmp",
-      loadLsp() {},
-    })
-    expect(store.question[sessionID]?.map((x) => x.id)).toEqual(["q_1", "q_2", "q_3"])
-
-    applyDirectoryEvent({
-      event: { type: "question.asked", properties: questionRequest("q_2", sessionID, "updated") },
-      store,
-      setStore,
-      push() {},
-      directory: "/tmp",
-      loadLsp() {},
-    })
-    expect(store.question[sessionID]?.find((x) => x.id === "q_2")?.questions[0]?.header).toBe("updated")
-
-    applyDirectoryEvent({
-      event: { type: "question.rejected", properties: { sessionID, requestID: "q_2" } },
-      store,
-      setStore,
-      push() {},
-      directory: "/tmp",
-      loadLsp() {},
-    })
-    expect(store.question[sessionID]?.map((x) => x.id)).toEqual(["q_1", "q_3"])
   })
 
   test("updates vcs branch in store and cache", () => {

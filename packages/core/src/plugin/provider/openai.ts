@@ -1,15 +1,13 @@
-import { createServer } from "node:http"
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
-import { App } from "../../app"
-import { Credential } from "../../credential"
-import { Bus } from "../../bus"
-import { Integration } from "../../integration"
-import { Model } from "../../model"
-import { OauthCallbackPage } from "../../oauth/page"
-import { Provider } from "../../provider"
-import type { PluginInternal } from "../internal"
+import { App } from "../../app.js"
+import { Credential } from "../../credential.js"
+import { Bus } from "../../bus.js"
+import { Integration } from "../../integration.js"
+import { OauthCallbackPage } from "../../oauth/page.js"
+import { Provider } from "../../provider.js"
+import type { PluginInternal } from "../internal.js"
 
 const clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const issuer = "https://auth.openai.com"
@@ -44,122 +42,128 @@ const Claims = Schema.fromJsonString(
 )
 const decodeClaims = Schema.decodeUnknownOption(Claims)
 
-const browser = (app: App.Info) => ({
-  integrationID: Integration.ID.make("openai"),
-  method: {
-    id: browserMethodID,
-    type: "oauth",
-    label: "ChatGPT Pro/Plus (browser)",
-  },
-  authorize: () =>
-    Effect.gen(function* () {
-      const pkce = yield* Effect.promise(generatePKCE)
-      const state = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
-      const code = yield* Deferred.make<string, Error>()
-      const redirect = `http://localhost:${callbackPort}/auth/callback`
-      const server = createServer((request, response) => {
-        const url = new URL(request.url ?? "/", `http://localhost:${callbackPort}`)
-        if (url.pathname !== "/auth/callback") {
-          response.writeHead(404).end("Not found")
-          return
-        }
-        const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
-        const value = url.searchParams.get("code")
-        if (error) {
-          Effect.runFork(Deferred.fail(code, new Error(error)))
-          response
-            .writeHead(400, { "Content-Type": "text/html" })
-            .end(OauthCallbackPage.error(error, { provider: "ChatGPT" }))
-          return
-        }
-        if (!value || url.searchParams.get("state") !== state) {
-          const message = value ? "Invalid OAuth state" : "Missing authorization code"
-          Effect.runFork(Deferred.fail(code, new Error(message)))
-          response
-            .writeHead(400, { "Content-Type": "text/html" })
-            .end(OauthCallbackPage.error(message, { provider: "ChatGPT" }))
-          return
-        }
-        Effect.runFork(Deferred.succeed(code, value))
-        response.writeHead(200, { "Content-Type": "text/html" }).end(OauthCallbackPage.success({ provider: "ChatGPT" }))
-      })
-      yield* Effect.callback<void, Error>((resume) => {
-        server.once("error", (error) => resume(Effect.fail(error)))
-        server.listen(callbackPort, "localhost", () => resume(Effect.void))
-      })
-      yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
-      return {
-        mode: "auto" as const,
-        url: authorizeURL(redirect, pkce, state),
-        instructions: "Complete authorization in your browser. This window will close automatically.",
-        callback: Deferred.await(code).pipe(
-          Effect.flatMap((value) => exchange(value, redirect, pkce, app)),
-          Effect.map((tokens) => credential(browserMethodID, tokens)),
-        ),
-      }
-    }),
-  refresh: (value) => refresh(browserMethodID, value, app),
-}) satisfies IntegrationOAuthMethodRegistration
-
-const headless = (app: App.Info) => ({
-  integrationID: Integration.ID.make("openai"),
-  method: {
-    id: headlessMethodID,
-    type: "oauth",
-    label: "ChatGPT Pro/Plus (headless)",
-  },
-  authorize: () =>
-    Effect.gen(function* () {
-      const device = yield* request<{ device_auth_id: string; user_code: string; interval: string }>(
-        `${issuer}/api/accounts/deviceauth/usercode`,
-        {
-          method: "POST",
-          headers: headers("application/json", app),
-          body: JSON.stringify({ client_id: clientID }),
-        },
-      )
-      const interval = Math.max(Number.parseInt(device.interval) || 5, 1) * 1000
-      return {
-        mode: "auto" as const,
-        url: `${issuer}/codex/device`,
-        instructions: `Enter code: ${device.user_code}`,
-        callback: Effect.gen(function* () {
-          while (true) {
-            const response = yield* Effect.tryPromise({
-              try: (signal) =>
-                fetch(`${issuer}/api/accounts/deviceauth/token`, {
-                  method: "POST",
-                  headers: headers("application/json", app),
-                  body: JSON.stringify({ device_auth_id: device.device_auth_id, user_code: device.user_code }),
-                  signal,
-                }),
-              catch: (cause) => cause,
-            })
-            if (response.ok) {
-              const data = (yield* Effect.promise(() => response.json())) as {
-                authorization_code: string
-                code_verifier: string
-              }
-              return credential(
-                headlessMethodID,
-                yield* exchange(
-                  data.authorization_code,
-                  `${issuer}/deviceauth/callback`,
-                  { verifier: data.code_verifier, challenge: "" },
-                  app,
-                ),
-              )
-            }
-            if (response.status !== 403 && response.status !== 404) {
-              return yield* Effect.fail(new Error(`Device authorization failed: ${response.status}`))
-            }
-            yield* Effect.sleep(interval + pollingSafetyMargin)
+const browser = (app: App.Info) =>
+  ({
+    integrationID: Integration.ID.make("openai"),
+    method: {
+      id: browserMethodID,
+      type: "oauth",
+      label: "ChatGPT Pro/Plus (browser)",
+    },
+    authorize: () =>
+      Effect.gen(function* () {
+        const pkce = yield* Effect.promise(generatePKCE)
+        const state = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
+        const code = yield* Deferred.make<string, Error>()
+        const redirect = `http://localhost:${callbackPort}/auth/callback`
+        // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
+        const { createServer } = yield* Effect.promise(() => import("node:http"))
+        const server = createServer((request, response) => {
+          const url = new URL(request.url ?? "/", `http://localhost:${callbackPort}`)
+          if (url.pathname !== "/auth/callback") {
+            response.writeHead(404).end("Not found")
+            return
           }
-        }),
-      }
-    }),
-  refresh: (value) => refresh(headlessMethodID, value, app),
-}) satisfies IntegrationOAuthMethodRegistration
+          const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
+          const value = url.searchParams.get("code")
+          if (error) {
+            Effect.runFork(Deferred.fail(code, new Error(error)))
+            response
+              .writeHead(400, { "Content-Type": "text/html" })
+              .end(OauthCallbackPage.error(error, { provider: "ChatGPT" }))
+            return
+          }
+          if (!value || url.searchParams.get("state") !== state) {
+            const message = value ? "Invalid OAuth state" : "Missing authorization code"
+            Effect.runFork(Deferred.fail(code, new Error(message)))
+            response
+              .writeHead(400, { "Content-Type": "text/html" })
+              .end(OauthCallbackPage.error(message, { provider: "ChatGPT" }))
+            return
+          }
+          Effect.runFork(Deferred.succeed(code, value))
+          response
+            .writeHead(200, { "Content-Type": "text/html" })
+            .end(OauthCallbackPage.success({ provider: "ChatGPT" }))
+        })
+        yield* Effect.callback<void, Error>((resume) => {
+          server.once("error", (error) => resume(Effect.fail(error)))
+          server.listen(callbackPort, "localhost", () => resume(Effect.void))
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
+        return {
+          mode: "auto" as const,
+          url: authorizeURL(redirect, pkce, state),
+          instructions: "Complete authorization in your browser. This window will close automatically.",
+          callback: Deferred.await(code).pipe(
+            Effect.flatMap((value) => exchange(value, redirect, pkce, app)),
+            Effect.map((tokens) => credential(browserMethodID, tokens)),
+          ),
+        }
+      }),
+    refresh: (value) => refresh(browserMethodID, value, app),
+  }) satisfies IntegrationOAuthMethodRegistration
+
+const headless = (app: App.Info) =>
+  ({
+    integrationID: Integration.ID.make("openai"),
+    method: {
+      id: headlessMethodID,
+      type: "oauth",
+      label: "ChatGPT Pro/Plus (headless)",
+    },
+    authorize: () =>
+      Effect.gen(function* () {
+        const device = yield* request<{ device_auth_id: string; user_code: string; interval: string }>(
+          `${issuer}/api/accounts/deviceauth/usercode`,
+          {
+            method: "POST",
+            headers: headers("application/json", app),
+            body: JSON.stringify({ client_id: clientID }),
+          },
+        )
+        const interval = Math.max(Number.parseInt(device.interval) || 5, 1) * 1000
+        return {
+          mode: "auto" as const,
+          url: `${issuer}/codex/device`,
+          instructions: `Enter code: ${device.user_code}`,
+          callback: Effect.gen(function* () {
+            while (true) {
+              const response = yield* Effect.tryPromise({
+                try: (signal) =>
+                  fetch(`${issuer}/api/accounts/deviceauth/token`, {
+                    method: "POST",
+                    headers: headers("application/json", app),
+                    body: JSON.stringify({ device_auth_id: device.device_auth_id, user_code: device.user_code }),
+                    signal,
+                  }),
+                catch: (cause) => cause,
+              })
+              if (response.ok) {
+                const data = (yield* Effect.promise(() => response.json())) as {
+                  authorization_code: string
+                  code_verifier: string
+                }
+                return credential(
+                  headlessMethodID,
+                  yield* exchange(
+                    data.authorization_code,
+                    `${issuer}/deviceauth/callback`,
+                    { verifier: data.code_verifier, challenge: "" },
+                    app,
+                  ),
+                )
+              }
+              if (response.status !== 403 && response.status !== 404) {
+                return yield* Effect.fail(new Error(`Device authorization failed: ${response.status}`))
+              }
+              yield* Effect.sleep(interval + pollingSafetyMargin)
+            }
+          }),
+        }
+      }),
+    refresh: (value) => refresh(headlessMethodID, value, app),
+  }) satisfies IntegrationOAuthMethodRegistration
 
 export const OpenAIPlugin = define({
   id: "opencode.provider.openai",
@@ -198,10 +202,10 @@ export const OpenAIPlugin = define({
       if (!item) return
       item.provider.settings = Provider.mergeOverlay(item.provider.settings, { baseURL: codexBaseURL })
       const account = chatgpt.metadata?.accountID
-      item.provider.headers = Provider.mergeHeaders(
-        item.provider.headers,
-        typeof account === "string" ? { "chatgpt-account-id": account } : undefined,
-      )
+      item.provider.headers = Provider.mergeHeaders(item.provider.headers, {
+        originator: "opencode",
+        ...(typeof account === "string" ? { "chatgpt-account-id": account } : {}),
+      })
       for (const model of item.models.values()) {
         // ChatGPT-plan tokens only authorize codex-eligible models, and the
         // subscription covers usage, so hide the rest and zero the cost.
@@ -225,17 +229,6 @@ export const OpenAIPlugin = define({
         })
       }
     })
-    yield* ctx.session.hook("http.request", (evt) =>
-      Effect.sync(() => {
-        if (!chatgpt || evt.model.providerID !== Provider.ID.openai) return
-        const url = new URL(evt.request.url)
-        evt.request.headers.set("originator", "opencode")
-        evt.request.headers.set("session-id", evt.sessionID)
-        if (url.origin !== "https://api.openai.com") return
-        evt.request = new Request(`${codexBaseURL}${url.pathname.replace(/^\/v1/, "")}${url.search}`, evt.request)
-      }),
-    )
-
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
     yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),

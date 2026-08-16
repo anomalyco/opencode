@@ -5,7 +5,7 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Suspense, createMemo, createSignal, lazy, Show, type JSX } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { ServerConnection, useServer } from "@/context/server"
+import { ServerConnection, useServers } from "@/context/servers"
 import { useServerSDK } from "@/context/server-sdk"
 import { useSync } from "@/context/sync"
 import { useGlobal } from "@/context/global"
@@ -14,9 +14,9 @@ import {
   hasServiceNeedingAttention,
   serverStatusDotClass,
 } from "./status-popover-indicator"
+import { useServer } from "@/context/server"
 
 const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
-const ServerBody = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverServerBody })))
 
 export function StatusPopover() {
   const language = useLanguage()
@@ -75,25 +75,20 @@ export function StatusPopover() {
             <div class="w-[360px] h-14 rounded-xl bg-background-strong shadow-[var(--shadow-lg-border-base)]" />
           }
         >
-          <Body shown={shown} />
+          <Body shown={shown()} />
         </Suspense>
       </Show>
     </Popover>
   )
 }
 
-export function StatusPopoverV2(props: { scope?: "server" }) {
-  if (props.scope === "server") return <ServerStatusPopover />
-  return <DirectoryStatusPopover />
-}
-
-function DirectoryStatusPopover() {
+export function StatusPopoverV2() {
   const language = useLanguage()
-  const server = useServerSDK()
+  const server = useServer()
   const global = useGlobal()
   const sync = useSync()
   const [shown, setShown] = createSignal(false)
-  const serverHealth = () => global.servers.health[ServerConnection.key(server().server)]?.healthy
+  const serverHealth = () => global.servers.health[server.key]?.healthy
   const ready = createMemo(() => serverHealth() === false || (sync().data.mcp_ready && sync().data.lsp_ready))
   const attention = createMemo(() =>
     hasServiceNeedingAttention({
@@ -116,31 +111,7 @@ function DirectoryStatusPopover() {
     onOpenChange: setShown,
     body: () => (
       <StatusPopoverBody shown={shown()}>
-        <Body shown={shown} />
-      </StatusPopoverBody>
-    ),
-  }))
-
-  return <StatusPopoverView state={state()} />
-}
-
-function ServerStatusPopover() {
-  const language = useLanguage()
-  const server = useServer()
-  const global = useGlobal()
-  const [shown, setShown] = createSignal(false)
-  const serverHealth = () => global.servers.health[server.key]?.healthy
-  const state = createMemo<StatusPopoverState>(() => ({
-    shown: shown(),
-    ready: serverHealth() !== undefined,
-    serverHealth: serverHealth(),
-    attention: false,
-    issue: false,
-    label: language.t("status.popover.trigger"),
-    onOpenChange: setShown,
-    body: () => (
-      <StatusPopoverBody shown={shown()}>
-        <ServerBody />
+        <Body shown={shown()} />
       </StatusPopoverBody>
     ),
   }))

@@ -1,16 +1,17 @@
-export * as Command from "./command"
+export * as Command from "./command.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Command } from "@opencode-ai/schema/command"
-import { State } from "./state"
-import { MCP } from "./mcp/index"
-import { Bus } from "./bus"
+import { State } from "./state.js"
+import { MCP } from "./mcp/index.js"
+import { Bus } from "./bus.js"
 import { AppProcess } from "@opencode-ai/util/process"
 import { ChildProcess } from "effect/unstable/process"
-import { Config } from "./config"
-import { Location } from "./location"
-import { ShellSelect } from "./shell/select"
+import { Config } from "./config.js"
+import { Location } from "./location.js"
+import { ShellSelect } from "./shell/select.js"
+import { Global } from "@opencode-ai/util/global"
 
 export const Info = Command.Info
 export type Info = Command.Info
@@ -52,103 +53,110 @@ export interface Interface extends State.Transformable<Draft> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Command") {}
 
-export const layer = (options?: ShellSelect.Options) => Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const mcp = yield* MCP.Service
-    const bus = yield* Bus.Service
-    const processes = yield* AppProcess.Service
-    const config = yield* Config.Service
-    const location = yield* Location.Service
-    const state = State.create<Data, Draft>({
-      name: "command",
-      initial: () => ({ commands: new Map() }),
-      draft: (draft) => ({
-        list: () => Array.from(draft.commands.values()) as Info[],
-        get: (name) => draft.commands.get(name),
-        update: (name, update) => {
-          const current = draft.commands.get(name) ?? ({ name, template: "" } as Types.DeepMutable<Info>)
-          if (!draft.commands.has(name)) draft.commands.set(name, current)
-          update(current)
-          current.name = name
-        },
-        remove: (name) => {
-          draft.commands.delete(name)
-        },
-      }),
-      finalize: () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
-    })
-    const staticCommand = (name: string) => state.get().commands.get(name) as Info | undefined
-    const mcpCommands = Effect.fnUntraced(function* () {
-      return (yield* mcp.prompts()).map((prompt) =>
-        Info.make({
-          name: mcpCommandName(prompt.server, prompt.name),
-          template: "",
-          description: prompt.description,
+export const layer = (options?: ShellSelect.Options) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const mcp = yield* MCP.Service
+      const bus = yield* Bus.Service
+      const processes = yield* AppProcess.Service
+      const config = yield* Config.Service
+      const location = yield* Location.Service
+      const global = yield* Global.Service
+      const state = State.create<Data, Draft>({
+        name: "command",
+        initial: () => ({ commands: new Map() }),
+        draft: (draft) => ({
+          list: () => Array.from(draft.commands.values()) as Info[],
+          get: (name) => draft.commands.get(name),
+          update: (name, update) => {
+            const current = draft.commands.get(name) ?? ({ name, template: "" } as Types.DeepMutable<Info>)
+            if (!draft.commands.has(name)) draft.commands.set(name, current)
+            update(current)
+            current.name = name
+          },
+          remove: (name) => {
+            draft.commands.delete(name)
+          },
         }),
-      )
-    })
+        finalize: () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
+      })
+      const staticCommand = (name: string) => state.get().commands.get(name) as Info | undefined
+      const mcpCommands = Effect.fnUntraced(function* () {
+        return (yield* mcp.prompts()).map((prompt) =>
+          Info.make({
+            name: mcpCommandName(prompt.server, prompt.name),
+            template: "",
+            description: prompt.description,
+          }),
+        )
+      })
 
-    return Service.of({
-      reload: state.reload,
-      transform: state.transform,
-      get: Effect.fn("Command.get")(function* (name) {
-        const command = staticCommand(name)
-        if (command) return command
-        return (yield* mcpCommands()).find((command) => command.name === name)
-      }),
-      list: Effect.fn("Command.list")(function* () {
-        const commands = Array.from(state.get().commands.values()) as Info[]
-        const names = new Set(commands.map((command) => command.name))
-        return [
-          ...commands,
-          ...(yield* mcpCommands()).filter((command) => !names.has(command.name)),
-        ]
-      }),
-      evaluate: Effect.fn("Command.evaluate")(function* (input) {
-        const command = staticCommand(input.name)
-        if (command) return yield* evaluateTemplate(input.name, command.template, input.arguments ?? "", {
-          config,
-          location,
-          processes,
-          shell: options,
-        })
+      return Service.of({
+        reload: state.reload,
+        transform: state.transform,
+        get: Effect.fn("Command.get")(function* (name) {
+          const command = staticCommand(name)
+          if (command) return command
+          return (yield* mcpCommands()).find((command) => command.name === name)
+        }),
+        list: Effect.fn("Command.list")(function* () {
+          const commands = Array.from(state.get().commands.values()) as Info[]
+          const names = new Set(commands.map((command) => command.name))
+          return [...commands, ...(yield* mcpCommands()).filter((command) => !names.has(command.name))]
+        }),
+        evaluate: Effect.fn("Command.evaluate")(function* (input) {
+          const command = staticCommand(input.name)
+          if (command)
+            return yield* evaluateTemplate(input.name, command.template, input.arguments ?? "", {
+              config,
+              location,
+              processes,
+              shell: options,
+              bin: global.bin,
+            })
 
-        const prompt = (yield* mcp.prompts()).find((prompt) => mcpCommandName(prompt.server, prompt.name) === input.name)
-        if (!prompt) return yield* new NotFoundError({ command: input.name, message: `Command not found: ${input.name}` })
-        const result = yield* mcp
-          .prompt({
-            server: prompt.server,
-            name: prompt.name,
-            args: Object.fromEntries(
-              (prompt.arguments ?? []).map((argument, index) => [
-                argument.name,
-                parseArguments(input.arguments ?? "")[index] ?? "",
-              ]),
-            ),
-          })
-          .pipe(
-            Effect.catchTag(
-              "MCP.NotFoundError",
-              () =>
+          const prompt = (yield* mcp.prompts()).find(
+            (prompt) => mcpCommandName(prompt.server, prompt.name) === input.name,
+          )
+          if (!prompt)
+            return yield* new NotFoundError({ command: input.name, message: `Command not found: ${input.name}` })
+          const result = yield* mcp
+            .prompt({
+              server: prompt.server,
+              name: prompt.name,
+              args: Object.fromEntries(
+                (prompt.arguments ?? []).map((argument, index) => [
+                  argument.name,
+                  parseArguments(input.arguments ?? "")[index] ?? "",
+                ]),
+              ),
+            })
+            .pipe(
+              Effect.catchTag("MCP.NotFoundError", () =>
                 Effect.fail(
                   new EvaluationError({
                     command: input.name,
                     message: `MCP server could not be found while evaluating prompt: ${prompt.server}`,
                   }),
                 ),
-            ),
-          )
-        if (!result)
-          return yield* new EvaluationError({
-            command: input.name,
-            message: `MCP prompt could not be evaluated: ${prompt.server}:${prompt.name}`,
-          })
-        return { text: result.messages.map((message) => promptMessageText(message.content)).join("\n").trim() }
-      }),
-    })
-  }),
-)
+              ),
+            )
+          if (!result)
+            return yield* new EvaluationError({
+              command: input.name,
+              message: `MCP prompt could not be evaluated: ${prompt.server}:${prompt.name}`,
+            })
+          return {
+            text: result.messages
+              .map((message) => promptMessageText(message.content))
+              .join("\n")
+              .trim(),
+          }
+        }),
+      })
+    }),
+  )
 
 function evaluateTemplate(
   command: string,
@@ -159,6 +167,7 @@ function evaluateTemplate(
     readonly location: Location.Info
     readonly processes: AppProcess.Interface
     readonly shell?: ShellSelect.Options
+    readonly bin: string
   },
 ) {
   return Effect.gen(function* () {
@@ -179,7 +188,8 @@ function evaluateArguments(template: string, input: string) {
     return args[argIndex]
   })
   const withArguments = expanded.replaceAll("$ARGUMENTS", input)
-  if (placeholders.length === 0 && !template.includes("$ARGUMENTS") && input.trim()) return `${withArguments}\n\n${input}`.trim()
+  if (placeholders.length === 0 && !template.includes("$ARGUMENTS") && input.trim())
+    return `${withArguments}\n\n${input}`.trim()
   return withArguments.trim()
 }
 
@@ -191,24 +201,38 @@ const evaluateShell = Effect.fnUntraced(function* (
     readonly location: Location.Info
     readonly processes: AppProcess.Interface
     readonly shell?: ShellSelect.Options
+    readonly bin: string
   },
 ) {
   const matches = Array.from(text.matchAll(shellRegex))
   if (matches.length === 0) return text
-  const shell = ShellSelect.preferred(Config.latest(yield* services.config.entries(), "shell"), services.shell)
+  const shell = ShellSelect.preferred(
+    Config.latest(yield* services.config.entries(), "shell"),
+    services.shell,
+    services.bin,
+  )
   const outputs = yield* Effect.forEach(
     matches,
     (match) => {
       const source = match[1] ?? ""
       return services.processes
-        .run(ChildProcess.make(shell, ShellSelect.args(shell, source), { cwd: services.location.directory, stdin: "ignore" }), {
-          combineOutput: true,
-        })
+        .run(
+          ChildProcess.make(shell, ShellSelect.args(shell, source), {
+            cwd: services.location.directory,
+            stdin: "ignore",
+          }),
+          {
+            combineOutput: true,
+          },
+        )
         .pipe(
           Effect.map((result) => (result.output ?? Buffer.concat([result.stdout, result.stderr])).toString("utf8")),
           Effect.mapError(
             (error) =>
-              new EvaluationError({ command, message: `Shell interpolation failed for ${JSON.stringify(source)}: ${error.message}` }),
+              new EvaluationError({
+                command,
+                message: `Shell interpolation failed for ${JSON.stringify(source)}: ${error.message}`,
+              }),
           ),
         )
     },
@@ -247,7 +271,7 @@ export function configured(options?: ShellSelect.Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [MCP.node, Bus.node, AppProcess.node, Config.node, Location.node],
+    deps: [MCP.node, Bus.node, AppProcess.node, Config.node, Location.node, Global.node],
   })
 }
 

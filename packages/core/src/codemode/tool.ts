@@ -1,9 +1,9 @@
-export * as CodeModeTool from "./tool"
+export * as CodeModeTool from "./tool.js"
 
 import { CodeMode, Tool, toolError } from "@opencode-ai/codemode"
 import type { Content, Context, Error, Info, Metadata, Result } from "@opencode-ai/schema/tool"
 import { Effect, Ref, Schema, Semaphore } from "effect"
-import { definition } from "../tool/runtime"
+import { definition } from "../tool/runtime.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -43,14 +43,9 @@ const description = [
 
 export const create = (
   registrations: ReadonlyMap<string, Info>,
-  executeTool: (
-    name: string,
-    tool: Info,
-    input: unknown,
-    context: Context,
-  ) => Effect.Effect<Result, Error>,
+  executeTool: (name: string, tool: Info, input: unknown, context: Context) => Effect.Effect<Result, Error>,
 ) => {
-  return ({
+  return {
     name: "execute",
     description,
     input: CodeMode.Input,
@@ -76,11 +71,13 @@ export const create = (
               const content =
                 typeof executed.content === "string"
                   ? [{ type: "text" as const, text: executed.content }]
-                  : executed.content ?? []
+                  : (executed.content ?? [])
               const outputFileParts = outputFiles(content)
               if (outputFileParts.length > 0)
                 yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-              return executed.output
+              if (executed.output !== undefined) return executed.output
+              const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+              return text === "" ? null : text
             }),
           {
             onToolCallStart: ({ index, name, input }) => {
@@ -134,7 +131,7 @@ export const create = (
           metadata,
         }
       }),
-  }) satisfies Info
+  } satisfies Info
 }
 
 export const catalog = (registrations: ReadonlyMap<string, Info>) => {
@@ -160,7 +157,7 @@ function runtime(
     tools[path] = Tool.make({
       description: child.description,
       input: child.inputSchema,
-      output: child.outputSchema,
+      output: child.outputSchema ?? Schema.NullOr(Schema.String),
       execute: (input) => executeTool(name, registration, input),
     })
   }

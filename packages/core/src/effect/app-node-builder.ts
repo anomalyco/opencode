@@ -1,5 +1,5 @@
-import { buildLocationServiceMap } from "../location-services"
-import { LocationServiceMap } from "../location-service-map"
+import { buildLocationServiceMap } from "../location-services.js"
+import { LocationServiceMap } from "../location-service-map.js"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 
@@ -20,4 +20,4 @@ function hasReplacement(replacements: LayerNode.Replacements, node: LayerNode.No
   return replacements.some(([source]) => source.name === node.name)
 }
 
-export * as AppNodeBuilder from "./app-node-builder"
+export * as AppNodeBuilder from "./app-node-builder.js"

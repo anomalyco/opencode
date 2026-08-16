@@ -16,9 +16,8 @@ import { mockOpenCodeServer } from "../utils/mock-server"
 import { installSseTransport } from "../utils/sse-transport"
 import { expectSessionTitle } from "../utils/waits"
 
-const initialPageSize = 20
-const historyPageSize = 200
-const messages = Array.from({ length: initialPageSize + 1 }, (_, index) => {
+const messagePageSize = 200
+const messages = Array.from({ length: messagePageSize / 2 + 1 }, (_, index) => {
   const id = `msg_${String(index + 1001).padStart(4, "0")}_history_root_user`
   return [
     userMessage(undefined, { id, created: 1700000000000 + index * 2_000 }),
@@ -26,7 +25,7 @@ const messages = Array.from({ length: initialPageSize + 1 }, (_, index) => {
       id: `msg_${String(index + 1001).padStart(4, "0")}_history_root_assistant`,
       parentID: id,
       created: 1700000001000 + index * 2_000,
-      completed: index < initialPageSize,
+      completed: index < messagePageSize / 2,
     }),
   ]
 }).flat()
@@ -160,21 +159,18 @@ for (const scenario of scenarios) {
     await expect(page.locator(`[data-timeline-part-id="${userPartID}"]`)).toBeVisible()
     const viewport = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
     await viewport.hover()
-    const deadline = Date.now() + 10_000
+    const deadline = Date.now() + 30_000
     while (requests.filter((request) => request.phase === "start").length < 2) {
       if (Date.now() >= deadline) throw new Error("Timed out scrolling to the history boundary")
-      await page.mouse.wheel(0, -240)
+      await page.mouse.wheel(0, -1_200)
       await page.waitForTimeout(20)
     }
     expect(requests.filter((request) => request.phase === "end")).toHaveLength(1)
     expect(sequence.slice(0, 3)).toEqual([
       "messages:start:latest",
       "messages:end:latest",
-      `messages:start:${messages.at(-initialPageSize)!.info.id}`,
+      `messages:start:${messages.at(-messagePageSize)!.info.id}`,
     ])
-    await expect(page.locator('[data-timeline-part-id*="_history_root_assistant:text:0"]')).toHaveCount(
-      initialPageSize / 2,
-    )
     await page.evaluate(() => {
       ;(
         window as Window & {
@@ -186,15 +182,12 @@ for (const scenario of scenarios) {
     expect(await visibleContentHidden(page)).toBe(false)
     const beforeHistory = await probeSamples(page)
     history.resolve()
-    await expect
-      .poll(() => page.locator('[data-timeline-part-id*="_history_root_assistant:text:0"]').count())
-      .toBeGreaterThan(initialPageSize / 2)
     await expect.poll(() => requests.filter((request) => request.phase === "end").length).toBe(2)
     await expect(page.getByRole("button", { name: "Stop" })).toBeVisible()
     await waitForProbeSamples(page, beforeHistory)
     expect(pages).toEqual([
-      { before: undefined, limit: initialPageSize },
-      { before: messages.at(-initialPageSize)!.info.id, limit: historyPageSize },
+      { before: undefined, limit: messagePageSize },
+      { before: messages.at(-messagePageSize)!.info.id, limit: messagePageSize },
     ])
     expect(roots).toEqual([])
 

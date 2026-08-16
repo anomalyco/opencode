@@ -1,12 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:bedrock-converse-cache",
-      "provider:amazon-bedrock",
-      "protocol:bedrock-converse",
-      "cache"
-    ],
+    "tags": ["prefix:bedrock-converse-cache", "provider:amazon-bedrock", "protocol:bedrock-converse", "cache"],
     "name": "bedrock-converse-cache/writes-then-reads-cachepoint-on-identical-second-call",
     "recordedAt": "2026-07-23T02:29:10.955Z"
   },

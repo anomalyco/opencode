@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { selectPromptTab } from "@/context/prompt"
 import type { Tab } from "@/context/tabs"
 

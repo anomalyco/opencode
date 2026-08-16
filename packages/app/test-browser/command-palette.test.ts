@@ -4,7 +4,7 @@ import type { SessionInfo } from "@opencode-ai/client/promise"
 import { createRoot } from "solid-js"
 import { createServerSessionEntries } from "@/components/command-palette"
 import type { LocalProject } from "@/context/layout"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { getProjectAvatarSource } from "@/pages/layout/helpers"
 
 const stored: Project = {

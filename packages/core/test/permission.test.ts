@@ -26,14 +26,7 @@ const current = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([
-      Database.node,
-      Bus.node,
-      SessionStore.node,
-      PermissionSaved.node,
-      Agent.node,
-      Permission.node,
-    ]),
+    LayerNode.group([Database.node, Bus.node, SessionStore.node, PermissionSaved.node, Agent.node, Permission.node]),
     [[Location.node, current]],
   ),
 )
@@ -116,6 +109,31 @@ describe("Permission", () => {
       yield* setRules([])
       expect(yield* service.ask(assertion())).toEqual({ id: Permission.ID.create("per_test"), effect: "ask" })
       expect(yield* service.get(Permission.ID.create("per_test"))).toBeDefined()
+    }),
+  )
+
+  it.effect("proves only unconditional configured allows", () =>
+    Effect.gen(function* () {
+      const service = yield* Permission.Service
+      const input = { sessionID: Session.ID.make("ses_test"), action: "shell" }
+
+      yield* setup([{ action: "shell", resource: "*", effect: "allow" }])
+      expect(yield* service.allowsAll(input)).toBe(true)
+
+      yield* setRules([
+        { action: "shell", resource: "*", effect: "allow" },
+        { action: "shell", resource: "rm *", effect: "deny" },
+      ])
+      expect(yield* service.allowsAll(input)).toBe(false)
+
+      yield* setRules([{ action: "shell", resource: "git *", effect: "allow" }])
+      expect(yield* service.allowsAll(input)).toBe(false)
+
+      yield* setRules([
+        { action: "shell", resource: "rm *", effect: "deny" },
+        { action: "shell", resource: "*", effect: "allow" },
+      ])
+      expect(yield* service.allowsAll(input)).toBe(true)
     }),
   )
 

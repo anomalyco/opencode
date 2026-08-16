@@ -1,6 +1,6 @@
-export * as TestLLM from "./testing"
+export * as TestLLM from "./testing.js"
 
-import { LLMClient, type Interface as LLMClientShape } from "./route/client"
+import { LLMClient, type Interface as LLMClientShape } from "./route/client.js"
 import {
   LLMEvent,
   LLMResponse,
@@ -8,7 +8,7 @@ import {
   type AIError,
   type LLMRequest,
   type UsageInput,
-} from "./schema"
+} from "./schema/index.js"
 import { Context, Deferred, Effect, Latch, Layer, Queue, Scope, Stream } from "effect"
 
 export type Response = readonly LLMEvent[] | Stream.Stream<LLMEvent, AIError>

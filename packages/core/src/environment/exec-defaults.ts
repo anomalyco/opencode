@@ -2,7 +2,7 @@ import { Effect, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { collectStream } from "@opencode-ai/util/process"
-import { Failed, NotFound, WrongKind, type FileInfo, type FileType, type FilesImpl } from "./files"
+import { Failed, NotFound, WrongKind, type FileInfo, type FileType, type FilesImpl } from "./files.js"
 
 /**
  * Files derived from spawning processes: one process per intent, "$1" is
@@ -189,4 +189,4 @@ const parseList = (bytes: Uint8Array) => {
   }))
 }
 
-export * as EnvironmentExecDefaults from "./exec-defaults"
+export * as EnvironmentExecDefaults from "./exec-defaults.js"

@@ -18,6 +18,7 @@ import { Provider } from "@opencode-ai/core/provider"
 import { Reference } from "@opencode-ai/core/reference"
 import { Skill } from "@opencode-ai/core/skill"
 import { Effect, Schema } from "effect"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
@@ -46,9 +47,7 @@ describe("config plugin reloads", () => {
 
       expect((yield* agents.get(Agent.ID.make("first")))?.description).toBe("First agent")
       expect((yield* commands.get("first"))?.description).toBe("First command")
-      expect(
-        (yield* skills.sources()).some((source) => source.type === "directory" && source.path === "/skills/first"),
-      ).toBe(true)
+      expect((yield* skills.list()).some((skill) => skill.id === "first")).toBe(true)
       expect((yield* references.list()).map((reference) => reference.name)).toEqual(["first"])
       expect(yield* catalog.provider.get(Provider.ID.make("first"))).toBeDefined()
 
@@ -69,12 +68,8 @@ describe("config plugin reloads", () => {
         }),
       )
 
-      expect(
-        (yield* skills.sources()).some((source) => source.type === "directory" && source.path === "/skills/first"),
-      ).toBe(false)
-      expect(
-        (yield* skills.sources()).some((source) => source.type === "directory" && source.path === "/skills/second"),
-      ).toBe(true)
+      expect((yield* skills.list()).some((skill) => skill.id === "first")).toBe(false)
+      expect((yield* skills.list()).some((skill) => skill.id === "second")).toBe(true)
     }).pipe(
       Effect.provide(Config.testLayer([config("first")])),
       Effect.provideService(Global.Service, Global.Service.of(Global.make())),
@@ -85,11 +80,11 @@ describe("config plugin reloads", () => {
 function config(name: string) {
   return new Document({
     type: "document",
-    path: document,
+    path: AbsolutePath.make(document),
     info: decode({
       agents: { [name]: { description: `${title(name)} agent`, mode: "subagent" } },
       commands: { [name]: { template: `${title(name)} command`, description: `${title(name)} command` } },
-      skills: [`/skills/${name}`],
+      skills: [path.join(import.meta.dir, "fixture", "skills", `${name}-source`)],
       references: { [name]: `/references/${name}` },
       providers: { [name]: { models: { chat: { name: `${title(name)} model` } } } },
     }),

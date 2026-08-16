@@ -1,10 +1,10 @@
-import { ProviderID, type ModelID } from "../schema"
-import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat"
-import type { RouteDefaultsInput } from "../route/client"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
-import type { ProviderPackage } from "../provider-package"
-import { profiles, type OpenAICompatibleProfile } from "./openai-compatible-profile"
-import type { OpenAIProviderOptionsInput } from "./openai-options"
+import { ProviderID, type ModelID } from "../schema/index.js"
+import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat.js"
+import type { RouteDefaultsInput } from "../route/client.js"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderPackage } from "../provider-package.js"
+import { profiles, type OpenAICompatibleProfile } from "./openai-compatible-profile.js"
+import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("openai-compatible")
 

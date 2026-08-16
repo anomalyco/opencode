@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/desktop",
   "private": true,
-  "version": "1.18.8",
+  "version": "1.18.15",
   "type": "module",
   "license": "MIT",
   "homepage": "https://opencode.ai",
@@ -11,8 +11,7 @@
   },
   "scripts": {
     "typecheck": "tsgo -b",
-    "predev": "bun ./scripts/predev.ts",
-    "dev": "electron-vite dev",
+    "dev": "bun ./scripts/dev.ts",
     "prebuild": "bun ./scripts/prebuild.ts",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
@@ -31,12 +30,13 @@
     "electron-store": "11.0.2",
     "electron-updater": "6.8.9",
     "electron-window-state": "^5.0.3",
-    "marked": "^15"
+    "drizzle-orm": "catalog:"
   },
   "devDependencies": {
     "@actions/artifact": "4.0.0",
     "@lydell/node-pty": "catalog:",
     "@opencode-ai/app": "workspace:*",
+    "@opencode-ai/client": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@sentry/solid": "catalog:",
     "@sentry/vite-plugin": "catalog:",

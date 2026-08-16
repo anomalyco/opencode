@@ -1,11 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { compile, emitEffectImported, emitEffectShape, emitPromise, write } from "@opencode-ai/httpapi-codegen"
-import {
-  ClientApi,
-  effectOmitEndpoints,
-  groupNames,
-  promiseOmitEndpoints,
-} from "@opencode-ai/protocol/client"
+import { ClientApi, effectOmitEndpoints, groupNames, promiseOmitEndpoints } from "@opencode-ai/protocol/client"
 import { Agent } from "@opencode-ai/schema/agent"
 import { Command } from "@opencode-ai/schema/command"
 import { Config } from "@opencode-ai/schema/config"
@@ -24,7 +19,7 @@ import { Permission } from "@opencode-ai/schema/permission"
 import { PermissionSaved } from "@opencode-ai/schema/permission-saved"
 import { Plugin } from "@opencode-ai/schema/plugin"
 import { Project } from "@opencode-ai/schema/project"
-import { ProjectCopy } from "@opencode-ai/schema/project-copy"
+import { Worktree } from "@opencode-ai/schema/worktree"
 import { AgentAttachment, FileAttachment, Prompt, PromptMention } from "@opencode-ai/schema/prompt"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Provider } from "@opencode-ai/schema/provider"
@@ -35,7 +30,7 @@ import { Reference } from "@opencode-ai/schema/reference"
 import { AbsolutePath, PositiveInt, RelativePath } from "@opencode-ai/schema/schema"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { SessionPending } from "@opencode-ai/schema/session-pending"
+import { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { Shell } from "@opencode-ai/schema/shell"
 import { Skill } from "@opencode-ai/schema/skill"
 import { Vcs } from "@opencode-ai/schema/vcs"
@@ -65,7 +60,7 @@ const effectTypeReferences = [
   ...namespaceTypes("PermissionSaved", "@opencode-ai/schema/permission-saved", PermissionSaved),
   ...namespaceTypes("Plugin", "@opencode-ai/schema/plugin", Plugin),
   ...namespaceTypes("Project", "@opencode-ai/schema/project", Project),
-  ...namespaceTypes("ProjectCopy", "@opencode-ai/schema/project-copy", ProjectCopy),
+  ...namespaceTypes("Worktree", "@opencode-ai/schema/worktree", Worktree),
   ...namespaceTypes("PromptInput", "@opencode-ai/schema/prompt-input", PromptInput),
   ...namespaceTypes("Provider", "@opencode-ai/schema/provider", Provider),
   ...namespaceTypes("Pty", "@opencode-ai/schema/pty", Pty),
@@ -74,7 +69,7 @@ const effectTypeReferences = [
   ...namespaceTypes("Reference", "@opencode-ai/schema/reference", Reference),
   ...namespaceTypes("Session", "@opencode-ai/schema/session", Session),
   ...namespaceTypes("SessionMessage", "@opencode-ai/schema/session-message", SessionMessage),
-  ...namespaceTypes("SessionPending", "@opencode-ai/schema/session-pending", SessionPending),
+  ...namespaceTypes("SessionInbox", "@opencode-ai/schema/session-inbox", SessionInbox),
   ...namespaceTypes("Shell", "@opencode-ai/schema/shell", Shell),
   ...namespaceTypes("Skill", "@opencode-ai/schema/skill", Skill),
   ...namespaceTypes("Vcs", "@opencode-ai/schema/vcs", Vcs),

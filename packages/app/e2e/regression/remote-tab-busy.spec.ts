@@ -58,8 +58,7 @@ async function mockServers(page: Page) {
     const current = url.origin === serverA ? sessionA : sessionB
     const directory = url.searchParams.get("directory")
     if (directory && directory !== current.directory) return json(route, { name: "InvalidDirectory" }, 500)
-    if (url.pathname === "/api/event")
-      return sse(route, url.pathname === "/api/event")
+    if (url.pathname === "/api/event") return sse(route, url.pathname === "/api/event")
     if (url.pathname === "/api/health") return json(route, { pid: 1 })
     if (url.pathname === "/api/session/active")
       return json(route, { data: url.origin === serverB ? { [sessionB.id]: { type: "running" } } : {} })

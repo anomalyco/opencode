@@ -9,14 +9,13 @@ network. Its types and methods are generated from the same contract as the
 [API reference](/api).
 
 <Callout type="warning">
-  The V2 API and client are beta. Method names, inputs, and outputs may change
-  before the stable release.
+  The V2 API and client are beta. Method names, inputs, and outputs may change before the stable release.
 </Callout>
 
 ## Install
 
 ```sh
-bun add @opencode-ai/client@next
+bun add @opencode-ai/client@beta
 ```
 
 ## Create a client
@@ -95,13 +94,14 @@ const client = OpenCode.make({
 const health = await client.health.get()
 ```
 
-`Service.ensure()` accepts an optional registration file, required version,
-service command, and `onStart` callback:
+`Service.ensure()` accepts an optional registration file, version, service
+command, and `onStart` callback. `version` accepts either an exact value or a
+compatibility predicate:
 
 ```ts
 const endpoint = await Service.ensure({
   file: "/var/run/opencode/service.json",
-  version: "2.0.0",
+  version: (version) => version.startsWith("2."),
   command: ["opencode", "serve", "--service"],
   onStart(reason, previousVersion) {
     console.log(reason, previousVersion)
@@ -119,7 +119,7 @@ OpenCode provides a first-class Effect client through the
 and decodes responses into OpenCode schema values.
 
 ```sh
-bun add @opencode-ai/client@next effect
+bun add @opencode-ai/client@beta effect
 ```
 
 ### Create a client
@@ -140,9 +140,7 @@ const program = Effect.gen(function* () {
   return yield* client.session.get({ sessionID: session.id })
 })
 
-const session = await Effect.runPromise(
-  program.pipe(Effect.provide(FetchHttpClient.layer)),
-)
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
 ```
 
 Streaming operations, including `client.event.subscribe()` and
@@ -175,9 +173,6 @@ const program = Effect.gen(function* () {
 })
 
 const health = await Effect.runPromise(
-  program.pipe(
-    Effect.provide(FetchHttpClient.layer),
-    Effect.provide(NodeFileSystem.layer),
-  ),
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
 )
 ```

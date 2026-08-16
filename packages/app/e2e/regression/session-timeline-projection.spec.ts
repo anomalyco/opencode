@@ -86,15 +86,10 @@ test.describe("session timeline projection", () => {
       ],
       { summary: { diffs: Array.from({ length: 11 }, (_, index) => summaryDiff(index)) } },
     )
-    const aborted = assistantMessage(
-      [
-        { id: "prt_before_abort", type: "text", text: "Before interruption" },
-      ],
-      {
-        id: "msg_1001_assistant_aborted",
-        error: { name: "MessageAbortedError", data: { message: "Stopped" } },
-      },
-    )
+    const aborted = assistantMessage([{ id: "prt_before_abort", type: "text", text: "Before interruption" }], {
+      id: "msg_1001_assistant_aborted",
+      error: { name: "MessageAbortedError", data: { message: "Stopped" } },
+    })
     const failed = assistantMessage([{ id: "prt_after_abort", type: "text", text: "After interruption" }], {
       id: "msg_1002_assistant_failed",
       error: {
@@ -285,6 +280,7 @@ function summaryDiff(index: number) {
     file: `src/diff-${index}.ts`,
     additions: 1,
     deletions: 1,
+    status: "modified" as const,
     patch: `@@ -1 +1 @@\n-export const value = ${index}\n+export const value = ${index + 1}`,
   }
 }

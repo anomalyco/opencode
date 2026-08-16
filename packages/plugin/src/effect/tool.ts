@@ -5,10 +5,9 @@ import type { SessionMessage } from "@opencode-ai/schema/session-message"
 import type { Hooks, Transform } from "./registration.js"
 
 export interface ToolDraft {
-  add<
-    Input extends Tool.ValueSchema<any>,
-    Output extends Tool.ValueSchema<any> | undefined,
-  >(tool: Tool.Info<Input, Output>): void
+  add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
+    tool: Tool.Info<Input, Output>,
+  ): void
 }
 
 export interface ToolHooks {
@@ -39,7 +38,13 @@ export interface ToolHooks {
   )
 }
 
+// Only execute.before may fail: a Tool.Error rejects the call before the tool runs.
+export interface ToolFailures extends Record<keyof ToolHooks, unknown> {
+  readonly "execute.before": Tool.Error
+  readonly "execute.after": never
+}
+
 export interface ToolDomain {
   readonly transform: Transform<ToolDraft>
-  readonly hook: Hooks<ToolHooks>
+  readonly hook: Hooks<ToolHooks, ToolFailures>
 }

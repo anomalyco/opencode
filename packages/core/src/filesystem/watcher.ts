@@ -1,4 +1,4 @@
-export * as Watcher from "./watcher"
+export * as Watcher from "./watcher.js"
 
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
@@ -6,10 +6,10 @@ import type ParcelWatcher from "@parcel/watcher"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { Cause, Context, Effect, Layer, PubSub, RcMap, Schema, Stream } from "effect"
-import { lazy } from "../util/lazy"
+import { lazy } from "../util/lazy.js"
 import { watch as watchFileSystem } from "node:fs"
 import path from "path"
-import loadBinding from "./watcher-binding"
+import loadBinding from "./watcher-binding.js"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 export const Event = { Updated: FileSystem.Event.Changed }
@@ -92,9 +92,7 @@ export const layer = (options?: Options) =>
       const watchers = yield* RcMap.make({
         lookup: (key: Key) =>
           Effect.gen(function* () {
-            const pubsub = yield* Effect.acquireRelease(PubSub.unbounded<Update>(), (pubsub) =>
-              PubSub.shutdown(pubsub),
-            )
+            const pubsub = yield* Effect.acquireRelease(PubSub.unbounded<Update>(), (pubsub) => PubSub.shutdown(pubsub))
             const subscription = yield* Effect.acquireRelease(
               native.subscribe({
                 type: key.type,

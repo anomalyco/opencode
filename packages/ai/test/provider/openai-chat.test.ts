@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Ref, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import {
   HttpOptions,
@@ -12,19 +12,19 @@ import {
   ToolCallPart,
   ToolDefinition,
   Usage,
-} from "../../src"
-import * as Azure from "../../src/providers/azure"
-import * as OpenAI from "../../src/providers/openai"
-import * as OpenAICompatible from "../../src/providers/openai-compatible"
-import * as XAI from "../../src/providers/xai"
-import * as OpenAIChat from "../../src/protocols/openai-chat"
-import { ProviderShared } from "../../src/protocols/shared"
-import { Auth, LLMClient } from "../../src/route"
-import { compileRequest } from "../../src/route/client"
-import { it } from "../lib/effect"
-import { dynamicResponse, fixedResponse, truncatedStream } from "../lib/http"
-import { deltaChunk, usageChunk } from "../lib/openai-chunks"
-import { sseEvents } from "../lib/sse"
+} from "../../src/index.js"
+import * as Azure from "../../src/providers/azure.js"
+import * as OpenAI from "../../src/providers/openai.js"
+import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
+import * as XAI from "../../src/providers/xai.js"
+import * as OpenAIChat from "../../src/protocols/openai-chat.js"
+import { ProviderShared } from "../../src/protocols/shared.js"
+import { Auth, LLMClient } from "../../src/route.js"
+import { compileRequest } from "../../src/route/client.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse, fixedResponse, systemError, truncatedStream } from "../lib/http.js"
+import { deltaChunk, usageChunk } from "../lib/openai-chunks.js"
+import { sseEvents } from "../lib/sse.js"
 
 const TargetJson = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(TargetJson)
@@ -99,6 +99,24 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(prepared.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_content: "thinking" }])
+    }),
+  )
+
+  it.effect("concatenates assistant text parts without adding separators", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "text", text: "Hello" },
+              { type: "text", text: " world" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([{ role: "assistant", content: "Hello world" }])
     }),
   )
 
@@ -509,35 +527,42 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  for (const [name, media] of [
-    ["mismatched data URL MIME", { mediaType: "image/png", data: "data:image/jpeg;base64,/9j/" }],
-    ["malformed base64", { mediaType: "image/png", data: "not-base64" }],
-    ["unsupported SVG", { mediaType: "image/svg+xml", data: "PHN2Zz4=" }],
-  ] as const)
-    it.effect(`rejects ${name}`, () =>
-      Effect.gen(function* () {
-        const error = yield* compileRequest(
-          LLM.request({ model, messages: [Message.user({ type: "media", ...media })] }),
-        ).pipe(Effect.flip)
-        expect(error.message).toMatch(/does not support|does not match|valid base64/)
-      }),
-    )
+  it.effect("passes encoded image media through without local validation", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user([
+              { type: "media", mediaType: "image/png", data: "not-base64" },
+              { type: "media", mediaType: "image/png", data: "data:image/jpeg;base64,/9j/" },
+              { type: "media", mediaType: "image/svg+xml", data: "PHN2Zz4=" },
+            ]),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: "data:image/png;base64,not-base64" } },
+            { type: "image_url", image_url: { url: "data:image/jpeg;base64,/9j/" } },
+            { type: "image_url", image_url: { url: "data:image/svg+xml;base64,PHN2Zz4=" } },
+          ],
+        },
+      ])
+    }),
+  )
 
-  it.effect("rejects oversized image input", () =>
+  it.effect("rejects non-image media that cannot be lowered", () =>
     Effect.gen(function* () {
       const error = yield* compileRequest(
         LLM.request({
           model,
-          messages: [
-            Message.user({
-              type: "media",
-              mediaType: "image/png",
-              data: "A".repeat(ProviderShared.MAX_MEDIA_ENCODED_BYTES + 4),
-            }),
-          ],
+          messages: [Message.user({ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
-      expect(error.message).toContain("encoded limit")
+      expect(error.message).toContain("OpenAI Chat does not support media type audio/mpeg")
     }),
   )
 
@@ -578,7 +603,7 @@ describe("OpenAI Chat route", () => {
         }),
       )
 
-      expect(prepared.body.messages).toEqual([{ role: "assistant", content: null, reasoning_content: "hidden" }])
+      expect(prepared.body.messages).toEqual([{ role: "assistant", content: "", reasoning_content: "hidden" }])
     }),
   )
 
@@ -827,7 +852,7 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("ignores scalar reasoning after content starts", () =>
+  it.effect("preserves scalar reasoning after content starts", () =>
     Effect.gen(function* () {
       const details = [{ type: "reasoning.text", text: "detail", format: "unknown", index: 0 }]
       const response = yield* LLMClient.generate(request).pipe(
@@ -843,11 +868,11 @@ describe("OpenAI Chat route", () => {
         ),
       )
 
-      expect(response.reasoning).toBe("detail")
-      expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
-      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
+      expect(response.reasoning).toBe("detailscalar")
+      expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(2)
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(2)
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningDetails: details },
+        openai: { reasoningField: "reasoning", reasoningDetails: details },
       })
     }),
   )
@@ -947,7 +972,7 @@ describe("OpenAI Chat route", () => {
       expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
-      expect(replay.body.messages).toEqual([{ role: "assistant", content: null, reasoning_details: details }])
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "", reasoning_details: details }])
     }),
   )
 
@@ -997,7 +1022,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(replay.body.messages).toEqual([
-        { role: "assistant", content: null, reasoning: "firstsecond", reasoning_details: [first, second] },
+        { role: "assistant", content: "", reasoning: "firstsecond", reasoning_details: [first, second] },
       ])
     }),
   )
@@ -1022,7 +1047,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(replay.body.messages).toEqual([
-        { role: "assistant", content: null, reasoning_content: "AB", reasoning_details: [detail] },
+        { role: "assistant", content: "", reasoning_content: "AB", reasoning_details: [detail] },
       ])
     }),
   )
@@ -1044,7 +1069,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(replay.body.messages).toEqual([
-        { role: "assistant", content: null, reasoning_content: "thinking", reasoning_details: details },
+        { role: "assistant", content: "", reasoning_content: "thinking", reasoning_details: details },
       ])
     }),
   )
@@ -1152,7 +1177,7 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("fails a streamed tool call when the provider ends without a finish reason", () =>
+  it.effect("finalizes a streamed tool call when the provider ends without a finish reason", () =>
     Effect.gen(function* () {
       const body = sseEvents(
         deltaChunk({
@@ -1164,27 +1189,31 @@ describe("OpenAI Chat route", () => {
       const input = LLMRequest.update(request, {
         tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
       })
-      const events: LLMEvent[] = []
-      const streamError = yield* LLMClient.stream(input).pipe(
-        Stream.runForEach((event) => Effect.sync(() => events.push(event))),
-        Effect.flip,
-        Effect.provide(fixedResponse(body)),
-      )
-      const error = yield* LLMClient.generate(input).pipe(Effect.provide(fixedResponse(body)), Effect.flip)
+      const response = yield* LLMClient.generate(input).pipe(Effect.provide(fixedResponse(body)))
 
-      expect(events).toEqual([
+      expect(response.events).toEqual([
         { type: "step-start", index: 0 },
         { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata: undefined },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
+        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        {
+          type: "step-finish",
+          index: 0,
+          reason: { normalized: "tool-calls" },
+          usage: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "finish", reason: { normalized: "tool-calls" }, usage: undefined },
       ])
-      expect(events.filter(LLMEvent.is.toolCall)).toEqual([])
-      expect(streamError.reason).toMatchObject({
-        _tag: "InvalidProviderOutput",
-        classification: "incomplete-stream",
-      })
-      expect(streamError.message).toContain("The provider response ended unexpectedly.")
-      expect(error.message).toContain("The provider response ended unexpectedly.")
     }),
   )
 
@@ -1199,12 +1228,44 @@ describe("OpenAI Chat route", () => {
 
   it.effect("surfaces transport errors that occur mid-stream", () =>
     Effect.gen(function* () {
-      const layer = truncatedStream([
-        `data: ${JSON.stringify(deltaChunk({ role: "assistant", content: "Hello" }))}\n\n`,
-      ])
-      const error = yield* LLMClient.generate(request).pipe(Effect.provide(layer), Effect.flip)
+      const layer = truncatedStream(
+        [`data: ${JSON.stringify(deltaChunk({ role: "assistant", content: "Hello" }))}\n\n`],
+        systemError("ECONNRESET", "socket closed unexpectedly"),
+      )
+      const events = yield* Ref.make<ReadonlyArray<LLMEvent>>([])
+      const error = yield* LLMClient.stream(request).pipe(
+        Stream.tap((event) => Ref.update(events, (current) => [...current, event])),
+        Stream.runDrain,
+        Effect.provide(layer),
+        Effect.flip,
+      )
 
-      expect(error.message).toContain("Failed to read openai/openai-chat stream")
+      expect((yield* Ref.get(events)).some((event) => event.type === "text-delta")).toBeTrue()
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        message: "ECONNRESET: socket closed unexpectedly",
+        transport: "http",
+        operation: "read",
+        code: "ECONNRESET",
+        url: "https://api.openai.test/v1/chat/completions",
+      })
+    }),
+  )
+
+  it.effect("surfaces transport errors before the first stream frame", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(truncatedStream([], systemError("ECONNRESET", "socket closed before output"))),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        message: "ECONNRESET: socket closed before output",
+        transport: "http",
+        operation: "read",
+        code: "ECONNRESET",
+      })
     }),
   )
 
@@ -1221,8 +1282,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(error).toBeInstanceOf(AIError)
-      expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
-      expect(error.message).toContain("HTTP 400")
+      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", message: "Bad request" })
     }),
   )
 

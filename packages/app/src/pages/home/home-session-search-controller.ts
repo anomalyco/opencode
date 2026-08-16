@@ -1,6 +1,6 @@
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
-import { serverName } from "@/context/server"
+import { serverName } from "@/context/servers"
 import { displayName } from "@/pages/layout/helpers"
 import { sessionLabel } from "@/utils/session-title"
 import { makeEventListener } from "@solid-primitives/event-listener"

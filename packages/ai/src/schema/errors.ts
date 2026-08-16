@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { Tool } from "@opencode-ai/schema/tool"
-import { ModelID, ProviderID, ProviderMetadata, RouteID } from "./ids"
+import { ModelID, ProviderID, ProviderMetadata, RouteID } from "./ids.js"
 
 export const ProviderFailureClassification = Schema.Literals(["context-overflow", "payload-too-large"])
 export type ProviderFailureClassification = typeof ProviderFailureClassification.Type
@@ -92,12 +92,27 @@ export class ProviderInternalReason extends Schema.Class<ProviderInternalReason>
   http: Schema.optional(HttpContext),
 }) {}
 
+export const TransportType = Schema.Literals(["http", "websocket"])
+export type TransportType = typeof TransportType.Type
+
+export const TransportOperation = Schema.Literals(["request", "read", "write"])
+export type TransportOperation = typeof TransportOperation.Type
+
 export class TransportReason extends Schema.Class<TransportReason>("AI.Error.Transport")({
   _tag: Schema.tag("Transport"),
   message: Schema.String,
-  kind: Schema.optional(Schema.String),
+  transport: TransportType,
+  operation: TransportOperation,
+  code: Schema.optional(Schema.String),
   url: Schema.optional(Schema.String),
   http: Schema.optional(HttpContext),
+  phase: Schema.optional(
+    Schema.Literals(["prepare", "queue", "connect", "send", "receive", "decode", "complete", "fallback", "close"]),
+  ),
+  delivery: Schema.optional(Schema.Literals(["not-sent", "rejected", "ambiguous", "accepted"])),
+  recovery: Schema.optional(
+    Schema.Literals(["retry-connect", "retry-full", "rotate-and-retry-full", "fallback-http", "fail"]),
+  ),
 }) {}
 
 export class InvalidProviderOutputReason extends Schema.Class<InvalidProviderOutputReason>(

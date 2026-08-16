@@ -11,7 +11,9 @@ import { createAcpFixture, expectOk, initialize, newSession, selectConfigOption 
 describe("acp lifecycle subprocess", () => {
   test("stdin EOF exits cleanly", async () => {
     await using fixture = await createAcpFixture()
-    expect(await fixture.spawn().close()).toBe(0)
+    const acp = fixture.spawn()
+    await initialize(acp)
+    expect(await acp.close()).toBe(0)
   }, 60_000)
 
   test("close capability and close request", async () => {

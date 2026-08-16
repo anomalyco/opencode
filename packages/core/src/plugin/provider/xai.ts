@@ -1,9 +1,9 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Clock, Effect, Option, Schema } from "effect"
-import { App } from "../../app"
-import { Credential } from "../../credential"
-import { Integration } from "../../integration"
+import { App } from "../../app.js"
+import { Credential } from "../../credential.js"
+import { Integration } from "../../integration.js"
 
 const clientID = "b1a00492-073a-47ea-816f-4c329264a828"
 const issuer = "https://auth.x.ai/oauth2"
@@ -35,40 +35,41 @@ const DeviceError = Schema.Struct({
 })
 const decodeDeviceError = Schema.decodeUnknownOption(Schema.fromJsonString(DeviceError))
 
-const device = (app: App.Info) => ({
-  integrationID: Integration.ID.make("xai"),
-  method: {
-    id: deviceMethodID,
-    type: "oauth",
-    label: "SuperGrok Subscription",
-  },
-  authorize: () =>
-    request(
-      `${issuer}/device/code`,
-      {
-        method: "POST",
-        headers: headers(app),
-        body: new URLSearchParams({ client_id: clientID, scope, referrer: "opencode" }).toString(),
-      },
-      Device,
-    ).pipe(
-      Effect.flatMap((value) =>
-        Clock.currentTimeMillis.pipe(
-          Effect.map((created) => {
-            const lifetime = positiveSeconds(value.expires_in, 0)
-            return {
-              mode: "auto" as const,
-              url: value.verification_uri_complete ?? value.verification_uri,
-              instructions: `Open ${value.verification_uri} on any device and enter code: ${value.user_code}`,
-              ...(lifetime ? { expiresAt: created + lifetime * 1000 } : {}),
-              callback: poll(value, app).pipe(Effect.flatMap((tokens) => credential(deviceMethodID, tokens))),
-            }
-          }),
+const device = (app: App.Info) =>
+  ({
+    integrationID: Integration.ID.make("xai"),
+    method: {
+      id: deviceMethodID,
+      type: "oauth",
+      label: "SuperGrok Subscription",
+    },
+    authorize: () =>
+      request(
+        `${issuer}/device/code`,
+        {
+          method: "POST",
+          headers: headers(app),
+          body: new URLSearchParams({ client_id: clientID, scope, referrer: "opencode" }).toString(),
+        },
+        Device,
+      ).pipe(
+        Effect.flatMap((value) =>
+          Clock.currentTimeMillis.pipe(
+            Effect.map((created) => {
+              const lifetime = positiveSeconds(value.expires_in, 0)
+              return {
+                mode: "auto" as const,
+                url: value.verification_uri_complete ?? value.verification_uri,
+                instructions: `Open ${value.verification_uri} on any device and enter code: ${value.user_code}`,
+                ...(lifetime ? { expiresAt: created + lifetime * 1000 } : {}),
+                callback: poll(value, app).pipe(Effect.flatMap((tokens) => credential(deviceMethodID, tokens))),
+              }
+            }),
+          ),
         ),
       ),
-    ),
-  refresh: (value) => refresh(deviceMethodID, Credential.OAuth.make({ ...value, methodID: deviceMethodID }), app),
-}) satisfies IntegrationOAuthMethodRegistration
+    refresh: (value) => refresh(deviceMethodID, Credential.OAuth.make({ ...value, methodID: deviceMethodID }), app),
+  }) satisfies IntegrationOAuthMethodRegistration
 
 export const XAIPlugin = define({
   id: "opencode.provider.xai",

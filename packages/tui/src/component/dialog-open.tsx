@@ -1,6 +1,7 @@
-import { createMemo, createResource, createSignal, onMount } from "solid-js"
+import { createMemo, createResource, createSignal } from "solid-js"
 import type { SessionInfo } from "@opencode-ai/client"
 import { useTerminalDimensions } from "@opentui/solid"
+import type { RGBA } from "@opentui/core"
 import { dialogWidth, useDialog } from "../ui/dialog"
 import { DialogSelect, dialogSelectContentWidth } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
@@ -20,10 +21,22 @@ import { Spinner } from "./spinner"
 import { projectName } from "../util/project"
 
 const RECENT_LIMIT = 8
+export const DialogOpenKey = Symbol("DialogOpen")
 
 type OpenTarget = { type: "session"; sessionID: string } | { type: "project"; directory: string }
 
-export function DialogOpen() {
+export async function loadDialogOpen(data: ReturnType<typeof useData>, client: ReturnType<typeof useClient>) {
+  const [, sessions] = await Promise.all([
+    data.project.sync().catch(() => {}),
+    client.api.session
+      .list({ limit: 50, order: "desc", parentID: null })
+      .then((response) => response.data)
+      .catch(() => [] as SessionInfo[]),
+  ])
+  return sessions
+}
+
+export function DialogOpen(props: { sessions: SessionInfo[] }) {
   const dialog = useDialog()
   const route = useRoute()
   const data = useData()
@@ -39,17 +52,16 @@ export function DialogOpen() {
   const [filter, setFilter] = createSignal("")
   const [selectionMoved, setSelectionMoved] = createSignal(false)
 
-  void data.project.sync().catch(() => {})
-
-  // One background fetch fills in recent sessions from other projects; the menu renders
-  // immediately from the local store and never blocks on the network.
-  const [fetched] = createResource(
-    () =>
+  const [matched] = createResource(
+    () => {
+      const value = filter().trim()
+      return /^ses_[0-9A-Za-z]{26}$/.test(value) ? value : undefined
+    },
+    (sessionID) =>
       client.api.session
-        .list({ limit: 50, order: "desc", parentID: null })
-        .then((response) => response.data)
-        .catch(() => [] as SessionInfo[]),
-    { initialValue: [] },
+        .get({ sessionID })
+        .then((session) => (session.id === sessionID ? session : undefined))
+        .catch(() => undefined),
   )
 
   const openTabs = createMemo(
@@ -60,7 +72,8 @@ export function DialogOpen() {
   )
   const sessions = createMemo(() => {
     const seen = new Set<string>()
-    return [...data.session.list(), ...fetched()]
+    const match = matched()
+    return [...data.session.list(), ...props.sessions, ...(match ? [match] : [])]
       .filter((session) => {
         if (session.parentID || seen.has(session.id)) return false
         seen.add(session.id)
@@ -87,12 +100,13 @@ export function DialogOpen() {
         data.session.family(session.id).some((id) => data.session.status(id) === "running")
       return {
         title: withTimestampedFallback(session),
+        searchText: session.id,
         value: { type: "session", sessionID: session.id } as OpenTarget,
         category: "Sessions",
         footer: `${name ? `${Locale.truncate(name, 20)} · ` : ""}${timeAgo(session.time.updated)}`,
         onSelect: () => location.set(session.location),
         gutter: running
-          ? () => <Spinner />
+          ? (color: RGBA) => <Spinner color={color} />
           : tabs.has(session.id)
             ? () => <text fg={theme.hue.accent[mode() === "light" ? 800 : 200]}>▪</text>
             : undefined,
@@ -129,8 +143,6 @@ export function DialogOpen() {
     return [...sessionOptions, ...projectOptions]
   })
 
-  onMount(() => dialog.setSize("large"))
-
   return (
     <DialogSelect
       title="Open"
@@ -138,6 +150,7 @@ export function DialogOpen() {
       options={options()}
       current={currentSessionID() ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget) : undefined}
       focusCurrent={false}
+      sectionNavigation={true}
       preserveSelection={selectionMoved()}
       onMove={() => setSelectionMoved(true)}
       onFilter={setFilter}

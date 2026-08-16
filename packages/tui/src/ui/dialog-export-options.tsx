@@ -9,7 +9,12 @@ export type ExportFormat = "markdown" | "json"
 
 export type DialogExportOptionsProps = {
   defaultThinking: boolean
-  onConfirm?: (options: { action: "copy" | "export"; format: ExportFormat; thinking: boolean; sanitize: boolean }) => void
+  onConfirm?: (options: {
+    action: "copy" | "export"
+    format: ExportFormat
+    thinking: boolean
+    sanitize: boolean
+  }) => void
   onCancel?: () => void
 }
 

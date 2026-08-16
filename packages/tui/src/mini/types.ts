@@ -23,7 +23,7 @@ import type {
 } from "@opencode-ai/client/promise"
 import type { Config } from "../config"
 import type { CliRenderer } from "@opentui/core"
-import type { SessionPending } from "@opencode-ai/schema/session-pending"
+import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 
 export type RunFilePart = {
   type: "file"
@@ -47,6 +47,7 @@ export type RunPromptPart =
       }
     }
   | { type: "agent"; name: string; source?: { start: number; end: number; value: string } }
+  | { type: "skill"; id: string; source?: { start: number; end: number; value: string } }
 
 export type RunCommand = {
   name: string
@@ -72,7 +73,7 @@ export type RunProvider = {
   models: Record<string, RunProviderModel>
 }
 
-export type RunDelivery = SessionPending.Delivery
+export type RunDelivery = SessionInbox.Delivery
 
 export type RunPrompt = {
   messageID?: string
@@ -391,7 +392,7 @@ export type FormCancel = {
   location?: LocationRef
 }
 
-export type RunTuiConfig = Pick<Config.Resolved, "keybinds" | "leader" | "theme" | "mini">
+export type RunTuiConfig = Pick<Config.Resolved, "keybinds" | "leader" | "theme" | "mini" | "session">
 
 export type MiniSettings = {
   thinking: "show" | "hide"

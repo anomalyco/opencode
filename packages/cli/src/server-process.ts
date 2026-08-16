@@ -13,6 +13,7 @@ import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
 import { Updater } from "./services/updater"
+import { WebUi } from "./services/web-ui"
 
 export type Mode = "default" | "service" | "stdio"
 
@@ -39,19 +40,20 @@ export const run = Effect.fnUntraced(function* (options: Options) {
 })
 
 const processEffect = Effect.fnUntraced(function* (options: Options) {
-  if (options.mode === "service") yield* Effect.sync(() => process.chdir(Global.Path.home))
+  const global = yield* Global.Service
+  if (options.mode === "service") yield* Effect.sync(() => process.chdir(global.home))
   return yield* Effect.scoped(
     Effect.gen(function* () {
+      const foreground = options.mode === "default"
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
       const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
-      if (
-        serviceOptions !== undefined &&
-        port !== undefined &&
-        (yield* Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })) !== undefined
-      )
-        return
+      const incumbent =
+        serviceOptions !== undefined && port !== undefined
+          ? yield* Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
+          : undefined
+      if (incumbent !== undefined) return
       const { start } = yield* Effect.promise(() => import("@opencode-ai/server/process"))
       const environmentPassword = yield* Env.password
       // Keep the lease credential out of the environment inherited by tools.
@@ -67,6 +69,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             : randomBytes(32).toString("base64url")
       if (!password) return yield* Effect.fail(new Error("Missing server password"))
       const instanceID = randomUUID()
+      const transform = yield* WebUi.handler()
       const server = yield* start(
         {
           app: {
@@ -81,7 +84,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           database: {
             path:
               process.env.OPENCODE_DB ??
-              (["latest", "beta", "next", "prod"].includes(OPENCODE_CHANNEL) ||
+              (["latest", "dev", "beta", "next", "prod"].includes(OPENCODE_CHANNEL) ||
               process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
               process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
                 ? "opencode.db"
@@ -91,10 +94,6 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             url: process.env.OPENCODE_MODELS_URL,
             file: process.env.OPENCODE_MODELS_PATH,
             fetch: !truthy(process.env.OPENCODE_DISABLE_MODELS_FETCH),
-          },
-          observability: {
-            endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
-            headers: process.env.OTEL_EXPORTER_OTLP_HEADERS,
           },
           config: {
             directory: process.env.OPENCODE_CONFIG_DIR,
@@ -125,6 +124,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                   return yield* register(address, password, instanceID, serviceOptions.file, shutdown)
                 }),
             },
+        transform,
       ).pipe(
         Effect.catch((error) => {
           if (serviceOptions === undefined || port === undefined || !addressInUse(error)) return Effect.fail(error)
@@ -146,7 +146,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       if (server === undefined) return
       const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
-      if (options.mode === "default" && !environmentPassword) console.log(`server password ${password}`)
+      if (foreground && !environmentPassword) console.log(`server password ${password}`)
       const updater = yield* Updater.Service
       yield* updater.check().pipe(Effect.schedule(Schedule.spaced("10 minutes")), Effect.forkScoped)
       return yield* options.mode === "service"

@@ -388,18 +388,18 @@ export function RunCommandMenuBody(props: {
       },
       ...(props.subagents().length > 0
         ? [
-          {
-            action: "subagent" as const,
-            category: "Session",
-            display: "View subagents",
-            footer:
-              activeSubagentCount() > 0 ? `${activeSubagentCount()} active` : `${props.subagents().length} recent`,
-            keywords: props
-              .subagents()
-              .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
-              .join(" "),
-          },
-        ]
+            {
+              action: "subagent" as const,
+              category: "Session",
+              display: "View subagents",
+              footer:
+                activeSubagentCount() > 0 ? `${activeSubagentCount()} active` : `${props.subagents().length} recent`,
+              keywords: props
+                .subagents()
+                .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
+                .join(" "),
+            },
+          ]
         : []),
       {
         action: "slash",
@@ -421,16 +421,16 @@ export function RunCommandMenuBody(props: {
     const prompt: CommandEntry[] =
       props.commands() === undefined || skills().length > 0
         ? [
-          {
-            action: "skill" as const,
-            category: "Prompt",
-            display: "Skills",
-            footer: "/skills",
-            keywords: `skill skills ${skills()
-              .map((item) => `${item.name} ${item.description ?? ""}`)
-              .join(" ")}`.trim(),
-          },
-        ]
+            {
+              action: "skill" as const,
+              category: "Prompt",
+              display: "Skills",
+              footer: "/skills",
+              keywords: `skill skills ${skills()
+                .map((item) => `${item.name} ${item.description ?? ""}`)
+                .join(" ")}`.trim(),
+            },
+          ]
         : []
     const agent: CommandEntry[] = [
       {
@@ -445,17 +445,17 @@ export function RunCommandMenuBody(props: {
       },
       ...(props.queued().length > 0
         ? [
-          {
-            action: "queued" as const,
-            category: "Agent",
-            display: "View queued prompts",
-            footer: `${props.queued().length} pending`,
-            keywords: props
-              .queued()
-              .map((item) => item.prompt.text)
-              .join(" "),
-          },
-        ]
+            {
+              action: "queued" as const,
+              category: "Agent",
+              display: "View queued prompts",
+              footer: `${props.queued().length} pending`,
+              keywords: props
+                .queued()
+                .map((item) => item.prompt.text)
+                .join(" "),
+            },
+          ]
         : []),
       {
         action: "variant.cycle",
@@ -466,13 +466,13 @@ export function RunCommandMenuBody(props: {
       },
       ...(props.variants().length > 0
         ? [
-          {
-            action: "variant.list" as const,
-            category: "Agent",
-            display: "Switch model variant",
-            keywords: `variant variants ${props.variants().join(" ")}`,
-          },
-        ]
+            {
+              action: "variant.list" as const,
+              category: "Agent",
+              display: "Switch model variant",
+              keywords: `variant variants ${props.variants().join(" ")}`,
+            },
+          ]
         : []),
     ]
     return [
@@ -713,7 +713,7 @@ export function RunSettingsBody(props: {
         : { key: item.key, value: props.settings()[item.key] === "show" ? "hide" : "show" }
     setSaving(item.key)
     void Promise.resolve(props.onChange(next))
-      .catch(() => { })
+      .catch(() => {})
       .finally(() => setSaving())
   }
   const controller = createSearchablePanelController({

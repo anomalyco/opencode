@@ -1,20 +1,20 @@
-export * as SessionGenerateNode from "./generate-node"
+export * as SessionGenerateNode from "./generate-node.js"
 
 import { LLM, LLMClient, Message, SystemPart } from "@opencode-ai/ai"
 import { Effect, Layer } from "effect"
-import { Database } from "../database/database"
+import { Database } from "../database/database.js"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { App } from "../app"
-import { llmClient } from "../effect/app-node-platform"
-import { PluginHooks } from "../plugin/hooks"
-import { SessionContext } from "./context"
-import { SessionGenerate } from "./generate"
-import { SessionHistory } from "./history"
-import { SessionModelHeaders } from "./model-headers"
-import { SessionPromptCacheKey } from "./prompt-cache-key"
-import { SessionRunnerModel } from "./runner/model"
-import PROMPT_DEFAULT from "./runner/prompt/base.txt"
-import { toLLMMessages } from "./runner/to-llm-message"
+import { App } from "../app.js"
+import { llmClient } from "../effect/app-node-platform.js"
+import { PluginHooks } from "../plugin/hooks.js"
+import { SessionContext } from "./context.js"
+import { SessionGenerate } from "./generate.js"
+import { SessionHistory } from "./history.js"
+import { SessionModelHeaders } from "./model-headers.js"
+import { SessionPromptCacheKey } from "./prompt-cache-key.js"
+import { SessionRunnerModel } from "./runner/model.js"
+import { SessionSystemPrompt } from "./system-prompt.js"
+import { toLLMMessages } from "./runner/to-llm-message.js"
 
 export const layer = Layer.effect(
   SessionGenerate.Service,
@@ -39,7 +39,12 @@ export const layer = Layer.effect(
           sessionID: selection.session.id,
           agent: selection.agent.id,
           model: model.ref,
-          system: [selection.agent.info.system ? selection.agent.info.system : PROMPT_DEFAULT, history.initial]
+          system: [
+            selection.agent.info.system
+              ? selection.agent.info.system
+              : SessionSystemPrompt.make(toolDefinitions.map((tool) => tool.name)),
+            history.initial,
+          ]
             .filter((part) => part.length > 0)
             .map(SystemPart.make),
           messages: [

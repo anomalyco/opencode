@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
 import {
   DEFAULT_THEME,
+  generateSyntax,
   resolveTheme,
   resolveThemeDocument,
   selectTheme,
@@ -42,6 +43,14 @@ test("validates and resolves categorical hues in configured order", () => {
   expect(() => resolveSource({ version: 2, light: { categorical: ["magenta"] } }, "light")).toThrow("Invalid theme")
 })
 
+test("generates syntax with one categorical hue", () => {
+  const theme = resolveSource({ version: 2, light: { categorical: ["red"] } }, "light")
+  const syntax = generateSyntax(theme, "light")
+
+  expect(syntax.getStyleId("extmark.skill")).not.toBeNull()
+  syntax.destroy()
+})
+
 test("uses the default categorical order for direct definitions", () => {
   const theme = resolveTheme({ ...light, categorical: undefined })
 
@@ -72,19 +81,13 @@ test("resolves independent definitions and hue aliases", () => {
   expect(lightTheme.background.surface.overlay).toBe(lightTheme.hue.neutral[400])
   expect(lightTheme.syntax.keyword).toBeInstanceOf(RGBA)
   expect(lightTheme.text.action.primary.default).toBe(lightTheme.hue.neutral[200])
-  expect(lightTheme.contextual.elevated.background.action.primary.default).toBe(
-    lightTheme.hue.interactive[500],
-  )
+  expect(lightTheme.contextual.elevated.background.action.primary.default).toBe(lightTheme.hue.interactive[500])
   expect(lightTheme.contextual.elevated.background.default).toBe(lightTheme.background.surface.offset)
   expect(lightTheme.contextual.elevated.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
-  expect(lightTheme.contextual.overlay.background.action.primary.default).toBe(
-    lightTheme.hue.interactive[500],
-  )
+  expect(lightTheme.contextual.overlay.background.action.primary.default).toBe(lightTheme.hue.interactive[500])
   expect(lightTheme.contextual.overlay.background.default).toBe(lightTheme.background.surface.overlay)
   expect(lightTheme.contextual.overlay.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
-  expect(darkTheme.contextual.elevated.background.action.primary.default).toBe(
-    darkTheme.hue.interactive[400],
-  )
+  expect(darkTheme.contextual.elevated.background.action.primary.default).toBe(darkTheme.hue.interactive[400])
   expect(darkTheme.contextual.elevated.text.action.primary.default).toBe(darkTheme.hue.neutral[200])
   expect(darkTheme.contextual.overlay.background.action.primary.default).toBe(darkTheme.hue.interactive[400])
   expect(darkTheme.contextual.overlay.text.action.primary.default).toBe(darkTheme.hue.neutral[200])

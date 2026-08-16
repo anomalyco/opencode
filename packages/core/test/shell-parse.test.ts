@@ -18,9 +18,49 @@ describe("ShellParse", () => {
     })
   })
 
+  test("portable scanning never adds permission resources", async () => {
+    const commands = [
+      "git status && npm run test -- --watch",
+      "echo $(curl evil | sed s/x/y/)",
+      "cat <<'EOF'\nstatic body\nEOF",
+      "cat <<EOF\n$(printf dynamic)\nEOF",
+      "cd /tmp/$USER && git status",
+      "$COMMAND status",
+      "if true; then printf yes; else printf no; fi",
+    ]
+
+    for (const command of commands) {
+      const legacy = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
+      const portable = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))
+      expect(
+        portable.commands.every((item) => legacy.commands.some((candidate) => candidate.resource === item.resource)),
+      ).toBe(true)
+      expect(portable.directories.every((item) => legacy.directories.includes(item))).toBe(true)
+    }
+  })
+
+  test("portable scanning authorizes opaque heredocs without inferring directories", async () => {
+    const command = "cat <<'EOF'\nstatic body\nEOF"
+    const portable = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))
+    expect(portable).toEqual({ commands: [{ resource: command, save: command }], directories: [] })
+  })
+
+  test.each(['c"\\d" relative', "'cd' /tmp", "c''d /tmp", "c\\\nd /tmp"])(
+    "portable scanning keeps source-shaped command heads under shell authorization: %s",
+    async (command) => {
+      const portable = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))
+      expect(portable.commands.map((item) => item.resource)).toEqual([command])
+      expect(portable.directories).toEqual([])
+    },
+  )
+
   test("splits PowerShell commands case-insensitively", async () => {
     const result = await Effect.runPromise(
-      ShellParse.scan("Get-ChildItem; Write-Output 'done'", "C:\\Program Files\\PowerShell\\7\\pwsh.exe", "C:\\workspace"),
+      ShellParse.scan(
+        "Get-ChildItem; Write-Output 'done'",
+        "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+        "C:\\workspace",
+      ),
     )
     expect(result.commands).toEqual([
       { resource: "Get-ChildItem", save: "Get-ChildItem *" },

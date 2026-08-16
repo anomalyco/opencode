@@ -3,7 +3,8 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import * as pty from "@lydell/node-pty"
 import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "../../preload/types"
-import { wslTerminalArgs } from "./policy"
+import { parseCliVersion } from "../cli-version"
+import { nativeT } from "../native-translations"
 
 export type WslCommandLine = {
   stream: "stdout" | "stderr"
@@ -28,6 +29,11 @@ export type RunWslOptions = {
    * a wedge. Callers can override for longer-running jobs.
    */
   timeoutMs?: number
+}
+
+export type WslCliBuild = {
+  version: string
+  binary?: string
 }
 
 const DEFAULT_WSL_TIMEOUT_MS = 20_000
@@ -68,7 +74,9 @@ function runCommand(command: string, args: string[], opts: RunWslOptions = {}) {
       } catch {
         /* ignore */
       }
-      reject(new Error(`${command} ${args.join(" ")} timed out after ${timeoutMs}ms`))
+      reject(
+        new Error(nativeT("desktop.wsl.error.commandTimeout", { command, args: args.join(" "), timeout: timeoutMs })),
+      )
     }, timeoutMs)
 
     let stdout = ""
@@ -139,7 +147,9 @@ function runInteractiveCommand(command: string, args: string[], opts: RunWslOpti
       if (settled) return
       settled = true
       cleanup()
-      reject(new Error(`${command} ${args.join(" ")} timed out after ${timeoutMs}ms`))
+      reject(
+        new Error(nativeT("desktop.wsl.error.commandTimeout", { command, args: args.join(" "), timeout: timeoutMs })),
+      )
     }, timeoutMs)
 
     const abortHandler = () => {
@@ -214,7 +224,7 @@ export async function probeWslRuntime(opts?: RunWslOptions): Promise<WslRuntimeC
     return {
       available: false,
       version: null,
-      error: summarize(version.stderr || version.stdout) || "WSL is unavailable",
+      error: summarize(version.stderr || version.stdout) || nativeT("desktop.wsl.error.unavailable"),
     }
   }
 
@@ -228,7 +238,7 @@ export async function probeWslRuntime(opts?: RunWslOptions): Promise<WslRuntimeC
 export async function listInstalledWslDistros(opts?: RunWslOptions) {
   const result = await runWsl(["--list", "--verbose"], opts)
   if (result.code !== 0) {
-    throw new Error(summarize(result.stderr || result.stdout) || "Failed to list installed WSL distros")
+    throw new Error(summarize(result.stderr || result.stdout) || nativeT("desktop.wsl.error.listInstalled"))
   }
   return parseInstalledDistros(result.stdout)
 }
@@ -236,7 +246,7 @@ export async function listInstalledWslDistros(opts?: RunWslOptions) {
 export async function listOnlineWslDistros(opts?: RunWslOptions) {
   const result = await runWsl(["--list", "--online"], opts)
   if (result.code !== 0) {
-    throw new Error(summarize(result.stderr || result.stdout) || "Failed to list online WSL distros")
+    throw new Error(summarize(result.stderr || result.stdout) || nativeT("desktop.wsl.error.listOnline"))
   }
   return parseOnlineDistros(result.stdout)
 }
@@ -247,28 +257,34 @@ export async function installWslRuntimeElevated(opts?: RunWslOptions) {
     "$process = Start-Process -FilePath 'wsl.exe' -Verb RunAs -ArgumentList @('--install','--no-distribution') -Wait -PassThru",
     "if ($null -ne $process.ExitCode) { exit $process.ExitCode }",
   ].join("; ")
-  return runPowerShell(script, withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS))
+  const result = await runPowerShell(script, withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS))
+  requireSuccess(result, nativeT("desktop.wsl.error.installWsl"))
 }
 
-export async function installWslDistro(name: string, opts?: RunWslOptions) {
-  return runInteractiveCommand(
+export async function installWslDistro(distro: string, opts?: RunWslOptions) {
+  const result = await runInteractiveCommand(
     resolveSystem32Command("wsl.exe"),
-    ["--install", "-d", name, "--web-download", "--no-launch"],
+    ["--install", "-d", distro, "--web-download", "--no-launch"],
     withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS),
     DEFAULT_WSL_INSTALL_TIMEOUT_MS,
   )
+  requireSuccess(result, nativeT("desktop.wsl.error.installDistro", { distro }))
 }
 
-export async function installWslOpencode(version: string, distro: string, opts?: RunWslOptions) {
-  return runInteractiveCommand(
+export async function installWslCli(distro: string, cli: WslCliBuild, opts?: RunWslOptions) {
+  const result = await runInteractiveCommand(
     resolveSystem32Command("wsl.exe"),
-    wslArgs(
-      ["bash", "-lc", `curl -fsSL https://opencode.ai/install | bash -s -- --version ${shellEscape(version)}`],
-      distro,
-    ),
+    wslArgs(["bash", "-lc", wslCliInstallCommand(cli)], distro),
     withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS),
     DEFAULT_WSL_INSTALL_TIMEOUT_MS,
   )
+  requireSuccess(result, nativeT("desktop.wsl.error.installOpencode"))
+}
+
+export function wslCliInstallCommand(cli: WslCliBuild) {
+  const installer = "curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/v2/install | bash -s --"
+  if (!cli.binary) return `${installer} --version ${shellEscape(cli.version)}`
+  return `${installer} --binary "$(wslpath -a ${shellEscape(cli.binary)})"`
 }
 
 export async function probeWslDistro(name: string, opts?: RunWslOptions): Promise<WslDistroProbe> {
@@ -284,7 +300,7 @@ export async function probeWslDistro(name: string, opts?: RunWslOptions): Promis
       canExecute: false,
       hasBash: false,
       hasCurl: false,
-      error: summarize(executable.stderr || executable.stdout) || "Cannot execute commands in distro",
+      error: summarize(executable.stderr || executable.stdout) || nativeT("desktop.wsl.error.executeDistro"),
     }
   }
 
@@ -302,11 +318,11 @@ export async function probeWslDistro(name: string, opts?: RunWslOptions): Promis
   }
 }
 
-export async function resolveWslOpencode(distro: string, opts?: RunWslOptions) {
+export async function resolveWslCli(distro: string, opts?: RunWslOptions) {
   return firstLine(
     (
       await runWslSh(
-        'if [ -x "$HOME/.opencode/bin/opencode" ]; then printf "%s\\n" "$HOME/.opencode/bin/opencode"; fi',
+        'if [ -x "$HOME/.opencode/bin/opencode2" ]; then printf "%s\\n" "$HOME/.opencode/bin/opencode2"; fi',
         distro,
         opts,
       )
@@ -314,14 +330,15 @@ export async function resolveWslOpencode(distro: string, opts?: RunWslOptions) {
   )
 }
 
-export async function readWslCommandVersion(command: string, distro: string, opts?: RunWslOptions) {
+export async function readWslCliVersion(command: string, distro: string, opts?: RunWslOptions) {
   const result = await runWslSh(`${shellEscape(command)} --version 2>/dev/null || true`, distro, opts)
-  return firstLine(result.stdout)
+  const output = firstLine(result.stdout)
+  return output ? parseCliVersion(output) : null
 }
 
 export function openWslTerminal(distro?: string | null) {
   return new Promise<void>((resolve, reject) => {
-    const child = spawn("cmd.exe", wslTerminalArgs(distro), {
+    const child = spawn("cmd.exe", ["/c", "start", "", "wsl", ...(distro ? ["-d", distro] : [])], {
       detached: true,
       stdio: "ignore",
       windowsHide: true,
@@ -379,6 +396,11 @@ export function summarize(value: string) {
     .map((line) => line.trim())
     .filter(Boolean)
     .join("\n")
+}
+
+function requireSuccess(result: WslCommandResult, fallback: string) {
+  if (result.code === 0) return
+  throw new Error(summarize(result.stderr || result.stdout) || fallback)
 }
 
 export function shellEscape(value: string) {

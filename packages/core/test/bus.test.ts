@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Option, Ref, Schema, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Ref, Schema, Stream } from "effect"
 import { Bus } from "@opencode-ai/core/bus"
 import { Event } from "@opencode-ai/schema/event"
 import { Session } from "@opencode-ai/schema/session"
@@ -105,13 +105,9 @@ const it = testEffect(
   ]),
 )
 const itWithoutLocation = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
-    [Bus.node, Bus.configured({ persist: true })],
-  ]),
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [[Bus.node, Bus.configured({ persist: true })]]),
 )
-const itWithoutPersistence = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node])),
-)
+const itWithoutPersistence = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node])))
 
 describe("Bus", () => {
   it.effect("subscribes to multiple event definitions with a discriminated payload union", () =>
@@ -426,7 +422,7 @@ describe("Bus", () => {
       const { db } = yield* Database.Service
       const aggregateID = Event.ID.create()
 
-      yield* bus.publish(SyncMessage, { id: aggregateID, text: "first" })
+      const event = yield* bus.publish(SyncMessage, { id: aggregateID, text: "first" })
       const rows = yield* db
         .select()
         .from(EventTable)
@@ -437,6 +433,7 @@ describe("Bus", () => {
       expect(rows).toHaveLength(1)
       expect(rows[0]?.type).toBe(Bus.versionedType(SyncMessage.type, 1))
       expect(rows[0]?.aggregate_id).toBe(aggregateID)
+      expect(rows[0]?.created).toBe(event.created)
     }),
   )
 
@@ -456,6 +453,120 @@ describe("Bus", () => {
         .pipe(Effect.orDie)
 
       expect(rows.map((row) => row.seq)).toEqual([0, 1])
+    }),
+  )
+
+  it.effect("publishes a durable batch atomically in provided order", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const aggregateID = Event.ID.create()
+      const observed = new Array<string>()
+      yield* bus.project(SyncMessage, (event) =>
+        Effect.sync(() => {
+          observed.push(`project:${event.data.text}`)
+        }),
+      )
+      yield* bus.listen((event) =>
+        event.type === SyncMessage.type
+          ? Effect.gen(function* () {
+              const text = (event.data as { readonly text: string }).text
+              const row = yield* db
+                .select({ seq: EventSequenceTable.seq })
+                .from(EventSequenceTable)
+                .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+                .get()
+                .pipe(Effect.orDie)
+              observed.push(`notify:${text}:${row?.seq}`)
+            })
+          : Effect.void,
+      )
+
+      const events = yield* bus.publishAll([
+        [SyncMessage, { id: aggregateID, text: "first" }],
+        [SyncMessage, { id: aggregateID, text: "second" }],
+      ])
+
+      expect(events.map((event) => event.durable.seq)).toEqual([Event.Seq.make(0), Event.Seq.make(1)])
+      expect(observed).toEqual(["project:first", "project:second", "notify:first:1", "notify:second:1"])
+      expect(
+        (yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).map(
+          (row) => row.seq,
+        ),
+      ).toEqual([0, 1])
+    }),
+  )
+
+  it.effect("rolls back every batch event when a projector fails", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const aggregateID = Event.ID.create()
+      const notifications = new Array<string>()
+      yield* db.run("CREATE TABLE IF NOT EXISTS event_batch_probe (value text NOT NULL)")
+      yield* db.run("DELETE FROM event_batch_probe")
+      yield* bus.project(SyncMessage, (event) =>
+        db
+          .run(`INSERT INTO event_batch_probe (value) VALUES ('${event.data.text}')`)
+          .pipe(
+            Effect.orDie,
+            Effect.andThen(event.data.text === "second" ? Effect.die("projector failed") : Effect.void),
+          ),
+      )
+      yield* bus.listen((event) =>
+        Effect.sync(() => {
+          notifications.push(event.type)
+        }),
+      )
+
+      const exit = yield* bus
+        .publishAll([
+          [SyncMessage, { id: aggregateID, text: "first" }],
+          [SyncMessage, { id: aggregateID, text: "second" }],
+        ])
+        .pipe(Effect.exit)
+
+      expect(String(exit)).toContain("projector failed")
+      expect(yield* db.all("SELECT value FROM event_batch_probe")).toEqual([])
+      expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).toEqual([])
+      expect(
+        yield* db.select().from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).all(),
+      ).toEqual([])
+      expect(notifications).toEqual([])
+    }),
+  )
+
+  it.effect("does not interleave a concurrent publish with batch notifications", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const aggregateID = Event.ID.create()
+      const firstObserved = yield* Deferred.make<void>()
+      const continueNotifications = yield* Deferred.make<void>()
+      const observed = new Array<string>()
+      yield* bus.listen((event) => {
+        if (event.type !== SyncMessage.type) return Effect.void
+        const text = (event.data as { readonly text: string }).text
+        return Effect.sync(() => observed.push(text)).pipe(
+          Effect.andThen(text === "first" ? Deferred.succeed(firstObserved, undefined) : Effect.void),
+          Effect.andThen(text === "first" ? Deferred.await(continueNotifications) : Effect.void),
+        )
+      })
+
+      const batch = yield* bus
+        .publishAll([
+          [SyncMessage, { id: aggregateID, text: "first" }],
+          [SyncMessage, { id: aggregateID, text: "second" }],
+        ])
+        .pipe(Effect.forkScoped)
+      yield* Deferred.await(firstObserved)
+      const single = yield* bus.publish(SyncMessage, { id: aggregateID, text: "third" }).pipe(Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      expect(observed).toEqual(["first"])
+      yield* Deferred.succeed(continueNotifications, undefined)
+      yield* Fiber.join(batch)
+      yield* Fiber.join(single)
+      expect(observed).toEqual(["first", "second", "third"])
     }),
   )
 
@@ -596,7 +707,7 @@ describe("Bus", () => {
 
       yield* bus.replay({
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -616,7 +727,7 @@ describe("Bus", () => {
 
       yield* bus.replay({
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -653,7 +764,7 @@ describe("Bus", () => {
         const exit = yield* bus
           .replay({
             id: Event.ID.create(),
-            created: DateTime.makeUnsafe(0),
+            created: 0,
             type: Bus.versionedType(DurableMessage.type, 1),
             seq: 1,
             aggregateID: envelopeAggregateID,
@@ -687,7 +798,7 @@ describe("Bus", () => {
 
       yield* bus.replay({
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -696,7 +807,7 @@ describe("Bus", () => {
       const exit = yield* bus
         .replay({
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 5,
           aggregateID,
@@ -721,14 +832,14 @@ describe("Bus", () => {
 
       yield* bus.replay({
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(SessionEvent.InstructionsUpdated.type, 2),
         seq: 0,
         aggregateID,
         data: { sessionID: aggregateID, delta: { "core/context": "0".repeat(64) } },
       })
 
-      expect(received[0]?.created).toEqual(DateTime.makeUnsafe(0))
+      expect(received[0]?.created).toBe(0)
     }),
   )
 
@@ -757,7 +868,7 @@ describe("Bus", () => {
       const exit = yield* bus
         .replay({
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: "unknown.event.1",
           seq: 0,
           aggregateID: Event.ID.create(),
@@ -766,88 +877,6 @@ describe("Bus", () => {
         .pipe(Effect.exit)
 
       expect(String(exit)).toContain("Unknown durable event type")
-    }),
-  )
-
-  it.effect("replayAll validates contiguous aggregate events", () =>
-    Effect.gen(function* () {
-      const bus = yield* Bus.Service
-      const aggregateID = Session.ID.create()
-      const source = yield* bus.replayAll([
-        {
-          id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
-          type: Bus.versionedType(DurableMessage.type, 1),
-          seq: 0,
-          aggregateID,
-          data: durableData(aggregateID, "one"),
-        },
-        {
-          id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
-          type: Bus.versionedType(DurableMessage.type, 1),
-          seq: 1,
-          aggregateID,
-          data: durableData(aggregateID, "two"),
-        },
-      ])
-
-      expect(source).toBe(aggregateID)
-    }),
-  )
-
-  it.effect("replayAll accepts later chunks after the first batch", () =>
-    Effect.gen(function* () {
-      const bus = yield* Bus.Service
-      const { db } = yield* Database.Service
-      const aggregateID = Session.ID.create()
-
-      const one = yield* bus.replayAll([
-        {
-          id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
-          type: Bus.versionedType(DurableMessage.type, 1),
-          seq: 0,
-          aggregateID,
-          data: durableData(aggregateID, "one"),
-        },
-        {
-          id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
-          type: Bus.versionedType(DurableMessage.type, 1),
-          seq: 1,
-          aggregateID,
-          data: durableData(aggregateID, "two"),
-        },
-      ])
-      const two = yield* bus.replayAll([
-        {
-          id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
-          type: Bus.versionedType(DurableMessage.type, 1),
-          seq: 2,
-          aggregateID,
-          data: durableData(aggregateID, "three"),
-        },
-        {
-          id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
-          type: Bus.versionedType(DurableMessage.type, 1),
-          seq: 3,
-          aggregateID,
-          data: durableData(aggregateID, "four"),
-        },
-      ])
-      const rows = yield* db
-        .select()
-        .from(EventTable)
-        .where(eq(EventTable.aggregate_id, aggregateID))
-        .all()
-        .pipe(Effect.orDie)
-
-      expect(one).toBe(aggregateID)
-      expect(two).toBe(aggregateID)
-      expect(rows.map((row) => row.seq)).toEqual([0, 1, 2, 3])
     }),
   )
 
@@ -867,7 +896,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -887,7 +916,7 @@ describe("Bus", () => {
       const id = Event.ID.create()
       const replayed = {
         id,
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -944,7 +973,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 0,
           aggregateID,
@@ -973,7 +1002,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -984,7 +1013,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 2,
           aggregateID,
@@ -1017,7 +1046,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 0,
           aggregateID,
@@ -1030,7 +1059,7 @@ describe("Bus", () => {
         .replay(
           {
             id: Event.ID.create(),
-            created: DateTime.makeUnsafe(0),
+            created: 0,
             type: Bus.versionedType(DurableMessage.type, 1),
             seq: 1,
             aggregateID,
@@ -1052,7 +1081,7 @@ describe("Bus", () => {
       yield* bus.listen((event) => Effect.sync(() => received.push(event)))
       const replayed = {
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -1073,7 +1102,7 @@ describe("Bus", () => {
       const aggregateID = Session.ID.create()
       const replayed = {
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -1098,7 +1127,7 @@ describe("Bus", () => {
       const id = Event.ID.create()
       yield* bus.replay({
         id,
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -1108,7 +1137,7 @@ describe("Bus", () => {
       const exit = yield* bus
         .replay({
           id,
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -1131,7 +1160,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 0,
           aggregateID,
@@ -1142,7 +1171,7 @@ describe("Bus", () => {
       yield* bus.replay(
         {
           id: Event.ID.create(),
-          created: DateTime.makeUnsafe(0),
+          created: 0,
           type: Bus.versionedType(DurableMessage.type, 1),
           seq: 1,
           aggregateID,
@@ -1204,7 +1233,7 @@ describe("Bus", () => {
 
       yield* bus.replay({
         id: Event.ID.create(),
-        created: DateTime.makeUnsafe(0),
+        created: 0,
         type: Bus.versionedType(DurableMessage.type, 1),
         seq: 0,
         aggregateID,
@@ -1341,5 +1370,4 @@ describe("Bus", () => {
       }).pipe(Effect.provide(eventLayer))
     }),
   )
-
 })

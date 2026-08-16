@@ -14,6 +14,7 @@ import { tmpdir } from "./fixture/tmpdir"
 import { Image } from "@opencode-ai/core/image"
 import { it } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
+import { permissionLayer } from "./lib/permission"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
@@ -52,47 +53,35 @@ describe("SkillTool", () => {
           let current = [info]
           const assertions: Permission.AssertInput[] = []
           let deny = false
-          const permission = Layer.succeed(
-            Permission.Service,
-            Permission.Service.of({
-              assert: (input) =>
-                Effect.sync(() => assertions.push(input)).pipe(
-                  Effect.andThen(
-                    deny
-                      ? Effect.fail(
-                          new Permission.BlockedError({
-                            rules: [],
-                            permission: input.action,
-                            resources: input.resources,
-                          }),
-                        )
-                      : Effect.void,
-                  ),
+          const permission = permissionLayer({
+            assert: (input) =>
+              Effect.sync(() => assertions.push(input)).pipe(
+                Effect.andThen(
+                  deny
+                    ? Effect.fail(
+                        new Permission.BlockedError({
+                          rules: [],
+                          permission: input.action,
+                          resources: input.resources,
+                        }),
+                      )
+                    : Effect.void,
                 ),
-              ask: () => Effect.die("unused"),
-              reply: () => Effect.die("unused"),
-              get: () => Effect.die("unused"),
-              forSession: () => Effect.die("unused"),
-              list: () => Effect.die("unused"),
-            }),
-          )
+              ),
+          })
           const skills = Layer.succeed(
             Skill.Service,
             Skill.Service.of({
               transform: (_transform) => Effect.die("unused"),
               reload: () => Effect.die("unused"),
-              sources: () => Effect.die("unused"),
               list: () => Effect.succeed(current),
             }),
           )
-          const skillToolLayer = AppNodeBuilder.build(
-            LayerNode.group([Tool.node, skillToolNode]),
-            [
-              [Permission.node, permission],
-              [Skill.node, skills],
-              [Image.node, imagePassthrough],
-            ],
-          )
+          const skillToolLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode]), [
+            [Permission.node, permission],
+            [Skill.node, skills],
+            [Image.node, imagePassthrough],
+          ])
 
           return yield* Effect.gen(function* () {
             const registry = yield* Tool.Service
@@ -108,9 +97,9 @@ describe("SkillTool", () => {
               }),
             ).toMatchObject({
               status: "completed",
-              content: [{ type: "text", text: SkillTool.toModelOutput(info, [reference]) }],
+              content: [{ type: "text", text: Skill.toModelOutput(info, [reference]) }],
             })
-            expect(SkillTool.toModelOutput(info, [reference])).toContain(`Base directory for this skill: ${directory}`)
+            expect(Skill.toModelOutput(info, [reference])).toContain(`Base directory for this skill: ${directory}`)
             expect(
               yield* executeTool(registry, {
                 sessionID,
@@ -119,8 +108,8 @@ describe("SkillTool", () => {
               }),
             ).toEqual({
               status: "completed",
-              output: { name: "Effect", directory, output: SkillTool.toModelOutput(info, [reference]) },
-              content: [{ type: "text", text: SkillTool.toModelOutput(info, [reference]) }],
+              output: { name: "Effect", directory, output: Skill.toModelOutput(info, [reference]) },
+              content: [{ type: "text", text: Skill.toModelOutput(info, [reference]) }],
               metadata: { name: "Effect", directory },
             })
             expect(assertions).toMatchObject([
@@ -171,7 +160,7 @@ describe("SkillTool", () => {
               }),
             ).toMatchObject({
               status: "completed",
-              content: [{ type: "text", text: SkillTool.toModelOutput(flat, []) }],
+              content: [{ type: "text", text: Skill.toModelOutput(flat, []) }],
             })
           }).pipe(Effect.provide(skillToolLayer))
         }),

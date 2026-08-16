@@ -1,6 +1,6 @@
 export * as Observability from "./observability.js"
 
-import { NodeFileSystem } from "@effect/platform-node"
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
 import { LayerNode } from "./effect/layer-node.js"
 import { Effect, Layer, Logger, References, Schema } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
@@ -45,9 +45,15 @@ export function layer(
         Layer.orDie,
         Layer.merge(Layer.succeed(References.MinimumLogLevel, Logging.minimumLogLevel())),
       )
-      return Layer.merge(logs, yield* Effect.promise(() => Otlp.tracingLayer(options, app)))
+      return Layer.merge(logs, yield* Otlp.tracingLayer(options, app))
     }),
   ).pipe(Layer.catchCause(() => local))
 }
 
-export const node = LayerNode.make({ name: "observability", layer: layer(), deps: [] })
+// Layer.suspend: constructing the loggers eagerly at module scope performs
+// I/O (file logger, run id) that workerd forbids in global scope.
+export const node = LayerNode.make({
+  name: "observability",
+  layer: Layer.suspend(() => layer()),
+  deps: [],
+})

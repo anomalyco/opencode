@@ -1,13 +1,13 @@
-export * as Catalog from "./catalog"
+export * as Catalog from "./catalog.js"
 
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Array, Context, Effect, Layer, Order, pipe } from "effect"
 import { Catalog } from "@opencode-ai/schema/catalog"
-import { Model } from "./model"
-import { Provider } from "./provider"
-import { Bus } from "./bus"
-import { State } from "./state"
-import { Integration } from "./integration"
+import { Model } from "./model.js"
+import { Provider } from "./provider.js"
+import { Bus } from "./bus.js"
+import { State } from "./state.js"
+import { Integration } from "./integration.js"
 
 export type ProviderRecord = {
   provider: Provider.MutableInfo
@@ -65,8 +65,8 @@ const layer = Layer.effect(
     const integrations = yield* Integration.Service
 
     const available = (provider: Provider.Info, integration: Integration.Info | undefined) => {
-      if (provider.disabled) return false
-      if (typeof provider.settings?.apiKey === "string") return true
+      if (provider.activation === "disabled") return false
+      if (provider.activation === "enabled") return true
       if (integration?.connections.length) return true
       return provider.integrationID === undefined && !integration
     }
@@ -115,8 +115,7 @@ const layer = Layer.effect(
                 }
                 draft.providers.set(providerID, record)
               }
-              const model =
-                record.models.get(modelID) ?? (Model.Info.default(providerID, modelID) as Model.MutableInfo)
+              const model = record.models.get(modelID) ?? (Model.Info.default(providerID, modelID) as Model.MutableInfo)
               if (!record.models.has(modelID)) record.models.set(modelID, model)
               fn(model)
               model.id = modelID
@@ -249,8 +248,7 @@ const layer = Layer.effect(
               items,
               Order.mapInput(
                 Order.Number,
-                (item: (typeof candidates)[number]) =>
-                  (item.cost / maxCost) * 0.8 + (item.age / maxAge) * 0.2,
+                (item: (typeof candidates)[number]) => (item.cost / maxCost) * 0.8 + (item.age / maxAge) * 0.2,
               ),
             )
             return projectModel(selected.model, provider)

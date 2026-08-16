@@ -1,14 +1,14 @@
-export * as Git from "./git"
+export * as Git from "./git.js"
 
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { AbsolutePath, RelativePath } from "./schema"
+import { AbsolutePath, RelativePath } from "./schema.js"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { AppProcess } from "@opencode-ai/util/process"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { File } from "./file"
-import { KeyedMutex } from "./effect/keyed-mutex"
+import { File } from "./file.js"
+import { KeyedMutex } from "./effect/keyed-mutex.js"
 
 export class Repository extends Schema.Class<Repository>("Git.Repository")({
   worktree: AbsolutePath,

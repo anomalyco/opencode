@@ -1,4 +1,4 @@
-export * as PromptCacheDiagnostics from "./prompt-cache-diagnostics"
+export * as PromptCacheDiagnostics from "./prompt-cache-diagnostics.js"
 
 import type { LLMRequest } from "@opencode-ai/ai"
 import { Hash } from "@opencode-ai/util/hash"

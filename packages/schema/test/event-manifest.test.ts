@@ -41,6 +41,9 @@ describe("public event manifest", () => {
     expect(EventManifest.Server.get("session.created")).toBe(SessionEvent.Created)
     expect(EventManifest.Server.get("session.deleted")).toBe(SessionEvent.Deleted)
     expect(EventManifest.Server.has("mcp.tools.changed")).toBe(false)
+    expect(EventManifest.Server.has("question.asked")).toBe(false)
+    expect(EventManifest.Server.has("question.replied")).toBe(false)
+    expect(EventManifest.Server.has("question.rejected")).toBe(false)
     expect(Agent.Event.Updated.durable).toBeUndefined()
     expect(EventManifest.Durable.has("agent.updated")).toBe(false)
   })
@@ -82,11 +85,10 @@ describe("public event manifest", () => {
         "session.renamed.1",
         "session.usage.recorded.1",
         "session.forked.2",
-        "session.input.promoted.1",
-        "session.input.admitted.1",
-        "session.input.cancelled.1",
-        "session.input.steered.1",
-        "session.input.queued.1",
+        "session.inbox.delivered.1",
+        "session.inbox.enqueued.1",
+        "session.inbox.cancelled.1",
+        "session.inbox.delivery.changed.1",
         "session.execution.started.1",
         "session.execution.succeeded.1",
         "session.execution.failed.1",
@@ -109,13 +111,13 @@ describe("public event manifest", () => {
         "session.reasoning.started.1",
         "session.reasoning.ended.1",
         "session.retry.scheduled.1",
-        "session.compaction.admitted.1",
         "session.compaction.started.1",
         "session.compaction.ended.1",
         "session.compaction.failed.1",
         "session.revert.staged.1",
         "session.revert.cleared.1",
         "session.revert.committed.1",
+        "worktree.resolved.1",
       ].toSorted(),
     )
     expect(SessionEvent.DurableDefinitions).toEqual([

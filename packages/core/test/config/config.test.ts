@@ -72,6 +72,53 @@ const provider = {
 }
 
 describe("Config", () => {
+  it.live("updates the first file-backed document", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const globalFile = path.join(global, "opencode.jsonc")
+        const projectFile = path.join(project, "opencode.json")
+        return Effect.promise(async () => {
+          await Promise.all([fs.mkdir(global, { recursive: true }), fs.mkdir(project, { recursive: true })])
+          await Promise.all([
+            fs.writeFile(globalFile, '{\n  // Keep this comment.\n  "shell": "global"\n}\n'),
+            fs.writeFile(projectFile, JSON.stringify({ shell: "project" })),
+          ])
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const updated = yield* config.update((draft) => {
+                draft.shell = "updated"
+              })
+
+              expect(updated.shell).toBe("updated")
+              expect(yield* Effect.promise(() => fs.readFile(globalFile, "utf8"))).toContain("// Keep this comment.")
+              expect(yield* Effect.promise(() => fs.readFile(globalFile, "utf8"))).toContain('"shell": "updated"')
+              expect(JSON.parse(yield* Effect.promise(() => fs.readFile(projectFile, "utf8")))).toEqual({
+                shell: "project",
+              })
+            }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.effect("fails updates when no file-backed document exists", () =>
+    Effect.gen(function* () {
+      const config = yield* Config.Service
+      const error = yield* config.update((draft) => void draft).pipe(Effect.flip)
+      expect(error.message).toBe("No editable config document found")
+    }).pipe(
+      Effect.provide(Config.testLayer([new Document({ type: "document", info: new Info({ shell: "virtual" }) })])),
+    ),
+  )
+
   it.live("loads explicit file and content overrides in priority order", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -307,7 +354,7 @@ describe("Config", () => {
     }),
   )
 
-  it.live("loads authenticated wellknown config before user configuration", () =>
+  it.live("tolerates unavailable authenticated wellknown config and reloads it later", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) =>
@@ -322,6 +369,7 @@ describe("Config", () => {
           })
 
           const integrationID = Integration.ID.make("https://example.com")
+          let available = false
           let key = "secret"
           const credentialNode = makeGlobalNode({
             service: Credential.Service,
@@ -361,7 +409,10 @@ describe("Config", () => {
                 refresh: () => Effect.succeed(false),
                 add: () => Effect.die("unused Wellknown.add"),
                 remove: () => Effect.die("unused Wellknown.remove"),
-                resolve: (_entry, variables) => Effect.succeed([{ shell: variables.TOKEN }]),
+                resolve: (_entry, variables) =>
+                  available
+                    ? Effect.succeed([{ shell: variables.TOKEN }])
+                    : Effect.fail(new Error("expired credential")),
               }),
             ),
             deps: [],
@@ -373,23 +424,20 @@ describe("Config", () => {
             const initial = yield* config.entries()
             expect(Config.latest(initial, "shell")).toBe("project")
             expect(
-              initial.flatMap((entry) =>
-                entry.type === "document" && entry.info.shell ? [entry.info.shell] : [],
-              ),
-            ).toEqual(["secret", "global", "project"])
+              initial.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
+            ).toEqual(["global", "project"])
             const updated = yield* bus
               .subscribe(Event.Updated)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
             yield* Effect.yieldNow
+            available = true
             key = "next"
             yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID })
             expect(yield* Fiber.join(updated)).toHaveLength(1)
             const refreshed = yield* config.entries()
             expect(Config.latest(refreshed, "shell")).toBe("project")
             expect(
-              refreshed.flatMap((entry) =>
-                entry.type === "document" && entry.info.shell ? [entry.info.shell] : [],
-              ),
+              refreshed.flatMap((entry) => (entry.type === "document" && entry.info.shell ? [entry.info.shell] : [])),
             ).toEqual(["next", "global", "project"])
           }).pipe(
             Effect.provide(testLayer(project, global, project, undefined, undefined, credentialNode, wellknownNode)),
@@ -857,7 +905,7 @@ describe("Config", () => {
             expect(documents.map((document) => document.type)).toEqual(["document", "document"])
             expect(documents.map((document) => document.info.$schema)).toEqual(["base", "last"])
             expect(documents[0]).toBeInstanceOf(Document)
-            expect(documents[0]?.path).toBe(path.join(tmp.path, "opencode.json"))
+            expect(documents[0]?.path).toBe(AbsolutePath.make(path.join(tmp.path, "opencode.json")))
             expect(documents[1]?.info.providers?.last).toBeInstanceOf(ConfigProvider.Info)
 
             yield* Effect.promise(() =>
@@ -1404,9 +1452,14 @@ describe("Config", () => {
           )
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
             const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
 
             expect(documents.map((document) => document.info.$schema)).toEqual(["base"])
+            expect(yield* watcher.subscriptions()).toContainEqual({
+              path: path.join(tmp.path, "opencode.jsonc"),
+              type: "file",
+            })
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),
@@ -1463,13 +1516,13 @@ describe("Config", () => {
             ])
             expect(entries.filter((entry) => entry.type === "agents").map((entry) => entry.path)).toEqual([
               AbsolutePath.make(globalAgents),
-              AbsolutePath.make(path.join(directory, ".agents")),
               AbsolutePath.make(path.join(root, ".agents")),
+              AbsolutePath.make(path.join(directory, ".agents")),
             ])
             expect(entries.filter((entry) => entry.type === "claude").map((entry) => entry.path)).toEqual([
               AbsolutePath.make(globalClaude),
-              AbsolutePath.make(path.join(directory, ".claude")),
               AbsolutePath.make(path.join(root, ".claude")),
+              AbsolutePath.make(path.join(directory, ".claude")),
             ])
             expect(documents.map((document) => document.info.$schema)).toEqual([
               "global",
@@ -1482,21 +1535,17 @@ describe("Config", () => {
             ])
             expect(entries.map((entry) => (entry.type === "document" ? entry.info.$schema : entry.path))).toEqual([
               AbsolutePath.make(globalClaude),
-              AbsolutePath.make(path.join(directory, ".claude")),
               AbsolutePath.make(path.join(root, ".claude")),
+              AbsolutePath.make(path.join(directory, ".claude")),
               AbsolutePath.make(globalAgents),
-              AbsolutePath.make(path.join(directory, ".agents")),
               AbsolutePath.make(path.join(root, ".agents")),
+              AbsolutePath.make(path.join(directory, ".agents")),
               "global",
               AbsolutePath.make(global),
               "outside",
-              AbsolutePath.make(path.join(tmp.path, "opencode.json")),
               "root",
-              AbsolutePath.make(path.join(root, "opencode.json")),
               "parent",
-              AbsolutePath.make(path.join(parent, "opencode.jsonc")),
               "directory",
-              AbsolutePath.make(path.join(directory, "opencode.json")),
               "root-dot",
               AbsolutePath.make(path.join(root, ".opencode")),
               "directory-dot",

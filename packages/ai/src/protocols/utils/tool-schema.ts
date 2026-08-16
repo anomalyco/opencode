@@ -1,6 +1,6 @@
-import type { JsonSchema, LanguageModelToolSchemaCompatibility } from "../../schema"
-import { isRecord } from "../../utils/record"
-import { GeminiToolSchema } from "./gemini-tool-schema"
+import type { JsonSchema, LanguageModelToolSchemaCompatibility } from "../../schema/index.js"
+import { isRecord } from "../../utils/record.js"
+import { GeminiToolSchema } from "./gemini-tool-schema.js"
 
 const removeNullSchemas = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(removeNullSchemas)

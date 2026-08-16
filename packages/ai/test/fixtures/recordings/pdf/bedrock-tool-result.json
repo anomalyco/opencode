@@ -1,14 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:pdf",
-      "pdf",
-      "provider:amazon-bedrock",
-      "protocol:bedrock-converse",
-      "tool",
-      "tool-result"
-    ],
+    "tags": ["prefix:pdf", "pdf", "provider:amazon-bedrock", "protocol:bedrock-converse", "tool", "tool-result"],
     "name": "pdf/bedrock-tool-result",
     "recordedAt": "2026-07-22T18:15:52.400Z"
   },

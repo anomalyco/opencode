@@ -6,7 +6,7 @@ import type {
   PermissionRequest,
   SessionMessageAssistantTool,
   SessionMessageInfo,
-  SessionPendingInfo,
+  SessionInboxInfo,
 } from "@opencode-ai/client/promise"
 import { Event } from "@opencode-ai/schema/event"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
@@ -120,6 +120,7 @@ type ToolState = {
   part: SessionMessageAssistantTool
   output: string
   version: number
+  started: boolean
 }
 
 type State = {
@@ -181,11 +182,11 @@ function errorMessage(error: { message?: string; _tag?: string }) {
   return error.message || error._tag || "Session execution failed"
 }
 
-function pendingPrompt(item: SessionPendingInfo): FooterQueuedPrompt | undefined {
+function pendingPrompt(item: SessionInboxInfo): FooterQueuedPrompt | undefined {
   if (item.type !== "user") return undefined
   return {
     messageID: item.id,
-    prompt: { messageID: item.id, text: item.data.text, parts: [] },
+    prompt: { messageID: item.id, text: item.payload.text, parts: [] },
     delivery: item.delivery,
   }
 }
@@ -288,6 +289,21 @@ function promptAgents(next: SessionTurnInput) {
   )
 }
 
+function promptSkills(next: SessionTurnInput) {
+  return next.prompt.parts.flatMap((part) =>
+    part.type === "skill"
+      ? [
+          {
+            id: part.id,
+            mention: part.source
+              ? { start: part.source.start, end: part.source.end, text: part.source.value }
+              : undefined,
+          },
+        ]
+      : [],
+  )
+}
+
 function streamPartKey(messageID: string, partID: string) {
   return `${messageID}\u0000${partID}`
 }
@@ -358,12 +374,12 @@ const catalogEvents = new Set([
 // briefly so the output commit renders inside it.
 const SHELL_OUTPUT_GRACE_MS = 1500
 
-function skillCommit(messageID: string, name: string): StreamCommit {
+function skillCommit(messageID: string, name: string, skillID = messageID): StreamCommit {
   return {
     kind: "system",
     source: "system",
     messageID,
-    partID: `skill:${messageID}`,
+    partID: `skill:${skillID}`,
     text: `→ Skill "${name}"`,
     phase: "start",
   }
@@ -526,7 +542,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     input.footer.event({ type: "queued.prompts", prompts })
   }
 
-  const mergePending = (item: SessionPendingInfo) => {
+  const mergePending = (item: SessionInboxInfo) => {
     const prompt = pendingPrompt(item)
     if (!prompt || state.messageIDs.has(prompt.messageID)) return
     state.admitted.add(prompt.messageID)
@@ -594,7 +610,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     state.toolSources.set(key, part)
     if (part.state.status === "streaming") {
-      state.tools.set(key, { part, output: "", version: 0 })
+      state.tools.set(key, { part, output: "", version: 0, started: false })
       return
     }
     const current = state.tools.get(key)
@@ -603,16 +619,18 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const version = current && !prefix ? current.version + 1 : (current?.version ?? 0)
     const delta = current && prefix ? output.slice(current.output.length) : output
     if (part.state.status === "running") {
-      if (render && (!current || current.part.state.status === "streaming"))
+      const started = current?.started === true
+      const ready = part.name !== "websearch" || typeof part.state.metadata.provider === "string"
+      if (render && !started && ready)
         write([toolCommit(part, messageID, "start", undefined, input.location?.directory, version)], {
           phase: "running",
           status: `running ${part.name}`,
         })
       if (render && delta) write([toolCommit(part, messageID, "progress", delta, input.location?.directory, version)])
-      state.tools.set(key, { part, output, version })
+      state.tools.set(key, { part, output, version, started: started || (render && ready) })
       return
     }
-    if (render && (!current || current.part.state.status === "streaming"))
+    if (render && !current?.started)
       write([toolCommit(part, messageID, "start", undefined, input.location?.directory, version)])
     state.finishedTools.add(key)
     state.tools.delete(key)
@@ -637,7 +655,10 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       state.messageIDs.add(message.id)
       if (!render) return
       if (reuseVisibleWait && waiting) return
-      write([{ kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id }])
+      write([
+        ...(message.skills ?? []).map((skill) => skillCommit(message.id, skill.name, skill.id)),
+        { kind: "user", source: "system", text: message.text, phase: "start", messageID: message.id },
+      ])
       return
     }
     if (message.type === "skill") {
@@ -818,7 +839,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const options = { signal: attempt.signal }
     const [projected, pending, permissions, forms, globals, active] = await Promise.all([
       projectedMessages(client, attempt.signal),
-      client.session.pending.list({ sessionID: input.sessionID }, options),
+      client.session.inbox.list({ sessionID: input.sessionID }, options),
       client.permission.list({ sessionID: input.sessionID }, options),
       client.form.list({ sessionID: input.sessionID }, options),
       input.location
@@ -906,25 +927,25 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       input.onSessionTitle?.(event.data.title)
       return
     }
-    if (event.type === "session.input.admitted") {
-      if (event.data.input.type !== "user") return
+    if (event.type === "session.inbox.enqueued") {
+      if (event.data.item.type !== "user") return
       mergePending({
-        id: event.data.inputID,
+        id: event.data.inboxID,
         sessionID: event.data.sessionID,
         timeCreated: event.created,
-        ...event.data.input,
+        ...event.data.item,
       })
       return
     }
-    if (event.type === "session.input.promoted") {
-      const waiting = state.wait?.messageID === event.data.inputID
-      if (state.wait) promoteWait(state.wait, true, event.data.inputID)
-      state.admitted.delete(event.data.inputID)
-      const pending = state.pending.get(event.data.inputID)
-      state.pending.delete(event.data.inputID)
+    if (event.type === "session.inbox.delivered") {
+      const waiting = state.wait?.messageID === event.data.inboxID
+      if (state.wait) promoteWait(state.wait, true, event.data.inboxID)
+      state.admitted.delete(event.data.inboxID)
+      const pending = state.pending.get(event.data.inboxID)
+      state.pending.delete(event.data.inboxID)
       syncPending()
-      const visible = state.messageIDs.has(event.data.inputID)
-      if (waiting || pending) state.messageIDs.add(event.data.inputID)
+      const visible = state.messageIDs.has(event.data.inboxID)
+      if (waiting || pending) state.messageIDs.add(event.data.inboxID)
       if (!waiting && pending && !visible) {
         write([
           {
@@ -932,41 +953,35 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             source: "system",
             text: pending.prompt.text,
             phase: "start",
-            messageID: event.data.inputID,
+            messageID: event.data.inboxID,
           },
         ])
       }
       write([], { phase: "running", status: "waiting for assistant" })
       return
     }
-    if (event.type === "session.input.steered") {
-      const pending = state.pending.get(event.data.inputID)
+    if (event.type === "session.inbox.delivery.changed") {
+      const pending = state.pending.get(event.data.inboxID)
       if (!pending) return
-      state.pending.set(event.data.inputID, { ...pending, delivery: "steer" })
+      state.pending.set(event.data.inboxID, { ...pending, delivery: event.data.delivery })
       syncPending()
-      if (state.messageIDs.has(event.data.inputID)) return
-      state.messageIDs.add(event.data.inputID)
+      if (event.data.delivery === "queue") return
+      if (state.messageIDs.has(event.data.inboxID)) return
+      state.messageIDs.add(event.data.inboxID)
       write([
         {
           kind: "user",
           source: "system",
           text: pending.prompt.text,
           phase: "start",
-          messageID: event.data.inputID,
+          messageID: event.data.inboxID,
         },
       ])
       return
     }
-    if (event.type === "session.input.queued") {
-      const pending = state.pending.get(event.data.inputID)
-      if (!pending) return
-      state.pending.set(event.data.inputID, { ...pending, delivery: "queue" })
-      syncPending()
-      return
-    }
-    if (event.type === "session.input.cancelled") {
-      state.admitted.delete(event.data.inputID)
-      if (state.pending.delete(event.data.inputID)) syncPending()
+    if (event.type === "session.inbox.cancelled") {
+      state.admitted.delete(event.data.inboxID)
+      if (state.pending.delete(event.data.inboxID)) syncPending()
       return
     }
     if (event.type === "session.step.started") {
@@ -1018,10 +1033,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         write([compactionSummary(messageID, "", "final")])
         return
       }
-      write([
-        compactionSummary(messageID, "", "final"),
-        compactionError(messageID, event.data.error.message),
-      ])
+      write([compactionSummary(messageID, "", "final"), compactionError(messageID, event.data.error.message)])
       return
     }
     if (event.type === "session.shell.started") {
@@ -1496,7 +1508,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     next: SessionTurnInput,
     messageID: string,
     client: OpenCodeClient,
-    send: () => Promise<SessionPendingInfo | void>,
+    send: () => Promise<SessionInboxInfo | void>,
     onAdmitted?: () => void,
   ) => {
     const active: Wait = {
@@ -1510,7 +1522,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     state.wait = active
     const interrupt = () => {
       active.interrupted = true
-      void sdk.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+      void sdk.session.interrupt({ sessionID: input.sessionID, continue: true }).catch(() => {})
     }
     next.signal?.addEventListener("abort", interrupt, { once: true })
     try {
@@ -1618,6 +1630,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const command = next.prompt.command
     const attachments = await prepareAttachments(next, command ? "command" : "prompt", input.readTextFile)
     const agents = promptAgents(next)
+    const skills = promptSkills(next)
     if (!command) {
       input.trace?.write("send.prompt", { sessionID: input.sessionID, messageID, delivery })
       return client.session.prompt(
@@ -1627,6 +1640,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           text: [next.prompt.text, ...attachments.text].join("\n\n"),
           files: attachments.files.length ? attachments.files : undefined,
           agents: agents.length ? agents : undefined,
+          skills: skills.length ? skills : undefined,
           delivery,
         },
         { signal: next.signal },
@@ -1646,6 +1660,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         model: selected,
         files: attachments.files.length ? attachments.files : undefined,
         agents: agents.length ? agents : undefined,
+        skills: skills.length ? skills : undefined,
         delivery,
       },
       { signal: next.signal },
@@ -1729,7 +1744,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
       if (command) {
-        await runTurnWait(next, messageID, client, () => admitPrompt(next, client, next.prompt.delivery ?? "steer"), admitted)
+        await runTurnWait(
+          next,
+          messageID,
+          client,
+          () => admitPrompt(next, client, next.prompt.delivery ?? "steer"),
+          admitted,
+        )
         return
       }
 
@@ -1741,7 +1762,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (selected)
         await client.session.switchModel({ sessionID: input.sessionID, model: selected }, { signal: next.signal })
 
-      await runTurnWait(next, messageID, client, () => admitPrompt(next, client, next.prompt.delivery ?? "steer"), admitted)
+      await runTurnWait(
+        next,
+        messageID,
+        client,
+        () => admitPrompt(next, client, next.prompt.delivery ?? "steer"),
+        admitted,
+      )
     },
     async interruptActiveTurn() {
       // A running shell holds no drain, so session.interrupt cannot reach it;
@@ -1753,7 +1780,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
       if (state.wait) state.wait.interrupted = true
-      await sdk.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+      await sdk.session.interrupt({ sessionID: input.sessionID, continue: true }).catch(() => {})
     },
     selectSubagent(sessionID) {
       subagents.select(sdk, sessionID)

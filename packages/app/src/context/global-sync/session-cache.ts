@@ -1,5 +1,5 @@
 import type { Message, Part, Todo } from "@/types"
-import type { PermissionRequest, QuestionRequest, SessionStatus } from "@opencode-ai/client/promise"
+import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode-ai/client/promise"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 
@@ -13,7 +13,7 @@ type SessionCache = {
   session_message: Record<string, SessionMessageInfo[] | undefined>
   part: Record<string, Part[] | undefined>
   permission: Record<string, PermissionRequest[] | undefined>
-  question: Record<string, QuestionRequest[] | undefined>
+  form?: Record<string, FormInfo[] | undefined>
   part_text_accum_delta: Record<string, string | undefined>
 }
 
@@ -37,7 +37,7 @@ export function dropSessionCaches(store: SessionCache, sessionIDs: Iterable<stri
     delete store.session_diff[sessionID]
     delete store.session_status[sessionID]
     delete store.permission[sessionID]
-    delete store.question[sessionID]
+    if (store.form) delete store.form[sessionID]
   }
 }
 

@@ -9,7 +9,7 @@ import { useEditorContext } from "../context/editor"
 import { useData } from "../context/data"
 import { useLocation } from "../context/location"
 import { FormPrompt } from "./session/form"
-import { PluginSlot } from "../plugin/render"
+import { Slot } from "../plugin/render"
 import { useTerminalDimensions } from "@opentui/solid"
 
 let once = false
@@ -91,7 +91,7 @@ export function Home() {
         <box flexGrow={1} minHeight={0} />
       </box>
       <box width="100%" flexShrink={0}>
-        <PluginSlot name="home.footer" input={{}} mode="replace" />
+        <Slot path="home.footer" />
       </box>
       <Show when={forms()[0]?.id} keyed>
         {(_) => {

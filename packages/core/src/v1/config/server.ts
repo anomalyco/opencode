@@ -1,7 +1,7 @@
-export * as ConfigServerV1 from "./server"
+export * as ConfigServerV1 from "./server.js"
 
 import { Schema } from "effect"
-import { PositiveInt } from "../../schema"
+import { PositiveInt } from "../../schema.js"
 
 export const Server = Schema.Struct({
   port: Schema.optional(PositiveInt).annotate({

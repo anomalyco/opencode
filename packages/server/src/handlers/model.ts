@@ -12,6 +12,19 @@ export const ModelHandler = HttpApiBuilder.group(Api, "server.model", (handlers)
       .handle(
         "model.list",
         Effect.fn(function* () {
+          const plugins = yield* PluginSupervisor.Service
+          yield* plugins.flush.pipe(
+            Effect.timeoutOrElse({
+              duration: "5 seconds",
+              orElse: () =>
+                Effect.fail(
+                  new ServiceUnavailableError({
+                    message: "Model catalog initialization timed out",
+                    service: "model.catalog",
+                  }),
+                ),
+            }),
+          )
           const catalog = yield* Catalog.Service
           return yield* response(catalog.model.available())
         }),

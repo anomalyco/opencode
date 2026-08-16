@@ -82,6 +82,7 @@
   "dependencies": {
     "@opencode-ai/client": "workspace:*",
     "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/merman": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/simulation": "workspace:*",
@@ -92,7 +93,6 @@
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
     "@solid-primitives/event-bus": "1.1.2",
-    "clipboardy": "4.0.0",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
     "get-east-asian-width": "catalog:",

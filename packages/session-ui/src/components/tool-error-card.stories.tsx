@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { For } from "solid-js"
 import { ToolErrorCard } from "./tool-error-card"
 
 const docs = `### Overview
@@ -83,9 +84,7 @@ export const All = {
   render: () => {
     return (
       <div style="display: flex; flex-direction: column; gap: 12px; max-width: 720px;">
-        {samples.map((item) => (
-          <ToolErrorCard tool={item.tool} error={item.error} />
-        ))}
+        <For each={samples}>{(item) => <ToolErrorCard tool={item.tool} error={item.error} />}</For>
       </div>
     )
   },

@@ -32,15 +32,110 @@ export interface MockServerConfig {
   todos?: (sessionID: string) => unknown[]
   permissions?: unknown[] | (() => unknown[])
   questions?: unknown[] | (() => unknown[])
+  forms?: unknown[] | (() => unknown[])
   fileList?: (path: string) => unknown | Promise<unknown>
   fileContent?: (path: string) => unknown | Promise<unknown>
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown
   sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
 }
 
+type MockStreamWindow = Window & {
+  __testSseTransport?: unknown
+  __mockServerStream?: { push: (payloads: unknown[]) => void }
+}
+
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   const cursors = new Map<string, string>()
   let nextCursor = 0
+
+  await page.addInitScript(
+    ({ port, retry }) => {
+      const host = window as MockStreamWindow
+      if (host.__testSseTransport || host.__mockServerStream) return
+      const originalFetch = window.fetch.bind(window)
+      const encoder = new TextEncoder()
+      const state: {
+        controller?: ReadableStreamDefaultController<Uint8Array>
+        buffer: string[]
+        connections: number
+      } = { buffer: [], connections: 0 }
+      const frame = (payload: unknown) => `data: ${JSON.stringify(payload)}\n\n`
+      host.__mockServerStream = {
+        push(payloads: unknown[]) {
+          const frames = payloads.map(frame)
+          const controller = state.controller
+          if (!controller) {
+            state.buffer.push(...frames)
+            return
+          }
+          frames.forEach((item) => controller.enqueue(encoder.encode(item)))
+        },
+      }
+      const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        const url = new URL(request.url)
+        if (url.port !== port || url.pathname !== "/api/event") return originalFetch(request)
+        state.connections += 1
+        const id = state.connections
+        let ended = false
+        let own: ReadableStreamDefaultController<Uint8Array> | undefined
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            own = controller
+            state.controller = controller
+            if (retry !== undefined) controller.enqueue(encoder.encode(`retry: ${retry}\n\n`))
+            controller.enqueue(
+              encoder.encode(frame({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })),
+            )
+            state.buffer.splice(0).forEach((item) => controller.enqueue(encoder.encode(item)))
+            request.signal.addEventListener(
+              "abort",
+              () => {
+                if (ended) return
+                ended = true
+                if (state.controller === controller) state.controller = undefined
+                controller.error(request.signal.reason ?? new DOMException("The operation was aborted", "AbortError"))
+              },
+              { once: true },
+            )
+          },
+          cancel() {
+            if (ended) return
+            ended = true
+            if (state.controller === own) state.controller = undefined
+          },
+        })
+        return Promise.resolve(
+          new Response(stream, {
+            status: 200,
+            headers: { "cache-control": "no-cache", "content-type": "text/event-stream" },
+          }),
+        )
+      }
+      Object.defineProperty(window, "fetch", { configurable: true, writable: true, value: fetch })
+    },
+    { port: process.env.PLAYWRIGHT_SERVER_PORT ?? "4096", retry: config.eventRetry },
+  )
+
+  if (config.events) {
+    const pump = { busy: false }
+    const timer = setInterval(() => {
+      if (pump.busy) return
+      const batch = config.events?.() ?? []
+      if (batch.length === 0) return
+      pump.busy = true
+      void page
+        .evaluate(
+          (payloads) => (window as MockStreamWindow).__mockServerStream?.push(payloads),
+          batch.map(currentEvent),
+        )
+        .catch(() => {})
+        .finally(() => {
+          pump.busy = false
+        })
+    }, 50)
+    page.on("close", () => clearInterval(timer))
+  }
   const staticRoutes: Record<string, unknown> = {
     "/path": {
       state: config.directory,
@@ -144,7 +239,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         location: location(config),
         data: currentProviders(providerConfig(config)),
       })
-    if (path === "/api/model") return json(route, { location: location(config), data: currentModels(providerConfig(config)) })
+    if (path === "/api/model")
+      return json(route, { location: location(config), data: currentModels(providerConfig(config)) })
     if (path === "/api/model/default")
       return json(route, { location: location(config), data: currentDefaultModel(providerConfig(config)) })
     if (path === "/api/integration") return json(route, { location: location(config), data: [] })
@@ -171,16 +267,34 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }
     if (/^\/api\/credential\/[^/]+$/.test(path) && route.request().method() === "DELETE")
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
-    if (path === "/api/project") return json(route, [config.project])
+    if (path === "/api/project") {
+      const project = config.project as typeof config.project & { canonical?: string; worktree?: string }
+      return json(route, [
+        {
+          ...project,
+          canonical: project.canonical ?? project.worktree ?? config.directory,
+        },
+      ])
+    }
     if (path === "/api/project/current")
       return json(route, { id: (config.project as { id?: string }).id, directory: config.directory })
+    const worktree = path.match(/^\/api\/worktree\/([^/]+)$/)?.[1]
+    if (worktree && route.request().method() === "GET")
+      return json(route, [
+        { directory: config.directory },
+        ...((config.project as { sandboxes?: string[] }).sandboxes ?? []).map((directory) => ({
+          directory,
+          strategy: "git",
+        })),
+      ])
     if (path === "/api/location") return json(route, location(config))
-    const projectCopy = path.match(/^\/experimental\/project\/([^/]+)\/copy$/)?.[1]
-    if (projectCopy && route.request().method() === "POST") {
+    if (worktree && route.request().method() === "POST") {
       const input = route.request().postDataJSON() as { directory: string; name?: string }
       return json(route, { directory: `${input.directory}/${input.name ?? "copy"}` })
     }
-    if (projectCopy && route.request().method() === "DELETE")
+    if (worktree && route.request().method() === "DELETE")
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    if (/^\/api\/worktree\/[^/]+\/refresh$/.test(path))
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     if (path === "/api/permission/request")
       return json(route, {
@@ -194,6 +308,11 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         location: location(config),
         data: typeof config.questions === "function" ? config.questions() : (config.questions ?? []),
       })
+    if (path === "/api/form/request")
+      return json(route, {
+        location: location(config),
+        data: typeof config.forms === "function" ? config.forms() : (config.forms ?? []),
+      })
     if (path === "/api/vcs")
       return json(route, { location: location(config), data: { branch: "main", defaultBranch: "main" } })
     if (path === "/api/vcs/status") return json(route, { location: location(config), data: [] })
@@ -206,7 +325,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     const fileRead = path.match(/^\/api\/fs\/read\/(.+)$/)?.[1]
     if (fileRead && config.fileContent) {
       const value = await config.fileContent(decodeURIComponent(fileRead))
-      const content = value && typeof value === "object" && "content" in value ? String(value.content) : String(value ?? "")
+      const content =
+        value && typeof value === "object" && "content" in value ? String(value.content) : String(value ?? "")
       return route.fulfill({ status: 200, body: content, headers: { "content-type": "application/octet-stream" } })
     }
     if (path === "/api/fs/find" && config.findFiles) {
@@ -241,7 +361,10 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       const limit = Number(url.searchParams.get("limit") ?? 50)
       const offset = Number(url.searchParams.get("cursor") ?? 0)
       const sessions = config.sessions
-        .filter((session) => !directory || session.directory === directory)
+        .filter((session) => {
+          const location = session.location as { directory?: string } | undefined
+          return !directory || location?.directory === directory || session.directory === directory
+        })
         .filter((session) => parentID !== "null" || session.parentID === undefined)
         .filter((session) => {
           const search = url.searchParams.get("search")?.toLowerCase()
@@ -278,10 +401,23 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (/^\/api\/session\/[^/]+\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
+    const sessionForm = path.match(/^\/api\/session\/([^/]+)\/form$/)?.[1]
+    if (sessionForm && route.request().method() === "GET") {
+      const forms = typeof config.forms === "function" ? config.forms() : (config.forms ?? [])
+      return json(route, { data: forms.filter((form) => (form as { sessionID?: string }).sessionID === sessionForm) })
+    }
+    if (/^\/api\/session\/[^/]+\/form\/[^/]+\/(reply|cancel)$/.test(path) && route.request().method() === "POST") {
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    }
+    if (/^\/api\/session\/[^/]+\/background$/.test(path) && route.request().method() === "POST")
+      return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+    if (/^\/api\/session\/[^/]+\/inbox$/.test(path) && route.request().method() === "GET")
+      return json(route, { data: [] })
     if (/^\/api\/session\/[^/]+\/permission\/[^/]+\/reply$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
-    if (/^\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST") return json(route, true)
+    if (/^\/question\/[^/]+\/(reply|reject)$/.test(path) && route.request().method() === "POST")
+      return json(route, true)
     if (/^\/session\/[^/]+\/permissions\/[^/]+$/.test(path) && route.request().method() === "POST")
       return json(route, true)
     if (
@@ -386,11 +522,13 @@ function providerConfig(config: MockServerConfig) {
 
 function currentProviders(value: unknown) {
   if (!record(value) || !Array.isArray(value.all)) return Array.isArray(value) ? value : []
-  return value.all.filter(record).flatMap((provider) =>
-    typeof provider.id === "string" && typeof provider.name === "string"
-      ? [{ id: provider.id, name: provider.name, package: provider.id }]
-      : [],
-  )
+  return value.all
+    .filter(record)
+    .flatMap((provider) =>
+      typeof provider.id === "string" && typeof provider.name === "string"
+        ? [{ id: provider.id, name: provider.name, package: provider.id }]
+        : [],
+    )
 }
 
 function currentModels(value: unknown) {
@@ -440,9 +578,7 @@ function currentDefaultModel(value: unknown) {
   if (!record(value) || !record(value.default)) return null
   const selected = value.default
   const models = currentModels(value)
-  return models.find(
-    (model) => model.providerID === selected.providerID && model.id === selected.modelID,
-  ) ?? null
+  return models.find((model) => model.providerID === selected.providerID && model.id === selected.modelID) ?? null
 }
 
 function currentPermission(value: unknown) {
@@ -463,6 +599,7 @@ function currentPermission(value: unknown) {
 
 export function currentSession(session: { id: string } & Record<string, unknown>, fallbackDirectory?: string) {
   const time = session.time && typeof session.time === "object" ? session.time : {}
+  const location = session.location && typeof session.location === "object" ? session.location : {}
   return {
     id: session.id,
     parentID: session.parentID,
@@ -480,10 +617,19 @@ export function currentSession(session: { id: string } & Record<string, unknown>
     },
     title: session.title ?? session.id,
     location: {
-      directory: typeof session.directory === "string" ? session.directory : fallbackDirectory,
-      ...(typeof session.workspaceID === "string" ? { workspaceID: session.workspaceID } : {}),
+      directory:
+        "directory" in location && typeof location.directory === "string"
+          ? location.directory
+          : typeof session.directory === "string"
+            ? session.directory
+            : fallbackDirectory,
+      ...(typeof session.workspaceID === "string"
+        ? { workspaceID: session.workspaceID }
+        : "workspaceID" in location && typeof location.workspaceID === "string"
+          ? { workspaceID: location.workspaceID }
+          : {}),
     },
-    subpath: session.path,
+    subpath: session.subpath ?? session.path,
     revert: session.revert,
   }
 }
@@ -562,22 +708,16 @@ function legacyAgent(part: Record<string, unknown>): PromptAgentAttachment[] {
 }
 
 function mentionFrom(value: Record<string, unknown> | undefined) {
-  if (
-    !value ||
-    typeof value.value !== "string" ||
-    typeof value.start !== "number" ||
-    typeof value.end !== "number"
-  )
+  if (!value || typeof value.value !== "string" || typeof value.start !== "number" || typeof value.end !== "number")
     return
   return { text: value.value, start: value.start, end: value.end }
 }
 
-function legacyAssistantContent(
-  part: Record<string, unknown>,
-  created: number,
-): SessionMessageAssistant["content"] {
+function legacyAssistantContent(part: Record<string, unknown>, created: number): SessionMessageAssistant["content"] {
   if (part.type === "text" && typeof part.text === "string")
-    return [{ type: "text", text: part.text, ...(jsonRecord(part.metadata) ? { state: jsonRecord(part.metadata) } : {}) }]
+    return [
+      { type: "text", text: part.text, ...(jsonRecord(part.metadata) ? { state: jsonRecord(part.metadata) } : {}) },
+    ]
   if (part.type === "reasoning" && typeof part.text === "string") {
     const time = record(part.time) ? part.time : undefined
     return [
@@ -618,7 +758,12 @@ function legacyAssistantContent(
     ...(jsonRecord(part.providerResultState) ? { providerResultState: jsonRecord(part.providerResultState) } : {}),
   }
   if (state.status === "pending")
-    return [{ ...base, state: { status: "streaming", input: typeof state.raw === "string" ? state.raw : JSON.stringify(input) } }]
+    return [
+      {
+        ...base,
+        state: { status: "streaming", input: typeof state.raw === "string" ? state.raw : JSON.stringify(input) },
+      },
+    ]
   if (state.status === "completed")
     return [
       {

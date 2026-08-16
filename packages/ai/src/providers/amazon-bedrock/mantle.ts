@@ -1,2 +1,2 @@
-export { chatModel as model } from "../amazon-bedrock-mantle"
-export type { Settings } from "../amazon-bedrock-mantle"
+export { chatModel as model } from "../amazon-bedrock-mantle.js"
+export type { Settings } from "../amazon-bedrock-mantle.js"

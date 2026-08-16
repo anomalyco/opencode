@@ -1,5 +1,5 @@
-import { LLM } from "../../src"
-import { XAI } from "../../src/providers"
+import { LLM } from "../../src/index.js"
+import { XAI } from "../../src/providers.js"
 
 const model = XAI.provider.model("grok-4")
 

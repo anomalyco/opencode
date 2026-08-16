@@ -13,6 +13,8 @@ const sessionB = session("ses_server_b", directoryB, "Server B session")
 
 test("session settings use the remote server context", async ({ page }) => {
   const permissionRequests: string[] = []
+  await installSseTransport(page, { server: serverA })
+  await installSseTransport(page, { server: serverB })
   await mockServers(page, permissionRequests)
   await configureServers(page)
 
@@ -46,6 +48,7 @@ test("session settings use the remote server context", async ({ page }) => {
 test("auto-accept responds for an unfocused server session", async ({ page }) => {
   const permissionRequests: string[] = []
   const permissionResponses: PermissionResponse[] = []
+  await installSseTransport(page, { server: serverB })
   const transport = await installSseTransport<{ directory: string; payload: Record<string, unknown> }>(page, {
     server: serverA,
     retry: 20,
@@ -181,12 +184,16 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
       return json(route, true)
     }
     if (requestDirectory && requestDirectory !== directory) return json(route, { name: "InvalidDirectory" }, 500)
-    if (url.pathname === "/api/event")
-      return sse(route)
     if (url.pathname === "/api/provider")
       return json(route, {
         location: { directory },
-        data: [{ id: remote ? "server-b" : "server-a", name: remote ? "Server B Provider" : "Server A Provider", package: "test" }],
+        data: [
+          {
+            id: remote ? "server-b" : "server-a",
+            name: remote ? "Server B Provider" : "Server A Provider",
+            package: "test",
+          },
+        ],
       })
     if (url.pathname === "/api/model") return json(route, { location: { directory }, data: [model(remote)] })
     if (url.pathname === "/api/model/default") return json(route, { location: { directory }, data: model(remote) })
@@ -213,7 +220,8 @@ async function mockServers(page: Page, permissionRequests: string[], permissionR
     }
     if (url.pathname === "/api/project/current")
       return json(route, { id: remote ? sessionB.projectID : "project-server-a", directory })
-    if (url.pathname === "/api/session") return json(route, { data: sessions.map(currentSession), cursor: {} })
+    if (url.pathname === "/api/session")
+      return json(route, { data: sessions.map((session) => currentSession(session)), cursor: {} })
     if (url.pathname === "/api/session/active") return json(route, { data: {} })
     const currentSessionInfo = sessions.find((session) => url.pathname === `/api/session/${session.id}`)
     if (currentSessionInfo) return json(route, { data: currentSession(currentSessionInfo) })
@@ -319,8 +327,4 @@ function json(route: Route, body: unknown, status = 200) {
     headers: { "access-control-allow-origin": "*" },
     body: JSON.stringify(body),
   })
-}
-
-function sse(route: Route) {
-  return route.fulfill({ status: 200, contentType: "text/event-stream", body: ": ok\n\n" })
 }

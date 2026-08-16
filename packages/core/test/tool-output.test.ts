@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Layer, Stream } from "effect"
+import { Effect } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { Document, Info } from "@opencode-ai/schema/config"
 import { ConfigToolOutput } from "@opencode-ai/schema/config/tool-output"
@@ -20,13 +20,7 @@ const withStore = <A, E, R>(
   Effect.acquireUseRelease(
     Effect.promise(() => tmpdir()),
     (tmp) => {
-      const config = Layer.succeed(
-        Config.Service,
-        Config.Service.of({
-          entries: () => Effect.succeed([new Document({ type: "document", info })]),
-          changes: () => Stream.empty,
-        }),
-      )
+      const config = Config.testLayer([new Document({ type: "document", info })])
       const layer = AppNodeBuilder.build(LayerNode.group([ToolOutput.node, FSUtil.node]), [
         [Config.node, config],
         [Global.node, Global.layerWith({ data: tmp.path })],
@@ -143,18 +137,16 @@ describe("ToolOutput", () => {
     ),
   )
 
-  it.live("removes expired managed files", () =>
+  it.live("uses file modification time when IDs wrap", () =>
     withStore((output, fs, root) =>
       Effect.gen(function* () {
         const directory = path.join(root, ToolOutput.DIRECTORY)
-        const old = path.join(
-          directory,
-          Identifier.create("tool", "ascending", Date.now() - 8 * 24 * 60 * 60 * 1_000),
-        )
-        const recent = path.join(directory, Identifier.ascending("tool"))
+        const old = path.join(directory, Identifier.create("tool", "ascending", 2 ** 36 - 1))
+        const recent = path.join(directory, Identifier.create("tool", "ascending", 2 ** 36 + 1))
         yield* fs.ensureDir(directory)
         yield* fs.writeFileString(old, "old")
         yield* fs.writeFileString(recent, "recent")
+        yield* fs.utimes(old, new Date(), new Date(Date.now() - 8 * 24 * 60 * 60 * 1_000))
         yield* output.cleanup()
         expect(yield* fs.exists(old)).toBe(false)
         expect(yield* fs.exists(recent)).toBe(true)

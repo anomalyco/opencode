@@ -273,7 +273,7 @@ export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
                 >
                   <For each={all()}>
                     {(pty, index) => (
-                      <SortableTerminalTabV2 terminal={pty} index={index} newLayout={newLayout()} onClose={close} />
+                      <SortableTerminalTabV2 terminal={pty} index={index()} newLayout={newLayout()} onClose={close} />
                     )}
                   </For>
                   <div class="h-full flex items-center justify-center">

@@ -1,4 +1,4 @@
-import { expect, mock, test } from "bun:test"
+import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -7,8 +7,6 @@ import { createEventStream, createFetch, directory, json } from "./fixture/tui-c
 
 test("SIGHUP clears title and disposes scoped resources once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
-  const core = await import("@opentui/core")
-  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const titles: string[] = []
   let started!: () => void
   const ready = new Promise<void>((resolve) => {
@@ -32,6 +30,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: {},
         log: () => {},
       }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
@@ -46,14 +45,11 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
-    mock.restore()
   }
 })
 
 test("session lifecycle updates the terminal title and prints the epilogue after cleanup", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
-  const core = await import("@opentui/core")
-  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   let initialTitle!: () => void
   const initialTitleSet = new Promise<void>((resolve) => {
     initialTitle = resolve
@@ -87,7 +83,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
       })
     if (url.pathname === "/api/session/dummy") return json({ data: session })
     if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
-    if (url.pathname === "/api/session/dummy/pending") return json({ data: [] })
+    if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
     if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
     if (url.pathname === "/api/session/dummy/prompt") {
       promptRequests++
@@ -110,6 +106,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
       }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
@@ -134,14 +131,11 @@ test("session lifecycle updates the terminal title and prints the epilogue after
     process.stdout.write = originalWrite
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
-    mock.restore()
   }
 })
 
 test("session title generated while an untitled session is loading remains visible", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
-  const core = await import("@opentui/core")
-  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const titles: string[] = []
   const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
   const generatedTitle = Promise.withResolvers<void>()
@@ -173,7 +167,7 @@ test("session title generated while an untitled session is loading remains visib
       return json({ data: session })
     }
     if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
-    if (url.pathname === "/api/session/dummy/pending") return json({ data: [] })
+    if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
     if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
   }, events)
   const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
@@ -186,6 +180,7 @@ test("session title generated while an untitled session is loading remains visib
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
       }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
@@ -222,14 +217,11 @@ test("session title generated while an untitled session is loading remains visib
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
-    mock.restore()
   }
 })
 
 test("session startup prompt is submitted exactly once", async () => {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
-  const core = await import("@opentui/core")
-  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const events = createEventStream()
   const cwd = process.cwd()
   const location = { directory: cwd, project: { id: "project", directory: cwd } }
@@ -251,7 +243,7 @@ test("session startup prompt is submitted exactly once", async () => {
     if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
     if (url.pathname === "/api/session/dummy") return json({ data: session })
     if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
-    if (url.pathname === "/api/session/dummy/pending") return json({ data: [] })
+    if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
     if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
     if (url.pathname === "/api/agent")
       return json({
@@ -279,6 +271,7 @@ test("session startup prompt is submitted exactly once", async () => {
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { resolve: async () => undefined },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy", prompt: "RESUME_READY" },
         log: () => {},
       }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
@@ -299,6 +292,65 @@ test("session startup prompt is submitted exactly once", async () => {
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
-    mock.restore()
+  }
+})
+
+test("configured app bindings execute settings and permission commands", async () => {
+  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const ready = Promise.withResolvers<void>()
+  const events = createEventStream()
+  const calls = createFetch(undefined, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: {
+          get: async () => ({
+            animations: false,
+            keybinds: { "opencode.settings": "f6", "permission.mode": "f7" },
+          }),
+          update: async () => ({}),
+        },
+        packages: { resolve: async () => undefined },
+        args: {},
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+        log: () => {},
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    )
+    await ready.promise
+    await setup.waitForFrame((frame) => frame.includes("commands"))
+
+    setup.mockInput.pressKey("F6")
+    const settings = await setup.waitForFrame((frame) => frame.includes("Settings"))
+    expect(settings).toContain("Color mode")
+    expect(settings).toContain("Animations")
+
+    setup.mockInput.pressEscape()
+    await setup.waitForFrame((frame) => !frame.includes("Settings"))
+    setup.mockInput.pressKey("F7")
+    await setup.renderOnce()
+    setup.mockInput.pressKey("p", { ctrl: true })
+    await setup.waitForFrame((frame) => frame.includes("Commands"))
+    setup.mockInput.pressKey("END")
+    const commands = await setup.waitForFrame(
+      (frame) => {
+        if (frame.includes("Disable auto-approve permissions")) return true
+        setup.mockInput.pressArrow("up")
+        return false
+      },
+      { maxPasses: 100 },
+    )
+    expect(commands).not.toContain("Enable auto-approve permissions")
+
+    setup.renderer.destroy()
+    await task
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
   }
 })

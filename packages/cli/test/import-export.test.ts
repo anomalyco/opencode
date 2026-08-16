@@ -159,14 +159,7 @@ test("import validates a file and sends it to the resolved location", async () =
   })
 
   try {
-    const [stdout, , exitCode] = await run([
-      "import",
-      file,
-      "--directory",
-      root,
-      "--server",
-      server.url.toString(),
-    ])
+    const [stdout, , exitCode] = await run(["import", file, "--directory", root, "--server", server.url.toString()])
 
     expect(exitCode).toBe(0)
     expect(stdout).toBe(`Imported session: ${info.id}${os.EOL}`)

@@ -269,9 +269,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
       prompt.command?.source !== "skill" &&
       !isNewCommand(prompt.text) &&
       !isCompactCommand(prompt.text) &&
-      !state.queue.some(
-        (item) => item.mode !== "shell" && (isNewCommand(item.text) || isCompactCommand(item.text)),
-      )
+      !state.queue.some((item) => item.mode !== "shell" && (isNewCommand(item.text) || isCompactCommand(item.text)))
     ) {
       const sent = { ...prompt, messageID: SessionMessage.ID.create() }
       const admission = state.admission
