@@ -78,6 +78,7 @@ describe("node build", () => {
         acquisitions++
         return Project.Service.of({
           list: () => Effect.succeed([]),
+          update: (projectID) => Effect.fail(new Project.NotFoundError({ projectID })),
           resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
         })
       }),
