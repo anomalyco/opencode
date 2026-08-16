@@ -2,6 +2,7 @@ import { APICallError } from "@ai-sdk/provider"
 import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { createMistral } from "@ai-sdk/mistral"
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { toolResultMediaFallback } from "@opencode-ai/core/session/model-request"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { Model } from "@opencode-ai/core/model"
@@ -399,6 +400,73 @@ it.effect("sends images through the real Mistral AI SDK provider", () =>
         ],
       },
     ])
+  }),
+)
+
+it.effect("sends tool result images to Mistral as a following user message", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    let body: { messages?: unknown[] } | undefined
+    const mockFetch = Object.assign(
+      async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        body = JSON.parse(String(init?.body))
+        const chunks = [
+          {
+            id: "response-1",
+            created: 0,
+            model: "pixtral-large-latest",
+            choices: [{ index: 0, delta: { content: [{ type: "text", text: "I see it." }] } }],
+          },
+          {
+            id: "response-1",
+            created: 0,
+            model: "pixtral-large-latest",
+            choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          },
+        ]
+        return new Response(chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join(""), {
+          headers: { "Content-Type": "text/event-stream" },
+        })
+      },
+      { preconnect: fetch.preconnect },
+    )
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = createMistral({ apiKey: "test", fetch: mockFetch })
+    })
+
+    const resolved = yield* aisdk.model({
+      ...model("@ai-sdk/mistral"),
+      modelID: Model.ID.make("pixtral-large-latest"),
+    })
+    const messages = toolResultMediaFallback(
+      [
+        Message.user("Capture the screen."),
+        Message.assistant({ type: "tool-call", id: "call_1", name: "screenshot", input: {} }),
+        Message.tool({
+          type: "tool-result",
+          id: "call_1",
+          name: "screenshot",
+          result: {
+            type: "content",
+            value: [
+              { type: "text", text: "Image captured" },
+              { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png", name: "screen.png" },
+            ],
+          },
+        }),
+      ],
+      "ai-sdk",
+    )
+    yield* LLMClient.generate(LLM.request({ model: resolved, messages })).pipe(Effect.provide(client))
+
+    expect(body?.messages?.at(-1)).toEqual({
+      role: "user",
+      content: [
+        { type: "text", text: "Attached media from tool result:" },
+        { type: "image_url", image_url: "data:image/png;base64,AAAA" },
+      ],
+    })
   }),
 )
 

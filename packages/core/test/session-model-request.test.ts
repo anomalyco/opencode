@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Message, ToolResultPart } from "@opencode-ai/ai"
-import { boundImages, unsupportedParts } from "@opencode-ai/core/session/model-request"
+import { boundImages, toolResultMediaFallback, unsupportedParts } from "@opencode-ai/core/session/model-request"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
 
@@ -108,5 +108,97 @@ describe("SessionModelRequest.boundImages", () => {
         value: [{ type: "text" }, { type: "file", name: "second.png" }],
       },
     })
+  })
+})
+
+describe("SessionModelRequest.toolResultMediaFallback", () => {
+  test("moves image and PDF tool results into a following user message", () => {
+    const messages = toolResultMediaFallback(
+      [
+        Message.tool(
+          ToolResultPart.make({
+            id: "call_1",
+            name: "read",
+            result: {
+              type: "content",
+              value: [
+                { type: "text", text: "Attachments read successfully" },
+                { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png", name: "pixel.png" },
+                {
+                  type: "file",
+                  uri: "data:application/pdf;base64,JVBERg==",
+                  mime: "application/pdf",
+                  name: "document.pdf",
+                },
+                { type: "file", uri: "data:audio/mpeg;base64,SUQz", mime: "audio/mpeg", name: "clip.mp3" },
+              ],
+            },
+          }),
+        ),
+      ],
+      "ai-sdk",
+    )
+
+    expect(messages).toEqual([
+      Message.tool(
+        ToolResultPart.make({
+          id: "call_1",
+          name: "read",
+          result: {
+            type: "content",
+            value: [
+              { type: "text", text: "Attachments read successfully" },
+              { type: "file", uri: "data:audio/mpeg;base64,SUQz", mime: "audio/mpeg", name: "clip.mp3" },
+            ],
+          },
+        }),
+      ),
+      Message.user([
+        Message.text("Attached media from tool result:"),
+        { type: "media", mediaType: "image/png", data: "AAAA", filename: "pixel.png" },
+        { type: "media", mediaType: "application/pdf", data: "JVBERg==", filename: "document.pdf" },
+      ]),
+    ])
+  })
+
+  test("leaves a valid tool result when all content is moved", () => {
+    const messages = toolResultMediaFallback(
+      [
+        Message.tool(
+          ToolResultPart.make({
+            id: "call_1",
+            name: "screenshot",
+            result: {
+              type: "content",
+              value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
+            },
+          }),
+        ),
+      ],
+      "ai-sdk",
+    )
+
+    expect(messages[0]?.content[0]).toMatchObject({
+      type: "tool-result",
+      result: { type: "text", value: "Media attached in the following user message." },
+    })
+    expect(messages[1]?.role).toBe("user")
+  })
+
+  test("leaves native protocol tool results untouched", () => {
+    const messages = [
+      Message.tool(
+        ToolResultPart.make({
+          id: "call_1",
+          name: "screenshot",
+          result: {
+            type: "content",
+            value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
+          },
+        }),
+      ),
+    ]
+
+    expect(toolResultMediaFallback(messages, "openai-chat")).toBe(messages)
   })
 })
