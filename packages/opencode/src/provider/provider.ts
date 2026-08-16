@@ -1448,18 +1448,17 @@ const layer = Layer.effect(
               return existingModel?.name ?? modelID
             })
             const longContext = model.cost?.context_over_200k
-            const optionalLongContext = longContext
+            const longContextCost = longContext
               ? {
-                  experimentalOver200K: {
-                    input: longContext.input,
-                    output: longContext.output,
-                    cache: {
-                      read: longContext.cache_read ?? 0,
-                      write: longContext.cache_write ?? 0,
-                    },
+                  input: longContext.input,
+                  output: longContext.output,
+                  cache: {
+                    read: longContext.cache_read ?? 0,
+                    write: longContext.cache_write ?? 0,
                   },
                 }
-              : {}
+              : existingModel?.cost.experimentalOver200K
+            const optionalLongContext = longContextCost ? { experimentalOver200K: longContextCost } : {}
             const parsedModel: Model = {
               id: ModelV2.ID.make(modelID),
               api: {

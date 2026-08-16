@@ -997,6 +997,7 @@ it.instance(
         usage: new Usage({ inputTokens, outputTokens: 0, totalTokens: inputTokens }),
       }).cost
     expect(estimate(199_000)).toBe(0.398)
+    expect(estimate(200_000)).toBe(0.4)
     expect(estimate(201_000)).toBe(0.804)
   }),
   {
@@ -1013,6 +1014,34 @@ it.instance(
               },
             },
           },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "preserves Grok long-context pricing when config omits it",
+  Effect.gen(function* () {
+    yield* set("XAI_API_KEY", "test-api-key")
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.make("xai")].models["grok-4.5"]
+    expect(model.cost.experimentalOver200K).toEqual({
+      input: 4,
+      output: 12,
+      cache: { read: 1, write: 0 },
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: new Usage({ inputTokens: 201_000, outputTokens: 0, totalTokens: 201_000 }),
+    })
+    expect(result.cost).toBe(0.804)
+  }),
+  {
+    config: {
+      provider: {
+        xai: {
+          models: { "grok-4.5": {} },
         },
       },
     },
