@@ -166,13 +166,15 @@ export function resolveServerList(input: {
     const key = ServerConnection.key(conn)
 
     const existing = deduped.get(key)
-    if (existing)
+    if (existing) {
+      const preferProvidedAuth = existing.type === "http" && existing.authToken
       deduped.set(key, {
         ...existing,
         ...conn,
-        http: { ...existing.http, ...conn.http },
+        authToken: preferProvidedAuth ? true : conn.authToken,
+        http: preferProvidedAuth ? { ...conn.http, ...existing.http } : { ...existing.http, ...conn.http },
       })
-    else deduped.set(key, conn)
+    } else deduped.set(key, conn)
   }
 
   return [...deduped.values()]

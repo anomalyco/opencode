@@ -21,7 +21,7 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "package.json"],
+  "include": ["src", "script", "test-launcher", "package.json"],
   "exclude": ["dist", "ts-dist"],
   "references": [{ "path": "../core" }]
 }

@@ -11,7 +11,7 @@ import { ServerScope } from "@/utils/server-scope"
 describe("resolveServerList", () => {
   test("lets startup auth_token credentials override a persisted same-url server", () => {
     const list = resolveServerList({
-      stored: [{ url: "https://server.example.test" }],
+      stored: [{ url: "https://server.example.test", username: "opencode", password: "stale" }],
       props: [
         {
           type: "http",

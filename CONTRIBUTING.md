@@ -46,6 +46,16 @@ bun run dev:desktop
 bun run dev:www
 ```
 
+To run the local web interface with hot reload against the already-running installed OpenCode V2 service:
+
+```bash
+bun run dev:web:live
+```
+
+This command discovers the installed service and launches only the local Vite server on port 4444. Sessions,
+permissions, and other server-owned state are shared with the installed app. Browser-local tabs, drafts,
+preferences, and storage remain separate for the local Vite origin.
+
 ### Packages
 
 - `packages/schema`: shared wire and storage contracts
