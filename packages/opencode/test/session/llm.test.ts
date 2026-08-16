@@ -1372,6 +1372,74 @@ describe("session.llm.stream", () => {
   )
 
   it.instance(
+    "keeps the leading system message date-free and stable on the default tier",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(alibabaQwenFixture.providerID, alibabaQwenFixture.modelID)
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(alibabaQwenFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-cache-prefix")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const input = {
+          user: {
+            id: MessageID.make("msg_user-cache-prefix"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: { providerID: ProviderV2.ID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
+          } satisfies SessionV1.User,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }] satisfies ModelMessage[],
+          tools: {},
+        }
+        const capture = () => {
+          const request = waitRequest(
+            "/chat/completions",
+            new Response(createChatStream("Hello"), {
+              status: 200,
+              headers: { "Content-Type": "text/event-stream" },
+            }),
+          )
+          return drain(input).pipe(Effect.andThen(Effect.promise(() => request)))
+        }
+
+        const first = yield* capture()
+        const second = yield* capture()
+        const systems = (body: Record<string, unknown>) =>
+          (body.messages as Array<{ role: string; content: string }>).filter((msg) => msg.role === "system")
+
+        // E6: the volatile date rides in a trailing system message; the
+        // leading system message is date-free and identical across turns.
+        const firstSystems = systems(first.body)
+        const secondSystems = systems(second.body)
+        expect(firstSystems[0]?.content).not.toContain("Today's date")
+        expect(firstSystems[0]?.content).toBe(secondSystems[0]?.content ?? "")
+        expect(firstSystems[firstSystems.length - 1]?.content).toBe(`Today's date: ${new Date().toDateString()}`)
+      }),
+    {
+      config: () => ({
+        enabled_providers: [alibabaQwenFixture.providerID],
+        provider: {
+          [alibabaQwenFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
     "repairs malformed tool-call JSON arguments in-stream",
     () =>
       Effect.gen(function* () {

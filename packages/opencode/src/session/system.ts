@@ -76,10 +76,11 @@ const layer = Layer.effect(
       environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
         const ctx = yield* InstanceState.context
         const cfg = yield* config.get()
+        const tier = SessionTier.resolve(model)
         // E3: the identity line costs prompt tokens and leaks the serving
         // model. Config can turn it off anywhere; the minimal tier omits it
         // by default (part of the C3 baseline budget).
-        const omitIdentity = cfg.experimental?.omit_model_identity ?? SessionTier.resolve(model) === "minimal"
+        const omitIdentity = cfg.experimental?.omit_model_identity ?? tier === "minimal"
         const references = yield* Effect.gen(function* () {
           return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
         }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
@@ -96,7 +97,11 @@ const layer = Layer.effect(
             `  Workspace root folder: ${ctx.worktree}`,
             `  Is directory a git repo: ${ctx.project.vcs === "git" ? "yes" : "no"}`,
             `  Platform: ${process.platform}`,
-            `  Today's date: ${new Date().toDateString()}`,
+            // E6: the volatile date line invalidates the prompt-cache prefix
+            // daily. Minimal/default tiers carry it as a trailing system
+            // message instead (request prep appends it); vendor tiers keep
+            // it here byte-identical.
+            ...(tier === "vendor" ? [`  Today's date: ${new Date().toDateString()}`] : []),
             `</env>`,
           ].join("\n"),
           references.length === 0

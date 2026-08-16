@@ -92,6 +92,16 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     system.push(header, rest.join("\n"))
   }
 
+  // E6: keep the leading system block byte-stable across days so the prompt
+  // cache prefix survives. SystemPrompt.environment drops the volatile date
+  // line on minimal/default tiers; it rides here as a trailing system message
+  // instead. Vendor tiers are byte-identical to upstream, and small utility
+  // calls (title, summary) don't need the date.
+  const tier = SessionTier.resolve(input.model)
+  if (!input.small && (tier === "minimal" || tier === "default")) {
+    system.push(`Today's date: ${new Date().toDateString()}`)
+  }
+
   const variant =
     !input.small && input.model.variants && input.user.model.variant
       ? input.model.variants[input.user.model.variant]
@@ -258,7 +268,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
       "x-opencode-limit-context": (input.model.limit.context ?? 0).toString(),
       "x-opencode-limit-output": ProviderTransform.maxOutputTokens(input.model, input.flags.outputTokenMax).toString(),
       "x-opencode-usable": usableWindow.toString(),
-      "x-opencode-tier": SessionTier.resolve(input.model),
+      "x-opencode-tier": tier,
       "x-opencode-session-id": input.sessionID,
       "x-opencode-agent": input.agent.name,
       ...(input.subagents?.length ? { "x-opencode-subagents": input.subagents.join(",") } : {}),

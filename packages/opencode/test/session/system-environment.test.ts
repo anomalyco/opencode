@@ -57,3 +57,24 @@ describe("system prompt environment identity line", () => {
     { config: { experimental: { omit_model_identity: false } } },
   )
 })
+
+describe("system prompt environment date line", () => {
+  it.instance("keeps the date in the env block on vendor tiers", () =>
+    Effect.gen(function* () {
+      const env = yield* environment(model("claude-sonnet-4-5"))
+      expect(env[0]).toContain(`Today's date: ${new Date().toDateString()}`)
+    }),
+  )
+
+  it.instance("drops the volatile date from the env block on minimal and default tiers", () =>
+    Effect.gen(function* () {
+      // E6: request prep appends the date as a trailing system message so
+      // the leading system block stays byte-stable across days.
+      const minimal = yield* environment(model("qwen3.5-4b"))
+      expect(minimal[0]).not.toContain("Today's date")
+
+      const fallback = yield* environment(model("some-unknown-model"))
+      expect(fallback[0]).not.toContain("Today's date")
+    }),
+  )
+})
