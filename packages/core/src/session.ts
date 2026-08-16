@@ -456,7 +456,7 @@ const layer = Layer.effect(
           .get()
           .pipe(Effect.orDie)
         if (!row) return yield* new NotFoundError({ sessionID: input.sessionID })
-        if (row.idle === null || row.viewed === row.idle) return
+        if (row.idle === null || (row.viewed !== null && row.viewed >= row.idle)) return
         yield* bus.publish(SessionEvent.Viewed, { sessionID: input.sessionID })
       }),
       remove: Effect.fn("Session.remove")(function* (sessionID) {

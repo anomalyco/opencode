@@ -1,10 +1,12 @@
 import { describe, expect } from "bun:test"
+import path from "path"
 import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
 import { Project } from "@opencode-ai/core/project"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
@@ -13,8 +15,9 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { DateTime, Effect } from "effect"
-import { eq } from "drizzle-orm"
+import { DateTime, Effect, Layer } from "effect"
+import { asc, eq } from "drizzle-orm"
+import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { globalProjectLayer } from "./lib/project"
 
@@ -106,6 +109,66 @@ describe("Session.view", () => {
       const session = yield* Session.Service
       const sessionID = Session.ID.make("ses_missing_view")
       expect(yield* Effect.flip(session.view({ sessionID }))).toEqual(new Session.NotFoundError({ sessionID }))
+    }),
+  )
+
+  it.effect("replays viewed state into a fresh database", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const sourceDb = (yield* Database.Service).db
+      const created = yield* session.create({ id: Session.ID.make("ses_view_replay"), location })
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: created.id })
+      yield* session.view({ sessionID: created.id })
+      yield* bus.publish(SessionEvent.Execution.Failed, {
+        sessionID: created.id,
+        error: { type: "unknown", message: "failed" },
+      })
+      const expected = yield* session.get(created.id)
+      if (!expected.time.idle || !expected.time.viewed) return yield* Effect.die(new Error("Expected attention times"))
+      const expectedIdle = DateTime.toEpochMillis(expected.time.idle)
+      const expectedViewed = DateTime.toEpochMillis(expected.time.viewed)
+      const serialized = (yield* sourceDb
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, created.id))
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie)).map((event) => ({
+        id: event.id,
+        created: event.created,
+        aggregateID: event.aggregate_id,
+        seq: event.seq,
+        type: event.type,
+        data: event.data,
+      }))
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const targetLayer = AppNodeBuilder.build(
+        LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node]),
+        [
+          [Database.node, Database.configured({ path: path.join(tmp.path, "target.sqlite") })],
+          [Bus.node, Bus.configured({ persist: true })],
+        ],
+      )
+
+      yield* Effect.gen(function* () {
+        const db = (yield* Database.Service).db
+        const targetBus = yield* Bus.Service
+        const store = yield* SessionStore.Service
+        yield* db
+          .insert(ProjectTable)
+          .values({ id: Project.ID.global, worktree: location.directory, sandboxes: [] })
+          .run()
+          .pipe(Effect.orDie)
+        yield* Effect.forEach(serialized, (event) => targetBus.replay(event), { discard: true })
+
+        expect((yield* store.get(created.id))?.time).toEqual(expected.time)
+        expect(expected.time.updated).toEqual(created.time.updated)
+        expect(expectedIdle).toBeGreaterThan(expectedViewed)
+      }).pipe(Effect.provide(Layer.fresh(targetLayer)))
     }),
   )
 })
