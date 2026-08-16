@@ -1032,11 +1032,14 @@ export async function handler(
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
       usageInfo
 
+    const hour = new Date().getUTCHours()
     const modelCost =
-      modelInfo.cost200K &&
-      inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) > 200_000
-        ? modelInfo.cost200K
-        : modelInfo.cost
+      modelInfo.costPeak && ((hour >= 1 && hour < 4) || (hour >= 6 && hour < 10))
+        ? modelInfo.costPeak
+        : modelInfo.cost200K &&
+            inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) > 200_000
+          ? modelInfo.cost200K
+          : modelInfo.cost
 
     const inputCost = modelCost.input * inputTokens * 100
     const outputCost = modelCost.output * outputTokens * 100

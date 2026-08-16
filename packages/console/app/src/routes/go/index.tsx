@@ -25,6 +25,7 @@ const checkLoggedIn = query(async () => {
 const models = [
   { name: "Grok 4.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 5.6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
+  { name: "GLM-5.3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.2", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.1", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Kimi K3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -66,24 +67,17 @@ function LimitsGraph(props: { href: string }) {
 
   const baseline = 100
   const graph = [
-    { id: "grok-4.5", name: "Grok 4.5", req: 120, d: "50ms" },
-    { id: "kimi-k3", name: "Kimi K3", req: 110, d: "75ms" },
+    { id: "kimi-k3", name: "Kimi K3", req: 110, d: "50ms" },
+    { id: "grok-4.5", name: "Grok 4.5", req: 120, d: "75ms" },
     { id: "qwen3.8-max", name: "Qwen3.8 Max", req: 160, d: "90ms" },
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
+    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 1050, d: "150ms" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
-    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 3450, d: "270ms" },
+    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 3800, d: "270ms" },
     { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 4100, baseReq: 2050, d: "290ms" },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "300ms" },
     { id: "hy3", name: "Hy3", req: 4300, d: "320ms" },
-    { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
-    {
-      id: "deepseek-v4-flash",
-      name: "DeepSeek V4 Flash",
-      req: 63300,
-      baseReq: 31650,
-      edge: true,
-      d: "340ms",
-    },
+    { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, edge: true, d: "340ms" },
   ]
 
   const w = 1040
@@ -258,12 +252,6 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
-            <div data-component="desktop-app-banner">
-              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
-              <div data-slot="content">
-                <span data-slot="text">{i18n.t("go.banner.text")}</span>
-              </div>
-            </div>
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={goLogoLight} alt="" />
               <img data-slot="zen logo dark" src={goLogoDark} alt="" />
