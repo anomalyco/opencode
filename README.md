@@ -97,6 +97,46 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
+### Building and installing a local preview build
+
+Requires the Bun version pinned in the root `package.json` (`packageManager` field).
+
+```bash
+# from the repo root
+bun install
+cd packages/opencode
+
+# build a binary for the current platform only
+bun run script/build.ts --single
+
+# smoke test the built binary
+./dist/opencode-linux-x64/bin/opencode --version
+```
+
+Preview builds (any channel other than `latest`) are versioned as
+`0.0.0-<branch>-<utc-timestamp>` based on the current git branch. Set
+`OPENCODE_VERSION` to override, or `OPENCODE_CHANNEL=latest` for a
+release-style version. The output directory follows the pattern
+`dist/opencode-<os>-<arch>`.
+
+Useful build flags:
+
+- `--single` - build only for the current OS/arch (default builds all targets)
+- `--baseline` - build the non-AVX2 (baseline) binary
+- `--skip-install` - skip reinstalling cross-platform native dependencies
+- `--skip-embed-web-ui` - skip bundling the web UI into the binary
+
+To install the build as your local `opencode`, replace the binary in the
+install directory (default `$HOME/.opencode/bin`, see above):
+
+```bash
+# back up the current binary, then replace it
+cp ~/.opencode/bin/opencode ~/.opencode/bin/opencode.bak-$(date +%Y%m%d-%H%M)
+cp dist/opencode-linux-x64/bin/opencode ~/.opencode/bin/opencode
+
+opencode --version
+```
+
 ### Agents
 
 OpenCode includes two built-in agents you can switch between with the `Tab` key.
