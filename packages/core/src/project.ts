@@ -32,6 +32,8 @@ export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const UpdateInput = ProjectSchema.UpdateInput
 export type UpdateInput = ProjectSchema.UpdateInput
 
+export const Event = ProjectSchema.Event
+
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Project.NotFoundError", {
   projectID: ID,
 }) {}
@@ -175,7 +177,9 @@ const layer = Layer.effect(
           : db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get()
       ).pipe(Effect.orDie)
       if (!row) return yield* new NotFoundError({ projectID })
-      return fromRow(row)
+      const info = fromRow(row)
+      if (changed) yield* bus.publish(ProjectSchema.Event.Updated, info)
+      return info
     })
 
     const cached = Effect.fnUntraced(function* (dir: string) {

@@ -2,9 +2,10 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { Effect, Fiber, Layer, Stream } from "effect"
 import { eq } from "drizzle-orm"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -13,7 +14,13 @@ import { Hash } from "@opencode-ai/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(Layer.merge(AppNodeBuilder.build(Project.node), AppNodeBuilder.build(Database.node)))
+const it = testEffect(
+  Layer.mergeAll(
+    AppNodeBuilder.build(Project.node),
+    AppNodeBuilder.build(Database.node),
+    AppNodeBuilder.build(Bus.node),
+  ),
+)
 
 describe("Project.list", () => {
   it.effect("returns complete projects ordered by recent update", () =>
@@ -68,10 +75,11 @@ describe("Project.list", () => {
 })
 
 describe("Project.update", () => {
-  it.effect("updates metadata", () =>
+  it.effect("updates metadata and publishes the complete project", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
       const project = yield* Project.Service
+      const bus = yield* Bus.Service
       const id = Project.ID.make("updated")
       yield* db
         .insert(ProjectTable)
@@ -88,6 +96,12 @@ describe("Project.update", () => {
         })
         .run()
 
+      const event = yield* bus.subscribe(Project.Event.Updated).pipe(
+        Stream.filter((event) => event.data.id === id),
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true }),
+      )
       const result = yield* project.update(id, {
         name: "Updated",
         icon: { override: "data:image/png;base64,updated" },
@@ -108,6 +122,7 @@ describe("Project.update", () => {
         sandboxes: [],
       })
       expect(result.time.updated).toBeGreaterThan(1)
+      expect(Array.from(yield* Fiber.join(event)).map((event) => event.data)).toEqual([result])
     }),
   )
 
@@ -180,16 +195,25 @@ describe("Project.update", () => {
     }),
   )
 
-  it.effect("does not update for an empty patch", () =>
+  it.live("does not update or publish for an empty patch", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
       const project = yield* Project.Service
+      const bus = yield* Bus.Service
       const id = Project.ID.make("unchanged")
       yield* db
         .insert(ProjectTable)
         .values({ id, worktree: abs("/unchanged"), sandboxes: [], time_created: 1, time_updated: 1 })
         .run()
+      const event = yield* bus.subscribe(Project.Event.Updated).pipe(
+        Stream.filter((event) => event.data.id === id),
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true }),
+      )
+
       expect(yield* project.update(id, {})).toMatchObject({ time: { updated: 1 } })
+      expect(yield* Fiber.join(event).pipe(Effect.timeoutOption("50 millis"))).toMatchObject({ _tag: "None" })
     }),
   )
 
