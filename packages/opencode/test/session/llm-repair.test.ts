@@ -50,3 +50,31 @@ describe("session.llm.repair", () => {
     expect(LLMRepair.repair('{"path": }')).toBeUndefined()
   })
 })
+
+describe("session.llm.repair camelKeys", () => {
+  test("converts snake_case top-level keys to camelCase", () => {
+    expect(JSON.parse(LLMRepair.camelKeys('{"file_path": "a.txt"}')!)).toEqual({ filePath: "a.txt" })
+    expect(JSON.parse(LLMRepair.camelKeys('{"old_string": "a", "new_string": "b"}')!)).toEqual({
+      oldString: "a",
+      newString: "b",
+    })
+  })
+
+  test("leaves nested object keys untouched", () => {
+    expect(JSON.parse(LLMRepair.camelKeys('{"file_path": "a", "meta": {"some_key": 1}}')!)).toEqual({
+      filePath: "a",
+      meta: { some_key: 1 },
+    })
+  })
+
+  test("returns undefined when nothing changes", () => {
+    expect(LLMRepair.camelKeys('{"filePath": "a.txt"}')).toBeUndefined()
+    expect(LLMRepair.camelKeys("{}")).toBeUndefined()
+  })
+
+  test("returns undefined for non-object input", () => {
+    expect(LLMRepair.camelKeys("not json")).toBeUndefined()
+    expect(LLMRepair.camelKeys('["file_path"]')).toBeUndefined()
+    expect(LLMRepair.camelKeys('"file_path"')).toBeUndefined()
+  })
+})

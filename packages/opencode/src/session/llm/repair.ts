@@ -11,6 +11,27 @@ export function repair(raw: string): string | undefined {
   return repaired
 }
 
+// E1: Claude-trained models emit snake_case argument keys (file_path,
+// old_string) against camelCase tool schemas. Converts top-level keys to
+// camelCase generically; returns undefined when the input is not a JSON
+// object or no key changes, so callers skip the extra validation round.
+// Nested objects are left alone — their keys may be user data.
+export function camelKeys(raw: string): string | undefined {
+  const parsed = (() => {
+    try {
+      return JSON.parse(raw) as unknown
+    } catch {
+      return undefined
+    }
+  })()
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined
+  const entries = Object.entries(parsed).map(
+    ([key, value]) => [key.replace(/_+([a-zA-Z0-9])/g, (_, ch: string) => ch.toUpperCase()), value] as const,
+  )
+  if (entries.every(([key], index) => key === Object.keys(parsed)[index])) return undefined
+  return JSON.stringify(Object.fromEntries(entries))
+}
+
 function parses(text: string) {
   try {
     JSON.parse(text)

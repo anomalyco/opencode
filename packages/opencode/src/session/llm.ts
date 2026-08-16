@@ -325,18 +325,30 @@ const live: Layer.Layer<
             // returned — an invalid repaired call would otherwise degrade into
             // the AI SDK's dynamic invalid path instead of ours below.
             if (name) {
+              const schema = asSchema(prepared.tools[name].inputSchema)
+              const validates = async (input: string) => {
+                if (!schema.validate) return true
+                const result = await schema.validate(JSON.parse(input))
+                return result.success
+              }
               const repaired = LLMRepair.repair(failed.toolCall.input)
-              if (repaired !== undefined) {
-                const schema = asSchema(prepared.tools[name].inputSchema)
-                const validated = schema.validate
-                  ? await schema.validate(JSON.parse(repaired))
-                  : { success: true as const }
-                if (validated.success) {
-                  return {
-                    ...failed.toolCall,
-                    toolName: name,
-                    input: repaired,
-                  }
+              if (repaired !== undefined && (await validates(repaired))) {
+                return {
+                  ...failed.toolCall,
+                  toolName: name,
+                  input: repaired,
+                }
+              }
+              // E1: snake_case argument keys (file_path → filePath) are a
+              // schema reject today and burn a full retry round-trip. Retry
+              // with top-level keys camelCased; accept only when the
+              // transformed arguments validate against the tool schema.
+              const camel = LLMRepair.camelKeys(repaired ?? failed.toolCall.input)
+              if (camel !== undefined && (await validates(camel))) {
+                return {
+                  ...failed.toolCall,
+                  toolName: name,
+                  input: camel,
                 }
               }
               if (name !== failed.toolCall.toolName) {
