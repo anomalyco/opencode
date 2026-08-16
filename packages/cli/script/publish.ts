@@ -20,7 +20,6 @@ async function publish(dir: string, name: string, version: string) {
     await $`bun pm pack`.cwd(dir)
     await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
   }
-  if (Script.channel === "beta") await $`npm dist-tag add ${`${name}@${version}`} next`
 }
 
 async function publishDistribution(input: { root: string; name: string; binary: string; packagePrefix: string }) {

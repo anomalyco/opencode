@@ -68,22 +68,6 @@ await $`bun ./packages/core/script/publish.ts`
 console.log("\n=== ui ===\n")
 await $`bun ./packages/ui/script/publish.ts`
 
-if (Script.channel === "beta") {
-  const packages = [
-    "@opencode-ai/schema",
-    "@opencode-ai/codemode",
-    "@opencode-ai/theme",
-    "@opencode-ai/ai",
-    "@opencode-ai/util",
-    "@opencode-ai/protocol",
-    "@opencode-ai/client",
-    "@opencode-ai/plugin",
-    "@opencode-ai/core",
-    "@opencode-ai/ui",
-  ]
-  await Promise.all(packages.map((name) => $`npm dist-tag add ${`${name}@${Script.version}`} next`))
-}
-
 if (Script.release) {
   await $`bun ./packages/desktop/scripts/finalize-latest-json.ts`
   await $`bun ./packages/desktop/scripts/finalize-latest-yml.ts`
