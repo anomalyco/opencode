@@ -156,6 +156,39 @@ const lsp = Layer.succeed(
   }),
 )
 
+const lspWithSymbol = Layer.succeed(
+  LSP.Service,
+  LSP.Service.of({
+    init: () => Effect.void,
+    status: () => Effect.succeed([]),
+    hasClients: () => Effect.succeed(false),
+    touchFile: () => Effect.void,
+    diagnostics: () => Effect.succeed({}),
+    hover: () => Effect.succeed(undefined),
+    definition: () => Effect.succeed([]),
+    references: () => Effect.succeed([]),
+    implementation: () => Effect.succeed([]),
+    documentSymbol: () =>
+      Effect.succeed([
+        {
+          name: "fn",
+          kind: 12,
+          location: {
+            uri: "file:///fn.ts",
+            range: {
+              start: { line: 1, character: 0 },
+              end: { line: 4, character: 0 },
+            },
+          },
+        },
+      ]),
+    workspaceSymbol: () => Effect.succeed([]),
+    prepareCallHierarchy: () => Effect.succeed([]),
+    incomingCalls: () => Effect.succeed([]),
+    outgoingCalls: () => Effect.succeed([]),
+  }),
+)
+
 const processorCreateStarted: Array<() => void> = []
 const blockingProcessor = Layer.succeed(
   SessionProcessor.Service,
@@ -255,6 +288,14 @@ const withMcpInstructions = testEffect(
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip
+const lspSymbolInstance = testEffect(
+  LayerNode.compile(promptRoot, [
+    [SessionSummary.node, summary],
+    [LSP.node, lspWithSymbol],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+  ]),
+)
 
 // Config that registers a custom "test" provider with a "test-model" model
 // so provider model lookup succeeds inside the loop.
@@ -2174,6 +2215,45 @@ noLLMServer.instance(
       expect(text[0]?.startsWith("Called the Read tool with the following input:")).toBe(true)
       expect(text[1]?.includes("Read tool failed to read")).toBe(true)
       expect(text[2]).toBe("after-file")
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+lspSymbolInstance.instance(
+  "expands single-line file selection to enclosing symbol",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const testFile = path.join(dir, "fn.ts")
+      yield* writeText(testFile, "line1\nline2\nline3\nline4\nline5\n")
+
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          {
+            type: "file",
+            mime: "text/plain",
+            url: `file://${testFile}?start=2&end=2`,
+            filename: "fn.ts",
+          },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+      const text = msg.parts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("\n")
+      expect(text).toContain('"offset":2')
+      expect(text).toContain('"limit":4')
 
       yield* sessions.remove(session.id)
     }),
