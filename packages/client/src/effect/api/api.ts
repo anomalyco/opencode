@@ -393,7 +393,7 @@ export type Endpoint5_31Output =
         }
       | {
           readonly id: Event.ID
-          readonly created: DateTime.Utc
+          readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.deleted"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
