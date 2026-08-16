@@ -133,8 +133,14 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
       }
 
-      const session = params.task_id
-        ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+      // E2: small models echo a label into task_id on a fresh dispatch;
+      // SessionID.make would die on it and burn the step (#1367). A value
+      // without the "ses" session-id prefix is a label, not a resume — ignore
+      // it and dispatch fresh. camelCase variants (taskId/taskID) are already
+      // dropped by the parameter schema decode.
+      const taskID = params.task_id?.startsWith("ses") ? params.task_id : undefined
+      const session = taskID
+        ? yield* sessions.get(SessionID.make(taskID)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
       const childPermission = deriveSubagentSessionPermission({
         parentSessionPermission: parent.permission ?? [],
