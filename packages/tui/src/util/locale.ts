@@ -65,17 +65,19 @@ export function truncate(str: string, len: number): string {
 
 export function truncateLeft(str: string, len: number): string {
   if (str.length <= len) return str
+  // slice(-0) returns the whole string, so budgets below 2 must short-circuit
+  if (len <= 1) return "…"
   return "…" + str.slice(-(len - 1))
 }
 
 export function truncateMiddle(str: string, maxLength: number = 35): string {
   if (str.length <= maxLength) return str
+  if (maxLength <= 1) return "…"
 
-  const ellipsis = "…"
-  const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
-  const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
+  const available = maxLength - 1
+  const keepEnd = Math.floor(available / 2)
 
-  return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
+  return str.slice(0, Math.ceil(available / 2)) + "…" + (keepEnd ? str.slice(-keepEnd) : "")
 }
 
 export function pluralize(count: number, singular: string, plural: string): string {
