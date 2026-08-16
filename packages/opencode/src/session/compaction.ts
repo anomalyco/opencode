@@ -318,7 +318,10 @@ const layer = Layer.effect(
           if (part.state.status !== "completed") continue
           if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
           if (part.state.time.compacted) break loop
-          const estimate = Token.estimate(part.state.output)
+          // C4: tool outputs with a known source filename estimate at the
+          // file format's real token density instead of the prose default.
+          const filePath = part.state.input["filePath"]
+          const estimate = Token.estimate(part.state.output, typeof filePath === "string" ? filePath : undefined)
           total += estimate
           if (total <= PRUNE_PROTECT) continue
           pruned += estimate
