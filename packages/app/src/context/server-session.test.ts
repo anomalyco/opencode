@@ -534,23 +534,23 @@ describe("server session", () => {
 
   test("projects committed revert before server reconciliation", () => {
     const ctx = setup({ child: session("child") })
-    ctx.store.remember({ ...session("child"), revert: { messageID: "msg_2", partID: "prt_1" } })
-    ctx.store.set("input", "child", ["msg_1", "msg_2"])
+    ctx.store.remember({ ...session("child"), revert: { messageID: "msg_000", partID: "prt_1" } })
+    ctx.store.set("input", "child", ["msg_fff", "msg_000"])
     ctx.store.set("session_message", "child", [
-      { id: "msg_1", type: "user", text: "keep", time: { created: 1 } },
-      { id: "msg_2", type: "user", text: "remove", time: { created: 2 } },
+      { id: "msg_fff", type: "user", text: "keep", time: { created: 1 } },
+      { id: "msg_000", type: "user", text: "remove", time: { created: 2 } },
     ])
 
     ctx.store.applyV2({
       id: "evt_revert",
       created: 3,
       type: "session.revert.committed",
-      data: { sessionID: "child", to: "msg_2" },
+      data: { sessionID: "child", to: "msg_000" },
     } as OpenCodeEvent)
 
     expect(ctx.store.data.info.child?.revert).toBeUndefined()
-    expect(ctx.store.data.input.child).toEqual(["msg_1"])
-    expect(ctx.store.data.session_message.child?.map((message) => message.id)).toEqual(["msg_1"])
+    expect(ctx.store.data.input.child).toEqual(["msg_fff"])
+    expect(ctx.store.data.session_message.child?.map((message) => message.id)).toEqual(["msg_fff"])
   })
 
   test("does not restore a message hydrated before a committed revert", async () => {

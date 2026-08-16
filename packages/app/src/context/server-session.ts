@@ -1015,13 +1015,17 @@ export function createServerSession(
     if (event.type === "session.revert.committed") {
       messageHydrationRevision.set(sessionID, (messageHydrationRevision.get(sessionID) ?? 0) + 1)
       if (info) remember({ ...info, revert: undefined })
-      setData("input", sessionID, (items) => items?.filter((id) => id < event.data.to))
+      setData("input", sessionID, (items) => {
+        const boundary = items?.findIndex((id) => id === event.data.to) ?? -1
+        return boundary < 0 ? items : items?.slice(0, boundary)
+      })
       const source = data.session_message[sessionID] ?? []
-      const removed = source.filter((message) => message.id >= event.data.to).map((message) => message.id)
+      const boundary = source.findIndex((message) => message.id === event.data.to)
+      const removed = boundary < 0 ? [] : source.slice(boundary).map((message) => message.id)
       removedMessages.set(sessionID, new Set([...(removedMessages.get(sessionID) ?? []), ...removed]))
       projectV2({
         sessionID,
-        messages: source.filter((message) => message.id < event.data.to),
+        messages: boundary < 0 ? source : source.slice(0, boundary),
         touched: [],
         removed,
       })

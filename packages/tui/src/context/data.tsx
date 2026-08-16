@@ -833,10 +833,13 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             "session",
             "input",
             event.data.sessionID,
-            (store.session.input[event.data.sessionID] ?? []).filter((id) => id < event.data.to),
+            (items) => {
+              const boundary = items?.findIndex((id) => id === event.data.to) ?? -1
+              return boundary < 0 ? items : items?.slice(0, boundary)
+            },
           )
           message.update(event.data.sessionID, (draft, index) => {
-            const position = draft.findIndex((item) => item.id >= event.data.to)
+            const position = draft.findIndex((item) => item.id === event.data.to)
             if (position === -1) return
             for (const item of draft.splice(position)) index.delete(item.id)
           })

@@ -52,8 +52,9 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     )
     const visible = queued.size === 0 ? messages : messages.filter((message) => !queued.has(message.id))
     const boundary = revertBoundary()
+    const boundaryIndex = boundary ? visible.findIndex((message) => message.id === boundary) : -1
     const rows = reduceSessionRows(
-      boundary ? visible.filter((message) => message.id < boundary) : visible,
+      boundaryIndex < 0 ? visible : visible.slice(0, boundaryIndex),
       inputs,
       turnTokens(),
     )

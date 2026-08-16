@@ -1105,7 +1105,7 @@ test("removes committed revert messages from local state", async () => {
   ))
 
   try {
-    for (const [seq, inboxID] of ["msg_001", "msg_002", "msg_003"].entries()) {
+    for (const [seq, inboxID] of ["msg_fff", "msg_000", "msg_001"].entries()) {
       emitEvent(events, {
         id: Event.ID.create(),
         created: seq,
@@ -1121,13 +1121,13 @@ test("removes committed revert messages from local state", async () => {
       created: 3,
       type: "session.revert.committed",
       durable: durable(sessionID, 3),
-      data: { sessionID, to: "msg_002" },
+      data: { sessionID, to: "msg_000" },
     })
 
     await wait(() => data.session.message.list(sessionID).length === 1)
-    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_001"])
-    expect(data.session.message.get(sessionID, "msg_002")).toBeUndefined()
-    expect(data.session.message.get(sessionID, "msg_003")).toBeUndefined()
+    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_fff"])
+    expect(data.session.message.get(sessionID, "msg_000")).toBeUndefined()
+    expect(data.session.message.get(sessionID, "msg_001")).toBeUndefined()
   } finally {
     app.renderer.destroy()
   }
