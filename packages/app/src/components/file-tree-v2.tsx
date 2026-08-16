@@ -24,6 +24,11 @@ import {
   type FileTreeV2Node,
 } from "@/components/file-tree-v2-model"
 import { virtualScrollElement } from "@/components/virtual-scroll-element"
+import { useSDK } from "@/context/sdk"
+import { useOpenInApp } from "@/components/session/open-in-app"
+import { OpenInAppContextMenuV2 } from "@/components/session/open-in-app-v2"
+import { resolveOpenInAppPath } from "@/components/session/open-in-app-path"
+import { usePlatform } from "@/context/platform"
 
 export type { Kind } from "@/components/file-tree"
 
@@ -99,7 +104,7 @@ const FileTreeNodeV2 = (
       {...rest}
     >
       {local.children}
-      <span class="flex-1 min-w-0 text-start text-12-medium whitespace-nowrap truncate">
+      <span data-slot="file-tree-v2-label" class="flex-1 shrink-0 text-start text-12-medium whitespace-nowrap">
         <bdi dir="auto">{local.node.name}</bdi>
       </span>
       {(() => {
@@ -132,6 +137,9 @@ export default function FileTreeV2(props: {
   onFileDoubleClick?: (file: FileNode) => void
 }) {
   const file = useFile()
+  const sdk = useSDK()
+  const platform = usePlatform()
+  const openIn = platform.platform === "desktop" ? useOpenInApp({ path: () => sdk().directory }) : undefined
   const live = () => props.allowed === undefined
   const draggable = () => props.draggable ?? true
   const active = () => normalizeFileTreeV2Path(props.active ?? "")
@@ -213,6 +221,19 @@ export default function FileTreeV2(props: {
   )
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key))
 
+  createEffect(() => {
+    rows()
+    const element = root()
+    if (!element) return
+    element.style.removeProperty("width")
+    syncFileTreeV2Width(element)
+  })
+
+  createEffect(() => {
+    virtualRowKeys()
+    syncFileTreeV2Width(root())
+  })
+
   return (
     <div
       ref={setRoot}
@@ -231,6 +252,7 @@ export default function FileTreeV2(props: {
                   top: "0",
                   "inset-inline-start": "0",
                   width: "100%",
+                  "min-width": "max-content",
                   height: `${item().size}px`,
                   transform: `translateY(${item().start}px)`,
                 }}
@@ -240,29 +262,36 @@ export default function FileTreeV2(props: {
                     <Show
                       when={row().node.type === "directory"}
                       fallback={
-                        <FileTreeNodeV2
-                          node={row().node}
-                          level={row().level}
-                          active={active()}
-                          draggable={draggable()}
-                          kinds={props.kinds}
-                          as="button"
-                          type="button"
-                          class="relative"
-                          onFocus={() => setFocused(row().node.path)}
-                          onBlur={() => setFocused(undefined)}
-                          onClick={() => selectFile(row().node, props.onFileClick)}
-                          onDblClick={() => selectFile(row().node, props.onFileDoubleClick)}
+                        <OpenInAppContextMenuV2
+                          state={openIn}
+                          path={() =>
+                            resolveOpenInAppPath(sdk().directory, row().node.absolute || row().node.originalPath)
+                          }
                         >
-                          <GuideLines level={row().level} />
-                          <Show when={row().level > 0}>
-                            <div class="w-4 shrink-0" />
-                          </Show>
-                          <span class="filetree-iconpair size-4">
-                            <FileIcon node={row().node} class="size-4 filetree-icon filetree-icon--color" />
-                            <FileIcon node={row().node} class="size-4 filetree-icon filetree-icon--mono" mono />
-                          </span>
-                        </FileTreeNodeV2>
+                          <FileTreeNodeV2
+                            node={row().node}
+                            level={row().level}
+                            active={active()}
+                            draggable={draggable()}
+                            kinds={props.kinds}
+                            as="button"
+                            type="button"
+                            class="relative"
+                            onFocus={() => setFocused(row().node.path)}
+                            onBlur={() => setFocused(undefined)}
+                            onClick={() => selectFile(row().node, props.onFileClick)}
+                            onDblClick={() => selectFile(row().node, props.onFileDoubleClick)}
+                          >
+                            <GuideLines level={row().level} />
+                            <Show when={row().level > 0}>
+                              <div class="w-4 shrink-0" />
+                            </Show>
+                            <span class="filetree-iconpair size-4">
+                              <FileIcon node={row().node} class="size-4 filetree-icon filetree-icon--color" />
+                              <FileIcon node={row().node} class="size-4 filetree-icon filetree-icon--mono" mono />
+                            </span>
+                          </FileTreeNodeV2>
+                        </OpenInAppContextMenuV2>
                       }
                     >
                       <FileTreeNodeV2
@@ -298,4 +327,14 @@ export default function FileTreeV2(props: {
       </For>
     </div>
   )
+}
+
+export function syncFileTreeV2Width(element?: HTMLDivElement) {
+  if (!element) return
+  queueMicrotask(() => {
+    if (!element.isConnected) return
+    const width = Math.max(element.clientWidth, ...Array.from(element.children, (child) => child.scrollWidth))
+    if (width <= element.clientWidth) return
+    element.style.width = `${width}px`
+  })
 }

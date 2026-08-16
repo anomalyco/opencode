@@ -2,10 +2,15 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import "@opencode-ai/ui/v2/file-tree-v2.css"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
-import { kindChange, kindLabel, type Kind } from "@/components/file-tree-v2"
+import { kindChange, kindLabel, syncFileTreeV2Width, type Kind } from "@/components/file-tree-v2"
 import { normalizePath } from "@/pages/session/v2/review-diff-kinds"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
 import { virtualScrollElement } from "@/components/virtual-scroll-element"
+import { useSDK } from "@/context/sdk"
+import { useOpenInApp } from "@/components/session/open-in-app"
+import { OpenInAppContextMenuV2 } from "@/components/session/open-in-app-v2"
+import { resolveOpenInAppPath } from "@/components/session/open-in-app-path"
+import { usePlatform } from "@/context/platform"
 
 // Drives the highlight/selection of the flat search-result list from the filter
 // input's keyboard events.
@@ -49,6 +54,9 @@ export function SessionFileListV2(props: {
   onFileClick: (path: string) => void
   onFileDoubleClick?: (path: string) => void
 }) {
+  const sdk = useSDK()
+  const platform = usePlatform()
+  const openIn = platform.platform === "desktop" ? useOpenInApp({ path: () => sdk().directory }) : undefined
   const active = () => normalizePath(props.active ?? "")
   const highlighted = () => normalizePath(props.highlighted ?? "")
   const normalized = createMemo(() => props.files.map(normalizePath))
@@ -89,6 +97,19 @@ export function SessionFileListV2(props: {
   )
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key))
 
+  createEffect(() => {
+    normalized()
+    const element = root()
+    if (!element) return
+    element.style.removeProperty("width")
+    syncFileTreeV2Width(element)
+  })
+
+  createEffect(() => {
+    virtualRowKeys()
+    syncFileTreeV2Width(root())
+  })
+
   return (
     <div
       ref={setRoot}
@@ -114,47 +135,48 @@ export function SessionFileListV2(props: {
                   style={{
                     position: "absolute",
                     top: "0",
-                    left: "0",
+                    "inset-inline-start": "0",
                     width: "100%",
+                    "min-width": "max-content",
                     height: `${item().size}px`,
                     transform: `translateY(${item().start}px)`,
                   }}
                 >
-                  <button
-                    type="button"
-                    id={props.optionID?.(path)}
-                    role={props.role ? "option" : undefined}
-                    aria-selected={props.role ? selected() : undefined}
-                    data-slot="file-tree-v2-row"
-                    data-path={path}
-                    data-selected={selected() ? "" : undefined}
-                    data-highlighted={highlightedRow() ? "" : undefined}
-                    style="padding-left: 8px"
-                    onFocus={() => setFocused(path)}
-                    onBlur={() => setFocused(undefined)}
-                    onClick={() => props.onFileClick(path)}
-                    onDblClick={() => props.onFileDoubleClick?.(path)}
-                  >
-                    <span class="filetree-iconpair size-4">
-                      <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--color" />
-                      <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--mono" mono />
-                    </span>
-                    <span class="flex min-w-0 flex-1 items-center overflow-hidden whitespace-nowrap">
-                      <Show when={directory()}>
+                  <OpenInAppContextMenuV2 state={openIn} path={() => resolveOpenInAppPath(sdk().directory, path)}>
+                    <button
+                      type="button"
+                      id={props.optionID?.(path)}
+                      role={props.role ? "option" : undefined}
+                      aria-selected={props.role ? selected() : undefined}
+                      data-slot="file-tree-v2-row"
+                      data-path={path}
+                      data-selected={selected() ? "" : undefined}
+                      data-highlighted={highlightedRow() ? "" : undefined}
+                      style="padding-inline-start: 8px"
+                      onFocus={() => setFocused(path)}
+                      onBlur={() => setFocused(undefined)}
+                      onClick={() => props.onFileClick(path)}
+                      onDblClick={() => props.onFileDoubleClick?.(path)}
+                    >
+                      <span class="filetree-iconpair size-4">
+                        <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--color" />
+                        <FileIcon node={{ path, type: "file" }} class="size-4 filetree-icon filetree-icon--mono" mono />
+                      </span>
+                      <span data-slot="file-tree-v2-label" class="flex flex-1 shrink-0 items-center whitespace-nowrap">
+                        <Show when={directory()}>
+                          {(value) => <span class="text-12-medium text-text-muted shrink-0">{value()}</span>}
+                        </Show>
+                        <span class="text-12-medium text-text-base shrink-0">{filename()}</span>
+                      </span>
+                      <Show when={kind()}>
                         {(value) => (
-                          <span class="text-12-medium text-text-muted truncate min-w-0 shrink">{value()}</span>
+                          <span data-slot="file-tree-v2-change" data-change={kindChange(value())}>
+                            {kindLabel(value())}
+                          </span>
                         )}
                       </Show>
-                      <span class="text-12-medium text-text-base truncate min-w-0 shrink-0">{filename()}</span>
-                    </span>
-                    <Show when={kind()}>
-                      {(value) => (
-                        <span data-slot="file-tree-v2-change" data-change={kindChange(value())}>
-                          {kindLabel(value())}
-                        </span>
-                      )}
-                    </Show>
-                  </button>
+                    </button>
+                  </OpenInAppContextMenuV2>
                 </div>
               )}
             </Show>
