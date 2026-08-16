@@ -1823,6 +1823,62 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("replays interrupted provider-local tool call IDs uniquely", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Echo twice" }), resume: false })
+
+      requests.length = 0
+      executions.length = 0
+      const firstGate = yield* Deferred.make<void>()
+      const secondGate = yield* Deferred.make<void>()
+      toolExecutionGate = firstGate
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "tool_0", name: "echo", input: { text: "first" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "tool_0", name: "echo", input: { text: "second" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+      ]
+
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      while (executions.length < 1) yield* Effect.yieldNow
+      toolExecutionGate = secondGate
+      yield* Deferred.succeed(firstGate, undefined)
+      while (executions.length < 2) yield* Effect.yieldNow
+      yield* session.interrupt(sessionID)
+      expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+      toolExecutionGate = undefined
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Echo twice" },
+        { type: "assistant", content: [{ type: "tool", id: "tool_0", state: { status: "completed" } }] },
+        { type: "assistant", content: [{ type: "tool", id: "tool_0", state: { status: "error" } }] },
+      ])
+
+      requests.length = 0
+      responses = undefined
+      response = []
+      yield* session.resume(sessionID)
+
+      const callIDs = requests[0]!.messages.flatMap((message) =>
+        message.role === "assistant"
+          ? message.content.filter((part) => part.type === "tool-call").map((part) => part.id)
+          : [],
+      )
+      expect(callIDs).toHaveLength(2)
+      expect(new Set(callIDs).size).toBe(callIDs.length)
+    }),
+  )
+
   it.effect("joins concurrent resume calls into one active provider run", () =>
     Effect.gen(function* () {
       yield* setup
