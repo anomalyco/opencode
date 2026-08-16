@@ -1,6 +1,5 @@
 ---
 title: "Skills"
-description: ""
 ---
 
 Skills are Markdown instructions that OpenCode can advertise to an agent and
@@ -25,8 +24,6 @@ Create one directory per skill with a `SKILL.md` file:
 ---
 name: Git Release
 description: Prepare release notes, version bumps, and GitHub releases
-metadata:
-  opencode/slash: "true"
 ---
 
 ## Workflow
@@ -120,9 +117,9 @@ V2 reads these fields:
 | Field                          | Purpose                                                            |
 | ------------------------------ | ------------------------------------------------------------------ |
 | `name`                         | Display name; defaults to the path-derived ID                      |
-| `description`                  | Summary shown to the model and command catalog                     |
-| `slash`                        | Set to `false` to hide the skill from the V2 slash-command catalog |
-| `metadata.opencode/slash`      | Boolean or `"true"`/`"false"`; overrides `slash`                   |
+| `description`                  | Summary used for model-facing discovery                            |
+| `slash`                        | Set to `false` to hide the skill from interactive command catalogs |
+| `metadata.opencode/slash`      | Boolean or `"true"`/`"false"`; overrides `slash`                 |
 | `metadata.opencode/autoinvoke` | Set to `false` to omit the skill from model-facing discovery       |
 
 Frontmatter, `name`, and `description` are optional at runtime. However, a
@@ -187,10 +184,6 @@ Supporting file contents are not loaded automatically. The agent can read a
 referenced file when the skill instructs it to do so. The supporting-file
 sample is available for directory-based `SKILL.md` skills; flat Markdown skills
 receive no neighboring file list.
-
-In the V2 CLI, skills appear as `/id` commands unless `slash` resolves to
-`false`. Selecting one appends the skill body as a skill message and resumes
-the session.
 
 ## Permissions
 

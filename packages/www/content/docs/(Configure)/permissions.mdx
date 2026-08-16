@@ -1,6 +1,5 @@
 ---
 title: "Permissions"
-description: ""
 ---
 
 Permissions control whether an agent may perform an action on a resource. V2
@@ -225,6 +224,4 @@ shell proposes the exact command text, and skills and subagents propose their
 IDs. Review the confirmation carefully and remove saved approvals that are no
 longer needed.
 
-For non-interactive runs, `opencode2 run --auto` replies `once` to permission
-requests. It does not save approvals, and explicit `deny` rules remain enforced.
-Without `--auto`, a non-interactive run rejects permission requests.
+Non-interactive clients must decide how to handle requests that require approval; explicit `deny` rules remain enforced.

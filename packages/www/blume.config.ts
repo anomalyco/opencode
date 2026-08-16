@@ -23,20 +23,26 @@ export default defineConfig({
     dir: "packages/www",
   },
   theme: {
-    background: { dark: "#131010" },
+    background: { dark: "#000000" },
     fonts: {
-      body: "ibm-plex-mono",
-      display: "ibm-plex-mono",
-      mono: "ibm-plex-mono",
+      body: { name: "Monaspace Neon", provider: "fontsource", weights: [400, 500, 600, 700], fallback: "mono" },
+      display: { name: "Monaspace Neon", provider: "fontsource", weights: [400, 500, 600, 700], fallback: "mono" },
+      mono: { name: "Monaspace Neon", provider: "fontsource", weights: [400, 500, 600, 700], fallback: "mono" },
     },
     mode: "dark",
   },
   navigation: {
     tabs: [
       { label: "Docs", path: "/" },
+      { label: "CLI", path: "/cli" },
       { label: "Build", path: "/build" },
       { label: "API", path: "/api" },
     ],
+  },
+  markdown: {
+    code: {
+      icons: false,
+    },
   },
   openapi: {
     enabled: true,

@@ -550,7 +550,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   const offSelectionKeys = keymap.intercept(
     "key",
     ({ event }) => {
-      if (config.data.terminal?.copy_on_select ?? process.platform !== "win32") return
+      if ((config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select") return
       Selection.handleSelectionKey(renderer, toast, event, clipboard)
     },
     { priority: 1 },
@@ -571,7 +571,8 @@ function App(props: { pair?: DialogPairCredentials }) {
     renderer.clearSelection()
   }
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
-  const copyOnSelectEnabled = () => config.data.terminal?.copy_on_select ?? process.platform !== "win32"
+  const copyOnSelectEnabled = () =>
+    (config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select"
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
   const tabsVertical = () =>
     config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, preferredTabsWidth())

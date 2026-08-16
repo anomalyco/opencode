@@ -1,29 +1,21 @@
 ---
 title: "Models"
-description: ""
 ---
 
-OpenCode builds its model catalog from [Models.dev](https://models.dev), provider integrations, and your configuration.
-Only enabled models whose provider is available for the current project appear in the model picker.
+OpenCode builds its model catalog from [models.dev](https://models.dev), provider integrations, and your configuration.
+Only enabled models whose provider is available for the current project are available for selection.
 
-Connect a provider with `/connect` in the TUI, or configure it in [Providers](/providers).
+Configure provider availability in [Providers](/providers).
 
 ## Choose a model
 
-Open the model picker with `/models` or the default `<leader>m` keybind. The picker shows the models available from
-providers connected to the current project.
-
-Select a model to use it in the current session. Switching models updates that session without changing your config. Use
-the catalog entries shown in the picker rather than guessing a provider or model name.
+Clients can select any model available from providers connected to the current project. Selecting a model updates the
+current session without changing configuration. Use an available catalog entry rather than guessing a provider or model
+name.
 
 ## Per-run model
 
-Select a model for one non-interactive run with `--model` or `-m`:
-
-```bash
-opencode2 run --model openai/gpt-5.2 "Explain this repository"
-opencode2 run -m openai/gpt-5.2#high "Review the current changes"
-```
+Command-line runs can select a model without changing the configured default.
 
 Agents and commands can also select their own model. See [Agents](/agents) and [Commands](/commands).
 
@@ -31,9 +23,7 @@ Agents and commands can also select their own model. See [Agents](/agents) and [
 
 Variants are named request overlays for one model, commonly used for reasoning effort or token budgets. Available names
 are model-specific and are derived from current catalog metadata. Do not assume that names such as `low`, `high`, or
-`max` exist for every model; `/variants` shows the valid choices.
-
-Use `/variants` to choose one for the current model, or press `ctrl+t` to cycle through available variants.
+`max` exist for every model. Clients should present only the variants available for the selected model.
 
 ## Configure
 
@@ -201,7 +191,7 @@ endpoint requires a key, add `apiKey` to provider `settings` using an environmen
 
 ### Model references
 
-Configuration and CLI options identify a model as `provider/model`, with an optional `#variant`:
+Configuration fields and model-selection inputs identify a model as `provider/model`, with an optional `#variant`:
 
 ```text
 openai/gpt-5.2
@@ -223,13 +213,13 @@ The expanded config form is equivalent when generated or programmatic configurat
 }
 ```
 
-Root, agent, and command `model` fields accept both forms. Use the IDs shown by `/models`, not provider display names.
+Root, agent, and command `model` fields accept both forms. Use IDs from the available catalog, not provider display names.
 
 ### Caveats
 
 - The selector object uses `model`, while a provider catalog entry uses `modelID` for the upstream API identifier.
 - The root `model` currently sets the default provider and model only. Although its selection shape accepts a variant,
-  the V2 catalog default does not retain it; select a variant in the TUI, with `opencode2 run`, or on an agent or command.
+  the V2 catalog default does not retain it; select a variant for the session, run, agent, or command instead.
 - Model options are provider-specific. A setting accepted by one provider package may be ignored or rejected by another.
 - Catalog data, credentials, and config are location-scoped. A model available in one project may be unavailable in
   another.

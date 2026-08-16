@@ -1,6 +1,5 @@
 ---
 title: "Agents"
-description: ""
 ---
 
 Agents combine a system prompt, model preference, tool permissions, and display
@@ -18,7 +17,7 @@ Markdown files.
 | **Explore** (`explore`) | `subagent` | Read-only code and web exploration using `read`, `glob`, `grep`, `webfetch`, and `websearch`.                                                              |
 
 OpenCode also has hidden `compaction`, `title`, and `summary` system agents.
-They run internal maintenance tasks and are not selectable. There is no built-in
+They run internal maintenance tasks and are not available for direct use. There is no built-in
 `scout` agent in V2.
 
 You can override a built-in agent with an entry of the same ID. Set
@@ -50,17 +49,8 @@ An agent's `mode` controls where it can run:
 | `subagent` | Can run in a child session through the `subagent` tool, but cannot be selected as the main agent.                                                    |
 | `all`      | Can be used either way.                                                                                                                              |
 
-In the TUI, press <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd> to cycle
-through visible primary and `all` agents, or use `/agents` to choose one.
-
 Subagents run in child sessions with fresh context. A primary agent can invoke
 one with the `subagent` tool, either in the foreground or in the background.
-You can also `@` mention a visible subagent to ask the current agent to delegate
-work to it:
-
-```text
-@explore find where authentication errors are handled
-```
 
 The parent agent's `subagent` permission controls which agents it may launch.
 The child currently uses its own configured permissions, not a restricted copy
@@ -179,11 +169,11 @@ The equivalent expanded form is:
 }
 ```
 
-The TUI uses this as the preferred model when the agent is selected. A child
-session uses its subagent's configured model, or inherits the parent session's
-model when none is configured. In the API, the session's selected model is
-stored separately; creating or switching a primary session with only an agent
-ID does not itself change that session model.
+This is the preferred model when the agent is activated. A child session uses
+its subagent's configured model, or inherits the parent session's model when
+none is configured. The session's selected model is stored separately;
+creating or switching a primary session with only an agent ID does not itself
+change that session model.
 
 ### `system`
 
@@ -241,9 +231,9 @@ user input resets the allowance.
 
 ### `hidden`
 
-When `true`, removes the agent from normal selectors, `@` autocomplete, and the
-subagent catalog advertised to models. It is a visibility setting, not a
-security boundary.
+When `true`, removes the agent from normal agent listings, interactive
+discovery, and the subagent catalog advertised to models. It is a visibility
+setting, not a security boundary.
 
 ### `color`
 
