@@ -1,6 +1,6 @@
 export * as EventV2 from "./event"
 
-import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Scope, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
@@ -145,23 +145,12 @@ export interface Interface {
   ) => Effect.Effect<string | undefined>
   readonly remove: (aggregateID: string) => Effect.Effect<void>
   readonly claim: (aggregateID: string, ownerID: string) => Effect.Effect<void>
+  readonly allBounded: (capacity: number) => Effect.Effect<Stream.Stream<Payload, SubscriberOverflowError>, never, Scope.Scope>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Event") {}
 
-export const allBounded = (events: Interface, capacity: number) =>
-  Effect.gen(function* () {
-    const queue = yield* Queue.dropping<Payload, SubscriberOverflowError>(capacity)
-    const unsubscribe = yield* events.listen((event) =>
-      Queue.offer(queue, event).pipe(
-        Effect.flatMap((accepted) =>
-          accepted ? Effect.void : Queue.fail(queue, new SubscriberOverflowError({ capacity })).pipe(Effect.asVoid),
-        ),
-      ),
-    )
-    yield* Effect.addFinalizer(() => unsubscribe.pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid))
-    return Stream.fromQueue(queue)
-  })
+export const allBounded = (events: Interface, capacity: number) => events.allBounded(capacity)
 
 export interface LayerOptions {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
@@ -178,7 +167,7 @@ export const layerWith = (options?: LayerOptions) =>
       }
       const projectors = new Map<string, Subscriber[]>()
       // TODO: Bind durable projectors to exact type+version before supporting incompatible historical payloads.
-      const listeners = new Array<Subscriber>()
+      const listeners = new Set<Subscriber>()
       const { db } = yield* Database.Service
 
       const getOrCreate = (definition: Definition) =>
@@ -605,10 +594,9 @@ export const layerWith = (options?: LayerOptions) =>
 
       const listen = (listener: Subscriber): Effect.Effect<Unsubscribe> =>
         Effect.sync(() => {
-          listeners.push(listener)
+          listeners.add(listener)
           return Effect.sync(() => {
-            const index = listeners.indexOf(listener)
-            if (index >= 0) listeners.splice(index, 1)
+            listeners.delete(listener)
           })
         })
 
@@ -617,6 +605,27 @@ export const layerWith = (options?: LayerOptions) =>
           const list = projectors.get(definition.type) ?? []
           list.push((event) => projector(event as Payload<D>))
           projectors.set(definition.type, list)
+        })
+
+      const allBounded = (capacity: number) =>
+        Effect.gen(function* () {
+          const queue = yield* Queue.dropping<Payload, SubscriberOverflowError>(capacity)
+          const subscription = yield* PubSub.subscribe(pubsub.all)
+          yield* Effect.forkScoped(
+            Stream.fromSubscription(subscription).pipe(
+              Stream.runForEach((event) =>
+                Queue.offer(queue, event).pipe(
+                  Effect.flatMap((accepted) =>
+                    accepted
+                      ? Effect.void
+                      : Queue.fail(queue, new SubscriberOverflowError({ capacity })).pipe(Effect.asVoid),
+                  ),
+                ),
+              ),
+            ),
+          )
+          yield* Effect.addFinalizer(() => Queue.shutdown(queue))
+          return Stream.fromQueue(queue)
         })
 
       return Service.of({
@@ -630,6 +639,7 @@ export const layerWith = (options?: LayerOptions) =>
         replayAll,
         remove,
         claim,
+        allBounded,
       })
     }),
   )
