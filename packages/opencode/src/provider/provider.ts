@@ -1897,7 +1897,13 @@ const layer = Layer.effect(
       if (cfg.small_model) {
         const parsed = parseModel(cfg.small_model)
         return yield* getModel(parsed.providerID, parsed.modelID).pipe(
-          Effect.catchTag("ProviderModelNotFoundError", () => Effect.succeed(undefined)),
+          // E4: a configured small_model that does not resolve used to fail
+          // silently; name the missing model so the misconfig is visible.
+          Effect.catchTag("ProviderModelNotFoundError", () =>
+            Effect.logWarning("configured small_model not found", { small_model: cfg.small_model }).pipe(
+              Effect.as(undefined),
+            ),
+          ),
         )
       }
 
@@ -1955,6 +1961,17 @@ const layer = Layer.effect(
           continue
         }
         if (candidates[0]) return candidates[0]
+      }
+
+      // E4: config-defined models (local endpoints especially) often carry an
+      // empty family and never match the exact-family ladder. Fall back to a
+      // substring scan over family and id before giving up.
+      for (const needle of ["flash", "nano", "haiku", "mini"]) {
+        const match = models.find(
+          (model) =>
+            (model.family ?? "").toLowerCase().includes(needle) || model.id.toLowerCase().includes(needle),
+        )
+        if (match) return match
       }
 
       return undefined
