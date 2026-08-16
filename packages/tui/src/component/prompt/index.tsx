@@ -308,7 +308,8 @@ export function Prompt(props: PromptProps) {
     ),
   )
 
-  // Initialize agent/model/variant from last user message when session changes
+  // Initialize the agent from the last user message when the session changes.
+  // The model follows durable session updates while preserving local picks.
   let syncedSessionID: string | undefined
   createEffect(() => {
     const sessionID = props.sessionID
@@ -324,10 +325,6 @@ export function Prompt(props: PromptProps) {
       if (msg.agent && isPrimaryAgent) {
         // Keep command line --agent if specified.
         if (!args.agent) local.agent.set(msg.agent)
-        if (msg.model) {
-          local.model.set(msg.model)
-          local.model.variant.set(msg.model.variant)
-        }
       }
     }
   })

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { hasCustomAgent, resolveAgent } from "./local-agent"
+import { hasCustomAgent, resolveAgent, shouldApplyAgent } from "./local-agent"
 
 describe("hasCustomAgent", () => {
   test("detects explicitly custom agents", () => {
@@ -25,5 +25,19 @@ describe("resolveAgent", () => {
 
   test("uses the first agent when build is unavailable", () => {
     expect(resolveAgent([{ name: "custom" }], "missing")?.name).toBe("custom")
+  })
+})
+
+describe("shouldApplyAgent", () => {
+  test("applies the first selection so state is persisted", () => {
+    expect(shouldApplyAgent({ agent: "build", persisted: undefined })).toBe(true)
+  })
+
+  test("applies a real agent switch", () => {
+    expect(shouldApplyAgent({ agent: "plan", persisted: "build" })).toBe(true)
+  })
+
+  test("skips re-applying the already-persisted agent", () => {
+    expect(shouldApplyAgent({ agent: "build", persisted: "build" })).toBe(false)
   })
 })

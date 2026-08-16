@@ -32,6 +32,14 @@ export function parseModel(model: string) {
   }
 }
 
+// A session carries the model used for its last turn, which is the agent's
+// configured model unless the user picked one. Seeding from it must therefore be
+// skipped once the agent has a local override, or the pick is silently reverted
+// on the next session update.
+export function shouldSeedSessionModel(override: { providerID: string; modelID: string } | undefined) {
+  return !override
+}
+
 export function recentModels(
   model: { providerID: string; modelID: string },
   recent: { providerID: string; modelID: string }[],
@@ -242,6 +250,27 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             fallbackModel,
           ) ?? undefined
         )
+      })
+
+      // Seed the model from durable session state, but never overwrite a model the
+      // user picked for this agent. Otherwise a session update mid-conversation
+      // reverts the selection to the agent's configured model.
+      createEffect(() => {
+        const currentRoute = route.data
+        if (currentRoute.type !== "session") return
+
+        const session = sync.data.session.find((item) => item.id === currentRoute.sessionID)
+        const selected = session?.model
+        const a = agent.current()
+        if (!a || !selected) return
+        if (!shouldSeedSessionModel(modelStore.model[a.name])) return
+
+        const model = { providerID: selected.providerID, modelID: selected.id }
+        if (!isModelValid(model)) return
+        batch(() => {
+          setModelStore("model", a.name, model)
+          setModelStore("variant", `${selected.providerID}/${selected.id}`, selected.variant ?? "default")
+        })
       })
 
       return {
