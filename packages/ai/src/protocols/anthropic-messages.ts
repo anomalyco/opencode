@@ -409,6 +409,8 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: Me
         data: media.base64,
       },
     } satisfies AnthropicDocumentBlock
+  if (!media.mime.startsWith("image/"))
+    return yield* invalid(`Anthropic Messages does not support media type ${part.mediaType}`)
   return {
     type: "image" as const,
     source: {

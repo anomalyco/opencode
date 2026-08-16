@@ -554,6 +554,18 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("rejects non-image media that cannot be lowered", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [Message.user({ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" })],
+        }),
+      ).pipe(Effect.flip)
+      expect(error.message).toContain("OpenAI Chat does not support media type audio/mpeg")
+    }),
+  )
+
   it.effect("prepares raw and data URL image media as vision input", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
