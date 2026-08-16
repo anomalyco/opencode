@@ -1021,9 +1021,16 @@ describe("SessionRunnerLLM", () => {
       const database = yield* Database.Service
       const bus = yield* Bus.Service
       yield* InstructionState.prepare(database.db, bus, selected.instructions, sessionID)
+      const loaded = yield* context.load(selected)
       const prepared = yield* modelRequests.prepare({
-        context: yield* context.load(selected),
-        step: 1,
+        scope: {
+          session: loaded.session,
+          agentID: loaded.agent.id,
+          model: loaded.model,
+          tools: loaded.tools,
+        },
+        transcript: { system: [], messages: [] },
+        webSocket: "session",
       })
       const http = prepared.options.http ?? (yield* Effect.die("Expected Session HTTP middleware"))
 
@@ -1032,7 +1039,7 @@ describe("SessionRunnerLLM", () => {
         return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("network")))
       })
 
-      expect(prepared.webSocketEligible).toBe(false)
+      expect(prepared.options.webSocket).toBeUndefined()
       expect(response.headers["x-response-hook"]).toBe("active")
       expect(requestTriggers).toBe(1)
       expect(responseTriggers).toBe(1)
