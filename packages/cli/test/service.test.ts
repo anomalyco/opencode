@@ -1,8 +1,10 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Service, type Info } from "@opencode-ai/client/effect/service"
+import { Session } from "@opencode-ai/schema/session"
 import { Global } from "@opencode-ai/util/global"
 import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
+import { Database } from "bun:sqlite"
 import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -121,6 +123,40 @@ test("managed service writes its registration once", async () => {
     expect(after.ino).toBe(before.ino)
     expect(after.mtimeMs).toBe(before.mtimeMs)
     expect(await Bun.file(service.registration).json()).toEqual(service.info)
+  } finally {
+    await stopManagedService(service)
+  }
+}, 30_000)
+
+test("managed service persists durable events when configured", async () => {
+  const service = await startManagedService("opencode-service-events-", false, {
+    OPENCODE_EVENTS_PERSIST: "1",
+  })
+  try {
+    const response = await fetch(new URL("/api/session", service.info.url), {
+      method: "POST",
+      headers: {
+        authorization: "Basic " + btoa(`opencode:${service.info.password}`),
+        "content-type": "application/json",
+      },
+      body: "{}",
+    })
+    expect(response.status).toBe(200)
+    const session = await Schema.decodeUnknownPromise(Schema.Struct({ data: Session.Info }))(await response.json())
+    await Effect.runPromise(Service.stop({ file: service.registration }).pipe(Effect.provide(NodeFileSystem.layer)))
+    await service.owner.exited
+
+    const database = new Database(path.join(service.root, "opencode.db"), { readonly: true })
+    try {
+      const event = database
+        .query<{ type: string }, [string]>(
+          "SELECT type FROM event WHERE aggregate_id = ? AND type = 'session.created.1'",
+        )
+        .get(session.data.id)
+      expect(event?.type).toBe("session.created.1")
+    } finally {
+      database.close()
+    }
   } finally {
     await stopManagedService(service)
   }
@@ -533,7 +569,7 @@ function serviceEnv(root: string) {
   }
 }
 
-async function startManagedService(prefix: string, failBoot = false) {
+async function startManagedService(prefix: string, failBoot = false, environment: Record<string, string> = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), prefix))
   const port = await availablePort()
   const registration = path.join(root, "state", "opencode", "service-local.json")
@@ -541,7 +577,11 @@ async function startManagedService(prefix: string, failBoot = false) {
   if (failBoot) await fs.mkdir(path.join(root, "database"))
   await fs.writeFile(path.join(root, "config", "opencode", "service-local.json"), JSON.stringify({ port }))
   const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
-    env: failBoot ? { ...serviceEnv(root), OPENCODE_DB: path.join(root, "database") } : serviceEnv(root),
+    env: {
+      ...serviceEnv(root),
+      ...environment,
+      ...(failBoot ? { OPENCODE_DB: path.join(root, "database") } : {}),
+    },
     stderr: "pipe",
     stdout: "ignore",
   })
