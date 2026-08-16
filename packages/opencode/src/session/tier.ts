@@ -22,7 +22,7 @@ export function detect(model: Provider.Model): {
 } {
   if (model.tier) return { tier: model.tier, source: "config" }
   if (vendor(model)) return { tier: "vendor", source: "vendor" }
-  const match = PARAMS_RE.exec(model.api.id)
+  const match = PARAMS_RE.exec(apiId(model))
   if (!match) return { tier: "default", source: "fallback" }
   if (Number(match[1]) <= MINIMAL_MAX_PARAMS_B) return { tier: "minimal", source: "heuristic" }
   if (Number(match[1]) <= DEFAULT_MAX_PARAMS_B) return { tier: "default", source: "heuristic" }
@@ -33,9 +33,16 @@ export function resolve(model: Provider.Model): ModelTier {
   return detect(model).tier
 }
 
+// Config-defined models may carry no upstream api id; fall back to the
+// opencode model id rather than crashing mid-stream (E5 calls resolve()
+// on every text-end event).
+function apiId(model: Provider.Model): string {
+  return model.api.id ?? model.id ?? ""
+}
+
 // Mirrors the family ladder in session/system.ts provider() — keep in sync.
 function vendor(model: Provider.Model) {
-  const id = model.api.id
+  const id = apiId(model)
   if (id.includes("muse")) return true
   if (id.includes("gpt-4") || id.includes("o1") || id.includes("o3")) return true
   if (id.includes("gpt")) return true
