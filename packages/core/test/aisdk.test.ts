@@ -277,6 +277,70 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
   }),
 )
 
+it.effect("preserves multimodal messages in AI SDK prompts", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const resolved = yield* aisdk.model(model("test-ai-sdk"))
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        system: "Inspect every attachment.",
+        messages: [
+          Message.user([
+            { type: "text", text: "What is in these files?" },
+            { type: "media", mediaType: "image/png", data: "AAAA", filename: "pixel.png" },
+            {
+              type: "media",
+              mediaType: "application/pdf",
+              data: "https://example.com/document.pdf",
+              filename: "document.pdf",
+            },
+            { type: "media", mediaType: "audio/mpeg", data: new Uint8Array([73, 68, 51]), filename: "clip.mp3" },
+          ]),
+          Message.assistant([
+            { type: "text", text: "I found this reference image." },
+            { type: "media", mediaType: "image/webp", data: "BBBB", filename: "reference.webp" },
+          ]),
+        ],
+      }),
+    )
+
+    expect(prepared.body.prompt).toEqual([
+      { role: "system", content: "Inspect every attachment." },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "What is in these files?" },
+          { type: "file", mediaType: "image/png", data: "AAAA", filename: "pixel.png" },
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            data: "https://example.com/document.pdf",
+            filename: "document.pdf",
+          },
+          {
+            type: "file",
+            mediaType: "audio/mpeg",
+            data: new Uint8Array([73, 68, 51]),
+            filename: "clip.mp3",
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "I found this reference image." },
+          { type: "file", mediaType: "image/webp", data: "BBBB", filename: "reference.webp" },
+        ],
+      },
+    ])
+  }),
+)
+
 it.effect("preserves tool result content in AI SDK prompts", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
