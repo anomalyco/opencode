@@ -7,7 +7,8 @@ import type { SessionInput } from "./input"
 import type { Snapshot } from "../snapshot"
 import { PermissionV1 } from "../v1/permission"
 import { ProjectV2 } from "../project"
-import type { SessionSchema } from "./schema"
+import type { AgentMemoryID, SessionSchema } from "./schema"
+import type { AgentMemoryID } from "./schema"
 import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
@@ -174,3 +175,34 @@ export const SessionContextEpochTable = sqliteTable("session_context_epoch", {
   snapshot: text({ mode: "json" }).notNull().$type<SystemContext.Snapshot>(),
   baseline_seq: integer().notNull(),
 })
+
+export const AgentMemoryTable = sqliteTable(
+  "agent_memory",
+  {
+    id: text().$type<AgentMemoryID>().primaryKey(),
+    project_id: text()
+      .$type<ProjectV2.ID>()
+      .notNull()
+      .references(() => ProjectTable.id, { onDelete: "cascade" }),
+    session_id: text().$type<SessionSchema.ID>(),
+    type: text().notNull(),
+    title: text().notNull(),
+    content: text().notNull(),
+    metadata: text({ mode: "json" }).$type<{
+      what?: string
+      why?: string
+      where?: string | string[]
+      learned?: string
+    }>(),
+    tags: text({ mode: "json" }).$type<string[]>(),
+    strength: integer().notNull().default(100),
+    status: text().notNull().default("active"),
+    ...Timestamps,
+  },
+  (table) => [
+    index("agent_memory_project_idx").on(table.project_id),
+    index("agent_memory_type_idx").on(table.type),
+    index("agent_memory_status_idx").on(table.status),
+    index("agent_memory_project_type_idx").on(table.project_id, table.type),
+  ],
+)

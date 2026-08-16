@@ -11,6 +11,7 @@ const prefixes = {
   pty: "pty",
   tool: "tool",
   workspace: "wrk",
+  memory: "mem",
 } as const
 
 const LENGTH = 26
