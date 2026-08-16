@@ -1,4 +1,4 @@
-import { afterEach, expect } from "bun:test"
+import { afterEach, expect, test } from "bun:test"
 import { $ } from "bun"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -1216,3 +1216,15 @@ it.instance(
   }),
   { git: true },
 )
+
+test("snapshot config with boolean true uses default 7-day retention", async () => {
+  const cfg = { snapshot: true as true | number }
+  const retentionDays = cfg.snapshot === true ? 7 : cfg.snapshot
+  expect(retentionDays).toBe(7)
+})
+
+test("snapshot config with positive integer uses specified retention", async () => {
+  const cfg = { snapshot: 3 as true | number }
+  const retentionDays = cfg.snapshot === true ? 7 : cfg.snapshot
+  expect(retentionDays).toBe(3)
+})

@@ -20,7 +20,7 @@ export type Patch = typeof Patch.Type
 export const FileDiff = Info
 export type FileDiff = typeof FileDiff.Type
 
-const prune = "7.days"
+const defaultRetentionDays = 7
 const limit = 2 * 1024 * 1024
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
@@ -166,7 +166,14 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
         const enabled = Effect.fnUntraced(function* () {
           if (state.vcs !== "git") return false
-          return (yield* config.get()).snapshot !== false
+          const snapshot = (yield* config.get()).snapshot
+          return snapshot !== false && snapshot !== 0
+        })
+
+        const retentionDays = Effect.fnUntraced(function* () {
+          const snapshot = (yield* config.get()).snapshot
+          if (typeof snapshot === "number") return snapshot
+          return defaultRetentionDays
         })
 
         const excludes = Effect.fnUntraced(function* () {
@@ -302,15 +309,40 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
             Effect.gen(function* () {
               if (!(yield* enabled())) return
               if (!(yield* exists(state.gitdir))) return
-              const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory })
+              const days = yield* retentionDays()
+
+              // Remove pack files so old objects can't survive in packs
+              const packDir = path.join(state.gitdir, "objects", "pack")
+              if (yield* exists(packDir)) {
+                const entries = yield* fs.readDirectoryEntries(packDir).pipe(Effect.orDie)
+                for (const entry of entries) {
+                  yield* fs.remove(path.join(packDir, entry.name)).pipe(Effect.catch(() => Effect.void))
+                }
+              }
+
+              // Prune loose objects older than retention period
+              const result = yield* git(args(["prune", `--expire=${days}.days`]))
               if (result.code !== 0) {
-                yield* Effect.logWarning("cleanup failed", {
+                yield* Effect.logWarning("prune encountered errors (continuing cleanup)", {
                   exitCode: result.code,
                   stderr: result.stderr,
                 })
-                return
               }
-              yield* Effect.logInfo("cleanup", { prune })
+
+              // Remove empty object directories
+              const objectsDir = path.join(state.gitdir, "objects")
+              const entries = yield* fs.readDirectoryEntries(objectsDir).pipe(Effect.orDie)
+              for (const entry of entries) {
+                if (entry.type === "directory" && entry.name !== "pack" && entry.name !== "info") {
+                  const dirPath = path.join(objectsDir, entry.name)
+                  const dirEntries = yield* fs.readDirectoryEntries(dirPath).pipe(Effect.orDie)
+                  if (dirEntries.length === 0) {
+                    yield* fs.remove(dirPath).pipe(Effect.catch(() => Effect.void))
+                  }
+                }
+              }
+
+              yield* Effect.logInfo("cleanup", { retentionDays: days })
             }),
           )
         })
