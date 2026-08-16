@@ -25,8 +25,9 @@ const archMap = {
 const platform = platformMap[os.platform()] ?? os.platform()
 const arch = archMap[os.arch()] ?? os.arch()
 const base = `opencode-${platform}-${arch}`
-const sourceBinary = platform === "windows" ? "opencode.exe" : "opencode"
-const targetBinary = path.join(__dirname, "bin", "opencode.exe")
+const windows = platform === "windows"
+const binaryName = windows ? "opencode.exe" : "opencode"
+const targetBinary = path.join(__dirname, "bin", binaryName)
 
 function supportsAvx2() {
   if (arch !== "x64") return false
@@ -52,7 +53,7 @@ function supportsAvx2() {
     }
   }
 
-  if (platform === "windows") {
+  if (windows) {
     const command =
       '(Add-Type -MemberDefinition "[DllImport(""kernel32.dll"")] public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);" -Name Kernel32 -Namespace Win32 -PassThru)::IsProcessorFeaturePresent(40)'
 
@@ -118,7 +119,7 @@ function packageNames() {
 
 function resolveBinary(name) {
   const packageJsonPath = require.resolve(`${name}/package.json`)
-  const binaryPath = path.join(path.dirname(packageJsonPath), "bin", sourceBinary)
+  const binaryPath = path.join(path.dirname(packageJsonPath), "bin", binaryName)
   if (!fs.existsSync(binaryPath)) throw new Error(`Binary not found at ${binaryPath}`)
   return binaryPath
 }
@@ -136,7 +137,7 @@ function installPackage(name) {
     )
     if (result.status !== 0) return
     const packageDir = path.join(temp, "node_modules", name)
-    copyBinary(path.join(packageDir, "bin", sourceBinary), targetBinary)
+    copyBinary(path.join(packageDir, "bin", binaryName), targetBinary)
     return true
   } finally {
     fs.rmSync(temp, { recursive: true, force: true })
@@ -146,13 +147,26 @@ function installPackage(name) {
 function copyBinary(source, target) {
   if (!fs.existsSync(source)) throw new Error(`Binary not found at ${source}`)
   fs.mkdirSync(path.dirname(target), { recursive: true })
-  if (fs.existsSync(target)) fs.unlinkSync(target)
-  try {
-    fs.linkSync(source, target)
-  } catch {
-    fs.copyFileSync(source, target)
+  if (windows) {
+    try {
+      fs.linkSync(source, target)
+    } catch {
+      fs.copyFileSync(source, target)
+    }
+    fs.chmodSync(target, 0o755)
+    return
   }
-  fs.chmodSync(target, 0o755)
+  // On Unix, atomically replace the JS wrapper with the binary via
+  // hardlink+rename (no ENOENT window). Matches esbuild's maybeOptimizePackage:
+  // https://github.com/evanw/esbuild/blob/v0.28.1/lib/npm/node-install.ts#L178
+  const temp = path.join(__dirname, "bin-opencode")
+  try {
+    fs.linkSync(source, temp)
+  } catch {
+    fs.copyFileSync(source, temp)
+  }
+  fs.chmodSync(temp, 0o755)
+  fs.renameSync(temp, target)
 }
 
 function verifyBinary() {
