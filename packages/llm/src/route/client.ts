@@ -8,7 +8,7 @@ import { HttpTransport } from "./transport"
 import type { Transport, TransportRuntime } from "./transport"
 import { WebSocketExecutor } from "./transport"
 import type { Protocol } from "./protocol"
-import { applyCachePolicy } from "../cache-policy"
+import { cachePolicyPatch } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
 import type { LLMError, LLMEvent, PreparedRequestOf, ProtocolID, ProviderOptions } from "../schema"
 import {
@@ -164,11 +164,15 @@ export interface GenerateMethod {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
 
-const resolveRequestOptions = (request: LLMRequest) => {
+// Merge route/model/request defaults into an `LLMRequest.update` patch touching
+// only the option fields (generation/providerOptions/http). Kept as a patch so
+// `compile` can fold it together with the cache-policy patch and rebuild the
+// request — which re-decodes the whole message history — exactly once.
+const resolveRequestOptionsPatch = (request: LLMRequest): Partial<LLMRequest.Input> => {
   const routeDefaults = request.model.route.defaults
   const modelDefaults = request.model.defaults
   const generation = mergeGenerationOptions(routeDefaults.generation, modelDefaults?.generation, request.generation)
-  return LLMRequest.update(request, {
+  return {
     generation: generation ?? new GenerationOptions({}),
     providerOptions: mergeProviderOptions(
       routeDefaults.providerOptions,
@@ -176,7 +180,7 @@ const resolveRequestOptions = (request: LLMRequest) => {
       request.providerOptions,
     ),
     http: mergeHttpOptions(routeDefaults.http, modelDefaults?.http, request.http),
-  })
+  }
 }
 
 export interface MakeInput<Body, Frame, Event, State> {
@@ -342,7 +346,14 @@ export function make<Body, Prepared, Frame, Event, State>(
 // validated provider body plus transport-private prepared data, but does not
 // execute transport.
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
-  const resolved = applyCachePolicy(resolveRequestOptions(request))
+  // The option merge (generation/providerOptions/http) and the cache-policy
+  // markings (tools/system/messages) touch disjoint fields and both read only
+  // from the original request, so folding them into one `LLMRequest.update`
+  // rebuilds — and re-decodes the full message history — once instead of twice.
+  const resolved = LLMRequest.update(request, {
+    ...resolveRequestOptionsPatch(request),
+    ...cachePolicyPatch(request),
+  })
   const route = resolved.model.route
 
   const body = yield* route.body
