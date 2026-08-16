@@ -6,6 +6,7 @@ import { Cause, Context, Effect, Layer, Schema, Scope } from "effect"
 import { ModelV2 } from "./model"
 import { ProviderV2 } from "./provider"
 import { State } from "./state"
+import { XaiSSE } from "./util/xai-sse"
 
 type SDK = any
 
@@ -114,8 +115,9 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
       ...opts,
       timeout: false,
     })
-    if (!chunkAbortCtl || typeof chunkTimeout !== "number") return res
-    return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+    const streamed = pkg === "@ai-sdk/xai" ? XaiSSE.wrap(res) : res
+    if (!chunkAbortCtl || typeof chunkTimeout !== "number") return streamed
+    return wrapSSE(streamed, chunkTimeout, chunkAbortCtl)
   }
 
   return options
