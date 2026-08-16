@@ -1,4 +1,5 @@
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { SessionTurnEvent } from "@opencode-ai/schema/session-turn-event"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -886,6 +887,55 @@ it.instance("glob tool keeps instance context during prompt runs", () =>
     expect(tool.state.output).toContain(file)
     expect(tool.state.output).not.toContain("No context found for instance")
     expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+  }),
+)
+
+it.instance("loop emits terminal turn event with parts_written after error-after-write", () =>
+  Effect.gen(function* () {
+    const { dir, llm } = yield* useServerConfig(providerCfg)
+    const events = yield* EventV2Bridge.Service
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Error after write",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    const terminal: (typeof SessionTurnEvent.Completed.data.Type)[] = []
+    const errors: (typeof SessionV1.Event.Error.data.Type)[] = []
+    const off = yield* events.listen((event) => {
+      if (event.type === SessionTurnEvent.Completed.type) {
+        terminal.push(event.data as typeof SessionTurnEvent.Completed.data.Type)
+      }
+      if (event.type === SessionV1.Event.Error.type) {
+        errors.push(event.data as typeof SessionV1.Event.Error.data.Type)
+      }
+      return Effect.void
+    })
+
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "write a file" }],
+    })
+    // First provider turn writes a file; the second errors terminally
+    // (400 is not retryable), so the turn ends in error after a
+    // successfully completed file-writing tool part.
+    yield* llm.tool("write", { filePath: path.join(dir, "artifact.txt"), content: "written before the error" })
+    yield* llm.error(400, { error: { message: "boom" } })
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+    yield* off
+
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") expect(result.info.error).toBeTruthy()
+
+    expect(terminal).toHaveLength(1)
+    expect(terminal[0]).toMatchObject({ sessionID: session.id, status: "error", parts_written: 1 })
+    expect(terminal[0].last_error).toBeTruthy()
+    // D5(a): the session error event carries the same evidence.
+    expect(errors.some((item) => item.sessionID === session.id && item.parts_written === 1)).toBe(true)
   }),
 )
 

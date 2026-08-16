@@ -32,6 +32,10 @@ import { Usage, type LLMEvent } from "@opencode-ai/llm"
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
 
+// D5: tools whose completed parts count as written artifacts when
+// reconciling a turn's reported status against what it actually produced.
+export const FILE_WRITING_TOOLS = new Set(["write", "edit", "apply_patch"])
+
 export interface Handle {
   readonly message: SessionV1.Assistant
   readonly updateToolCall: (
@@ -631,6 +635,21 @@ const layer = Layer.effect(
         yield* session.updateMessage(ctx.assistantMessage)
       })
 
+      // D5: completed file-writing tool parts across the current turn (all
+      // assistant messages sharing this message's parent user message), so a
+      // terminal error event can carry evidence that the turn produced
+      // artifacts before failing.
+      const partsWritten = Effect.fn("SessionProcessor.partsWritten")(function* () {
+        const msgs = yield* session
+          .messages({ sessionID: ctx.sessionID })
+          .pipe(Effect.catch(() => Effect.succeed<SessionV1.WithParts[]>([])))
+        return msgs
+          .filter((m) => m.info.role === "assistant" && m.info.parentID === ctx.assistantMessage.parentID)
+          .flatMap((m) => m.parts)
+          .filter((part) => part.type === "tool" && FILE_WRITING_TOOLS.has(part.tool) && part.state.status === "completed")
+          .length
+      })
+
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
         yield* Effect.logError("process", {
           "session.id": input.sessionID,
@@ -654,7 +673,12 @@ const layer = Layer.effect(
           if ((yield* config.get()).compaction?.auto === false && !ctx.assistantMessage.summary) {
             ctx.assistantMessage.error = error
             ctx.assistantMessage.finish = "error"
-            yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
+            const written = yield* partsWritten()
+            yield* events.publish(Session.Event.Error, {
+              sessionID: ctx.sessionID,
+              error,
+              ...(written > 0 ? { parts_written: written } : {}),
+            })
             yield* status.set(ctx.sessionID, { type: "idle" })
             return
           }
@@ -663,9 +687,13 @@ const layer = Layer.effect(
           return
         }
         ctx.assistantMessage.error = error
+        // D5: a turn erroring after successful file writes must say so — the
+        // error alone reads as "produced nothing" and poisons reconciliation.
+        const written = yield* partsWritten()
         yield* events.publish(Session.Event.Error, {
           sessionID: ctx.assistantMessage.sessionID,
           error: ctx.assistantMessage.error,
+          ...(written > 0 ? { parts_written: written } : {}),
         })
         yield* status.set(ctx.sessionID, { type: "idle" })
       })

@@ -90,6 +90,7 @@ export type Event =
   | EventSessionCompacted
   | EventSessionCompactionStarted
   | EventSessionCompactionCompleted
+  | EventSessionTurnCompleted
   | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
@@ -1228,6 +1229,7 @@ export type GlobalEvent = {
             | ContextOverflowError
             | ContentFilterError
             | ApiError
+          parts_written?: number
         }
       }
     | {
@@ -1590,6 +1592,16 @@ export type GlobalEvent = {
           sessionID: string
           before_tokens: number
           after_tokens?: number
+        }
+      }
+    | {
+        id: string
+        type: "session.turn.completed"
+        properties: {
+          sessionID: string
+          status: "idle" | "error"
+          parts_written: number
+          last_error?: string
         }
       }
     | {
@@ -3121,6 +3133,7 @@ export type V2Event =
   | SessionCompacted
   | SessionCompactionStarted
   | SessionCompactionCompleted
+  | SessionTurnCompleted
   | VcsBranchUpdated
   | WorkspaceReady
   | WorkspaceFailed
@@ -5550,6 +5563,7 @@ export type SessionError = {
       | ContextOverflowError
       | ContentFilterError
       | ApiError
+    parts_written?: number
   }
 }
 
@@ -6247,6 +6261,26 @@ export type SessionCompactionCompleted = {
     sessionID: string
     before_tokens: number
     after_tokens?: number
+  }
+}
+
+export type SessionTurnCompleted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.turn.completed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    status: "idle" | "error"
+    parts_written: number
+    last_error?: string
   }
 }
 
@@ -6970,6 +7004,7 @@ export type EventSessionError = {
       | ContextOverflowError
       | ContentFilterError
       | ApiError
+    parts_written?: number
   }
 }
 
@@ -7316,6 +7351,17 @@ export type EventSessionCompactionCompleted = {
     sessionID: string
     before_tokens: number
     after_tokens?: number
+  }
+}
+
+export type EventSessionTurnCompleted = {
+  id: string
+  type: "session.turn.completed"
+  properties: {
+    sessionID: string
+    status: "idle" | "error"
+    parts_written: number
+    last_error?: string
   }
 }
 

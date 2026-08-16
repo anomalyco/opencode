@@ -55,6 +55,7 @@ import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
+import { SessionTurnEvent } from "@opencode-ai/schema/session-turn-event"
 import { LLMEvent } from "@opencode-ai/llm"
 
 // @ts-ignore
@@ -1078,7 +1079,50 @@ const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
-    const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
+    // D5: terminal reconciliation event on every runLoop exit path (break,
+    // error, abort). Additive — session status semantics stay untouched; the
+    // event lets consumers reconcile status against what the turn actually
+    // wrote (parts_written counts completed file-writing tool parts).
+    const emitTurnCompleted = Effect.fnUntraced(function* (sessionID: SessionID, exit: Exit.Exit<unknown, unknown>) {
+      const msgs = yield* sessions
+        .messages({ sessionID })
+        .pipe(Effect.catch(() => Effect.succeed<SessionV1.WithParts[]>([])))
+      const lastUser = msgs.findLast((m) => m.info.role === "user")
+      const turn = lastUser
+        ? msgs.filter((m) => m.info.role === "assistant" && m.info.parentID === lastUser.info.id)
+        : []
+      const written = turn
+        .flatMap((m) => m.parts)
+        .filter(
+          (part) =>
+            part.type === "tool" &&
+            SessionProcessor.FILE_WRITING_TOOLS.has(part.tool) &&
+            part.state.status === "completed",
+        ).length
+      const last = turn.at(-1)?.info
+      const assistantError = last?.role === "assistant" ? last.error : undefined
+      const exitError = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+      const lastError = assistantError
+        ? ((assistantError.data as { message?: string } | undefined)?.message ?? assistantError.name)
+        : exitError instanceof Error
+          ? exitError.message
+          : exitError !== undefined
+            ? String(exitError)
+            : undefined
+      yield* events
+        .publish(SessionTurnEvent.Completed, {
+          sessionID,
+          status: assistantError || exitError ? "error" : "idle",
+          parts_written: written,
+          ...(lastError ? { last_error: lastError } : {}),
+        })
+        .pipe(Effect.ignore)
+    })
+
+    const runLoop = (sessionID: SessionID) =>
+      runLoopInner(sessionID).pipe(Effect.onExit((exit) => emitTurnCompleted(sessionID, exit)))
+
+    const runLoopInner: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
         let structured: unknown

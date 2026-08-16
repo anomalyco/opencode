@@ -26,6 +26,7 @@ import { SessionCompactionEvent } from "./session-compaction-event"
 import { SessionEvent } from "./session-event"
 import { SessionStatusEvent } from "./session-status-event"
 import { SessionTodo } from "./session-todo"
+import { SessionTurnEvent } from "./session-turn-event"
 import { SessionV1 } from "./session-v1"
 import { TuiEvent } from "./tui-event"
 import { VcsEvent } from "./vcs-event"
@@ -77,6 +78,7 @@ export const Definitions = Event.inventory(
   ...QuestionV1.Event.Definitions,
   ...SessionBudgetEvent.Definitions,
   ...SessionCompactionEvent.Definitions,
+  ...SessionTurnEvent.Definitions,
   ...VcsEvent.Definitions,
   ...WorkspaceEvent.Definitions,
   ...WorktreeEvent.Definitions,

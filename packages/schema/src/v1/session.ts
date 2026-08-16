@@ -653,6 +653,10 @@ export const Error = define({
   schema: {
     sessionID: Schema.optional(SessionID),
     error: Assistant.fields.error,
+    // D5: when the erroring turn had already completed file-writing tool
+    // parts, the count is included so consumers don't misread the turn as
+    // having produced nothing.
+    parts_written: Schema.optional(Schema.Finite),
   },
 })
 
