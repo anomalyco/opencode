@@ -57,7 +57,10 @@ import {
   type LocalAttachment,
 } from "./local-attachment"
 import { useData } from "../../context/data"
+import { usePromptRef } from "../../context/prompt"
 import { useLocation } from "../../context/location"
+import type { PromptFileAttachment, PromptSkillAttachment, SkillInfo } from "@opencode-ai/client"
+import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { abbreviateHome } from "../../runtime"
 import { Slot } from "../../plugin/render"
@@ -100,6 +103,59 @@ export type PromptRef = {
 }
 
 const DRAFT_RETENTION_MIN_CHARS = 20
+
+// Serialize background prompt submissions per session so admission order matches
+// the on-screen optimistic order, even across Prompt remounts and route changes.
+const submitTails = new Map<string, Promise<void>>()
+
+function enqueueSubmit(sessionID: string, task: () => Promise<void>) {
+  const tail = (submitTails.get(sessionID) ?? Promise.resolve()).then(task, task)
+  submitTails.set(sessionID, tail)
+  void tail.finally(() => {
+    if (submitTails.get(sessionID) === tail) submitTails.delete(sessionID)
+  })
+  return tail
+}
+
+// Approximate the server's materialized attachment shape for the local echo. Pasted
+// data: URIs carry real content so images preview immediately; file references render
+// as labels until the admission echo replaces them with server truth.
+function optimisticFiles(files: PromptInfo["files"]): PromptFileAttachment[] | undefined {
+  if (!files?.length) return undefined
+  return files.map((file) => {
+    const match = /^data:([^;,]*);base64,(.*)$/.exec(file.uri)
+    if (match)
+      return {
+        data: match[2] ?? "",
+        mime: match[1] || "application/octet-stream",
+        source: { type: "inline" as const },
+        name: file.name,
+        description: file.description,
+        mention: file.mention,
+      }
+    return {
+      data: "",
+      mime: file.uri.endsWith("/") ? "application/x-directory" : "text/plain",
+      source: { type: "uri" as const, uri: file.uri },
+      name: file.name,
+      description: file.description,
+      mention: file.mention,
+    }
+  })
+}
+
+function optimisticSkills(
+  skills: PromptInfo["skills"],
+  available: SkillInfo[],
+): PromptSkillAttachment[] | undefined {
+  if (!skills?.length) return undefined
+  return skills.map((attachment) => ({
+    id: attachment.id,
+    name: available.find((skill) => skill.id === attachment.id)?.name ?? attachment.id,
+    text: "",
+    mention: attachment.mention,
+  }))
+}
 
 function randomIndex(count: number) {
   if (count <= 0) return 0
@@ -202,6 +258,7 @@ export function Prompt(props: PromptProps) {
   const editor = useEditorContext()
   const route = useRoute()
   const data = useData()
+  const activePrompt = usePromptRef()
   const directoryRecents = useDirectoryRecents()
   const keymapCommands = Keymap.useCommands()
   const currentLocation = useLocation()
@@ -1071,6 +1128,20 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  // Return a failed background submission to its author. When the target tab's
+  // editor is live and empty, restore directly; otherwise stash a draft for the
+  // next mount. A non-empty editor is never clobbered—prompt history retains the
+  // failed prompt either way.
+  function restorePrompt(sessionID: string, snapshot: PromptInfo) {
+    const active = route.data
+    if (active.type === "session" && active.sessionID === sessionID) {
+      const live = activePrompt.current
+      if (live && !live.current.text.trim()) live.set(snapshot)
+      return
+    }
+    saveDraft(sessionID, { prompt: snapshot, cursor: snapshot.text.length })
+  }
+
   let submitting = false
   async function submit(delivery: SessionInbox.Delivery = "steer") {
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
@@ -1171,7 +1242,6 @@ export function Prompt(props: PromptProps) {
 
     const variant = selection.variant
     let sessionID = props.sessionID
-    let session = sessionID ? data.session.get(sessionID) : undefined
     let finishMoveProgress = false
     if (sessionID == null) {
       const directory = await move.getDirectory()
@@ -1205,7 +1275,6 @@ export function Prompt(props: PromptProps) {
       }
 
       sessionID = created.id
-      session = created
     }
 
     // Capture mode before it gets reset
@@ -1246,70 +1315,70 @@ export function Prompt(props: PromptProps) {
       })
     } else {
       move.startSubmit()
-      if (!session) {
-        await data.session.sync(sessionID)
-        session = data.session.get(sessionID)
-      }
-      if (session?.agent !== agent.id) {
-        await client.api.session.switchAgent({ sessionID, agent: agent.id })
-      }
-      if (
-        session?.model?.providerID !== selection.providerID ||
-        session.model.id !== selection.modelID ||
-        (session.model.variant ?? "default") !== (variant ?? "default")
-      ) {
-        const model = { providerID: selection.providerID, id: selection.modelID, variant }
-        const cancelCommit = local.model.trackSessionCommit(sessionID, model)
-        await client.api.session.switchModel({ sessionID, model }).catch((error) => {
-          cancelCommit()
-          throw error
-        })
-      }
-      if (session?.revert) {
-        const error = await client.api.session.revert.commit({ sessionID }).then(
-          () => undefined,
-          (error) => error,
-        )
-        if (error) {
-          toast.show({ title: "Failed to commit revert", message: errorMessage(error), variant: "error" })
-          return false
-        }
-      }
-      if (pendingEditorSelection) {
-        // Keep editor context hidden while admitting it before the corresponding user prompt.
-        const error = await client.api.session
-          .synthetic({
-            sessionID,
-            text: formatEditorContext(pendingEditorSelection),
-            resume: false,
+      // Echo the prompt locally and admit it in the background: the editor clears and
+      // the message renders immediately, while a per-session queue preserves admission
+      // order. Failure rolls the echo back and restores the captured prompt.
+      const submitSessionID = sessionID
+      const messageID = SessionMessage.ID.create()
+      const snapshot = structuredClone(unwrap(store.prompt))
+      const editorContextText = pendingEditorSelection ? formatEditorContext(pendingEditorSelection) : undefined
+      const targetAgent = agent.id
+      const model = { providerID: selection.providerID, id: selection.modelID, variant }
+      data.session.optimistic.prompt({
+        sessionID: submitSessionID,
+        messageID,
+        delivery,
+        text: inputText,
+        files: optimisticFiles(snapshot.files),
+        agents: snapshot.agents?.length ? snapshot.agents : undefined,
+        skills: optimisticSkills(snapshot.skills, data.location.skill.list(currentLocation.ref) ?? []),
+      })
+      // Mark the editor context sent with the echo so a rapid follow-up submit
+      // does not re-attach the same selection while admission is in flight.
+      if (editorContextText) editor.markSelectionSent()
+      void enqueueSubmit(submitSessionID, async () => {
+        const error = await (async () => {
+          let session = data.session.get(submitSessionID)
+          if (!session) {
+            await data.session.sync(submitSessionID)
+            session = data.session.get(submitSessionID)
+          }
+          if (session?.agent !== targetAgent) {
+            await client.api.session.switchAgent({ sessionID: submitSessionID, agent: targetAgent })
+          }
+          if (
+            session?.model?.providerID !== model.providerID ||
+            session.model.id !== model.id ||
+            (session.model.variant ?? "default") !== (model.variant ?? "default")
+          ) {
+            const cancelCommit = local.model.trackSessionCommit(submitSessionID, model)
+            await client.api.session.switchModel({ sessionID: submitSessionID, model }).catch((error) => {
+              cancelCommit()
+              throw error
+            })
+          }
+          if (session?.revert) await client.api.session.revert.commit({ sessionID: submitSessionID })
+          // Keep editor context hidden while admitting it before the corresponding user prompt.
+          if (editorContextText)
+            await client.api.session.synthetic({ sessionID: submitSessionID, text: editorContextText, resume: false })
+          await client.api.session.prompt({
+            sessionID: submitSessionID,
+            id: messageID,
+            text: inputText,
+            files: snapshot.files,
+            agents: snapshot.agents,
+            skills: snapshot.skills?.length ? snapshot.skills : undefined,
+            delivery,
           })
-          .then(
-            () => undefined,
-            (error) => error,
-          )
-        if (error) {
-          toast.show({ title: "Failed to send editor context", message: errorMessage(error), variant: "error" })
-          return false
-        }
-      }
-      const error = await client.api.session
-        .prompt({
-          sessionID,
-          text: inputText,
-          files: store.prompt.files,
-          agents: store.prompt.agents,
-          skills: store.prompt.skills?.length ? store.prompt.skills : undefined,
-          delivery,
-        })
-        .then(
+        })().then(
           () => undefined,
           (error) => error,
         )
-      if (error) {
+        if (error === undefined) return
+        data.session.optimistic.rollback(submitSessionID, messageID)
+        restorePrompt(submitSessionID, snapshot)
         toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
-        return false
-      }
-      if (pendingEditorSelection) editor.markSelectionSent()
+      })
     }
     history.append({
       ...store.prompt,
@@ -1320,15 +1389,14 @@ export function Prompt(props: PromptProps) {
     setStore("extmarkToPart", new Map())
     props.onSubmit?.()
 
-    // temporary hack to make sure the message is sent
     if (!props.sessionID) {
       if (pendingEditorSelection) editor.preserveSelectionFromNewSession()
-      setTimeout(() => {
-        route.navigate({
-          type: "session",
-          sessionID,
-        })
-      }, 50)
+      // The optimistic echo is already in the data store, so the session route
+      // renders the prompt immediately; admission continues in the background.
+      route.navigate({
+        type: "session",
+        sessionID,
+      })
     }
     input.clear()
     if (finishMoveProgress) move.finishSubmit()

@@ -20,6 +20,7 @@ import type {
   ProviderInfo,
   ReferenceInfo,
   SessionMessageInfo,
+  SessionMessageUser,
   SessionMessageAssistant,
   SessionMessageAssistantReasoning,
   SessionMessageAssistantText,
@@ -40,7 +41,7 @@ import { useClient } from "./client"
 import { nonEmptyToolContent } from "../util/tool-display"
 import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { Worktree } from "@opencode-ai/schema/worktree"
-import { createEffect, createSignal, onCleanup } from "solid-js"
+import { batch, createEffect, createSignal, onCleanup } from "solid-js"
 
 export type DataSessionStatus = "idle" | "running"
 
@@ -161,6 +162,25 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     const messageIndex = new Map<string, Map<string, number>>()
     const sync = createSync()
 
+    // Optimistic prompt echoes: user prompts applied locally before server admission,
+    // keyed sessionID -> messageID. The session.inbox.enqueued echo carrying the same
+    // ID replaces the local copy with server truth (admission materializes file
+    // attachments and expands skills). Entries survive wholesale sync replaces until
+    // the server confirms them or the submitter rolls back.
+    type OptimisticPrompt = { message: SessionMessageInfo; pending: SessionInboxInfo }
+    const optimisticPrompts = new Map<string, Map<string, OptimisticPrompt>>()
+
+    function confirmOptimistic(sessionID: string, messageID: string) {
+      const entries = optimisticPrompts.get(sessionID)
+      if (!entries?.delete(messageID)) return false
+      if (entries.size === 0) optimisticPrompts.delete(sessionID)
+      return true
+    }
+
+    function optimisticMessages(sessionID: string) {
+      return [...(optimisticPrompts.get(sessionID)?.values() ?? [])]
+    }
+
     function setSessionActive(sessionID: string, status: DataSessionStatus) {
       setStore("session", "active", sessionID, status)
     }
@@ -186,6 +206,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           sessionID,
           (store.session.input[sessionID] ?? []).filter((id) => id !== inboxID),
         )
+    }
+
+    function removeMessage(sessionID: string, messageID: string) {
+      if (!messageIndex.get(sessionID)?.has(messageID)) return
+      message.update(sessionID, (draft, index) => {
+        const position = index.get(messageID)
+        if (position === undefined) return
+        draft.splice(position, 1)
+        index.delete(messageID)
+        message.reindex(draft, index, position)
+      })
     }
 
     function removePermission(sessionID: string, requestID: string) {
@@ -313,6 +344,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     function removeSession(sessionID: string) {
       messageIndex.delete(sessionID)
+      optimisticPrompts.delete(sessionID)
       sync.invalidate(`session:${sessionID}`)
       sync.invalidate(`session.pending:${sessionID}`)
       sync.invalidate(`session.message:${sessionID}`)
@@ -471,6 +503,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         }
         case "session.inbox.delivered": {
+          // Delivery implies the message is projected server-side, so future message
+          // fetches include it and the optimistic entry no longer needs re-appending.
+          confirmOptimistic(event.data.sessionID, event.data.inboxID)
           const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inboxID) ?? false
           removePending(event.data.sessionID, event.data.inboxID)
           message.update(event.data.sessionID, (draft, index) => {
@@ -489,25 +524,31 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           updatePending(event.data.sessionID, event.data.inboxID, event.data.delivery)
           break
         case "session.inbox.cancelled": {
+          confirmOptimistic(event.data.sessionID, event.data.inboxID)
           removePending(event.data.sessionID, event.data.inboxID)
-          if (messageIndex.get(event.data.sessionID)?.has(event.data.inboxID))
-            message.update(event.data.sessionID, (draft, index) => {
-              const position = index.get(event.data.inboxID)
-              if (position === undefined) return
-              draft.splice(position, 1)
-              index.delete(event.data.inboxID)
-              message.reindex(draft, index, position)
-            })
+          removeMessage(event.data.sessionID, event.data.inboxID)
           break
         }
         case "session.inbox.enqueued": {
           const item = event.data.item
-          addPending({
+          // The admission echo is authoritative for an optimistic local copy: it
+          // materializes file attachments and expands skills, so replace in place.
+          const confirmed = confirmOptimistic(event.data.sessionID, event.data.inboxID)
+          const pendingItem: SessionInboxInfo = {
             id: event.data.inboxID,
             sessionID: event.data.sessionID,
             timeCreated: event.created,
             ...item,
-          })
+          }
+          const pendingList = store.session.pending[event.data.sessionID]
+          if (confirmed && pendingList?.some((pending) => pending.id === event.data.inboxID))
+            setStore(
+              "session",
+              "pending",
+              event.data.sessionID,
+              pendingList.map((pending) => (pending.id === event.data.inboxID ? pendingItem : pending)),
+            )
+          else addPending(pendingItem)
           if (!store.session.input[event.data.sessionID]?.includes(event.data.inboxID))
             setStore("session", "input", event.data.sessionID, [
               ...(store.session.input[event.data.sessionID] ?? []),
@@ -515,9 +556,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             ])
           if (item.type !== "user" && item.type !== "synthetic") break
           message.update(event.data.sessionID, (draft, index) => {
-            message.append(
-              draft,
-              index,
+            const next: SessionMessageInfo =
               item.type === "user"
                 ? {
                     id: event.data.inboxID,
@@ -530,8 +569,13 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
                     type: "synthetic",
                     ...item.payload,
                     time: { created: event.created },
-                  },
-            )
+                  }
+            const position = index.get(event.data.inboxID)
+            if (confirmed && position !== undefined) {
+              draft[position] = next
+              return
+            }
+            message.append(draft, index, next)
           })
           break
         }
@@ -825,22 +869,30 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           if (store.session.info[event.data.sessionID])
             setStore("session", "info", event.data.sessionID, "revert", undefined)
           break
-        case "session.revert.committed":
+        case "session.revert.committed": {
           if (store.session.info[event.data.sessionID]) {
             setStore("session", "info", event.data.sessionID, "revert", undefined)
           }
+          // Unconfirmed optimistic prompts postdate the revert boundary but were never
+          // part of the reverted history: the server admits them after the commit.
+          const local = optimisticPrompts.get(event.data.sessionID)
           setStore(
             "session",
             "input",
             event.data.sessionID,
-            (store.session.input[event.data.sessionID] ?? []).filter((id) => id < event.data.to),
+            (store.session.input[event.data.sessionID] ?? []).filter(
+              (id) => id < event.data.to || local?.has(id) === true,
+            ),
           )
           message.update(event.data.sessionID, (draft, index) => {
             const position = draft.findIndex((item) => item.id >= event.data.to)
             if (position === -1) return
-            for (const item of draft.splice(position)) index.delete(item.id)
+            const dropped = draft.splice(position)
+            for (const item of dropped) index.delete(item.id)
+            for (const item of dropped) if (local?.has(item.id)) message.append(draft, index, item)
           })
           break
+        }
         case "session.compaction.delta":
           message.update(event.data.sessionID, (draft) => {
             const current = message.compaction(draft)
@@ -1013,13 +1065,74 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.session.input[sessionID]?.includes(inboxID) ?? false
           },
         },
+        optimistic: {
+          // Locally echo a user prompt before server admission. The session.inbox.enqueued
+          // echo carrying the same message ID replaces the copy with server truth; rollback
+          // removes the echo when submission fails.
+          prompt(input: {
+            sessionID: string
+            messageID: string
+            delivery: SessionInbox.Delivery
+            text: string
+            files?: SessionMessageUser["files"]
+            agents?: SessionMessageUser["agents"]
+            skills?: SessionMessageUser["skills"]
+          }) {
+            const created = Date.now()
+            const pendingItem: SessionInboxInfo = {
+              id: input.messageID,
+              sessionID: input.sessionID,
+              timeCreated: created,
+              type: "user",
+              payload: { text: input.text, files: input.files, agents: input.agents, skills: input.skills },
+              delivery: input.delivery,
+            }
+            const messageItem: SessionMessageInfo = {
+              id: input.messageID,
+              type: "user",
+              text: input.text,
+              files: input.files,
+              agents: input.agents,
+              skills: input.skills,
+              time: { created },
+            }
+            const entries = optimisticPrompts.get(input.sessionID) ?? new Map<string, OptimisticPrompt>()
+            optimisticPrompts.set(input.sessionID, entries)
+            entries.set(input.messageID, { message: messageItem, pending: pendingItem })
+            batch(() => {
+              addPending(pendingItem)
+              if (!store.session.input[input.sessionID]?.includes(input.messageID))
+                setStore("session", "input", input.sessionID, [
+                  ...(store.session.input[input.sessionID] ?? []),
+                  input.messageID,
+                ])
+              message.update(input.sessionID, (draft, index) => message.append(draft, index, messageItem))
+            })
+          },
+          rollback(sessionID: string, messageID: string) {
+            if (!confirmOptimistic(sessionID, messageID)) return
+            batch(() => {
+              removePending(sessionID, messageID)
+              removeMessage(sessionID, messageID)
+            })
+          },
+        },
         pending: {
           list(sessionID: string) {
             return store.session.pending[sessionID] ?? []
           },
           sync(sessionID: string) {
             return sync.run(`session.pending:${sessionID}`, async () => {
-              const pending = await client.api.session.inbox.list({ sessionID })
+              const fetched = await client.api.session.inbox.list({ sessionID })
+              // Keep unconfirmed optimistic prompts pending across the wholesale replace.
+              // Server presence here is not treated as confirmation: until the enqueued
+              // echo or a projected message arrives, the ledger still guards message.sync.
+              const pending = [
+                ...fetched,
+                ...optimisticMessages(sessionID)
+                  .map((entry) => entry.pending)
+                  .filter((entry) => !fetched.some((item) => item.id === entry.id)),
+              ]
               setStore("session", "pending", sessionID, reconcile(pending))
               setStore(
                 "session",
@@ -1069,9 +1182,15 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           },
           sync(sessionID: string) {
             return sync.run(`session.message:${sessionID}`, async () => {
-              const messages = (
+              const fetched = (
                 await client.api.message.list({ sessionID, limit: 200, order: "desc" })
               ).data.toReversed()
+              // A wholesale replace would drop optimistic prompts the server has not
+              // admitted yet. A fetched ID is server confirmation; the rest re-append.
+              for (const entry of optimisticMessages(sessionID))
+                if (fetched.some((item) => item.id === entry.message.id))
+                  confirmOptimistic(sessionID, entry.message.id)
+              const messages = [...fetched, ...optimisticMessages(sessionID).map((entry) => entry.message)]
               messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
               setStore("session", "message", sessionID, reconcile(messages))
             })
