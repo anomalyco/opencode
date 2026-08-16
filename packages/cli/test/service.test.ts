@@ -133,6 +133,7 @@ test("managed service persists durable events when configured", async () => {
     OPENCODE_EVENTS_PERSIST: "1",
   })
   try {
+    await waitForStatus(service.info, 200)
     const response = await fetch(new URL("/api/session", service.info.url), {
       method: "POST",
       headers: {
@@ -177,7 +178,7 @@ test("deleting a managed service registration stops its owner", async () => {
 test("deleting a failed service registration stops its owner", async () => {
   const service = await startManagedService("opencode-service-failed-delete-", true)
   try {
-    await waitForFailed(service.info)
+    await waitForStatus(service.info, 500)
     await fs.rm(service.registration)
     expect(await waitForExit(service.owner)).toBe(true)
     await expectPortAvailable(service.port)
@@ -502,7 +503,7 @@ test("a failed service stays registered and owns the selected port until stopped
 
   try {
     const info = await waitForInfo(registration)
-    await waitForFailed(info)
+    await waitForStatus(info, 500)
     expect(owner.exitCode).toBe(null)
 
     const contender = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
@@ -535,17 +536,17 @@ async function waitForInfo(file: string, accept: (info: Info) => boolean = () =>
   throw new Error("Timed out waiting for service registration")
 }
 
-async function waitForFailed(info: Info) {
+async function waitForStatus(info: Info, expected: number) {
   for (let attempt = 0; attempt < 400; attempt++) {
     const status = await fetch(new URL("/api/health", info.url), {
       headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) },
     })
       .then((response) => response.status)
       .catch(() => undefined)
-    if (status === 500) return
+    if (status === expected) return
     await Bun.sleep(50)
   }
-  throw new Error("Timed out waiting for service boot failure")
+  throw new Error(`Timed out waiting for service status ${expected}`)
 }
 
 async function availablePort() {
