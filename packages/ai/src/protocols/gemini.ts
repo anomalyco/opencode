@@ -24,7 +24,6 @@ import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
 
 const ADAPTER = "gemini"
-const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
 // Google documents this sentinel for replaying Gemini 3 function calls after their original signature was lost.
 const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -248,7 +247,7 @@ const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
 
 const lowerUserPart = Effect.fn("Gemini.lowerUserPart")(function* (part: TextPart | MediaPart) {
   if (part.type === "text") return { text: part.text }
-  const media = yield* ProviderShared.validateMedia("Gemini", part, MEDIA_MIMES)
+  const media = ProviderShared.normalizeMedia(part)
   return { inlineData: { mimeType: media.mime, data: media.base64 } }
 })
 
@@ -353,7 +352,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       const media: GeminiInlineDataPart[] = []
       for (const item of content) {
         if (item.type === "text") continue
-        const value = yield* ProviderShared.validateToolFile("Gemini", item, MEDIA_MIMES)
+        const value = ProviderShared.normalizeToolFile(item)
         media.push({ inlineData: { mimeType: value.mime, data: value.base64 } })
       }
       parts.push({

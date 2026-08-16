@@ -26,7 +26,6 @@ import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "open-responses"
 const NAME = "Open Responses"
-const MEDIA_MIMES = new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.PDF_MIMES])
 export const PATH = "/responses"
 
 // =============================================================================
@@ -285,7 +284,7 @@ export interface Extension {
   readonly name: string
   readonly lowerMedia?: (input: {
     readonly part: MediaPart
-    readonly media: ProviderShared.ValidatedMedia
+    readonly media: ProviderShared.NormalizedMedia
     readonly request: LLMRequest
   }) => MediaInput | undefined
   readonly messagePhase?: (value: unknown) => MessagePhase | null | undefined
@@ -380,13 +379,13 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   request: LLMRequest,
   extension: Extension,
 ) {
-  const media = yield* ProviderShared.validateMedia(extension.name, part, MEDIA_MIMES)
+  const media = ProviderShared.normalizeMedia(part)
   const extended = extension.lowerMedia?.({ part, media, request })
   if (extended) return extended
-  if (media.mime === "application/pdf") {
+  if (!media.mime.startsWith("image/")) {
     return {
       type: "input_file" as const,
-      filename: part.filename ?? "document.pdf",
+      filename: part.filename ?? (media.mime === "application/pdf" ? "document.pdf" : "file"),
       file_data: media.dataUrl,
     }
   }
