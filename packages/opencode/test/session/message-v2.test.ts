@@ -322,6 +322,16 @@ describe("session.message-v2.toModelMessage", () => {
   test("converts assistant tool completion into tool-call + tool-result messages with attachments", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
+    const imageModel: Provider.Model = {
+      ...model,
+      capabilities: {
+        ...model.capabilities,
+        input: {
+          ...model.capabilities.input,
+          image: true,
+        },
+      },
+    }
 
     const input: SessionV1.WithParts[] = [
       {
@@ -371,7 +381,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, imageModel)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -406,6 +416,58 @@ describe("session.message-v2.toModelMessage", () => {
             },
             providerOptions: { openai: { tool: "meta" } },
           },
+        ],
+      },
+    ])
+
+    const unsupported = await MessageV2.toModelMessages(input, model)
+    expect(unsupported).toMatchObject([
+      { role: "user" },
+      { role: "assistant" },
+      {
+        role: "tool",
+        content: [{ output: { type: "text", value: "ok" } }],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: MessageV2.SYNTHETIC_ATTACHMENT_PROMPT },
+          { type: "file", mediaType: "image/png" },
+        ],
+      },
+    ])
+    expect(ProviderTransform.message(unsupported, model, {})).toMatchObject([
+      { role: "user" },
+      { role: "assistant" },
+      { role: "tool" },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: MessageV2.SYNTHETIC_ATTACHMENT_PROMPT },
+          {
+            type: "text",
+            text: 'ERROR: Cannot read "attachment.png" (this model does not support image input). Inform the user.',
+          },
+        ],
+      },
+    ])
+
+    const legacyModel: Provider.Model = {
+      ...model,
+      api: { ...model.api, npm: "@ai-sdk/openai-compatible" },
+      capabilities: { ...model.capabilities, attachment: true },
+    }
+    expect(
+      ProviderTransform.message(await MessageV2.toModelMessages(input, legacyModel), legacyModel, {}),
+    ).toMatchObject([
+      { role: "user" },
+      { role: "assistant" },
+      { role: "tool" },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: MessageV2.SYNTHETIC_ATTACHMENT_PROMPT },
+          { type: "file", mediaType: "image/png" },
         ],
       },
     ])
