@@ -1,10 +1,8 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Service, type Info } from "@opencode-ai/client/effect/service"
-import { Session } from "@opencode-ai/schema/session"
 import { Global } from "@opencode-ai/util/global"
 import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
-import { Database } from "bun:sqlite"
 import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -128,41 +126,6 @@ test("managed service writes its registration once", async () => {
   }
 }, 30_000)
 
-test("managed service persists durable events when configured", async () => {
-  const service = await startManagedService("opencode-service-events-", false, {
-    OPENCODE_EVENTS_PERSIST: "1",
-  })
-  try {
-    await waitForStatus(service.info, 200)
-    const response = await fetch(new URL("/api/session", service.info.url), {
-      method: "POST",
-      headers: {
-        authorization: "Basic " + btoa(`opencode:${service.info.password}`),
-        "content-type": "application/json",
-      },
-      body: "{}",
-    })
-    expect(response.status).toBe(200)
-    const session = await Schema.decodeUnknownPromise(Schema.Struct({ data: Session.Info }))(await response.json())
-    await Effect.runPromise(Service.stop({ file: service.registration }).pipe(Effect.provide(NodeFileSystem.layer)))
-    await service.owner.exited
-
-    const database = new Database(path.join(service.root, "opencode.db"), { readonly: true })
-    try {
-      const event = database
-        .query<{ type: string }, [string]>(
-          "SELECT type FROM event WHERE aggregate_id = ? AND type = 'session.created.1'",
-        )
-        .get(session.data.id)
-      expect(event?.type).toBe("session.created.1")
-    } finally {
-      database.close()
-    }
-  } finally {
-    await stopManagedService(service)
-  }
-}, 30_000)
-
 test("deleting a managed service registration stops its owner", async () => {
   const service = await startManagedService("opencode-service-delete-")
   try {
@@ -178,7 +141,7 @@ test("deleting a managed service registration stops its owner", async () => {
 test("deleting a failed service registration stops its owner", async () => {
   const service = await startManagedService("opencode-service-failed-delete-", true)
   try {
-    await waitForStatus(service.info, 500)
+    await waitForFailed(service.info)
     await fs.rm(service.registration)
     expect(await waitForExit(service.owner)).toBe(true)
     await expectPortAvailable(service.port)
@@ -503,7 +466,7 @@ test("a failed service stays registered and owns the selected port until stopped
 
   try {
     const info = await waitForInfo(registration)
-    await waitForStatus(info, 500)
+    await waitForFailed(info)
     expect(owner.exitCode).toBe(null)
 
     const contender = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
@@ -536,17 +499,17 @@ async function waitForInfo(file: string, accept: (info: Info) => boolean = () =>
   throw new Error("Timed out waiting for service registration")
 }
 
-async function waitForStatus(info: Info, expected: number) {
+async function waitForFailed(info: Info) {
   for (let attempt = 0; attempt < 400; attempt++) {
     const status = await fetch(new URL("/api/health", info.url), {
       headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) },
     })
       .then((response) => response.status)
       .catch(() => undefined)
-    if (status === expected) return
+    if (status === 500) return
     await Bun.sleep(50)
   }
-  throw new Error(`Timed out waiting for service status ${expected}`)
+  throw new Error("Timed out waiting for service boot failure")
 }
 
 async function availablePort() {
@@ -570,7 +533,7 @@ function serviceEnv(root: string) {
   }
 }
 
-async function startManagedService(prefix: string, failBoot = false, environment: Record<string, string> = {}) {
+async function startManagedService(prefix: string, failBoot = false) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), prefix))
   const port = await availablePort()
   const registration = path.join(root, "state", "opencode", "service-local.json")
@@ -578,11 +541,7 @@ async function startManagedService(prefix: string, failBoot = false, environment
   if (failBoot) await fs.mkdir(path.join(root, "database"))
   await fs.writeFile(path.join(root, "config", "opencode", "service-local.json"), JSON.stringify({ port }))
   const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
-    env: {
-      ...serviceEnv(root),
-      ...environment,
-      ...(failBoot ? { OPENCODE_DB: path.join(root, "database") } : {}),
-    },
+    env: failBoot ? { ...serviceEnv(root), OPENCODE_DB: path.join(root, "database") } : serviceEnv(root),
     stderr: "pipe",
     stdout: "ignore",
   })

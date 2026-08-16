@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { Service } from "@opencode-ai/client/effect/service"
+import { OpenCode } from "@opencode-ai/client"
 import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
 import { Schema } from "effect"
 import fs from "node:fs/promises"
@@ -19,6 +20,7 @@ const env = {
   HOME: root,
   USERPROFILE: root,
   OPENCODE_DB: path.join(root, "opencode.db"),
+  OPENCODE_EVENTS_PERSIST: "1",
   OPENCODE_TEST_HOME: root,
   XDG_CACHE_HOME: path.join(root, "cache"),
   XDG_CONFIG_HOME: path.join(root, "config"),
@@ -40,6 +42,11 @@ try {
   const token = encodeURIComponent(credential)
   const health = await waitForReady(info.url, headers)
   if (health.pid !== info.pid) throw new Error("Health process does not match registration")
+  const client = OpenCode.make({ baseUrl: info.url, headers })
+  const session = await client.session.create({})
+  const log = []
+  for await (const event of client.session.log({ sessionID: session.id, follow: false })) log.push(event)
+  if (!log.some((event) => event.type === "session.created")) throw new Error("Compiled service did not persist events")
   const tokenHealth = await fetch(new URL(`/api/health?auth_token=${token}`, info.url), {
     signal: AbortSignal.timeout(5_000),
   })
