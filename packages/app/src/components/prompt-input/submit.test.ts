@@ -286,6 +286,20 @@ beforeAll(async () => {
     },
   }))
 
+  mock.module("@/context/server", () => ({
+    useData: () => ({
+      session: {
+        remember: () => undefined,
+        setStatus: () => undefined,
+      },
+      location: {
+        command: {
+          list: () => commands,
+        },
+      },
+    }),
+  }))
+
   mock.module("@/context/platform", () => ({
     usePlatform: () => ({
       fetch: fetch,

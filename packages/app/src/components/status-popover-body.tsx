@@ -11,7 +11,7 @@ import { type ServerHealth } from "@/utils/server-health"
 import { useGlobal } from "@/context/global"
 import { useMcpToggle } from "@/context/mcp"
 import { useSDK } from "@/context/sdk"
-import { useServer } from "@/context/server"
+import { useData, useServer } from "@/context/server"
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -103,6 +103,7 @@ type ServerStatusItem = {
 
 export function StatusPopoverBody(props: { shown: boolean }) {
   const sync = useSync()
+  const data = useData()
   const sdk = useSDK()
   const language = useLanguage()
 
@@ -119,8 +120,9 @@ export function StatusPopoverBody(props: { shown: boolean }) {
     dialogRun += 1
   })
   const toggleMcp = useMcpToggle()
-  const mcpNames = createMemo(() => Object.keys(sync().data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
-  const mcpStatus = (name: string) => sync().data.mcp?.[name]?.status
+  const mcp = () => data.location.mcp.server.list({ directory: sdk().directory }) ?? []
+  const mcpNames = createMemo(() => mcp().map((server) => server.name).sort((a, b) => a.localeCompare(b)))
+  const mcpStatus = (name: string) => mcp().find((server) => server.name === name)?.status.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
   const lspItems = createMemo(() => sync().data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)

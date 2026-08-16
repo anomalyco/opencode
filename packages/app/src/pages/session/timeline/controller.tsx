@@ -51,6 +51,7 @@ export function createTimelineController(input: {
   const serverSDK = useServerSDK()
   const sync = useSync()
   const server = useServer()
+  const data = server.ctx.data
   const settings = useSettings()
   const tabs = useTabs()
   const dialog = useDialog()
@@ -63,7 +64,7 @@ export function createTimelineController(input: {
     const boundary = input.session.history
       .messages()
       .find((message) => message.role === "user" && !visible.has(message.id))?.id
-    const projected = sync().data.session_message[id] ?? []
+    const projected = data.session.message.list(id)
     if (!boundary) return projected
     const index = projected.findIndex((message) => message.id === boundary)
     return index < 0 ? projected : projected.slice(0, index)
@@ -186,7 +187,7 @@ export function createTimelineController(input: {
     }
   }
   const remove = async (id: string) => {
-    const session = sync().session.get(id)
+    const session = data.session.get(id)
     if (!session) return false
     const sessions = sync().data.session.filter((item) => !item.parentID && !item.time?.archived)
     const index = sessions.findIndex((item) => item.id === id)
@@ -209,7 +210,7 @@ export function createTimelineController(input: {
 
   function DeleteDialog(props: { sessionID: string }) {
     const name = createMemo(
-      () => sessionTitle(sync().session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
+      () => sessionTitle(data.session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
     )
     const confirm = async () => {
       await remove(props.sessionID)
@@ -260,7 +261,7 @@ export function createTimelineController(input: {
       () => [input.session.data.parentID(), childTaskDescription()] as const,
       ([id, description]) => {
         if (!id || description || sync().data.message[id] !== undefined) return
-        void sync().session.sync(id)
+        void Promise.all([data.session.sync(id), sync().session.sync(id)])
       },
       { defer: true },
     ),

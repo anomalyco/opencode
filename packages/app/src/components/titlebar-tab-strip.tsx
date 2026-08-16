@@ -84,14 +84,18 @@ function SessionTabEntry(props: {
   const tabs = useTabs()
   const language = useLanguage()
   const sdk = createMemo(() => props.serverCtx?.sdk ?? null)
-  const cachedSession = createMemo(() => props.serverCtx?.sync.session.peek(props.tab.sessionId))
+  const cachedSession = createMemo(() => props.serverCtx?.data.session.get(props.tab.sessionId))
   const persisted = createMemo(() => tabs.info[props.id])
   const [loadedSession] = createResource(
     () => {
       const ctx = props.serverCtx
       return ctx ? { id: props.tab.sessionId, ctx } : null
     },
-    ({ id, ctx }) => ctx.sync.session.resolve(id).catch(() => undefined),
+    ({ id, ctx }) =>
+      ctx.data.session
+        .sync(id)
+        .then(() => ctx.data.session.get(id))
+        .catch(() => undefined),
   )
   const session = createMemo(() => cachedSession() ?? loadedSession())
   const missingSession = createMemo(() => !!props.serverCtx && !loadedSession.loading && !session())
@@ -103,13 +107,13 @@ function SessionTabEntry(props: {
     const ctx = props.serverCtx
     if (!value || !ctx) return
 
-    ctx.sync.session.remember({ ...value, title })
+    ctx.data.session.remember({ ...value, title })
     try {
       await ctx.sdk.api.session.rename({ sessionID: value.id, title })
     } catch (err) {
       const current = session()
       const currentCtx = props.serverCtx
-      if (current && currentCtx) currentCtx.sync.session.remember({ ...current, title: value.title })
+      if (current && currentCtx) currentCtx.data.session.remember({ ...current, title: value.title })
       showToast({
         title: language.t("common.requestFailed"),
         description: err instanceof Error ? err.message : undefined,
@@ -126,9 +130,13 @@ function SessionTabEntry(props: {
     prefetched = true
     createRoot((dispose) => {
       try {
-        void ctx.sync
-          .ensureDirSyncContext(value.location.directory)
-          .session.sync(value.id)
+        void Promise.allSettled([
+          ctx.data.session.sync(value.id, { children: true }),
+          ctx.data.session.pending.sync(value.id),
+          ctx.data.session.message.sync(value.id),
+          ctx.data.session.permission.sync(value.id),
+          ctx.data.session.form.sync(value.id),
+        ])
           .catch(() => {})
           .finally(dispose)
       } catch {

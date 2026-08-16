@@ -17,10 +17,9 @@ import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
 import { useQuery } from "@tanstack/solid-query"
 import { QueryOptionsApi } from "../server-sync"
 import { directoryKey, type DirectoryKey } from "./utils"
-import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import type { ServerScope } from "@/utils/server-scope"
 import type { Data } from "@opencode-ai/client/solid"
-import { normalizeAgentList } from "./utils"
+import { normalizeAgentList, normalizeProviderList } from "./utils"
 
 export function createChildStoreManager(input: {
   owner: Owner
@@ -37,7 +36,6 @@ export function createChildStoreManager(input: {
   data: Data
   global: {
     path: Path
-    provider: NormalizedProviderListResponse
   }
 }) {
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
@@ -193,23 +191,23 @@ export function createChildStoreManager(input: {
             ...input.queryOptions.lsp(key),
             enabled: input.connected() && instanceQueriesEnabled(),
           }))
-          const providerQuery = useQuery(() => ({
-            ...input.queryOptions.providers(key),
-            enabled: input.connected() && instanceQueriesEnabled(),
-          }))
           const child = createStore<State>({
             project: "",
             projectMeta: initialMeta,
             icon: initialIcon,
             get provider_ready() {
-              return instanceQueriesEnabled() && (providerQuery.isSuccess || providerQuery.isRefetchError)
+              return (
+                input.data.location.provider.list({ directory }) !== undefined &&
+                input.data.location.model.list({ directory }) !== undefined &&
+                input.data.location.model.default({ directory }) !== undefined
+              )
             },
             get provider() {
-              const EMPTY = { all: new Map(), connected: [], default: {} }
-              if (!providerQuery.isSuccess && !providerQuery.isRefetchError) return EMPTY
-              const provider = providerQuery.data
-              if (provider.all.size === 0 && input.global.provider.all.size > 0) return input.global.provider
-              return provider
+              const provider = input.data.location.provider.list({ directory })
+              const model = input.data.location.model.list({ directory })
+              const defaultModel = input.data.location.model.default({ directory })
+              if (!provider || !model || defaultModel === undefined) return { all: new Map(), connected: [], default: {} }
+              return normalizeProviderList(provider, model, defaultModel)
             },
             config: {},
             get path() {

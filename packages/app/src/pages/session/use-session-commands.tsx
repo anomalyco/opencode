@@ -10,6 +10,7 @@ import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
+import { useData } from "@/context/server"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
@@ -54,6 +55,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const sdk = useSDK()
   const settings = useSettings()
   const sync = useSync()
+  const data = useData()
   const terminal = useTerminal()
   const layout = useLayout()
   const navigate = useNavigate()
@@ -304,7 +306,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!message) return
     const parts = sync().data.part[message.id]
 
-    if (sync().data.session_working(sessionID)) {
+    if (data.session.status(sessionID) === "running") {
       await session.interrupt({ sessionID }).catch(() => {})
     }
 

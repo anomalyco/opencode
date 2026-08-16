@@ -112,7 +112,7 @@ export function createHomeSessionsController(home: HomeController) {
         const key = `${ServerConnection.key(conn)}\0${record.session.id}`
         if (prefetched.has(key)) return
         prefetched.add(key)
-        void untrack(() => ctx.sync.session.sync(record.session.id)).catch(() => {})
+        void untrack(() => ctx.data.session.sync(record.session.id)).catch(() => {})
       })
   })
 
@@ -179,7 +179,7 @@ export function createHomeSessionsController(home: HomeController) {
         const directory = project?.worktree ?? session.location.directory
         const ctx = home.server.focusedContext()
         if (!ctx) return
-        ctx.sync.session.remember(session)
+        ctx.data.session.remember(session)
         ctx.projects.open(directory)
         if (options?.background) {
           tabs.addSessionTab({ server: connKey, sessionId: session.id })

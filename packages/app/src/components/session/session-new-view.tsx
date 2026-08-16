@@ -3,6 +3,7 @@ import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
+import { useData } from "@/context/server"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Mark } from "@opencode-ai/ui/logo"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
@@ -19,6 +20,7 @@ export function NewSessionView(props: NewSessionViewProps) {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
+  const data = useData()
 
   const sandboxes = createMemo(() => sync().project?.sandboxes ?? [])
   const options = createMemo(() => [MAIN_WORKTREE, ...sandboxes(), CREATE_WORKTREE])
@@ -37,7 +39,7 @@ export function NewSessionView(props: NewSessionViewProps) {
   const label = (value: string) => {
     if (value === MAIN_WORKTREE) {
       if (isWorktree()) return language.t("session.new.worktree.main")
-      const branch = sync().data.vcs?.branch
+      const branch = data.location.vcs.info({ directory: sdk().directory })?.branch.current
       if (branch) return language.t("session.new.worktree.mainWithBranch", { branch })
       return language.t("session.new.worktree.main")
     }

@@ -47,6 +47,7 @@ import { CommentsProvider, useComments } from "@/context/comments"
 import { useCommand } from "@/context/command"
 import { DirectoryDataProvider } from "@/pages/directory-layout"
 import { useServerSync } from "@/context/server-sync"
+import { useData } from "@/context/server"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
@@ -151,8 +152,8 @@ async function runPromptRollbackMutation<T, R>(input: {
 // workspace-scoped state (terminal, directory providers) lives below.
 export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
-  const serverSync = useServerSync()
-  const directory = createMemo(() => serverSync.session.lineage.peek(params.id)?.session.location.directory)
+  const data = useData()
+  const directory = createMemo(() => data.session.lineage.peek(params.id)?.session.location.directory)
   return (
     // Settings must keep the target-server SDK, sync, and models context and remain registered
     // when session content falls back to the route error boundary.
@@ -238,11 +239,11 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
 function ResolvedTargetSessionRoute() {
   const params = useParams<{ serverKey: string; id: string }>()
   const tabs = useTabs()
-  const sync = useServerSync()
+  const data = useData()
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
   const current = createSessionLineage(
     () => params.id,
-    () => sync.session.lineage,
+    () => data.session.lineage,
   )
   const directory = createMemo(() => current()?.session.location.directory)
 
@@ -330,6 +331,7 @@ function SessionPanelFrame(props: ParentProps<{ newLayout: boolean; raised?: boo
 
 export default function Page() {
   const serverSync = useServerSync()
+  const data = useData()
   const layout = useLayout()
   const local = useLocal()
   const file = useFile()
@@ -571,12 +573,17 @@ export default function Page() {
     const project = sync().project
     return !!project && project.vcs !== "git"
   })
+  const vcs = createMemo(() => data.location.vcs.info({ directory: sdk().directory }))
   const changesOptions = createMemo<ChangeMode[]>(() => {
     const list: ChangeMode[] = []
     const project = sync().project
-    const vcs = sync().data.vcs
     if (project?.vcs === "git") list.push("git")
-    if (project?.vcs === "git" && vcs?.branch && vcs?.default_branch && vcs.branch !== vcs.default_branch) {
+    if (
+      project?.vcs === "git" &&
+      vcs()?.branch.current &&
+      vcs()?.branch.default &&
+      vcs()?.branch.current !== vcs()?.branch.default
+    ) {
       list.push("branch")
     }
     list.push("turn")
@@ -600,8 +607,8 @@ export default function Page() {
         serverSDK.scope,
         "session-vcs",
         sdk().directory,
-        sync().data.vcs?.branch ?? "",
-        sync().data.vcs?.default_branch ?? "",
+        vcs()?.branch.current ?? "",
+        vcs()?.branch.default ?? "",
       ] as const,
   )
   const vcsQuery = createQuery(() => {
@@ -848,7 +855,7 @@ export default function Page() {
         return [
           sdk().directory,
           id,
-          id ? (sync().data.session_status[id]?.type ?? "idle") : "idle",
+          id ? data.session.status(id) : "idle",
           id ? composer.blocked() : false,
         ] as const
       },
@@ -1033,7 +1040,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => sync().data.session_status[controller.identity.params.id ?? ""]?.type,
+      () => data.session.status(controller.identity.params.id ?? ""),
       (next, prev) => {
         if (next !== "idle" || prev === undefined || prev === "idle") return
         refreshVcs()
@@ -1645,7 +1652,7 @@ export default function Page() {
     target.session.remember({ ...session, revert: next })
   }
 
-  const busy = (sessionID: string) => sync().data.session_working(sessionID)
+  const busy = (sessionID: string) => data.session.status(sessionID) === "running"
   const queuedFollowups = createMemo(() => {
     const id = controller.identity.params.id
     if (!id) return emptyFollowups
@@ -1676,8 +1683,8 @@ export default function Page() {
       const ok = await sendFollowupDraft({
         api: sdk().api.session,
         sync: sync(),
-        serverSync: serverSync,
-        session: () => sync().session.get(input.sessionID),
+        data,
+        session: () => data.session.get(input.sessionID),
         draft: item,
         optimisticBusy: item.sessionDirectory === sdk().directory,
       }).catch((err) => {
@@ -1742,7 +1749,7 @@ export default function Page() {
   const followupDock = createMemo(() => queuedFollowups().map((item) => ({ id: item.id, text: followupText(item) })))
 
   const sendFollowup = (sessionID: string, id: string, opts?: { manual?: boolean }) => {
-    if (sync().session.get(sessionID)?.parentID) return Promise.resolve()
+    if (data.session.get(sessionID)?.parentID) return Promise.resolve()
     const item = (followup.items[sessionID] ?? []).find((entry) => entry.id === id)
     if (!item) return Promise.resolve()
     if (followupBusy(sessionID)) return Promise.resolve()

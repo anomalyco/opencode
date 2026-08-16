@@ -4,15 +4,12 @@ import { getFilename } from "@opencode-ai/core/util/path"
 import { batch, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
-import type { InitError } from "../pages/error"
 import { type ServerEvent, type ServerSDK } from "./server-sdk"
 import {
   bootstrapDirectory,
   bootstrapGlobal,
-  clearProviderRev,
   loadGlobalConfigQuery,
   loadPathQuery,
-  loadProvidersQuery,
 } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent } from "./global-sync/event-reducer"
@@ -27,7 +24,6 @@ import { createRefreshQueue } from "./global-sync/queue"
 import { directoryKey } from "./global-sync/utils"
 import { pathKey, PathKey } from "@/utils/path-key"
 import { createDirSyncContext } from "./directory-sync"
-import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { createRefCountMap } from "@/utils/refcount"
 import { ServerConnection } from "./servers"
 import type { ServerScope } from "@/utils/server-scope"
@@ -57,11 +53,8 @@ export function shouldRefreshWorkspaceSessions(event: ServerEvent) {
 }
 
 type GlobalStore = {
-  ready: boolean
-  error?: InitError
   path: Path
   project: Project[]
-  provider: NormalizedProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
   reload: undefined | "pending" | "complete"
@@ -133,7 +126,6 @@ function makeQueryOptionsApi(scope: ServerScope, serverAPI: ServerApi) {
   return {
     globalConfig: () => loadGlobalConfigQuery(scope),
     path: () => loadPathQuery(scope, null, serverAPI.location),
-    providers: (directory: PathKey | null) => loadProvidersQuery(scope, directory, serverAPI),
     lsp: (directory: PathKey) => loadLspQuery(scope, directory),
     sessions: (directory: PathKey) => ({ queryKey: [scope, directory, "loadSessions"] as const }),
   }
@@ -154,21 +146,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   const session = createServerSession(serverSDK.api.session, serverSDK.api.message)
   const queryOptionsApi = makeQueryOptionsApi(serverSDK.scope, serverSDK.api)
   const connected = () => serverSDK.connection.status() === "connected"
-  const hydrateSessionState = async (sessionID: string) => {
-    await session.hydrateTransient(sessionID, async () => {
-      const [pending, forms] = await Promise.all([
-        serverSDK.api.session.inbox.list({ sessionID }),
-        serverSDK.api.form.list({ sessionID }),
-      ])
-      return { pending, forms }
-    })
-  }
-  const hydrateSession = (sessionID: string) => Promise.all([session.sync(sessionID), hydrateSessionState(sessionID)])
+  const hydrateSession = (sessionID: string) => session.sync(sessionID)
 
-  const [configQuery, providerQuery, pathQuery] = useQueries(() => ({
+  const [configQuery, pathQuery] = useQueries(() => ({
     queries: [
       { ...queryOptionsApi.globalConfig(), enabled: connected() },
-      { ...queryOptionsApi.providers(null), enabled: connected() },
       { ...queryOptionsApi.path(), enabled: connected() },
     ],
   }))
@@ -178,7 +160,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
         const active = await serverSDK.api.session.active()
         reconcileActiveSessionStatuses(session, active)
         Object.keys(active).forEach((sessionID) => {
-          void Promise.all([session.resolve(sessionID), hydrateSessionState(sessionID)]).catch(() => undefined)
+          void session.resolve(sessionID).catch(() => undefined)
         })
         return active
       },
@@ -187,20 +169,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   }))
 
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
-    get ready() {
-      return bootstrap.isSuccess
-    },
     project: [],
     provider_auth: {},
     get path() {
       const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
       if (pathQuery.isLoading) return EMPTY
       return pathQuery.data ?? EMPTY
-    },
-    get provider() {
-      const EMPTY = { all: new Map(), connected: [], default: {} }
-      if (providerQuery.isLoading) return EMPTY
-      return providerQuery.data ?? EMPTY
     },
     get config() {
       if (configQuery.isLoading) return {}
@@ -287,7 +261,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
       const key = directoryKey(directory)
       queue.clear(key)
       sessionMeta.delete(key)
-      clearProviderRev(serverSDK.scope, key)
     },
     translate: language.t,
     queryOptions: queryOptionsApi,
@@ -295,9 +268,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     global: {
       get path() {
         return globalStore.path
-      },
-      get provider() {
-        return globalStore.provider
       },
     },
   })
@@ -311,7 +281,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
       })
     },
     connected: (info) => {
-      if (info.reconnect) void session.refreshPinned(hydrateSessionState).catch(() => undefined)
+      if (info.reconnect) void session.refreshPinned(() => Promise.resolve()).catch(() => undefined)
       if (activeSessionsQuery.data !== undefined && !activeSessionsQuery.isFetching) void activeSessionsQuery.refetch()
       if (bootstrap.data !== undefined && !bootstrap.isFetching) void bootstrap.refetch()
       Object.keys(children.children)
@@ -426,7 +396,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
             config: globalStore.config,
             path: globalStore.path,
             project: globalStore.project,
-            provider: globalStore.provider,
           },
           api: serverSDK.api,
           store: child[0],
@@ -546,9 +515,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     }
     homeSessions.refresh(event.type)
     connection.handleEvent({ type: eventType, directory })
-    if (eventType === "catalog.updated" || eventType === "integration.updated") {
-      void queryClient.invalidateQueries(queryOptionsApi.providers(directory === "global" ? null : key))
-    }
 
     if (directory === "global") {
       applyGlobalEvent({
@@ -618,33 +584,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   })
 
   const projectApi = {
-    loadSessions,
     meta(directory: string, patch: ProjectMeta) {
       children.projectMeta(directory, patch)
     },
     icon(directory: string, value: string | undefined) {
       children.projectIcon(directory, value)
     },
-  }
-
-  const refreshProviders = () => {
-    const locations = Object.keys(children.children).filter(children.active)
-    if (locations.length === 0) locations.push(data.location.default().directory)
-    locations.filter(Boolean).forEach((directory) => {
-      data.location.provider.invalidate({ directory })
-      data.location.model.invalidate({ directory })
-    })
-    return Promise.all(
-      [
-        queryClient.refetchQueries({
-          predicate: (query) => query.queryKey[0] === serverSDK.scope && query.queryKey[2] === "providers",
-        }),
-        ...locations.filter(Boolean).flatMap((directory) => [
-          data.location.provider.sync({ directory }),
-          data.location.model.sync({ directory }),
-        ]),
-      ],
-    ).then(() => undefined)
   }
 
   const updateConfigMutation = useMutation(() => ({
@@ -655,29 +600,22 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     },
     onSuccess: () => {
       bootstrap.refetch()
-      // Invalidate all provider queries so newly configured custom providers
-      // appear immediately in the available provider list across all directories.
-      queryClient.invalidateQueries({ queryKey: [serverSDK.scope, null, "providers"] })
-      queryClient.invalidateQueries({
-        predicate: (query) => query.queryKey[0] === serverSDK.scope && query.queryKey[2] === "providers",
-      })
+      data.location.provider.invalidate()
+      data.location.model.invalidate()
+      data.location.model.invalidateDefault()
+      void Promise.all([
+        data.location.provider.sync(),
+        data.location.model.sync(),
+        data.location.model.syncDefault(),
+      ])
     },
   }))
 
   return {
     data: globalStore,
     set,
-    get ready() {
-      return globalStore.ready
-    },
-    get error() {
-      return globalStore.error
-    },
     child: children.child,
-    peek: children.peek,
     disableMcp: children.disableMcp,
-    queryOptions: queryOptionsApi,
-    refreshProviders,
     // bootstrap,
     updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
@@ -745,9 +683,4 @@ export type ServerSync = ReturnType<typeof createServerSyncContext>
 export const useServerSync = () => {
   const server = useServer()
   return server.ctx.sync
-}
-
-export function useQueryOptions() {
-  const sync = useServerSync()
-  return sync.queryOptions
 }

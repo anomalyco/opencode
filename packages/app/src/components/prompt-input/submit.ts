@@ -1,5 +1,6 @@
 import type { Message } from "@/types"
 import type { SessionInfo } from "@opencode-ai/client/promise"
+import type { Data } from "@opencode-ai/client/solid"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
@@ -7,6 +8,7 @@ import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { batch, startTransition, type Accessor } from "solid-js"
 import { useTabs } from "@/context/tabs"
 import { useServerSync, type ServerSync } from "@/context/server-sync"
+import { useData } from "@/context/server"
 import { useLanguage } from "@/context/language"
 import { useLocal, type ModelSelection } from "@/context/local"
 import { usePermission } from "@/context/permission"
@@ -37,7 +39,7 @@ export type FollowupDraft = {
 
 type FollowupSendInput = {
   api: DirectorySDK["api"]["session"]
-  serverSync: ServerSync
+  data: Data
   sync: DirectorySync
   session: Accessor<{ agent?: string; model?: { id: string; providerID: string; variant?: string } } | undefined>
   draft: FollowupDraft
@@ -54,17 +56,17 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   const images = draftImages(input.draft.prompt)
   const setBusy = () => {
     if (!input.optimisticBusy) return
-    input.serverSync.session.set("session_status", input.draft.sessionID, { type: "busy" })
+    input.data.session.setStatus(input.draft.sessionID, "running")
   }
 
   const setIdle = () => {
     if (!input.optimisticBusy) return
-    input.serverSync.session.set("session_status", input.draft.sessionID, { type: "idle" })
+    input.data.session.setStatus(input.draft.sessionID, "idle")
   }
 
   const [head, ...tail] = text.split(" ")
   const cmd = head?.startsWith("/") ? head.slice(1) : undefined
-  if (cmd && input.sync.data.command.find((item) => item.name === cmd)) {
+  if (cmd && input.data.location.command.list({ directory: input.draft.sessionDirectory })?.some((item) => item.name === cmd)) {
     setBusy()
     try {
       const messageID = Identifier.ascending("message")
@@ -228,6 +230,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const sdk = useSDK()
   const sync = useSync()
   const serverSync = useServerSync()
+  const data = useData()
   const local = useLocal()
   const permission = usePermission()
   const prompt = input.prompt
@@ -281,6 +284,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   }
 
   const seed = (target: ServerSync, dir: string, info: SessionInfo) => {
+    data.session.remember(info)
     target.session.remember(info)
     const [, setStore] = target.child(dir)
     setStore("session", (list: SessionInfo[]) => {
@@ -329,6 +333,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const submissionSDK = sdk()
     const submissionSync = sync()
     const submissionServerSync = serverSync
+    const submissionData = data
     const submissionScope = submissionSDK.scope
     const projectDirectory = submissionSDK.directory
     const sessionID = params.id
@@ -503,11 +508,13 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       if (text.startsWith("/")) {
         const [cmdName, ...args] = text.split(" ")
         const commandName = cmdName.slice(1)
-        const customCommand = submissionSync.data.command.find((c) => c.name === commandName)
+          const customCommand = submissionData.location.command
+            .list({ directory: sessionDirectory })
+            ?.find((command) => command.name === commandName)
         if (customCommand) {
           clearInput()
           const messageID = Identifier.ascending("message")
-          submissionServerSync.session.set("session_status", session.id, { type: "busy" })
+          submissionData.session.setStatus(session.id, "running")
           void submissionSDK.api.session
             .command({
               sessionID: session.id,
@@ -524,7 +531,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
               ),
             })
             .catch((err) => {
-              submissionServerSync.session.set("session_status", session.id, { type: "idle" })
+              submissionData.session.setStatus(session.id, "idle")
               showToast({
                 title: language.t("prompt.toast.commandSendFailed.title"),
                 description: formatServerError(err, language.t, language.t("common.requestFailed")),
@@ -552,14 +559,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       void sendFollowupDraft({
         api: submissionSDK.api.session,
         sync: submissionSync,
-        serverSync: submissionServerSync,
+        data: submissionData,
         session: () => session,
         draft,
         messageID,
         optimisticBusy: sessionDirectory === projectDirectory,
       }).catch((err) => {
         if (sessionDirectory === projectDirectory) {
-          submissionSync.set("session_status", session.id, { type: "idle" })
+          submissionData.session.setStatus(session.id, "idle")
         }
         showToast({
           title: language.t("prompt.toast.promptSendFailed.title"),

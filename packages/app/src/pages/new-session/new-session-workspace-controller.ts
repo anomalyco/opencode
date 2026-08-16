@@ -1,7 +1,7 @@
-import { createMemo } from "solid-js"
+import { createEffect, createMemo } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
+import { useData } from "@/context/server"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import {
@@ -47,7 +47,7 @@ export function createNewSessionWorkspaceController(input: {
   const sdk = useSDK()
   const sync = useSync()
   const serverSDK = useServerSDK()
-  const serverSync = useServerSync()
+  const data = useData()
   const settings = useSettings()
   const visible = createMemo(() => sync().project?.vcs === "git")
   const selected = createMemo(() => {
@@ -74,12 +74,17 @@ export function createNewSessionWorkspaceController(input: {
     }),
   )
   const projectRoot = createMemo(() => sync().project?.worktree ?? sdk().directory)
-  const localBranch = createMemo(() => serverSync.child(projectRoot())[0].vcs?.branch)
+  createEffect(() => {
+    const project = sync().project
+    const directories = project ? [project.worktree, ...workspaceDirectories(project)] : [sdk().directory]
+    directories.forEach((directory) => void data.location.vcs.sync({ directory }).catch(() => undefined))
+  })
+  const localBranch = createMemo(() => data.location.vcs.info({ directory: projectRoot() })?.branch.current)
   const branch = createMemo(() =>
     resolveNewSessionBranch({
       worktree: value(),
       local: localBranch(),
-      worktreeBranch: (worktree) => serverSync.child(worktree)[0].vcs?.branch,
+      worktreeBranch: (worktree) => data.location.vcs.info({ directory: worktree })?.branch.current,
     }),
   )
   const remember = (worktree = value()) => {

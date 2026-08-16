@@ -14,7 +14,8 @@ import {
   hasServiceNeedingAttention,
   serverStatusDotClass,
 } from "./status-popover-indicator"
-import { useServer } from "@/context/server"
+import { useData, useServer } from "@/context/server"
+import { useSDK } from "@/context/sdk"
 
 const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
 
@@ -23,17 +24,20 @@ export function StatusPopover() {
   const server = useServer()
   const global = useGlobal()
   const sync = useSync()
+  const data = useData()
+  const sdk = useSDK()
   const [shown, setShown] = createSignal(false)
   const serverHealth = () => global.servers.health[server.key]?.healthy
-  const ready = createMemo(() => serverHealth() === false || (sync().data.mcp_ready && sync().data.lsp_ready))
+  const mcp = () => data.location.mcp.server.list({ directory: sdk().directory })
+  const ready = createMemo(() => serverHealth() === false || (mcp() !== undefined && sync().data.lsp_ready))
   const attention = createMemo(() =>
     hasServiceNeedingAttention({
-      mcp: Object.values(sync().data.mcp ?? {}).map((item) => item.status),
+      mcp: (mcp() ?? []).map((item) => item.status.status),
     }),
   )
   const issue = createMemo(() =>
     hasNonBlockingServiceIssue({
-      mcp: Object.values(sync().data.mcp ?? {}).map((item) => item.status),
+      mcp: (mcp() ?? []).map((item) => item.status.status),
       lsp: (sync().data.lsp ?? []).map((item) => item.status),
     }),
   )
@@ -87,17 +91,20 @@ export function StatusPopoverV2() {
   const server = useServer()
   const global = useGlobal()
   const sync = useSync()
+  const data = useData()
+  const sdk = useSDK()
   const [shown, setShown] = createSignal(false)
   const serverHealth = () => global.servers.health[server.key]?.healthy
-  const ready = createMemo(() => serverHealth() === false || (sync().data.mcp_ready && sync().data.lsp_ready))
+  const mcp = () => data.location.mcp.server.list({ directory: sdk().directory })
+  const ready = createMemo(() => serverHealth() === false || (mcp() !== undefined && sync().data.lsp_ready))
   const attention = createMemo(() =>
     hasServiceNeedingAttention({
-      mcp: Object.values(sync().data.mcp ?? {}).map((item) => item.status),
+      mcp: (mcp() ?? []).map((item) => item.status.status),
     }),
   )
   const issue = createMemo(() =>
     hasNonBlockingServiceIssue({
-      mcp: Object.values(sync().data.mcp ?? {}).map((item) => item.status),
+      mcp: (mcp() ?? []).map((item) => item.status.status),
       lsp: (sync().data.lsp ?? []).map((item) => item.status),
     }),
   )

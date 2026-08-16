@@ -4,6 +4,7 @@ import { type Accessor, createEffect, createMemo, createResource, onCleanup } fr
 import { createStore } from "solid-js/store"
 import type { PromptInputState } from "@/components/prompt-input"
 import { useSync } from "@/context/sync"
+import { useData } from "@/context/server"
 import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
 import type { SessionComposerController } from "./session-composer-state"
 
@@ -40,6 +41,7 @@ export function createSessionComposerRegionController(input: {
   setDockRef: (el: HTMLDivElement) => void
 }) {
   const sync = useSync()
+  const data = useData()
   const [store, setStore] = createStore({
     ready: input.ready() || input.state.dock(),
     height: 320,
@@ -104,7 +106,7 @@ export function createSessionComposerRegionController(input: {
 
   const parentID = createMemo(() => {
     const id = input.sessionID()
-    return id ? sync().session.get(id)?.parentID : undefined
+    return id ? data.session.get(id)?.parentID : undefined
   })
   const open = createMemo(() => store.ready && input.state.dock() && !input.state.closing())
   const progress = useSpring(

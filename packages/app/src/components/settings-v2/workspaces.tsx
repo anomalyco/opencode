@@ -14,6 +14,7 @@ import { getFilename } from "@opencode-ai/core/util/path"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
+import { useData } from "@/context/server"
 import { showToast } from "@/utils/toast"
 import { getRelativeTime } from "@/utils/time"
 import { pathKey } from "@/utils/path-key"
@@ -49,6 +50,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
   const language = useLanguage()
   const serverSDK = useServerSDK()
   const serverSync = useServerSync()
+  const data = useData()
   const tabs = useTabs()
   const platform = usePlatform()
   const [store, setStore] = createStore({
@@ -71,13 +73,19 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
   const filtered = createMemo(() => filterWorkspaceInventory(workspaces(), selectedProject()))
   const captureDeleteContext = () => {
     const sdk = serverSDK
-    return { sdk, sync: serverSync, server: ServerConnection.key(sdk.server), activeDirectory: props.activeDirectory }
+    return {
+      sdk,
+      data,
+      sync: serverSync,
+      server: ServerConnection.key(sdk.server),
+      activeDirectory: props.activeDirectory,
+    }
   }
   const loadSessions = async (context = captureDeleteContext()) => {
     const fetched = await listAllSessions(context.sdk.api.session, { order: "desc" })
     return mergeWorkspaceSessionInventory(
       fetched,
-      Object.values(context.sync.session.data.info).filter((session): session is SessionInfo => !!session),
+      context.data.session.list(),
     )
   }
   const sessionQuery = useQuery(() => ({

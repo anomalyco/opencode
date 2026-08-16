@@ -1,7 +1,6 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test"
 import { createRoot, getOwner, type Owner } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import type { State } from "./types"
 import type { QueryOptionsApi } from "../server-sync"
 import { ServerScope } from "@/utils/server-scope"
@@ -9,7 +8,6 @@ import type { Data } from "@opencode-ai/client/solid"
 
 let createChildStoreManager: typeof import("./child-store").createChildStoreManager
 const querySingles: Array<() => { queryKey?: unknown[]; enabled?: boolean }> = []
-let providerQuerySuccess = true
 const persist: typeof import("@/utils/persist").persisted = (_target, store) => [
   store[0],
   store[1],
@@ -18,7 +16,6 @@ const persist: typeof import("@/utils/persist").persisted = (_target, store) => 
 ]
 
 const child = () => createStore({} as State)
-const provider = { all: new Map(), connected: [], default: {} } satisfies NormalizedProviderListResponse
 const path = { state: "", config: "", worktree: "", directory: "", home: "" }
 const data = {
   location: {
@@ -26,6 +23,8 @@ const data = {
     agent: { list: () => undefined },
     command: { list: () => undefined },
     reference: { list: () => undefined },
+    provider: { list: () => undefined },
+    model: { list: () => undefined, default: () => undefined },
     mcp: {
       server: { list: () => undefined },
       resource: { list: () => undefined },
@@ -37,7 +36,6 @@ const data = {
 const queryOptionsApi = {
   globalConfig: () => ({ queryKey: ["globalConfig"], queryFn: async () => ({}) }),
   projects: () => ({ queryKey: ["projects"], queryFn: async () => [] }),
-  providers: (directory: string | null) => ({ queryKey: [directory, "providers"], queryFn: async () => provider }),
   path: (directory: string | null) => ({
     queryKey: [directory, "path"],
     queryFn: async () => ({
@@ -75,7 +73,7 @@ beforeAll(async () => {
           return options().queryKey?.[1] === "path"
         },
         get isSuccess() {
-          return options().queryKey?.[1] === "providers" && options().enabled === true && providerQuerySuccess
+          return false
         },
         get isRefetchError() {
           return false
@@ -84,7 +82,6 @@ beforeAll(async () => {
           if (options().queryKey?.[1] === "path") throw new Error("pending path data read")
           if (options().queryKey?.[1] === "mcp") return options().enabled ? { demo: { status: "disabled" } } : undefined
           if (options().queryKey?.[1] === "lsp") return []
-          if (options().queryKey?.[1] === "providers") return providerQuerySuccess ? provider : undefined
           return undefined
         },
       }
@@ -116,7 +113,7 @@ describe("createChildStoreManager", () => {
       translate: (key) => key,
       queryOptions: queryOptionsApi,
       data,
-      global: { path, provider },
+      global: { path },
     })
 
     Array.from({ length: 30 }, (_, index) => `/pinned-${index}`).forEach((directory) => {
@@ -151,7 +148,7 @@ describe("createChildStoreManager", () => {
         translate: (key) => key,
         queryOptions: queryOptionsApi,
         data,
-        global: { path, provider },
+        global: { path },
       })
     })
 
@@ -185,7 +182,7 @@ describe("createChildStoreManager", () => {
         translate: (key) => key,
         queryOptions: queryOptionsApi,
         data,
-        global: { path, provider },
+        global: { path },
       })
     })
 
@@ -217,7 +214,7 @@ describe("createChildStoreManager", () => {
         translate: (key) => key,
         queryOptions: queryOptionsApi,
         data,
-        global: { path, provider },
+        global: { path },
       })
     })
 
@@ -254,14 +251,14 @@ describe("createChildStoreManager", () => {
         translate: (key) => key,
         queryOptions: queryOptionsApi,
         data,
-        global: { path, provider },
+        global: { path },
       })
     })
 
     try {
       if (!manager) throw new Error("manager required")
       const [, setStore] = manager.child("/project", { bootstrap: false })
-      expect(querySingles.length - offset).toBe(2)
+      expect(querySingles.length - offset).toBe(1)
 
       setStore("status", "complete")
       manager.child("/project", { bootstrap: false, mcp: true })
@@ -295,7 +292,7 @@ describe("createChildStoreManager", () => {
         translate: (key) => key,
         queryOptions: queryOptionsApi,
         data,
-        global: { path, provider },
+        global: { path },
       })
     })
 
@@ -304,9 +301,8 @@ describe("createChildStoreManager", () => {
       const [store] = manager.child("/project", { bootstrap: false })
       const queries = querySingles.slice(offset)
 
-      expect(queries).toHaveLength(2)
+      expect(queries).toHaveLength(1)
       expect(queries[0]?.().enabled).toBe(false)
-      expect(queries[1]?.().enabled).toBe(false)
       expect(store.path.directory).toBe("/project")
       expect(store.provider_ready).toBe(false)
       expect(store.lsp_ready).toBe(false)
@@ -314,7 +310,6 @@ describe("createChildStoreManager", () => {
 
       manager.child("/project")
       expect(queries[0]?.().enabled).toBe(true)
-      expect(queries[1]?.().enabled).toBe(true)
       expect(bootstraps).toEqual(["/project"])
 
       manager.child("/project", { bootstrap: false })
@@ -324,9 +319,8 @@ describe("createChildStoreManager", () => {
     }
   })
 
-  test("does not mark a cancelled provider query as ready", () => {
+  test("does not mark unsynced provider data as ready", () => {
     let manager: ReturnType<typeof createChildStoreManager> | undefined
-    providerQuerySuccess = false
 
     const dispose = createOwner((owner) => {
       manager = createChildStoreManager({
@@ -342,7 +336,7 @@ describe("createChildStoreManager", () => {
         translate: (key) => key,
         queryOptions: queryOptionsApi,
         data,
-        global: { path, provider },
+        global: { path },
       })
     })
 
@@ -351,7 +345,6 @@ describe("createChildStoreManager", () => {
       const [store] = manager.child("/cancelled")
       expect(store.provider_ready).toBe(false)
     } finally {
-      providerQuerySuccess = true
       dispose()
     }
   })
@@ -374,7 +367,7 @@ describe("createChildStoreManager", () => {
         translate: (key) => key,
         queryOptions: queryOptionsApi,
         data,
-        global: { path, provider },
+        global: { path },
       })
     })
 
@@ -383,11 +376,9 @@ describe("createChildStoreManager", () => {
       manager.child("/handshake")
       const queries = querySingles.slice(offset)
       expect(queries[0]?.().enabled).toBe(false)
-      expect(queries[1]?.().enabled).toBe(false)
 
       connected = true
       expect(queries[0]?.().enabled).toBe(true)
-      expect(queries[1]?.().enabled).toBe(true)
     } finally {
       dispose()
     }

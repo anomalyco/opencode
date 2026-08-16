@@ -1,12 +1,13 @@
 import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
-import { type Component, For, Show, createMemo, createResource, createSignal } from "solid-js"
+import { type Component, For, Show, createEffect, createMemo, createResource, createSignal } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useMcpToggle } from "@/context/mcp"
 import { useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
+import { useData } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { ExternalLink } from "./external-link"
 
@@ -77,30 +78,41 @@ export const ProjectSettingsExtensions: Component = () => {
   const serverSDK = useServerSDK()
   const directorySDK = useSDK()
   const serverSync = useServerSync()
+  const data = useData()
   const sync = useSync()
   const toggleMcp = useMcpToggle()
 
-  const [serverMcp] = createResource(
-    serverSDK,
-    (sdk) =>
-      sdk.api.mcp
-        .list()
-        .then((result) => Object.fromEntries(result.data.map((server) => [server.name, server.status])))
-        .catch(() => ({})),
-    { initialValue: {} },
-  )
+  createEffect(() => {
+    if (serverSDK.connection.status() !== "connected") return
+    const ref = { directory: directorySDK().directory }
+    void Promise.all([
+      data.location.mcp.server.sync(),
+      data.location.skill.sync(),
+      data.location.mcp.server.sync(ref),
+      data.location.skill.sync(ref),
+    ]).catch(() => undefined)
+  })
+
   const globalMcpNames = createMemo(() =>
-    [...new Set([...Object.keys(serverSync.data.config.mcp ?? {}), ...Object.keys(serverMcp.latest)])].sort(),
+    [
+      ...new Set([
+        ...Object.keys(serverSync.data.config.mcp ?? {}),
+        ...(data.location.mcp.server.list() ?? []).map((server) => server.name),
+      ]),
+    ].sort(),
   )
   const projectMcpNames = createMemo(() => {
     const shared = new Set(globalMcpNames())
     const configured = Object.keys(sync().data.config.mcp ?? {}).filter((name) => !shared.has(name))
     if (configured.length > 0) return configured.sort()
-    return Object.keys(sync().data.mcp ?? {})
+    return (data.location.mcp.server.list({ directory: directorySDK().directory }) ?? [])
+      .map((server) => server.name)
       .filter((name) => !shared.has(name))
       .sort()
   })
-  const mcpEnabled = (name: string) => sync().data.mcp?.[name]?.status === "connected"
+  const mcpEnabled = (name: string) =>
+    data.location.mcp.server.list({ directory: directorySDK().directory })?.find((server) => server.name === name)?.status
+      .status === "connected"
 
   const globalPlugins = createMemo(() => (serverSync.data.config.plugin ?? []).map(pluginName))
   const projectPlugins = createMemo(() => {
@@ -108,23 +120,12 @@ export const ProjectSettingsExtensions: Component = () => {
     return (sync().data.config.plugin ?? []).map(pluginName).filter((name) => !shared.has(name))
   })
 
-  const [serverSkills] = createResource(
-    serverSDK,
-    (sdk): Promise<SkillItem[]> =>
-      sdk.api.skill.list().then((result) => result.data.map((item) => ({ name: item.name, location: item.location }))),
-    { initialValue: [] },
-  )
-  const [directorySkills] = createResource(
-    directorySDK,
-    (sdk): Promise<SkillItem[]> =>
-      sdk.api.skill
-        .list({ location: { directory: sdk.directory } })
-        .then((result) => result.data.map((item) => ({ name: item.name, location: item.location }))),
-    { initialValue: [] },
-  )
+  const serverSkills = createMemo(() => data.location.skill.list() ?? [])
   const projectSkills = createMemo(() => {
-    const shared = new Set(serverSkills.latest.map(skillKey))
-    return directorySkills.latest.filter((item) => !shared.has(skillKey(item)))
+    const shared = new Set(serverSkills().map(skillKey))
+    return (data.location.skill.list({ directory: directorySDK().directory }) ?? []).filter(
+      (item) => !shared.has(skillKey(item)),
+    )
   })
 
   const mcpRows = (items: string[]) => (
@@ -205,7 +206,7 @@ export const ProjectSettingsExtensions: Component = () => {
             <Show when={projectSkills().length > 0}>
               <ExtensionCard>{skillRows(projectSkills())}</ExtensionCard>
             </Show>
-            <SharedSection count={serverSkills.latest.length}>{skillRows(serverSkills.latest)}</SharedSection>
+            <SharedSection count={serverSkills().length}>{skillRows(serverSkills())}</SharedSection>
           </div>
         </TabsV2.Content>
 

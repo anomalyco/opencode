@@ -75,6 +75,7 @@ type LocationData = {
     resource?: McpResource[]
   }
   model?: ModelInfo[]
+  modelDefault?: ModelInfo | null
   provider?: ProviderInfo[]
   reference?: ReferenceInfo[]
   websearch?: WebSearchProvider[]
@@ -920,8 +921,13 @@ export function createServerData(config: CreateServerDataInput) {
     switch (event.type) {
       case "catalog.updated":
         result.location.model.invalidate(location)
+        result.location.model.invalidateDefault(location)
         result.location.provider.invalidate(location)
-        void Promise.all([result.location.model.sync(location), result.location.provider.sync(location)])
+        void Promise.all([
+          result.location.model.sync(location),
+          result.location.model.syncDefault(location),
+          result.location.provider.sync(location),
+        ])
         break
       case "agent.updated":
         result.location.agent.invalidate(location)
@@ -976,10 +982,12 @@ export function createServerData(config: CreateServerDataInput) {
       case "integration.updated":
         result.location.integration.invalidate(location)
         result.location.model.invalidate(location)
+        result.location.model.invalidateDefault(location)
         result.location.provider.invalidate(location)
         void Promise.all([
           result.location.integration.sync(location),
           result.location.model.sync(location),
+          result.location.model.syncDefault(location),
           result.location.provider.sync(location),
         ])
         break
@@ -1009,6 +1017,46 @@ export function createServerData(config: CreateServerDataInput) {
       },
       get(sessionID: string) {
         return store.session.info[sessionID]
+      },
+      remember(info: SessionInfo) {
+        setStore("session", "info", info.id, reconcile(info))
+        sync.complete(`session:${info.id}`)
+        registerSession(info.id)
+      },
+      setStatus(sessionID: string, status: DataSessionStatus) {
+        setSessionActive(sessionID, status)
+      },
+      lineage: {
+        peek(sessionID: string) {
+          const session = store.session.info[sessionID]
+          if (!session) return
+          const seen = new Set([session.id])
+          let root = session
+          while (root.parentID) {
+            if (seen.has(root.parentID)) return { session, root }
+            seen.add(root.parentID)
+            const parent = store.session.info[root.parentID]
+            if (!parent) return
+            root = parent
+          }
+          return { session, root }
+        },
+        async resolve(sessionID: string) {
+          await result.session.sync(sessionID)
+          const session = store.session.info[sessionID]
+          if (!session) throw new Error(`Session not found: ${sessionID}`)
+          const seen = new Set([session.id])
+          let root = session
+          while (root.parentID) {
+            if (seen.has(root.parentID)) return { session, root }
+            seen.add(root.parentID)
+            await result.session.sync(root.parentID)
+            const parent = store.session.info[root.parentID]
+            if (!parent) throw new Error(`Session not found: ${root.parentID}`)
+            root = parent
+          }
+          return { session, root }
+        },
       },
       root(sessionID: string) {
         return resolveRoot(sessionID)
@@ -1262,6 +1310,7 @@ export function createServerData(config: CreateServerDataInput) {
           result.location.mcp.server.sync(location),
           result.location.mcp.resource.sync(location),
           result.location.model.sync(location),
+          result.location.model.syncDefault(location),
           result.location.provider.sync(location),
           result.location.reference.sync(location),
           result.location.skill.sync(location),
@@ -1279,6 +1328,7 @@ export function createServerData(config: CreateServerDataInput) {
         result.location.mcp.server.invalidate(location)
         result.location.mcp.resource.invalidate(location)
         result.location.model.invalidate(location)
+        result.location.model.invalidateDefault(location)
         result.location.provider.invalidate(location)
         result.location.reference.invalidate(location)
         result.location.skill.invalidate(location)
@@ -1405,6 +1455,20 @@ export function createServerData(config: CreateServerDataInput) {
         },
         invalidate(ref?: LocationRef) {
           sync.invalidate(`location.model:${locationKey(ref ?? defaultLocation())}`)
+        },
+        default(location?: LocationRef) {
+          return store.location[locationKey(location ?? defaultLocation())]?.modelDefault
+        },
+        syncDefault(ref?: LocationRef) {
+          const id = locationKey(ref ?? defaultLocation())
+          return sync.run(`location.model.default:${id}`, async () => {
+            const response = await api().model.default({ location: locationQuery(ref ?? defaultLocation()) })
+            const key = locationKey(response.location)
+            setStore("location", key, { ...store.location[key], modelDefault: response.data })
+          })
+        },
+        invalidateDefault(ref?: LocationRef) {
+          sync.invalidate(`location.model.default:${locationKey(ref ?? defaultLocation())}`)
         },
       },
       provider: {

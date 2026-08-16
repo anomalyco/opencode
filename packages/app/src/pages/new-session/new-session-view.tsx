@@ -17,7 +17,6 @@ import {
 import { StatusPopoverV2 } from "@/components/status-popover"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
-import { useServerSync } from "@/context/server-sync"
 import { useProviders } from "@/hooks/use-providers"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 import { Persist, persisted } from "@/utils/persist"
@@ -107,7 +106,6 @@ function ProviderTip() {
   const language = useLanguage()
   const dialog = useDialog()
   const sdk = useSDK()
-  const serverSync = useServerSync()
   const providers = useProviders(() => sdk().directory)
   const [persistedState, setPersistedState, , persistedReady] = persisted(
     Persist.global("new-session.provider-tip"),
@@ -115,7 +113,7 @@ function ProviderTip() {
   )
   const visible = createMemo(
     () =>
-      serverSync.child(sdk().directory)[0].provider_ready &&
+      providers.ready() &&
       persistedReady() &&
       providers.paid().length === 0 &&
       Date.now() - persistedState.dismissedAt >= providerTipDismissalDuration,

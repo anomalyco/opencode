@@ -9,6 +9,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { useFile } from "@/context/file"
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
+import { useData } from "@/context/server"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 import { useSDK } from "@/context/sdk"
@@ -44,6 +45,7 @@ function openSessionContext(args: {
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
   const sync = useSync()
+  const data = useData()
   const file = useFile()
   const layout = useLayout()
   const language = useLanguage()
@@ -62,7 +64,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     fileBrowser: () => settings.general.newLayoutDesigns() && isDesktop() && !!params.id,
   })
   const messages = createMemo(() => (params.id ? (sync().data.message[params.id] ?? []) : []))
-  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
+  const info = createMemo(() => (params.id ? data.session.get(params.id) : undefined))
 
   const usd = createMemo(
     () =>

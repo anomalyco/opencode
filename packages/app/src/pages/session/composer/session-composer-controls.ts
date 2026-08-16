@@ -10,10 +10,10 @@ import { useLocal, type ModelSelection } from "@/context/local"
 import { useServerSDK } from "@/context/server-sdk"
 import { serverName, ServerConnection, useServers } from "@/context/servers"
 import { useSDK } from "@/context/sdk"
-import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { useProviders } from "@/hooks/use-providers"
 import { useData } from "@/context/server"
+import { normalizeAgentList } from "@/context/global-sync/utils"
 
 export function createPromptInputController(input: {
   sessionKey: Accessor<string>
@@ -23,7 +23,6 @@ export function createPromptInputController(input: {
   const layout = useLayout()
   const local = useLocal()
   const sdk = useSDK()
-  const sync = useSync()
   const data = useData()
   const providers = useProviders(() => sdk().directory)
   const view = layout.view(input.sessionKey)
@@ -31,7 +30,7 @@ export function createPromptInputController(input: {
   return createMemo<PromptInputControls>(() => {
     return {
       agents: {
-        available: sync().data.agent,
+        available: normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []),
         options: local.agent.list().map((agent) => agent.name),
         current: local.agent.current()?.name ?? "",
         loading: data.location.agent.list({ directory: sdk().directory }) === undefined,

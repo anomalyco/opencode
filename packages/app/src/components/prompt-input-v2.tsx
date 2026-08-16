@@ -23,6 +23,7 @@ import { usePermission } from "@/context/permission"
 import { type ImageAttachmentPart, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
+import { useData } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { showToast } from "@/utils/toast"
@@ -82,6 +83,7 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
 
 export function usePromptInputV2Controller(props: PromptInputV2ControllerProps): PromptInputV2ComposerController {
   const sdk = useSDK()
+  const data = useData()
   const sync = useSync()
   const files = useFile()
   const layout = useLayout()
@@ -113,8 +115,8 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       return [...result, path]
     }, [])
   })
-  const info = createMemo(() => (props.controls.session.id ? sync().session.get(props.controls.session.id) : undefined))
-  const working = createMemo(() => sync().data.session_working(props.controls.session.id ?? ""))
+  const info = createMemo(() => (props.controls.session.id ? data.session.get(props.controls.session.id) : undefined))
+  const working = createMemo(() => data.session.status(props.controls.session.id ?? "") === "running")
   const attachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
@@ -246,7 +248,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       })),
   )
   const resources = createMemo(() =>
-    Object.values(sync().data.mcp_resource).map((resource) => ({
+    (data.location.mcp.resource.list({ directory: sdk().directory }) ?? []).map((resource) => ({
       id: `resource:${resource.server}:${resource.uri}`,
       kind: "resource" as const,
       label: `@${resource.name}`,
@@ -292,7 +294,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     })),
   ])
   const slashCommands = createMemo(() => [
-    ...sync().data.command.map((item) => ({
+    ...(data.location.command.list({ directory: sdk().directory }) ?? []).map((item) => ({
       id: `custom.${item.name}`,
       trigger: item.name,
       title: item.name,

@@ -1,6 +1,5 @@
 import type { Config, Path, Project, ProviderAuthResponse } from "@/types"
 import type {
-  CatalogApi,
   LocationGetInput,
   LocationGetOutput,
   PermissionRequest,
@@ -18,19 +17,16 @@ import { batch } from "solid-js"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State } from "./types"
 import type { ServerSession } from "../server-session"
-import { cmp, directoryKey, normalizeProjectInfo, normalizeProviderList } from "./utils"
+import { cmp, normalizeProjectInfo } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
-import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
-import { ScopedKey, type ServerScope } from "@/utils/server-scope"
+import type { ServerScope } from "@/utils/server-scope"
 import type { ServerApi } from "@/utils/server"
 import { sameDirectory } from "@/utils/workspace"
 
 type GlobalStore = {
-  ready: boolean
   path: Path
   project: Project[]
-  provider: NormalizedProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
   reload: undefined | "pending" | "complete"
@@ -57,12 +53,6 @@ function waitForPaint() {
 
 function errors(list: PromiseSettledResult<unknown>[]) {
   return list.filter((item): item is PromiseRejectedResult => item.status === "rejected").map((item) => item.reason)
-}
-
-const providerRev = new Map<string, number>()
-
-export function clearProviderRev(scope: ServerScope, directory: string) {
-  providerRev.delete(ScopedKey.from(scope, directory))
 }
 
 function runAll(list: Array<() => Promise<unknown>>) {
@@ -139,7 +129,7 @@ export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi, work
   })
 
 export async function bootstrapGlobal(input: {
-  serverAPI: CatalogApi & {
+  serverAPI: {
     readonly location: LocationApi
     readonly project: ProjectApi
     readonly worktree: WorktreeApi
@@ -153,7 +143,6 @@ export async function bootstrapGlobal(input: {
 }) {
   const slow = [
     () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope)),
-    () => input.queryClient.fetchQuery(loadProvidersQuery(input.scope, null, input.serverAPI)),
     () => input.queryClient.fetchQuery(loadPathQuery(input.scope, null, input.serverAPI.location)),
     () =>
       input.queryClient
@@ -213,21 +202,6 @@ function warmSessions(input: {
   ).then(() => undefined)
 }
 
-export const loadProvidersQuery = (scope: ServerScope, directory: string | null, sdk: CatalogApi) =>
-  queryOptions({
-    queryKey: [scope, directory, "providers"],
-    queryFn: () =>
-      retry(async () => {
-        const location = directory ? { location: { directory } } : undefined
-        const [providers, models, defaultModel] = await Promise.all([
-          sdk.provider.list(location),
-          sdk.model.list(location),
-          sdk.model.default(location),
-        ])
-        return normalizeProviderList(providers.data, models.data, defaultModel.data)
-      }),
-  })
-
 export const loadPathQuery = (scope: ServerScope, directory: string | null, api: LocationApi) =>
   queryOptions<Path>({
     queryKey: [scope, directory, "path"],
@@ -245,7 +219,7 @@ export async function bootstrapDirectory(input: {
   directory: string
   scope: ServerScope
   mcp: boolean
-  api: CatalogApi & {
+  api: {
     readonly permission: PermissionApi
     readonly project: ProjectApi
     readonly question: QuestionApi
@@ -259,7 +233,6 @@ export async function bootstrapDirectory(input: {
     config: Config
     path: Path
     project: Project[]
-    provider: NormalizedProviderListResponse
   }
   queryClient: QueryClient
   session?: ServerSession
@@ -272,9 +245,6 @@ export async function bootstrapDirectory(input: {
   }
   if (loading) input.setStore("status", "partial")
 
-  const revKey = ScopedKey.from(input.scope, input.directory)
-  const rev = (providerRev.get(revKey) ?? 0) + 1
-  providerRev.set(revKey, rev)
   const slow = [
     () => Promise.resolve(input.loadSessions(input.directory)),
     !seededProject &&
@@ -351,17 +321,6 @@ export async function bootstrapDirectory(input: {
           }),
       ),
     () => Promise.resolve(input.loadSessions(input.directory)),
-    () =>
-      input.queryClient
-        .fetchQuery(loadProvidersQuery(input.scope, directoryKey(input.directory), input.api))
-        .catch((err) => {
-          const project = getFilename(input.directory)
-          showToast({
-            variant: "error",
-            title: input.translate("toast.project.reloadFailed.title", { project }),
-            description: formatServerError(err, input.translate),
-          })
-        }),
   ].filter(Boolean) as (() => Promise<any>)[]
 
   await waitForPaint()

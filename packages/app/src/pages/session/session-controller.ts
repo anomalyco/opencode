@@ -2,6 +2,7 @@ import type { Message, UserMessage } from "@/types"
 import { createMemo, type Accessor } from "solid-js"
 import { useFile } from "@/context/file"
 import { useSync } from "@/context/sync"
+import { useData } from "@/context/server"
 import { same } from "@/utils/same"
 import { createSessionTabs } from "./helpers"
 import {
@@ -24,16 +25,17 @@ export function createSessionController(input: {
 }) {
   const file = useFile()
   const sync = useSync()
+  const data = useData()
   const layout = useSessionLayout()
   const sessionID = createMemo(() => layout.params.id)
   const info = createMemo(() => {
     const id = sessionID()
-    return id ? sync().session.get(id) : undefined
+    return id ? data.session.get(id) : undefined
   })
   const parentID = createMemo(() => info()?.parentID)
   const parent = createMemo(() => {
     const id = parentID()
-    return id ? sync().session.get(id) : undefined
+    return id ? data.session.get(id) : undefined
   })
   const status = createMemo(() => {
     const id = sessionID()
@@ -75,7 +77,7 @@ export function createSessionController(input: {
       status,
       working: createMemo(() => {
         const id = sessionID()
-        return id ? sync().data.session_working(id) : false
+        return id ? data.session.status(id) === "running" : false
       }),
       revertMessageID,
     },

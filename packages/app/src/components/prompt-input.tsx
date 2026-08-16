@@ -27,6 +27,7 @@ import {
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
+import { useData } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -115,6 +116,7 @@ const EXAMPLES = [
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
+  const data = useData()
 
   const sync = useSync()
   const files = useFile()
@@ -250,8 +252,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     return paths
   })
-  const info = createMemo(() => (props.controls.session.id ? sync().session.get(props.controls.session.id) : undefined))
-  const working = createMemo(() => sync().data.session_working(props.controls.session.id ?? ""))
+  const info = createMemo(() => (props.controls.session.id ? data.session.get(props.controls.session.id) : undefined))
+  const working = createMemo(() => data.session.status(props.controls.session.id ?? "") === "running")
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
@@ -585,7 +587,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 
   const mcpResourceList = createMemo(() =>
-    Object.values(sync().data.mcp_resource).map(
+    (data.location.mcp.resource.list({ directory: sdk().directory }) ?? []).map(
       (resource): AtOption => ({
         type: "resource",
         name: resource.name,
@@ -702,7 +704,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "builtin" as const,
       }))
 
-    const custom = sync().data.command.map((cmd) => ({
+    const custom = (data.location.command.list({ directory: sdk().directory }) ?? []).map((cmd) => ({
       id: `custom.${cmd.name}`,
       trigger: cmd.name,
       title: cmd.name,
