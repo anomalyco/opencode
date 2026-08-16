@@ -46,12 +46,15 @@ const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 // default header timeout at all, so a backend that accepted a request and
 // then silently died (e.g. a model load crash) left the fetch waiting for
 // response headers forever — no error, no timeout, nothing for the caller
-// (including a Task subagent) to react to. 180s tolerates a cold load of a
-// large model (llama-skein's own healthCheckTimeout defaults to 120s) with
-// margin, while still turning a truly-dead connection into a clear timeout
-// error instead of an indefinite hang. A user-configured headerTimeout for
-// that provider always wins — this is only the fallback.
-const LOCAL_PROVIDER_HEADER_TIMEOUT_DEFAULT = 180_000
+// (including a Task subagent) to react to. 180s covered a cold model load,
+// but a multi-day /loop or /backlog session's context only grows, and
+// prefill on that much context genuinely exceeds 180s on real local
+// hardware without the backend being dead — observed killing an otherwise-
+// healthy generation mid-run. 600s keeps that margin while still turning a
+// truly-dead connection into a clear timeout instead of an indefinite hang.
+// A user-configured headerTimeout for that provider always wins — this is
+// only the fallback.
+const LOCAL_PROVIDER_HEADER_TIMEOUT_DEFAULT = 600_000
 // fork: SSE stream chunk timeout for local providers — if no chunk arrives
 // within this window, the stream is aborted. Catches a model that accepted
 // the request and started streaming but then hung (e.g. endlessly generating
