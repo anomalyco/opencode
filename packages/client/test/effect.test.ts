@@ -227,9 +227,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(requests).toContainEqual({ method: "POST", url: "http://localhost:3000/api/session/ses_test/view" })
   const logged = Array.from(result.log)
   expect(logged.map((item) => item.type)).toEqual(["session.model.selected", "log.synced"])
-  expect(logged[0]?.type === "session.model.selected" && DateTime.toEpochMillis(logged[0].created)).toBe(
-    1_717_171_717_000,
-  )
+  expect(logged[0]?.type === "session.model.selected" && logged[0].created).toBe(1_717_171_717_000)
   expect(logged.at(-1)).toEqual(synced)
   expect(result.message).toEqual(expect.objectContaining({ id: "msg_model", type: "model-switched" }))
 })

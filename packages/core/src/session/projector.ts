@@ -401,7 +401,7 @@ function projectIdle(
   return Effect.gen(function* () {
     yield* run(db, event)
     if (event.type === SessionEvent.Execution.Interrupted.type && event.data.reason === "shutdown") return
-    const time = DateTime.toEpochMillis(event.created)
+    const time = event.created
     yield* db
       .update(SessionTable)
       .set({
