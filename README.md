@@ -124,6 +124,10 @@ If you're interested in contributing to OpenCode, please read our [contributing 
 
 If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
 
+### Tools
+
+- [`tools/moa`](./tools/moa) — local Mixture-of-Agents (MoA) runner: fans a task prompt to advisor models in parallel (`ollama-cloud/glm-5.2`, `ollama-cloud/minimax-m3`), then aggregates their analyses into a final verdict (`ollama-cloud/deepseek-v4-flash:0731`). Route via `MOA_BASE_URL` / `MOA_API_KEY` (fallbacks `OLLAMA_API_BASE` / `OLLAMA_API_KEY`); no hardcoded keys. See [`tools/moa/README.md`](./tools/moa/README.md).
+
 ---
 
 **Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)

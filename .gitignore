@@ -32,3 +32,10 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# moa-run (tools/moa) — traces are untrusted model output, never commit
+tools/moa/traces/
+tools/moa/audit/
+tools/moa/.venv/
+**/__pycache__/
+*.pyc
