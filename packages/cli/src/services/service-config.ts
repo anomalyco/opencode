@@ -104,7 +104,12 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
   return {
     file,
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
-    command: [...selfCommand(), "serve", "--service"],
+    command: [
+      ...selfCommand(),
+      "serve",
+      "--service",
+      ...(process.env.OPENCODE_CPU_PROFILE ? ["--cpu-profile", process.env.OPENCODE_CPU_PROFILE] : []),
+    ],
   }
 })
 

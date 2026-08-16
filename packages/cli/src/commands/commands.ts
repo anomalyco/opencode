@@ -1,5 +1,6 @@
-import { Argument, Flag } from "effect/unstable/cli"
+import { Argument, Command, Flag } from "effect/unstable/cli"
 import { Spec } from "../framework/spec"
+import { GlobalFlags } from "./global-flags"
 
 declare const OPENCODE_CLI_NAME: string | undefined
 
@@ -26,7 +27,7 @@ const PermissionParams = {
   ),
 }
 
-export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "opencode", {
+const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "opencode", {
   description: "OpenCode 2.0 preview command line interface",
   params: {
     ...ServerParams,
@@ -277,3 +278,5 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
     }),
   ],
 })
+
+export const Commands = { ...Root, spec: Root.spec.pipe(Command.withGlobalFlags(GlobalFlags.all)) }

@@ -1,10 +1,13 @@
-import { Effect, FileSystem, Scope } from "effect"
+import { Effect, FileSystem, Option, Scope } from "effect"
 import { Command } from "effect/unstable/cli"
 import { Spec } from "./spec"
 import { Global } from "@opencode-ai/util/global"
 import { Updater } from "../services/updater"
 import { Config } from "../config"
 import { Npm } from "@opencode-ai/util/npm"
+import { GlobalFlags } from "../commands/global-flags"
+import { CpuProfile } from "../cpu-profile"
+import path from "node:path"
 
 export type Input<Value> =
   Value extends Spec.Node<infer _Name, infer Command, infer _Commands>
@@ -86,7 +89,20 @@ function provide(node: Spec.Any, handlers: ReadonlyArray<LazyHandler>): Provided
     ? node.spec.pipe(
         Command.withHandler((input) =>
           Effect.gen(function* () {
-            yield* Effect.flatMap(Effect.promise(handler.load), (module) => module.default(input))
+            const module = yield* Effect.promise(handler.load)
+            const cpuProfile = Option.getOrUndefined(yield* GlobalFlags.CpuProfile)
+            if (!cpuProfile) return yield* module.default(input)
+            const target = path.resolve(cpuProfile)
+            const previous = process.env.OPENCODE_CPU_PROFILE
+            process.env.OPENCODE_CPU_PROFILE = target
+            return yield* (node.name === "serve" ? CpuProfile.run(target, module.default(input)) : module.default(input)).pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  if (previous === undefined) delete process.env.OPENCODE_CPU_PROFILE
+                  else process.env.OPENCODE_CPU_PROFILE = previous
+                }),
+              ),
+            )
           }),
         ),
       )
