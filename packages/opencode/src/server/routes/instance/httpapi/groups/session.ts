@@ -126,6 +126,17 @@ export const ContextBudget = Schema.Struct({
           "Serialized id + description + provider-transformed JSON schema across the roster",
         ),
         est_tokens: Schema.Finite,
+        // D4: per-tool cost so toolset budgets are a CI assertion, not a hope.
+        tools_detail: described(
+          Schema.Array(
+            Schema.Struct({
+              id: Schema.String,
+              chars: Schema.Finite,
+              est_tokens: Schema.Finite,
+            }),
+          ),
+          "Per-tool serialized cost (id + description + provider-transformed JSON schema)",
+        ),
       }),
       instructions: described(BudgetEstimate, "Project/global instruction files (AGENTS.md and config instructions)"),
     }),

@@ -2672,6 +2672,14 @@ export type SessionContextBudget = {
        */
       chars: number
       est_tokens: number
+      /**
+       * Per-tool serialized cost (id + description + provider-transformed JSON schema)
+       */
+      tools_detail: Array<{
+        id: string
+        chars: number
+        est_tokens: number
+      }>
     }
     /**
      * Project/global instruction files (AGENTS.md and config instructions)
