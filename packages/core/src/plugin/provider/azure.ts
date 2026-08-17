@@ -5,14 +5,6 @@ import { Provider } from "../../provider.js"
 import { iife } from "../../util/iife.js"
 import { configuredSettings } from "./configured.js"
 
-function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
-  if (useChat && sdk.chat) return sdk.chat(modelID)
-  if (sdk.responses) return sdk.responses(modelID)
-  if (sdk.messages) return sdk.messages(modelID)
-  if (sdk.chat) return sdk.chat(modelID)
-  return sdk.languageModel(modelID)
-}
-
 export const AzurePlugin = define({
   id: "opencode.provider.azure",
   effect: Effect.fn(function* (ctx) {
@@ -65,34 +57,6 @@ export const AzurePlugin = define({
         }
       }
     })
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/azure") return
-        if (evt.model.providerID === Provider.ID.azure) {
-          if (
-            !evt.options.resourceName &&
-            !evt.options.baseURL &&
-            (!Provider.isAISDK(evt.model.package) || typeof evt.model.settings?.baseURL !== "string")
-          ) {
-            throw new Error("Azure resource name is missing; set AZURE_RESOURCE_NAME or configure resourceName/baseURL")
-          }
-        }
-        const mod = yield* Effect.promise(() => import("@ai-sdk/azure"))
-        evt.sdk = mod.createAzure(evt.options)
-      }),
-    )
-    yield* ctx.aisdk.hook(
-      "language",
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.azure) return
-        evt.language = selectLanguage(
-          evt.sdk,
-          evt.model.modelID ?? evt.model.id,
-          Boolean(evt.options.useCompletionUrls),
-        )
-      }),
-    )
   }),
 })
 

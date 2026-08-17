@@ -188,8 +188,10 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   if (
     Provider.isAISDK(resolved.package) &&
     packageName === "@ai-sdk/openai-compatible" &&
-    typeof resolved.settings?.baseURL === "string"
-  ) {
+    typeof resolved.settings?.baseURL !== "string"
+  )
+    return yield* unsupported(resolved)
+  if (Provider.isAISDK(resolved.package) && packageName === "@ai-sdk/openai-compatible") {
     const runtime = yield* prepareProviderModel(resolved)
     return withDefaults(runtime, OpenAICompatibleChat.route)
       .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })

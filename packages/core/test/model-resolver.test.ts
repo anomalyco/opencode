@@ -415,6 +415,21 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("rejects OpenAI-compatible packages without an endpoint instead of loading the AI SDK", () =>
+    Effect.gen(function* () {
+      const failure = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/openai-compatible")),
+        undefined,
+        { loadAISDK: () => Effect.die("AI SDK loader should not be called") },
+      ).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({
+        _tag: "SessionRunnerModel.UnsupportedPackageError",
+        package: "aisdk:@ai-sdk/openai-compatible",
+      })
+    }),
+  )
+
   it.effect("resolves provider URLs from environment without mutating the catalog model", () =>
     withEnv({ ACME_HOST: "api.acme.test" }, () =>
       Effect.gen(function* () {

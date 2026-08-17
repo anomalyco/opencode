@@ -20,8 +20,6 @@ import { MistralPlugin } from "./provider/mistral.js"
 import { NvidiaPlugin } from "./provider/nvidia.js"
 import { OllamaPlugin } from "./provider/ollama.js"
 import { OpenAIPlugin } from "./provider/openai.js"
-import { SnowflakeCortexPlugin } from "./provider/snowflake-cortex.js"
-import { OpenAICompatiblePlugin } from "./provider/openai-compatible.js"
 import { OpencodePlugin } from "./provider/opencode.js"
 import { OpenRouterPlugin } from "./provider/openrouter.js"
 import { PerplexityPlugin } from "./provider/perplexity.js"
@@ -56,8 +54,6 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   NvidiaPlugin,
   OllamaPlugin,
   OpencodePlugin,
-  SnowflakeCortexPlugin,
-  OpenAICompatiblePlugin,
   OpenAIPlugin,
   OpenRouterPlugin,
   PerplexityPlugin,
