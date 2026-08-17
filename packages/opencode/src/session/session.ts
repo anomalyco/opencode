@@ -366,9 +366,10 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   const adjustedInputTokens = safe(inputTokens - cacheReadInputTokens - cacheWriteInputTokens)
 
   const total = input.usage.totalTokens
+  const safeTotal = total !== undefined && Number.isFinite(total) ? Math.max(0, total) : undefined
 
   const tokens = {
-    total,
+    total: safeTotal,
     input: adjustedInputTokens,
     output: safe(outputTokens - reasoningTokens),
     reasoning: reasoningTokens,

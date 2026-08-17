@@ -77,12 +77,20 @@ export const cursor = {
   },
 }
 
-const info = (row: typeof MessageTable.$inferSelect) =>
-  ({
-    ...row.data,
+const info = (row: typeof MessageTable.$inferSelect) => {
+  const data = row.data as Record<string, any>
+  // JSON.stringify(NaN) → null in SQLite; on read-back null violates Schema.optional(Schema.Finite).
+  // Sanitize affected numeric fields so existing corrupted rows don't cause 500s.
+  if (data.tokens) {
+    if (data.tokens.total === null) data.tokens.total = undefined
+  }
+  if (data.cost === null) data.cost = 0
+  return {
+    ...data,
     id: row.id,
     sessionID: row.session_id,
-  }) as Info
+  } as Info
+}
 
 const part = (row: typeof PartTable.$inferSelect) =>
   ({
