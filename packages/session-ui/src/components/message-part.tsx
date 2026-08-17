@@ -66,6 +66,7 @@ import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
+import { mediaLabel, supportedImageMime } from "./message-media"
 
 async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -1117,6 +1118,11 @@ export function ContextToolGroup(props: {
               const running = createMemo(
                 () => partAccessor().state.status === "pending" || partAccessor().state.status === "running",
               )
+              const attachments = createMemo(() => {
+                const state = partAccessor().state
+                if (state.status !== "completed") return []
+                return state.attachments ?? []
+              })
               return (
                 <div data-slot="context-tool-group-item">
                   <div data-component="tool-trigger">
@@ -1140,6 +1146,9 @@ export function ContextToolGroup(props: {
                       </div>
                     </div>
                   </div>
+                  <Show when={attachments().length > 0}>
+                    <MediaAttachments files={attachments()} provenance={partAccessor().tool} />
+                  </Show>
                 </div>
               )
             }}
@@ -1564,6 +1573,11 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   })
 
   const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
+  const attachments = createMemo(() => {
+    const state = part().state
+    if (state.status !== "completed") return []
+    return state.attachments ?? []
+  })
   const controlledOpen = () => (props.onToolOpenChange ? (props.toolOpen ?? props.defaultOpen) : undefined)
   const handleToolOpenChange = (open: boolean) => props.onToolOpenChange?.(open)
 
@@ -1608,26 +1622,74 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             }}
           </Match>
           <Match when={true}>
-            <Dynamic
-              component={render()}
-              input={input()}
-              tool={part().tool}
-              sessionID={part().sessionID}
-              metadata={partMetadata()}
-              // @ts-expect-error
-              output={part().state.output}
-              status={part().state.status}
-              hideDetails={props.hideDetails}
-              defaultOpen={props.defaultOpen}
-              open={controlledOpen()}
-              onOpenChange={props.onToolOpenChange ? handleToolOpenChange : undefined}
-              deferContent={props.deferToolContent}
-              virtualizeDiff={props.virtualizeDiff}
-              onContentRendered={props.onContentRendered}
-            />
+            <>
+              <Dynamic
+                component={render()}
+                input={input()}
+                tool={part().tool}
+                sessionID={part().sessionID}
+                metadata={partMetadata()}
+                // @ts-expect-error
+                output={part().state.output}
+                status={part().state.status}
+                hideDetails={props.hideDetails}
+                defaultOpen={props.defaultOpen}
+                open={controlledOpen()}
+                onOpenChange={props.onToolOpenChange ? handleToolOpenChange : undefined}
+                deferContent={props.deferToolContent}
+                virtualizeDiff={props.virtualizeDiff}
+                onContentRendered={props.onContentRendered}
+              />
+              <Show when={attachments().length > 0}>
+                <MediaAttachments files={attachments()} provenance={part().tool} />
+              </Show>
+            </>
           </Match>
         </Switch>
       </div>
+    </Show>
+  )
+}
+
+PART_MAPPING["file"] = function FilePartDisplay(props) {
+  const part = () => props.part as FilePart
+  return <MediaAttachments files={[part()]} />
+}
+
+function MediaAttachments(props: { files: FilePart[]; provenance?: string }) {
+  return (
+    <Show when={props.files.length > 0}>
+      <div data-slot="agent-media-attachments" data-provenance={props.provenance}>
+        <For each={props.files}>{(file) => <MediaAttachment file={file} />}</For>
+      </div>
+    </Show>
+  )
+}
+
+function MediaAttachment(props: { file: FilePart }) {
+  const dialog = useDialog()
+  const [failed, setFailed] = createSignal(false)
+  const name = () => mediaLabel(props.file)
+  const image = () => supportedImageMime(props.file.mime)
+
+  const open = () => {
+    if (!image() || failed()) return
+    dialog.show(() => <ImagePreview src={props.file.url} alt={name()} />)
+  }
+
+  return (
+    <Show
+      when={image() && !failed()}
+      fallback={
+        <div data-slot="agent-media-fallback" role="status" title={name()}>
+          <FileIcon node={{ path: name(), type: "file" }} />
+          <span>{name()}</span>
+        </div>
+      }
+    >
+      <button type="button" data-slot="agent-media-image" aria-label={name()} title={name()} onClick={open}>
+        <img src={props.file.url} alt={name()} loading="lazy" onError={() => setFailed(true)} />
+      </button>
     </Show>
   )
 }
