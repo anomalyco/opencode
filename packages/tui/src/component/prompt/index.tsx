@@ -1206,6 +1206,19 @@ export function Prompt(props: PromptProps) {
 
       sessionID = created.id
       session = created
+      if (created.location.workspaceID === undefined && terminalEnvironment.variables !== undefined) {
+        const error = await client.api.session
+          .environment({ sessionID, variables: terminalEnvironment.variables })
+          .then(
+            () => undefined,
+            (error) => error,
+          )
+        if (error) {
+          if (finishMoveProgress) move.finishSubmit()
+          toast.show({ title: "Failed to set session environment", message: errorMessage(error), variant: "error" })
+          return true
+        }
+      }
     }
 
     // Capture mode before it gets reset

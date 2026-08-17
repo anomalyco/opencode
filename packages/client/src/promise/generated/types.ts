@@ -3936,6 +3936,13 @@ export type SessionMessageInput = {
 
 export type SessionMessageOutput = { data: SessionMessageInfo }["data"]
 
+export type SessionEnvironmentInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly variables: { readonly variables: { readonly [x: string]: string } }["variables"]
+}
+
+export type SessionEnvironmentOutput = void
+
 export type MessageListInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly limit?: {

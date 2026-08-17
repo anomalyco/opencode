@@ -260,6 +260,36 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
+  productionIt.live(
+    "uses the session environment instead of the server environment",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const sessions = yield* Session.Service
+              yield* sessions.environment({
+                sessionID,
+                variables: { OPENCODE_SESSION_ENV_TEST: "from-session" },
+              })
+              const command = isWindows
+                ? "[Console]::Out.Write($env:OPENCODE_SESSION_ENV_TEST)"
+                : 'printf %s "$OPENCODE_SESSION_ENV_TEST"'
+
+              const settled = yield* executeTool(registry, call({ command }))
+
+              expect(settled.status).toBe("completed")
+              expect(settled.content?.[0]).toEqual({ type: "text", text: "from-session" })
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
+  )
+
   it.live("resolves a relative workdir from the active Location", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

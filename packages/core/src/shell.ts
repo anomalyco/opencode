@@ -15,6 +15,8 @@ import { Global } from "@opencode-ai/util/global"
 import { ShellSelect } from "./shell/select.js"
 import type { ShellCreateBefore } from "@opencode-ai/plugin/effect/shell"
 import { PluginHooks } from "./plugin/hooks.js"
+import { SessionEnvironment } from "./session/environment.js"
+import { SessionSchema } from "./session/schema.js"
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Shell.NotFoundError", {
   id: Shell.ID,
@@ -76,6 +78,7 @@ export const layer = (options?: ShellSelect.Options) =>
       const global = yield* Global.Service
       const environment = yield* Environment.Service
       const hooks = yield* PluginHooks.Service
+      const environments = yield* SessionEnvironment.Service
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
       const sessions = new Map<string, Active>()
@@ -184,13 +187,18 @@ export const layer = (options?: ShellSelect.Options) =>
         input: Shell.CreateInput,
         before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
       ) {
+        const sessionID = input.metadata?.sessionID
+        const sessionEnvironment =
+          location.workspaceID === undefined && Schema.is(SessionSchema.ID)(sessionID)
+            ? yield* environments.get(sessionID)
+            : undefined
         const invocation: ShellCreateBefore = {
           command: input.command,
           cwd: input.cwd ?? location.directory,
           timeout: input.timeout,
           shell: yield* resolve(),
           env: {
-            ...process.env,
+            ...(sessionEnvironment ?? process.env),
             TERM: "xterm-256color",
             OPENCODE_TERMINAL: "1",
           },
@@ -349,7 +357,15 @@ export function configured(options?: ShellSelect.Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Bus.node, Location.node, Config.node, Global.node, Environment.node, PluginHooks.node],
+    deps: [
+      Bus.node,
+      Location.node,
+      Config.node,
+      Global.node,
+      Environment.node,
+      PluginHooks.node,
+      SessionEnvironment.node,
+    ],
   })
 }
 

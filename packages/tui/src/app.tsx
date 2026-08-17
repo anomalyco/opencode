@@ -41,6 +41,7 @@ import {
   useTuiApp,
   useTuiPaths,
   useTuiStartup,
+  useTuiTerminalEnvironment,
   type TuiApp,
 } from "./context/runtime"
 import { DialogProvider, useDialog } from "./ui/dialog"
@@ -185,6 +186,7 @@ export type TuiInput = {
   args: Args
   config: Config.Interface
   packages: PackageResolver
+  environment?: Readonly<Record<string, string>>
   terminalHandoff?: () => Promise<
     | {
         readonly renderer: CliRenderer
@@ -332,6 +334,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                   : process.env.DISPLAY
                                     ? "x11"
                                     : undefined,
+                                variables: input.environment,
                               }}
                             >
                               <TuiStartupProvider
@@ -480,6 +483,17 @@ function App(props: { pair?: DialogPairCredentials }) {
   const promptRef = usePromptRef()
   const plugins = usePlugin()
   const clipboard = useClipboard()
+  const terminalEnvironment = useTuiTerminalEnvironment()
+  createEffect(() => {
+    if (client.connection.status() !== "connected") return
+    if (route.data.type !== "session") return
+    const session = data.session.get(route.data.sessionID)
+    if (!session) return
+    if (session.location.workspaceID !== undefined || terminalEnvironment.variables === undefined) return
+    void client.api.session
+      .environment({ sessionID: session.id, variables: terminalEnvironment.variables })
+      .catch(toast.error)
+  })
   const [layout, updateLayout] = useStorage().store<{ verticalTabsWidth?: number }>("layout", {
     initial: { verticalTabsWidth: SESSION_SIDEBAR_WIDTH },
   })
