@@ -14,6 +14,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_TITLE_SHORT from "./prompt/title-short.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
@@ -245,7 +246,11 @@ const layer = Layer.effect(
               }),
               user,
             ),
-            prompt: PROMPT_TITLE,
+            // A user `agent.title.prompt` still wins over this: the config loop
+            // below overwrites `prompt` unconditionally.
+            prompt: cfg.title_max_words
+              ? PROMPT_TITLE_SHORT.replaceAll("{{MAX_WORDS}}", String(cfg.title_max_words))
+              : PROMPT_TITLE,
           },
           summary: {
             name: "summary",
