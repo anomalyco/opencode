@@ -316,8 +316,9 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
 }
 
 type TextSummary = { readonly bytes: number; readonly lines: number }
-// Request-local form of Zed's summarized Rope<SumTree<Chunk>>. The summaries
-// locate a line without repeatedly decoding and splitting the accumulated text.
+// Request-local augmented rope. Subtree byte and newline weights locate a line
+// like an order-statistic query without repeatedly decoding the accumulated text.
+// https://doi.org/10.1002/spe.4380251203
 type TextNode =
   | { readonly type: "leaf"; readonly bytes: Uint8Array; readonly summary: TextSummary }
   | { readonly type: "branch"; readonly children: ReadonlyArray<TextNode>; readonly summary: TextSummary }

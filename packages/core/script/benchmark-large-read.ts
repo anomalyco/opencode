@@ -75,11 +75,11 @@ const current = async () => {
   }
 }
 
-// Request-local adaptation of Zed's Rope<SumTree<Chunk>>. Leaves summarize
-// bytes/newlines and a B+-style tree seeks by accumulated newline count.
-// https://github.com/zed-industries/zed/blob/8968bf78084f30809aa2ce1574a3be68ed02a513/crates/rope/src/rope.rs
-const zedLayer = LayerNode.compile(LayerNode.group([CrossSpawnSpawner.node, LayerNodePlatform.filesystem]))
-const zed = () =>
+// Request-local augmented rope. Leaves summarize bytes/newlines and the tree
+// seeks by accumulated newline count as an order-statistic query.
+// https://doi.org/10.1002/spe.4380251203
+const candidateLayer = LayerNode.compile(LayerNode.group([CrossSpawnSpawner.node, LayerNodePlatform.filesystem]))
+const candidate = () =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const environment = Environment.makeFiles(Environment.makeLocalDriver(spawner))
@@ -89,7 +89,7 @@ const zed = () =>
     })
     if (result.type !== "text-page") return yield* Effect.die("production read did not return a text page")
     return result.content
-  }).pipe(Effect.scoped, Effect.provide(zedLayer), Effect.runPromise)
+  }).pipe(Effect.scoped, Effect.provide(candidateLayer), Effect.runPromise)
 
 type Piece = { readonly data: Buffer; readonly lineStarts: Uint32Array }
 type PieceNode = {
@@ -168,7 +168,7 @@ const vscode = async () => {
 
 const algorithms = [
   { name: "current", run: current },
-  { name: "zed-sum-tree", run: zed },
+  { name: "augmented-rope", run: candidate },
   { name: "vscode-piece-tree", run: vscode },
 ]
 const samples = new Map(algorithms.map((algorithm) => [algorithm.name, [] as number[]]))
