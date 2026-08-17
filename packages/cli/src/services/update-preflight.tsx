@@ -7,6 +7,7 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { registerOpencodeSpinner } from "@opencode-ai/tui/component/register-spinner"
 import { SPINNER_FRAMES } from "@opencode-ai/tui/component/spinner"
 import { go } from "@opencode-ai/tui/logo"
+import { setTimeout } from "node:timers/promises"
 import {
   batch,
   createEffect,
@@ -123,7 +124,7 @@ async function open(from?: string): Promise<Session> {
   let shownAt = performance.now()
   const waitForStage = async () => {
     const remaining = stageFloor - (performance.now() - shownAt)
-    if (remaining > 0) await Bun.sleep(remaining)
+    if (remaining > 0) await setTimeout(remaining)
   }
   const advance = async (stage: number) => {
     await waitForStage()
@@ -140,11 +141,11 @@ async function open(from?: string): Promise<Session> {
     setOutcome(next)
     const completed = await Promise.race([
       settled.promise.then(() => true),
-      Bun.sleep(transitionDuration + 500).then(() => false),
+      setTimeout(transitionDuration + 500).then(() => false),
     ])
     resolveOutcome = undefined
     setAnimating(false)
-    if (completed) await Bun.sleep(hold)
+    if (completed) await setTimeout(hold)
   }
   let closing: Promise<void> | undefined
   let transferred = false
@@ -154,7 +155,7 @@ async function open(from?: string): Promise<Session> {
       setAnimating(false)
       if (renderer.isDestroyed) return
       renderer.pause()
-      await Promise.race([renderer.idle(), Bun.sleep(500)])
+      await Promise.race([renderer.idle(), setTimeout(500)])
       renderer.destroy()
     })())
   let loading: Promise<void> | undefined
@@ -178,7 +179,7 @@ async function open(from?: string): Promise<Session> {
       renderer.screenMode = "alternate-screen"
       renderer.consoleMode = "console-overlay"
       renderer.requestRender()
-      await Promise.race([renderer.idle(), Bun.sleep(500)])
+      await Promise.race([renderer.idle(), setTimeout(500)])
       transferred = true
       return {
         renderer,

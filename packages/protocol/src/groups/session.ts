@@ -544,6 +544,24 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
+      HttpApiEndpoint.post("session.generate", "/api/session/:sessionID/generate", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({ prompt: Schema.String }),
+        success: Schema.Struct({
+          data: Schema.Struct({ text: Schema.String }),
+        }).annotate({ identifier: "SessionGenerateResponse" }),
+        error: [SessionNotFoundError, ServiceUnavailableError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.generate",
+            summary: "Generate text from session context",
+            description: "Generate transient text from the current session context without mutating session history.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.get("session.log", "/api/experimental/session/:sessionID/log", {
         params: { sessionID: Session.ID },
         query: {

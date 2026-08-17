@@ -141,7 +141,7 @@ if (sessionMessagesTypesPatched === sessionListTypesPatched) {
   throw new Error("Session messages numeric query patch did not apply")
 }
 const eventSubscribeTypesPatched = sessionMessagesTypesPatched.replace(
-  /(export type V2EventSubscribeResponses = \{\s*\/\*\*[\s\S]*?\*\/\s*200: )\{\s*id: string \| null;?\s*event: string;?\s*data: V2EventStream(?:V2)?;?\s*\};?/,
+  /(export type V2EventSubscribeResponses = \{\s*\/\*\*[\s\S]*?\*\/\s*200: )\{\s*id: string \| null;?\s*event: string;?\s*data: (?:V2EventStream(?:V2)?|V2EventJsonString);?\s*\};?/,
   "$1V2Event",
 )
 if (eventSubscribeTypesPatched === sessionMessagesTypesPatched) {

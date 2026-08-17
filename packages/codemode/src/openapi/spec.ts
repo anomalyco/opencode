@@ -27,22 +27,225 @@ export const nonEmptyString = (value: unknown): string | undefined =>
 export const own = <T>(record: Readonly<Record<string, T>>, key: string): T | undefined =>
   Object.hasOwn(record, key) ? record[key] : undefined
 
+const resolvePointer = (root: unknown, ref: string): unknown =>
+  ref
+    .slice(2)
+    .split("/")
+    .map((segment) => segment.replaceAll("~1", "/").replaceAll("~0", "~"))
+    .reduce<unknown>((item, segment) => (isRecord(item) ? own(item, segment) : undefined), root)
+
 export const resolve = (document: Document, value: unknown): unknown => {
   const next = (current: unknown, seen: ReadonlySet<string>): unknown => {
     if (!isRecord(current)) return current
-    const ref = nonEmptyString(current.$ref)
+    const ref = nonEmptyString(own(current, "$ref"))
     if (ref === undefined || !ref.startsWith("#/") || seen.has(ref)) return current
-    const target = ref
-      .slice(2)
-      .split("/")
-      .map((segment) => segment.replaceAll("~1", "/").replaceAll("~0", "~"))
-      .reduce<unknown>((item, segment) => (isRecord(item) ? own(item, segment) : undefined), document)
+    const target = resolvePointer(document, ref)
     return target === undefined ? current : next(target, new Set([...seen, ref]))
   }
   return next(value, new Set())
 }
 
-const projectSchema = (document: Document, value: unknown): JsonSchema => {
+// Model-facing directional projection: request schemas omit `readOnly` properties,
+// response schemas omit `writeOnly` properties, and `required` stays consistent.
+// Runtime values pass through unchanged.
+type SchemaDirection = "request" | "response"
+type SchemaResource = { readonly value: unknown; readonly root: unknown }
+
+const hiddenKeyword = { request: "readOnly", response: "writeOnly" } as const
+
+// Resolves one `$ref` hop so every link of a chain has its own sibling declarations
+// inspected; cycles terminate in the callers' cycle solver. Local `$defs`/`definitions`
+// pointers resolve against the schema being projected, other pointers rebase onto the target.
+const resolveResource = (document: Document, resource: SchemaResource): SchemaResource => {
+  if (!isRecord(resource.value)) return resource
+  const ref = nonEmptyString(own(resource.value, "$ref"))
+  if (ref === undefined || !ref.startsWith("#/")) return resource
+  const local = ref.startsWith("#/$defs/") || ref.startsWith("#/definitions/")
+  const target = resolvePointer(local ? resource.root : document, ref)
+  if (target === undefined) return resource
+  return { value: target, root: local ? resource.root : target }
+}
+
+// Hidden-ness and hidden names are memoized per schema object and direction so
+// diamond-shaped reference graphs stay linear. Documents are assumed immutable once
+// projected; a schema reachable under multiple resolution roots reuses the first result.
+type Solver<T> = {
+  readonly values: Map<unknown, T>
+  // Discovery index per schema whose strongly connected component is unresolved.
+  readonly pending: Map<unknown, number>
+  readonly stack: Array<unknown>
+}
+type DirectionCache = {
+  readonly hidden: Solver<boolean>
+  readonly names: Solver<ReadonlySet<string>>
+}
+
+const emptyCache = (): DirectionCache => ({
+  hidden: { values: new Map(), pending: new Map(), stack: [] },
+  names: { values: new Map(), pending: new Map(), stack: [] },
+})
+
+const projectionCaches = new WeakMap<Document, Record<SchemaDirection, DirectionCache>>()
+
+const projectionCache = (document: Document, direction: SchemaDirection): DirectionCache => {
+  const existing = projectionCaches.get(document)
+  if (existing !== undefined) return existing[direction]
+  const created = { request: emptyCache(), response: emptyCache() }
+  projectionCaches.set(document, created)
+  return created[direction]
+}
+
+// Tarjan's strongly connected components: cycle members all reach the same
+// declarations, so the component root's value is final for every member. Only resolved
+// components are cached, keeping results independent of traversal order.
+type CycleScope = { lowlink: number }
+
+const solveCycles = <T>(
+  solver: Solver<T>,
+  key: unknown,
+  provisional: T,
+  scope: CycleScope,
+  compute: (inner: CycleScope) => T,
+): T => {
+  const cached = solver.values.get(key)
+  if (cached !== undefined) return cached
+  const pending = solver.pending.get(key)
+  if (pending !== undefined) {
+    scope.lowlink = Math.min(scope.lowlink, pending)
+    return provisional
+  }
+  // Components pop as contiguous stack suffixes, so pending indices stay 0..size-1.
+  const index = solver.pending.size
+  const base = solver.stack.length
+  solver.pending.set(key, index)
+  solver.stack.push(key)
+  const inner: CycleScope = { lowlink: Infinity }
+  const value = compute(inner)
+  if (inner.lowlink < index) {
+    scope.lowlink = Math.min(scope.lowlink, inner.lowlink)
+    return value
+  }
+  for (const member of solver.stack.splice(base)) {
+    solver.pending.delete(member)
+    solver.values.set(member, value)
+  }
+  return value
+}
+
+// Most documents have no directional keywords; one cached scan skips projection entirely.
+const directionalDocuments = new WeakMap<Document, boolean>()
+
+export const hasDirectionalSchemas = (document: Document): boolean => {
+  const cached = directionalDocuments.get(document)
+  if (cached !== undefined) return cached
+  const contains = (value: unknown): boolean => {
+    if (Array.isArray(value)) return value.some(contains)
+    if (!isRecord(value)) return false
+    if (own(value, "readOnly") === true || own(value, "writeOnly") === true) return true
+    return Object.values(value).some(contains)
+  }
+  const result = contains(document)
+  directionalDocuments.set(document, result)
+  return result
+}
+
+// OpenAPI 3.1 allows keywords as siblings of `$ref`, so a schema's own declarations
+// are inspected before following the reference.
+const isHidden = (
+  document: Document,
+  resource: SchemaResource,
+  direction: SchemaDirection,
+  scope: CycleScope = { lowlink: Infinity },
+): boolean => {
+  const value = resource.value
+  if (!isRecord(value)) return false
+  if (own(value, hiddenKeyword[direction]) === true) return true
+  return solveCycles(projectionCache(document, direction).hidden, value, false, scope, (inner) => {
+    const target = resolveResource(document, resource)
+    return (
+      asArray(own(value, "allOf")).some((item) => isHidden(document, { ...resource, value: item }, direction, inner)) ||
+      (target.value !== value && isHidden(document, target, direction, inner))
+    )
+  })
+}
+
+// Hidden property names declared by a schema itself or inherited through `$ref` and
+// `allOf` composition, so sibling `required` lists stay consistent after projection.
+const hiddenNames = (
+  document: Document,
+  resource: SchemaResource,
+  direction: SchemaDirection,
+  scope: CycleScope = { lowlink: Infinity },
+): ReadonlySet<string> => {
+  const value = resource.value
+  if (!isRecord(value)) return new Set()
+  return solveCycles(projectionCache(document, direction).names, value, new Set(), scope, (inner) => {
+    const properties = own(value, "properties")
+    const declared = isRecord(properties)
+      ? Object.entries(properties)
+          .filter(([, property]) => isHidden(document, { ...resource, value: property }, direction))
+          .map(([name]) => name)
+      : []
+    const composed = asArray(own(value, "allOf")).flatMap((item) => [
+      ...hiddenNames(document, { ...resource, value: item }, direction, inner),
+    ])
+    const target = resolveResource(document, resource)
+    const referenced = target.value === value ? [] : hiddenNames(document, target, direction, inner)
+    return new Set([...declared, ...composed, ...referenced])
+  })
+}
+
+// `not`/`if`/`contains` subschemas pass through unprojected: they negate or select
+// rather than assert, so removing hidden properties would invert their semantics.
+const nestedSchemas = new Set([
+  "items",
+  "additionalProperties",
+  "unevaluatedProperties",
+  "propertyNames",
+  "then",
+  "else",
+])
+const nestedSchemaLists = new Set(["anyOf", "oneOf", "prefixItems"])
+const nestedSchemaMaps = new Set(["patternProperties", "dependentSchemas", "$defs", "definitions"])
+
+const directionalSchema = (
+  document: Document,
+  resource: SchemaResource,
+  direction: SchemaDirection,
+  excluded: ReadonlySet<string> = new Set(),
+): unknown => {
+  if (!isRecord(resource.value)) return resource.value
+  const hidden = new Set([...excluded, ...hiddenNames(document, resource, direction)])
+  const project = (item: unknown, inherited: ReadonlySet<string> = new Set()): unknown =>
+    directionalSchema(document, { ...resource, value: item }, direction, inherited)
+  return Object.fromEntries(
+    Object.entries(resource.value).map(([key, item]) => {
+      if (key === "properties" && isRecord(item)) {
+        return [
+          key,
+          Object.fromEntries(
+            Object.entries(item)
+              .filter(([name]) => !hidden.has(name))
+              .map(([name, property]) => [name, project(property)]),
+          ),
+        ]
+      }
+      if (key === "required" && Array.isArray(item)) {
+        return [key, item.filter((name) => typeof name !== "string" || !hidden.has(name))]
+      }
+      // allOf branches share one object; hidden names apply across every branch.
+      if (key === "allOf" && Array.isArray(item)) return [key, item.map((entry) => project(entry, hidden))]
+      if (nestedSchemas.has(key)) return [key, project(item)]
+      if (nestedSchemaLists.has(key) && Array.isArray(item)) return [key, item.map((entry) => project(entry))]
+      if (nestedSchemaMaps.has(key) && isRecord(item)) {
+        return [key, Object.fromEntries(Object.entries(item).map(([name, entry]) => [name, project(entry)]))]
+      }
+      return [key, item]
+    }),
+  )
+}
+
+const normalizeSchema = (document: Document, value: unknown): JsonSchema => {
   if (!isRecord(value)) return {}
   const normalized = nonEmptyString(document.openapi)?.startsWith("3.0")
     ? fromSchemaOpenApi3_0(value)
@@ -52,10 +255,21 @@ const projectSchema = (document: Document, value: unknown): JsonSchema => {
     : { ...normalized.schema, $defs: normalized.definitions }
 }
 
-export const componentDefinitions = (document: Document): Readonly<Record<string, JsonSchema>> => {
+const projectSchema = (document: Document, value: unknown, direction: SchemaDirection): JsonSchema =>
+  normalizeSchema(
+    document,
+    hasDirectionalSchemas(document) ? directionalSchema(document, { value, root: value }, direction) : value,
+  )
+
+export const componentDefinitions = (
+  document: Document,
+  direction: SchemaDirection,
+): Readonly<Record<string, JsonSchema>> => {
   const components = isRecord(document.components) ? document.components : {}
   const schemas = isRecord(components.schemas) ? components.schemas : {}
-  return Object.fromEntries(Object.entries(schemas).map(([name, value]) => [name, projectSchema(document, value)]))
+  return Object.fromEntries(
+    Object.entries(schemas).map(([name, value]) => [name, projectSchema(document, value, direction)]),
+  )
 }
 
 const withDefinitions = (schema: JsonSchema, definitions: Readonly<Record<string, JsonSchema>>): JsonSchema => {
@@ -157,7 +371,7 @@ const operationParameters = (
     if (style === "deepObject" && !explode) {
       return { ok: false, reason: `query parameter '${name}' uses deepObject with explode=false` }
     }
-    const base = projectSchema(document, resolved.schema)
+    const base = projectSchema(document, resolved.schema, "request")
     const description = nonEmptyString(resolved.description)
     unordered.push({
       name,
@@ -191,7 +405,10 @@ const operationBody = (
       reason: `request body has no JSON content (declared: ${Object.keys(content).join(", ") || "none"})`,
     }
   }
-  const schema = resolve(document, selected.schema)
+  const resolvedSchema = resolve(document, selected.schema)
+  const schema = hasDirectionalSchemas(document)
+    ? directionalSchema(document, { value: resolvedSchema, root: resolvedSchema }, "request")
+    : resolvedSchema
   const required = resolved.required === true
   if (!isFlattenableObjectBody(schema, required)) {
     return {
@@ -202,7 +419,7 @@ const operationBody = (
             name: "body",
             location: "body",
             required,
-            schema: projectSchema(document, selected.schema),
+            schema: projectSchema(document, selected.schema, "request"),
             style: undefined,
             explode: undefined,
           },
@@ -217,11 +434,13 @@ const operationBody = (
   return {
     ok: true,
     value: {
+      // Field schemas were already projected with the body as resolution root; a second
+      // directional pass rooted at the field would misresolve shadowed local $defs.
       fields: Object.entries(schema.properties).map(([name, value]) => ({
         name,
         location: "body" as const,
         required: required && requiredProperties.has(name),
-        schema: projectSchema(document, value),
+        schema: normalizeSchema(document, value),
         style: undefined,
         explode: undefined,
       })),
@@ -339,7 +558,7 @@ export const operationOutput = (
         continue
       }
       if (!isRecord(value) || value.schema === undefined) return { ok: true, value: undefined }
-      outcomes.push(projectSchema(document, value.schema))
+      outcomes.push(projectSchema(document, value.schema, "response"))
     }
   }
   if (outcomes.length === 0) return { ok: true, value: undefined }

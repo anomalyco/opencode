@@ -420,7 +420,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
   const client = useClient()
   const toast = useToast()
   const themeState = useTheme()
-  const { theme, mode, setMode, locked, lock, unlock } = themeState
+  const { themeV2, mode, setMode, locked, lock, unlock } = themeState
   const data = useData()
   const location = useLocation()
   const exit = useExit()
@@ -1087,7 +1087,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
       width={dimensions().width}
       height={dimensions().height}
       flexDirection="column"
-      backgroundColor={theme.background}
+      backgroundColor={themeV2.background()}
       onMouseDown={(evt) => {
         if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return

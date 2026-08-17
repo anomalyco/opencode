@@ -1,5 +1,5 @@
 import type { BoxRenderable, TextareaRenderable, ScrollBoxRenderable } from "@opentui/core"
-import { pathToFileURL } from "bun"
+import { pathToFileURL } from "node:url"
 import fuzzysort from "fuzzysort"
 import path from "path"
 import { firstBy } from "remeda"
@@ -21,6 +21,7 @@ import { useFrecency } from "../../prompt/frecency"
 import { Keymap } from "../../context/keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/client"
+import { stringWidth } from "../../util/string-width"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -188,7 +189,7 @@ export function Autocomplete(props: {
 
     const virtualText = "@" + text
     const extmarkStart = store.index
-    const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
+    const extmarkEnd = extmarkStart + stringWidth(virtualText)
 
     const styleId = part.type === "file" ? props.fileStyleId : props.agentStyleId
 
@@ -431,7 +432,7 @@ export function Autocomplete(props: {
     const cursor = props.input().logicalCursor
     props.input().deleteRange(0, 0, cursor.row, cursor.col)
     props.input().insertText(newText)
-    props.input().cursorOffset = Bun.stringWidth(newText)
+    props.input().cursorOffset = stringWidth(newText)
   }
 
   const commands = createMemo((): AutocompleteOption[] => {

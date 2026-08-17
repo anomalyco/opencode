@@ -11,7 +11,7 @@ import { SessionV2 } from "../session"
 export interface Interface {
   readonly session: Pick<
     SessionV2.Interface,
-    "get" | "create" | "messages" | "prompt" | "command" | "resume" | "interrupt" | "synthetic"
+    "get" | "create" | "messages" | "prompt" | "generate" | "command" | "resume" | "interrupt" | "synthetic"
   >
   readonly job: Pick<Job.Interface, "start" | "wait" | "block" | "background" | "cancel">
   readonly location: {
@@ -50,6 +50,7 @@ export const layerWithCell = (cell: Cell) =>
         create: (input) => require(cell, (runtime) => runtime.session.create(input)),
         messages: (input) => require(cell, (runtime) => runtime.session.messages(input)),
         prompt: (input) => require(cell, (runtime) => runtime.session.prompt(input)),
+        generate: (input) => require(cell, (runtime) => runtime.session.generate(input)),
         command: (input) => require(cell, (runtime) => runtime.session.command(input)),
         resume: (sessionID) => require(cell, (runtime) => runtime.session.resume(sessionID)),
         interrupt: (sessionID) => require(cell, (runtime) => runtime.session.interrupt(sessionID)),
