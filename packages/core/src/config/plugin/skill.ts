@@ -180,8 +180,7 @@ export const Plugin = define({
     yield* ctx.skill.transform((draft) => {
       for (const skill of loaded.skills) draft.add(skill)
     })
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
+    yield* ctx.event.subscribe("config.updated").pipe(
       Stream.runForEach(() =>
         config.entries().pipe(
           Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),

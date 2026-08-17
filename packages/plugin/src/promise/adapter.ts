@@ -2,6 +2,7 @@ import { Tool } from "@opencode-ai/schema/tool"
 import { Effect, Schema, SchemaAST, Scope, Stream } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/unstable/httpapi"
 import { define } from "../effect/plugin.js"
+import type { PluginEventType } from "./event.js"
 import type { Context, Plugin } from "./plugin.js"
 import type { Info } from "./tool.js"
 
@@ -149,13 +150,15 @@ export function fromPromise(plugin: Plugin) {
             reload: () => run(host.command.reload()),
           },
           event: {
-            subscribe: () =>
-              Stream.toAsyncIterable(
-                host.event.subscribe().pipe(
+            subscribe: (type?: PluginEventType) => {
+              const events = type === undefined ? host.event.subscribe() : host.event.subscribe(type)
+              return Stream.toAsyncIterable(
+                events.pipe(
                   Stream.mapEffect((event) => Schema.encodeUnknownEffect(OpenCodeEvent)(event)),
                   Stream.map((event) => event as unknown as PromiseEvent),
                 ),
-              ),
+              )
+            },
           },
           integration: {
             list: adaptApiMethod(IntegrationEndpoints["integration.list"], host.integration.list),

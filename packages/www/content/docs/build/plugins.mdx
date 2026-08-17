@@ -183,6 +183,14 @@ and plugin options.
 | `ctx.event`            | `subscribe` to the current public server event stream                                        |
 | `ctx.options`          | Readonly options from the matching config object                                             |
 
+Event subscriptions can receive every plugin-visible public event, or select
+one event type:
+
+```ts
+ctx.event.subscribe()
+ctx.event.subscribe("config.updated")
+```
+
 ### Transform hooks
 
 Transform hooks let a plugin modify how OpenCode is configured. Use them to add

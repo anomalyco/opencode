@@ -59,6 +59,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
     ref.directory === location.directory && ref.workspaceID === location.workspaceID
   const response = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(Effect.map((data) => ({ location: locationInfo(), data })))
+  const subscribe: Plugin.Context["event"]["subscribe"] = (type?: EventManifest.ServerEvent["type"]) => {
+    if (type === undefined) return bus.subscribe().pipe(Stream.filter(EventManifest.isServer))
+    const definition = EventManifest.Server.get(type)
+    if (!definition) return Stream.fail(new Error(`Unknown plugin event type: ${type}`))
+    return bus.subscribe(definition).pipe(Stream.filter(EventManifest.isServer))
+  }
 
   return {
     app,
@@ -180,7 +186,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
         }),
     },
     event: {
-      subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)),
+      subscribe,
     },
     integration: {
       list: () => response(integration.list()),

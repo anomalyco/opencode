@@ -20,21 +20,52 @@ class Secret extends Context.Service<Secret, string>()("@opencode/test/PluginSec
 const versioned = <R>(plugin: EffectPlugin.Plugin<R>, version = "1") => ({ ...plugin, version })
 
 describe("Plugin", () => {
-  it.live("exposes public events through the plugin context", () =>
+  it.live("selects one public event type through the plugin context", () =>
     Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       const bus = yield* Bus.Service
       const host = yield* PluginHost.make(plugins)
-      const received = yield* host.event.subscribe().pipe(
-        Stream.filter((event) => event.type === "config.updated"),
-        Stream.runHead,
-        Effect.forkScoped({ startImmediately: true }),
-      )
+      const received = yield* host.event
+        .subscribe("config.updated")
+        .pipe(Stream.runHead, Effect.forkScoped({ startImmediately: true }))
       yield* Effect.sleep("10 millis")
 
+      yield* bus.publish(Plugin.Event.Updated, {})
       yield* bus.publish(ConfigSchema.Event.Updated, {})
 
       expect((yield* Fiber.join(received)).valueOrUndefined?.type).toBe("config.updated")
+    }),
+  )
+
+  it.live("exposes all public events through a wildcard plugin subscription", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const bus = yield* Bus.Service
+      const host = yield* PluginHost.make(plugins)
+      const received = yield* host.event
+        .subscribe()
+        .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      yield* Effect.sleep("10 millis")
+
+      yield* bus.publish(Plugin.Event.Updated, {})
+      yield* bus.publish(ConfigSchema.Event.Updated, {})
+
+      expect(Array.from(yield* Fiber.join(received), (event) => event.type)).toEqual([
+        "plugin.updated",
+        "config.updated",
+      ])
+    }),
+  )
+
+  it.effect("rejects unknown runtime plugin event types", () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugins)
+      const subscribe = host.event.subscribe as unknown as (type: string) => Stream.Stream<never, Error>
+
+      const failure = yield* subscribe("unknown.event").pipe(Stream.runDrain, Effect.flip)
+
+      expect(failure.message).toBe("Unknown plugin event type: unknown.event")
     }),
   )
 

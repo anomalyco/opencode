@@ -49,8 +49,7 @@ export const Plugin = define({
       }
       for (const [name, source] of entries) draft.add(name, source)
     })
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
+    yield* ctx.event.subscribe("config.updated").pipe(
       Stream.runForEach(() =>
         config.entries().pipe(
           Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
