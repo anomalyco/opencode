@@ -44,7 +44,7 @@ import { NewSessionView, SessionHeader } from "@/components/session"
 import { ErrorPage } from "@/pages/error"
 import { CommentsProvider, useComments } from "@/context/comments"
 import { useCommand } from "@/context/command"
-import { DirectoryDataProvider } from "@/pages/directory-layout"
+import { SessionUIProvider } from "@/pages/directory-layout"
 import { useData } from "@/context/server"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -208,23 +208,14 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
 
 function ResolvedTargetSessionRoute() {
   const params = useParams<{ serverKey: string; id: string }>()
-  const tabs = useTabs()
   const data = useData()
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
   const current = createSessionResolution(
     () => params.id,
     () => data.session,
+    { children: true },
   )
   const directory = createMemo(() => current()?.location.directory)
-
-  createEffect(() => {
-    const session = current()
-    if (!session) return
-    tabs.addSessionTab({
-      server: serverKey(),
-      sessionId: data.session.root(session.id),
-    })
-  })
 
   return (
     // Non-keyed: closes only while the target's directory is unknown (uncached
@@ -234,9 +225,9 @@ function ResolvedTargetSessionRoute() {
     <Show when={directory()}>
       {(dir) => (
         <LocationProvider directory={dir()}>
-          <DirectoryDataProvider directory={dir()} server={serverKey()}>
+          <SessionUIProvider directory={dir()} server={serverKey()}>
             <TargetSessionPage />
-          </DirectoryDataProvider>
+          </SessionUIProvider>
         </LocationProvider>
       )}
     </Show>
@@ -583,10 +574,11 @@ export default function Page() {
       refetchOnWindowFocus: true,
       queryFn: mode
         ? () =>
-            serverSDK.api.vcs.diff({
-              location: { directory: sdk().directory },
-              mode: mode === "git" ? "working" : mode,
-            })
+            serverSDK.api.vcs
+              .diff({
+                location: { directory: sdk().directory },
+                mode: mode === "git" ? "working" : mode,
+              })
               .then((result) => result.data)
         : skipToken,
     }

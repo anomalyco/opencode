@@ -37,7 +37,7 @@ import { SettingsProvider } from "@/context/settings"
 import { TabsProvider, useTabs, type DraftTab } from "@/context/tabs"
 import { LocationProvider } from "@/context/location"
 import { WslServersProvider } from "@/wsl/context"
-import { DirectoryDataProvider } from "@/pages/directory-layout"
+import { SessionUIProvider } from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
@@ -110,11 +110,11 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
           <ServerProvider conn={conn}>
             <ModelsProvider directory={props.draft.directory}>
               <LocationProvider directory={props.draft.directory}>
-                <DirectoryDataProvider directory={props.draft.directory} server={props.draft.server}>
+                <SessionUIProvider directory={props.draft.directory} server={props.draft.server}>
                   <DraftProviders>
                     <NewSession draftId={props.draft.draftID} />
                   </DraftProviders>
-                </DirectoryDataProvider>
+                </SessionUIProvider>
               </LocationProvider>
             </ModelsProvider>
           </ServerProvider>

@@ -1,7 +1,10 @@
 import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { sessionNotFoundError } from "@/utils/server-errors"
 
-type SessionStore<T> = { get: (id: string) => T | undefined; sync: (id: string) => Promise<unknown> }
+type SessionStore<T> = {
+  get: (id: string) => T | undefined
+  sync: (id: string, options?: { children?: boolean }) => Promise<unknown>
+}
 
 type Resolution<T> = { id: string; store: SessionStore<T> } & (
   | { state: "pending" }
@@ -25,7 +28,11 @@ type Resolution<T> = { id: string; store: SessionStore<T> } & (
 // so trusting a previous target's settlement would fabricate a not-found for a
 // session that simply has not resolved yet. Resolve failures rethrow on read so
 // the enclosing SessionRouteErrorBoundary renders the scoped session error.
-export function createSessionResolution<T>(sessionID: () => string, sessions: () => SessionStore<T>) {
+export function createSessionResolution<T>(
+  sessionID: () => string,
+  sessions: () => SessionStore<T>,
+  options?: { children?: boolean },
+) {
   const cached = createMemo(() => sessions().get(sessionID()))
   const [status, setStatus] = createSignal<Resolution<T>>()
 
@@ -35,13 +42,13 @@ export function createSessionResolution<T>(sessionID: () => string, sessions: ()
       onCleanup(() => {
         stale = true
       })
-      if (cached()) {
+      if (cached() && !options?.children) {
         setStatus({ id, store, state: "settled" })
         return
       }
       setStatus({ id, store, state: "pending" })
       store
-        .sync(id)
+        .sync(id, options)
         .then(() => {
           if (!stale) setStatus({ id, store, state: "settled" })
         })
