@@ -656,7 +656,9 @@ export function Session() {
         dialog.clear()
         const messageID = session()?.revert?.messageID
         if (!messageID) return
-        const message = messages().find((x) => x.role === "user" && x.id > messageID)
+        const boundary = messages().findIndex((item) => item.id === messageID)
+        if (boundary === -1) return
+        const message = messages().find((item, index) => index > boundary && item.role === "user")
         if (!message) {
           void sdk.client.session.unrevert({
             sessionID: route.sessionID,
