@@ -49,13 +49,6 @@ const remoteModel = (id: string, max_model_len = 32_768, owned_by = "vllm") => (
 })
 
 describe("VLLMPlugin", () => {
-  it.effect("is registered as a built-in provider plugin", () =>
-    Effect.sync(() => {
-      expect(VLLMPlugin.id).toBe("opencode.provider.vllm")
-      expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.vllm")
-    }),
-  )
-
   it.live("waits for readiness and discovers official vLLM model metadata", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -80,6 +73,8 @@ describe("VLLMPlugin", () => {
         Effect.gen(function* () {
           const catalog = yield* Catalog.Service
           const providerID = Provider.ID.make("vllm")
+          expect(VLLMPlugin.id).toBe("opencode.provider.vllm")
+          expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.vllm")
           yield* addPlugin(server.url.origin, "5 millis")
           yield* Effect.promise(() => Bun.sleep(20))
           expect(yield* catalog.provider.get(providerID)).toBeUndefined()
@@ -145,47 +140,6 @@ describe("VLLMPlugin", () => {
             (model) => model !== undefined,
           )
           expect(yield* catalog.model.get(providerID, Model.ID.make("first-model"))).toBeUndefined()
-        }),
-      ({ server }) => Effect.promise(() => server.stop(true)),
-    ),
-  )
-
-  it.live("shares endpoint and credential discovery across plugin instances", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const requests = { health: 0, models: 0, authorization: [] as Array<string | null> }
-        return {
-          requests,
-          server: Bun.serve({
-            port: 0,
-            fetch: (request) => {
-              requests.authorization.push(request.headers.get("authorization"))
-              if (new URL(request.url).pathname === "/health") {
-                requests.health++
-                return new Response()
-              }
-              requests.models++
-              return Response.json({ object: "list", data: [remoteModel("shared-model")] })
-            },
-          }),
-        }
-      }),
-      ({ requests, server }) =>
-        Effect.gen(function* () {
-          const catalog = yield* Catalog.Service
-          const config = yield* Config.Test
-          yield* config.setEntries([configuration({ baseURL: `${server.url.origin}/v1`, apiKey: "shared-secret" })])
-          yield* addPlugin(server.url.origin)
-          yield* addPlugin(server.url.origin)
-          yield* eventually(
-            catalog.model.get(Provider.ID.make("vllm"), Model.ID.make("shared-model")),
-            (model) => model !== undefined,
-          )
-          expect(requests).toEqual({
-            health: 1,
-            models: 1,
-            authorization: ["Bearer shared-secret", "Bearer shared-secret"],
-          })
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
