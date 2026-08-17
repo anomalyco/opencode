@@ -52,7 +52,6 @@ import { createProviderBudgetTracker } from "./providerBudgetTracker"
 import { accumulateUsage, HOT_WORKSPACES } from "./usageBatcher"
 import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import { countryFromRequest } from "~/lib/request-country"
-import { finalizeProviderHeaders } from "./providerHeaders"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
@@ -245,7 +244,14 @@ export async function handler(
               }
               headers.set(k, v)
             })
-            return finalizeProviderHeaders(headers, isNewInference, sessionId)
+            headers.delete("host")
+            headers.delete("content-length")
+            headers.delete("x-opencode-request")
+            headers.delete("x-opencode-session")
+            headers.delete("x-opencode-project")
+            headers.delete("x-opencode-client")
+            if (isNewInference && sessionId) headers.set("x-opencode-session", sessionId)
+            return headers
           })(),
           body: reqBody,
           // Propagate caller disconnects to the upstream provider request so
