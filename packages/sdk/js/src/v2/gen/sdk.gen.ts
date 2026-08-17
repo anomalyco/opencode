@@ -209,6 +209,11 @@ import type {
   SessionMessagesResponses,
   SessionPermissionDecisionsErrors,
   SessionPermissionDecisionsResponses,
+  SessionPermissionValidatorConfig,
+  SessionPermissionValidatorGetErrors,
+  SessionPermissionValidatorGetResponses,
+  SessionPermissionValidatorUpdateErrors,
+  SessionPermissionValidatorUpdateResponses,
   SessionPromptAsyncErrors,
   SessionPromptAsyncResponses,
   SessionPromptErrors,
@@ -3428,6 +3433,87 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class PermissionValidator extends HeyApiClient {
+  /**
+   * Get session permission validator
+   *
+   * Get the per-session model or disabled state for the auto permission validator.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionPermissionValidatorGetResponses,
+      SessionPermissionValidatorGetErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/permission-validator",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update session permission validator
+   *
+   * Select, disable, or inherit the model used by the auto permission validator.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      config?: SessionPermissionValidatorConfig | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "config" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      SessionPermissionValidatorUpdateResponses,
+      SessionPermissionValidatorUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/permission-validator",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Session2 extends HeyApiClient {
   /**
    * List sessions
@@ -3492,6 +3578,7 @@ export class Session2 extends HeyApiClient {
         [key: string]: unknown
       }
       permission?: PermissionRuleset
+      permissionValidator?: SessionPermissionValidatorConfig
       workspaceID?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -3509,6 +3596,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "metadata" },
             { in: "body", key: "permission" },
+            { in: "body", key: "permissionValidator" },
             { in: "body", key: "workspaceID" },
           ],
         },
@@ -4461,6 +4549,11 @@ export class Session2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _permissionValidator?: PermissionValidator
+  get permissionValidator(): PermissionValidator {
+    return (this._permissionValidator ??= new PermissionValidator({ client: this.client }))
   }
 }
 

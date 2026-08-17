@@ -98,6 +98,10 @@ export const SessionAutoSummary = Schema.Struct({
   updated_at: Schema.Number,
 }).annotate({ identifier: "SessionAutoSummary" })
 
+export const PermissionValidatorPayload = Schema.Struct({
+  config: Schema.NullOr(Session.PermissionValidatorConfig),
+})
+
 export const SessionPaths = {
   list: root,
   status: `${root}/status`,
@@ -124,6 +128,7 @@ export const SessionPaths = {
   permissions: `${root}/:sessionID/permissions/:permissionID`,
   permissionDecisions: `${root}/:sessionID/permission_decisions`,
   autoSummary: `${root}/:sessionID/auto_summary`,
+  permissionValidator: `${root}/:sessionID/permission-validator`,
   deleteMessage: `${root}/:sessionID/message/:messageID`,
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
   updatePart: `${root}/:sessionID/message/:messageID/part/:partID`,
@@ -213,6 +218,18 @@ export const SessionApi = HttpApi.make("session")
             summary: "Get session auto summary",
             description:
               "Get the incremental summary maintained by the session-summarizer agent (auto mode), or null when none exists.",
+          }),
+        ),
+        HttpApiEndpoint.get("permissionValidator", SessionPaths.permissionValidator, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.NullOr(Session.PermissionValidatorConfig), "Session permission validator"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.permission_validator.get",
+            summary: "Get session permission validator",
+            description: "Get the per-session model or disabled state for the auto permission validator.",
           }),
         ),
         HttpApiEndpoint.get("diff", SessionPaths.diff, {
@@ -490,6 +507,19 @@ export const SessionApi = HttpApi.make("session")
           OpenApi.annotations({
             identifier: "part.update",
             description: "Update a part in a message.",
+          }),
+        ),
+        HttpApiEndpoint.patch("permissionValidatorUpdate", SessionPaths.permissionValidator, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: PermissionValidatorPayload,
+          success: described(Schema.NullOr(Session.PermissionValidatorConfig), "Updated session permission validator"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.permission_validator.update",
+            summary: "Update session permission validator",
+            description: "Select, disable, or inherit the model used by the auto permission validator.",
           }),
         ),
       )

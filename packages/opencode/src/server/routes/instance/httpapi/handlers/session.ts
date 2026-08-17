@@ -32,6 +32,7 @@ import {
   ListQuery,
   MessagesQuery,
   PermissionResponsePayload,
+  PermissionValidatorPayload,
   PromptPayload,
   RevertPayload,
   ShellPayload,
@@ -131,6 +132,26 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         turn_count: row.turnCount,
         updated_at: row.updatedAt,
       }
+    })
+
+    const permissionValidator = Effect.fn("SessionHttpApi.permissionValidator")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      const current = yield* requireSession(ctx.params.sessionID)
+      return current.permissionValidator ?? null
+    })
+
+    const permissionValidatorUpdate = Effect.fn("SessionHttpApi.permissionValidatorUpdate")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof PermissionValidatorPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      yield* session.setPermissionValidator({
+        sessionID: ctx.params.sessionID,
+        config: ctx.payload.config ?? undefined,
+      })
+      const current = yield* requireSession(ctx.params.sessionID)
+      return current.permissionValidator ?? null
     })
 
     const diff = Effect.fn("SessionHttpApi.diff")(function* (ctx: {
@@ -455,6 +476,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("todo", todo)
       .handle("permissionDecisions", permissionDecisions)
       .handle("autoSummary", autoSummary)
+      .handle("permissionValidator", permissionValidator)
+      .handle("permissionValidatorUpdate", permissionValidatorUpdate)
       .handle("diff", diff)
       .handle("messages", messages)
       .handle("message", message)

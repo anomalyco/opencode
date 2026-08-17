@@ -18,6 +18,18 @@ import type { SystemContext } from "../system-context/index"
 import { AgentV2 } from "../agent"
 import type { Revert } from "@opencode-ai/schema/revert"
 
+export type PermissionValidatorConfig =
+  | {
+      mode: "model"
+      model: string
+    }
+  | {
+      mode: "disabled"
+    }
+  | {
+      mode: "inherit"
+    }
+
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
 type V1PartData = Omit<SessionV1.Part, "id" | "sessionID" | "messageID">
@@ -51,6 +63,7 @@ export const SessionTable = sqliteTable(
     tokens_cache_write: integer().notNull().default(0),
     revert: text({ mode: "json" }).$type<Revert.State>(),
     permission: text({ mode: "json" }).$type<PermissionV1.Ruleset>(),
+    permission_validator: text({ mode: "json" }).$type<PermissionValidatorConfig>(),
     agent: text(),
     model: text({ mode: "json" }).$type<{
       id: string

@@ -1292,6 +1292,38 @@ const scenarios: Scenario[] = [
       check(body.length === 0, "session without validator activity should have no decisions")
     }),
   http.protected
+    .get("/session/{sessionID}/auto_summary", "session.auto_summary")
+    .seeded((ctx) => ctx.session({ title: "Auto summary session" }))
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/auto_summary", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      check(body === null, "session without auto summary should return null")
+    }),
+  http.protected
+    .get("/session/{sessionID}/permission-validator", "session.permission_validator.get")
+    .seeded((ctx) => ctx.session({ title: "Permission validator session" }))
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/permission-validator", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      check(body === null, "session without an override should return null")
+    }),
+  http.protected
+    .patch("/session/{sessionID}/permission-validator", "session.permission_validator.update")
+    .mutating()
+    .seeded((ctx) => ctx.session({ title: "Permission validator update session" }))
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/permission-validator", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: { config: { mode: "disabled" } },
+    }))
+    .json(200, (body) => {
+      check(isRecord(body) && body.mode === "disabled", "session validator should persist disabled mode")
+    }),
+  http.protected
     .get("/session/{sessionID}/message", "session.messages")
     .seeded((ctx) => ctx.session({ title: "Messages session" }))
     .at((ctx) => ({ path: route("/session/{sessionID}/message", { sessionID: ctx.state.id }), headers: ctx.headers() }))

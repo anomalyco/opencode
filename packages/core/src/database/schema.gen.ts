@@ -240,6 +240,7 @@ export default {
           \`tokens_cache_write\` integer DEFAULT 0 NOT NULL,
           \`revert\` text,
           \`permission\` text,
+          \`permission_validator\` text,
           \`agent\` text,
           \`model\` text,
           \`time_created\` integer NOT NULL,

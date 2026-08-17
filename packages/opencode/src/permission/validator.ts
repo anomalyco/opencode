@@ -12,6 +12,7 @@ import { Provider } from "@/provider/provider"
 import { LLM } from "@/session/llm"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionAutoSummary } from "@/session/auto-summary"
+import { Session } from "@/session/session"
 import { MessageID, SessionID } from "@/session/schema"
 import { InstanceState } from "@/effect/instance-state"
 import { Permission } from "."
@@ -35,7 +36,9 @@ export interface Health {
 }
 
 export interface Interface {
-  readonly validate: (input: Permission.AutoInput) => Effect.Effect<Permission.AutoOutcome, PermissionV1.CorrectedError>
+  readonly validate: (
+    input: Permission.AutoInput,
+  ) => Effect.Effect<Permission.AutoOutcome | undefined, PermissionV1.CorrectedError>
   readonly health: () => Effect.Effect<Health>
 }
 
@@ -60,6 +63,7 @@ const make = (options?: Options) =>
       const summaries = yield* AutoSummaryStore.Service
       const decisions = yield* PermissionDecisionsStore.Service
       const database = yield* Database.Service
+      const sessions = yield* Session.Service
 
       // Strict FIFO per session: each validation awaits its predecessor's
       // release before touching the model, so parallel tool calls validate one
@@ -155,8 +159,12 @@ const make = (options?: Options) =>
             Effect.timeout(timeout),
           )
 
-      const resolveModel = (ag: Agent.Info, user: SessionV1.User) =>
+      const resolveModel = (ag: Agent.Info, user: SessionV1.User, config?: Session.PermissionValidatorConfig) =>
         Effect.gen(function* () {
+          if (config?.mode === "model") {
+            const selected = Provider.parseModel(config.model)
+            return yield* provider.getModel(selected.providerID, selected.modelID)
+          }
           if (ag.model) return yield* provider.getModel(ag.model.providerID, ag.model.modelID)
           const small = yield* provider.getSmallModel(user.model.providerID)
           if (small) return small
@@ -168,6 +176,8 @@ const make = (options?: Options) =>
         // Catch-up summary gates the first validation after switching a session
         // to "auto"; bounded so a broken summarizer only means validating
         // without a summary, never a stuck ask.
+        const session = yield* recover(sessions.get(input.sessionID))
+        if (session?.permissionValidator?.mode === "disabled") return undefined
         yield* recover(
           autoSummary.ensure(input.sessionID).pipe(Effect.timeout(SUMMARY_TIMEOUT)),
           "auto summary ensure failed",
@@ -199,7 +209,7 @@ const make = (options?: Options) =>
 
         if (!ag) return yield* fallback("error", "unknown")
         if (!user) return yield* fallback("error", "unknown")
-        const mdl = yield* recover(resolveModel(ag, user))
+        const mdl = yield* recover(resolveModel(ag, user, session?.permissionValidator))
         if (!mdl) return yield* fallback("error", "unknown")
         const model = `${mdl.providerID}/${mdl.id}`
 
@@ -347,6 +357,7 @@ const deps = [
   AutoSummaryStore.node,
   PermissionDecisionsStore.node,
   Database.node,
+  Session.node,
 ] as const
 
 export const node = LayerNode.make({ service: Service, layer: make(), deps })

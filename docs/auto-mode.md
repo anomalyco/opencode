@@ -202,6 +202,35 @@ minimum:
 Static rules keep precedence on both sides: a configured `deny` is never seen
 by the validator, and a configured `allow` never spends an LLM call.
 
+### Escolha por sessão
+
+O modelo principal da sessão e o modelo do validador são configurações
+independentes. No TUI, abra a paleta de comandos e escolha **Choose permission
+validator**. A ação está disponível somente dentro de uma sessão e oferece:
+
+- **Inherit session small model** — usa a resolução global normal;
+- qualquer modelo disponível no catálogo, no formato `provider/model`;
+- **Disable session validator** — pula o LLM e mantém a pergunta normal de
+  permissão.
+
+A escolha vale para a próxima validação. Uma validação que já começou não é
+interrompida. A configuração é persistida no banco da sessão, sobrevive a
+reinício e não altera `session.model`.
+
+Também é possível alterar uma sessão em execução pela API local:
+
+```bash
+curl -X PATCH "http://127.0.0.1:4096/session/SESSION_ID/permission-validator" \
+  -H 'content-type: application/json' \
+  -H 'x-opencode-directory: /caminho/do/projeto' \
+  -d '{"config":{"mode":"model","model":"provider/model"}}'
+```
+
+Para herdar, use `{"config":{"mode":"inherit"}}`; para desativar, use
+`{"config":{"mode":"disabled"}}`. `disabled` não libera comandos: ele
+retorna ao fluxo humano de permissão. A API também aceita `{"config":null}`
+para limpar o override e voltar à herança.
+
 ### OpenRouter (initial project choice)
 
 OpenRouter resolves through the native models.dev catalog provider — setting

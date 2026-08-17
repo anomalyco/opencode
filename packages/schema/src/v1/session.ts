@@ -540,6 +540,12 @@ const SessionModel = Schema.Struct({
   variant: optional(Schema.String),
 })
 
+const SessionPermissionValidatorConfig = Schema.Union([
+  Schema.Struct({ mode: Schema.Literal("model"), model: Schema.String }),
+  Schema.Struct({ mode: Schema.Literal("disabled") }),
+  Schema.Struct({ mode: Schema.Literal("inherit") }),
+])
+
 export const SessionInfo = Schema.Struct({
   id: SessionID,
   slug: Schema.String,
@@ -564,6 +570,7 @@ export const SessionInfo = Schema.Struct({
     archived: optional(Schema.Finite),
   }),
   permission: optional(PermissionV1.Ruleset),
+  permissionValidator: optional(SessionPermissionValidatorConfig),
   revert: optional(SessionRevert),
 }).annotate({ identifier: "Session" })
 export type SessionInfo = typeof SessionInfo.Type

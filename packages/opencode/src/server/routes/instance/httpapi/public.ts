@@ -143,6 +143,15 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
           if (content.schema) content.schema = stripOptionalNull(structuredClone(content.schema))
         }
       }
+      if (path === "/session/{sessionID}/permission-validator") {
+        if (operation.requestBody?.content?.["application/json"]?.schema?.properties?.config) {
+          operation.requestBody.content["application/json"].schema.properties.config = nullable(
+            operation.requestBody.content["application/json"].schema.properties.config,
+          )
+        }
+        const response = operation.responses?.["200"]?.content?.["application/json"]
+        if (response?.schema) response.schema = nullable(response.schema)
+      }
       if (!isV2Api) {
         // Auth is still runtime middleware outside the legacy public OpenAPI
         // metadata, so the legacy SDK should not expose auth schemes or

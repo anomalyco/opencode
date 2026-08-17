@@ -27,7 +27,7 @@ export type AutoOutcome =
   | { readonly verdict: "uncertain"; readonly reason: string; readonly model: string }
   | { readonly verdict: "fallback"; readonly reason: string; readonly model: string }
 
-export type AutoValidator = (input: AutoInput) => Effect.Effect<AutoOutcome, PermissionV1.CorrectedError>
+export type AutoValidator = (input: AutoInput) => Effect.Effect<AutoOutcome | undefined, PermissionV1.CorrectedError>
 
 export interface Interface {
   readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>

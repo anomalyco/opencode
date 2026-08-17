@@ -28,6 +28,7 @@ import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
 import { PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import type { PermissionValidatorConfig as StoredPermissionValidatorConfig } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
@@ -109,6 +110,7 @@ export function fromRow(row: SessionRow): Info {
     metadata: row.metadata ?? undefined,
     revert,
     permission: row.permission ? [...row.permission] : undefined,
+    permissionValidator: row.permission_validator ?? undefined,
     time: {
       created: row.time_created,
       updated: row.time_updated,
@@ -152,6 +154,7 @@ export function toRow(info: Info) {
         }
       : null,
     permission: info.permission,
+    permission_validator: info.permissionValidator,
     time_created: info.time.created,
     time_updated: info.time.updated,
     time_compacting: info.time.compacting,
@@ -222,6 +225,23 @@ const Model = Schema.Struct({
 
 export const Metadata = Schema.Record(Schema.String, Schema.Any)
 
+const PermissionValidatorModel = Schema.Struct({
+  mode: Schema.Literal("model"),
+  model: Schema.String,
+})
+const PermissionValidatorDisabled = Schema.Struct({
+  mode: Schema.Literal("disabled"),
+})
+const PermissionValidatorInherit = Schema.Struct({
+  mode: Schema.Literal("inherit"),
+})
+export const PermissionValidatorConfig = Schema.Union([
+  PermissionValidatorModel,
+  PermissionValidatorDisabled,
+  PermissionValidatorInherit,
+]).annotate({ identifier: "SessionPermissionValidatorConfig" })
+export type PermissionValidatorConfig = StoredPermissionValidatorConfig
+
 export const Info = Schema.Struct({
   id: SessionID,
   slug: Schema.String,
@@ -241,6 +261,7 @@ export const Info = Schema.Struct({
   metadata: optional(Metadata),
   time: Time,
   permission: optional(PermissionV1.Ruleset),
+  permissionValidator: optional(PermissionValidatorConfig),
   revert: optional(Revert),
 }).annotate({ identifier: "Session" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
@@ -266,6 +287,7 @@ export const CreateInput = Schema.optional(
     model: Schema.optional(Model),
     metadata: Schema.optional(Metadata),
     permission: Schema.optional(PermissionV1.Ruleset),
+    permissionValidator: Schema.optional(PermissionValidatorConfig),
     workspaceID: Schema.optional(WorkspaceV2.ID),
   }),
 )
@@ -423,6 +445,7 @@ export interface Interface {
     model?: Schema.Schema.Type<typeof Model>
     metadata?: typeof Metadata.Type
     permission?: PermissionV1.Ruleset
+    permissionValidator?: PermissionValidatorConfig
     workspaceID?: WorkspaceV2.ID
   }) => Effect.Effect<Info>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
@@ -445,6 +468,10 @@ export interface Interface {
     time: number
   }) => Effect.Effect<void>
   readonly setPermission: (input: { sessionID: SessionID; permission: PermissionV1.Ruleset }) => Effect.Effect<void>
+  readonly setPermissionValidator: (input: {
+    sessionID: SessionID
+    config?: PermissionValidatorConfig
+  }) => Effect.Effect<void>
   readonly setRevert: (input: {
     sessionID: SessionID
     revert: Info["revert"]
@@ -485,12 +512,16 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 export const use = serviceUse(Service)
 
-export type Patch = Omit<Partial<Info>, "time" | "share" | "summary" | "revert" | "permission"> & {
+export type Patch = Omit<
+  Partial<Info>,
+  "time" | "share" | "summary" | "revert" | "permission" | "permissionValidator"
+> & {
   time?: Partial<Info["time"]>
   share?: Partial<NonNullable<Info["share"]>> | null
   summary?: Info["summary"] | null
   revert?: Info["revert"] | null
   permission?: Info["permission"] | null
+  permissionValidator?: Info["permissionValidator"] | null
 }
 
 const layer: Layer.Layer<
@@ -518,6 +549,7 @@ const layer: Layer.Layer<
       path?: string
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
+      permissionValidator?: PermissionValidatorConfig
     }) {
       const ctx = yield* InstanceState.context
       const result: Info = {
@@ -534,6 +566,7 @@ const layer: Layer.Layer<
         model: input.model,
         metadata: input.metadata,
         permission: input.permission ? [...input.permission] : undefined,
+        permissionValidator: input.permissionValidator,
         cost: 0,
         tokens: EmptyTokens,
         time: {
@@ -682,6 +715,7 @@ const layer: Layer.Layer<
       model?: Schema.Schema.Type<typeof Model>
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
+      permissionValidator?: PermissionValidatorConfig
       workspaceID?: WorkspaceV2.ID
     }) {
       const ctx = yield* InstanceState.context
@@ -695,6 +729,7 @@ const layer: Layer.Layer<
         model: input?.model,
         metadata: input?.metadata,
         permission: input?.permission,
+        permissionValidator: input?.permissionValidator,
         workspaceID: input?.workspaceID ?? workspace,
       })
     })
@@ -709,6 +744,7 @@ const layer: Layer.Layer<
         workspaceID: original.workspaceID,
         title,
         metadata: structuredClone(original.metadata),
+        permissionValidator: original.permissionValidator,
       })
       const msgs = yield* messages({ sessionID: input.sessionID })
       const idMap = new Map<string, MessageID>()
@@ -753,6 +789,8 @@ const layer: Layer.Layer<
           summary: info.summary === null ? undefined : (info.summary ?? current.summary),
           revert: info.revert === null ? undefined : (info.revert ?? current.revert),
           permission: info.permission === null ? undefined : (info.permission ?? current.permission),
+          permissionValidator:
+            info.permissionValidator === null ? undefined : (info.permissionValidator ?? current.permissionValidator),
         } as Info
         yield* events.publish(SessionV1.Event.Updated, { sessionID, info: next })
       })
@@ -828,6 +866,16 @@ const layer: Layer.Layer<
       yield* patch(input.sessionID, { permission: [...input.permission], time: { updated: Date.now() } }).pipe(
         Effect.orDie,
       )
+    })
+
+    const setPermissionValidator = Effect.fn("Session.setPermissionValidator")(function* (input: {
+      sessionID: SessionID
+      config?: PermissionValidatorConfig
+    }) {
+      yield* patch(input.sessionID, {
+        permissionValidator: input.config ?? null,
+        time: { updated: Date.now() },
+      }).pipe(Effect.orDie)
     })
 
     const setRevert = Effect.fn("Session.setRevert")(function* (input: {
@@ -961,6 +1009,7 @@ const layer: Layer.Layer<
       setMetadata,
       setAgentModel,
       setPermission,
+      setPermissionValidator,
       setRevert,
       clearRevert,
       setSummary,

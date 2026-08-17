@@ -436,6 +436,57 @@ it.instance(
 )
 
 it.instance(
+  "uses a persisted session validator model without changing the session model",
+  () =>
+    Effect.gen(function* () {
+      llm.reset()
+      const sessions = yield* SessionNs.Service
+      const decisions = yield* PermissionDecisionsStore.Service
+      const chat = yield* seedAutoSession()
+      yield* sessions.setPermissionValidator({
+        sessionID: chat.id,
+        config: { mode: "model", model: "test/test-model" },
+      })
+      llm.push(text("ALLOW"))
+
+      yield* ask({ sessionID: chat.id, agent: "auto" })
+
+      expect(llm.state.hits[0]?.model).toMatchObject({
+        providerID: "test",
+        id: "test-model",
+      })
+      expect((yield* sessions.get(chat.id)).model).toEqual(undefined)
+      expect((yield* decisions.listBySession(chat.id))[0]?.model).toBe("test/test-model")
+    }),
+  { git: true },
+)
+
+it.instance(
+  "disabled session validator skips the LLM and keeps the human permission flow",
+  () =>
+    Effect.gen(function* () {
+      llm.reset()
+      const sessions = yield* SessionNs.Service
+      const decisions = yield* PermissionDecisionsStore.Service
+      const chat = yield* seedAutoSession()
+      yield* sessions.setPermissionValidator({
+        sessionID: chat.id,
+        config: { mode: "disabled" },
+      })
+
+      const fiber = yield* ask({ sessionID: chat.id, agent: "auto" }).pipe(Effect.forkScoped)
+      const items = yield* waitForPending(1)
+
+      expect(items[0].auto).toBeUndefined()
+      expect(llm.state.hits).toHaveLength(0)
+      expect(yield* decisions.listBySession(chat.id)).toHaveLength(0)
+      yield* reply({ requestID: items[0].id, reply: "once" })
+      yield* Fiber.join(fiber)
+    }),
+  { git: true },
+)
+
+it.instance(
   "audits the tool callID in metadata for transcript correlation",
   () =>
     Effect.gen(function* () {
