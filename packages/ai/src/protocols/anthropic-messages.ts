@@ -958,13 +958,11 @@ const onMessageDelta = (state: ParserState, event: AnthropicEvent): StepResult =
 }
 
 const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (state: ParserState) {
-  if (Object.values(state.tools).some((tool) => tool !== undefined))
-    return yield* ProviderShared.eventError(
-      ADAPTER,
-      "Anthropic Messages message_stop arrived before content_block_stop for a pending tool call",
-    )
+  const result = yield* ToolStream.finishAll(ADAPTER, state.tools)
   const events: LLMEvent[] = []
-  const lifecycle = Lifecycle.finish(state.lifecycle, events, {
+  const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
+  events.push(...result.events)
+  const finished = Lifecycle.finish(lifecycle, events, {
     reason: state.pendingFinish?.reason ?? {
       normalized: "unknown",
       raw: undefined,
@@ -972,7 +970,7 @@ const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (st
     usage: state.usage,
     providerMetadata: state.pendingFinish?.providerMetadata,
   })
-  return [{ ...state, lifecycle }, events] satisfies StepResult
+  return [{ ...state, lifecycle: finished, tools: result.tools }, events] satisfies StepResult
 })
 
 // Prefix `error.type` so overloads, rate limits, and quota errors are visible
