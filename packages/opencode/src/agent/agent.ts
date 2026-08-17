@@ -62,6 +62,7 @@ const GeneratedAgent = Schema.Struct({
 })
 
 export interface Interface {
+  defaultModel(): Generator<any, any, any>
   readonly get: (agent: string) => Effect.Effect<Info>
   readonly list: () => Effect.Effect<Info[]>
   readonly defaultInfo: () => Effect.Effect<Info>
