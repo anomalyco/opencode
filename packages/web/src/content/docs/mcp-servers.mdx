@@ -149,6 +149,8 @@ Add remote MCP servers by setting `type` to `"remote"`.
 
 The `url` is the URL of the remote MCP server and with the `headers` option you can pass in a list of headers.
 
+These headers are static — they are resolved once when the config is loaded and applied identically to every outbound request, including SDK handshake traffic. If you need headers that vary per tool call (e.g. forwarding the current `sessionID`, a request-scoped user identity, or a fresh bearer token), use the [`mcp.call.before`](/plugins#forward-session-identity-to-mcp-servers) plugin hook instead.
+
 ---
 
 #### Options
@@ -161,6 +163,25 @@ The `url` is the URL of the remote MCP server and with the `headers` option you 
 | `headers` | Object  |          | Headers to send with the request.                                                   |
 | `oauth`   | Object  |          | OAuth authentication configuration. See [OAuth](#oauth) section below.              |
 | `timeout` | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds). |
+
+---
+
+### Per-call headers
+
+The `headers` above are static — resolved once at config load. For headers that need to vary per tool call (the current `sessionID`, a fresh bearer token, a per-user identity from your environment), use the [`mcp.call.before`](/plugins#mcp-events) plugin hook:
+
+```ts title=".opencode/plugins/mcp-forward-session.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const McpForwardSession: Plugin = async () => ({
+  "mcp.call.before": async (input, output) => {
+    output.headers["x-opencode-session-id"] = input.sessionID
+    output.headers["x-opencode-call-id"] = input.callID
+  },
+})
+```
+
+Register the plugin in your `opencode.json`'s `"plugin"` array. The hook fires only for `callTool` on remote (HTTP/SSE) transports; stdio MCP servers and SDK handshake traffic are unaffected, so per-call values never leak into OAuth probes.
 
 ---
 

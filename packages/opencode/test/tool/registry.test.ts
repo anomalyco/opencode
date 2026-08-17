@@ -67,6 +67,7 @@ const withCodeMode = testEffect(
         tools: () =>
           Effect.succeed({
             weather_current: {
+              server: "weather",
               def: {
                 name: "current",
                 description: "current weather",

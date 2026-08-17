@@ -30,6 +30,7 @@ function mcpTool(
   outputSchema?: Record<string, unknown>,
 ): MCP.McpTool {
   return {
+    server: "test",
     def: { name, description: name, inputSchema, ...(outputSchema ? { outputSchema } : {}) } as MCPToolDef,
     client: {
       callTool: async (params: { arguments?: Record<string, unknown> }) => handler(params.arguments ?? {}),
@@ -197,6 +198,7 @@ describe("code mode execute", () => {
     const filler = "a searchable description of this operation that consumes catalog budget ".repeat(3)
     for (let i = 0; i < 150; i++) {
       tools[`alpha_op_${i}`] = {
+        server: "alpha",
         def: {
           name: `op_${i}`,
           description: `${filler}${i}`,
