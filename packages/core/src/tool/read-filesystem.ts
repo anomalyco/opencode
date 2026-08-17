@@ -160,6 +160,12 @@ export const read = Effect.fn("ReadTool.read")(function* (
     }
   }
 
+  if (first.bytes.length >= first.info.size) {
+    const result = textPage(first.bytes, true, page)
+    if (result === undefined) return yield* Effect.die("Read page did not settle for a complete first chunk")
+    return yield* makeTextPage(input, resource, result, first.bytes.subarray(0, result.consumed).includes(0))
+  }
+
   const offset = page.offset || 1
   const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
   const leaves = [textLeaf(first.bytes)]
