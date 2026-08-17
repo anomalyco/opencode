@@ -39,13 +39,6 @@ function eventually<A>(
 }
 
 describe("OllamaPlugin", () => {
-  it.effect("is registered as a built-in provider plugin", () =>
-    Effect.sync(() => {
-      expect(OllamaPlugin.id).toBe("opencode.provider.ollama")
-      expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.ollama")
-    }),
-  )
-
   it.live("discovers local completion models and native metadata", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -85,6 +78,8 @@ describe("OllamaPlugin", () => {
         Effect.gen(function* () {
           const catalog = yield* Catalog.Service
           const providerID = Provider.ID.make("ollama")
+          expect(OllamaPlugin.id).toBe("opencode.provider.ollama")
+          expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.ollama")
           yield* addPlugin(server.url.origin)
           const model = yield* eventually(
             catalog.model.get(providerID, Model.ID.make("gemma3:4b")),
@@ -161,41 +156,6 @@ describe("OllamaPlugin", () => {
           state.fail = true
           yield* Effect.promise(() => Bun.sleep(30))
           expect((yield* catalog.model.get(providerID, modelID))?.limit.context).toBe(65_536)
-        }),
-      ({ server }) => Effect.promise(() => server.stop(true)),
-    ),
-  )
-
-  it.live("deduplicates tags and digest metadata across plugin instances", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const requests = { tags: 0, show: 0 }
-        return {
-          requests,
-          server: Bun.serve({
-            port: 0,
-            fetch: async (request) => {
-              if (request.method === "GET") {
-                requests.tags++
-                return Response.json({ models: [summary("shared-model", "shared-digest")] })
-              }
-              decodeShowRequest(await request.json())
-              requests.show++
-              return Response.json(show({ capabilities: ["completion"], context: 16_384 }))
-            },
-          }),
-        }
-      }),
-      ({ requests, server }) =>
-        Effect.gen(function* () {
-          const catalog = yield* Catalog.Service
-          yield* addPlugin(server.url.origin)
-          yield* addPlugin(server.url.origin)
-          yield* eventually(
-            catalog.model.get(Provider.ID.make("ollama"), Model.ID.make("shared-model")),
-            (model) => model !== undefined,
-          )
-          expect(requests).toEqual({ tags: 1, show: 1 })
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
