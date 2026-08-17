@@ -35,6 +35,7 @@ export class HttpContext extends Schema.Class<HttpContext>("AI.HttpContext")({
 export class InvalidRequestReason extends Schema.Class<InvalidRequestReason>("AI.Error.InvalidRequest")({
   _tag: Schema.tag("InvalidRequest"),
   message: Schema.String,
+  data: Schema.optional(Schema.Json),
   parameter: Schema.optional(Schema.String),
   classification: Schema.optional(ProviderFailureClassification),
   providerMetadata: Schema.optional(ProviderMetadata),
@@ -55,6 +56,7 @@ export class NoRouteReason extends Schema.Class<NoRouteReason>("AI.Error.NoRoute
 export class AuthenticationReason extends Schema.Class<AuthenticationReason>("AI.Error.Authentication")({
   _tag: Schema.tag("Authentication"),
   message: Schema.String,
+  data: Schema.optional(Schema.Json),
   kind: Schema.Literals(["missing", "invalid", "expired", "insufficient-permissions", "unknown"]),
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),
@@ -63,6 +65,7 @@ export class AuthenticationReason extends Schema.Class<AuthenticationReason>("AI
 export class RateLimitReason extends Schema.Class<RateLimitReason>("AI.Error.RateLimit")({
   _tag: Schema.tag("RateLimit"),
   message: Schema.String,
+  data: Schema.optional(Schema.Json),
   retryAfterMs: Schema.optional(Schema.Number),
   rateLimit: Schema.optional(HttpRateLimitDetails),
   providerMetadata: Schema.optional(ProviderMetadata),
@@ -72,6 +75,7 @@ export class RateLimitReason extends Schema.Class<RateLimitReason>("AI.Error.Rat
 export class QuotaExceededReason extends Schema.Class<QuotaExceededReason>("AI.Error.QuotaExceeded")({
   _tag: Schema.tag("QuotaExceeded"),
   message: Schema.String,
+  data: Schema.optional(Schema.Json),
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),
 }) {}
@@ -79,6 +83,7 @@ export class QuotaExceededReason extends Schema.Class<QuotaExceededReason>("AI.E
 export class ContentPolicyReason extends Schema.Class<ContentPolicyReason>("AI.Error.ContentPolicy")({
   _tag: Schema.tag("ContentPolicy"),
   message: Schema.String,
+  data: Schema.optional(Schema.Json),
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),
 }) {}
@@ -86,6 +91,7 @@ export class ContentPolicyReason extends Schema.Class<ContentPolicyReason>("AI.E
 export class ProviderInternalReason extends Schema.Class<ProviderInternalReason>("AI.Error.ProviderInternal")({
   _tag: Schema.tag("ProviderInternal"),
   message: Schema.String,
+  data: Schema.optional(Schema.Json),
   status: Schema.optional(Schema.Number),
   retryAfterMs: Schema.optional(Schema.Number),
   providerMetadata: Schema.optional(ProviderMetadata),
@@ -129,6 +135,7 @@ export class InvalidProviderOutputReason extends Schema.Class<InvalidProviderOut
 export class UnknownProviderReason extends Schema.Class<UnknownProviderReason>("AI.Error.UnknownProvider")({
   _tag: Schema.tag("UnknownProvider"),
   message: Schema.String,
+  data: Schema.optional(Schema.Json),
   status: Schema.optional(Schema.Number),
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),

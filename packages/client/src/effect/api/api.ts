@@ -478,7 +478,12 @@ export type Endpoint5_31Output =
           readonly location?: Location.Ref | undefined
           readonly data: {
             readonly sessionID: Session.ID
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly data?: Schema.Json | undefined
+            }
           }
         }
       | {
@@ -605,7 +610,12 @@ export type Endpoint5_31Output =
           readonly data: {
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly data?: Schema.Json | undefined
+            }
             readonly cost?: (number & Brand.Brand<"Money.USD">) | undefined
             readonly tokens?:
               | {
@@ -767,7 +777,12 @@ export type Endpoint5_31Output =
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
             readonly id: string
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly data?: Schema.Json | undefined
+            }
             readonly content?:
               | readonly [
                   (
@@ -807,7 +822,12 @@ export type Endpoint5_31Output =
             readonly assistantMessageID: SessionMessage.ID
             readonly attempt: number
             readonly at: number
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly data?: Schema.Json | undefined
+            }
           }
         }
       | {
@@ -848,7 +868,12 @@ export type Endpoint5_31Output =
           readonly data: {
             readonly sessionID: Session.ID
             readonly reason: "auto" | "manual"
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly data?: Schema.Json | undefined
+            }
             readonly inputID?: SessionMessage.ID | undefined
           }
         }

@@ -77,6 +77,7 @@ const CONTENT_POLICY_TEXT = /content[-_\s]?policy|content_filter|safety/i
 
 export interface ProviderFailure {
   readonly message: string
+  readonly data: typeof Schema.Json.Type
   readonly status?: number | undefined
   readonly code?: string | undefined
   readonly retryAfterMs?: number | undefined
@@ -93,7 +94,12 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     .filter((code): code is string => code !== undefined)
     .map((code) => code.toLowerCase())
   const text = body || input.message
-  const common = { message: input.message, providerMetadata: input.providerMetadata, http: input.http }
+  const common = {
+    message: input.message,
+    data: input.data,
+    providerMetadata: input.providerMetadata,
+    http: input.http,
+  }
   const clientScoped = input.status === undefined || (input.status >= 400 && input.status < 500)
 
   if (

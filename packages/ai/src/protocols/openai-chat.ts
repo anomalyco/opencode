@@ -209,16 +209,22 @@ const OpenAIChatChoice = Schema.Struct({
   native_finish_reason: optionalNull(Schema.String),
 })
 
-const OpenAIChatError = Schema.Struct({
-  code: optionalNull(Schema.Union([Schema.String, Schema.Number])),
-  message: Schema.String,
-})
+const OpenAIChatError = Schema.StructWithRest(
+  Schema.Struct({
+    code: optionalNull(Schema.Union([Schema.String, Schema.Number])),
+    message: Schema.String,
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 
-export const OpenAIChatEvent = Schema.Struct({
-  choices: optionalNull(Schema.Array(OpenAIChatChoice)),
-  usage: optionalNull(OpenAIChatUsage),
-  error: optionalNull(OpenAIChatError),
-})
+export const OpenAIChatEvent = Schema.StructWithRest(
+  Schema.Struct({
+    choices: optionalNull(Schema.Array(OpenAIChatChoice)),
+    usage: optionalNull(OpenAIChatUsage),
+    error: optionalNull(OpenAIChatError),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 export type OpenAIChatEvent = Schema.Schema.Type<typeof OpenAIChatEvent>
 type OpenAIChatRequestMessage = LLMRequest["messages"][number]
 
@@ -687,6 +693,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
           message: event.error.message,
           code: event.error.code === undefined || event.error.code === null ? undefined : String(event.error.code),
           status: typeof event.error.code === "number" ? event.error.code : undefined,
+          data: Schema.decodeUnknownSync(Schema.Json)(event),
         }),
       })
     const events: LLMEvent[] = []

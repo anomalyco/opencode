@@ -12,6 +12,11 @@ describe("SessionError", () => {
     const values: SessionError.Error[] = [
       { type: "provider.rate-limit", message: "Slow down" },
       { type: "provider.auth", message: "Authentication failed" },
+      {
+        type: "provider.unknown",
+        message: "Stream error",
+        data: { type: "error", error: { type: "server_error" } },
+      },
       { type: "provider.future-condition", message: "A future provider failure" },
       { type: "unknown", message: "Unexpected" },
     ]

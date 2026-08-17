@@ -216,6 +216,7 @@ export type Finish = Schema.Schema.Type<typeof Finish>
 export const ProviderErrorEvent = Schema.Struct({
   type: Schema.tag("provider-error"),
   message: Schema.String,
+  data: Schema.Json,
   classification: Schema.optional(ProviderFailureClassification),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ProviderError" })

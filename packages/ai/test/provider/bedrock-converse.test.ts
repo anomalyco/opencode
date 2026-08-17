@@ -714,11 +714,15 @@ describe("Bedrock Converse route", () => {
     Effect.gen(function* () {
       const body = concat([
         eventFrame("messageStart", { role: "assistant" }),
-        exceptionFrame("throttlingException", { message: "Slow down" }),
+        exceptionFrame("throttlingException", { message: "Slow down", requestId: "req_123" }),
       ])
       const error = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)), Effect.flip)
 
-      expect(error.reason).toMatchObject({ _tag: "RateLimit", message: "Slow down" })
+      expect(error.reason).toMatchObject({
+        _tag: "RateLimit",
+        message: "Slow down",
+        data: { throttlingException: { message: "Slow down", requestId: "req_123" } },
+      })
     }),
   )
 

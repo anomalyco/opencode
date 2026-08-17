@@ -310,7 +310,7 @@ it.effect("retries after a failed title request", () =>
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Retry this title")
     const title = yield* SessionTitle.Service
-    titleStream = () => Stream.make(LLMEvent.providerError({ message: "Provider unavailable" }))
+    titleStream = () => Stream.make(LLMEvent.providerError({ message: "Provider unavailable", data: {} }))
 
     yield* title.generateForFirstPrompt(sessionID)
     titleStream = successfulTitle

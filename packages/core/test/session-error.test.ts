@@ -61,6 +61,24 @@ describe("toSessionError", () => {
       ).type,
     ).toBe("provider.no-route")
     expect(toSessionError(llm(new UnknownProviderReason({ message: "unknown" }))).type).toBe("provider.unknown")
+    expect(toSessionError(llm(new InvalidProviderOutputReason({ message: "malformed", raw: "not-json" })))).toEqual({
+      type: "provider.invalid-output",
+      message: "malformed",
+      data: "not-json",
+    })
+  })
+
+  test("preserves provider error data", () => {
+    const data = {
+      type: "error",
+      sequence_number: 2,
+      error: { type: "server_error", code: null, message: null },
+    }
+    expect(toSessionError(llm(new UnknownProviderReason({ message: "stream error", data })))).toEqual({
+      type: "provider.unknown",
+      message: "stream error",
+      data,
+    })
   })
 
   test("preserves the permission rejection type without exposing internal fields", () => {

@@ -253,14 +253,17 @@ describe("OpenRouter", () => {
         Effect.provide(
           fixedResponse(
             sseEvents({
-              error: { code: 502, message: "Provider disconnected" },
+              error: { code: 502, message: "Provider disconnected", upstream: "openai" },
             }),
           ),
         ),
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
+      expect(error.reason).toMatchObject({
+        _tag: "ProviderInternal",
+        data: { error: { code: 502, message: "Provider disconnected", upstream: "openai" } },
+      })
       expect(error.message).toContain("Provider disconnected")
     }),
   )

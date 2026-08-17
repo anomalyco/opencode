@@ -2592,13 +2592,25 @@ describe("OpenAI Responses route", () => {
               message: "Something went wrong",
               param: null,
               sequence_number: 1,
+              diagnostic: { region: "us-east" },
             }),
           ),
         ),
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "UnknownProvider", message: "Something went wrong" })
+      expect(error.reason).toMatchObject({
+        _tag: "UnknownProvider",
+        message: "Something went wrong",
+        data: {
+          type: "error",
+          code: null,
+          message: "Something went wrong",
+          param: null,
+          sequence_number: 1,
+          diagnostic: { region: "us-east" },
+        },
+      })
     }),
   )
 

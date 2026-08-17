@@ -1012,7 +1012,12 @@ export const providerFailure = (id: string, event: Event, fallback: string) => {
   return new AIError({
     module: id,
     method: "stream",
-    reason: classifyProviderFailure({ message, code, status }),
+    reason: classifyProviderFailure({
+      message,
+      code,
+      status,
+      data: Schema.decodeUnknownSync(Schema.Json)(event),
+    }),
   })
 }
 

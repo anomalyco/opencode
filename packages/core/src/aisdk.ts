@@ -780,7 +780,10 @@ function llmError(method: string, error: unknown) {
       ? new InvalidProviderOutputReason({ message: error.message })
       : APICallError.isInstance(error)
         ? apiCallErrorReason(error)
-        : new UnknownProviderReason({ message: unknownErrorMessage(error) })
+        : new UnknownProviderReason({
+            message: unknownErrorMessage(error),
+            data: Schema.decodeUnknownSync(Schema.Json)(jsonValue(error)),
+          })
   return new AIError({
     module: "AISDK",
     method,
@@ -792,6 +795,7 @@ function apiCallErrorReason(error: APICallError) {
   const details = providerErrorDetails(error)
   const reason = RequestExecutor.classifyHttpFailure({
     message: details.message,
+    data: Schema.decodeUnknownSync(Schema.Json)(jsonValue(error.data ?? error.responseBody ?? null)),
     url: error.url,
     status: error.statusCode,
     code: details.code,

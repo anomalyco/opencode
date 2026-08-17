@@ -61,5 +61,11 @@ export function toSessionError(cause: unknown): SessionError.Error {
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
   const status =
     ("http" in reason ? reason.http?.response?.status : undefined) ?? ("status" in reason ? reason.status : undefined)
-  return { type, message: reason.message, ...(status === undefined ? {} : { status }) }
+  const data = "data" in reason ? reason.data : reason._tag === "InvalidProviderOutput" ? reason.raw : undefined
+  return {
+    type,
+    message: reason.message,
+    ...(status === undefined ? {} : { status }),
+    ...(data === undefined ? {} : { data }),
+  }
 }

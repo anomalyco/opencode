@@ -487,6 +487,7 @@ it.effect("derives status and code when the AI SDK error message is empty", () =
     expect(projected.type).toBe("provider.invalid-request")
     expect(projected.status).toBe(404)
     expect(projected.message).not.toBe("")
+    expect(projected.data).toEqual({ error: { message: "", code: "not_found" } })
   }),
 )
 
@@ -504,6 +505,7 @@ it.effect("preserves complete HTTP context on AI SDK call errors", () =>
     expect(http?.response?.status).toBe(404)
     expect(http?.response?.headers["authorization"]).toBe("Bearer secret-token")
     expect(http?.body).toBe('{"error":{"message":"","code":"not_found"}}')
+    expect(error.reason).toMatchObject({ data: '{"error":{"message":"","code":"not_found"}}' })
   }),
 )
 

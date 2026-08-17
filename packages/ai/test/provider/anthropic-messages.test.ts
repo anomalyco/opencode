@@ -1031,12 +1031,24 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(
-          fixedResponse(sseEvents({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } })),
+          fixedResponse(
+            sseEvents({
+              type: "error",
+              error: { type: "overloaded_error", message: "Overloaded", request_id: "req_123" },
+            }),
+          ),
         ),
         Effect.flip,
       )
 
-      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", message: "overloaded_error: Overloaded" })
+      expect(error.reason).toMatchObject({
+        _tag: "ProviderInternal",
+        message: "overloaded_error: Overloaded",
+        data: {
+          type: "error",
+          error: { type: "overloaded_error", message: "Overloaded", request_id: "req_123" },
+        },
+      })
     }),
   )
 

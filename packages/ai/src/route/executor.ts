@@ -173,6 +173,7 @@ const statusError =
         reason: classifyProviderFailure({
           status: response.status,
           message: providerMessage(response.status, body),
+          data: body ?? null,
           retryAfterMs: retryAfter,
           rateLimit,
           http: responseHttp({
@@ -193,6 +194,7 @@ const statusError =
 // request headers are empty.
 export const classifyHttpFailure = (input: {
   readonly message: string
+  readonly data: typeof Schema.Json.Type
   readonly url: string
   readonly status?: number | undefined
   readonly code?: string | undefined
@@ -205,6 +207,7 @@ export const classifyHttpFailure = (input: {
   const details = responseBody(input.responseBody)
   return classifyProviderFailure({
     message: input.message,
+    data: input.data,
     status: input.status,
     code: input.code,
     retryAfterMs: retryAfter,

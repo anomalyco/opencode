@@ -528,7 +528,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         return
       case "provider-error":
         providerFailed = true
-        yield* failAssistant({ type: "provider.unknown", message: event.message })
+        yield* failAssistant({ type: "provider.unknown", message: event.message, data: event.data })
         return
     }
   })

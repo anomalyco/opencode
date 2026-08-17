@@ -283,21 +283,27 @@ const AnthropicStreamDelta = Schema.Struct({
   stop_sequence: optionalNull(Schema.String),
 })
 
-const AnthropicEvent = Schema.Struct({
-  type: Schema.String,
-  index: Schema.optional(Schema.Number),
-  message: Schema.optional(Schema.Struct({ usage: Schema.optional(AnthropicUsage) })),
-  content_block: Schema.optional(AnthropicStreamBlock),
-  delta: Schema.optional(AnthropicStreamDelta),
-  usage: Schema.optional(AnthropicUsage),
-  // `type` and `message` are both required per Anthropic's spec, but
-  // OpenAI-compatible proxies and gateway translations occasionally drop one
-  // or the other; mark them optional so a partial payload still parses and
-  // the parser can fall back to whichever field is populated.
-  error: Schema.optional(
-    Schema.Struct({ type: Schema.optional(Schema.String), message: Schema.optional(Schema.String) }),
-  ),
-})
+const AnthropicEvent = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+    index: Schema.optional(Schema.Number),
+    message: Schema.optional(Schema.Struct({ usage: Schema.optional(AnthropicUsage) })),
+    content_block: Schema.optional(AnthropicStreamBlock),
+    delta: Schema.optional(AnthropicStreamDelta),
+    usage: Schema.optional(AnthropicUsage),
+    // `type` and `message` are both required per Anthropic's spec, but
+    // OpenAI-compatible proxies and gateway translations occasionally drop one
+    // or the other; mark them optional so a partial payload still parses and
+    // the parser can fall back to whichever field is populated.
+    error: Schema.optional(
+      Schema.StructWithRest(
+        Schema.Struct({ type: Schema.optional(Schema.String), message: Schema.optional(Schema.String) }),
+        [Schema.Record(Schema.String, Schema.Unknown)],
+      ),
+    ),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 type AnthropicEvent = Schema.Schema.Type<typeof AnthropicEvent>
 
 interface ParserState {
@@ -983,7 +989,11 @@ const onError = (event: AnthropicEvent) =>
   new AIError({
     module: ADAPTER,
     method: "stream",
-    reason: classifyProviderFailure({ message: providerErrorMessage(event), code: event.error?.type }),
+    reason: classifyProviderFailure({
+      message: providerErrorMessage(event),
+      code: event.error?.type,
+      data: Schema.decodeUnknownSync(Schema.Json)(event),
+    }),
   })
 
 const step = (state: ParserState, event: AnthropicEvent) => {

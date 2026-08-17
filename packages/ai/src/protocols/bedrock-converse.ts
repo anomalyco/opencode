@@ -155,69 +155,75 @@ const BedrockUsageSchema = Schema.Struct({
 })
 type BedrockUsageSchema = Schema.Schema.Type<typeof BedrockUsageSchema>
 
-const BedrockStreamException = Schema.Struct({
-  message: Schema.optional(Schema.String),
-  originalMessage: Schema.optional(Schema.String),
-  originalStatusCode: Schema.optional(Schema.Number),
-})
+const BedrockStreamException = Schema.StructWithRest(
+  Schema.Struct({
+    message: Schema.optional(Schema.String),
+    originalMessage: Schema.optional(Schema.String),
+    originalStatusCode: Schema.optional(Schema.Number),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 
 // Streaming event shape — the AWS event stream wraps each JSON payload by its
 // `:event-type` header (e.g. `messageStart`, `contentBlockDelta`). We
 // reconstruct that wrapping in `decodeFrames` below so the event schema can
 // stay a plain discriminated record.
-const BedrockEvent = Schema.Struct({
-  messageStart: Schema.optional(Schema.Struct({ role: Schema.String })),
-  contentBlockStart: Schema.optional(
-    Schema.Struct({
-      contentBlockIndex: Schema.Number,
-      start: Schema.optional(
-        Schema.Struct({
-          toolUse: Schema.optional(Schema.Struct({ toolUseId: Schema.String, name: Schema.String })),
-        }),
-      ),
-    }),
-  ),
-  contentBlockDelta: Schema.optional(
-    Schema.Struct({
-      contentBlockIndex: Schema.Number,
-      delta: Schema.optional(
-        Schema.Struct({
-          text: Schema.optional(Schema.String),
-          toolUse: Schema.optional(Schema.Struct({ input: Schema.String })),
-          reasoningContent: Schema.optional(
-            Schema.Struct({
-              text: Schema.optional(Schema.String),
-              signature: Schema.optional(Schema.String),
-              // Blob fields in Bedrock's JSON event stream are base64 strings.
-              redactedContent: Schema.optional(Schema.String),
-              // Vercel's Bedrock provider exposes the same delta under
-              // Anthropic's shorter `data` spelling.
-              data: Schema.optional(Schema.String),
-            }),
-          ),
-        }),
-      ),
-    }),
-  ),
-  contentBlockStop: Schema.optional(Schema.Struct({ contentBlockIndex: Schema.Number })),
-  messageStop: Schema.optional(
-    Schema.Struct({
-      stopReason: Schema.String,
-      additionalModelResponseFields: Schema.optional(Schema.Unknown),
-    }),
-  ),
-  metadata: Schema.optional(
-    Schema.Struct({
-      usage: Schema.optional(BedrockUsageSchema),
-      metrics: Schema.optional(Schema.Unknown),
-    }),
-  ),
-  internalServerException: Schema.optional(BedrockStreamException),
-  modelStreamErrorException: Schema.optional(BedrockStreamException),
-  validationException: Schema.optional(BedrockStreamException),
-  throttlingException: Schema.optional(BedrockStreamException),
-  serviceUnavailableException: Schema.optional(BedrockStreamException),
-})
+const BedrockEvent = Schema.StructWithRest(
+  Schema.Struct({
+    messageStart: Schema.optional(Schema.Struct({ role: Schema.String })),
+    contentBlockStart: Schema.optional(
+      Schema.Struct({
+        contentBlockIndex: Schema.Number,
+        start: Schema.optional(
+          Schema.Struct({
+            toolUse: Schema.optional(Schema.Struct({ toolUseId: Schema.String, name: Schema.String })),
+          }),
+        ),
+      }),
+    ),
+    contentBlockDelta: Schema.optional(
+      Schema.Struct({
+        contentBlockIndex: Schema.Number,
+        delta: Schema.optional(
+          Schema.Struct({
+            text: Schema.optional(Schema.String),
+            toolUse: Schema.optional(Schema.Struct({ input: Schema.String })),
+            reasoningContent: Schema.optional(
+              Schema.Struct({
+                text: Schema.optional(Schema.String),
+                signature: Schema.optional(Schema.String),
+                // Blob fields in Bedrock's JSON event stream are base64 strings.
+                redactedContent: Schema.optional(Schema.String),
+                // Vercel's Bedrock provider exposes the same delta under
+                // Anthropic's shorter `data` spelling.
+                data: Schema.optional(Schema.String),
+              }),
+            ),
+          }),
+        ),
+      }),
+    ),
+    contentBlockStop: Schema.optional(Schema.Struct({ contentBlockIndex: Schema.Number })),
+    messageStop: Schema.optional(
+      Schema.Struct({
+        stopReason: Schema.String,
+        additionalModelResponseFields: Schema.optional(Schema.Unknown),
+      }),
+    ),
+    metadata: Schema.optional(
+      Schema.Struct({
+        usage: Schema.optional(BedrockUsageSchema),
+        metrics: Schema.optional(Schema.Unknown),
+      }),
+    ),
+    internalServerException: Schema.optional(BedrockStreamException),
+    modelStreamErrorException: Schema.optional(BedrockStreamException),
+    validationException: Schema.optional(BedrockStreamException),
+    throttlingException: Schema.optional(BedrockStreamException),
+    serviceUnavailableException: Schema.optional(BedrockStreamException),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 type BedrockEvent = Schema.Schema.Type<typeof BedrockEvent>
 
 // =============================================================================
@@ -666,6 +672,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
         reason: classifyProviderFailure({
           message: exception[1]?.message ?? exception[1]?.originalMessage ?? "Bedrock Converse stream error",
           code: exception[0],
+          data: Schema.decodeUnknownSync(Schema.Json)(event),
         }),
       })
     }
