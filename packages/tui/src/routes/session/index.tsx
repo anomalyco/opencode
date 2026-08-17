@@ -1193,16 +1193,22 @@ export function Session(props: { verticalTabsWidth: number }) {
                 </Show>
               </scrollbox>
             </box>
-            <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
+            <box height={1} flexShrink={0} flexDirection="row">
               <Show when={awayFromBottom()}>
-                <text
-                  fg={latestHovered() ? theme.text.default : theme.text.subdued}
+                <box
+                  flexGrow={1}
+                  justifyContent="center"
+                  backgroundColor={
+                    latestHovered() ? theme.background.action.primary.hovered : theme.raise(theme.background.default)
+                  }
                   onMouseOver={() => setLatestHovered(true)}
                   onMouseOut={() => setLatestHovered(false)}
                   onMouseUp={toBottom}
                 >
-                  Latest ↓
-                </text>
+                  <text fg={latestHovered() ? theme.text.action.primary.hovered : theme.text.default}>
+                    Viewing earlier messages · Jump to latest ↓
+                  </text>
+                </box>
               </Show>
             </box>
             <box flexShrink={0}>
