@@ -3,8 +3,9 @@
 // catches bugs spanning argv → server boot → routing → instance loading.
 //
 // `serve` is long-lived: the harness returns a handle (url/port/kill/exited)
-// and kills the process when the test scope closes. The OS-assigned port is
-// parsed off the "listening on http://..." line.
+// and kills the process when the test scope closes. The bound port is parsed
+// off the "listening on http://..." line — `--port 0` asks for 4096 first and
+// falls back to an OS-assigned port only if that bind fails.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClient } from "effect/unstable/http"
@@ -24,9 +25,11 @@ describe("opencode serve (subprocess)", () => {
         const client = yield* HttpClient.HttpClient
         const res = yield* client.get(`${server.url}/global/health`)
         expect(res.status).toBe(200)
-        // GlobalHealth schema is { success: true, ... } | { success: false, error }.
+        // GlobalHealth returns { healthy: true, version } (handlers/global.ts).
         // We don't lock in further shape here — any 200 with parseable JSON is
-        // enough proof the routing + auth-bypass + instance loading is alive.
+        // enough proof that argv → server boot → routing works. It does NOT
+        // prove instance loading: `serve` runs with instance: false and the
+        // global health route loads no instance (src/cli/effect-cmd.ts).
         const body = yield* res.json
         expect(body).toBeDefined()
       }),
@@ -40,22 +43,28 @@ describe("opencode serve (subprocess)", () => {
     "kills the subprocess on scope close",
     ({ opencode }) =>
       Effect.gen(function* () {
-        // Inner scope so we can observe `.exited` resolving after it closes.
-        const exitedPromise = yield* Effect.scoped(
+        const client = yield* HttpClient.HttpClient
+        const handle = yield* Effect.scoped(
           Effect.gen(function* () {
             const server = yield* opencode.serve()
-            // Capture the Promise, not the resolved value — scope closes after
-            // this gen returns, at which point the finalizer kills the child.
-            return server.exited
+            const response = yield* client.get(`${server.url}/global/health`)
+            expect(response.status).toBe(200)
+            return { url: server.url, exited: server.exited }
           }),
         )
-        // After scope close: finalizer fired, process must have exited.
-        const code = yield* Effect.promise(() => exitedPromise)
-        // Bun reports the exit code; SIGTERM-killed processes return non-null
-        // (typically 143 on POSIX). We just require resolution within a sane
-        // window — anything else means the kill didn't take.
-        expect(typeof code === "number" || code === null).toBe(true)
-      }),
+
+        yield* Effect.promise(() => handle.exited)
+
+        const request = () =>
+          client.get(`${handle.url}/global/health`).pipe(Effect.exit, Effect.timeout("1 second"))
+        const first = yield* request()
+        yield* Effect.sleep("75 millis")
+        const second = yield* request()
+        yield* Effect.sleep("75 millis")
+        const third = yield* request()
+
+        expect([first, second, third].map((result) => result._tag)).toEqual(["Failure", "Failure", "Failure"])
+      }).pipe(Effect.timeout("20 seconds")),
     60_000,
   )
 })
