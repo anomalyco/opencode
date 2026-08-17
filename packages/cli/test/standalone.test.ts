@@ -9,8 +9,8 @@ test("standalone server exits when its owner is killed", async () => {
     stdout: "pipe",
     stderr: "pipe",
   })
-  const line = await Promise.race([readLine(owner.stdout), Bun.sleep(10_000).then(() => undefined)])
-  const [rawPID, url, status] = line?.split(" ") ?? []
+  const line = await Promise.race([readLine(owner.stdout, "STANDALONE_READY "), Bun.sleep(10_000).then(() => undefined)])
+  const [, rawPID, url, status] = line?.split(" ") ?? []
   const pid = Number(rawPID)
 
   try {
@@ -29,7 +29,7 @@ test("standalone server exits when its owner is killed", async () => {
   }
 })
 
-async function readLine(stream: ReadableStream<Uint8Array>) {
+async function readLine(stream: ReadableStream<Uint8Array>, prefix: string) {
   const reader = stream.getReader()
   const decoder = new TextDecoder()
   const chunks: string[] = []
@@ -38,14 +38,14 @@ async function readLine(stream: ReadableStream<Uint8Array>) {
     if (result.done) break
     chunks.push(decoder.decode(result.value, { stream: true }))
     const output = chunks.join("")
-    const newline = output.indexOf("\n")
-    if (newline !== -1) {
+    const line = output.split("\n").find((line) => line.startsWith(prefix))
+    if (line) {
       reader.releaseLock()
-      return output.slice(0, newline)
+      return line
     }
   }
   reader.releaseLock()
-  return chunks.join("") + decoder.decode()
+  return (chunks.join("") + decoder.decode()).split("\n").find((line) => line.startsWith(prefix))
 }
 
 async function waitForExit(pid: number, attempts = 100): Promise<boolean> {
