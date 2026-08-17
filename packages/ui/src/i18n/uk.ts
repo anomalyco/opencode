@@ -207,7 +207,6 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Відгалузити в нову сесію",
   "ui.message.revertMessage": "Скинути до цього моменту",
   "ui.message.copyResponse": "Копіювати відповідь",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Скопійовано",
   "ui.message.duration.seconds": "{{count}}с",
   "ui.message.duration.minutesSeconds": "{{minutes}}хв {{seconds}}с",

@@ -172,8 +172,6 @@ export const dict: Record<string, string> = {
   "command.session.redo": "पुन: गर्नुहोस्",
   "command.session.redo.description": "अन्तिम अनडू सन्देश पुन: गर्नुहोस्",
   "command.session.compact": "कम्प्याक्ट सत्र",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "प्रसंगको आकार घटाउन सत्रलाई संक्षेप गर्नुहोस्",
   "command.session.fork": "सन्देशबाट फोर्क",
   "command.session.fork.description": "अघिल्लो सन्देशबाट नयाँ सत्र सिर्जना गर्नुहोस्",

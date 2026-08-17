@@ -79,8 +79,6 @@ export const dict = {
   "command.session.redo": "Ripeti",
   "command.session.redo.description": "Ripristina l'ultimo messaggio annullato",
   "command.session.compact": "Compatta sessione",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Riepiloga la sessione per ridurre le dimensioni del contesto",
   "command.session.fork": "Crea sessione dal messaggio",
   "command.session.fork.description": "Crea una nuova sessione da un messaggio precedente",

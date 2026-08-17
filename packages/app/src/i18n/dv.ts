@@ -174,8 +174,6 @@ export const dict = {
   "command.session.redo": "ރީޑޯ",
   "command.session.redo.description": "އެންމެ ފަހުން އަންޑޯން މެސެޖު އަލުން ކުރާށެވެ",
   "command.session.compact": "ކޮމްޕެކްޓް ސެޝަން",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "ކޮންޓެކްސްޓް ސައިޒު ކުޑަކުރުމަށްޓަކައި ސެޝަން ޚުލާޞާކުރުން",
   "command.session.fork": "މެސެޖުން ފޯކް",
   "command.session.fork.description": "ކުރީގެ މެސެޖަކުން އާ ސެޝަނެއް އުފެއްދުން",

@@ -171,8 +171,6 @@ export const dict = {
   "command.session.redo": "გამეორება",
   "command.session.redo.description": "გაამეორეთ ბოლო გაუქმებული შეტყობინება",
   "command.session.compact": "კომპაქტური სესია",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "შეაჯამეთ სესია კონტექსტის ზომის შესამცირებლად",
   "command.session.fork": "შეტყობინებიდან განშტოება",
   "command.session.fork.description": "შექმენით ახალი სესია წინა შეტყობინებისგან",

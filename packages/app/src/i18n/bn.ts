@@ -172,8 +172,6 @@ export const dict: Record<string, string> = {
   "command.session.redo": "আবার করুন",
   "command.session.redo.description": "শেষ পূর্বাবস্থায় ফেরানো বার্তাটি আবার করুন",
   "command.session.compact": "কমপ্যাক্ট সেশন",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "প্রসঙ্গ আকার কমাতে সেশনের সারসংক্ষেপ করুন",
   "command.session.fork": "বার্তা থেকে ফর্ক",
   "command.session.fork.description": "একটি পূর্ববর্তী বার্তা থেকে একটি নতুন সেশন তৈরি করুন",

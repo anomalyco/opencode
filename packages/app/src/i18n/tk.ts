@@ -172,8 +172,6 @@ export const dict = {
   "command.session.redo": "Gaýtadan işlediň",
   "command.session.redo.description": "Iň soňky yzyna gaýtarylan habary yzyna gaýtaryň",
   "command.session.compact": "Ykjam sessiýa",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Kontekstiň ululygyny azaltmak üçin sessiýany jemläň",
   "command.session.fork": "Habardan şahalandyr",
   "command.session.fork.description": "Öňki habardan täze sessiýa dörediň",
