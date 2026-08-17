@@ -1098,7 +1098,8 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} relací bude archivováno.",
   "workspace.reset.note": "Tím se pracovní prostor resetuje tak, aby odpovídal výchozí větvi.",
   "dialog.usageExceeded.dontShowAgain": "Znovu nezobrazovat",
-  "provider.disconnect.toast.noCredentials.description": "Pro {{provider}} nebyly nalezeny žádné vyměnitelné přihlašovací údaje.",
+  "provider.disconnect.toast.noCredentials.description":
+    "Pro {{provider}} nebyly nalezeny žádné vyměnitelné přihlašovací údaje.",
   "provider.disconnect.toast.failed.description": "Odpojení {{provider}} se nezdařilo.",
   "toast.migration.failed.title": "Migrace dat se nezdařila",
   "session.background.moveTasks": "Přesuňte {{tasks}} na pozadí",
@@ -1162,10 +1163,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Poslední aktivní relace",
   "settings.workspaces.deleteAll": "Smazat všechny pracovní prostory",
   "settings.workspaces.deleteAll.confirm": "Smazat všechny pracovní prostory {{count}}?",
-  "settings.workspaces.delete.warning": "Adresář a větev pracovního prostoru budou trvale odstraněny, včetně všech nesloučených změn zobrazených níže.",
-  "settings.workspaces.deleteAll.warning": "Vybrané pracovní prostory {{count}} v {{project}} budou trvale odstraněny, pouze pokud jsou čisté, neaktivní a nemají žádné propojené relace.",
+  "settings.workspaces.delete.warning":
+    "Adresář a větev pracovního prostoru budou trvale odstraněny, včetně všech nesloučených změn zobrazených níže.",
+  "settings.workspaces.deleteAll.warning":
+    "Vybrané pracovní prostory {{count}} v {{project}} budou trvale odstraněny, pouze pokud jsou čisté, neaktivní a nemají žádné propojené relace.",
   "settings.workspaces.delete.blocked.active": "Aktivní pracovní prostor nelze smazat.",
-  "settings.workspaces.delete.blocked.linked": "Propojené relace zůstanou, ale jejich pracovní adresář bude trvale odstraněn.",
+  "settings.workspaces.delete.blocked.linked":
+    "Propojené relace zůstanou, ale jejich pracovní adresář bude trvale odstraněn.",
   "settings.workspaces.default.title": "Výchozí prostředí",
   "settings.workspaces.default.description": "Vyberte, kde začínají nové relace",
   "settings.workspaces.default.lastUsed": "Naposledy použito na projekt",

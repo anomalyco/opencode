@@ -1161,10 +1161,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Сессияи охирини фаъол",
   "settings.workspaces.deleteAll": "Ҳамаи фазоҳои кориро нест кунед",
   "settings.workspaces.deleteAll.confirm": "Ҳамаи {{count}} фазои кориро нест кунед?",
-  "settings.workspaces.delete.warning": "Феҳрист ва шохаи фазои корӣ, аз ҷумла тағйироти якҷонашудаи дар поён нишондодашуда, ба таври доимӣ нест карда мешаванд.",
-  "settings.workspaces.deleteAll.warning": "{{count}} фазои кории интихобшуда дар {{project}} танҳо дар сурате ба таври доимӣ нест карда мешаванд, ки ҳар кадом тоза, ғайрифаъол ва бе сессияи пайваст бошанд.",
+  "settings.workspaces.delete.warning":
+    "Феҳрист ва шохаи фазои корӣ, аз ҷумла тағйироти якҷонашудаи дар поён нишондодашуда, ба таври доимӣ нест карда мешаванд.",
+  "settings.workspaces.deleteAll.warning":
+    "{{count}} фазои кории интихобшуда дар {{project}} танҳо дар сурате ба таври доимӣ нест карда мешаванд, ки ҳар кадом тоза, ғайрифаъол ва бе сессияи пайваст бошанд.",
   "settings.workspaces.delete.blocked.active": "Фазои кории фаъолро нест кардан мумкин нест.",
-  "settings.workspaces.delete.blocked.linked": "Сессияҳои пайваст боқӣ мемонанд, аммо феҳристи кории онҳо ба таври доимӣ нест карда мешавад.",
+  "settings.workspaces.delete.blocked.linked":
+    "Сессияҳои пайваст боқӣ мемонанд, аммо феҳристи кории онҳо ба таври доимӣ нест карда мешавад.",
   "settings.workspaces.default.title": "Муҳити пешфарз",
   "settings.workspaces.default.description": "Интихоб кунед, ки сессияҳои нав дар куҷо оғоз шаванд",
   "settings.workspaces.default.lastUsed": "Охирин истифодашуда барои ҳар лоиҳа",
@@ -1177,13 +1180,15 @@ export const dict = {
   "workspace.lifecycle.created": "Фазои корӣ эҷод шуд",
   "workspace.lifecycle.starting": "Сессия оғоз шуда истодааст",
   "workspace.onboarding.title": "Сессияҳоро бо фазоҳои корӣ ҷудо кунед",
-  "workspace.onboarding.description": "Ҳар кадом checkout-и худро дорад, бинобар ин ҳеҷ чиз ба анбори маҳаллии шумо халал намерасонад",
+  "workspace.onboarding.description":
+    "Ҳар кадом checkout-и худро дорад, бинобар ин ҳеҷ чиз ба анбори маҳаллии шумо халал намерасонад",
   "workspace.lifecycle.moving": "Ба фазои корӣ гузаронида истодааст",
   "workspace.lifecycle.set": "Фазои корӣ таъин шуд",
   "session.summary.title": "Тафсилоти сессия",
   "session.summary.noBranch": "Шоха нест",
   "session.summary.basedOn": "Бар асоси {{branch}}",
-  "provider.disconnect.toast.noCredentials.description": "Барои {{provider}} маълумоти эътимодномаи ҳазфшаванда ёфт нашуд.",
+  "provider.disconnect.toast.noCredentials.description":
+    "Барои {{provider}} маълумоти эътимодномаи ҳазфшаванда ёфт нашуд.",
   "provider.disconnect.toast.failed.description": "Қатъ кардани пайвасти {{provider}} муяссар нашуд.",
   "session.timeline.notice.instructionsUpdated": "Дастурҳо нав карда шуданд: {{sources}}",
   "session.timeline.notice.restart": "Идома пас аз бозоғозӣ",

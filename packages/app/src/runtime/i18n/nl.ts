@@ -1172,10 +1172,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Laatste actieve sessie",
   "settings.workspaces.deleteAll": "Verwijder alle werkruimten",
   "settings.workspaces.deleteAll.confirm": "Alle {{count}}-werkruimten verwijderen?",
-  "settings.workspaces.delete.warning": "De map en vertakking van de werkruimte worden permanent verwijderd, inclusief eventuele niet-samengevoegde wijzigingen die hieronder worden weergegeven.",
-  "settings.workspaces.deleteAll.warning": "De door {{count}} geselecteerde werkruimten in {{project}} worden alleen permanent verwijderd als ze schoon en inactief zijn en geen gekoppelde sessies hebben.",
+  "settings.workspaces.delete.warning":
+    "De map en vertakking van de werkruimte worden permanent verwijderd, inclusief eventuele niet-samengevoegde wijzigingen die hieronder worden weergegeven.",
+  "settings.workspaces.deleteAll.warning":
+    "De door {{count}} geselecteerde werkruimten in {{project}} worden alleen permanent verwijderd als ze schoon en inactief zijn en geen gekoppelde sessies hebben.",
   "settings.workspaces.delete.blocked.active": "De actieve werkruimte kan niet worden verwijderd.",
-  "settings.workspaces.delete.blocked.linked": "Gekoppelde sessies blijven bestaan, maar hun werkmap wordt permanent verwijderd.",
+  "settings.workspaces.delete.blocked.linked":
+    "Gekoppelde sessies blijven bestaan, maar hun werkmap wordt permanent verwijderd.",
   "settings.workspaces.default.title": "Standaardomgeving",
   "settings.workspaces.default.description": "Kies waar nieuwe sessies beginnen",
   "settings.workspaces.default.lastUsed": "Laatst gebruikt per project",
@@ -1188,7 +1191,8 @@ export const dict = {
   "workspace.lifecycle.created": "Werkruimte gecreëerd",
   "workspace.lifecycle.starting": "Startsessie",
   "workspace.onboarding.title": "Isoleer sessies met werkruimten",
-  "workspace.onboarding.description": "Elke sessie krijgt een eigen checkout, zodat niets de lokale repository verstoort",
+  "workspace.onboarding.description":
+    "Elke sessie krijgt een eigen checkout, zodat niets de lokale repository verstoort",
   "workspace.lifecycle.moving": "Verplaatsen naar werkruimte",
   "workspace.lifecycle.set": "Werkruimte ingesteld",
   "session.summary.title": "Sessiedetails",

@@ -1099,7 +1099,8 @@ export const dict = {
   "workspace.reset.archived.one": "1 سیشن آرکائیو کیتا جائے گا۔",
   "workspace.reset.archived.many": "{{count}} سیشن آرکائیو کیتے جان گے۔",
   "workspace.reset.note": "ایہ ورک اسپیس نو ڈیفالٹ برانچ نال ملاون لئی ری سیٹ کرے گا۔",
-  "provider.disconnect.toast.noCredentials.description": "\u2068{{provider}}\u2069 لئی ہٹاؤن جوگ کوئی اسناد نئیں لبھیاں۔",
+  "provider.disconnect.toast.noCredentials.description":
+    "\u2068{{provider}}\u2069 لئی ہٹاؤن جوگ کوئی اسناد نئیں لبھیاں۔",
   "provider.disconnect.toast.failed.description": "\u2068{{provider}}\u2069 نالوں کنکشن توڑن چ ناکامی ہوئی۔",
   "toast.migration.failed.title": "ڈیٹا منتقل نئیں ہو سکیا",
   "session.background.moveTasks": "\u2068{{tasks}}\u2069 نوں پس منظر چ لے جاؤ",
@@ -1163,10 +1164,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "آخری فعال سیشن",
   "settings.workspaces.deleteAll": "ساریاں ورک سپیس مٹاؤ",
   "settings.workspaces.deleteAll.confirm": "ساریاں {{count}} ورک سپیس مٹا دیواں؟",
-  "settings.workspaces.delete.warning": "ورک سپیس ڈائریکٹری تے برانچ پکے طور تے ہٹا دتے جان گے، تھلے وکھائیاں غیر ضم شدہ تبدیلیاں سمیت۔",
-  "settings.workspaces.deleteAll.warning": "\u2068{{project}}\u2069 چ چُݨیاں {{count}} ورک سپیسز صرف اوہدوں پکے طور تے ہٹائیاں جان گیاں جدوں ہر اک صاف، غیر فعال تے کسے سیشن نال جڑی نہ ہووے۔",
+  "settings.workspaces.delete.warning":
+    "ورک سپیس ڈائریکٹری تے برانچ پکے طور تے ہٹا دتے جان گے، تھلے وکھائیاں غیر ضم شدہ تبدیلیاں سمیت۔",
+  "settings.workspaces.deleteAll.warning":
+    "\u2068{{project}}\u2069 چ چُݨیاں {{count}} ورک سپیسز صرف اوہدوں پکے طور تے ہٹائیاں جان گیاں جدوں ہر اک صاف، غیر فعال تے کسے سیشن نال جڑی نہ ہووے۔",
   "settings.workspaces.delete.blocked.active": "فعال ورک سپیس نوں مٹایا نئیں جا سکدا۔",
-  "settings.workspaces.delete.blocked.linked": "جڑے سیشن موجود رہن گے، پر اوہناں دی ورکنگ ڈائریکٹری پکے طور تے ہٹا دتی جائے گی۔",
+  "settings.workspaces.delete.blocked.linked":
+    "جڑے سیشن موجود رہن گے، پر اوہناں دی ورکنگ ڈائریکٹری پکے طور تے ہٹا دتی جائے گی۔",
   "settings.workspaces.default.title": "ڈیفالٹ ماحول",
   "settings.workspaces.default.description": "چنو نویں سیشن کتھے شروع ہون",
   "settings.workspaces.default.lastUsed": "ہر پروجیکٹ چ آخری واری ورتیا",
@@ -1179,7 +1183,8 @@ export const dict = {
   "workspace.lifecycle.created": "ورک سپیس بن گئی",
   "workspace.lifecycle.starting": "سیشن شروع ہو رہیا اے",
   "workspace.onboarding.title": "ورک سپیس نال سیشن وکھرے رکھو",
-  "workspace.onboarding.description": "ہر اک نوں اپنا چیک آؤٹ ملدا اے، ایس لئی تہاڈی مقامی ریپوزٹری چ کوئی مداخلت نئیں ہوندی",
+  "workspace.onboarding.description":
+    "ہر اک نوں اپنا چیک آؤٹ ملدا اے، ایس لئی تہاڈی مقامی ریپوزٹری چ کوئی مداخلت نئیں ہوندی",
   "workspace.lifecycle.moving": "ورک سپیس چ لے جایا جا رہیا اے",
   "workspace.lifecycle.set": "ورک سپیس سیٹ ہو گئی",
   "session.summary.title": "سیشن دیاں تفصیلاں",

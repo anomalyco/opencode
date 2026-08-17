@@ -1180,10 +1180,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Última sessão ativa",
   "settings.workspaces.deleteAll": "Excluir todos os espaços de trabalho",
   "settings.workspaces.deleteAll.confirm": "Excluir todos os espaços de trabalho {{count}}?",
-  "settings.workspaces.delete.warning": "O diretório e a ramificação do espaço de trabalho serão removidos permanentemente, incluindo quaisquer alterações não mescladas mostradas abaixo.",
-  "settings.workspaces.deleteAll.warning": "Os espaços de trabalho selecionados {{count}} em {{project}} serão removidos permanentemente somente se cada um estiver limpo, inativo e não tiver sessões vinculadas.",
+  "settings.workspaces.delete.warning":
+    "O diretório e a ramificação do espaço de trabalho serão removidos permanentemente, incluindo quaisquer alterações não mescladas mostradas abaixo.",
+  "settings.workspaces.deleteAll.warning":
+    "Os espaços de trabalho selecionados {{count}} em {{project}} serão removidos permanentemente somente se cada um estiver limpo, inativo e não tiver sessões vinculadas.",
   "settings.workspaces.delete.blocked.active": "O espaço de trabalho ativo não pode ser excluído.",
-  "settings.workspaces.delete.blocked.linked": "As sessões vinculadas permanecerão, mas seu diretório de trabalho será removido permanentemente.",
+  "settings.workspaces.delete.blocked.linked":
+    "As sessões vinculadas permanecerão, mas seu diretório de trabalho será removido permanentemente.",
   "settings.workspaces.default.title": "Ambiente padrão",
   "settings.workspaces.default.description": "Escolha onde as novas sessões começam",
   "settings.workspaces.default.lastUsed": "Última utilização por projeto",
@@ -1196,7 +1199,8 @@ export const dict = {
   "workspace.lifecycle.created": "Espaço de trabalho criado",
   "workspace.lifecycle.starting": "Iniciando sessão",
   "workspace.onboarding.title": "Isolar sessões com espaços de trabalho",
-  "workspace.onboarding.description": "Cada um recebe seu próprio checkout, então nada interfere no seu repositório local",
+  "workspace.onboarding.description":
+    "Cada um recebe seu próprio checkout, então nada interfere no seu repositório local",
   "workspace.lifecycle.moving": "Movendo para o espaço de trabalho",
   "workspace.lifecycle.set": "Espaço de trabalho definido",
   "session.summary.title": "Detalhes da sessão",

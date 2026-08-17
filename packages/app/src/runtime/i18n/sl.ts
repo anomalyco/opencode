@@ -1097,7 +1097,8 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} seje bodo arhivirane.",
   "workspace.reset.note": "To bo ponastavilo delovni prostor, da bo ustrezal privzeti veji.",
   "dialog.usageExceeded.dontShowAgain": "Ne prikaži več",
-  "provider.disconnect.toast.noCredentials.description": "Za {{provider}} ni bilo mogoče najti odstranljivih poverilnic.",
+  "provider.disconnect.toast.noCredentials.description":
+    "Za {{provider}} ni bilo mogoče najti odstranljivih poverilnic.",
   "provider.disconnect.toast.failed.description": "Odklop {{provider}} ni uspel.",
   "toast.migration.failed.title": "Selitev podatkov ni uspela",
   "session.background.moveTasks": "Premakni {{tasks}} v ozadje",
@@ -1161,10 +1162,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Zadnja aktivna seja",
   "settings.workspaces.deleteAll": "Izbriši vse delovne prostore",
   "settings.workspaces.deleteAll.confirm": "Želite izbrisati vse delovne prostore {{count}}?",
-  "settings.workspaces.delete.warning": "Imenik in veja delovnega prostora bosta trajno odstranjena, vključno z vsemi nespojenimi spremembami, prikazanimi spodaj.",
-  "settings.workspaces.deleteAll.warning": "Izbrani delovni prostori {{count}} v {{project}} bodo trajno odstranjeni le, če je vsak čist, nedejaven in nima povezanih sej.",
+  "settings.workspaces.delete.warning":
+    "Imenik in veja delovnega prostora bosta trajno odstranjena, vključno z vsemi nespojenimi spremembami, prikazanimi spodaj.",
+  "settings.workspaces.deleteAll.warning":
+    "Izbrani delovni prostori {{count}} v {{project}} bodo trajno odstranjeni le, če je vsak čist, nedejaven in nima povezanih sej.",
   "settings.workspaces.delete.blocked.active": "Aktivnega delovnega prostora ni mogoče izbrisati.",
-  "settings.workspaces.delete.blocked.linked": "Povezane seje bodo ostale, vendar bo njihov delovni imenik trajno odstranjen.",
+  "settings.workspaces.delete.blocked.linked":
+    "Povezane seje bodo ostale, vendar bo njihov delovni imenik trajno odstranjen.",
   "settings.workspaces.default.title": "Privzeto okolje",
   "settings.workspaces.default.description": "Izberite, kje se začnejo nove seje",
   "settings.workspaces.default.lastUsed": "Nazadnje uporabljeno na projekt",

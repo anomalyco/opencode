@@ -1106,7 +1106,8 @@ export const dict = {
   "desktop.picker.error.sizeLimit": "Valitut liitteet ylittävät {{limit}} Mt:n rajan",
   "command.logs.export": "Vie lokit",
 
-  "provider.disconnect.toast.noCredentials.description": "{{provider}}:lle ei löytynyt irrotettavia kirjautumistietoja.",
+  "provider.disconnect.toast.noCredentials.description":
+    "{{provider}}:lle ei löytynyt irrotettavia kirjautumistietoja.",
   "provider.disconnect.toast.failed.description": "{{provider}}:n irrottaminen epäonnistui.",
   "toast.migration.failed.title": "Tietojen siirto epäonnistui",
   "session.background.moveTasks": "Siirrä {{tasks}} taustalle",
@@ -1170,10 +1171,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Viimeinen aktiivinen istunto",
   "settings.workspaces.deleteAll": "Poista kaikki työtilat",
   "settings.workspaces.deleteAll.confirm": "Poistetaanko kaikki {{count}}-työtilat?",
-  "settings.workspaces.delete.warning": "Työtilan hakemisto ja haara poistetaan pysyvästi, mukaan lukien alla näkyvät yhdistämättömät muutokset.",
-  "settings.workspaces.deleteAll.warning": "{{count}}:n valitut työtilat {{project}}:ssä poistetaan pysyvästi vain, jos jokainen on puhdas, ei-aktiivinen eikä siinä ole linkitettyjä istuntoja.",
+  "settings.workspaces.delete.warning":
+    "Työtilan hakemisto ja haara poistetaan pysyvästi, mukaan lukien alla näkyvät yhdistämättömät muutokset.",
+  "settings.workspaces.deleteAll.warning":
+    "{{count}}:n valitut työtilat {{project}}:ssä poistetaan pysyvästi vain, jos jokainen on puhdas, ei-aktiivinen eikä siinä ole linkitettyjä istuntoja.",
   "settings.workspaces.delete.blocked.active": "Aktiivista työtilaa ei voi poistaa.",
-  "settings.workspaces.delete.blocked.linked": "Linkitetyt istunnot säilyvät, mutta niiden työhakemisto poistetaan pysyvästi.",
+  "settings.workspaces.delete.blocked.linked":
+    "Linkitetyt istunnot säilyvät, mutta niiden työhakemisto poistetaan pysyvästi.",
   "settings.workspaces.default.title": "Oletusympäristö",
   "settings.workspaces.default.description": "Valitse, missä uudet istunnot alkavat",
   "settings.workspaces.default.lastUsed": "Viimeksi käytetty projektia kohti",

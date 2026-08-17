@@ -1168,7 +1168,8 @@ export const dict = {
   "session.background.shell.two": "{{count}} פקודות מעטפת",
   "session.background.subagent.two": "{{count}} סוכני משנה",
   "toast.migration.failed.title": "העברת הנתונים נכשלה",
-  "provider.disconnect.toast.noCredentials.description": "לא נמצאו פרטי התחברות שניתן להסיר עבור \u2068{{provider}}\u2069.",
+  "provider.disconnect.toast.noCredentials.description":
+    "לא נמצאו פרטי התחברות שניתן להסיר עבור \u2068{{provider}}\u2069.",
   "provider.disconnect.toast.failed.description": "הניתוק של \u2068{{provider}}\u2069 נכשל.",
   "session.timeline.notice.instructionsUpdated": "ההוראות עודכנו: \u2068{{sources}}\u2069",
   "session.timeline.notice.restart": "ממשיך לאחר הפעלה מחדש",

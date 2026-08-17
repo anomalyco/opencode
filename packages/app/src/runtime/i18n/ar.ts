@@ -1202,7 +1202,8 @@ export const dict = {
   "session.summary.title": "تفاصيل الجلسة",
   "session.summary.noBranch": "لا يوجد فرع",
   "session.summary.basedOn": "استنادًا إلى \u2068{{branch}}\u2069",
-  "provider.disconnect.toast.noCredentials.description": "لم يتم العثور على بيانات اعتماد قابلة للإزالة لـ \u2068{{provider}}\u2069.",
+  "provider.disconnect.toast.noCredentials.description":
+    "لم يتم العثور على بيانات اعتماد قابلة للإزالة لـ \u2068{{provider}}\u2069.",
   "provider.disconnect.toast.failed.description": "فشل قطع الاتصال بـ \u2068{{provider}}\u2069.",
   "session.timeline.notice.instructionsUpdated": "تم تحديث التعليمات: \u2068{{sources}}\u2069",
   "session.timeline.notice.restart": "المتابعة بعد إعادة التشغيل",

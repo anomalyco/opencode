@@ -220,8 +220,4 @@ export const dict: Record<Keys, string> = {
   "ui.messagePart.context.match.one": "({{count}} treff)",
   "ui.messagePart.context.match.other": "({{count}} treff)",
   "ui.tool.execute": "Kjør",
-
-
-
-
 }

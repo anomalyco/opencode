@@ -1117,8 +1117,7 @@ export const dict = {
   "workspace.lifecycle.created": "Munkaterület létrehozva",
   "workspace.lifecycle.starting": "Munkamenet indítása",
   "workspace.onboarding.title": "Munkamenetek elkülönítése munkaterületekkel",
-  "workspace.onboarding.description":
-    "Mindegyik saját checkoutot kap, így semmi sem zavarja a helyi adattárat",
+  "workspace.onboarding.description": "Mindegyik saját checkoutot kap, így semmi sem zavarja a helyi adattárat",
   "workspace.lifecycle.moving": "Áthelyezés munkaterületre",
   "workspace.lifecycle.set": "Munkaterület beállítva",
   "session.summary.title": "Munkamenet részletei",
@@ -1149,7 +1148,8 @@ export const dict = {
   "workspace.reset.archived.many": "A {{count}} munkamenetek archiválva lesznek.",
   "workspace.reset.note": "Ezzel visszaállítja a munkaterületet, hogy megfeleljen az alapértelmezett ágnak.",
   "dialog.usageExceeded.dontShowAgain": "Ne jelenjen meg újra",
-  "provider.disconnect.toast.noCredentials.description": "Nem találhatók eltávolítható hitelesítő adatok a következőhöz: {{provider}}.",
+  "provider.disconnect.toast.noCredentials.description":
+    "Nem találhatók eltávolítható hitelesítő adatok a következőhöz: {{provider}}.",
   "provider.disconnect.toast.failed.description": "Nem sikerült leválasztani a következőt: {{provider}}.",
   "toast.migration.failed.title": "Az adatok áttelepítése nem sikerült",
   "session.background.moveTasks": "{{tasks}} áthelyezése a háttérbe",

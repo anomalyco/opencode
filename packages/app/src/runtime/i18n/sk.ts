@@ -1157,10 +1157,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Posledná aktívna relácia",
   "settings.workspaces.deleteAll": "Odstráňte všetky pracovné priestory",
   "settings.workspaces.deleteAll.confirm": "Odstrániť všetky pracovné priestory {{count}}?",
-  "settings.workspaces.delete.warning": "Adresár pracovného priestoru a vetva budú natrvalo odstránené, vrátane všetkých nezlúčených zmien zobrazených nižšie.",
-  "settings.workspaces.deleteAll.warning": "Vybrané pracovné priestory {{count}} v {{project}} budú natrvalo odstránené, iba ak sú čisté, neaktívne a nemajú žiadne prepojené relácie.",
+  "settings.workspaces.delete.warning":
+    "Adresár pracovného priestoru a vetva budú natrvalo odstránené, vrátane všetkých nezlúčených zmien zobrazených nižšie.",
+  "settings.workspaces.deleteAll.warning":
+    "Vybrané pracovné priestory {{count}} v {{project}} budú natrvalo odstránené, iba ak sú čisté, neaktívne a nemajú žiadne prepojené relácie.",
   "settings.workspaces.delete.blocked.active": "Aktívny pracovný priestor nie je možné odstrániť.",
-  "settings.workspaces.delete.blocked.linked": "Prepojené relácie zostanú, ale ich pracovný adresár bude natrvalo odstránený.",
+  "settings.workspaces.delete.blocked.linked":
+    "Prepojené relácie zostanú, ale ich pracovný adresár bude natrvalo odstránený.",
   "settings.workspaces.default.title": "Predvolené prostredie",
   "settings.workspaces.default.description": "Vyberte, kde sa začínajú nové relácie",
   "settings.workspaces.default.lastUsed": "Naposledy použité na projekt",
@@ -1173,7 +1176,8 @@ export const dict = {
   "workspace.lifecycle.created": "Pracovný priestor bol vytvorený",
   "workspace.lifecycle.starting": "Začiatok relácie",
   "workspace.onboarding.title": "Izolujte relácie s pracovnými priestormi",
-  "workspace.onboarding.description": "Každá získa vlastnú pracovnú kópiu, takže nič nezasahuje do lokálneho repozitára",
+  "workspace.onboarding.description":
+    "Každá získa vlastnú pracovnú kópiu, takže nič nezasahuje do lokálneho repozitára",
   "workspace.lifecycle.moving": "Presun do pracovného priestoru",
   "workspace.lifecycle.set": "Pracovný priestor nastavený",
   "session.summary.title": "Podrobnosti o relácii",

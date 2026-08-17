@@ -1162,10 +1162,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Последња активна сесија",
   "settings.workspaces.deleteAll": "Избришите све радне просторе",
   "settings.workspaces.deleteAll.confirm": "Избрисати све {{count}} радних простора?",
-  "settings.workspaces.delete.warning": "Директоријум и грана радног простора ће бити трајно уклоњени, укључујући све необјављене промене приказане у наставку.",
-  "settings.workspaces.deleteAll.warning": "Изабрани радни простори {{count}} у {{project}} биће трајно уклоњени само ако је сваки чист, неактиван и нема повезаних сесија.",
+  "settings.workspaces.delete.warning":
+    "Директоријум и грана радног простора ће бити трајно уклоњени, укључујући све необјављене промене приказане у наставку.",
+  "settings.workspaces.deleteAll.warning":
+    "Изабрани радни простори {{count}} у {{project}} биће трајно уклоњени само ако је сваки чист, неактиван и нема повезаних сесија.",
   "settings.workspaces.delete.blocked.active": "Активни радни простор се не може избрисати.",
-  "settings.workspaces.delete.blocked.linked": "Повезане сесије ће остати, али ће њихов радни именик бити трајно уклоњен.",
+  "settings.workspaces.delete.blocked.linked":
+    "Повезане сесије ће остати, али ће њихов радни именик бити трајно уклоњен.",
   "settings.workspaces.default.title": "Подразумевано окружење",
   "settings.workspaces.default.description": "Изаберите где почињу нове сесије",
   "settings.workspaces.default.lastUsed": "Последње коришћено по пројекту",

@@ -1151,7 +1151,8 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} θα αρχειοθετηθούν οι περίοδοι σύνδεσης.",
   "workspace.reset.note": "Αυτό θα επαναφέρει τον χώρο εργασίας ώστε να ταιριάζει με τον προεπιλεγμένο κλάδο.",
   "dialog.usageExceeded.dontShowAgain": "Να μην εμφανιστεί ξανά",
-  "provider.disconnect.toast.noCredentials.description": "Δεν βρέθηκαν διαπιστευτήρια που μπορούν να αφαιρεθούν για τον πάροχο {{provider}}.",
+  "provider.disconnect.toast.noCredentials.description":
+    "Δεν βρέθηκαν διαπιστευτήρια που μπορούν να αφαιρεθούν για τον πάροχο {{provider}}.",
   "provider.disconnect.toast.failed.description": "Αποτυχία αποσύνδεσης του παρόχου {{provider}}.",
   "toast.migration.failed.title": "Η μετεγκατάσταση δεδομένων απέτυχε",
   "session.background.moveTasks": "Μετακίνηση {{tasks}} στο παρασκήνιο",

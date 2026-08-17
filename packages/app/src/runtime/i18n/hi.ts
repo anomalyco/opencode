@@ -1160,10 +1160,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "अंतिम सक्रिय सेशन",
   "settings.workspaces.deleteAll": "सभी वर्कस्पेस हटाएँ",
   "settings.workspaces.deleteAll.confirm": "सभी {{count}} वर्कस्पेस हटाएँ?",
-  "settings.workspaces.delete.warning": "नीचे दिखाए गए मर्ज न किए गए परिवर्तनों सहित वर्कस्पेस निर्देशिका और शाखा स्थायी रूप से हटा दी जाएगी।",
-  "settings.workspaces.deleteAll.warning": "{{project}} में चुने गए {{count}} वर्कस्पेस तभी स्थायी रूप से हटेंगे जब प्रत्येक साफ़, निष्क्रिय और किसी सेशन से जुड़ा न हो।",
+  "settings.workspaces.delete.warning":
+    "नीचे दिखाए गए मर्ज न किए गए परिवर्तनों सहित वर्कस्पेस निर्देशिका और शाखा स्थायी रूप से हटा दी जाएगी।",
+  "settings.workspaces.deleteAll.warning":
+    "{{project}} में चुने गए {{count}} वर्कस्पेस तभी स्थायी रूप से हटेंगे जब प्रत्येक साफ़, निष्क्रिय और किसी सेशन से जुड़ा न हो।",
   "settings.workspaces.delete.blocked.active": "सक्रिय वर्कस्पेस हटाया नहीं जा सकता।",
-  "settings.workspaces.delete.blocked.linked": "जुड़े सेशन बने रहेंगे, लेकिन उनकी कार्यशील निर्देशिका स्थायी रूप से हटा दी जाएगी।",
+  "settings.workspaces.delete.blocked.linked":
+    "जुड़े सेशन बने रहेंगे, लेकिन उनकी कार्यशील निर्देशिका स्थायी रूप से हटा दी जाएगी।",
   "settings.workspaces.default.title": "डिफ़ॉल्ट परिवेश",
   "settings.workspaces.default.description": "चुनें कि नए सेशन कहाँ शुरू हों",
   "settings.workspaces.default.lastUsed": "हर प्रोजेक्ट में अंतिम बार उपयोग किया गया",
@@ -1176,7 +1179,8 @@ export const dict = {
   "workspace.lifecycle.created": "वर्कस्पेस बनाया गया",
   "workspace.lifecycle.starting": "सेशन शुरू हो रहा है",
   "workspace.onboarding.title": "वर्कस्पेस से सेशन अलग रखें",
-  "workspace.onboarding.description": "हर सेशन को अपना चेकआउट मिलता है, इसलिए आपकी स्थानीय रिपॉजिटरी में कोई हस्तक्षेप नहीं होता",
+  "workspace.onboarding.description":
+    "हर सेशन को अपना चेकआउट मिलता है, इसलिए आपकी स्थानीय रिपॉजिटरी में कोई हस्तक्षेप नहीं होता",
   "workspace.lifecycle.moving": "वर्कस्पेस में ले जाया जा रहा है",
   "workspace.lifecycle.set": "वर्कस्पेस सेट किया गया",
   "session.summary.title": "सेशन विवरण",

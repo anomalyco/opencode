@@ -1098,7 +1098,8 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} sessioner kommer att arkiveras.",
   "workspace.reset.note": "Detta kommer att återställa arbetsytan så att den matchar standardgrenen.",
 
-  "provider.disconnect.toast.noCredentials.description": "Inga flyttbara autentiseringsuppgifter hittades för {{provider}}.",
+  "provider.disconnect.toast.noCredentials.description":
+    "Inga flyttbara autentiseringsuppgifter hittades för {{provider}}.",
   "provider.disconnect.toast.failed.description": "Det gick inte att koppla från {{provider}}.",
   "toast.migration.failed.title": "Datamigrering misslyckades",
   "session.background.moveTasks": "Flytta {{tasks}} till bakgrunden",
@@ -1162,10 +1163,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Sista aktiva sessionen",
   "settings.workspaces.deleteAll": "Ta bort alla arbetsytor",
   "settings.workspaces.deleteAll.confirm": "Ta bort alla {{count}}-arbetsytor?",
-  "settings.workspaces.delete.warning": "Arbetsytans katalog och filial kommer att tas bort permanent, inklusive alla osammanfogade ändringar som visas nedan.",
-  "settings.workspaces.deleteAll.warning": "De {{count}} valda arbetsytorna i {{project}} kommer att tas bort permanent endast om var och en är ren, inaktiv och inte har några länkade sessioner.",
+  "settings.workspaces.delete.warning":
+    "Arbetsytans katalog och filial kommer att tas bort permanent, inklusive alla osammanfogade ändringar som visas nedan.",
+  "settings.workspaces.deleteAll.warning":
+    "De {{count}} valda arbetsytorna i {{project}} kommer att tas bort permanent endast om var och en är ren, inaktiv och inte har några länkade sessioner.",
   "settings.workspaces.delete.blocked.active": "Den aktiva arbetsytan kan inte tas bort.",
-  "settings.workspaces.delete.blocked.linked": "Länkade sessioner kommer att finnas kvar, men deras arbetskatalog kommer att tas bort permanent.",
+  "settings.workspaces.delete.blocked.linked":
+    "Länkade sessioner kommer att finnas kvar, men deras arbetskatalog kommer att tas bort permanent.",
   "settings.workspaces.default.title": "Standardmiljö",
   "settings.workspaces.default.description": "Välj var nya sessioner börjar",
   "settings.workspaces.default.lastUsed": "Senast använd per projekt",

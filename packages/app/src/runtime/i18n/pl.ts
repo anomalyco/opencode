@@ -1181,10 +1181,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Ostatnia aktywna sesja",
   "settings.workspaces.deleteAll": "Usuń wszystkie obszary robocze",
   "settings.workspaces.deleteAll.confirm": "Usunąć wszystkie obszary robocze {{count}}?",
-  "settings.workspaces.delete.warning": "Katalog i gałąź obszaru roboczego zostaną trwale usunięte, łącznie ze wszystkimi niezintegrowanymi zmianami pokazanymi poniżej.",
-  "settings.workspaces.deleteAll.warning": "Wybrane obszary robocze {{count}} w {{project}} zostaną trwale usunięte tylko wtedy, gdy każdy z nich jest czysty, nieaktywny i nie ma połączonych sesji.",
+  "settings.workspaces.delete.warning":
+    "Katalog i gałąź obszaru roboczego zostaną trwale usunięte, łącznie ze wszystkimi niezintegrowanymi zmianami pokazanymi poniżej.",
+  "settings.workspaces.deleteAll.warning":
+    "Wybrane obszary robocze {{count}} w {{project}} zostaną trwale usunięte tylko wtedy, gdy każdy z nich jest czysty, nieaktywny i nie ma połączonych sesji.",
   "settings.workspaces.delete.blocked.active": "Nie można usunąć aktywnego obszaru roboczego.",
-  "settings.workspaces.delete.blocked.linked": "Połączone sesje pozostaną, ale ich katalog roboczy zostanie trwale usunięty.",
+  "settings.workspaces.delete.blocked.linked":
+    "Połączone sesje pozostaną, ale ich katalog roboczy zostanie trwale usunięty.",
   "settings.workspaces.default.title": "Domyślne środowisko",
   "settings.workspaces.default.description": "Wybierz miejsce rozpoczęcia nowych sesji",
   "settings.workspaces.default.lastUsed": "Ostatnio użyte w ramach projektu",
@@ -1197,7 +1200,8 @@ export const dict = {
   "workspace.lifecycle.created": "Utworzono obszar roboczy",
   "workspace.lifecycle.starting": "Rozpoczęcie sesji",
   "workspace.onboarding.title": "Izoluj sesje za pomocą obszarów roboczych",
-  "workspace.onboarding.description": "Każda otrzymuje własną kopię roboczą, dzięki czemu nic nie koliduje z lokalnym repozytorium",
+  "workspace.onboarding.description":
+    "Każda otrzymuje własną kopię roboczą, dzięki czemu nic nie koliduje z lokalnym repozytorium",
   "workspace.lifecycle.moving": "Przechodzę do obszaru roboczego",
   "workspace.lifecycle.set": "Obszar roboczy ustawiony",
   "session.summary.title": "Szczegóły sesji",

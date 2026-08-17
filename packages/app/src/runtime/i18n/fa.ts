@@ -1156,7 +1156,8 @@ export const dict = {
   "settings.workspaces.deleteAll.warning":
     "{{count}} فضای کاری انتخاب‌شده در \u2068{{project}}\u2069 تنها در صورتی برای همیشه حذف می‌شوند که همگی پاک و غیرفعال باشند و جلسه پیوندشده‌ای نداشته باشند.",
   "settings.workspaces.delete.blocked.active": "فضای کاری فعال را نمی‌توان حذف کرد.",
-  "settings.workspaces.delete.blocked.linked": "جلسه‌های پیوندشده باقی می‌مانند، اما پوشه کاری آن‌ها برای همیشه حذف می‌شود.",
+  "settings.workspaces.delete.blocked.linked":
+    "جلسه‌های پیوندشده باقی می‌مانند، اما پوشه کاری آن‌ها برای همیشه حذف می‌شود.",
   "settings.workspaces.default.title": "محیط پیش‌فرض",
   "settings.workspaces.default.description": "محل شروع جلسه‌های جدید را انتخاب کنید",
   "settings.workspaces.default.lastUsed": "آخرین مورد استفاده در هر پروژه",
@@ -1175,7 +1176,8 @@ export const dict = {
   "session.summary.title": "جزئیات جلسه",
   "session.summary.noBranch": "بدون شاخه",
   "session.summary.basedOn": "بر پایه \u2068{{branch}}\u2069",
-  "provider.disconnect.toast.noCredentials.description": "اطلاعات ورود قابل حذفی برای \u2068{{provider}}\u2069 یافت نشد.",
+  "provider.disconnect.toast.noCredentials.description":
+    "اطلاعات ورود قابل حذفی برای \u2068{{provider}}\u2069 یافت نشد.",
   "provider.disconnect.toast.failed.description": "قطع اتصال از \u2068{{provider}}\u2069 ناموفق بود.",
   "session.timeline.notice.instructionsUpdated": "دستورالعمل‌ها به‌روزرسانی شدند: \u2068{{sources}}\u2069",
   "session.timeline.notice.restart": "ادامه پس از راه‌اندازی مجدد",

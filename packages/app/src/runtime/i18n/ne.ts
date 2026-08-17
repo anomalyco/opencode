@@ -1155,10 +1155,13 @@ export const dict: Record<string, string> = {
   "settings.workspaces.lastActiveSession": "अन्तिम सक्रिय सत्र",
   "settings.workspaces.deleteAll": "सबै कार्यस्थान मेटाउनुहोस्",
   "settings.workspaces.deleteAll.confirm": "सबै {{count}} कार्यस्थान मेटाउने हो?",
-  "settings.workspaces.delete.warning": "तल देखाइएका मर्ज नगरिएका परिवर्तनसहित कार्यस्थान निर्देशिका र शाखा स्थायी रूपमा हटाइनेछ।",
-  "settings.workspaces.deleteAll.warning": "{{project}} का चयन गरिएका {{count}} कार्यस्थान प्रत्येक सफा, निष्क्रिय र कुनै सत्रसँग नजोडिएको भए मात्र स्थायी रूपमा हटाइनेछन्।",
+  "settings.workspaces.delete.warning":
+    "तल देखाइएका मर्ज नगरिएका परिवर्तनसहित कार्यस्थान निर्देशिका र शाखा स्थायी रूपमा हटाइनेछ।",
+  "settings.workspaces.deleteAll.warning":
+    "{{project}} का चयन गरिएका {{count}} कार्यस्थान प्रत्येक सफा, निष्क्रिय र कुनै सत्रसँग नजोडिएको भए मात्र स्थायी रूपमा हटाइनेछन्।",
   "settings.workspaces.delete.blocked.active": "सक्रिय कार्यस्थान मेटाउन सकिँदैन।",
-  "settings.workspaces.delete.blocked.linked": "जोडिएका सत्रहरू रहनेछन्, तर तिनको कार्य निर्देशिका स्थायी रूपमा हटाइनेछ।",
+  "settings.workspaces.delete.blocked.linked":
+    "जोडिएका सत्रहरू रहनेछन्, तर तिनको कार्य निर्देशिका स्थायी रूपमा हटाइनेछ।",
   "settings.workspaces.default.title": "पूर्वनिर्धारित वातावरण",
   "settings.workspaces.default.description": "नयाँ सत्र कहाँ सुरु हुने छान्नुहोस्",
   "settings.workspaces.default.lastUsed": "प्रति परियोजना पछिल्लो प्रयोग",

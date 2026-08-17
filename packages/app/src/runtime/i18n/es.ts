@@ -1263,10 +1263,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Última sesión activa",
   "settings.workspaces.deleteAll": "Eliminar todos los espacios de trabajo",
   "settings.workspaces.deleteAll.confirm": "¿Eliminar todos los espacios de trabajo {{count}}?",
-  "settings.workspaces.delete.warning": "El directorio y la rama del espacio de trabajo se eliminarán permanentemente, incluidos los cambios no combinados que se muestran a continuación.",
-  "settings.workspaces.deleteAll.warning": "Los espacios de trabajo seleccionados {{count}} en {{project}} se eliminarán permanentemente solo si cada uno está limpio, inactivo y no tiene sesiones vinculadas.",
+  "settings.workspaces.delete.warning":
+    "El directorio y la rama del espacio de trabajo se eliminarán permanentemente, incluidos los cambios no combinados que se muestran a continuación.",
+  "settings.workspaces.deleteAll.warning":
+    "Los espacios de trabajo seleccionados {{count}} en {{project}} se eliminarán permanentemente solo si cada uno está limpio, inactivo y no tiene sesiones vinculadas.",
   "settings.workspaces.delete.blocked.active": "El espacio de trabajo activo no se puede eliminar.",
-  "settings.workspaces.delete.blocked.linked": "Las sesiones vinculadas permanecerán, pero su directorio de trabajo se eliminará permanentemente.",
+  "settings.workspaces.delete.blocked.linked":
+    "Las sesiones vinculadas permanecerán, pero su directorio de trabajo se eliminará permanentemente.",
   "settings.workspaces.default.title": "Entorno predeterminado",
   "settings.workspaces.default.description": "Elige dónde comienzan las nuevas sesiones",
   "settings.workspaces.default.lastUsed": "Último usado por proyecto",
@@ -1279,7 +1282,8 @@ export const dict = {
   "workspace.lifecycle.created": "Espacio de trabajo creado",
   "workspace.lifecycle.starting": "Iniciando sesión",
   "workspace.onboarding.title": "Aislar sesiones con espacios de trabajo",
-  "workspace.onboarding.description": "Cada uno tiene su propio pago, por lo que nada interfiere con su repositorio local.",
+  "workspace.onboarding.description":
+    "Cada uno tiene su propio pago, por lo que nada interfiere con su repositorio local.",
   "workspace.lifecycle.moving": "Moverse al espacio de trabajo",
   "workspace.lifecycle.set": "Espacio de trabajo establecido",
   "session.summary.title": "Detalles de la sesión",

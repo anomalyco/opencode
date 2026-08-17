@@ -1101,8 +1101,7 @@ export const dict = {
   "workspace.lifecycle.created": "Workspace stovnað",
   "workspace.lifecycle.starting": "Byrjar setu",
   "workspace.onboarding.title": "Avbyrg setur við workspaces",
-  "workspace.onboarding.description":
-    "Hvør seta fær sítt egna checkout, so einki órógvar lokalu goymsluna",
+  "workspace.onboarding.description": "Hvør seta fær sítt egna checkout, so einki órógvar lokalu goymsluna",
   "workspace.lifecycle.moving": "Flytur til workspace",
   "workspace.lifecycle.set": "Workspace sett",
   "session.summary.title": "Setuupplýsingar",
@@ -1133,7 +1132,8 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} setur verða arkiveraðar.",
   "workspace.reset.note": "Hetta nullstillar workspace til at passa til forsettu greinina.",
   "dialog.usageExceeded.dontShowAgain": "Vís ikki aftur",
-  "provider.disconnect.toast.noCredentials.description": "Eingi trúnaðarupplýsingar, ið kunnu strikast, funnar fyri {{provider}}.",
+  "provider.disconnect.toast.noCredentials.description":
+    "Eingi trúnaðarupplýsingar, ið kunnu strikast, funnar fyri {{provider}}.",
   "provider.disconnect.toast.failed.description": "Tað eydnaðist ikki at slíta sambandið við {{provider}}.",
   "toast.migration.failed.title": "Dataflytingin miseydnaðist",
   "session.background.moveTasks": "Flyt {{tasks}} í bakgrundina",

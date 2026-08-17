@@ -1154,8 +1154,10 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Soňky işjeň sessiýa",
   "settings.workspaces.deleteAll": "Ähli workspace-lary pozuň",
   "settings.workspaces.deleteAll.confirm": "Ähli {{count}} workspace pozulsynmy?",
-  "settings.workspaces.delete.warning": "Workspace bukjasy we şahasy, aşakda görkezilen birleşdirilmedik üýtgeşmeler bilen bilelikde hemişelik aýrylar.",
-  "settings.workspaces.deleteAll.warning": "{{project}} taslamasyndaky saýlanan {{count}} workspace diňe olaryň her biri arassa, işjeň däl we baglanan sessiýasy ýok bolsa hemişelik aýrylar.",
+  "settings.workspaces.delete.warning":
+    "Workspace bukjasy we şahasy, aşakda görkezilen birleşdirilmedik üýtgeşmeler bilen bilelikde hemişelik aýrylar.",
+  "settings.workspaces.deleteAll.warning":
+    "{{project}} taslamasyndaky saýlanan {{count}} workspace diňe olaryň her biri arassa, işjeň däl we baglanan sessiýasy ýok bolsa hemişelik aýrylar.",
   "settings.workspaces.delete.blocked.active": "Işjeň workspace-i pozup bolmaýar.",
   "settings.workspaces.delete.blocked.linked": "Baglanan sessiýalar galar, emma olaryň iş bukjasy hemişelik aýrylar.",
   "settings.workspaces.default.title": "Başlangyç gurşaw",
@@ -1170,7 +1172,8 @@ export const dict = {
   "workspace.lifecycle.created": "Workspace döredildi",
   "workspace.lifecycle.starting": "Sessiýa başladylýar",
   "workspace.onboarding.title": "Sessiýalary workspace-lar bilen aýratynlaşdyryň",
-  "workspace.onboarding.description": "Her biriniň öz checkout-y bar, şonuň üçin ýerli ammaryňyza hiç zat päsgel bermeýär",
+  "workspace.onboarding.description":
+    "Her biriniň öz checkout-y bar, şonuň üçin ýerli ammaryňyza hiç zat päsgel bermeýär",
   "workspace.lifecycle.moving": "Workspace-e geçirilýär",
   "workspace.lifecycle.set": "Workspace bellenildi",
   "session.summary.title": "Sessiýanyň jikme-jiklikleri",

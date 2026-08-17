@@ -1154,8 +1154,10 @@ export const dict: Record<string, string> = {
   "settings.workspaces.lastActiveSession": "අවසන් සක්‍රිය සැසිය",
   "settings.workspaces.deleteAll": "සියලු වැඩබිම් මකන්න",
   "settings.workspaces.deleteAll.confirm": "වැඩබිම් {{count}}ම මකන්නද?",
-  "settings.workspaces.delete.warning": "පහත පෙන්වා ඇති ඒකාබද්ධ නොකළ වෙනස්කම්ද ඇතුළුව වැඩබිම් නාමාවලිය සහ ශාඛාව ස්ථිරව ඉවත් කෙරේ.",
-  "settings.workspaces.deleteAll.warning": "{{project}} හි තෝරාගත් වැඩබිම් {{count}}, එක් එක් වැඩබිම පිරිසිදු, අක්‍රිය සහ සබැඳි සැසි රහිත නම් පමණක් ස්ථිරව ඉවත් කෙරේ.",
+  "settings.workspaces.delete.warning":
+    "පහත පෙන්වා ඇති ඒකාබද්ධ නොකළ වෙනස්කම්ද ඇතුළුව වැඩබිම් නාමාවලිය සහ ශාඛාව ස්ථිරව ඉවත් කෙරේ.",
+  "settings.workspaces.deleteAll.warning":
+    "{{project}} හි තෝරාගත් වැඩබිම් {{count}}, එක් එක් වැඩබිම පිරිසිදු, අක්‍රිය සහ සබැඳි සැසි රහිත නම් පමණක් ස්ථිරව ඉවත් කෙරේ.",
   "settings.workspaces.delete.blocked.active": "සක්‍රිය වැඩබිම මැකිය නොහැක.",
   "settings.workspaces.delete.blocked.linked": "සබැඳි සැසි පවතිනු ඇත, නමුත් ඒවායේ වැඩ කරන නාමාවලිය ස්ථිරව ඉවත් කෙරේ.",
   "settings.workspaces.default.title": "පෙරනිමි පරිසරය",
@@ -1170,7 +1172,8 @@ export const dict: Record<string, string> = {
   "workspace.lifecycle.created": "වැඩබිම සාදන ලදී",
   "workspace.lifecycle.starting": "සැසිය ආරම්භ කරමින්",
   "workspace.onboarding.title": "වැඩබිම් භාවිතයෙන් සැසි වෙන් කරන්න",
-  "workspace.onboarding.description": "එක් එක් සැසියට තමන්ගේම චෙක්අවුට් එකක් ලැබෙන බැවින් ඔබේ දේශීය කේත ගබඩාවට බාධාවක් නොවේ",
+  "workspace.onboarding.description":
+    "එක් එක් සැසියට තමන්ගේම චෙක්අවුට් එකක් ලැබෙන බැවින් ඔබේ දේශීය කේත ගබඩාවට බාධාවක් නොවේ",
   "workspace.lifecycle.moving": "වැඩබිමට ගෙන යමින්",
   "workspace.lifecycle.set": "වැඩබිම සකසන ලදී",
   "session.summary.title": "සැසි විස්තර",

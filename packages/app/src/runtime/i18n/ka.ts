@@ -1153,10 +1153,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "ბოლო აქტიური სესია",
   "settings.workspaces.deleteAll": "ყველა სამუშაო სივრცის წაშლა",
   "settings.workspaces.deleteAll.confirm": "წაიშალოს ყველა {{count}} სამუშაო სივრცე?",
-  "settings.workspaces.delete.warning": "სამუშაო სივრცის საქაღალდე და ბრენჩი სამუდამოდ წაიშლება, მათ შორის ქვემოთ ნაჩვენები გაუერთიანებელი ცვლილებები.",
-  "settings.workspaces.deleteAll.warning": "პროექტში {{project}} არჩეული {{count}} სამუშაო სივრცე სამუდამოდ წაიშლება მხოლოდ მაშინ, თუ თითოეული სუფთაა, არააქტიურია და დაკავშირებული სესიები არ აქვს.",
+  "settings.workspaces.delete.warning":
+    "სამუშაო სივრცის საქაღალდე და ბრენჩი სამუდამოდ წაიშლება, მათ შორის ქვემოთ ნაჩვენები გაუერთიანებელი ცვლილებები.",
+  "settings.workspaces.deleteAll.warning":
+    "პროექტში {{project}} არჩეული {{count}} სამუშაო სივრცე სამუდამოდ წაიშლება მხოლოდ მაშინ, თუ თითოეული სუფთაა, არააქტიურია და დაკავშირებული სესიები არ აქვს.",
   "settings.workspaces.delete.blocked.active": "აქტიური სამუშაო სივრცის წაშლა შეუძლებელია.",
-  "settings.workspaces.delete.blocked.linked": "დაკავშირებული სესიები დარჩება, მაგრამ მათი სამუშაო საქაღალდე სამუდამოდ წაიშლება.",
+  "settings.workspaces.delete.blocked.linked":
+    "დაკავშირებული სესიები დარჩება, მაგრამ მათი სამუშაო საქაღალდე სამუდამოდ წაიშლება.",
   "settings.workspaces.default.title": "ნაგულისხმევი გარემო",
   "settings.workspaces.default.description": "აირჩიეთ, სად დაიწყოს ახალი სესიები",
   "settings.workspaces.default.lastUsed": "ბოლოს გამოყენებული თითოეული პროექტისთვის",
@@ -1175,7 +1178,8 @@ export const dict = {
   "session.summary.title": "სესიის დეტალები",
   "session.summary.noBranch": "ბრენჩი არ არის",
   "session.summary.basedOn": "დაფუძნებულია {{branch}} ბრენჩზე",
-  "provider.disconnect.toast.noCredentials.description": "{{provider}}-ისთვის წასაშლელი ავტორიზაციის მონაცემები ვერ მოიძებნა.",
+  "provider.disconnect.toast.noCredentials.description":
+    "{{provider}}-ისთვის წასაშლელი ავტორიზაციის მონაცემები ვერ მოიძებნა.",
   "provider.disconnect.toast.failed.description": "{{provider}}-ის გათიშვა ვერ მოხერხდა.",
   "session.timeline.notice.instructionsUpdated": "ინსტრუქციები განახლდა: {{sources}}",
   "session.timeline.notice.restart": "გაგრძელება გადატვირთვის შემდეგ",

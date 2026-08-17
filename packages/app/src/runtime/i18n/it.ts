@@ -1176,10 +1176,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Ultima sessione attiva",
   "settings.workspaces.deleteAll": "Elimina tutte le aree di lavoro",
   "settings.workspaces.deleteAll.confirm": "Eliminare tutti gli spazi di lavoro {{count}}?",
-  "settings.workspaces.delete.warning": "La directory e il ramo dell'area di lavoro verranno rimossi in modo permanente, incluse eventuali modifiche non unite mostrate di seguito.",
-  "settings.workspaces.deleteAll.warning": "Gli spazi di lavoro selezionati {{count}} in {{project}} verranno rimossi in modo permanente solo se ciascuno è pulito, inattivo e non ha sessioni collegate.",
+  "settings.workspaces.delete.warning":
+    "La directory e il ramo dell'area di lavoro verranno rimossi in modo permanente, incluse eventuali modifiche non unite mostrate di seguito.",
+  "settings.workspaces.deleteAll.warning":
+    "Gli spazi di lavoro selezionati {{count}} in {{project}} verranno rimossi in modo permanente solo se ciascuno è pulito, inattivo e non ha sessioni collegate.",
   "settings.workspaces.delete.blocked.active": "L'area di lavoro attiva non può essere eliminata.",
-  "settings.workspaces.delete.blocked.linked": "Le sessioni collegate rimarranno, ma la loro directory di lavoro verrà rimossa in modo permanente.",
+  "settings.workspaces.delete.blocked.linked":
+    "Le sessioni collegate rimarranno, ma la loro directory di lavoro verrà rimossa in modo permanente.",
   "settings.workspaces.default.title": "Ambiente predefinito",
   "settings.workspaces.default.description": "Scegli dove iniziare le nuove sessioni",
   "settings.workspaces.default.lastUsed": "Ultimo utilizzo per progetto",
@@ -1192,7 +1195,8 @@ export const dict = {
   "workspace.lifecycle.created": "Area di lavoro creata",
   "workspace.lifecycle.starting": "Avvio della sessione",
   "workspace.onboarding.title": "Isolare le sessioni con spazi di lavoro",
-  "workspace.onboarding.description": "Ognuno riceve il proprio checkout, quindi nulla interferisce con il tuo repository locale",
+  "workspace.onboarding.description":
+    "Ognuno riceve il proprio checkout, quindi nulla interferisce con il tuo repository locale",
   "workspace.lifecycle.moving": "Spostarsi nello spazio di lavoro",
   "workspace.lifecycle.set": "Area di lavoro impostata",
   "session.summary.title": "Dettagli della sessione",

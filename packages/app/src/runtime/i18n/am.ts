@@ -1133,7 +1133,8 @@ export const dict = {
   "settings.workspaces.deleteAll": "ሁሉንም workspace-ዎች ሰርዝ",
   "settings.workspaces.deleteAll.confirm": "ሁሉንም {{count}} workspace-ዎች ይሰረዙ?",
   "settings.workspaces.delete.warning": "የworkspace ማውጫው እና ቅርንጫፉ፣ ከዚህ በታች የሚታዩ ያልተዋሃዱ ለውጦችን ጨምሮ፣ እስከመጨረሻው ይወገዳሉ።",
-  "settings.workspaces.deleteAll.warning": "በ{{project}} ውስጥ ያሉት {{count}} የተመረጡ workspace-ዎች እያንዳንዳቸው ንጹህ፣ እንቅስቃሴ-አልባ እና የተገናኘ ክፍለ ጊዜ ከሌላቸው ብቻ እስከመጨረሻው ይወገዳሉ።",
+  "settings.workspaces.deleteAll.warning":
+    "በ{{project}} ውስጥ ያሉት {{count}} የተመረጡ workspace-ዎች እያንዳንዳቸው ንጹህ፣ እንቅስቃሴ-አልባ እና የተገናኘ ክፍለ ጊዜ ከሌላቸው ብቻ እስከመጨረሻው ይወገዳሉ።",
   "settings.workspaces.delete.blocked.active": "ንቁው workspace ሊሰረዝ አይችልም።",
   "settings.workspaces.delete.blocked.linked": "የተገናኙ ክፍለ ጊዜዎች ይቀራሉ፣ ነገር ግን የሥራ ማውጫቸው እስከመጨረሻው ይወገዳል።",
   "settings.workspaces.default.title": "ነባሪ አካባቢ",

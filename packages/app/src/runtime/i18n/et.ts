@@ -1099,8 +1099,7 @@ export const dict = {
   "workspace.lifecycle.created": "Tööruum loodud",
   "workspace.lifecycle.starting": "Seansi käivitamine",
   "workspace.onboarding.title": "Eralda seansid tööruumidega",
-  "workspace.onboarding.description":
-    "Igal seansil on oma väljavõte, nii et miski ei sega kohalikku hoidlat",
+  "workspace.onboarding.description": "Igal seansil on oma väljavõte, nii et miski ei sega kohalikku hoidlat",
   "workspace.lifecycle.moving": "Tööruumi teisaldamine",
   "workspace.lifecycle.set": "Tööruum määratud",
   "session.summary.title": "Seansi üksikasjad",

@@ -1133,7 +1133,8 @@ export const dict = {
   "titlebar.update": "Mettre à jour",
   "titlebar.updateVersion": "Mettre à jour {{version}}",
 
-  "provider.disconnect.toast.noCredentials.description": "Aucune information d'identification amovible trouvée pour {{provider}}.",
+  "provider.disconnect.toast.noCredentials.description":
+    "Aucune information d'identification amovible trouvée pour {{provider}}.",
   "provider.disconnect.toast.failed.description": "Échec de la déconnexion de {{provider}}.",
   "toast.migration.failed.title": "Échec de la migration des données",
   "session.background.moveTasks": "Déplacer {{tasks}} en arrière-plan",
@@ -1197,10 +1198,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Dernière session active",
   "settings.workspaces.deleteAll": "Supprimer tous les espaces de travail",
   "settings.workspaces.deleteAll.confirm": "Supprimer tous les espaces de travail {{count}} ?",
-  "settings.workspaces.delete.warning": "Le répertoire et la branche de l'espace de travail seront définitivement supprimés, y compris toutes les modifications non fusionnées indiquées ci-dessous.",
-  "settings.workspaces.deleteAll.warning": "Les espaces de travail sélectionnés {{count}} dans {{project}} seront définitivement supprimés uniquement si chacun est propre, inactif et n'a aucune session liée.",
+  "settings.workspaces.delete.warning":
+    "Le répertoire et la branche de l'espace de travail seront définitivement supprimés, y compris toutes les modifications non fusionnées indiquées ci-dessous.",
+  "settings.workspaces.deleteAll.warning":
+    "Les espaces de travail sélectionnés {{count}} dans {{project}} seront définitivement supprimés uniquement si chacun est propre, inactif et n'a aucune session liée.",
   "settings.workspaces.delete.blocked.active": "L'espace de travail actif ne peut pas être supprimé.",
-  "settings.workspaces.delete.blocked.linked": "Les sessions liées resteront, mais leur répertoire de travail sera définitivement supprimé.",
+  "settings.workspaces.delete.blocked.linked":
+    "Les sessions liées resteront, mais leur répertoire de travail sera définitivement supprimé.",
   "settings.workspaces.default.title": "Environnement par défaut",
   "settings.workspaces.default.description": "Choisissez où commencent les nouvelles sessions",
   "settings.workspaces.default.lastUsed": "Dernière utilisation par projet",
@@ -1213,7 +1217,8 @@ export const dict = {
   "workspace.lifecycle.created": "Espace de travail créé",
   "workspace.lifecycle.starting": "Démarrage de la session",
   "workspace.onboarding.title": "Isoler les sessions avec des espaces de travail",
-  "workspace.onboarding.description": "Chacun a sa propre extraction, donc rien n'interfère avec votre référentiel local",
+  "workspace.onboarding.description":
+    "Chacun a sa propre extraction, donc rien n'interfère avec votre référentiel local",
   "workspace.lifecycle.moving": "Passer à l'espace de travail",
   "workspace.lifecycle.set": "Espace de travail défini",
   "session.summary.title": "Détails de la session",

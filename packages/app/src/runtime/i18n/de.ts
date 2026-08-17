@@ -1122,7 +1122,8 @@ export const dict = {
   "desktop.picker.error.sizeLimit": "Die ausgewählten Anhänge überschreiten das Limit von {{limit}} MB",
   "command.logs.export": "Protokolle exportieren",
 
-  "provider.disconnect.toast.noCredentials.description": "Für {{provider}} wurden keine entfernbaren Anmeldeinformationen gefunden.",
+  "provider.disconnect.toast.noCredentials.description":
+    "Für {{provider}} wurden keine entfernbaren Anmeldeinformationen gefunden.",
   "provider.disconnect.toast.failed.description": "{{provider}} konnte nicht getrennt werden.",
   "toast.migration.failed.title": "Die Datenmigration ist fehlgeschlagen",
   "session.background.moveTasks": "Verschieben Sie {{tasks}} in den Hintergrund",
@@ -1186,10 +1187,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Letzte aktive Sitzung",
   "settings.workspaces.deleteAll": "Löschen Sie alle Arbeitsbereiche",
   "settings.workspaces.deleteAll.confirm": "Alle {{count}}-Arbeitsbereiche löschen?",
-  "settings.workspaces.delete.warning": "Das Arbeitsbereichsverzeichnis und der Zweig werden dauerhaft entfernt, einschließlich aller unten aufgeführten nicht zusammengeführten Änderungen.",
-  "settings.workspaces.deleteAll.warning": "Die von {{count}} ausgewählten Arbeitsbereiche in {{project}} werden nur dann dauerhaft entfernt, wenn jeder sauber und inaktiv ist und keine verknüpften Sitzungen aufweist.",
+  "settings.workspaces.delete.warning":
+    "Das Arbeitsbereichsverzeichnis und der Zweig werden dauerhaft entfernt, einschließlich aller unten aufgeführten nicht zusammengeführten Änderungen.",
+  "settings.workspaces.deleteAll.warning":
+    "Die von {{count}} ausgewählten Arbeitsbereiche in {{project}} werden nur dann dauerhaft entfernt, wenn jeder sauber und inaktiv ist und keine verknüpften Sitzungen aufweist.",
   "settings.workspaces.delete.blocked.active": "Der aktive Arbeitsbereich kann nicht gelöscht werden.",
-  "settings.workspaces.delete.blocked.linked": "Verknüpfte Sitzungen bleiben bestehen, ihr Arbeitsverzeichnis wird jedoch dauerhaft entfernt.",
+  "settings.workspaces.delete.blocked.linked":
+    "Verknüpfte Sitzungen bleiben bestehen, ihr Arbeitsverzeichnis wird jedoch dauerhaft entfernt.",
   "settings.workspaces.default.title": "Standardumgebung",
   "settings.workspaces.default.description": "Wählen Sie, wo neue Sitzungen beginnen",
   "settings.workspaces.default.lastUsed": "Zuletzt pro Projekt verwendet",
@@ -1202,7 +1206,8 @@ export const dict = {
   "workspace.lifecycle.created": "Arbeitsbereich erstellt",
   "workspace.lifecycle.starting": "Beginn der Sitzung",
   "workspace.onboarding.title": "Isolieren Sie Sitzungen mit Arbeitsbereichen",
-  "workspace.onboarding.description": "Jeder erhält seinen eigenen Checkout, sodass Ihr lokales Repository nicht beeinträchtigt wird",
+  "workspace.onboarding.description":
+    "Jeder erhält seinen eigenen Checkout, sodass Ihr lokales Repository nicht beeinträchtigt wird",
   "workspace.lifecycle.moving": "In Arbeitsbereich verschieben",
   "workspace.lifecycle.set": "Arbeitsbereich eingestellt",
   "session.summary.title": "Sitzungsdetails",

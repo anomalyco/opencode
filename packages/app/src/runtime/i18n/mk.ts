@@ -1166,10 +1166,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Последна активна сесија",
   "settings.workspaces.deleteAll": "Избришете ги сите работни простори",
   "settings.workspaces.deleteAll.confirm": "Да се ​​избришат сите работни простори на {{count}}?",
-  "settings.workspaces.delete.warning": "Директориумот и гранката на работниот простор трајно ќе се отстранат, вклучувајќи ги и сите неповрзани промени прикажани подолу.",
-  "settings.workspaces.deleteAll.warning": "Избраните работни простори {{count}} во {{project}} трајно ќе се отстранат само ако секој е чист, неактивен и нема поврзани сесии.",
+  "settings.workspaces.delete.warning":
+    "Директориумот и гранката на работниот простор трајно ќе се отстранат, вклучувајќи ги и сите неповрзани промени прикажани подолу.",
+  "settings.workspaces.deleteAll.warning":
+    "Избраните работни простори {{count}} во {{project}} трајно ќе се отстранат само ако секој е чист, неактивен и нема поврзани сесии.",
   "settings.workspaces.delete.blocked.active": "Активниот работен простор не може да се избрише.",
-  "settings.workspaces.delete.blocked.linked": "Поврзаните сесии ќе останат, но нивниот работен директориум трајно ќе биде отстранет.",
+  "settings.workspaces.delete.blocked.linked":
+    "Поврзаните сесии ќе останат, но нивниот работен директориум трајно ќе биде отстранет.",
   "settings.workspaces.default.title": "Стандардна околина",
   "settings.workspaces.default.description": "Изберете каде започнуваат новите сесии",
   "settings.workspaces.default.lastUsed": "Последно користено по проект",
@@ -1182,7 +1185,8 @@ export const dict = {
   "workspace.lifecycle.created": "Создаден работен простор",
   "workspace.lifecycle.starting": "Почетна сесија",
   "workspace.onboarding.title": "Изолирајте сесии со работни простори",
-  "workspace.onboarding.description": "Секоја добива сопствена работна копија, така што ништо не го попречува локалното складиште",
+  "workspace.onboarding.description":
+    "Секоја добива сопствена работна копија, така што ништо не го попречува локалното складиште",
   "workspace.lifecycle.moving": "Преместување во работен простор",
   "workspace.lifecycle.set": "Работниот простор е поставен",
   "session.summary.title": "Детали за сесијата",

@@ -1257,10 +1257,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Последняя активная сессия",
   "settings.workspaces.deleteAll": "Удалить все рабочие области",
   "settings.workspaces.deleteAll.confirm": "Удалить все рабочие пространства {{count}}?",
-  "settings.workspaces.delete.warning": "Каталог и ветка рабочей области будут удалены без возможности восстановления, включая все несвязанные изменения, показанные ниже.",
-  "settings.workspaces.deleteAll.warning": "Выбранные рабочие пространства {{count}} в {{project}} будут окончательно удалены, только если каждое из них является чистым, неактивным и не имеет связанных сеансов.",
+  "settings.workspaces.delete.warning":
+    "Каталог и ветка рабочей области будут удалены без возможности восстановления, включая все несвязанные изменения, показанные ниже.",
+  "settings.workspaces.deleteAll.warning":
+    "Выбранные рабочие пространства {{count}} в {{project}} будут окончательно удалены, только если каждое из них является чистым, неактивным и не имеет связанных сеансов.",
   "settings.workspaces.delete.blocked.active": "Активное рабочее пространство не может быть удалено.",
-  "settings.workspaces.delete.blocked.linked": "Связанные сеансы останутся, но их рабочий каталог будет удален без возможности восстановления.",
+  "settings.workspaces.delete.blocked.linked":
+    "Связанные сеансы останутся, но их рабочий каталог будет удален без возможности восстановления.",
   "settings.workspaces.default.title": "Среда по умолчанию",
   "settings.workspaces.default.description": "Выберите, где начинаются новые сеансы",
   "settings.workspaces.default.lastUsed": "Последнее использование в проекте",
@@ -1273,7 +1276,8 @@ export const dict = {
   "workspace.lifecycle.created": "Рабочая область создана",
   "workspace.lifecycle.starting": "Начало сеанса",
   "workspace.onboarding.title": "Изолируйте сеансы с помощью рабочих областей",
-  "workspace.onboarding.description": "Каждая получает собственную рабочую копию, поэтому ничто не затрагивает локальный репозиторий",
+  "workspace.onboarding.description":
+    "Каждая получает собственную рабочую копию, поэтому ничто не затрагивает локальный репозиторий",
   "workspace.lifecycle.moving": "Переезд в рабочее пространство",
   "workspace.lifecycle.set": "Рабочее пространство задано",
   "session.summary.title": "Детали сеанса",

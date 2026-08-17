@@ -1109,8 +1109,7 @@ export const dict = {
   "workspace.lifecycle.created": "Hapësira e punës u krijua",
   "workspace.lifecycle.starting": "Po niset sesioni",
   "workspace.onboarding.title": "Izoloni sesionet me hapësira pune",
-  "workspace.onboarding.description":
-    "Secili ka checkout-in e vet, kështu që asgjë nuk ndërhyn me depon lokale",
+  "workspace.onboarding.description": "Secili ka checkout-in e vet, kështu që asgjë nuk ndërhyn me depon lokale",
   "workspace.lifecycle.moving": "Po zhvendoset në hapësirën e punës",
   "workspace.lifecycle.set": "Hapësira e punës u caktua",
   "session.summary.title": "Detajet e sesionit",

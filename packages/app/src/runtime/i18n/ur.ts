@@ -1101,7 +1101,8 @@ export const dict = {
   "workspace.reset.archived.one": "1 سیشن آرکائیو کیا جائے گا۔",
   "workspace.reset.archived.many": "{{count}} سیشنز آرکائیو کیے جائیں گے۔",
   "workspace.reset.note": "یہ ڈیفالٹ برانچ سے ملنے کے لیے ورک اسپیس کو دوبارہ ترتیب دے گا۔",
-  "provider.disconnect.toast.noCredentials.description": "\u2068{{provider}}\u2069 کے لیے ہٹائی جا سکنے والی کوئی اسناد نہیں ملیں۔",
+  "provider.disconnect.toast.noCredentials.description":
+    "\u2068{{provider}}\u2069 کے لیے ہٹائی جا سکنے والی کوئی اسناد نہیں ملیں۔",
   "provider.disconnect.toast.failed.description": "\u2068{{provider}}\u2069 سے کنکشن منقطع کرنے میں ناکام۔",
   "toast.migration.failed.title": "ڈیٹا کی منتقلی ناکام ہو گئی",
   "session.background.moveTasks": "\u2068{{tasks}}\u2069 کو پس منظر میں منتقل کریں",
@@ -1165,11 +1166,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "آخری فعال سیشن",
   "settings.workspaces.deleteAll": "تمام ورک اسپیسز حذف کریں",
   "settings.workspaces.deleteAll.confirm": "تمام {{count}} ورک اسپیسز حذف کریں؟",
-  "settings.workspaces.delete.warning": "ورک اسپیس ڈائریکٹری اور برانچ مستقل طور پر ہٹا دی جائیں گی، بشمول ذیل میں دکھائی گئی غیر ضم شدہ تبدیلیاں۔",
+  "settings.workspaces.delete.warning":
+    "ورک اسپیس ڈائریکٹری اور برانچ مستقل طور پر ہٹا دی جائیں گی، بشمول ذیل میں دکھائی گئی غیر ضم شدہ تبدیلیاں۔",
   "settings.workspaces.deleteAll.warning":
     "\u2068{{project}}\u2069 میں منتخب {{count}} ورک اسپیسز صرف اسی صورت مستقل طور پر ہٹائی جائیں گی جب ہر ایک صاف، غیر فعال اور منسلک سیشنز کے بغیر ہو۔",
   "settings.workspaces.delete.blocked.active": "فعال ورک اسپیس حذف نہیں کی جا سکتی۔",
-  "settings.workspaces.delete.blocked.linked": "منسلک سیشنز موجود رہیں گے، لیکن ان کی ورکنگ ڈائریکٹری مستقل طور پر ہٹا دی جائے گی۔",
+  "settings.workspaces.delete.blocked.linked":
+    "منسلک سیشنز موجود رہیں گے، لیکن ان کی ورکنگ ڈائریکٹری مستقل طور پر ہٹا دی جائے گی۔",
   "settings.workspaces.default.title": "ڈیفالٹ ماحول",
   "settings.workspaces.default.description": "منتخب کریں کہ نئے سیشن کہاں شروع ہوں",
   "settings.workspaces.default.lastUsed": "ہر پروجیکٹ میں آخری استعمال شدہ",
@@ -1182,7 +1185,8 @@ export const dict = {
   "workspace.lifecycle.created": "ورک اسپیس بن گئی",
   "workspace.lifecycle.starting": "سیشن شروع ہو رہا ہے",
   "workspace.onboarding.title": "ورک اسپیسز کے ذریعے سیشنز الگ رکھیں",
-  "workspace.onboarding.description": "ہر ایک کو اپنا چیک آؤٹ ملتا ہے، اس لیے آپ کی مقامی ریپوزٹری میں کوئی مداخلت نہیں ہوتی",
+  "workspace.onboarding.description":
+    "ہر ایک کو اپنا چیک آؤٹ ملتا ہے، اس لیے آپ کی مقامی ریپوزٹری میں کوئی مداخلت نہیں ہوتی",
   "workspace.lifecycle.moving": "ورک اسپیس میں منتقل کیا جا رہا ہے",
   "workspace.lifecycle.set": "ورک اسپیس مقرر کر دی گئی",
   "session.summary.title": "سیشن کی تفصیلات",

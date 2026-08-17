@@ -1150,10 +1150,13 @@ export const dict: Record<string, string> = {
   "settings.workspaces.lastActiveSession": "সর্বশেষ সক্রিয় সেশন",
   "settings.workspaces.deleteAll": "সব ওয়ার্কস্পেস মুছুন",
   "settings.workspaces.deleteAll.confirm": "সব {{count}}টি ওয়ার্কস্পেস মুছবেন?",
-  "settings.workspaces.delete.warning": "নিচে দেখানো একীভূত না হওয়া পরিবর্তনসহ ওয়ার্কস্পেস ডিরেক্টরি ও ব্রাঞ্চ স্থায়ীভাবে মুছে যাবে।",
-  "settings.workspaces.deleteAll.warning": "{{project}}-এর নির্বাচিত {{count}}টি ওয়ার্কস্পেসের প্রতিটি পরিষ্কার, নিষ্ক্রিয় এবং কোনো সেশনের সঙ্গে যুক্ত না থাকলেই স্থায়ীভাবে মুছে যাবে।",
+  "settings.workspaces.delete.warning":
+    "নিচে দেখানো একীভূত না হওয়া পরিবর্তনসহ ওয়ার্কস্পেস ডিরেক্টরি ও ব্রাঞ্চ স্থায়ীভাবে মুছে যাবে।",
+  "settings.workspaces.deleteAll.warning":
+    "{{project}}-এর নির্বাচিত {{count}}টি ওয়ার্কস্পেসের প্রতিটি পরিষ্কার, নিষ্ক্রিয় এবং কোনো সেশনের সঙ্গে যুক্ত না থাকলেই স্থায়ীভাবে মুছে যাবে।",
   "settings.workspaces.delete.blocked.active": "সক্রিয় ওয়ার্কস্পেস মোছা যাবে না।",
-  "settings.workspaces.delete.blocked.linked": "যুক্ত সেশনগুলো থাকবে, তবে তাদের কার্যকরী ডিরেক্টরি স্থায়ীভাবে মুছে যাবে।",
+  "settings.workspaces.delete.blocked.linked":
+    "যুক্ত সেশনগুলো থাকবে, তবে তাদের কার্যকরী ডিরেক্টরি স্থায়ীভাবে মুছে যাবে।",
   "settings.workspaces.default.title": "ডিফল্ট পরিবেশ",
   "settings.workspaces.default.description": "নতুন সেশন কোথায় শুরু হবে তা বেছে নিন",
   "settings.workspaces.default.lastUsed": "প্রতি প্রকল্পে সর্বশেষ ব্যবহৃত",
@@ -1166,13 +1169,15 @@ export const dict: Record<string, string> = {
   "workspace.lifecycle.created": "ওয়ার্কস্পেস তৈরি হয়েছে",
   "workspace.lifecycle.starting": "সেশন শুরু হচ্ছে",
   "workspace.onboarding.title": "ওয়ার্কস্পেস দিয়ে সেশন আলাদা রাখুন",
-  "workspace.onboarding.description": "প্রতিটি নিজস্ব চেকআউট পায়, তাই আপনার স্থানীয় রিপোজিটরিতে কোনো হস্তক্ষেপ হয় না",
+  "workspace.onboarding.description":
+    "প্রতিটি নিজস্ব চেকআউট পায়, তাই আপনার স্থানীয় রিপোজিটরিতে কোনো হস্তক্ষেপ হয় না",
   "workspace.lifecycle.moving": "ওয়ার্কস্পেসে সরানো হচ্ছে",
   "workspace.lifecycle.set": "ওয়ার্কস্পেস সেট করা হয়েছে",
   "session.summary.title": "সেশনের বিবরণ",
   "session.summary.noBranch": "কোনো ব্রাঞ্চ নেই",
   "session.summary.basedOn": "{{branch}}-এর ভিত্তিতে",
-  "provider.disconnect.toast.noCredentials.description": "{{provider}}-এর জন্য অপসারণযোগ্য কোনো শংসাপত্র পাওয়া যায়নি।",
+  "provider.disconnect.toast.noCredentials.description":
+    "{{provider}}-এর জন্য অপসারণযোগ্য কোনো শংসাপত্র পাওয়া যায়নি।",
   "provider.disconnect.toast.failed.description": "{{provider}}-এর সংযোগ বিচ্ছিন্ন করা যায়নি।",
   "session.timeline.notice.instructionsUpdated": "নির্দেশনা আপডেট হয়েছে: {{sources}}",
   "session.timeline.notice.restart": "পুনরায় চালু হওয়ার পর অব্যাহত রয়েছে",

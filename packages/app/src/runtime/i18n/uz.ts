@@ -1167,10 +1167,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Oxirgi faol sessiya",
   "settings.workspaces.deleteAll": "Barcha ish maydonlarini o‘chirish",
   "settings.workspaces.deleteAll.confirm": "Barcha {{count}} ish maydoni o‘chirilsinmi?",
-  "settings.workspaces.delete.warning": "Ish maydoni katalogi va branch, jumladan quyida ko‘rsatilgan birlashtirilmagan o‘zgarishlar butunlay olib tashlanadi.",
-  "settings.workspaces.deleteAll.warning": "{{project}} loyihasidagi tanlangan {{count}} ish maydoni faqat har biri toza, nofaol va bog‘langan sessiyalarsiz bo‘lsa butunlay olib tashlanadi.",
+  "settings.workspaces.delete.warning":
+    "Ish maydoni katalogi va branch, jumladan quyida ko‘rsatilgan birlashtirilmagan o‘zgarishlar butunlay olib tashlanadi.",
+  "settings.workspaces.deleteAll.warning":
+    "{{project}} loyihasidagi tanlangan {{count}} ish maydoni faqat har biri toza, nofaol va bog‘langan sessiyalarsiz bo‘lsa butunlay olib tashlanadi.",
   "settings.workspaces.delete.blocked.active": "Faol ish maydonini o‘chirib bo‘lmaydi.",
-  "settings.workspaces.delete.blocked.linked": "Bog‘langan sessiyalar qoladi, ammo ularning ish katalogi butunlay olib tashlanadi.",
+  "settings.workspaces.delete.blocked.linked":
+    "Bog‘langan sessiyalar qoladi, ammo ularning ish katalogi butunlay olib tashlanadi.",
   "settings.workspaces.default.title": "Standart muhit",
   "settings.workspaces.default.description": "Yangi sessiyalar qayerda boshlanishini tanlang",
   "settings.workspaces.default.lastUsed": "Har bir loyiha bo‘yicha oxirgi ishlatilgan",
@@ -1183,13 +1186,15 @@ export const dict = {
   "workspace.lifecycle.created": "Ish maydoni yaratildi",
   "workspace.lifecycle.starting": "Sessiya boshlanmoqda",
   "workspace.onboarding.title": "Sessiyalarni ish maydonlari bilan ajrating",
-  "workspace.onboarding.description": "Har birining o‘z checkout-i bor, shuning uchun mahalliy omboringizga hech narsa xalaqit bermaydi",
+  "workspace.onboarding.description":
+    "Har birining o‘z checkout-i bor, shuning uchun mahalliy omboringizga hech narsa xalaqit bermaydi",
   "workspace.lifecycle.moving": "Ish maydoniga ko‘chirilmoqda",
   "workspace.lifecycle.set": "Ish maydoni belgilandi",
   "session.summary.title": "Sessiya tafsilotlari",
   "session.summary.noBranch": "Branch yo‘q",
   "session.summary.basedOn": "{{branch}} asosida",
-  "provider.disconnect.toast.noCredentials.description": "{{provider}} uchun olib tashlanadigan kirish maʼlumotlari topilmadi.",
+  "provider.disconnect.toast.noCredentials.description":
+    "{{provider}} uchun olib tashlanadigan kirish maʼlumotlari topilmadi.",
   "provider.disconnect.toast.failed.description": "{{provider}} ulanishini uzib bo‘lmadi.",
   "session.timeline.notice.instructionsUpdated": "Ko‘rsatmalar yangilandi: {{sources}}",
   "session.timeline.notice.restart": "Qayta ishga tushirilgandan keyin davom etmoqda",

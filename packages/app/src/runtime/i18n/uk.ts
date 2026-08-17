@@ -1264,10 +1264,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Останній активний сеанс",
   "settings.workspaces.deleteAll": "Видалити всі робочі області",
   "settings.workspaces.deleteAll.confirm": "Видалити всі {{count}} робочих областей?",
-  "settings.workspaces.delete.warning": "Каталог робочої області та гілку буде видалено назавжди, включно з усіма необ’єднаними змінами, показаними нижче.",
-  "settings.workspaces.deleteAll.warning": "{{count}} вибраних робочих областей у {{project}} буде остаточно видалено, лише якщо кожна чиста, неактивна та не має пов’язаних сеансів.",
+  "settings.workspaces.delete.warning":
+    "Каталог робочої області та гілку буде видалено назавжди, включно з усіма необ’єднаними змінами, показаними нижче.",
+  "settings.workspaces.deleteAll.warning":
+    "{{count}} вибраних робочих областей у {{project}} буде остаточно видалено, лише якщо кожна чиста, неактивна та не має пов’язаних сеансів.",
   "settings.workspaces.delete.blocked.active": "Активну робочу область не можна видалити.",
-  "settings.workspaces.delete.blocked.linked": "Пов’язані сеанси залишаться, але їх робочий каталог буде остаточно видалено.",
+  "settings.workspaces.delete.blocked.linked":
+    "Пов’язані сеанси залишаться, але їх робочий каталог буде остаточно видалено.",
   "settings.workspaces.default.title": "Середовище за замовчуванням",
   "settings.workspaces.default.description": "Виберіть місце початку нових сеансів",
   "settings.workspaces.default.lastUsed": "Останнє використання для проекту",

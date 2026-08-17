@@ -1107,7 +1107,8 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} сесии ще бъдат архивирани.",
   "workspace.reset.note": "Това ще нулира работното пространство, за да съответства на клона по подразбиране.",
   "dialog.usageExceeded.dontShowAgain": "Не показвай отново",
-  "provider.disconnect.toast.noCredentials.description": "Няма намерени подвижни идентификационни данни за {{provider}}.",
+  "provider.disconnect.toast.noCredentials.description":
+    "Няма намерени подвижни идентификационни данни за {{provider}}.",
   "provider.disconnect.toast.failed.description": "Неуспешно прекъсване на връзката {{provider}}.",
   "toast.migration.failed.title": "Мигрирането на данни не бе успешно",
   "session.background.moveTasks": "Преместете {{tasks}} на заден план",
@@ -1171,10 +1172,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Последна активна сесия",
   "settings.workspaces.deleteAll": "Изтрийте всички работни области",
   "settings.workspaces.deleteAll.confirm": "Да се ​​изтрият ли всички {{count}} работни пространства?",
-  "settings.workspaces.delete.warning": "Директорията и клонът на работното пространство ще бъдат премахнати за постоянно, включително всички необединени промени, показани по-долу.",
-  "settings.workspaces.deleteAll.warning": "Избраните {{count}} работни пространства в {{project}} ще бъдат премахнати за постоянно само ако всяко е чисто, неактивно и няма свързани сесии.",
+  "settings.workspaces.delete.warning":
+    "Директорията и клонът на работното пространство ще бъдат премахнати за постоянно, включително всички необединени промени, показани по-долу.",
+  "settings.workspaces.deleteAll.warning":
+    "Избраните {{count}} работни пространства в {{project}} ще бъдат премахнати за постоянно само ако всяко е чисто, неактивно и няма свързани сесии.",
   "settings.workspaces.delete.blocked.active": "Активното работно пространство не може да бъде изтрито.",
-  "settings.workspaces.delete.blocked.linked": "Свързаните сесии ще останат, но тяхната работна директория ще бъде премахната за постоянно.",
+  "settings.workspaces.delete.blocked.linked":
+    "Свързаните сесии ще останат, но тяхната работна директория ще бъде премахната за постоянно.",
   "settings.workspaces.default.title": "Среда по подразбиране",
   "settings.workspaces.default.description": "Изберете къде започват новите сесии",
   "settings.workspaces.default.lastUsed": "Последно използвано за проект",
@@ -1187,7 +1191,8 @@ export const dict = {
   "workspace.lifecycle.created": "Работното пространство е създадено",
   "workspace.lifecycle.starting": "Начална сесия",
   "workspace.onboarding.title": "Изолирайте сесиите с работни пространства",
-  "workspace.onboarding.description": "Всяко получава собствено работно копие, така че нищо да не пречи на локалното ви хранилище",
+  "workspace.onboarding.description":
+    "Всяко получава собствено работно копие, така че нищо да не пречи на локалното ви хранилище",
   "workspace.lifecycle.moving": "Преминаване към работното пространство",
   "workspace.lifecycle.set": "Работното пространство е зададено",
   "session.summary.title": "Подробности за сесията",

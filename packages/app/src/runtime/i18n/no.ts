@@ -1268,10 +1268,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Siste aktive økt",
   "settings.workspaces.deleteAll": "Slett alle arbeidsområder",
   "settings.workspaces.deleteAll.confirm": "Vil du slette alle {{count}} arbeidsområder?",
-  "settings.workspaces.delete.warning": "Arbeidsområdekatalogen og grenen vil bli permanent fjernet, inkludert eventuelle usammenslåtte endringer vist nedenfor.",
-  "settings.workspaces.deleteAll.warning": "De {{count}} valgte arbeidsområdene i {{project}} vil bli permanent fjernet bare hvis hver av dem er rene, inaktive og ikke har noen tilknyttede økter.",
+  "settings.workspaces.delete.warning":
+    "Arbeidsområdekatalogen og grenen vil bli permanent fjernet, inkludert eventuelle usammenslåtte endringer vist nedenfor.",
+  "settings.workspaces.deleteAll.warning":
+    "De {{count}} valgte arbeidsområdene i {{project}} vil bli permanent fjernet bare hvis hver av dem er rene, inaktive og ikke har noen tilknyttede økter.",
   "settings.workspaces.delete.blocked.active": "Det aktive arbeidsområdet kan ikke slettes.",
-  "settings.workspaces.delete.blocked.linked": "Koblede økter forblir, men arbeidskatalogen deres vil bli permanent fjernet.",
+  "settings.workspaces.delete.blocked.linked":
+    "Koblede økter forblir, men arbeidskatalogen deres vil bli permanent fjernet.",
   "settings.workspaces.default.title": "Standard miljø",
   "settings.workspaces.default.description": "Velg hvor nye økter starter",
   "settings.workspaces.default.lastUsed": "Sist brukt per prosjekt",

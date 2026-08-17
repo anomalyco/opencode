@@ -1162,8 +1162,10 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Վերջին ակտիվ նիստը",
   "settings.workspaces.deleteAll": "Ջնջել բոլոր աշխատանքային տարածքները",
   "settings.workspaces.deleteAll.confirm": "Ջնջե՞լ բոլոր {{count}} աշխատանքային տարածքները",
-  "settings.workspaces.delete.warning": "Աշխատանքային տարածքի պանակը և ճյուղը ընդմիշտ կհեռացվեն՝ ներառյալ ստորև ցուցադրված չմիավորված փոփոխությունները։",
-  "settings.workspaces.deleteAll.warning": "{{project}} նախագծի ընտրված {{count}} աշխատանքային տարածքները ընդմիշտ կհեռացվեն միայն եթե յուրաքանչյուրն անփոփոխ է, ոչ ակտիվ և չունի կապված նիստեր։",
+  "settings.workspaces.delete.warning":
+    "Աշխատանքային տարածքի պանակը և ճյուղը ընդմիշտ կհեռացվեն՝ ներառյալ ստորև ցուցադրված չմիավորված փոփոխությունները։",
+  "settings.workspaces.deleteAll.warning":
+    "{{project}} նախագծի ընտրված {{count}} աշխատանքային տարածքները ընդմիշտ կհեռացվեն միայն եթե յուրաքանչյուրն անփոփոխ է, ոչ ակտիվ և չունի կապված նիստեր։",
   "settings.workspaces.delete.blocked.active": "Ակտիվ աշխատանքային տարածքը չի կարող ջնջվել։",
   "settings.workspaces.delete.blocked.linked": "Կապված նիստերը կմնան, բայց դրանց աշխատանքային պանակը ընդմիշտ կհեռացվի։",
   "settings.workspaces.default.title": "Լռելյայն միջավայր",

@@ -1141,7 +1141,8 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} sesiuni vor fi arhivate.",
   "workspace.reset.note": "Aceasta va reseta spațiul de lucru la ramura implicită.",
   "dialog.usageExceeded.dontShowAgain": "Nu mai afișa",
-  "provider.disconnect.toast.noCredentials.description": "Nu s-au găsit date de autentificare care pot fi eliminate pentru {{provider}}.",
+  "provider.disconnect.toast.noCredentials.description":
+    "Nu s-au găsit date de autentificare care pot fi eliminate pentru {{provider}}.",
   "provider.disconnect.toast.failed.description": "Nu s-a putut deconecta {{provider}}.",
   "toast.migration.failed.title": "Migrarea datelor a eșuat",
   "session.background.moveTasks": "Mută {{tasks}} în fundal",

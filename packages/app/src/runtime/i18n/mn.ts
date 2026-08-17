@@ -1164,10 +1164,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Сүүлд идэвхтэй байсан сесс",
   "settings.workspaces.deleteAll": "Бүх ажлын талбарыг устгах",
   "settings.workspaces.deleteAll.confirm": "Бүх {{count}} ажлын талбарыг устгах уу?",
-  "settings.workspaces.delete.warning": "Ажлын талбарын хавтас болон салаа, доор харуулсан нэгтгээгүй өөрчлөлтүүдийн хамт бүрмөсөн устгагдана.",
-  "settings.workspaces.deleteAll.warning": "{{project}} төсөлд сонгосон {{count}} ажлын талбарыг тус бүр нь цэвэр, идэвхгүй, холбогдсон сессгүй үед л бүрмөсөн устгана.",
+  "settings.workspaces.delete.warning":
+    "Ажлын талбарын хавтас болон салаа, доор харуулсан нэгтгээгүй өөрчлөлтүүдийн хамт бүрмөсөн устгагдана.",
+  "settings.workspaces.deleteAll.warning":
+    "{{project}} төсөлд сонгосон {{count}} ажлын талбарыг тус бүр нь цэвэр, идэвхгүй, холбогдсон сессгүй үед л бүрмөсөн устгана.",
   "settings.workspaces.delete.blocked.active": "Идэвхтэй ажлын талбарыг устгах боломжгүй.",
-  "settings.workspaces.delete.blocked.linked": "Холбогдсон сессүүд үлдэх боловч тэдгээрийн ажлын хавтас бүрмөсөн устгагдана.",
+  "settings.workspaces.delete.blocked.linked":
+    "Холбогдсон сессүүд үлдэх боловч тэдгээрийн ажлын хавтас бүрмөсөн устгагдана.",
   "settings.workspaces.default.title": "Өгөгдмөл орчин",
   "settings.workspaces.default.description": "Шинэ сессүүд хаана эхлэхийг сонгоно уу",
   "settings.workspaces.default.lastUsed": "Төсөл бүрд сүүлд ашигласан",
@@ -1186,7 +1189,8 @@ export const dict = {
   "session.summary.title": "Сессийн дэлгэрэнгүй",
   "session.summary.noBranch": "Салаа байхгүй",
   "session.summary.basedOn": "{{branch}} салаанд суурилсан",
-  "provider.disconnect.toast.noCredentials.description": "{{provider}}-ийн устгах боломжтой нэвтрэх мэдээлэл олдсонгүй.",
+  "provider.disconnect.toast.noCredentials.description":
+    "{{provider}}-ийн устгах боломжтой нэвтрэх мэдээлэл олдсонгүй.",
   "provider.disconnect.toast.failed.description": "{{provider}}-ийг салгаж чадсангүй.",
   "session.timeline.notice.instructionsUpdated": "Заавар шинэчлэгдлээ: {{sources}}",
   "session.timeline.notice.restart": "Дахин эхлүүлсний дараа үргэлжлүүлж байна",

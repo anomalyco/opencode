@@ -1105,8 +1105,7 @@ export const dict = {
   "workspace.lifecycle.created": "Vinnusvæði búið til",
   "workspace.lifecycle.starting": "Ræsir setu",
   "workspace.onboarding.title": "Einangraðu setur með vinnusvæðum",
-  "workspace.onboarding.description":
-    "Hver seta fær sitt eigið checkout, svo ekkert truflar staðbundnu geymsluna",
+  "workspace.onboarding.description": "Hver seta fær sitt eigið checkout, svo ekkert truflar staðbundnu geymsluna",
   "workspace.lifecycle.moving": "Færir á vinnusvæði",
   "workspace.lifecycle.set": "Vinnusvæði valið",
   "session.summary.title": "Upplýsingar um setu",

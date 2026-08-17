@@ -1185,7 +1185,8 @@ export const dict = {
 
   "command.logs.export": "Eksportér logfiler",
 
-  "provider.disconnect.toast.noCredentials.description": "Der blev ikke fundet nogen flytbare legitimationsoplysninger for {{provider}}.",
+  "provider.disconnect.toast.noCredentials.description":
+    "Der blev ikke fundet nogen flytbare legitimationsoplysninger for {{provider}}.",
   "provider.disconnect.toast.failed.description": "Kunne ikke afbryde {{provider}}.",
   "toast.migration.failed.title": "Datamigrering mislykkedes",
   "session.background.moveTasks": "Flyt {{tasks}} til baggrunden",
@@ -1249,10 +1250,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Sidste aktive session",
   "settings.workspaces.deleteAll": "Slet alle arbejdsområder",
   "settings.workspaces.deleteAll.confirm": "Vil du slette alle {{count}}-arbejdsområder?",
-  "settings.workspaces.delete.warning": "Arbejdsområdets bibliotek og filial vil blive permanent fjernet, inklusive eventuelle ikke-sammenflettede ændringer vist nedenfor.",
-  "settings.workspaces.deleteAll.warning": "De {{count}} valgte arbejdsområder i {{project}} vil kun blive permanent fjernet, hvis hver af dem er rene, inaktive og ikke har nogen linkede sessioner.",
+  "settings.workspaces.delete.warning":
+    "Arbejdsområdets bibliotek og filial vil blive permanent fjernet, inklusive eventuelle ikke-sammenflettede ændringer vist nedenfor.",
+  "settings.workspaces.deleteAll.warning":
+    "De {{count}} valgte arbejdsområder i {{project}} vil kun blive permanent fjernet, hvis hver af dem er rene, inaktive og ikke har nogen linkede sessioner.",
   "settings.workspaces.delete.blocked.active": "Det aktive arbejdsområde kan ikke slettes.",
-  "settings.workspaces.delete.blocked.linked": "Linkede sessioner forbliver, men deres arbejdsmappe vil blive permanent fjernet.",
+  "settings.workspaces.delete.blocked.linked":
+    "Linkede sessioner forbliver, men deres arbejdsmappe vil blive permanent fjernet.",
   "settings.workspaces.default.title": "Standard miljø",
   "settings.workspaces.default.description": "Vælg, hvor nye sessioner starter",
   "settings.workspaces.default.lastUsed": "Sidst brugt pr. projekt",

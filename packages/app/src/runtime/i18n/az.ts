@@ -1165,10 +1165,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "Son aktiv sessiya",
   "settings.workspaces.deleteAll": "Bütün iş sahələrini sil",
   "settings.workspaces.deleteAll.confirm": "Bütün {{count}} iş sahəsi silinsin?",
-  "settings.workspaces.delete.warning": "İş sahəsi qovluğu və branch, aşağıda göstərilən birləşdirilməmiş dəyişikliklər də daxil olmaqla, həmişəlik silinəcək.",
-  "settings.workspaces.deleteAll.warning": "{{project}} layihəsində seçilmiş {{count}} iş sahəsi yalnız hər biri təmiz, qeyri-aktiv və əlaqəli sessiyasız olduqda həmişəlik silinəcək.",
+  "settings.workspaces.delete.warning":
+    "İş sahəsi qovluğu və branch, aşağıda göstərilən birləşdirilməmiş dəyişikliklər də daxil olmaqla, həmişəlik silinəcək.",
+  "settings.workspaces.deleteAll.warning":
+    "{{project}} layihəsində seçilmiş {{count}} iş sahəsi yalnız hər biri təmiz, qeyri-aktiv və əlaqəli sessiyasız olduqda həmişəlik silinəcək.",
   "settings.workspaces.delete.blocked.active": "Aktiv iş sahəsi silinə bilməz.",
-  "settings.workspaces.delete.blocked.linked": "Əlaqəli sessiyalar qalacaq, lakin onların iş qovluğu həmişəlik silinəcək.",
+  "settings.workspaces.delete.blocked.linked":
+    "Əlaqəli sessiyalar qalacaq, lakin onların iş qovluğu həmişəlik silinəcək.",
   "settings.workspaces.default.title": "Standart mühit",
   "settings.workspaces.default.description": "Yeni sessiyaların harada başlayacağını seçin",
   "settings.workspaces.default.lastUsed": "Hər layihə üzrə son istifadə edilən",
@@ -1181,7 +1184,8 @@ export const dict = {
   "workspace.lifecycle.created": "İş sahəsi yaradıldı",
   "workspace.lifecycle.starting": "Sessiya başladılır",
   "workspace.onboarding.title": "Sessiyaları iş sahələri ilə təcrid edin",
-  "workspace.onboarding.description": "Hər birinin öz checkout-u var, buna görə heç nə yerli repozitoriyanıza müdaxilə etmir",
+  "workspace.onboarding.description":
+    "Hər birinin öz checkout-u var, buna görə heç nə yerli repozitoriyanıza müdaxilə etmir",
   "workspace.lifecycle.moving": "İş sahəsinə köçürülür",
   "workspace.lifecycle.set": "İş sahəsi təyin edildi",
   "session.summary.title": "Sessiya detalları",

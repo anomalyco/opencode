@@ -1112,7 +1112,8 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} ސެޝަންތައް އަރުޝީފް ކުރެވޭނެއެވެ.",
   "workspace.reset.note": "މިއީ ޑިފޯލްޓް ބްރާންޗާ އެއްގޮތްވާ ގޮތަށް ވޯކްސްޕޭސް ރީސެޓް ކުރާނެ ކަމެކެވެ.",
   "dialog.usageExceeded.dontShowAgain": "އަލުން ނުދައްކާ",
-  "provider.disconnect.toast.noCredentials.description": "{{provider}} އަށް ނައްތާލެވޭ އެއްވެސް ކްރެޑެންޝަލެއް ނުފެނުނެވެ.",
+  "provider.disconnect.toast.noCredentials.description":
+    "{{provider}} އަށް ނައްތާލެވޭ އެއްވެސް ކްރެޑެންޝަލެއް ނުފެނުނެވެ.",
   "provider.disconnect.toast.failed.description": "{{provider}} ޑިސްކަނެކްޓް ނުކުރެވުނެވެ.",
   "toast.migration.failed.title": "ޑޭޓާ މައިގްރޭޝަން ފެއިލްވެއްޖެއެވެ",
   "session.background.moveTasks": "{{tasks}} ބެކްގްރައުންޑަށް ބަދަލުކުރާށެވެ",
@@ -1176,10 +1177,13 @@ export const dict = {
   "settings.workspaces.lastActiveSession": "ފަހުގެ އެކްޓިވް ސެޝަން",
   "settings.workspaces.deleteAll": "ހުރިހާ ވޯކްސްޕޭސްތައް ފުހެލާށެވެ",
   "settings.workspaces.deleteAll.confirm": "ހުރިހާ {{count}} ވޯކްސްޕޭސް ފުހެލަންތަ؟",
-  "settings.workspaces.delete.warning": "ތިރީގައި ދައްކާ މާޖްނުކުރެވި ހުރި ބަދަލުތަކާއެކު ވޯކްސްޕޭސް ޑައިރެކްޓަރީ އަދި ބްރާންޗް ދާއިމީކޮށް ނައްތާލެވޭނެއެވެ.",
-  "settings.workspaces.deleteAll.warning": "{{project}} ގައި ހޮވާފައިވާ {{count}} ވޯކްސްޕޭސް، ކޮންމެ ވޯކްސްޕޭސެއް ސާފު، އިނެކްޓިވް، އަދި ލިންކްވެފައިވާ ސެޝަނެއް ނެތްނަމަ އެކަނި ދާއިމީކޮށް ނައްތާލެވޭނެއެވެ.",
+  "settings.workspaces.delete.warning":
+    "ތިރީގައި ދައްކާ މާޖްނުކުރެވި ހުރި ބަދަލުތަކާއެކު ވޯކްސްޕޭސް ޑައިރެކްޓަރީ އަދި ބްރާންޗް ދާއިމީކޮށް ނައްތާލެވޭނެއެވެ.",
+  "settings.workspaces.deleteAll.warning":
+    "{{project}} ގައި ހޮވާފައިވާ {{count}} ވޯކްސްޕޭސް، ކޮންމެ ވޯކްސްޕޭސެއް ސާފު، އިނެކްޓިވް، އަދި ލިންކްވެފައިވާ ސެޝަނެއް ނެތްނަމަ އެކަނި ދާއިމީކޮށް ނައްތާލެވޭނެއެވެ.",
   "settings.workspaces.delete.blocked.active": "އެކްޓިވް ވޯކްސްޕޭސް ފުހެލެވޭނެ ގޮތެއް ނެތެވެ.",
-  "settings.workspaces.delete.blocked.linked": "ލިންކްވެފައިވާ ސެޝަންތައް ހުންނާނެ، ނަމަވެސް އޭގެ ވޯކިންގ ޑައިރެކްޓަރީ ދާއިމީކޮށް ނައްތާލެވޭނެއެވެ.",
+  "settings.workspaces.delete.blocked.linked":
+    "ލިންކްވެފައިވާ ސެޝަންތައް ހުންނާނެ، ނަމަވެސް އޭގެ ވޯކިންގ ޑައިރެކްޓަރީ ދާއިމީކޮށް ނައްތާލެވޭނެއެވެ.",
   "settings.workspaces.default.title": "ޑިފޯލްޓް މާޙައުލު",
   "settings.workspaces.default.description": "އާ ސެޝަންތައް ފަށާނެ ތަން ހޮވާށެވެ",
   "settings.workspaces.default.lastUsed": "ކޮންމެ ޕްރޮޖެކްޓަކަށް ވަކިން ފަހުން ބޭނުންކުރި",
@@ -1192,7 +1196,8 @@ export const dict = {
   "workspace.lifecycle.created": "ވޯކްސްޕޭސް އުފެދިއްޖެއެވެ",
   "workspace.lifecycle.starting": "ސެޝަން ފަށަމުން",
   "workspace.onboarding.title": "ވޯކްސްޕޭސްތަކުން ސެޝަންތައް ވަކިކޮށް ބަހައްޓާށެވެ",
-  "workspace.onboarding.description": "ކޮންމެ ސެޝަނަކަށް ވަކި ޗެކްއައުޓެއް ލިބޭތީ ތިޔަ ލޯކަލް ރިޕޮޒިޓަރީއަށް އެއްވެސް ހުރަހެއް ނާޅާނެއެވެ",
+  "workspace.onboarding.description":
+    "ކޮންމެ ސެޝަނަކަށް ވަކި ޗެކްއައުޓެއް ލިބޭތީ ތިޔަ ލޯކަލް ރިޕޮޒިޓަރީއަށް އެއްވެސް ހުރަހެއް ނާޅާނެއެވެ",
   "workspace.lifecycle.moving": "ވޯކްސްޕޭސަށް ބަދަލުކުރަމުން",
   "workspace.lifecycle.set": "ވޯކްސްޕޭސް ސެޓްވެއްޖެއެވެ",
   "session.summary.title": "ސެޝަންގެ ތަފްޞީލު",
