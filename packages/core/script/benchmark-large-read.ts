@@ -1,10 +1,17 @@
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
+import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
+import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Effect } from "effect"
+import { ChildProcessSpawner } from "effect/unstable/process"
+import { Environment } from "../src/environment/index"
+import { AbsolutePath } from "../src/schema"
+import { ReadToolFileSystem } from "../src/tool/read-filesystem"
 
 const CHUNK_SIZE = 256 * 1024
 const VSCODE_CHUNK_SIZE = 64 * 1024
-const TREE_BASE = 6
 const OFFSET = 2_000_000
 const LIMIT = 125
 const LINES = OFFSET + LIMIT + 125
@@ -68,76 +75,21 @@ const current = async () => {
   }
 }
 
-type Summary = { readonly bytes: number; readonly lines: number }
-type ZedNode =
-  | { readonly type: "leaf"; readonly data: Buffer; readonly summary: Summary }
-  | { readonly type: "branch"; readonly children: ReadonlyArray<ZedNode>; readonly summary: Summary }
-
-const summary = (nodes: ReadonlyArray<ZedNode>) => ({
-  bytes: nodes.reduce((total, node) => total + node.summary.bytes, 0),
-  lines: nodes.reduce((total, node) => total + node.summary.lines, 0),
-})
-
 // Request-local adaptation of Zed's Rope<SumTree<Chunk>>. Leaves summarize
 // bytes/newlines and a B+-style tree seeks by accumulated newline count.
 // https://github.com/zed-industries/zed/blob/8968bf78084f30809aa2ce1574a3be68ed02a513/crates/rope/src/rope.rs
-const zed = async () => {
-  const handle = await fs.open(file, "r")
-  const leaves: Array<Extract<ZedNode, { readonly type: "leaf" }>> = []
-
-  for (let position = 0; ; position += CHUNK_SIZE) {
-    const data = await readChunk(handle, position, CHUNK_SIZE)
-    if (data.length === 0) break
-    let lines = 0
-    for (const byte of data) if (byte === 10) lines++
-    leaves.push({ type: "leaf", data, summary: { bytes: data.length, lines } })
-  }
-
-  const build = (nodes: ReadonlyArray<ZedNode>): ZedNode => {
-    if (nodes.length === 1) return nodes[0]
-    const parents = Array.from({ length: Math.ceil(nodes.length / (TREE_BASE * 2)) }, (_, index) => {
-      const children = nodes.slice(index * TREE_BASE * 2, (index + 1) * TREE_BASE * 2)
-      return { type: "branch" as const, children, summary: summary(children) }
+const zedLayer = LayerNode.compile(LayerNode.group([CrossSpawnSpawner.node, LayerNodePlatform.filesystem]))
+const zed = () =>
+  Effect.gen(function* () {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const environment = Environment.makeFiles(Environment.makeLocalDriver(spawner))
+    const result = yield* ReadToolFileSystem.read(environment, AbsolutePath.make(file), "opencode.log", {
+      offset: OFFSET,
+      limit: LIMIT,
     })
-    return build(parents)
-  }
-
-  const root = build(leaves)
-  const byteOffset = (newline: number) => {
-    if (newline === 0) return 0
-    let node = root
-    let remaining = newline
-    let offset = 0
-    while (node.type === "branch") {
-      const child = node.children.find((candidate) => {
-        if (remaining <= candidate.summary.lines) return true
-        remaining -= candidate.summary.lines
-        offset += candidate.summary.bytes
-        return false
-      })
-      if (!child) return root.summary.bytes
-      node = child
-    }
-    for (const [index, byte] of node.data.entries()) {
-      if (byte !== 10) continue
-      remaining--
-      if (remaining === 0) return offset + index + 1
-    }
-    return root.summary.bytes
-  }
-
-  const start = byteOffset(OFFSET - 1)
-  const end = byteOffset(OFFSET + LIMIT - 1)
-  let position = 0
-  const selected = leaves.flatMap((leaf) => {
-    const leafStart = position
-    position += leaf.data.length
-    if (position <= start || leafStart >= end) return []
-    return [leaf.data.subarray(Math.max(0, start - leafStart), Math.min(leaf.data.length, end - leafStart))]
-  })
-  await handle.close()
-  return new TextDecoder().decode(Buffer.concat(selected)).replace(/\n$/, "")
-}
+    if (result.type !== "text-page") return yield* Effect.die("production read did not return a text page")
+    return result.content
+  }).pipe(Effect.scoped, Effect.provide(zedLayer), Effect.runPromise)
 
 type Piece = { readonly data: Buffer; readonly lineStarts: Uint32Array }
 type PieceNode = {
