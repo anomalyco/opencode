@@ -42,6 +42,7 @@ import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
 import { decode64 } from "@/utils/base64"
+import { promptKeybindOptions, PROMPT_KEYBINDS } from "@/components/prompt-input/keybinds"
 
 import { TargetSessionRouteContent } from "@/pages/session"
 import { Home } from "@/pages/home"
@@ -201,6 +202,20 @@ function DesktopCommands() {
   return null
 }
 
+function PromptCommands() {
+  const command = useCommand()
+  const language = useLanguage()
+
+  command.register("prompt", () =>
+    promptKeybindOptions({
+      submit: language.t(PROMPT_KEYBINDS.submit.title),
+      newline: language.t(PROMPT_KEYBINDS.newline.title),
+    }),
+  )
+
+  return null
+}
+
 function AppLayout(props: ParentProps) {
   return (
     <LayoutProvider>
@@ -274,6 +289,7 @@ export function AppInterface(props: {
     <TabsProvider>
       <BodyTypography />
       <CommandProvider>
+        <PromptCommands />
         <DesktopCommands />
         <HighlightsProvider>
           {props.children}

@@ -14,6 +14,7 @@ import { normalizePromptHistoryEntry, promptLength, type PromptHistoryComment } 
 import { createPersistedPromptInputHistory } from "@/components/prompt-input/history-store"
 import { promptDesignPlaceholder, promptPlaceholder } from "@/components/prompt-input/placeholder"
 import { createPromptSubmit } from "@/components/prompt-input/submit"
+import { createPromptKeybinds, PROMPT_KEYBINDS } from "@/components/prompt-input/keybinds"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useCommand } from "@/context/command"
@@ -49,6 +50,7 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
+  const keybinds = createPromptKeybinds()
 
   return (
     <div class="flex flex-col gap-3">
@@ -60,6 +62,8 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
         variantControlVisible={!props.controller.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
+        keybinds={keybinds}
+        submitKeybind={command.keybindParts(PROMPT_KEYBINDS.submit.id)}
         modelControl={
           <PromptInputV2ModelControl
             loading={props.controller.model.loading}
