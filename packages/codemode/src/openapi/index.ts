@@ -3,6 +3,7 @@ import { make, type Definition } from "../tool.js"
 import { invoke } from "./runtime.js"
 import {
   componentDefinitions,
+  hasDirectionalSchemas,
   inputSchema,
   isRecord,
   methods,
@@ -38,7 +39,10 @@ export const fromSpec = (options: Options): Result => {
   const document = options.spec
   const schemes = securitySchemes(document)
   const defaultSecurity = securityRequirements(document.security)
-  const definitions = componentDefinitions(document)
+  const requestDefinitions = componentDefinitions(document, "request")
+  const responseDefinitions = hasDirectionalSchemas(document)
+    ? componentDefinitions(document, "response")
+    : requestDefinitions
   const paths = isRecord(document.paths) ? document.paths : {}
   const used = new Set<string>()
   const namespaces = new Set<string>()
@@ -57,7 +61,7 @@ export const fromSpec = (options: Options): Result => {
         summary: nonEmptyString(operationValue.summary),
         description: nonEmptyString(operationValue.description),
       }
-      const output = operationOutput(document, operationValue, definitions)
+      const output = operationOutput(document, operationValue, responseDefinitions)
       if (!output.ok) {
         skipped.push({ method: operation.method, path, reason: output.reason })
         continue
@@ -102,7 +106,7 @@ export const fromSpec = (options: Options): Result => {
         segments,
         make({
           description: operation.description ?? operation.summary ?? `${operation.method} ${path}`,
-          input: inputSchema(input.fields, definitions),
+          input: inputSchema(input.fields, requestDefinitions),
           output: output.value,
           run: (input) => invoke(plan, input),
         }),

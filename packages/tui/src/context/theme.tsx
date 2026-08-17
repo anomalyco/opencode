@@ -297,18 +297,19 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       themePerformance.set("Resolve final theme", duration(performance.now() - resolveStarted))
       return result
     })
-    const themeV2 = createComponentTheme(valuesV2)
+    const mode = () => store.mode
+    const themeV2 = createComponentTheme(valuesV2, mode)
     const contextsV2 = {
       elevated: createComponentTheme(() => {
         const theme = valuesV2().contexts["@context:elevated"]
         if (!theme) throw new Error("Theme context is not defined: elevated")
         return theme
-      }),
+      }, mode),
       overlay: createComponentTheme(() => {
         const theme = valuesV2().contexts["@context:overlay"]
         if (!theme) throw new Error("Theme context is not defined: overlay")
         return theme
-      }),
+      }, mode),
     }
 
     createEffect(() => renderer.setBackgroundColor(values().background))

@@ -18,7 +18,7 @@ import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Effect } from "effect"
+import { Effect, Logger } from "effect"
 import { Database } from "../../src/database/database"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
@@ -111,8 +111,15 @@ describe("PluginSupervisor config", () => {
     ),
   )
 
-  it.live("ignores invalid packages and continues loading", () =>
-    withLocation(
+  it.live("logs invalid packages and continues loading", () => {
+    const output: string[] = []
+    const logger = Logger.map(Logger.formatStructured, (entry) => {
+      if (!Array.isArray(entry.message) || entry.message[0] !== "failed to load plugin") return
+      const details = entry.message[1]
+      if (typeof details !== "object" || details === null || !("target" in details)) return
+      if (typeof details.target === "string") output.push(details.target)
+    })
+    return withLocation(
       {
         plugins: [
           "-*",
@@ -130,9 +137,13 @@ describe("PluginSupervisor config", () => {
         expect(yield* agents.get(AgentV2.ID.make("configured"))).toMatchObject({
           description: "Loaded after invalid plugins",
         })
+        expect(output).toEqual([
+          path.join(import.meta.dir, "../plugin/fixtures/missing-plugin.ts"),
+          path.join(import.meta.dir, "../plugin/fixtures/invalid-plugin.ts"),
+        ])
       }),
-    ),
-  )
+    ).pipe(Effect.provide(Logger.layer([logger])))
+  })
 
   it.live("loads auto-discovered plugin files", () =>
     withLocation(

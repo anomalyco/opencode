@@ -1,11 +1,11 @@
 export * as ProviderV2 from "./provider"
 
 import { Effect, Schema } from "effect"
-import { pathToFileURL } from "url"
 import { Provider } from "@opencode-ai/schema/provider"
 import type { ProviderPackageDefinition } from "@opencode-ai/ai"
 import { Npm } from "./npm"
 import type { DeepMutable } from "./schema"
+import { importModule, resolveModule } from "#runtime-import"
 
 export const ID = Provider.ID
 export type ID = typeof ID.Type
@@ -32,8 +32,24 @@ export class LoadError extends Schema.TaggedErrorClass<LoadError>()("ProviderV2.
 export type ProviderPackage = ProviderPackageDefinition
 
 const packages = new Map<string, Promise<unknown>>()
+const builtins = new Map<string, () => Promise<unknown>>([
+  ["@opencode-ai/ai/providers/amazon-bedrock", () => import("@opencode-ai/ai/providers/amazon-bedrock")],
+  ["@opencode-ai/ai/providers/anthropic", () => import("@opencode-ai/ai/providers/anthropic")],
+  ["@opencode-ai/ai/providers/azure", () => import("@opencode-ai/ai/providers/azure")],
+  ["@opencode-ai/ai/providers/azure/chat", () => import("@opencode-ai/ai/providers/azure/chat")],
+  ["@opencode-ai/ai/providers/azure/responses", () => import("@opencode-ai/ai/providers/azure/responses")],
+  ["@opencode-ai/ai/providers/google", () => import("@opencode-ai/ai/providers/google")],
+  ["@opencode-ai/ai/providers/openai", () => import("@opencode-ai/ai/providers/openai")],
+  ["@opencode-ai/ai/providers/openai/chat", () => import("@opencode-ai/ai/providers/openai/chat")],
+  ["@opencode-ai/ai/providers/openai/responses", () => import("@opencode-ai/ai/providers/openai/responses")],
+  ["@opencode-ai/ai/providers/openai-compatible", () => import("@opencode-ai/ai/providers/openai-compatible")],
+  ["@opencode-ai/ai/providers/openrouter", () => import("@opencode-ai/ai/providers/openrouter")],
+  ["@opencode-ai/ai/providers/xai", () => import("@opencode-ai/ai/providers/xai")],
+])
 
 export const loadPackage = Effect.fn("ProviderV2.loadPackage")(function* (specifier: string, npm?: Npm.Interface) {
+  const builtin = builtins.get(specifier)
+  if (builtin) return yield* importPackage(specifier, specifier, builtin)
   const resolved = yield* Effect.sync(() => {
     if (specifier.startsWith("file://") || specifier.startsWith("@opencode-ai/ai/")) return specifier
     try {
@@ -53,7 +69,8 @@ export const loadPackage = Effect.fn("ProviderV2.loadPackage")(function* (specif
   const root = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : (parts[0] ?? specifier)
   const installed = yield* npm.add(root).pipe(Effect.mapError((cause) => new LoadError({ package: specifier, cause })))
   const entrypoint = yield* Effect.try({
-    try: () => import.meta.resolve(specifier, pathToFileURL(`${installed.directory}/`).href),
+    try: () =>
+      specifier === root && installed.entrypoint ? installed.entrypoint : resolveModule(specifier, installed.directory),
     catch: (cause) => new LoadError({ package: specifier, cause }),
   })
   return yield* importPackage(specifier, entrypoint)
@@ -116,12 +133,16 @@ export type Info = Provider.Info
 
 export type MutableInfo = DeepMutable<Info>
 
-const importPackage = Effect.fn("ProviderV2.importPackage")(function* (specifier: string, entrypoint: string) {
+const importPackage = Effect.fn("ProviderV2.importPackage")(function* (
+  specifier: string,
+  entrypoint: string,
+  load = () => importModule(entrypoint),
+) {
   const module = yield* Effect.tryPromise({
     try: () => {
       const existing = packages.get(entrypoint)
       if (existing) return existing
-      const loaded = import(entrypoint)
+      const loaded = load()
       packages.set(entrypoint, loaded)
       return loaded
     },

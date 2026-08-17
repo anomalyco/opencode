@@ -43,12 +43,35 @@
     "./util/persistence": "./src/util/persistence.ts",
     "./util/record": "./src/util/record.ts",
     "./util/session": "./src/util/session.ts",
+    "./util/string-width": "./src/util/string-width.ts",
     "./logo": "./src/logo.ts",
     "./ui/dialog": "./src/ui/dialog.tsx",
     "./ui/spinner": "./src/ui/spinner.ts",
     "./ui/toast": "./src/ui/toast.tsx",
     "./component/spinner": "./src/component/spinner.tsx",
     "./component/register-spinner": "./src/component/register-spinner.ts"
+  },
+  "imports": {
+    "#attention-sounds": {
+      "bun": "./src/attention-sounds.bun.ts",
+      "node": "./src/attention-sounds.node.ts",
+      "default": "./src/attention-sounds.bun.ts"
+    },
+    "#terminal-win32": {
+      "bun": "./src/terminal-win32.bun.ts",
+      "node": "./src/terminal-win32.node.ts",
+      "default": "./src/terminal-win32.bun.ts"
+    },
+    "#string-width": {
+      "bun": "./src/util/string-width.bun.ts",
+      "node": "./src/util/string-width.node.ts",
+      "default": "./src/util/string-width.bun.ts"
+    },
+    "#zed-sqlite": {
+      "bun": "./src/editor-zed-sqlite.bun.ts",
+      "node": "./src/editor-zed-sqlite.node.ts",
+      "default": "./src/editor-zed-sqlite.bun.ts"
+    }
   },
   "dependencies": {
     "@opencode-ai/client": "workspace:*",
@@ -64,10 +87,12 @@
     "diff": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
+    "get-east-asian-width": "catalog:",
     "open": "10.1.2",
     "opentui-spinner": "catalog:",
     "remeda": "catalog:",
     "solid-js": "catalog:",
+    "string-width": "catalog:",
     "strip-ansi": "7.1.2",
     "uqr": "0.1.3"
   },

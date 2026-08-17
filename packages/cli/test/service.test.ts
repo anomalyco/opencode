@@ -191,9 +191,7 @@ test("concurrent service processes elect one server", async () => {
       ),
     ).toEqual({ timeSuspended: null })
     expect(await waitForExecutionStart(database, sessionID)).toBe(1)
-    await Effect.runPromise(
-      Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)),
-    )
+    await Effect.runPromise(Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)))
     await winner?.exited
   } finally {
     processes.forEach((process) => process.kill("SIGTERM"))
@@ -271,7 +269,7 @@ function waitForExecutionStart(file: string, sessionID: SessionV2.ID) {
           ),
           Effect.filterOrFail((rows) => rows.length > 0),
           Effect.map((rows) => rows.length),
-          Effect.retry(Schedule.spaced("50 millis").pipe(Schedule.both(Schedule.recurs(200)))),
+          Effect.retry(Schedule.max([Schedule.spaced("50 millis"), Schedule.recurs(200)])),
         )
     }),
   )

@@ -134,6 +134,8 @@ export type SessionMessageCompactionCompleted = {
 
 export type InstructionEntryKey = string
 
+export type SessionGenerateResponse = { data: { text: string } }
+
 export type SessionPendingSyntheticData1 = { text: string; description?: string; metadata?: { [x: string]: any } }
 
 export type ShellInfo = {
@@ -3186,6 +3188,13 @@ export type SessionInstructionsEntryRemoveInput = {
 }
 
 export type SessionInstructionsEntryRemoveOutput = void
+
+export type SessionGenerateInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly prompt: { readonly prompt: string }["prompt"]
+}
+
+export type SessionGenerateOutput = SessionGenerateResponse["data"]
 
 export type SessionLogInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]

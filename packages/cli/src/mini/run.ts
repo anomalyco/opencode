@@ -4,6 +4,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Model } from "@opencode-ai/schema/model"
 import { open } from "node:fs/promises"
 import path from "node:path"
+import { readStdin } from "../util/io"
 import { ServerConnection } from "../services/server-connection"
 import { loadRunAgents, waitForCatalogReady } from "./catalog.shared"
 import { runNonInteractivePrompt } from "./noninteractive"
@@ -48,7 +49,7 @@ async function run(input: RunCommandInput) {
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
   const root = process.env.PWD ?? process.cwd()
   const directory = localDirectory(root)
-  const message = mergeInput(formatMessage(input.message), process.stdin.isTTY ? undefined : await Bun.stdin.text())
+  const message = mergeInput(formatMessage(input.message), process.stdin.isTTY ? undefined : await readStdin())
   if (!message?.trim()) fail("You must provide a message")
   const files = await Promise.all(input.file.map((file) => prepareFile(file, root)))
   const prepared = { directory, message, files }
