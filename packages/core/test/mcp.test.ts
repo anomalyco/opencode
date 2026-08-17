@@ -14,6 +14,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import { Document, Event, Info } from "@opencode-ai/schema/config"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
+import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigMCPPlugin } from "@opencode-ai/core/config/plugin/mcp"
 import { Credential } from "@opencode-ai/core/credential"
@@ -175,6 +176,7 @@ function resourceMcpLayer(
     entries?: Config.Interface["entries"]
     subscribe?: Bus.Interface["subscribe"]
     environment?: Layer.Layer<Environment.Service>
+    published?: string[]
   },
 ) {
   const directory = AbsolutePath.make(import.meta.dir)
@@ -222,6 +224,7 @@ function resourceMcpLayer(
               type: definition.type,
               data,
             } as Payload<typeof definition>
+            overrides?.published?.push(event.type)
             if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
             return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
           },
@@ -983,6 +986,28 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
           ),
         )
       }),
+    ),
+  )
+})
+
+test("announces initially disabled MCP servers", async () => {
+  const published: string[] = []
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = yield* MCP.Service
+        expect(yield* service.servers()).toMatchObject([{ name: "resources", status: { status: "disabled" } }])
+        expect(published).toContain(McpEvent.StatusChanged.type)
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer(
+            new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }),
+            undefined,
+            undefined,
+            { published },
+          ),
+        ),
+      ),
     ),
   )
 })

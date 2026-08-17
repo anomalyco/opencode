@@ -605,6 +605,7 @@ export const layer = (options?: Options) =>
             if (entry.config.disabled) {
               entry.status = { status: "disabled" }
               Deferred.doneUnsafe(entry.startup, Exit.void)
+              yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
               continue
             }
             fork(startServer(name, entry).pipe(locks.withLock(name)))
