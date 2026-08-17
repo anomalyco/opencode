@@ -9,7 +9,7 @@ import type {
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 import { exists, readText } from "@/util/filesystem"
-import type { ACPSession } from "./session"
+import { ACPSession } from "./session"
 import { pendingToolCall, toLocations, type ToolInput } from "./tool"
 import { Effect } from "effect"
 
@@ -50,8 +50,16 @@ export class Handler {
 
   private async process(event: PermissionEvent) {
     const permission = event.properties
-    const session = await Effect.runPromise(this.input.session.tryGet(permission.sessionID))
-    if (!session) return
+    const session = await this.resolveSession(permission.sessionID)
+    if (!session) {
+      // Unresolvable even after walking the parentID chain (e.g. a child
+      // session whose ancestor was itself never registered). Reply with an
+      // active reject instead of silently dropping the event — silence
+      // leaves the underlying Permission.ask Deferred unresolved forever,
+      // hanging whichever session/prompt call is waiting on it (G1).
+      await this.rejectUnresolvable(permission.id)
+      return
+    }
 
     if (!this.input.connection.requestPermission) {
       await this.reply(permission.id, "reject", session.cwd)
@@ -94,6 +102,41 @@ export class Handler {
       reply,
       directory,
     })
+  }
+
+  // Child/subagent sessions spawned server-side by the `task` tool are never
+  // registered as their own ACP session (only session/new|load|resume|fork
+  // register one). Walk the SDK's `parentID` chain to find the nearest
+  // ancestor that IS registered, so permission asks from those sessions
+  // still route through this connection instead of being dropped.
+  private resolveSession(sessionID: string): Promise<ACPSession.Info | undefined> {
+    return Effect.runPromise(
+      ACPSession.resolveAncestor({
+        tryGet: this.input.session.tryGet,
+        sessionId: sessionID,
+        fetchParentID: (id) => this.fetchParentID(id),
+      }),
+    )
+  }
+
+  private async fetchParentID(sessionID: string): Promise<string | undefined> {
+    const roots = await Effect.runPromise(this.input.session.list())
+    const directories = [...new Set(roots.map((root) => root.cwd))]
+    for (const directory of directories) {
+      const info = await this.input.sdk.session
+        .get({ directory, sessionID }, { throwOnError: true })
+        .then((response) => response.data)
+        .catch(() => undefined)
+      if (info) return info.parentID
+    }
+    return undefined
+  }
+
+  private async rejectUnresolvable(requestID: string) {
+    const roots = await Effect.runPromise(this.input.session.list())
+    const directory = roots[0]?.cwd
+    if (!directory) return
+    await this.reply(requestID, "reject", directory).catch(() => {})
   }
 
   private async writeProposedEdit(sessionId: string, metadata: ToolInput) {
