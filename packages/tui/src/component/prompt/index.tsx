@@ -452,7 +452,6 @@ export function Prompt(props: PromptProps) {
         title: "Queue prompt",
         name: "prompt.queue",
         category: "Prompt",
-        palette: undefined,
         run: async (_input: string | undefined, event?: KeyEvent) => {
           event?.preventDefault()
           event?.stopPropagation()

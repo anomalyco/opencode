@@ -399,7 +399,7 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects unsupported media in tool-result content with a clear error", () =>
+  it.effect("rejects tool-result media that cannot be lowered", () =>
     Effect.gen(function* () {
       const error = yield* compileRequest(
         LLM.request({
@@ -418,8 +418,7 @@ describe("Anthropic Messages route", () => {
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("Anthropic Messages")
-      expect(error.message).toContain("audio/mpeg")
+      expect(error.message).toContain("Anthropic Messages does not support media type audio/mpeg")
     }),
   )
 

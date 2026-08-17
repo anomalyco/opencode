@@ -1149,6 +1149,32 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("passes large PDF tool-result content through", () =>
+    Effect.gen(function* () {
+      const base64 = "A".repeat(8_125_844)
+      const dataUrl = `data:application/pdf;base64,${base64}`
+      const prepared = yield* compileRequest(
+        LLM.request({
+          id: "req_tool_result_large_pdf",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              resultType: "content",
+              result: [{ type: "file", uri: dataUrl, mime: "application/pdf", name: "report.pdf" }],
+            }),
+          ],
+        }),
+      )
+
+      expect(expectToolOutput(prepared.body).output).toEqual([
+        { type: "input_file", filename: "report.pdf", file_data: dataUrl },
+      ])
+    }),
+  )
+
   it.effect("uses xAI inline file encoding for PDF tool results", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -1184,9 +1210,9 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("rejects unsupported media in tool-result content with a clear error", () =>
+  it.effect("passes non-image tool-result content through as an input file", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_tool_result_unsupported_media",
           model,
@@ -1200,10 +1226,11 @@ describe("OpenAI Responses route", () => {
             }),
           ],
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.message).toContain("OpenAI Responses")
-      expect(error.message).toContain("audio/mpeg")
+      expect(expectToolOutput(prepared.body).output).toEqual([
+        { type: "input_file", filename: "file", file_data: "data:audio/mpeg;base64,AAECAw==" },
+      ])
     }),
   )
 
@@ -2394,17 +2421,28 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("rejects unsupported user media content", () =>
+  it.effect("passes non-image user media through as an input file", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_media",
           model,
           messages: [Message.user({ type: "media", mediaType: "application/x-tar", data: "AAECAw==" })],
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.message).toContain("OpenAI Responses does not support media type application/x-tar")
+      expect(prepared.body.input).toEqual([
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_file",
+              filename: "file",
+              file_data: "data:application/x-tar;base64,AAECAw==",
+            },
+          ],
+        },
+      ])
     }),
   )
 

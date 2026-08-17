@@ -62,6 +62,16 @@ test("shows the new session location default in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.new_location")?.default).toBe("launch")
 })
 
+test("validates terminal copy behavior", () => {
+  expect(decodeInfo({ terminal: { copy: "manual" } })).toEqual({ terminal: { copy: "manual" } })
+  expect(decodeInfo({ terminal: { copy: "select" } })).toEqual({ terminal: { copy: "select" } })
+  expect(() => decodeInfo({ terminal: { copy: "always" } })).toThrow()
+
+  const setting = settings.find((setting) => setting.path.join(".") === "terminal.copy")
+  expect(setting?.values).toEqual(["manual", "select"])
+  expect(setting?.default).toBe(process.platform === "win32" ? "manual" : "select")
+})
+
 test("uses command IDs as keybind keys", () => {
   const config = resolve({ keybinds: { "session.list": "ctrl+l" } }, { terminalSuspend: true })
 
@@ -97,6 +107,7 @@ test("preserves migrated v1 keybind defaults", () => {
   const pairs = [
     ["app.exit", "app_exit"],
     ["prompt.paste", "input_paste"],
+    ["prompt.queue", "prompt_queue"],
     ["session.delete", "session_delete"],
     ["session.list", "session_list"],
     ["agent.list", "agent_list"],

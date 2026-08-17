@@ -12,7 +12,6 @@ test("pressing mouse down on a tab navigates before mouse up", async ({ page }) 
   await mockServer(page)
   await page.addInitScript(
     ({ server, sessionA, sessionB }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",
         JSON.stringify([
@@ -46,7 +45,6 @@ test("keyboard navigation follows the visible tab order", async ({ page }) => {
   await mockServer(page)
   await page.addInitScript(
     ({ server, sessionA, unresolved, sessionC }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",
         JSON.stringify([

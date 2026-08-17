@@ -509,21 +509,6 @@ export const dict: Record<string, string> = {
   "wsl.onboarding.desktopVersion": "ডেস্কটপ {{version}}",
   "wsl.onboarding.versionMismatch": "ইনস্টল করা সংস্করণ ডেস্কটপ অ্যাপ সংস্করণের সাথে মেলে না।",
   "wsl.onboarding.adding": "যোগ করা হচ্ছে...",
-  "help.tabs.toast.ariaLabel": "ট্যাব চালু করা হচ্ছে। ট্যাব দিয়ে আপনার কাজ এবং সক্রিয় সেশনগুলি সংগঠিত করুন",
-  "help.tabs.toast.dismiss": "ট্যাব তথ্য খারিজ",
-  "help.tabs.title": "ট্যাব চালু করা হচ্ছে",
-  "help.tabs.description": "ট্যাব দিয়ে আপনার কাজ এবং সক্রিয় সেশনগুলি সংগঠিত করুন",
-  "help.tabs.date": "14 জুলাই",
-  "help.tabs.introduction": "OpenCode ডেস্কটপ এখন ট্যাবের চারপাশে তৈরি।",
-  "help.tabs.sessions":
-    "একটি ট্যাবে একটি নতুন সেশন শুরু করুন, বা আপনার যেকোনো প্রকল্প থেকে একটি বিদ্যমান সেশন খুলুন৷ আপনি যখন নতুন কিছু শুরু করছেন তখন একটি নতুন ট্যাব খুলুন এবং আপনার কাজ শেষ হলে এটি বন্ধ করুন।",
-  "help.tabs.organize":
-    "কয়েকটি ট্যাব খোলা রাখলে আপনার সক্রিয় সেশনগুলি সংগঠিত করা সহজ হয়৷ ট্যাবগুলিকে স্মরণীয় কিছুতে পুনঃনামকরণ করুন যদি আপনি সেগুলিকে কাছাকাছি রাখার পরিকল্পনা করেন৷",
-  "help.tabs.home":
-    "আপনি নতুন হোম স্ক্রিনে আপনার সমস্ত সেশন এবং প্রকল্পগুলি খুঁজে পাবেন৷ একটি সেশন নির্বাচন করা এটি একটি ট্যাবে খোলে।",
-  "help.tabs.persistence": "আপনি যখন অ্যাপটি আবার খুলবেন, তখনও আপনার ট্যাবগুলি খোলা থাকবে৷",
-  "help.tabs.worktrees":
-    "নতুন ডিজাইন এখনও Git Worktrees সমর্থন করে না, এটি শীঘ্রই আসছে। সুতরাং আপনি যদি পূর্ববর্তী লেআউটটি ব্যবহার করা চালিয়ে যেতে চান তবে আপনি সেটিংসে লেআউটগুলির মধ্যে স্যুইচ করতে পারেন৷ শুধু মনে রাখবেন যে নতুন লেআউট কয়েক সপ্তাহের মধ্যে স্থায়ী হয়ে যাবে।",
   "server.row.noUsername": "ব্যবহারকারীর নাম নেই",
   "dialog.project.edit.title": "প্রকল্প সম্পাদনা করুন",
   "dialog.project.edit.name": "নাম",
@@ -966,13 +951,6 @@ export const dict: Record<string, string> = {
   "settings.general.row.editToolPartsExpanded.title": "সম্পাদনা টুল অংশ প্রসারিত করুন",
   "settings.general.row.editToolPartsExpanded.description":
     "টাইমলাইনে ডিফল্টরূপে প্রসারিত সম্পাদনা, লিখুন এবং প্যাচ টুল অংশগুলি দেখান৷",
-  "settings.general.row.newInterface.title": "নতুন লেআউট",
-  "settings.general.row.newInterface.badge": "নতুন",
-  "settings.general.row.newInterface.description":
-    "নতুন ট্যাব এবং হোম লেআউট ব্যবহার করুন. একটি সীমিত সময়ের জন্য লেআউটগুলির মধ্যে স্যুইচ করুন৷",
-  "settings.general.row.newInterfaceNotice.title": "আপনি এখন নতুন লেআউট ব্যবহার করছেন",
-  "settings.general.row.newInterfaceNotice.description": "আগের লেআউট আর উপলব্ধ নেই৷",
-  "settings.general.row.newInterfaceNotice.dismiss": "খারিজ",
   "settings.general.row.pinchZoom.title": "জুম করতে চিমটি করুন",
   "settings.general.row.pinchZoom.description": "ট্র্যাকপ্যাড পিঞ্চ এবং Ctrl - স্ক্রোল অঙ্গভঙ্গি জুম করার অনুমতি দিন",
   "settings.general.row.wayland.title": "স্থানীয় Wayland ব্যবহার করুন",

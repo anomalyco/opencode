@@ -11,6 +11,7 @@ import { SessionContext } from "./context.js"
 import { SessionGenerate } from "./generate.js"
 import { SessionHistory } from "./history.js"
 import { SessionModelHeaders } from "./model-headers.js"
+import { SessionModelHttp } from "./model-http.js"
 import { SessionPromptCacheKey } from "./prompt-cache-key.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSystemPrompt } from "./system-prompt.js"
@@ -79,6 +80,13 @@ export const layer = Layer.effect(
             messages: contextEvent.messages,
             tools: hookedTools,
           }),
+          {
+            http: SessionModelHttp.middleware(hooks, {
+              sessionID: selection.session.id,
+              agent: selection.agent.id,
+              model: model.ref,
+            }),
+          },
         )
         yield* Effect.logInfo("session generation usage diagnostic", { usage: response.usage })
         return response.text

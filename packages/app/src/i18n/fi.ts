@@ -870,13 +870,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Laajenna muokkaustyökalun osat",
   "settings.general.row.editToolPartsExpanded.description":
     "Näytä muokkaus-, kirjoitus- ja paikkaustyökalun osat oletusarvoisesti laajennettuina aikajanalla",
-  "settings.general.row.newInterface.title": "Uusi asettelu",
-  "settings.general.row.newInterface.badge": "Uusi",
-  "settings.general.row.newInterface.description":
-    "Käytä uusia välilehtiä ja etusivun asettelua. Vaihda asettelujen välillä rajoitetun ajan.",
-  "settings.general.row.newInterfaceNotice.title": "Käytät nyt uutta asettelua",
-  "settings.general.row.newInterfaceNotice.description": "Edellinen asettelu ei ole enää käytettävissä",
-  "settings.general.row.newInterfaceNotice.dismiss": "Hylkää",
   "settings.general.row.pinchZoom.title": "Zoomaa nipistämällä",
   "settings.general.row.pinchZoom.description": "Salli zoomaus ohjauslevyn nipistyseleellä ja Ctrl-vierityksellä",
   "settings.general.row.wayland.title": "Käytä alkuperäistä Waylandia",
@@ -1150,19 +1143,4 @@ export const dict = {
   "desktop.picker.error.notSelected": "Tiedostovalitsimessa ei valittu tiedostoa",
   "desktop.picker.error.sizeLimit": "Valitut liitteet ylittävät {{limit}} Mt:n rajan",
   "command.logs.export": "Vie lokit",
-  "help.tabs.toast.ariaLabel": "Esittelyssä välilehdet. Järjestä työsi ja aktiiviset istuntosi välilehtien avulla",
-  "help.tabs.toast.dismiss": "Sulje välilehtien tiedot",
-  "help.tabs.title": "Esittelyssä välilehdet",
-  "help.tabs.description": "Järjestä työsi ja aktiiviset istuntosi välilehtien avulla",
-  "help.tabs.date": "14. heinäkuuta",
-  "help.tabs.introduction": "OpenCode Desktop perustuu nyt välilehtiin.",
-  "help.tabs.sessions":
-    "Aloita uusi istunto välilehdessä tai avaa olemassa oleva istunto mistä tahansa projektistasi. Avaa uusi välilehti, kun aloitat jotain uutta, ja sulje se, kun olet valmis.",
-  "help.tabs.organize":
-    "Muutaman välilehden pitäminen avoinna helpottaa aktiivisten istuntojen järjestämistä. Nimeä välilehdet helposti muistettaviksi, jos aiot pitää ne avoinna.",
-  "help.tabs.home":
-    "Kaikki istuntosi ja projektisi ovat uudessa etusivunäkymässä. Istunnon valitseminen avaa sen välilehteen.",
-  "help.tabs.persistence": "Kun avaat sovelluksen uudelleen, välilehtesi ovat yhä avoinna.",
-  "help.tabs.worktrees":
-    "Uusi ulkoasu ei vielä tue Git-työpuita, mutta tuki on tulossa pian. Jos haluat jatkaa aiemman ulkoasun käyttöä, voit vaihtaa ulkoasua asetuksissa. Huomaa kuitenkin, että uudesta ulkoasusta tulee pysyvä muutaman viikon kuluttua.",
 }

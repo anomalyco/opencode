@@ -28,7 +28,6 @@ import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "openai-chat"
-const IMAGE_MIMES = new Set<string>(ProviderShared.IMAGE_MIMES)
 const RESERVED_REASONING_FIELDS = new Set(["role", "content", "tool_calls"])
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/chat/completions"
@@ -284,7 +283,9 @@ const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
 })
 
 const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart) {
-  const media = yield* ProviderShared.validateMedia("OpenAI Chat", part, IMAGE_MIMES)
+  const media = ProviderShared.normalizeMedia(part)
+  if (!media.mime.startsWith("image/"))
+    return yield* ProviderShared.invalidRequest(`OpenAI Chat does not support media type ${part.mediaType}`)
   return { type: "image_url" as const, image_url: { url: media.dataUrl } }
 })
 

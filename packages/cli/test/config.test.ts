@@ -210,6 +210,46 @@ test("migrates legacy keybind names in an existing cli.json", async () => {
   }
 })
 
+test("migrates copy_on_select in an existing cli.json", async () => {
+  for (const item of [
+    { legacy: true, expected: "select" },
+    { legacy: false, expected: "manual" },
+    { legacy: true, copy: "manual", expected: "manual" },
+  ] as const) {
+    const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+    const file = path.join(directory, "cli.json")
+    await Bun.write(
+      file,
+      `{
+  // Preserve this comment
+  "terminal": {
+    ${item.copy === undefined ? "" : `"copy": ${JSON.stringify(item.copy)},`}
+    "copy_on_select": ${item.legacy}
+  }
+}
+`,
+    )
+
+    try {
+      const config = await run(
+        directory,
+        Effect.gen(function* () {
+          const service = yield* Config.Service
+          return yield* service.get()
+        }),
+      )
+
+      expect(config.terminal).toEqual({ copy: item.expected })
+      const text = await Bun.file(file).text()
+      expect(text).toContain("// Preserve this comment")
+      expect(text).not.toContain("copy_on_select")
+      expect(parse(text).terminal).toEqual({ copy: item.expected })
+    } finally {
+      await Bun.$`rm -rf ${directory}`
+    }
+  }
+})
+
 test("uses migrated keybinds when persistence fails", async () => {
   const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   const file = path.join(directory, "cli.json")

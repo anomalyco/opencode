@@ -166,10 +166,9 @@ function QueryProvider(props: ParentProps) {
   return <QueryClientProvider client={client}>{props.children}</QueryClientProvider>
 }
 
-function BodyDesignClass() {
+function BodyTypography() {
   createRenderEffect(() => {
     if (typeof document === "undefined") return
-    document.body.toggleAttribute("data-new-layout", true)
     document.body.classList.remove("text-12-regular")
     document.body.classList.add("font-(family-name:--font-family-text)", "text-[13px]", "font-[440]")
   })
@@ -273,7 +272,7 @@ export function AppInterface(props: {
   // providers beneath it.
   const Root = (rootProps: ParentProps) => (
     <TabsProvider>
-      <BodyDesignClass />
+      <BodyTypography />
       <CommandProvider>
         <DesktopCommands />
         <HighlightsProvider>

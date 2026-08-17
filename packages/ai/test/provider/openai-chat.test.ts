@@ -527,35 +527,42 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  for (const [name, media] of [
-    ["mismatched data URL MIME", { mediaType: "image/png", data: "data:image/jpeg;base64,/9j/" }],
-    ["malformed base64", { mediaType: "image/png", data: "not-base64" }],
-    ["unsupported SVG", { mediaType: "image/svg+xml", data: "PHN2Zz4=" }],
-  ] as const)
-    it.effect(`rejects ${name}`, () =>
-      Effect.gen(function* () {
-        const error = yield* compileRequest(
-          LLM.request({ model, messages: [Message.user({ type: "media", ...media })] }),
-        ).pipe(Effect.flip)
-        expect(error.message).toMatch(/does not support|does not match|valid base64/)
-      }),
-    )
+  it.effect("passes encoded image media through without local validation", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user([
+              { type: "media", mediaType: "image/png", data: "not-base64" },
+              { type: "media", mediaType: "image/png", data: "data:image/jpeg;base64,/9j/" },
+              { type: "media", mediaType: "image/svg+xml", data: "PHN2Zz4=" },
+            ]),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: "data:image/png;base64,not-base64" } },
+            { type: "image_url", image_url: { url: "data:image/jpeg;base64,/9j/" } },
+            { type: "image_url", image_url: { url: "data:image/svg+xml;base64,PHN2Zz4=" } },
+          ],
+        },
+      ])
+    }),
+  )
 
-  it.effect("rejects oversized image input", () =>
+  it.effect("rejects non-image media that cannot be lowered", () =>
     Effect.gen(function* () {
       const error = yield* compileRequest(
         LLM.request({
           model,
-          messages: [
-            Message.user({
-              type: "media",
-              mediaType: "image/png",
-              data: "A".repeat(ProviderShared.MAX_MEDIA_ENCODED_BYTES + 4),
-            }),
-          ],
+          messages: [Message.user({ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
-      expect(error.message).toContain("encoded limit")
+      expect(error.message).toContain("OpenAI Chat does not support media type audio/mpeg")
     }),
   )
 

@@ -11,7 +11,6 @@ test("tab busy indicator reflects the tab server's own session status", async ({
   await mockServers(page)
   await page.addInitScript(
     ({ serverA, serverB, sessionA, sessionB }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
       localStorage.setItem("opencode.global.dat:server", JSON.stringify({ list: [serverB] }))
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",

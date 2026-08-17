@@ -20,6 +20,7 @@
     "./promise": "./src/promise/index.ts",
     "./promise/api": "./src/promise/api.ts",
     "./service": "./src/promise/service.ts",
+    "./solid": "./src/solid/index.ts",
     "./effect": "./src/effect/index.ts",
     "./effect/api": "./src/effect/api.ts",
     "./effect/service": "./src/effect/service.ts"
@@ -36,10 +37,14 @@
     "@opencode-ai/protocol": "workspace:*"
   },
   "peerDependencies": {
-    "effect": "4.0.0-beta.101"
+    "effect": "4.0.0-beta.101",
+    "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {
     "effect": {
+      "optional": true
+    },
+    "solid-js": {
       "optional": true
     }
   },
@@ -49,6 +54,7 @@
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "solid-js": "catalog:"
   }
 }

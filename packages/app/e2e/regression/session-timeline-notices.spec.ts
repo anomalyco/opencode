@@ -1,10 +1,15 @@
 import { expect, test } from "@playwright/test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
-import { session, sessionID, setupTimeline } from "../performance/timeline-stability/fixture"
+import { event, session, sessionID, setupTimeline } from "../performance/timeline-stability/fixture"
 
 const user = { id: "msg_user", type: "user", text: "Run it", time: { created: 1 } } satisfies SessionMessageInfo
 
-const assistant = (completed: boolean, tool = false, childID?: string): SessionMessageAssistant => ({
+const assistant = (
+  completed: boolean,
+  tool = false,
+  childID?: string,
+  background = false,
+): SessionMessageAssistant => ({
   id: "msg_assistant",
   type: "assistant",
   agent: "build",
@@ -15,7 +20,11 @@ const assistant = (completed: boolean, tool = false, childID?: string): SessionM
           type: "tool",
           id: "call_subagent",
           name: "subagent",
-          state: { status: "running", input: {}, metadata: childID ? { sessionID: childID } : {} },
+          state: {
+            status: "running",
+            input: { description: "Inspect code", ...(background ? { background: true } : {}) },
+            metadata: { status: "running", ...(childID ? { sessionID: childID } : {}) },
+          },
           time: { created: 2 },
         },
       ]
@@ -59,12 +68,17 @@ test("renders current protocol notices in CLI order", async ({ page }) => {
   await expect(notices.nth(1)).toContainText("explore finished · Search code")
   await expect(notices.nth(2)).toContainText("Continuing after restart")
   await expect(notices.nth(3)).toContainText("Skill · Review")
+  await expect(notices).toHaveClass([/text-text-weak/, /text-text-weak/, /text-text-weak/, /text-text-weak/])
+  await expect(notices.locator(".text-text-strong")).toHaveCount(0)
   expect(ownerWarnings).toEqual([])
 })
 
 test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
   await setupTimeline(page, { currentMessages: [user, assistant(false, true)] })
-  await expect(page.locator('[data-component="task-tool-card"]')).toBeVisible()
+  const card = page.locator('[data-component="task-tool-card"]')
+  await expect(card).toBeVisible()
+  await expect(card).toContainText("Inspect code")
+  await expect(card).not.toContainText("(background)")
   await expect(page.getByText("Called `subagent`", { exact: false })).toHaveCount(0)
   await expect(page.locator('[data-component="background-tool-control"]')).toHaveCount(0)
   await expect(page.locator('[data-action="session-background-toggle"]')).toContainText("Move 1 subagent to background")
@@ -75,6 +89,11 @@ test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
   )
   await page.keyboard.press("Control+b")
   await request
+})
+
+test("waits for completion before labeling requested background work", async ({ page }) => {
+  await setupTimeline(page, { currentMessages: [user, assistant(false, true, undefined, true)] })
+  await expect(page.locator('[data-component="task-tool-card"]')).not.toContainText("(background)")
 })
 
 test("navigates from a running subagent card and hides background controls in the child", async ({ page }) => {
@@ -105,7 +124,7 @@ test("shows a badge for active background work", async ({ page }) => {
 test("separates blocking and already-backgrounded work into two rows", async ({ page }) => {
   const backgroundID = "ses_background_existing"
   const blockingID = "ses_background_blocking"
-  await setupTimeline(page, {
+  const timeline = await setupTimeline(page, {
     currentMessages: [
       user,
       {
@@ -175,9 +194,16 @@ test("separates blocking and already-backgrounded work into two rows", async ({ 
   })
 
   const dock = page.locator('[data-component="session-background-dock"]')
+  const backgroundCard = page.locator('[data-timeline-part-id="call_backgrounded"]')
   await expect(dock).toContainText("Move 1 subagent to background")
   await expect(dock.getByText("Running 1 shell and 1 subagent in background", { exact: true })).toBeVisible()
+  await expect(backgroundCard).toContainText("Background task (background)")
+  await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
   await expect(
     page.locator('[data-timeline-part-id="call_shell_backgrounded"] [data-component="text-shimmer"]'),
   ).toHaveAttribute("data-active", "true")
+
+  await timeline.send(event("session.status", { sessionID: backgroundID, status: { type: "idle" } }))
+  await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toHaveCount(0)
+  await expect(backgroundCard).toContainText("Background task (background)")
 })

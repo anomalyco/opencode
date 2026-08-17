@@ -228,16 +228,6 @@
   }
 }
 
-body:not([data-new-layout]) [data-component="session-turn"] {
-  .error-card {
-    color: var(--text-on-critical-base);
-  }
-
-  [data-slot="session-turn-diffs-header"] {
-    background-color: var(--background-stronger);
-  }
-}
-
 [data-slot="session-turn-list"] {
   gap: 24px;
 }

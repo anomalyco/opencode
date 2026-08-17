@@ -511,21 +511,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "мизи корӣ {{version}}",
   "wsl.onboarding.versionMismatch": "Версияи насбшуда ба версияи барномаи мизи корӣ мувофиқат намекунад.",
   "wsl.onboarding.adding": "Илова кардан...",
-  "help.tabs.toast.ariaLabel": "Муаррифии ҷадвалҳо. Кор ва ҷаласаҳои фаъоли худро бо ҷадвалҳо ташкил кунед",
-  "help.tabs.toast.dismiss": "Бекор кардани маълумоти ҷадвалҳо",
-  "help.tabs.title": "Муаррифии ҷадвалҳо",
-  "help.tabs.description": "Кор ва ҷаласаҳои фаъоли худро бо ҷадвалҳо ташкил кунед",
-  "help.tabs.date": "14 июл",
-  "help.tabs.introduction": "OpenCode Desktop ҳоло дар атрофи ҷадвалҳо сохта шудааст.",
-  "help.tabs.sessions":
-    "Сеанси навро дар ҷадвал оғоз кунед ё сеанси мавҷударо аз ягон лоиҳаи худ кушоед. Вақте ки шумо ягон чизи навро оғоз мекунед, ҷадвали нав кушоед ва пас аз анҷоми он онро пӯшед.",
-  "help.tabs.organize":
-    "Кушодани якчанд ҷадвалҳо ташкили ҷаласаҳои фаъоли шуморо осонтар мекунад. Номи ҷадвалҳоро ба чизи фаромӯшнашаванда тағир диҳед, агар шумо ният доред, ки онҳоро дар гирду атроф нигоҳ доред.",
-  "help.tabs.home":
-    "Шумо тамоми сессияҳо ва лоиҳаҳои худро дар экрани нави асосӣ пайдо мекунед. Интихоби сессия онро дар ҷадвал мекушояд.",
-  "help.tabs.persistence": "Вақте ки шумо барномаро аз нав мекушоед, ҷадвалҳои шумо ҳанӯз кушода мешаванд.",
-  "help.tabs.worktrees":
-    "Тарҳи нав то ҳол Git Worktrees-ро дастгирӣ намекунад, он ба зудӣ меояд. Пас, агар шумо хоҳед, ки истифодаи тарҳи қаблиро идома диҳед, шумо метавонед дар Танзимот байни тарҳҳо гузаред. Танҳо дар хотир доред, ки тарҳи нав пас аз чанд ҳафта доимӣ хоҳад шуд.",
   "server.row.noUsername": "номи корбар нест",
   "dialog.project.edit.title": "Таҳрири лоиҳа",
   "dialog.project.edit.name": "Ном",
@@ -975,13 +960,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Қисмҳои таҳрири асбобро васеъ кунед",
   "settings.general.row.editToolPartsExpanded.description":
     "Намоиши қисмҳои абзори таҳрир, навиштан ва часбкунӣ, ки ба таври нобаёнӣ дар ҷадвали вақт васеъ карда шудаанд",
-  "settings.general.row.newInterface.title": "Тарҳбандии нав",
-  "settings.general.row.newInterface.badge": "Нав",
-  "settings.general.row.newInterface.description":
-    "Варақаҳои нав ва тарҳбандии хонаро истифода баред. Дар муддати маҳдуд байни тарҳҳо гузаред.",
-  "settings.general.row.newInterfaceNotice.title": "Шумо ҳоло тарҳбандии навро истифода мебаред",
-  "settings.general.row.newInterfaceNotice.description": "Тарҳбандии қаблӣ дигар дастрас нест",
-  "settings.general.row.newInterfaceNotice.dismiss": "Рад кардан",
   "settings.general.row.pinchZoom.title": "Барои калон кардан чимч кунед",
   "settings.general.row.pinchZoom.description":
     "Ба имову ишораи паймоиш ва Ctrl-и паймоиш иҷозат диҳед, ки калонтар кунед",

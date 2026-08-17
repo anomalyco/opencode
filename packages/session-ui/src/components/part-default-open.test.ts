@@ -71,8 +71,9 @@ describe("partDefaultOpen", () => {
     ).toBe(true)
   })
 
-  test("preserves shell defaults", () => {
+  test("applies shell defaults to console tools", () => {
     expect(partDefaultOpen(tool("shell", {}), true, false)).toBe(true)
+    expect(partDefaultOpen(tool("execute", {}), true, false)).toBe(true)
   })
 })
 

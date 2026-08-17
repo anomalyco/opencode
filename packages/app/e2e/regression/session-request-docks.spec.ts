@@ -233,7 +233,4 @@ async function mockServer(
     forms: requests.forms,
     sessionStatus: requests.sessionStatus,
   })
-  await page.addInitScript(() => {
-    localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-  })
 }

@@ -14,7 +14,7 @@ const context = (key: string, partIDs: string[], userMessageID = "user-1") =>
     previousAssistantPart: false,
   })
 
-const user = (userMessageID = "user-1") => new TimelineRow.UserMessage({ userMessageID, anchor: true })
+const user = (userMessageID = "user-1") => new TimelineRow.UserMessage({ userMessageID })
 const keys = (rows: TimelineRow.TimelineRow[]) => rows.map(TimelineRow.key)
 
 describe("reuseTimelineRows", () => {

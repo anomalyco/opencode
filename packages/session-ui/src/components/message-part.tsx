@@ -55,7 +55,6 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
@@ -455,10 +454,6 @@ function agentColor(value: string | undefined, themeColors: Record<string, strin
   return themeColors[value] ?? value
 }
 
-function newLayout() {
-  return typeof document !== "undefined" && document.body.hasAttribute("data-new-layout")
-}
-
 function webSearchProviderLabel(provider: unknown, i18n: ReturnType<typeof useI18n>) {
   const name =
     provider === "parallel"
@@ -546,6 +541,12 @@ export function getToolInfo(
         icon: "console",
         title: i18n.t("ui.tool.shell"),
         subtitle: input.command,
+      }
+    case "execute":
+      return {
+        icon: "console",
+        title: i18n.t("ui.tool.execute"),
+        subtitle: input.code,
       }
     case "edit":
       return {
@@ -865,6 +866,12 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
   const include = typeof input.include === "string" ? input.include : undefined
   const offset = typeof input.offset === "number" ? input.offset : undefined
   const limit = typeof input.limit === "number" ? input.limit : undefined
+  const metadata = "metadata" in part.state ? part.state.metadata : undefined
+  const count = part.tool === "glob" ? metadata?.count : part.tool === "grep" ? metadata?.matches : undefined
+  const matches =
+    typeof count === "number" && Number.isFinite(count) && count !== 0
+      ? i18n.plural("ui.messagePart.context.match", count)
+      : undefined
 
   switch (part.tool) {
     case "read": {
@@ -886,12 +893,13 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       return {
         title: i18n.t("ui.tool.glob"),
         subtitle: getDirectory(path),
-        args: pattern ? ["pattern=" + pattern] : [],
+        args: [...(pattern ? ["pattern=" + pattern] : []), ...(matches ? [matches] : [])],
       }
     case "grep": {
       const args: string[] = []
       if (pattern) args.push("pattern=" + pattern)
       if (include) args.push("include=" + include)
+      if (matches) args.push(matches)
       return {
         title: i18n.t("ui.tool.grep"),
         subtitle: getDirectory(path),
@@ -1217,7 +1225,7 @@ export function UserMessageDisplay(props: {
 
   const attachments = createMemo(() => files().filter(attached))
 
-  const messageComments = createMemo(() => (newLayout() ? (props.comments ?? []) : []))
+  const messageComments = createMemo(() => props.comments ?? [])
 
   const inlineFiles = createMemo(() => files().filter(inline))
 
@@ -1283,7 +1291,7 @@ export function UserMessageDisplay(props: {
 
             return (
               <Show
-                when={newLayout() && type === "file"}
+                when={type === "file"}
                 fallback={
                   <div
                     data-slot="user-message-attachment"
@@ -1574,6 +1582,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     if (typeof value === "string" && value) return value
     return taskId()
   })
+  const toolError = createMemo(() => partError(part(), i18n.t("ui.toolErrorCard.failed")))
 
   const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
   const controlledOpen = () => (props.onToolOpenChange ? (props.toolOpen ?? props.defaultOpen) : undefined)
@@ -1583,7 +1592,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     <Show when={!hideQuestion()}>
       <div data-component="tool-part-wrapper" data-timeline-part-id={part().id}>
         <Switch>
-          <Match when={part().state.status === "error" && (part().state as any).error}>
+          <Match when={toolError()}>
             {(error) => {
               const cleaned = error().replace("Error: ", "")
               if (part().tool === "question" && cleaned.includes("dismissed this question")) {
@@ -1642,6 +1651,26 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
       </div>
     </Show>
   )
+}
+
+function partError(part: ToolPart, fallback: string) {
+  if (part.state.status === "error") return part.state.error
+  if (part.tool !== "execute" || !("metadata" in part.state)) return undefined
+  const calls = part.state.metadata?.toolCalls
+  const failed =
+    part.state.metadata?.error === true ||
+    (Array.isArray(calls) &&
+      calls.some(
+        (call) =>
+          call !== null &&
+          typeof call === "object" &&
+          !Array.isArray(call) &&
+          "status" in call &&
+          call.status === "error",
+      ))
+  if (!failed) return undefined
+  if ("output" in part.state && typeof part.state.output === "string" && part.state.output) return part.state.output
+  return fallback
 }
 
 export function MessageDivider(props: { label: string }) {
@@ -2000,17 +2029,25 @@ ToolRegistry.register({
     const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
     const tone = createMemo(() => agent().color)
     const v2Tone = createMemo(() => agent().v2Color)
+    const background = createMemo(() => {
+      if (props.tool === "task") return props.metadata.background === true
+      return props.status === "completed" && props.metadata.status === "running"
+    })
     const subtitle = createMemo(() => {
       const value =
         typeof props.input.description === "string" && props.input.description
           ? props.input.description
           : childSessionId()
       if (!value) return value
-      if (props.input.background === true || props.metadata.background === true || props.metadata.status === "running")
-        return `${value} (background)`
+      if (background()) return `${value} (background)`
       return value
     })
-    const running = createMemo(() => props.status === "pending" || props.status === "running")
+    const running = createMemo(() => {
+      if (props.status === "pending" || props.status === "running") return true
+      const id = childSessionId()
+      if (!id) return false
+      return (data.store.session_status[id]?.type ?? "idle") !== "idle"
+    })
 
     const href = createMemo(() => sessionLink(childSessionId(), data.sessionHref))
     const clickable = createMemo(() => !!(childSessionId() && (data.navigateToSession || href())))
@@ -2048,19 +2085,15 @@ ToolRegistry.register({
               <Show
                 when={running()}
                 fallback={
-                  <Show when={newLayout()}>
-                    <span data-component="task-tool-icon">
-                      <Icon name="subagent" size="small" />
-                    </span>
-                  </Show>
+                  <span data-component="task-tool-icon">
+                    <Icon name="subagent" size="small" />
+                  </span>
                 }
               >
                 <span data-component="task-tool-spinner" style={{ color: tone() ?? "var(--icon-interactive-base)" }}>
-                  <Show when={newLayout()} fallback={<Spinner />}>
-                    <SessionProgressIndicatorV2
-                      style={{ color: v2Tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
-                    />
-                  </Show>
+                  <SessionProgressIndicatorV2
+                    style={{ color: v2Tone() ?? "light-dark(var(--v2-text-text-base), #ffffff)" }}
+                  />
                 </span>
               </Show>
               <span data-component="task-tool-title">{title()}</span>
@@ -2096,6 +2129,84 @@ ToolRegistry.register({
 
 ToolRegistry.register({ name: "subagent", render: ToolRegistry.render("task") })
 
+function ConsoleOutput(props: { copy: string; children: JSX.Element }) {
+  const i18n = useI18n()
+  const [copied, setCopied] = createSignal(false)
+
+  const copy = async () => {
+    if (!props.copy) return
+    if (!(await writeClipboard(props.copy))) return
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div data-component="bash-output" dir="ltr">
+      <div data-slot="bash-copy">
+        <TooltipV2 value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
+          <IconButtonV2
+            icon={<IconV2 name={copied() ? "check" : "outline-copy"} size="small" />}
+            size="normal"
+            variant="ghost-muted"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={copy}
+            aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+          />
+        </TooltipV2>
+      </div>
+      <div
+        data-slot="bash-scroll"
+        data-scrollable
+        tabIndex={0}
+        role="region"
+        aria-label={i18n.t("ui.scrollView.ariaLabel")}
+      >
+        <pre data-slot="bash-pre">
+          <code>{props.children}</code>
+        </pre>
+      </div>
+    </div>
+  )
+}
+
+ToolRegistry.register({
+  name: "execute",
+  render(props) {
+    const i18n = useI18n()
+    const pending = () => props.status === "pending" || props.status === "streaming" || props.status === "running"
+    const code = createMemo(() => (typeof props.input.code === "string" ? props.input.code : ""))
+    const text = createMemo(() => {
+      const output = stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n")
+      return `${code()}${output ? "\n\n" + output : ""}`
+    })
+    const sawPending = pending()
+    return (
+      <BasicTool
+        {...props}
+        icon="console"
+        allowOpenWhilePending
+        trigger={(open) => (
+          <div data-slot="basic-tool-tool-info-structured">
+            <span data-slot="basic-tool-tool-indicator">
+              <Icon name="console" size="small" />
+            </span>
+            <div data-slot="basic-tool-tool-info-main">
+              <span data-slot="basic-tool-tool-title">
+                <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
+              </span>
+              <Show when={!open() && code()}>
+                <ShellSubmessage text={code()} animate={sawPending} />
+              </Show>
+            </div>
+          </div>
+        )}
+      >
+        <ConsoleOutput copy={text()}>{text()}</ConsoleOutput>
+      </BasicTool>
+    )
+  },
+})
+
 ToolRegistry.register({
   name: "shell",
   render(props) {
@@ -2103,22 +2214,11 @@ ToolRegistry.register({
     const pending = () =>
       props.status === "pending" || props.status === "running" || props.metadata.status === "running"
     const sawPending = pending()
+    const command = () => props.input.command ?? props.metadata.command ?? ""
     const text = createMemo(() => {
-      const cmd = props.input.command ?? props.metadata.command ?? ""
       const out = stripAnsi(props.output || props.metadata.output || "").replace(/\r\n?/g, "\n")
-      return `$ ${cmd}${out ? "\n\n" + out : ""}`
+      return `${command()}${out ? "\n\n" + out : ""}`
     })
-    const [copied, setCopied] = createSignal(false)
-
-    const handleCopy = async () => {
-      const content = text()
-      if (!content) return
-      if (await writeClipboard(content)) {
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-      }
-    }
-
     return (
       <BasicTool
         {...props}
@@ -2137,31 +2237,12 @@ ToolRegistry.register({
           </div>
         )}
       >
-        <div data-component="bash-output" dir="ltr">
-          <div data-slot="bash-copy">
-            <TooltipV2 value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
-              <IconButtonV2
-                icon={<IconV2 name={copied() ? "check" : "outline-copy"} size="small" />}
-                size="normal"
-                variant="ghost-muted"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={handleCopy}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-              />
-            </TooltipV2>
-          </div>
-          <div
-            data-slot="bash-scroll"
-            data-scrollable
-            tabIndex={0}
-            role="region"
-            aria-label={i18n.t("ui.scrollView.ariaLabel")}
-          >
-            <pre data-slot="bash-pre">
-              <code>{text()}</code>
-            </pre>
-          </div>
-        </div>
+        <ConsoleOutput copy={command()}>
+          <span data-slot="bash-prompt" aria-hidden="true">
+            {"$ "}
+          </span>
+          {text()}
+        </ConsoleOutput>
       </BasicTool>
     )
   },
@@ -2637,21 +2718,36 @@ ToolRegistry.register({
   name: "skill",
   render(props) {
     const i18n = useI18n()
-    const title = createMemo(() => skillToolName(props.input, props.metadata) || i18n.t("ui.tool.skill"))
+    const name = createMemo(() => skillToolName(props.input, props.metadata))
     const running = createMemo(() => props.status === "pending" || props.status === "running")
 
-    const titleContent = () => <TextShimmer text={title()} active={running()} />
-
     const trigger = () => (
-      <div data-slot="basic-tool-tool-info-structured">
-        <div data-slot="basic-tool-tool-info-main">
-          <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
-            {titleContent()}
-          </span>
-        </div>
+      <div data-slot="skill-tool-trigger" class="flex min-w-0 items-center gap-1.5">
+        <Icon name="post-skill" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+        <span
+          data-slot="skill-tool-label"
+          class="shrink-0 text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
+        >
+          {i18n.t("ui.tool.skill")}
+        </span>
+        <Show when={name()}>
+          {(name) => (
+            <>
+              <span data-slot="skill-tool-separator" aria-hidden="true" class="shrink-0 text-v2-text-text-muted">
+                ·
+              </span>
+              <TextShimmer
+                as="bdi"
+                text={name()}
+                active={running()}
+                class="min-w-0 truncate text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
+              />
+            </>
+          )}
+        </Show>
       </div>
     )
 
-    return <BasicTool icon="brain" status={props.status} trigger={trigger()} hideDetails />
+    return <BasicTool icon="post-skill" status={props.status} trigger={trigger()} hideDetails />
   },
 })

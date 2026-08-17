@@ -1,5 +1,6 @@
 import { APICallError } from "@ai-sdk/provider"
 import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
+import { createMistral } from "@ai-sdk/mistral"
 import { AISDK } from "@opencode-ai/core/aisdk"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
@@ -277,67 +278,88 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
   }),
 )
 
-it.effect("preserves tool result content in AI SDK prompts", () =>
+it.effect("moves a tool image through the real Mistral provider as a user message", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
+    let body: { messages?: unknown[] } | undefined
+    const mockFetch = Object.assign(
+      async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        body = JSON.parse(String(init?.body))
+        const chunks = [
+          {
+            id: "response-1",
+            created: 0,
+            model: "pixtral-large-latest",
+            choices: [{ index: 0, delta: { content: [{ type: "text", text: "I see it." }] } }],
+          },
+          {
+            id: "response-1",
+            created: 0,
+            model: "pixtral-large-latest",
+            choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          },
+        ]
+        return new Response(chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join(""), {
+          headers: { "Content-Type": "text/event-stream" },
+        })
+      },
+      { preconnect: fetch.preconnect },
+    )
     yield* aisdk.hook.sdk((event) => {
-      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+      event.sdk = createMistral({ apiKey: "test", fetch: mockFetch })
     })
 
-    const resolved = yield* aisdk.model(model("test-ai-sdk"))
-    const prepared = yield* compileRequest(
+    const resolved = yield* aisdk.model({
+      ...model("@ai-sdk/mistral"),
+      modelID: Model.ID.make("pixtral-large-latest"),
+    })
+    yield* LLMClient.generate(
       LLM.request({
         model: resolved,
         messages: [
+          Message.user("Inspect the screenshot."),
+          Message.assistant({ type: "tool-call", id: "call_1", name: "screenshot", input: {} }),
           Message.tool({
+            type: "tool-result",
             id: "call_1",
-            name: "read",
+            name: "screenshot",
             result: {
               type: "content",
               value: [
-                { type: "text", text: "attachments" },
-                { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png", name: "pixel.png" },
-                {
-                  type: "file",
-                  uri: "data:application/pdf;charset=utf-8;base64,JVBERg==",
-                  mime: "application/pdf",
-                  name: "document.pdf",
-                },
-                { type: "file", uri: "data:audio/mpeg;base64,SUQz", mime: "audio/mpeg", name: "clip.mp3" },
-                { type: "file", uri: "https://example.com/pixel.png", mime: "image/png" },
-                { type: "file", uri: "https://example.com/document.pdf", mime: "application/pdf" },
+                { type: "text", text: "Screenshot captured" },
+                { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png", name: "screen.png" },
               ],
             },
           }),
         ],
       }),
-    )
+    ).pipe(Effect.provide(client))
 
-    expect(prepared.body.prompt).toEqual([
+    expect(body?.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "Inspect the screenshot." }] },
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            function: { name: "screenshot", arguments: "{}" },
+          },
+        ],
+      },
       {
         role: "tool",
+        name: "screenshot",
+        tool_call_id: "call_1",
+        content: '[{"type":"text","text":"Screenshot captured"}]',
+      },
+      {
+        role: "user",
         content: [
-          {
-            type: "tool-result",
-            toolCallId: "call_1",
-            toolName: "read",
-            output: {
-              type: "content",
-              value: [
-                { type: "text", text: "attachments" },
-                { type: "image-data", data: "AAAA", mediaType: "image/png" },
-                {
-                  type: "file-data",
-                  data: "JVBERg==",
-                  mediaType: "application/pdf",
-                  filename: "document.pdf",
-                },
-                { type: "file-data", data: "SUQz", mediaType: "audio/mpeg", filename: "clip.mp3" },
-                { type: "image-url", url: "https://example.com/pixel.png" },
-                { type: "file-url", url: "https://example.com/document.pdf" },
-              ],
-            },
-          },
+          { type: "text", text: "Attached media from tool result:" },
+          { type: "image_url", image_url: "data:image/png;base64,AAAA" },
         ],
       },
     ])

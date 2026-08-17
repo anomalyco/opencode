@@ -104,30 +104,6 @@
   }
 }
 
-body:not([data-new-layout]) [data-component="accordion"] {
-  [data-slot="accordion-item"] [data-slot="accordion-header"] [data-slot="accordion-trigger"] {
-    background-color: var(--background-stronger);
-    border-width: 1px;
-    border-color: var(--border-weak-base);
-    color: var(--text-strong);
-
-    &:hover:not([data-disabled]) {
-      background-color: var(--surface-base-hover);
-    }
-
-    &:active:not([data-disabled]) {
-      background-color: var(--surface-base-active);
-    }
-  }
-
-  [data-slot="accordion-item"][data-expanded] [data-slot="accordion-content"] {
-    border-width: 1px;
-    border-color: var(--border-weak-base);
-    border-top: 0;
-    background-color: var(--background-stronger);
-  }
-}
-
 @keyframes slideDown {
   from {
     height: 0;

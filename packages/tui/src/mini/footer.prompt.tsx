@@ -1050,6 +1050,7 @@ export function createPromptState(input: PromptInput): PromptState {
         id: "prompt.queue",
         title: "Queue prompt",
         group: "Prompt",
+        palette: true,
         run() {
           syncDraft()
           submitPrompt(promptCopy(draft), "queue")

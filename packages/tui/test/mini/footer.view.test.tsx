@@ -981,7 +981,8 @@ test("direct footer steers the oldest queued prompt from an empty composer", asy
 
   try {
     await app.renderOnce()
-    app.mockInput.pressEnter({ meta: true })
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressEnter()
     await Bun.sleep(0)
     expect(steered).toEqual([])
     app.mockInput.pressEnter()
@@ -1034,7 +1035,8 @@ test("direct footer rejects local commands submitted with the queue shortcut", a
   try {
     await app.renderOnce()
     await app.mockInput.typeText("/settings ")
-    app.mockInput.pressEnter({ meta: true })
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressEnter()
     await Bun.sleep(0)
     expect(submitted).toEqual([])
     expect(statuses).toContain("this prompt cannot be queued")

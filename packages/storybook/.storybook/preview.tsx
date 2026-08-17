@@ -44,11 +44,8 @@ const Scheme = (props: { value?: unknown }) => {
   return null
 }
 
-const NewLayout = () => {
-  // Mirror app.tsx BodyDesignClass so stories render with v2 (new-layout) styles
-  // instead of the legacy `body:not([data-new-layout])` branch.
+const BodyTypography = () => {
   onMount(() => {
-    document.body.toggleAttribute("data-new-layout", true)
     document.body.classList.add("font-(family-name:--font-family-text)", "text-[13px]", "font-[440]")
     document.body.classList.remove("text-12-regular")
   })
@@ -65,7 +62,7 @@ const frame = createJSXDecorator((Story, context) => {
       <Font />
       <ThemeProvider>
         <Scheme value={scheme} />
-        <NewLayout />
+        <BodyTypography />
         <DialogProvider>
           <MarkedProvider>
             <div

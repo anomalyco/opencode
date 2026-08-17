@@ -1,63 +1,30 @@
 ---
 title: "Providers"
-description: ""
 ---
 
-OpenCode builds its provider and model catalog from [Models.dev](https://models.dev), then applies the `providers`
-overlays from your [configuration](/config). A provider needs both a usable runtime package and, when required, an
-active connection.
-
-## Connect a provider
-
-Run `/connect` in the TUI, choose an integration, and complete one of the methods it offers:
-
-```text
-/connect
-```
-
-An integration may support an API key, OAuth, environment variables, or a combination of them. API keys and OAuth
-tokens entered through `/connect` are stored by the OpenCode service in its database. Run `/connect` again to replace
-or remove a stored credential.
-
-Providers from Models.dev also declare their standard environment variables. A non-empty declared variable is exposed
-as an environment connection automatically, so common providers usually need no config:
-
-```bash
-export ANTHROPIC_API_KEY="your-key"
-```
-
-For a custom provider, `env` declares the variables that can supply its key:
+OpenCode includes a built-in catalog of providers and models from [models.dev](https://models.dev). You can also add a
+custom provider to your configuration.
 
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "providers": {
     "acme": {
+      "name": "Acme",
       "env": ["ACME_API_KEY"],
-    },
-  },
-}
-```
-
-When several credential sources exist, OpenCode uses the stored credential first, then the first non-empty variable in
-`env`, then `settings.apiKey`. Use config substitution instead of committing a literal key:
-
-```jsonc title="opencode.jsonc"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "providers": {
-    "acme": {
+      "package": "@opencode-ai/ai/providers/openai-compatible",
       "settings": {
-        "apiKey": "{env:ACME_API_KEY}",
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {
+          "name": "Qwen 3 Coder",
+        },
       },
     },
   },
 }
 ```
-
-<Callout type="warning">Do not commit API keys or authorization headers to your repository.</Callout>
-
-## Configure
 
 The `providers` object is keyed by provider ID. Each provider accepts these fields:
 
@@ -71,11 +38,7 @@ The `providers` object is keyed by provider ID. Each provider accepts these fiel
 | `body`     | JSON fields merged into request bodies.                         |
 | `models`   | Models to add or override, keyed by catalog model ID.           |
 
-Configuration files are applied from lowest to highest precedence. `settings` and `body` are deep-merged. Headers are
-merged case-insensitively. At request time, provider values are inherited by the model, model values override them, and
-the selected variant is applied last.
-
-### Endpoint
+## Endpoint
 
 Override `settings.baseURL` to send an existing provider through a proxy or compatible endpoint. Its existing package,
 models, and connection continue to apply:
@@ -95,29 +58,10 @@ models, and connection continue to apply:
 
 `settings` is package-specific. A field only has an effect when the selected package supports it.
 
-### Experimental OpenAI Responses WebSocket
+## Headers and body
 
-OpenAI Responses can reuse one Session-bound WebSocket connection across sequential model calls. This transport is
-experimental and disabled by default. To test it, set the flag before starting or restarting the OpenCode service:
-
-```bash
-export OPENCODE_EXPERIMENTAL_OPENAI_RESPONSES_WEBSOCKET=true
-opencode2 service restart
-```
-
-The flag applies only to the `openai` provider using the native `openai-responses` route. Azure, xAI,
-OpenAI-compatible providers, and other protocols continue to use HTTP. A Session HTTP plugin hook also forces HTTP so
-the hook is never bypassed.
-
-OpenCode reuses a connection only while its endpoint and effective handshake headers remain unchanged. It rotates
-connections before the provider lifetime limit and never replays a request after ambiguous delivery. HTTP fallback is
-limited to failures proven to occur before the provider received the request.
-
-Unset the variable or set it to `false`, then restart the service, to return to HTTP-only execution.
-
-### Headers and body
-
-Headers and body fields can be set at provider, model, or variant scope:
+Use `headers` to add HTTP headers to provider requests. Use `body` to merge additional JSON fields into each request
+body:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -132,34 +76,21 @@ Headers and body fields can be set at provider, model, or variant scope:
           "application": "opencode",
         },
       },
-      "models": {
-        "gpt-5.2": {
-          "headers": {
-            "X-Model-Policy": "coding",
-          },
-        },
-      },
     },
   },
 }
 ```
 
-These are request overlays, not a generic authentication scheme. Prefer `/connect`, `env`, or `settings.apiKey` for
-provider credentials unless the endpoint explicitly requires a custom header.
+## Package
 
-### Provider packages
-
-For an OpenAI-compatible service, use the V2 native compatible package. The model map is explicit because a custom
-provider has no Models.dev catalog entries:
+The `package` field selects the runtime used to communicate with a provider. For an OpenAI-compatible API, use the
+built-in compatible package:
 
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "acme/qwen3-coder",
   "providers": {
     "acme": {
-      "name": "Acme Gateway",
-      "env": ["ACME_API_KEY"],
       "package": "@opencode-ai/ai/providers/openai-compatible",
       "settings": {
         "baseURL": "https://llm.acme.example/v1",
@@ -167,15 +98,6 @@ provider has no Models.dev catalog entries:
       "models": {
         "qwen3-coder": {
           "name": "Qwen 3 Coder",
-          "capabilities": {
-            "tools": true,
-            "input": ["text"],
-            "output": ["text"],
-          },
-          "limit": {
-            "context": 131072,
-            "output": 32768,
-          },
         },
       },
     },
@@ -183,23 +105,36 @@ provider has no Models.dev catalog entries:
 }
 ```
 
-Omit `env` for an endpoint that does not require authentication. The native compatible package requires
-`settings.baseURL` and uses bearer authentication when a key is available.
+Native package options:
 
-The `package` field supports two runtime contracts:
+- `@opencode-ai/ai/providers/openai`
+- `@opencode-ai/ai/providers/openai/chat`
+- `@opencode-ai/ai/providers/openai/responses`
+- `@opencode-ai/ai/providers/openai-compatible`
+- `@opencode-ai/ai/providers/openai-compatible/responses`
+- `@opencode-ai/ai/providers/anthropic`
+- `@opencode-ai/ai/providers/anthropic-compatible`
+- `@opencode-ai/ai/providers/google`
+- `@opencode-ai/ai/providers/google-vertex`
+- `@opencode-ai/ai/providers/google-vertex/gemini`
+- `@opencode-ai/ai/providers/google-vertex/chat`
+- `@opencode-ai/ai/providers/google-vertex/responses`
+- `@opencode-ai/ai/providers/google-vertex/messages`
+- `@opencode-ai/ai/providers/azure`
+- `@opencode-ai/ai/providers/azure/chat`
+- `@opencode-ai/ai/providers/azure/responses`
+- `@opencode-ai/ai/providers/amazon-bedrock`
+- `@opencode-ai/ai/providers/amazon-bedrock/mantle`
+- `@opencode-ai/ai/providers/amazon-bedrock/mantle/chat`
+- `@opencode-ai/ai/providers/amazon-bedrock/mantle/responses`
+- `@opencode-ai/ai/providers/openrouter`
+- `@opencode-ai/ai/providers/xai`
 
-| Form                                            | Contract                                                                                                                        |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `"@opencode-ai/ai/providers/openai-compatible"` | A V2 native package exporting `model(modelID, settings)`. An npm specifier or absolute `file://` URL may use the same contract. |
-| `"aisdk:@ai-sdk/openai-compatible"`             | An AI SDK provider package. The `aisdk:` prefix is required.                                                                    |
+You can also use an npm package such as `@acme/opencode-provider` or an absolute `file://` URL for a local package.
 
-Native packages receive the merged `settings` plus the resolved `apiKey`, `headers`, `body`, and `limits`. AI SDK
-packages receive their merged provider options. Use a package's own documentation for accepted settings; OpenCode does
-not validate package-specific keys.
+Use `settings` for options supported by the selected package.
 
-`package` may also be set on one model to override the provider package for that model.
-
-### Models
+## Models
 
 Add a model under a provider's `models` map. The object key is the model ID used in OpenCode; `modelID` is the ID sent to
 the provider:

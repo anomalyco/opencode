@@ -11,11 +11,7 @@ import {
   untrack,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Button } from "@opencode-ai/ui/button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { useLocation, useNavigate } from "@solidjs/router"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
@@ -32,14 +28,13 @@ import { TitlebarTabStrip } from "@/components/titlebar-tab-strip"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
-import { useGlobal, useServerCtx } from "@/context/global"
-import { ServerConnection, useServers } from "@/context/servers"
+import { useGlobal } from "@/context/global"
+import { ServerConnection } from "@/context/servers"
 import { tabKey, useTabs } from "@/context/tabs"
 import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
 
-const legacyTitlebarHeight = 40
 const v2TitlebarHeight = 36
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
@@ -65,12 +60,10 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
-  const servers = useServers()
   const navigate = useNavigate()
   const location = useLocation()
-  const useV2Titlebar = createMemo(() => settings.general.newLayoutDesigns())
   const mobile = createMediaQuery("(max-width: 767px)")
-  const bottom = createMemo(() => useV2Titlebar() && mobile() && settings.general.mobileTitlebarPosition() === "bottom")
+  const bottom = createMemo(() => mobile() && settings.general.mobileTitlebarPosition() === "bottom")
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
@@ -79,9 +72,8 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const zoom = () => platform.webviewZoom?.() ?? 1
   const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
   const minHeight = () => {
-    const height = useV2Titlebar() ? v2TitlebarHeight : legacyTitlebarHeight
-    if (mac()) return `${height / zoom()}px`
-    if (windows()) return `${height / Math.min(titlebarZoom(), 1)}px`
+    if (mac()) return `${v2TitlebarHeight / zoom()}px`
+    if (windows()) return `${v2TitlebarHeight / Math.min(titlebarZoom(), 1)}px`
     return undefined
   }
   const windowsControlsWidth = () => `${windowsControlsBaseWidth / Math.max(titlebarZoom(), 1)}px`
@@ -153,11 +145,9 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
 
   return (
     <header
-      data-slot={useV2Titlebar() ? "titlebar-v2" : undefined}
+      data-slot="titlebar-v2"
       classList={{
-        "shrink-0 relative flex flex-row": true,
-        "h-9 bg-v2-background-bg-deep overflow-visible": useV2Titlebar(),
-        "h-10 bg-background-base overflow-hidden": !useV2Titlebar(),
+        "shrink-0 relative flex flex-row h-9 bg-v2-background-bg-deep overflow-visible": true,
         "order-last": bottom(),
       }}
       style={{

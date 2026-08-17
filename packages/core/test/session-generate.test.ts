@@ -51,15 +51,17 @@ import { Effect, Layer, Schema, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 const requests: LLMRequest[] = []
+let hasHttpMiddleware = false
 let instruction: string | Instructions.Unavailable = "Initial context"
 const sessionID = SessionSchema.ID.make("ses_generate_test")
 
 const model = LanguageModel.make({ id: "generate-model", provider: "test", route: OpenAIChat.route })
 const client = Layer.mock(LLMClient.Service)({
   stream: () => Stream.die(new Error("unused")),
-  generate: (request) =>
+  generate: (request, options) =>
     Effect.sync(() => {
       requests.push(request)
+      hasHttpMiddleware = typeof options?.http === "function"
       const response = LLMResponse.fromEvents([
         LLMEvent.stepStart({ index: 0 }),
         LLMEvent.textStart({ id: "generate" }),
@@ -221,6 +223,7 @@ const setup = Effect.gen(function* () {
 it.effect("generates from fresh settled Session context without durable mutation", () =>
   Effect.gen(function* () {
     requests.length = 0
+    hasHttpMiddleware = false
     instruction = "Initial context"
     const { db, bus, instructions } = yield* setup
     yield* InstructionState.prepare(db, bus, instructions, sessionID)
@@ -298,6 +301,7 @@ it.effect("generates from fresh settled Session context without durable mutation
 
     expect(result).toBe("Transient answer")
     expect(requests).toHaveLength(1)
+    expect(hasHttpMiddleware).toBe(true)
     expect(requests[0]?.model).toBe(model)
     expect(requests[0]?.system[0]?.text).toBe("Hooked system")
     expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")

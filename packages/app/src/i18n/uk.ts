@@ -547,21 +547,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "Встановлена версія не відповідає версії десктопного застосунку.",
   "wsl.onboarding.adding": "Додавання...",
 
-  "help.tabs.toast.ariaLabel": "Представляємо вкладки. Упорядковуйте роботу й активні сесії за допомогою вкладок",
-  "help.tabs.toast.dismiss": "Закрити інформацію про вкладки",
-  "help.tabs.title": "Представляємо вкладки",
-  "help.tabs.description": "Упорядковуйте роботу й активні сесії за допомогою вкладок",
-  "help.tabs.date": "14 липня",
-  "help.tabs.introduction": "OpenCode Desktop тепер побудовано навколо вкладок.",
-  "help.tabs.sessions":
-    "Почніть нову сесію у вкладці або відкрийте наявну сесію з будь-якого свого проєкту. Відкривайте нову вкладку, коли починаєте щось нове, і закривайте її після завершення.",
-  "help.tabs.organize":
-    "Кілька відкритих вкладок полегшують упорядкування активних сесій. Якщо плануєте залишити вкладки відкритими, перейменуйте їх на щось пам'ятне.",
-  "help.tabs.home":
-    "Усі свої сесії та проєкти ви знайдете на новому екрані «Головна». Вибрана сесія відкриється у вкладці.",
-  "help.tabs.persistence": "Після повторного відкриття програми ваші вкладки залишаться відкритими.",
-  "help.tabs.worktrees":
-    "Новий дизайн поки не підтримує робочі дерева Git, але ця можливість незабаром з'явиться. Тож якщо ви бажаєте й надалі користуватися попереднім макетом, перемикатися між макетами можна в налаштуваннях. Зауважте, що за кілька тижнів новий макет стане постійним.",
   "server.row.noUsername": "без імені користувача",
 
   "dialog.project.edit.title": "Редагувати проєкт",
@@ -1066,13 +1051,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Розгортати частини інструменту редагування",
   "settings.general.row.editToolPartsExpanded.description":
     "Показувати частини інструментів редагування, запису та патчів розгорнутими за замовчуванням на часовій шкалі",
-  "settings.general.row.newInterface.title": "Новий макет",
-  "settings.general.row.newInterface.badge": "Нове",
-  "settings.general.row.newInterface.description":
-    "Використовуйте нові вкладки та макет головної сторінки. Протягом обмеженого часу можна перемикатися між макетами.",
-  "settings.general.row.newInterfaceNotice.title": "Тепер ви використовуєте новий макет",
-  "settings.general.row.newInterfaceNotice.description": "Попередній макет більше недоступний",
-  "settings.general.row.newInterfaceNotice.dismiss": "Відхилити",
   "settings.general.row.pinchZoom.title": "Масштабування щипком",
   "settings.general.row.pinchZoom.description":
     "Дозволити масштабування жестом щипка на трекпаді та прокручуванням із Ctrl",

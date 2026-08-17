@@ -1,6 +1,6 @@
 export * as PlanPlugin from "./plan.js"
 
-import { ToolFailure } from "@opencode-ai/ai"
+import { Message, ToolFailure } from "@opencode-ai/ai"
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Agent } from "../agent.js"
@@ -38,13 +38,33 @@ export const Plugin = define({
       })
     })
 
+    // Compaction and committed reverts can strip reminders while the session's agent stays
+    // put. Reconcile per request, appending near the tail so the cached prefix stays warm.
+    yield* ctx.session.hook("context", (event) => {
+      const reminder = lastReminder(event.messages)
+      const missing = event.agent === plan && reminder !== enter
+      const stale = event.agent !== plan && reminder === enter
+      const text = missing ? enter : stale ? leave : undefined
+      if (!text) return Effect.void
+      // Before the user's prompt, matching where agent-switch reminders land.
+      const at = event.messages.at(-1)?.role === "user" ? event.messages.length - 1 : event.messages.length
+      event.messages.splice(at, 0, Message.user(text))
+      return ctx.session
+        .synthetic({ sessionID: event.sessionID, text, resume: false })
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("failed to persist Plan mode reminder", { sessionID: event.sessionID, cause }),
+          ),
+        )
+    })
+
     yield* ctx.event.subscribe().pipe(
       Stream.filter(
         (event): event is SessionEvent.Created | SessionEvent.AgentSelected =>
           event.type === "session.created" || event.type === "session.agent.selected",
       ),
       Stream.runForEach((event) => {
-        const text = reminder(event)
+        const text = switchReminder(event)
         if (!text) return Effect.void
         return ctx.session
           .synthetic({
@@ -63,7 +83,7 @@ export const Plugin = define({
   }),
 })
 
-function reminder(event: SessionEvent.Created | SessionEvent.AgentSelected) {
+function switchReminder(event: SessionEvent.Created | SessionEvent.AgentSelected) {
   if (event.type === "session.created") {
     if (event.data.agent !== plan) return
     return enter
@@ -71,4 +91,12 @@ function reminder(event: SessionEvent.Created | SessionEvent.AgentSelected) {
   if (event.data.agent === event.data.previous) return
   if (event.data.agent === plan) return enter
   if (event.data.previous === plan) return leave
+}
+
+function lastReminder(messages: ReadonlyArray<Message>) {
+  return messages.reduce<string | undefined>((found, message) => {
+    const part = message.role === "user" && message.content.length === 1 ? message.content[0] : undefined
+    if (part?.type !== "text") return found
+    return part.text === enter || part.text === leave ? part.text : found
+  }, undefined)
 }

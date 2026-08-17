@@ -5,7 +5,7 @@ import { TuiKeybind } from "@opencode-ai/tui/config/v1/keybind"
 import { Definitions } from "@opencode-ai/tui/config/keybind"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { randomUUID } from "crypto"
-import { createScanner, parse, parseTree, type Node, type ParseError } from "jsonc-parser"
+import { applyEdits, createScanner, modify, parse, parseTree, type Node, type ParseError } from "jsonc-parser"
 import path from "path"
 import { Info } from "./schema"
 
@@ -41,33 +41,55 @@ export const run = Effect.fn("cli.config.migrate")(function* (input: {
     if (errors.length) return
     const config = Option.getOrUndefined(decodeRecord(value))
     if (config === undefined) return
+    const terminal = Option.getOrUndefined(decodeRecord(config.terminal))
+    const legacyCopy = terminal?.copy_on_select
+    const copy =
+      typeof legacyCopy === "boolean" && terminal?.copy === undefined ? (legacyCopy ? "select" : "manual") : undefined
+    const renamed =
+      typeof legacyCopy !== "boolean"
+        ? text
+        : [
+            ...(copy === undefined ? [] : [{ path: ["terminal", "copy"], value: copy }]),
+            { path: ["terminal", "copy_on_select"], value: undefined },
+          ].reduce(
+            (text, edit) =>
+              applyEdits(
+                text,
+                modify(text, edit.path, edit.value, { formattingOptions: { tabSize: 2, insertSpaces: true } }),
+              ),
+            text,
+          )
     const keybinds = Option.getOrUndefined(decodeRecord(config.keybinds))
-    if (keybinds === undefined) return
-    const deduped = findKeybindObjects(text)
-      .slice(0, -1)
-      .reduce((text) => {
-        const property = findKeybindObjects(text)[0]
-        return property === undefined ? text : removeProperty(text, property)
-      }, text)
-    const updated = Object.keys(keybinds).reduce((text, name) => {
-      const target =
-        TuiKeybind.CommandMap[name as keyof typeof TuiKeybind.CommandMap] ??
-        (name in Definitions || LegacyKeybindTargets.has(name) ? name : undefined)
-      if (target === undefined) return text
-      const properties = findKeybindProperties(text, name)
-      if (!properties.length) return text
-      const remove = !(target in Definitions) || (target !== name && target in keybinds)
-      // The parser gives the final duplicate precedence, so remove earlier properties before renaming it.
-      const updated = properties.slice(0, remove ? properties.length : -1).reduce((text) => {
-        const property = findKeybindProperties(text, name)[0]
-        return property === undefined ? text : removeProperty(text, property)
-      }, text)
-      if (remove) return updated
-      if (target === name) return updated
-      const key = findKeybindProperties(updated, name)[0]?.children?.[0]
-      if (key === undefined) return text
-      return updated.slice(0, key.offset) + JSON.stringify(target) + updated.slice(key.offset + key.length)
-    }, deduped)
+    const updated =
+      keybinds === undefined
+        ? renamed
+        : Object.keys(keybinds).reduce(
+            (text, name) => {
+              const target =
+                TuiKeybind.CommandMap[name as keyof typeof TuiKeybind.CommandMap] ??
+                (name in Definitions || LegacyKeybindTargets.has(name) ? name : undefined)
+              if (target === undefined) return text
+              const properties = findKeybindProperties(text, name)
+              if (!properties.length) return text
+              const remove = !(target in Definitions) || (target !== name && target in keybinds)
+              // The parser gives the final duplicate precedence, so remove earlier properties before renaming it.
+              const cleaned = properties.slice(0, remove ? properties.length : -1).reduce((text) => {
+                const property = findKeybindProperties(text, name)[0]
+                return property === undefined ? text : removeProperty(text, property)
+              }, text)
+              if (remove) return cleaned
+              if (target === name) return cleaned
+              const key = findKeybindProperties(cleaned, name)[0]?.children?.[0]
+              if (key === undefined) return text
+              return cleaned.slice(0, key.offset) + JSON.stringify(target) + cleaned.slice(key.offset + key.length)
+            },
+            findKeybindObjects(renamed)
+              .slice(0, -1)
+              .reduce((text) => {
+                const property = findKeybindObjects(text)[0]
+                return property === undefined ? text : removeProperty(text, property)
+              }, renamed),
+          )
     if (updated === text) return
     const updatedErrors: ParseError[] = []
     const info = Option.getOrUndefined(decodeInfo(parse(updated, updatedErrors, { allowTrailingComma: true })))

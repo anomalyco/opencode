@@ -1,6 +1,5 @@
 ---
 title: "MCP servers"
-description: ""
 ---
 
 OpenCode can connect to [Model Context Protocol](https://modelcontextprotocol.io/) servers and make their tools, prompts, and instructions available to agents. MCP tools consume model context, so enable only the servers you need.
@@ -130,21 +129,8 @@ For a server that supports dynamic client registration, only the remote server i
 }
 ```
 
-When the server reports that it needs authentication, run `/connect` in the TUI:
-
-```text
-/connect
-```
-
-Select the MCP server under **Services**, then complete the browser authorization flow.
-
-You can also authenticate from the command line:
-
-```bash
-opencode2 mcp auth sentry
-```
-
-The CLI command prints the authorization URL and waits for the redirect to OpenCode's loopback callback server.
+When a server reports that it needs authentication, start its OAuth flow using
+an MCP management interface and complete authorization in the browser.
 
 If the provider issued client credentials, configure them using V2's snake_case field names:
 
@@ -176,12 +162,6 @@ If the provider issued client credentials, configure them using V2's snake_case 
 | `scope`         | Space-delimited scopes to request.                                                              |
 | `callback_port` | Local callback port, from `1` through `65535`. An available ephemeral port is used by default.  |
 | `redirect_uri`  | Pre-registered loopback redirect URI. Its path and port must reach the local callback listener. |
-
-Remove stored credentials with:
-
-```bash
-opencode2 mcp logout sentry
-```
 
 ## Timeouts
 
@@ -217,7 +197,7 @@ Timeouts are positive integer milliseconds. Configure defaults under `mcp.timeou
 
 ## Names and permissions
 
-OpenCode combines the server name and MCP tool name as `<server>_<tool>`. Characters other than letters, numbers, `_`, and `-` are replaced with `_`; for example, server `context 7` and tool `resolve.library/id` become `context_7_resolve_library_id`. MCP prompts appear as slash commands named `<server>:<prompt>` using the same normalization.
+OpenCode combines the server name and MCP tool name as `<server>_<tool>`. Characters other than letters, numbers, `_`, and `-` are replaced with `_`; for example, server `context 7` and tool `resolve.library/id` become `context_7_resolve_library_id`. MCP prompts become available as commands named `<server>:<prompt>` using the same normalization.
 
 Choose short server names that remain unique after normalization. Under the default Code Mode, MCP tools are grouped by the normalized server name.
 
@@ -251,26 +231,9 @@ Use permission actions to hide or deny a server's tools without stopping its con
 }
 ```
 
-## CLI commands
+## Manage servers
 
-V2 provides these MCP management commands:
-
-```bash
-# Add a local server to the project config
-opencode2 mcp add everything --env LOG_LEVEL=info -- npx -y @modelcontextprotocol/server-everything
-
-# Add a remote server to the project config
-opencode2 mcp add context7 --url https://mcp.context7.com/mcp --header 'CONTEXT7_API_KEY={env:CONTEXT7_API_KEY}'
-
-# Add to the global config instead
-opencode2 mcp add context7 --global --url https://mcp.context7.com/mcp
-
-# List configured servers and connection status
-opencode2 mcp list
-
-# Authenticate or remove OAuth credentials
-opencode2 mcp auth context7
-opencode2 mcp logout context7
-```
-
-`mcp add` accepts either `--url` for a remote server or a command after `--` for a local server, not both. Use `--header NAME=VALUE` only with remote servers and `--env NAME=VALUE` only with local servers. Edit the config directly for OAuth, timeout, working-directory, or enablement settings.
+OpenCode interfaces can add servers to project or global configuration, list
+configured servers and their connection status, authenticate remote servers,
+and remove stored OAuth credentials. Edit configuration directly for OAuth client settings, timeouts, working
+directories, or enablement.

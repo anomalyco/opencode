@@ -510,21 +510,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "desktop {{version}}",
   "wsl.onboarding.versionMismatch": "Den installerade versionen matchar inte versionen av skrivbordsappen.",
   "wsl.onboarding.adding": "Lägger till...",
-  "help.tabs.toast.ariaLabel": "Vi presenterar flikar. Ordna ditt arbete och dina aktiva sessioner med flikar",
-  "help.tabs.toast.dismiss": "Stäng informationen om flikar",
-  "help.tabs.title": "Vi presenterar flikar",
-  "help.tabs.description": "Ordna ditt arbete och dina aktiva sessioner med flikar",
-  "help.tabs.date": "14 juli",
-  "help.tabs.introduction": "OpenCode Desktop är nu uppbyggt kring flikar.",
-  "help.tabs.sessions":
-    "Starta en ny session på en flik eller öppna en befintlig session från något av dina projekt. Öppna en ny flik när du påbörjar något nytt och stäng den när du är klar.",
-  "help.tabs.organize":
-    "Genom att hålla några flikar öppna blir det enklare att ordna dina aktiva sessioner. Byt namn på flikarna till något du kommer ihåg om du tänker behålla dem.",
-  "help.tabs.home":
-    "Du hittar alla dina sessioner och projekt på den nya hemskärmen. När du väljer en session öppnas den på en flik.",
-  "help.tabs.persistence": "När du öppnar appen igen är dina flikar fortfarande öppna.",
-  "help.tabs.worktrees":
-    "Den nya designen stöder inte Git Worktrees ännu, men stöd kommer snart. Om du föredrar att fortsätta använda den tidigare layouten kan du därför växla mellan layouterna i Inställningar. Tänk bara på att den nya layouten blir permanent om några veckor.",
   "server.row.noUsername": "inget användarnamn",
   "dialog.project.edit.title": "Redigera projekt",
   "dialog.project.edit.name": "Namn",
@@ -974,13 +959,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Fäll ut delar för redigeringsverktyg",
   "settings.general.row.editToolPartsExpanded.description":
     "Visa delar för redigerings-, skriv- och patchverktyg utfällda som standard i tidslinjen",
-  "settings.general.row.newInterface.title": "Ny layout",
-  "settings.general.row.newInterface.badge": "Ny",
-  "settings.general.row.newInterface.description":
-    "Använd de nya flikarna och hemlayouten. Växla mellan layouter under en begränsad tid.",
-  "settings.general.row.newInterfaceNotice.title": "Du använder nu ny layout",
-  "settings.general.row.newInterfaceNotice.description": "Den tidigare layouten är inte längre tillgänglig",
-  "settings.general.row.newInterfaceNotice.dismiss": "Avfärda",
   "settings.general.row.pinchZoom.title": "Nyp för att zooma",
   "settings.general.row.pinchZoom.description": "Tillåt nypgester på styrplattan och Ctrl-rullning för att zooma",
   "settings.general.row.wayland.title": "Använd inbyggt Wayland-stöd",

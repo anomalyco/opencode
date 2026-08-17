@@ -49,10 +49,6 @@ test("shows the V2 thinking level control while relevant", async ({ page }) => {
     ],
     pageMessages: () => ({ items: [] }),
   })
-  await page.addInitScript(() => {
-    localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-  })
-
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   const composer = page.locator('[data-component="prompt-input-v2"]')
   const input = composer.locator('[data-component="prompt-input"]')

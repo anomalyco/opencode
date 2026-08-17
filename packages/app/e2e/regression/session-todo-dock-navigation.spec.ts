@@ -119,7 +119,6 @@ async function configurePage(page: Page) {
   const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
   await page.addInitScript(
     ({ directory, dirBase64, server, sessionIDs }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({

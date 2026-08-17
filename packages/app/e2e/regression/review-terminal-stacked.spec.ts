@@ -124,7 +124,6 @@ test("keeps the review tree and terminal sized when both panels are open", async
   )
   await page.routeWebSocket("**/api/pty/pty_review_terminal/connect", () => undefined)
   await page.addInitScript(() => {
-    localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
     localStorage.setItem(
       "opencode.global.dat:layout",
       JSON.stringify({ review: { diffStyle: "split", panelOpened: true } }),

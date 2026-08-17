@@ -36,7 +36,6 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
-import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { isWorkspaceDirectory } from "@/utils/workspace"
@@ -60,7 +59,6 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { TerminalProvider } from "@/context/terminal"
-import { PromptInput } from "@/components/prompt-input"
 import { PromptInputV2Composer, usePromptInputV2Controller } from "@/components/prompt-input-v2"
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { setCursorPosition } from "@/components/prompt-input/editor-dom"
@@ -86,12 +84,10 @@ import {
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { sessionPanelLayout } from "@/pages/session/session-panel-layout"
 import { SessionReviewEmptyChangesV2 } from "@opencode-ai/session-ui/v2/session-review-empty-changes-v2"
-import { SessionReviewEmptyNoGitV2 } from "@opencode-ai/session-ui/v2/session-review-empty-no-git-v2"
 import { SessionReviewV2SidebarToggle } from "@opencode-ai/session-ui/v2/session-review-v2"
 import { ReviewPanelV2 } from "@/pages/session/v2/review-panel-v2"
 import { createReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
 import { reviewDiffDirectory, reviewDiffNeedsLoad, reviewRootDirectory } from "@/pages/session/v2/review-diff-kinds"
-import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { TerminalPanelV2 } from "@/pages/session/terminal-panel-v2"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
@@ -180,7 +176,7 @@ export function SessionRouteErrorBoundary(
     <ErrorBoundary
       fallback={(error) => (
         <SessionRouteFrame padded={props.padded}>
-          <SessionPanelFrame newLayout raised={!!props.sessionID}>
+          <SessionPanelFrame raised={!!props.sessionID}>
             <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
           </SessionPanelFrame>
         </SessionRouteFrame>
@@ -312,15 +308,12 @@ function SessionRouteFrame(props: ParentProps<{ padded?: boolean }>) {
   )
 }
 
-function SessionPanelFrame(props: ParentProps<{ newLayout: boolean; raised?: boolean }>) {
+function SessionPanelFrame(props: ParentProps<{ raised?: boolean }>) {
   return (
     <div
+      class="flex-1 min-h-0 flex flex-col bg-v2-background-bg-base rounded-[10px] overflow-hidden"
       classList={{
-        "flex-1 min-h-0 flex flex-col": true,
-        "bg-v2-background-bg-base": props.newLayout,
-        "bg-background-stronger": !props.newLayout,
-        "rounded-[10px] overflow-hidden": props.newLayout,
-        "shadow-[var(--v2-elevation-raised)]": props.newLayout && props.raised,
+        "shadow-[var(--v2-elevation-raised)]": props.raised,
       }}
     >
       {props.children}
@@ -348,12 +341,11 @@ export default function Page() {
   const location = useLocation()
   const navigate = useNavigate()
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
   const canReview = createMemo(() => !!sync().project)
   const controller = createSessionController({
     review: isDesktop,
     hasReview: canReview,
-    fileBrowser: (sessionID) => newSessionDesign() && isDesktop() && !!sessionID,
+    fileBrowser: (sessionID) => isDesktop() && !!sessionID,
   })
   const reviewMode = () => controller.layout.view().review.mode() ?? "git"
   const reviewFile = () => controller.layout.view().review.file()
@@ -393,14 +385,10 @@ export default function Page() {
 
   const size = createSizing()
   const desktopReviewOpen = createMemo(() => isDesktop() && controller.layout.view().reviewPanel.opened())
-  const desktopV2ReviewOpen = createMemo(
-    () => newSessionDesign() && desktopReviewOpen() && !!controller.identity.params.id,
-  )
+  const desktopV2ReviewOpen = createMemo(() => desktopReviewOpen() && !!controller.identity.params.id)
   const terminalOpen = createMemo(() => controller.layout.view().terminal.opened())
   const desktopTerminalOpen = createMemo(() => isDesktop() && terminalOpen())
-  const desktopInlineTerminalOnlyOpen = createMemo(
-    () => newSessionDesign() && desktopTerminalOpen() && !desktopV2ReviewOpen(),
-  )
+  const desktopInlineTerminalOnlyOpen = createMemo(() => desktopTerminalOpen() && !desktopV2ReviewOpen())
   const desktopFileTreeOpen = createMemo(
     () =>
       isDesktop() &&
@@ -409,9 +397,7 @@ export default function Page() {
         opened: layout.fileTree.opened(),
       }),
   )
-  const desktopSessionResizeOpen = createMemo(() =>
-    newSessionDesign() ? desktopV2ReviewOpen() || desktopTerminalOpen() : desktopReviewOpen(),
-  )
+  const desktopSessionResizeOpen = createMemo(() => desktopV2ReviewOpen() || desktopTerminalOpen())
   const desktopSidePanelOpen = createMemo(() => desktopSessionResizeOpen() || desktopFileTreeOpen())
   let panelRow: HTMLDivElement | undefined
   const [panelRowWidth, setPanelRowWidth] = createSignal<number>()
@@ -419,15 +405,13 @@ export default function Page() {
     () => panelRow,
     ({ width }) => setPanelRowWidth(width),
   )
-  const splitReview = createMemo(
-    () => (newSessionDesign() ? desktopV2ReviewOpen() : desktopReviewOpen()) && layout.review.diffStyle() === "split",
-  )
+  const splitReview = createMemo(() => desktopV2ReviewOpen() && layout.review.diffStyle() === "split")
   // The observer reports the content-box width, which already excludes the row
   // padding; only the flex gap between the panels remains to subtract.
   const sessionPanelAvailable = createMemo(() => {
     const width = panelRowWidth()
     if (width === undefined) return undefined
-    return width - (settings.general.newLayoutDesigns() ? 8 : 0)
+    return width - 8
   })
   const sessionPanelMax = createMemo(() => {
     const available = sessionPanelAvailable()
@@ -448,7 +432,7 @@ export default function Page() {
     if (desktopSessionResizeOpen()) return `${sessionPanelResizedWidth()}px`
     return `calc(100% - ${layout.fileTree.width()}px)`
   })
-  const centered = createMemo(() => isDesktop() && (newSessionDesign() || !desktopReviewOpen()))
+  const centered = createMemo(() => isDesktop())
   const desktopV2PanelLayout = createMemo(() =>
     sessionPanelLayout({
       review: desktopV2ReviewOpen(),
@@ -587,8 +571,7 @@ export default function Page() {
   const wantsReview = createMemo(() =>
     isDesktop()
       ? desktopFileTreeOpen() ||
-        (desktopReviewOpen() &&
-          (controller.tabs.activeTab() === "review" || (newSessionDesign() && !!controller.tabs.activeFileTab())))
+        (desktopReviewOpen() && (controller.tabs.activeTab() === "review" || !!controller.tabs.activeFileTab()))
       : store.mobileTab === "changes",
   )
   const vcsMode = createMemo<VcsMode | undefined>(() => {
@@ -1298,25 +1281,6 @@ export default function Page() {
     </div>
   )
 
-  const reviewPanel = () => (
-    <div
-      classList={{
-        "flex flex-col h-full overflow-hidden contain-strict": true,
-        "bg-v2-background-bg-base": settings.general.newLayoutDesigns(),
-        "bg-background-stronger": !settings.general.newLayoutDesigns(),
-      }}
-    >
-      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-        {reviewContent({
-          diffStyle: layout.review.diffStyle(),
-          onDiffStyleChange: layout.review.setDiffStyle,
-          loadingClass: "px-6 py-4 text-text-weak",
-          emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
-        })}
-      </div>
-    </div>
-  )
-
   createEffect(
     on(
       controller.tabs.activeFileTab,
@@ -2006,9 +1970,7 @@ export default function Page() {
       </Tabs.List>
     </Tabs>
   )
-  const mobileTabsBottom = createMemo(
-    () => !isDesktop() && settings.general.newLayoutDesigns() && settings.general.mobileTitlebarPosition() === "bottom",
-  )
+  const mobileTabsBottom = createMemo(() => !isDesktop() && settings.general.mobileTitlebarPosition() === "bottom")
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
     createEffect(on(controller.identity.sessionKey, reset, { defer: true }))
@@ -2018,13 +1980,7 @@ export default function Page() {
   const sessionPanelContent = () => (
     <>
       {sessionSync() ?? ""}
-      <Show
-        when={
-          !isDesktop() && !!controller.identity.params.id && settings.general.newLayoutDesigns() && !mobileTabsBottom()
-        }
-      >
-        {mobileTabs(true)}
-      </Show>
+      <Show when={!isDesktop() && !!controller.identity.params.id && !mobileTabsBottom()}>{mobileTabs(true)}</Show>
       <div class="flex-1 min-h-0 overflow-hidden">
         <Switch>
           <Match when={controller.identity.params.id && mobileChanges()}>
@@ -2092,7 +2048,7 @@ export default function Page() {
         </Switch>
       </div>
 
-      <Show when={(controller.identity.params.id || !newSessionDesign()) && !mobileChanges()}>
+      <Show when={controller.identity.params.id && !mobileChanges()}>
         {(_) => {
           const region = createSessionComposerRegionController({
             state: composer,
@@ -2140,73 +2096,42 @@ export default function Page() {
               promptDock = el
             },
           })
+          const promptInputController = usePromptInputV2Controller({
+            get controls() {
+              return inputController()
+            },
+            ref: (el) => {
+              inputRef = el
+            },
+            get newSessionWorktree() {
+              return newSessionWorktree()
+            },
+            onNewSessionWorktreeReset: () => setStore("newSessionWorktree", "main"),
+            onSubmit: () => {
+              comments.clear()
+              resumeScroll()
+            },
+            get edit() {
+              return editingFollowup()
+            },
+            onEditLoaded: clearFollowupEdit,
+            shouldQueue: queueEnabled,
+            onQueue: queueFollowup,
+            onAbort: () => {
+              const id = controller.identity.params.id
+              if (!id) return
+              setFollowup("paused", id, true)
+            },
+          })
           return (
             <SessionComposerRegion
               controller={region}
               promptInput={
-                <Show
-                  when={newSessionDesign()}
-                  fallback={
-                    <PromptInput
-                      controls={inputController()}
-                      ref={(el) => {
-                        inputRef = el
-                      }}
-                      newSessionWorktree={newSessionWorktree()}
-                      onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-                      onSubmit={() => {
-                        comments.clear()
-                        resumeScroll()
-                      }}
-                      edit={editingFollowup()}
-                      onEditLoaded={clearFollowupEdit}
-                      shouldQueue={queueEnabled}
-                      onQueue={queueFollowup}
-                      onAbort={() => {
-                        const id = controller.identity.params.id
-                        if (!id) return
-                        setFollowup("paused", id, true)
-                      }}
-                    />
-                  }
-                >
-                  {(_) => {
-                    const promptInputController = usePromptInputV2Controller({
-                      get controls() {
-                        return inputController()
-                      },
-                      ref: (el) => {
-                        inputRef = el
-                      },
-                      get newSessionWorktree() {
-                        return newSessionWorktree()
-                      },
-                      onNewSessionWorktreeReset: () => setStore("newSessionWorktree", "main"),
-                      onSubmit: () => {
-                        comments.clear()
-                        resumeScroll()
-                      },
-                      get edit() {
-                        return editingFollowup()
-                      },
-                      onEditLoaded: clearFollowupEdit,
-                      shouldQueue: queueEnabled,
-                      onQueue: queueFollowup,
-                      onAbort: () => {
-                        const id = controller.identity.params.id
-                        if (!id) return
-                        setFollowup("paused", id, true)
-                      },
-                    })
-                    return (
-                      <PromptInputV2Composer
-                        controller={promptInputController}
-                        borderUnderlay
-                        accentSubmit={workspaceSession()}
-                      />
-                    )
-                  }}
-                </Show>
+                <PromptInputV2Composer
+                  controller={promptInputController}
+                  borderUnderlay
+                  accentSubmit={workspaceSession()}
+                />
               }
             />
           )
@@ -2219,17 +2144,7 @@ export default function Page() {
   return (
     <SessionRouteFrame>
       <SessionHeader />
-      <div
-        ref={panelRow}
-        class="flex-1 min-h-0 flex flex-col md:flex-row"
-        classList={{
-          "gap-2 p-2": settings.general.newLayoutDesigns(),
-        }}
-      >
-        <Show when={!isDesktop() && !!controller.identity.params.id && !settings.general.newLayoutDesigns()}>
-          {mobileTabs()}
-        </Show>
-
+      <div ref={panelRow} class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 p-2">
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none transition-[width]": true,
@@ -2240,29 +2155,18 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          <Show
-            when={settings.general.newLayoutDesigns()}
-            fallback={
-              <SessionPanelFrame newLayout={false} raised={!!controller.identity.params.id}>
-                {sessionPanelContent()}
+          <Show when={sessionPanelKey()} keyed>
+            {(_) => (
+              <SessionPanelFrame raised={!!controller.identity.params.id}>
+                <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
               </SessionPanelFrame>
-            }
-          >
-            <Show when={sessionPanelKey()} keyed>
-              {(_) => (
-                <SessionPanelFrame newLayout raised={!!controller.identity.params.id}>
-                  <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
-                </SessionPanelFrame>
-              )}
-            </Show>
+            )}
           </Show>
 
           <Show when={desktopSessionResizeOpen()}>
             <div onPointerDown={() => size.start()}>
               <ResizeHandle
-                classList={{
-                  "-end-1": settings.general.newLayoutDesigns(),
-                }}
+                class="-end-1"
                 direction="horizontal"
                 size={sessionPanelResizedWidth()}
                 min={SESSION_PANEL_WIDTH_MIN}
@@ -2276,91 +2180,66 @@ export default function Page() {
           </Show>
         </div>
 
-        <Show when={!newSessionDesign() && desktopSidePanelOpen()}>
-          <Suspense>
-            <SessionSidePanel
-              canReview={canReview()}
-              diffs={reviewDiffs()}
-              diffsReady={reviewReady()}
-              empty={reviewEmptyText()}
-              hasReview={hasReview()}
-              reviewHasFocusableContent={hasReview()}
-              reviewCount={reviewCount()}
-              reviewPanel={reviewPanel}
-              activeDiff={activeReviewFile()}
-              focusReviewDiff={focusReviewDiff}
-              reviewSnap={ui.reviewSnap}
-              size={size}
-            />
-          </Suspense>
-        </Show>
-        <Show when={newSessionDesign()}>
-          <Show when={isDesktop() ? desktopV2PanelLayout().visible : terminalOpen()}>
-            <div class="min-w-0 h-full flex flex-1 flex-col">
-              <Show when={isDesktop() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
-                <div class="min-h-0 flex-1">
-                  <Suspense>
-                    <SessionSidePanel
-                      canReview={canReview()}
-                      diffs={reviewDiffs()}
-                      diffsReady={reviewReady()}
-                      empty={reviewEmptyText()}
-                      hasReview={hasReview()}
-                      reviewHasFocusableContent={hasReview() || reviewV2State.sidebarOpened()}
-                      reviewCount={reviewCount()}
-                      reviewPanel={reviewPanelV2}
-                      reviewSidebarToggle={(disabled) => (
-                        <SessionReviewV2SidebarToggle
-                          opened={reviewV2State.sidebarOpened()}
-                          disabled={disabled}
-                          onToggle={reviewV2State.toggleSidebar}
-                        />
-                      )}
-                      fileBrowserState={reviewV2State}
-                      activeDiff={activeReviewFile()}
-                      focusReviewDiff={focusReviewDiff}
-                      reviewSnap={ui.reviewSnap}
-                      size={size}
-                      stacked={desktopV2PanelLayout().stacked}
-                    />
-                  </Suspense>
-                </div>
-              </Show>
-              <Show when={desktopV2PanelLayout().stacked}>
-                <div class="relative h-2 shrink-0" onPointerDown={() => size.start()}>
-                  <ResizeHandle
-                    class="!relative !inset-auto !h-full !w-full !transform-none"
-                    direction="vertical"
-                    size={layout.terminal.height()}
-                    min={100}
-                    max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
-                    collapseThreshold={50}
-                    onResize={(height) => {
-                      size.touch()
-                      layout.terminal.resize(height)
-                    }}
-                    onCollapse={() => controller.layout.view().terminal.close()}
+        <Show when={isDesktop() ? desktopV2PanelLayout().visible : terminalOpen()}>
+          <div class="min-w-0 h-full flex flex-1 flex-col">
+            <Show when={isDesktop() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
+              <div class="min-h-0 flex-1">
+                <Suspense>
+                  <SessionSidePanel
+                    canReview={canReview()}
+                    diffs={reviewDiffs()}
+                    diffsReady={reviewReady()}
+                    hasReview={hasReview()}
+                    reviewHasFocusableContent={hasReview() || reviewV2State.sidebarOpened()}
+                    reviewCount={reviewCount()}
+                    reviewPanel={reviewPanelV2}
+                    reviewSidebarToggle={(disabled) => (
+                      <SessionReviewV2SidebarToggle
+                        opened={reviewV2State.sidebarOpened()}
+                        disabled={disabled}
+                        onToggle={reviewV2State.toggleSidebar}
+                      />
+                    )}
+                    fileBrowserState={reviewV2State}
+                    activeDiff={activeReviewFile()}
+                    focusReviewDiff={focusReviewDiff}
+                    reviewSnap={ui.reviewSnap}
+                    size={size}
+                    stacked={desktopV2PanelLayout().stacked}
                   />
-                </div>
-              </Show>
-              <Show when={terminalOpen()}>
-                <div
-                  classList={{
-                    "min-h-0 shrink-0": desktopV2PanelLayout().stacked,
-                    "min-h-0 flex-1": !desktopV2PanelLayout().stacked,
+                </Suspense>
+              </div>
+            </Show>
+            <Show when={desktopV2PanelLayout().stacked}>
+              <div class="relative h-2 shrink-0" onPointerDown={() => size.start()}>
+                <ResizeHandle
+                  class="!relative !inset-auto !h-full !w-full !transform-none"
+                  direction="vertical"
+                  size={layout.terminal.height()}
+                  min={100}
+                  max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
+                  collapseThreshold={50}
+                  onResize={(height) => {
+                    size.touch()
+                    layout.terminal.resize(height)
                   }}
-                >
-                  <TerminalPanelV2 stacked={desktopV2PanelLayout().stacked} />
-                </div>
-              </Show>
-            </div>
-          </Show>
+                  onCollapse={() => controller.layout.view().terminal.close()}
+                />
+              </div>
+            </Show>
+            <Show when={terminalOpen()}>
+              <div
+                classList={{
+                  "min-h-0 shrink-0": desktopV2PanelLayout().stacked,
+                  "min-h-0 flex-1": !desktopV2PanelLayout().stacked,
+                }}
+              >
+                <TerminalPanelV2 stacked={desktopV2PanelLayout().stacked} />
+              </div>
+            </Show>
+          </div>
         </Show>
       </div>
-
-      <Show when={!newSessionDesign()}>
-        <TerminalPanel />
-      </Show>
     </SessionRouteFrame>
   )
 }

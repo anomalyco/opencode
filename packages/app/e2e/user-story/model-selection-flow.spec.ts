@@ -53,7 +53,6 @@ test("creates a session in a new project and selects its model", async ({ page }
     findFiles: () => ["NewProject"],
   })
   await page.addInitScript(() => {
-    localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
     localStorage.setItem("opencode.global.dat:server", JSON.stringify({ projects: { local: [] } }))
     localStorage.setItem(
       "opencode.global.dat:model",

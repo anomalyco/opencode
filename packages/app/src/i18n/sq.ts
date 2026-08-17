@@ -509,21 +509,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "desktop {{version}}",
   "wsl.onboarding.versionMismatch": "Versioni i instaluar nuk përputhet me versionin e aplikacionit desktop.",
   "wsl.onboarding.adding": "Po shtohet...",
-  "help.tabs.toast.ariaLabel": "Prezantimi i skedave. Organizoni punën tuaj dhe seancat aktive me skeda",
-  "help.tabs.toast.dismiss": "Hiq informacionin e skedave",
-  "help.tabs.title": "Prezantimi i skedave",
-  "help.tabs.description": "Organizoni punën tuaj dhe seancat aktive me skeda",
-  "help.tabs.date": "14 korrik",
-  "help.tabs.introduction": "OpenCode Desktop tani është ndërtuar rreth skedave.",
-  "help.tabs.sessions":
-    "Filloni një sesion të ri në një skedë ose hapni një sesion ekzistues nga ndonjë prej projekteve tuaja. Hapni një skedë të re kur filloni diçka të re dhe mbylleni kur të keni mbaruar.",
-  "help.tabs.organize":
-    "Mbajtja e disa skedave të hapura e bën më të lehtë organizimin e seancave tuaja aktive. Riemërtoni skedat në diçka të paharrueshme nëse planifikoni t'i mbani ato përreth.",
-  "help.tabs.home":
-    "Do t'i gjeni të gjitha seancat dhe projektet tuaja në ekranin e ri Home. Zgjedhja e një sesioni e hap atë në një skedë.",
-  "help.tabs.persistence": "Kur rihapni aplikacionin, skedat tuaja janë ende të hapura.",
-  "help.tabs.worktrees":
-    'Dizajni i ri nuk mbështet ende Git Worktrees, ai vjen së shpejti. Pra, nëse preferoni të vazhdoni të përdorni paraqitjen e mëparshme, mund të kaloni midis paraqitjeve te "Cilësimet". Vetëm mbani në mend se faqosja e re do të bëhet e përhershme brenda disa javësh.',
   "server.row.noUsername": "asnjë emër përdoruesi",
   "dialog.project.edit.title": "Redakto projektin",
   "dialog.project.edit.name": "Emri",
@@ -976,13 +961,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Zgjero pjesët e veglave të redaktimit",
   "settings.general.row.editToolPartsExpanded.description":
     "Shfaq pjesët e veglave të modifikimit, shkrimit dhe korrigjimit të zgjeruara si parazgjedhje në afatin kohor",
-  "settings.general.row.newInterface.title": "Paraqitje e re",
-  "settings.general.row.newInterface.badge": "E re",
-  "settings.general.row.newInterface.description":
-    "Përdorni skedat e reja dhe paraqitjen e shtëpisë. Kaloni ndërmjet paraqitjeve për një kohë të kufizuar.",
-  "settings.general.row.newInterfaceNotice.title": "Tani po përdorni strukturë të re",
-  "settings.general.row.newInterfaceNotice.description": "Paraqitja e mëparshme nuk është më e disponueshme",
-  "settings.general.row.newInterfaceNotice.dismiss": "Largoje",
   "settings.general.row.pinchZoom.title": "Pini për të zmadhuar",
   "settings.general.row.pinchZoom.description": "Lejo zmadhimin e kapjes së tastierës dhe gjestet e lëvizjes Ctrl",
   "settings.general.row.wayland.title": "Përdorni Wayland amtare",

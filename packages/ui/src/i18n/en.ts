@@ -108,6 +108,8 @@ const source = {
   "ui.messagePart.context.search.other": "{{count}} searches",
   "ui.messagePart.context.list.one": "{{count}} list",
   "ui.messagePart.context.list.other": "{{count}} lists",
+  "ui.messagePart.context.match.one": "({{count}} match)",
+  "ui.messagePart.context.match.other": "({{count}} matches)",
 
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",
@@ -158,6 +160,7 @@ const source = {
   "ui.tool.websearch": "Web Search",
   "ui.tool.websearch.provider": "{{provider}} Web Search",
   "ui.tool.shell": "Shell",
+  "ui.tool.execute": "Execute",
   "ui.tool.patch": "Patch",
   "ui.tool.questions": "Questions",
   "ui.tool.questions.numbered": "Questions {{number}}",
