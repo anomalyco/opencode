@@ -955,6 +955,38 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("rejects pending tool calls at message_stop", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              {
+                type: "content_block_start",
+                index: 0,
+                content_block: { type: "tool_use", id: "call_1", name: "lookup" },
+              },
+              {
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "input_json_delta", partial_json: '{"query":"weather"}' },
+              },
+              { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        message: "Anthropic Messages message_stop arrived before content_block_stop for a pending tool call",
+      })
+    }),
+  )
+
   it.effect("assembles and persists multiple tool calls from one Anthropic response", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
