@@ -1,24 +1,24 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { DateTime, Effect, Layer } from "effect"
+import { DateTime, Effect, Layer, Stream } from "effect"
 import { Message } from "@opencode-ai/ai"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Config } from "@opencode-ai/core/config"
 import { Database } from "@opencode-ai/core/database/database"
-import { EventV2 } from "@opencode-ai/core/event"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Global } from "@opencode-ai/core/global"
+import { Bus } from "@opencode-ai/core/bus"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Global } from "@opencode-ai/util/global"
 import { Image } from "@opencode-ai/core/image"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PermissionV2 } from "@opencode-ai/core/permission"
-import { ProjectV2 } from "@opencode-ai/core/project"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ReadTool } from "@opencode-ai/core/tool/read"
+import { Model } from "@opencode-ai/core/model"
+import { Permission } from "@opencode-ai/core/permission"
+import { Project } from "@opencode-ai/core/project"
+import { Provider } from "@opencode-ai/core/provider"
+import { ReadTool } from "@opencode-ai/core/tool/plugin/read"
 import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -26,92 +26,72 @@ import { SessionInstructions } from "@opencode-ai/core/session/instructions"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
-import { ToolHooks } from "@opencode-ai/core/tool/hooks"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
-import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
+import { Tool } from "@opencode-ai/core/tool"
 import { tempLocationLayer } from "./fixture/location"
-import { makeLocationNode } from "@opencode-ai/core/effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { testEffect } from "./lib/effect"
-import { registerToolPlugin, settleTool } from "./lib/tool"
+import { permissionLayer } from "./lib/permission"
+import { globalProjectLayer } from "./lib/project"
+import { executeTool, registerToolPlugin } from "./lib/tool"
 
 const readToolNode = makeLocationNode({
   name: "test/read-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(ReadTool.Plugin)),
   deps: [
-    ToolRegistry.toolsNode,
+    Tool.node,
     ReadToolFileSystem.node,
     LocationMutation.node,
     Image.node,
-    PermissionV2.node,
+    Permission.node,
     SessionInstructions.node,
     FSUtil.node,
     Location.node,
   ],
 })
 
-const projects = Layer.succeed(
-  ProjectV2.Service,
-  ProjectV2.Service.of({
-    list: () => Effect.succeed([]),
-    resolve: (directory) => Effect.succeed({ id: ProjectV2.ID.global, directory }),
-    directories: () => Effect.succeed([]),
-    commit: () => Effect.void,
-  }),
-)
-const permission = Layer.succeed(
-  PermissionV2.Service,
-  PermissionV2.Service.of({
-    assert: () => Effect.void,
-    ask: () => Effect.die("unused"),
-    reply: () => Effect.die("unused"),
-    get: () => Effect.die("unused"),
-    forSession: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-  }),
-)
-const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
+const permission = permissionLayer({ assert: () => Effect.void })
+const config = Config.testLayer()
 const imageLayer = AppNodeBuilder.build(Image.node, [[Config.node, config]])
 
 const testLayer = AppNodeBuilder.build(
   LayerNode.group([
     Database.node,
-    EventV2.node,
+    Bus.node,
     SessionProjector.node,
     SessionStore.node,
-    SessionV2.node,
+    Session.node,
     Location.node,
     FSUtil.node,
     LocationMutation.node,
     ReadToolFileSystem.node,
     readToolNode,
-    ToolRegistry.node,
-    ToolRegistry.toolsNode,
-    ToolHooks.node,
+    Tool.node,
+    Tool.node,
+    PluginHooks.node,
     SessionInstructions.node,
     Global.node,
-    ToolOutputStore.node,
     Image.node,
   ]),
   [
-    [ProjectV2.node, projects],
+    [Project.node, globalProjectLayer],
     [SessionExecution.node, SessionExecution.noopLayer],
     [Location.node, tempLocationLayer],
-    [PermissionV2.node, permission],
+    [Permission.node, permission],
     [Config.node, config],
     [Image.node, imageLayer],
-    [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
   ],
 ) as unknown as Layer.Layer<unknown>
 
 const it = testEffect(testLayer)
 
 const identity = {
-  agent: AgentV2.ID.make("build"),
+  agent: Agent.ID.make("build"),
   messageID: SessionMessage.ID.make("msg_nearby"),
 }
-const readCall = (sessionID: SessionV2.ID, id: string, readPath: string): ToolRegistry.ExecuteInput => ({
+const readCall = (sessionID: Session.ID, id: string, readPath: string): Parameters<Tool.Snapshot["execute"]>[0] => ({
   sessionID,
   ...identity,
   call: { type: "tool-call", id, name: "read", input: { path: readPath } },
@@ -120,7 +100,7 @@ const readCall = (sessionID: SessionV2.ID, id: string, readPath: string): ToolRe
 const writeAgents = (file: string, content: string) => Effect.promise(() => fs.writeFile(file, content))
 const mkdir = (dir: string) => Effect.promise(() => fs.mkdir(dir, { recursive: true }))
 
-const synthetics = (sessionID: SessionV2.ID) =>
+const synthetics = (sessionID: Session.ID) =>
   Effect.gen(function* () {
     const store = yield* SessionStore.Service
     return (yield* store.context(sessionID)).filter((message) => message.type === "synthetic")
@@ -128,10 +108,10 @@ const synthetics = (sessionID: SessionV2.ID) =>
 
 // Seed a prior synthetic message with an instruction dedup ledger, simulating a prior turn
 // after the Location layer was reopened (in-memory set empty).
-const seedSynthetic = (sessionID: SessionV2.ID, paths: string[]) =>
+const seedSynthetic = (sessionID: Session.ID, paths: string[]) =>
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
-    yield* events.publish(SessionEvent.Synthetic, {
+    const bus = yield* Bus.Service
+    yield* bus.publish(SessionEvent.Synthetic, {
       sessionID,
       text: `Instructions from: ${paths[0]}\nprior`,
       description: `Loaded ${paths[0]}`,
@@ -157,13 +137,13 @@ describe("SessionInstructions", () => {
       yield* Effect.promise(() => fs.writeFile(path.resolve(dir, "sub", "deep", "file.txt"), "file content"))
       yield* Effect.promise(() => fs.writeFile(path.resolve(dir, "sub", "other", "file2.txt"), "file content 2"))
 
-      const session = yield* SessionV2.Service
-      const registry = yield* ToolRegistry.Service
+      const session = yield* Session.Service
+      const registry = yield* Tool.Service
       const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
 
       // A read deep under sub/ discovers deep and sub AGENTS.md, walking up to but
       // excluding the Location root (already supplied by core initial instructions).
-      yield* settleTool(registry, readCall(sessionID, "call-deep", "sub/deep/file.txt"))
+      yield* executeTool(registry, readCall(sessionID, "call-deep", "sub/deep/file.txt"))
 
       const firstInjected = yield* synthetics(sessionID)
       expect(firstInjected).toHaveLength(1)
@@ -179,7 +159,7 @@ describe("SessionInstructions", () => {
 
       // A sibling read under sub/other discovers only the new AGENTS.md; sub is already
       // injected for this session so it is not re-emitted, and the root is still excluded.
-      yield* settleTool(registry, readCall(sessionID, "call-other", "sub/other/file2.txt"))
+      yield* executeTool(registry, readCall(sessionID, "call-other", "sub/other/file2.txt"))
 
       const secondInjected = yield* synthetics(sessionID)
       expect(secondInjected).toHaveLength(2)
@@ -201,8 +181,8 @@ describe("SessionInstructions", () => {
       yield* writeAgents(subPath, "sub-instructions")
       yield* Effect.promise(() => fs.writeFile(path.resolve(dir, "sub", "file.txt"), "content"))
 
-      const session = yield* SessionV2.Service
-      const registry = yield* ToolRegistry.Service
+      const session = yield* Session.Service
+      const registry = yield* Tool.Service
       const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
 
       // Seed the durable history with a prior synthetic that already claims sub's AGENTS.md
@@ -210,7 +190,7 @@ describe("SessionInstructions", () => {
       yield* seedSynthetic(sessionID, [subPath])
       expect(yield* synthetics(sessionID)).toHaveLength(1)
 
-      yield* settleTool(registry, readCall(sessionID, "call-sub", "sub/file.txt"))
+      yield* executeTool(registry, readCall(sessionID, "call-sub", "sub/file.txt"))
 
       // The durable claim on the prior synthetic prevents re-injection; no new synthetic.
       expect(yield* synthetics(sessionID)).toHaveLength(1)
@@ -230,13 +210,13 @@ describe("SessionInstructions", () => {
         yield* writeAgents(pkgPath, "pkg-instructions")
         yield* Effect.promise(() => fs.writeFile(path.resolve(dir, "packages", "foo", "file.txt"), "content"))
 
-        const session = yield* SessionV2.Service
-        const registry = yield* ToolRegistry.Service
+        const session = yield* Session.Service
+        const registry = yield* Tool.Service
         const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
 
         // Listing packages/foo/ discovers its own AGENTS.md, walking up to but excluding
         // the Location root (already supplied by core initial instructions).
-        yield* settleTool(registry, readCall(sessionID, "call-list", "packages/foo"))
+        yield* executeTool(registry, readCall(sessionID, "call-list", "packages/foo"))
 
         const firstInjected = yield* synthetics(sessionID)
         expect(firstInjected).toHaveLength(1)
@@ -247,7 +227,7 @@ describe("SessionInstructions", () => {
 
         // A subsequent file read under the listed directory is a dedup: pkg's AGENTS.md is
         // already injected for this session, so nothing new is emitted.
-        yield* settleTool(registry, readCall(sessionID, "call-file", "packages/foo/file.txt"))
+        yield* executeTool(registry, readCall(sessionID, "call-file", "packages/foo/file.txt"))
 
         expect(yield* synthetics(sessionID)).toHaveLength(1)
       }),
@@ -263,13 +243,13 @@ describe("SessionInstructions", () => {
       yield* writeAgents(rootPath, "root-instructions")
       yield* writeAgents(subPath, "sub-instructions")
 
-      const session = yield* SessionV2.Service
-      const registry = yield* ToolRegistry.Service
+      const session = yield* Session.Service
+      const registry = yield* Tool.Service
       const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
 
       // The walk starts and stops at the Location root: the root AGENTS.md is searched but
       // dropped by the dirname filter, and up() only walks upward so nested dirs are unseen.
-      yield* settleTool(registry, readCall(sessionID, "call-root-list", "."))
+      yield* executeTool(registry, readCall(sessionID, "call-root-list", "."))
 
       expect(yield* synthetics(sessionID)).toHaveLength(0)
     }),
@@ -283,7 +263,7 @@ describe("SessionInstructions", () => {
       yield* mkdir(path.resolve(dir, "sub"))
       yield* writeAgents(subPath, "sub-instructions")
 
-      const session = yield* SessionV2.Service
+      const session = yield* Session.Service
       const sessionInstructions = yield* SessionInstructions.Service
       const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: dir }) })).id
 
@@ -299,7 +279,7 @@ describe("SessionInstructions", () => {
 
   test("toLLMMessages does not forward synthetic metadata to the provider", () => {
     const created = DateTime.makeUnsafe(0)
-    const model = ModelV2.Ref.make({ id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") })
+    const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
     const synthetic = SessionMessage.Synthetic.make({
       id: SessionMessage.ID.make("msg_synthetic"),
       type: "synthetic",

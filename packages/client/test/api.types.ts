@@ -1,5 +1,7 @@
 import { Effect } from "effect"
 import { OpenCode as EffectOpenCode, type AppApi as EffectApi } from "../src/effect"
+import type { Session } from "@opencode-ai/schema/session"
+import type { DiscoverOptions } from "../src/service"
 
 type EffectClient = Effect.Success<ReturnType<typeof EffectOpenCode.make>>
 type PromiseClient = ReturnType<typeof import("../src/promise").OpenCode.make>
@@ -7,7 +9,14 @@ type PromiseClient = ReturnType<typeof import("../src/promise").OpenCode.make>
 declare const effectClient: EffectClient
 declare const promiseClient: PromiseClient
 
+const exactVersion: DiscoverOptions = { version: "2.0.0" }
+const compatibleVersion: DiscoverOptions = { version: (version) => version.startsWith("2.") }
+
 const effectApi: EffectApi<unknown> = effectClient
+
+const effectSession: Effect.Effect<Session.Info, unknown> = effectClient.session.get({
+  sessionID: "ses_test" as Session.ID,
+})
 
 declare const sessionID: Parameters<typeof effectApi.session.instructions.entry.list>[0]["sessionID"]
 
@@ -37,4 +46,14 @@ const promiseRemove: Promise<void> = promiseClient.session.instructions.entry.re
   key: "review-notes",
 })
 
-void [effectList, effectPut, effectRemove, promiseList, promisePut, promiseRemove]
+void [
+  effectSession,
+  effectList,
+  effectPut,
+  effectRemove,
+  promiseList,
+  promisePut,
+  promiseRemove,
+  exactVersion,
+  compatibleVersion,
+]

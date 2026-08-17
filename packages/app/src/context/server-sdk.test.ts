@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { coalesceServerEvents, enqueueServerEvent, resumeStreamAfterPageShow } from "./server-sdk"
-import type { Event } from "@opencode-ai/sdk/v2/client"
+import type { OpenCodeEvent } from "@opencode-ai/client/promise"
+import { adaptServerEvent, coalesceServerEvents, resumeStreamAfterPageShow } from "./server-sdk"
 
 describe("resumeStreamAfterPageShow", () => {
   test("restarts a stream only after a back-forward cache restore", () => {
@@ -14,148 +14,77 @@ describe("resumeStreamAfterPageShow", () => {
   })
 })
 
-describe("coalesceServerEvents", () => {
-  const delta = (value: string, field = "text", partID = "part") => ({
-    directory: "/repo",
-    payload: {
-      type: "message.part.delta",
-      properties: { messageID: "msg", partID, field, delta: value },
-    } as Event,
-  })
+describe("adaptServerEvent", () => {
+  test("preserves current permission requests", () => {
+    const current = {
+      id: "evt_1",
+      created: 1,
+      type: "permission.asked",
+      data: {
+        id: "perm_1",
+        sessionID: "ses_1",
+        action: "read",
+        resources: ["src/**"],
+        source: { type: "tool", messageID: "msg_1", id: "call_1" },
+      },
+    } as OpenCodeEvent
 
-  test("merges adjacent deltas for the same field", () => {
-    const first = delta("hello ")
-    const second = delta("world")
-    first.payload.id = "first"
-    second.payload.id = "second"
-    const result = coalesceServerEvents([first, second])
-
-    expect(result).toHaveLength(1)
-    expect(result[0]?.payload).toMatchObject({ id: "second", properties: { delta: "hello world" } })
-  })
-
-  test("preserves event boundaries and distinct fields", () => {
-    const status = {
-      directory: "/repo",
-      payload: { type: "session.status", properties: { sessionID: "ses", status: { type: "idle" } } } as Event,
-    }
-    const result = coalesceServerEvents([delta("a"), delta("b", "metadata"), status, delta("c")])
-
-    expect(result.map((event) => event.payload.type)).toEqual([
-      "message.part.delta",
-      "message.part.delta",
-      "session.status",
-      "message.part.delta",
-    ])
-  })
-
-  test("preserves event ID order across interleaved deltas", () => {
-    const first = delta("a")
-    const other = delta("b", "text", "other")
-    const last = delta("c")
-    first.payload.id = "1"
-    other.payload.id = "2"
-    last.payload.id = "3"
-
-    const result = coalesceServerEvents([first, other, last])
-
-    expect(result.map((event) => event.payload.id)).toEqual(["1", "2", "3"])
+    expect(adaptServerEvent(current)).toMatchObject({
+      id: "evt_1",
+      type: "permission.asked",
+      properties: {
+        id: "perm_1",
+        sessionID: "ses_1",
+        action: "read",
+        resources: ["src/**"],
+        source: { type: "tool", messageID: "msg_1", id: "call_1" },
+      },
+      current,
+    })
   })
 })
 
-describe("enqueueServerEvent", () => {
-  const partUpdated = (text: string) =>
-    ({
-      type: "message.part.updated",
-      properties: {
-        sessionID: "session",
-        part: { id: "part", sessionID: "session", messageID: "message", type: "text", text },
-      },
-    }) as Event
+describe("current event buffering", () => {
+  const delta = (id: string, value: string, ordinal = 0) =>
+    adaptServerEvent({
+      id,
+      created: 1,
+      type: "session.text.delta",
+      location: { directory: "/repo" },
+      data: { sessionID: "ses", assistantMessageID: "msg", ordinal, delta: value },
+    } as OpenCodeEvent)
 
-  test("preserves part updates across message remove and re-add barriers", () => {
-    const events: Array<{ directory: string; payload: Event }> = []
-    const enqueue = (payload: Event) => enqueueServerEvent(events, { directory: "/repo", payload })
+  test("merges adjacent text deltas for the same message and ordinal", () => {
+    const result = coalesceServerEvents([delta("evt_1", "hello "), delta("evt_2", "world")])
 
-    enqueue(partUpdated("old"))
-    enqueue({ type: "message.removed", properties: { sessionID: "session", messageID: "message" } } as Event)
-    enqueue({
-      type: "message.updated",
-      properties: {
-        sessionID: "session",
-        info: {
-          id: "message",
-          sessionID: "session",
-          role: "user",
-          time: { created: 1 },
-          agent: "build",
-          model: { providerID: "provider", modelID: "model" },
-        },
-      },
-    } as Event)
-    enqueue(partUpdated("new"))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.current).toMatchObject({ id: "evt_2", data: { delta: "hello world" } })
+    expect(result[0]?.properties).toMatchObject({ delta: "hello world" })
+  })
 
-    expect(events.map((event) => event.payload.type)).toEqual([
-      "message.part.updated",
-      "message.removed",
-      "message.updated",
-      "message.part.updated",
+  test("coalesces current tool input deltas by tool ID", () => {
+    const current = (eventID: string, id: string, delta: string) =>
+      adaptServerEvent({
+        id: eventID,
+        created: 1,
+        type: "session.tool.input.delta",
+        location: { directory: "/repo" },
+        data: { sessionID: "ses", assistantMessageID: "msg", id, delta },
+      } as OpenCodeEvent)
+    const result = coalesceServerEvents([
+      current("evt_1", "call_1", "{"),
+      current("evt_2", "call_1", "}"),
+      current("evt_3", "call_2", "[]"),
     ])
+
+    expect(result).toHaveLength(2)
+    expect(result[0]?.current).toMatchObject({ id: "evt_2", data: { id: "call_1", delta: "{}" } })
+    expect(result[1]?.current).toMatchObject({ id: "evt_3", data: { id: "call_2", delta: "[]" } })
   })
 
-  test("preserves deltas after a replacement snapshot", () => {
-    const events: Array<{ directory: string; payload: Event }> = []
-    const enqueue = (payload: Event) => enqueueServerEvent(events, { directory: "/repo", payload })
+  test("preserves boundaries between distinct delta streams", () => {
+    const events = [delta("evt_1", "a"), delta("evt_2", "b", 1), delta("evt_3", "c")]
 
-    enqueue(partUpdated("a"))
-    enqueue(partUpdated("ab"))
-    enqueue({
-      type: "message.part.delta",
-      properties: { sessionID: "session", messageID: "message", partID: "part", field: "text", delta: "c" },
-    } as Event)
-
-    const result = coalesceServerEvents(events)
-    expect(result.map((event) => event.payload.type)).toEqual(["message.part.updated", "message.part.delta"])
-    expect(result[0]?.payload).toMatchObject({ properties: { part: { text: "ab" } } })
-    expect(result[1]?.payload).toMatchObject({ properties: { delta: "c" } })
-  })
-
-  test("preserves updates after session deletion", () => {
-    const events: Array<{ directory: string; payload: Event }> = []
-    const enqueue = (payload: Event) => enqueueServerEvent(events, { directory: "/repo", payload })
-
-    enqueue(partUpdated("old"))
-    enqueue({
-      id: "event-delete",
-      type: "session.deleted",
-      properties: { sessionID: "session" },
-    } as Event)
-    enqueue(partUpdated("new"))
-
-    expect(events.map((event) => event.payload.type)).toEqual([
-      "message.part.updated",
-      "session.deleted",
-      "message.part.updated",
-    ])
-  })
-
-  test("does not coalesce edge-triggered session statuses", () => {
-    const events: Array<{ directory: string; payload: Event }> = []
-    const enqueue = (status: "retry" | "busy") =>
-      enqueueServerEvent(events, {
-        directory: "/repo",
-        payload: {
-          type: "session.status",
-          properties: {
-            sessionID: "session",
-            status: status === "retry" ? { type: "retry", attempt: 1, message: "retry", next: 1 } : { type: "busy" },
-          },
-        } as Event,
-      })
-
-    enqueue("retry")
-    enqueue("busy")
-
-    expect(events).toHaveLength(2)
+    expect(coalesceServerEvents(events).map((event) => event.current?.id)).toEqual(["evt_1", "evt_2", "evt_3"])
   })
 })

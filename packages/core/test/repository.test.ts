@@ -17,6 +17,12 @@ describe("Repository", () => {
       label: "owner/repo",
     })
     expect(Repository.cachePath("/cache", reference)).toBe(path.join("/cache", "github.com", "owner", "repo"))
+    expect(Repository.cachePath("/cache", reference, "main")).toBe(
+      path.join("/cache", "github.com", "owner", "repo@main"),
+    )
+    expect(Repository.cachePath("/cache", reference, "feature/x")).toBe(
+      path.join("/cache", "github.com", "owner", "repo@feature%2Fx"),
+    )
     expect(Repository.cacheIdentity(reference)).toBe("github.com/owner/repo")
   })
 

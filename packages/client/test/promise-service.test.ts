@@ -3,8 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Service, type EnsureReason } from "../src/promise/service"
+import { accelerate, waitForExit } from "./fixture/service-timing"
 
 const fixture = join(import.meta.dir, "fixture/service.ts")
+const ensure = accelerate(Service.ensure)
 const processes: Bun.Subprocess[] = []
 const directories: string[] = []
 
@@ -23,12 +25,25 @@ test("discovers a registered service", async () => {
   expect(await Service.discover({ file: registration, version: "other" })).toBeUndefined()
 })
 
+test("discovers a compatible registered service", async () => {
+  const registration = await setup("compatible")
+
+  expect(await Service.discover({ file: registration, version: "2.1.0" })).toBeUndefined()
+  expect(await Service.discover({ file: registration, version: "2.1.0-next.1" })).toEqual(
+    expect.objectContaining({ url: expect.stringMatching(/^http:\/\//) }),
+  )
+  expect(await Service.discover({ file: registration, version: (version) => version.startsWith("2.") })).toEqual(
+    expect.objectContaining({ url: expect.stringMatching(/^http:\/\//) }),
+  )
+  expect(await Service.discover({ file: registration, version: (version) => version.startsWith("3.") })).toBeUndefined()
+})
+
 test("ensures a missing service with native promises", async () => {
   const directory = await temp()
   const registration = join(directory, "service.json")
   const starts: EnsureReason[] = []
 
-  const endpoint = await Service.ensure({
+  const endpoint = await ensure({
     file: registration,
     version: "test",
     command: [process.execPath, fixture, registration, "coordinated"],
@@ -42,14 +57,73 @@ test("ensures a missing service with native promises", async () => {
     process.kill(info.pid, "SIGTERM")
     await waitForExit(info.pid)
   }
-}, 15_000)
+})
+
+test("waits for a live contender when another native contender fails", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+
+  const endpoint = await ensure({
+    file: registration,
+    version: "test",
+    command: [process.execPath, fixture, registration, "coordinated-failed-loser", "300"],
+  })
+  const info = await Bun.file(registration).json()
+  try {
+    expect(endpoint.url).toBe(info.url)
+  } finally {
+    process.kill(info.pid, "SIGTERM")
+    await waitForExit(info.pid)
+  }
+})
 
 test("reports a failed registered service", async () => {
   const registration = await setup("failed-owner")
 
-  await expect(Service.ensure({ file: registration, version: "test", command: [] })).rejects.toThrow(
+  await expect(ensure({ file: registration, version: "test", command: [] })).rejects.toThrow(
     "Background service failed to start",
   )
+})
+
+test("reports a bounded contender stderr tail with native promises", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const error = await Service.ensure({
+    file: registration,
+    version: "test",
+    command: [process.execPath, fixture, registration, "stderr-failed"],
+  }).catch((error: unknown) => error)
+
+  expect(error).toBeInstanceOf(Error)
+  if (!(error instanceof Error)) throw error
+  expect(error.message).toContain("actionable startup failure")
+  expect(error.message.length).toBeLessThan(9_000)
+}, 10_000)
+
+test("evicts an unresponsive registered service before starting its replacement", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  const existing = Bun.spawn([process.execPath, fixture, registration, "hanging"], {
+    stdout: "ignore",
+    stderr: "inherit",
+  })
+  processes.push(existing)
+  await waitForFile(registration)
+  const original = await Bun.file(registration).json()
+
+  const endpoint = await ensure({
+    file: registration,
+    version: "test",
+    command: [process.execPath, fixture, registration, "delayed", "10"],
+  })
+  const replacement = await Bun.file(registration).json()
+
+  expect((await Bun.file(registration + ".requests").text()).trim().split("\n")).toHaveLength(3)
+  expect(await existing.exited).toBe(0)
+  expect(replacement.pid).not.toBe(original.pid)
+  expect(endpoint.url).toBe(replacement.url)
+  process.kill(replacement.pid, "SIGTERM")
+  await waitForExit(replacement.pid)
 })
 
 test("requests graceful stop of the exact service instance", async () => {
@@ -81,16 +155,4 @@ async function waitForFile(file: string) {
     await Bun.sleep(5)
   }
   throw new Error(`Timed out waiting for ${file}`)
-}
-
-async function waitForExit(pid: number) {
-  for (let attempt = 0; attempt < 600; attempt++) {
-    try {
-      process.kill(pid, 0)
-    } catch {
-      return
-    }
-    await Bun.sleep(5)
-  }
-  throw new Error(`Timed out waiting for process ${pid}`)
 }

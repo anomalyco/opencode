@@ -69,7 +69,7 @@ export const urlArgument = (value: unknown, label: string): string =>
   value instanceof CodeModeURL ? value.url.href : uriArgument(value, label)
 
 export const invokeURLStatic = (name: string, args: Array<unknown>, node: AstNode): unknown => {
-  if (!urlStatics.has(name)) throw new InterpreterRuntimeError(`URL.${name} is not available in CodeMode.`, node)
+  if (!urlStatics.has(name)) throw new InterpreterRuntimeError(`URL.${name} is not available.`, node)
   if (args.length === 0) throw new InterpreterRuntimeError(`URL.${name} requires a URL argument.`, node).as("TypeError")
   const input = urlArgument(args[0], `URL.${name} input`)
   const base = args[1] === undefined ? undefined : urlArgument(args[1], `URL.${name} base`)
@@ -83,7 +83,7 @@ export const invokeURLStatic = (name: string, args: Array<unknown>, node: AstNod
 
 export const invokeURLMethod = (value: CodeModeURL, name: string, node: AstNode): string => {
   if (name === "toString" || name === "toJSON") return value.url.href
-  throw new InterpreterRuntimeError(`URL method '${name}' is not available in CodeMode.`, node)
+  throw new InterpreterRuntimeError(`URL method '${name}' is not available.`, node)
 }
 import { type AstNode, InterpreterRuntimeError, UriFunction } from "../interpreter/model.js"
 import { CodeModeURL } from "../values.js"

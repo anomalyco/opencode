@@ -258,7 +258,8 @@ add("test/built-ins/String/prototype/toUpperCase/supplementary_plane.js", "toUpp
   ),
 ])
 
-const whitespace = "\u0009\u000A\u000B\u000C\u000D\u0020\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF"
+const whitespace =
+  "\u0009\u000A\u000B\u000C\u000D\u0020\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF"
 const lineTerminators = "\u000A\u000D\u2028\u2029"
 const trim = (file: string, input: string, expected: string) =>
   add(`test/built-ins/String/prototype/trim/${file}`, "trim", [assertion("upstream assertion", input, expected)])
@@ -334,18 +335,35 @@ add("test/built-ins/String/prototype/trim/u180e.js", "trim", [
   assertion("leading U+180E", "\u180E_", "\u180E_"),
 ])
 
-const directionalWhitespace = "\x09\x0A\x0B\x0C\x0D\x20\xA0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u202F\u205F\u3000\u2028\u2029\uFEFF"
+const directionalWhitespace =
+  "\x09\x0A\x0B\x0C\x0D\x20\xA0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u202F\u205F\u3000\u2028\u2029\uFEFF"
 add("test/built-ins/String/prototype/trimStart/this-value-whitespace.js", "trimStart", [
-  assertion("all whitespace", directionalWhitespace + "a" + directionalWhitespace + "b" + directionalWhitespace, "a" + directionalWhitespace + "b" + directionalWhitespace),
+  assertion(
+    "all whitespace",
+    directionalWhitespace + "a" + directionalWhitespace + "b" + directionalWhitespace,
+    "a" + directionalWhitespace + "b" + directionalWhitespace,
+  ),
 ])
 add("test/built-ins/String/prototype/trimStart/this-value-line-terminator.js", "trimStart", [
-  assertion("all line terminators", lineTerminators + "a" + lineTerminators + "b" + lineTerminators, "a" + lineTerminators + "b" + lineTerminators),
+  assertion(
+    "all line terminators",
+    lineTerminators + "a" + lineTerminators + "b" + lineTerminators,
+    "a" + lineTerminators + "b" + lineTerminators,
+  ),
 ])
 add("test/built-ins/String/prototype/trimEnd/this-value-whitespace.js", "trimEnd", [
-  assertion("all whitespace", directionalWhitespace + "a" + directionalWhitespace + "b" + directionalWhitespace, directionalWhitespace + "a" + directionalWhitespace + "b"),
+  assertion(
+    "all whitespace",
+    directionalWhitespace + "a" + directionalWhitespace + "b" + directionalWhitespace,
+    directionalWhitespace + "a" + directionalWhitespace + "b",
+  ),
 ])
 add("test/built-ins/String/prototype/trimEnd/this-value-line-terminator.js", "trimEnd", [
-  assertion("all line terminators", lineTerminators + "a" + lineTerminators + "b" + lineTerminators, lineTerminators + "a" + lineTerminators + "b"),
+  assertion(
+    "all line terminators",
+    lineTerminators + "a" + lineTerminators + "b" + lineTerminators,
+    lineTerminators + "a" + lineTerminators + "b",
+  ),
 ])
 add("test/built-ins/String/prototype/repeat/repeat-string-n-times.js", "repeat", [
   assertion("repeat once", "abc", "abc", [1]),
@@ -363,7 +381,9 @@ add("test/built-ins/String/prototype/repeat/count-is-zero-returns-empty-string.j
 add("test/built-ins/String/prototype/repeat/count-coerced-to-zero-returns-empty-string.js", "repeat", [
   assertion("fraction truncates to zero", "abc", "", [0.9]),
 ])
-add("test/built-ins/String/prototype/padStart/fill-string-empty.js", "padStart", [assertion("empty fill", "abc", "abc", [5, ""])])
+add("test/built-ins/String/prototype/padStart/fill-string-empty.js", "padStart", [
+  assertion("empty fill", "abc", "abc", [5, ""]),
+])
 add("test/built-ins/String/prototype/padStart/normal-operation.js", "padStart", [
   assertion("truncated multi-character fill", "abc", "defdabc", [7, "def"]),
   assertion("single-character fill", "abc", "**abc", [5, "*"]),
@@ -381,7 +401,9 @@ add("test/built-ins/String/prototype/padStart/max-length-not-greater-than-string
   assertion("equal length", "abc", "abc", [3, "def"]),
   assertion("fraction truncates", "abc", "abc", [3.9999, "def"]),
 ])
-add("test/built-ins/String/prototype/padEnd/fill-string-empty.js", "padEnd", [assertion("empty fill", "abc", "abc", [5, ""])])
+add("test/built-ins/String/prototype/padEnd/fill-string-empty.js", "padEnd", [
+  assertion("empty fill", "abc", "abc", [5, ""]),
+])
 add("test/built-ins/String/prototype/padEnd/normal-operation.js", "padEnd", [
   assertion("truncated multi-character fill", "abc", "abcdefd", [7, "def"]),
   assertion("single-character fill", "abc", "abc**", [5, "*"]),
@@ -401,11 +423,29 @@ add("test/built-ins/String/prototype/padEnd/max-length-not-greater-than-string.j
 ])
 
 add("test/built-ins/String/prototype/charAt/S15.5.4.4_A1_T4.js", "charAt", [assertion("omitted position", "lego", "l")])
-add("test/built-ins/String/prototype/charAt/S15.5.4.4_A1_T7.js", "charAt", [assertion("undefined position", "lego", "l", [undefined])])
-add("test/built-ins/String/prototype/charAt/S15.5.4.4_A1_T8.js", "charAt", [assertion("undefined position", "42", "4", [undefined])])
-add("test/built-ins/String/prototype/charAt/S15.5.4.4_A4_T1.js", "charAt", ["A", "B", "C", "A", "B", "C"].map((expected, position) => assertion(`position ${position}`, "ABCABC", expected, [position])))
-add("test/built-ins/String/prototype/charAt/S15.5.4.4_A4_T2.js", "charAt", [-2, -1].map((position) => assertion(`position ${position}`, "ABCABC", "", [position])))
-add("test/built-ins/String/prototype/charAt/S15.5.4.4_A4_T3.js", "charAt", [6, 7].map((position) => assertion(`position ${position}`, "ABCABC", "", [position])))
+add("test/built-ins/String/prototype/charAt/S15.5.4.4_A1_T7.js", "charAt", [
+  assertion("undefined position", "lego", "l", [undefined]),
+])
+add("test/built-ins/String/prototype/charAt/S15.5.4.4_A1_T8.js", "charAt", [
+  assertion("undefined position", "42", "4", [undefined]),
+])
+add(
+  "test/built-ins/String/prototype/charAt/S15.5.4.4_A4_T1.js",
+  "charAt",
+  ["A", "B", "C", "A", "B", "C"].map((expected, position) =>
+    assertion(`position ${position}`, "ABCABC", expected, [position]),
+  ),
+)
+add(
+  "test/built-ins/String/prototype/charAt/S15.5.4.4_A4_T2.js",
+  "charAt",
+  [-2, -1].map((position) => assertion(`position ${position}`, "ABCABC", "", [position])),
+)
+add(
+  "test/built-ins/String/prototype/charAt/S15.5.4.4_A4_T3.js",
+  "charAt",
+  [6, 7].map((position) => assertion(`position ${position}`, "ABCABC", "", [position])),
+)
 add("test/built-ins/String/prototype/charAt/S9.4_A1.js", "charAt", [assertion("NaN position", "abc", "a", [NaN])])
 add("test/built-ins/String/prototype/charAt/S9.4_A2.js", "charAt", [
   assertion("positive zero", "abc", "a", [0]),
@@ -420,9 +460,15 @@ add("test/built-ins/String/prototype/charAt/pos-rounding.js", "charAt", [
   assertion("1.99999", "abc", "b", [1.99999]),
 ])
 
-add("test/built-ins/String/prototype/charCodeAt/S15.5.4.5_A1_T4.js", "charCodeAt", [assertion("omitted position", "smart", 0x73)])
-add("test/built-ins/String/prototype/charCodeAt/S15.5.4.5_A1_T7.js", "charCodeAt", [assertion("undefined position", "lego", 0x6c, [undefined])])
-add("test/built-ins/String/prototype/charCodeAt/S15.5.4.5_A1_T8.js", "charCodeAt", [assertion("undefined position", "42", 0x34, [undefined])])
+add("test/built-ins/String/prototype/charCodeAt/S15.5.4.5_A1_T4.js", "charCodeAt", [
+  assertion("omitted position", "smart", 0x73),
+])
+add("test/built-ins/String/prototype/charCodeAt/S15.5.4.5_A1_T7.js", "charCodeAt", [
+  assertion("undefined position", "lego", 0x6c, [undefined]),
+])
+add("test/built-ins/String/prototype/charCodeAt/S15.5.4.5_A1_T8.js", "charCodeAt", [
+  assertion("undefined position", "42", 0x34, [undefined]),
+])
 add("test/built-ins/String/prototype/charCodeAt/pos-rounding.js", "charCodeAt", [
   assertion("-0.99999", "abc", 0x61, [-0.99999]),
   assertion("-0.00001", "abc", 0x61, [-0.00001]),
@@ -433,55 +479,91 @@ add("test/built-ins/String/prototype/charCodeAt/pos-rounding.js", "charCodeAt", 
 ])
 
 add("test/built-ins/String/prototype/codePointAt/return-single-code-unit.js", "codePointAt", [
-  assertion("a", "abc", 97, [0]), assertion("b", "abc", 98, [1]), assertion("c", "abc", 99, [2]),
-  assertion("ordinary BMP", "\uAAAA\uBBBB", 0xaaaa, [0]), assertion("before high-surrogate range", "\uD7FF\uAAAA", 0xd7ff, [0]),
-  assertion("low surrogate", "\uDC00\uAAAA", 0xdc00, [0]), assertion("trailing D800", "123\uD800", 0xd800, [3]),
-  assertion("trailing DAAA", "123\uDAAA", 0xdaaa, [3]), assertion("trailing DBFF", "123\uDBFF", 0xdbff, [3]),
+  assertion("a", "abc", 97, [0]),
+  assertion("b", "abc", 98, [1]),
+  assertion("c", "abc", 99, [2]),
+  assertion("ordinary BMP", "\uAAAA\uBBBB", 0xaaaa, [0]),
+  assertion("before high-surrogate range", "\uD7FF\uAAAA", 0xd7ff, [0]),
+  assertion("low surrogate", "\uDC00\uAAAA", 0xdc00, [0]),
+  assertion("trailing D800", "123\uD800", 0xd800, [3]),
+  assertion("trailing DAAA", "123\uDAAA", 0xdaaa, [3]),
+  assertion("trailing DBFF", "123\uDBFF", 0xdbff, [3]),
 ])
 add("test/built-ins/String/prototype/codePointAt/return-first-code-unit.js", "codePointAt", [
-  assertion("D800 before DBFF", "\uD800\uDBFF", 0xd800, [0]), assertion("D800 before E000", "\uD800\uE000", 0xd800, [0]),
-  assertion("DAAA before DBFF", "\uDAAA\uDBFF", 0xdaaa, [0]), assertion("DAAA before E000", "\uDAAA\uE000", 0xdaaa, [0]),
-  assertion("DBFF before DBFF", "\uDBFF\uDBFF", 0xdbff, [0]), assertion("DBFF before E000", "\uDBFF\uE000", 0xdbff, [0]),
-  assertion("D800 before NUL", "\uD800\u0000", 0xd800, [0]), assertion("D800 before FFFF", "\uD800\uFFFF", 0xd800, [0]),
-  assertion("DAAA before NUL", "\uDAAA\u0000", 0xdaaa, [0]), assertion("DAAA before FFFF", "\uDAAA\uFFFF", 0xdaaa, [0]),
+  assertion("D800 before DBFF", "\uD800\uDBFF", 0xd800, [0]),
+  assertion("D800 before E000", "\uD800\uE000", 0xd800, [0]),
+  assertion("DAAA before DBFF", "\uDAAA\uDBFF", 0xdaaa, [0]),
+  assertion("DAAA before E000", "\uDAAA\uE000", 0xdaaa, [0]),
+  assertion("DBFF before DBFF", "\uDBFF\uDBFF", 0xdbff, [0]),
+  assertion("DBFF before E000", "\uDBFF\uE000", 0xdbff, [0]),
+  assertion("D800 before NUL", "\uD800\u0000", 0xd800, [0]),
+  assertion("D800 before FFFF", "\uD800\uFFFF", 0xd800, [0]),
+  assertion("DAAA before NUL", "\uDAAA\u0000", 0xdaaa, [0]),
+  assertion("DAAA before FFFF", "\uDAAA\uFFFF", 0xdaaa, [0]),
   assertion("DBFF before FFFF", "\uDBFF\uFFFF", 0xdbff, [0]),
 ])
 add("test/built-ins/String/prototype/codePointAt/return-utf16-decode.js", "codePointAt", [
-  assertion("U+10000", "\uD800\uDC00", 65536, [0]), assertion("U+101D0", "\uD800\uDDD0", 66000, [0]),
-  assertion("U+103FF", "\uD800\uDFFF", 66559, [0]), assertion("U+BA800", "\uDAAA\uDC00", 763904, [0]),
-  assertion("U+BA9D0", "\uDAAA\uDDD0", 764368, [0]), assertion("U+BABFF", "\uDAAA\uDFFF", 764927, [0]),
-  assertion("U+10FC00", "\uDBFF\uDC00", 1113088, [0]), assertion("U+10FDD0", "\uDBFF\uDDD0", 1113552, [0]),
+  assertion("U+10000", "\uD800\uDC00", 65536, [0]),
+  assertion("U+101D0", "\uD800\uDDD0", 66000, [0]),
+  assertion("U+103FF", "\uD800\uDFFF", 66559, [0]),
+  assertion("U+BA800", "\uDAAA\uDC00", 763904, [0]),
+  assertion("U+BA9D0", "\uDAAA\uDDD0", 764368, [0]),
+  assertion("U+BABFF", "\uDAAA\uDFFF", 764927, [0]),
+  assertion("U+10FC00", "\uDBFF\uDC00", 1113088, [0]),
+  assertion("U+10FDD0", "\uDBFF\uDDD0", 1113552, [0]),
   assertion("U+10FFFF", "\uDBFF\uDFFF", 1114111, [0]),
 ])
 add("test/built-ins/String/prototype/codePointAt/return-code-unit-coerced-position.js", "codePointAt", [
-  assertion("NaN", "\uD800\uDC00", 65536, [NaN]), assertion("undefined", "\uD800\uDC00", 65536, [undefined]),
+  assertion("NaN", "\uD800\uDC00", 65536, [NaN]),
+  assertion("undefined", "\uD800\uDC00", 65536, [undefined]),
 ])
 add("test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-less-than-zero.js", "codePointAt", [
   { label: "negative one", input: "abc", args: [-1], outcome: "undefined" },
   { label: "negative infinity", input: "abc", args: [-Infinity], outcome: "undefined" },
 ])
-add("test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-equal-or-more-than-size.js", "codePointAt", [
-  { label: "equal to size", input: "abc", args: [3], outcome: "undefined" },
-  { label: "greater than size", input: "abc", args: [4], outcome: "undefined" },
-  { label: "positive infinity", input: "abc", args: [Infinity], outcome: "undefined" },
-])
+add(
+  "test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-equal-or-more-than-size.js",
+  "codePointAt",
+  [
+    { label: "equal to size", input: "abc", args: [3], outcome: "undefined" },
+    { label: "greater than size", input: "abc", args: [4], outcome: "undefined" },
+    { label: "positive infinity", input: "abc", args: [Infinity], outcome: "undefined" },
+  ],
+)
 
 add("test/built-ins/String/prototype/at/returns-code-unit.js", "at", [
-  assertion("position 0", "12\uD80034", "1", [0]), assertion("position 1", "12\uD80034", "2", [1]),
-  assertion("unpaired surrogate", "12\uD80034", "\uD800", [2]), assertion("position 3", "12\uD80034", "3", [3]),
+  assertion("position 0", "12\uD80034", "1", [0]),
+  assertion("position 1", "12\uD80034", "2", [1]),
+  assertion("unpaired surrogate", "12\uD80034", "\uD800", [2]),
+  assertion("position 3", "12\uD80034", "3", [3]),
   assertion("position 4", "12\uD80034", "4", [4]),
 ])
-add("test/built-ins/String/prototype/at/returns-item.js", "at", ["1", "2", "3", "4", "5"].map((expected, position) => assertion(`position ${position}`, "12345", expected, [position])))
+add(
+  "test/built-ins/String/prototype/at/returns-item.js",
+  "at",
+  ["1", "2", "3", "4", "5"].map((expected, position) =>
+    assertion(`position ${position}`, "12345", expected, [position]),
+  ),
+)
 add("test/built-ins/String/prototype/at/returns-item-relative-index.js", "at", [
-  assertion("zero", "12345", "1", [0]), assertion("negative one", "12345", "5", [-1]),
-  assertion("negative three", "12345", "3", [-3]), assertion("negative four", "12345", "2", [-4]),
+  assertion("zero", "12345", "1", [0]),
+  assertion("negative one", "12345", "5", [-1]),
+  assertion("negative three", "12345", "3", [-3]),
+  assertion("negative four", "12345", "2", [-4]),
 ])
-add("test/built-ins/String/prototype/at/returns-undefined-for-out-of-range-index.js", "at", [-2, 0, 1].map((position) => ({ label: `position ${position}`, input: "", args: [position], outcome: "undefined" })))
-add("test/built-ins/String/prototype/at/index-non-numeric-argument-tointeger.js", "at", [assertion("undefined", "01", "0", [undefined])])
+add(
+  "test/built-ins/String/prototype/at/returns-undefined-for-out-of-range-index.js",
+  "at",
+  [-2, 0, 1].map((position) => ({ label: `position ${position}`, input: "", args: [position], outcome: "undefined" })),
+)
+add("test/built-ins/String/prototype/at/index-non-numeric-argument-tointeger.js", "at", [
+  assertion("undefined", "01", "0", [undefined]),
+])
 
 add("test/built-ins/String/prototype/concat/S15.5.4.6_A1_T4.js", "concat", [assertion("no arguments", "lego", "lego")])
 add("test/built-ins/String/prototype/toString/string-primitive.js", "toString", [
-  assertion("empty string", "", ""), assertion("non-empty string", "str", "str"),
+  assertion("empty string", "", ""),
+  assertion("non-empty string", "str", "str"),
 ])
 
 add("test/built-ins/String/prototype/normalize/return-normalized-string.js", "normalize", [
@@ -492,11 +574,15 @@ add("test/built-ins/String/prototype/normalize/return-normalized-string.js", "no
   assertion("NFC long", "\u00C5\u2ADC\u0958\u2126\u0344", "\xC5\u2ADD\u0338\u0915\u093C\u03A9\u0308\u0301", ["NFC"]),
   assertion("NFD long", "\u00C5\u2ADC\u0958\u2126\u0344", "A\u030A\u2ADD\u0338\u0915\u093C\u03A9\u0308\u0301", ["NFD"]),
   assertion("NFKC long", "\u00C5\u2ADC\u0958\u2126\u0344", "\xC5\u2ADD\u0338\u0915\u093C\u03A9\u0308\u0301", ["NFKC"]),
-  assertion("NFKD long", "\u00C5\u2ADC\u0958\u2126\u0344", "A\u030A\u2ADD\u0338\u0915\u093C\u03A9\u0308\u0301", ["NFKD"]),
+  assertion("NFKD long", "\u00C5\u2ADC\u0958\u2126\u0344", "A\u030A\u2ADD\u0338\u0915\u093C\u03A9\u0308\u0301", [
+    "NFKD",
+  ]),
 ])
 add("test/built-ins/String/prototype/normalize/return-normalized-string-using-default-parameter.js", "normalize", [
   assertion("omitted", "\u00C5\u2ADC\u0958\u2126\u0344", "\xC5\u2ADD\u0338\u0915\u093C\u03A9\u0308\u0301"),
-  assertion("undefined", "\u00C5\u2ADC\u0958\u2126\u0344", "\xC5\u2ADD\u0338\u0915\u093C\u03A9\u0308\u0301", [undefined]),
+  assertion("undefined", "\u00C5\u2ADC\u0958\u2126\u0344", "\xC5\u2ADD\u0338\u0915\u093C\u03A9\u0308\u0301", [
+    undefined,
+  ]),
 ])
 add("test/built-ins/String/prototype/normalize/form-is-not-valid-throws.js", "normalize", [
   { label: "bar", input: "foo", args: ["bar"], outcome: "RangeError" },
@@ -504,51 +590,141 @@ add("test/built-ins/String/prototype/normalize/form-is-not-valid-throws.js", "no
 ])
 
 add("test/built-ins/String/prototype/localeCompare/15.5.4.9_CE.js", "localeCompare", [
-  assertion("D70", "o\u0308", 0, ["ö"]), assertion("reordered diaeresis", "ä\u0323", 0, ["a\u0323\u0308"]),
-  assertion("reordered marks", "a\u0308\u0323", 0, ["a\u0323\u0308"]), assertion("precomposed dot below", "ạ\u0308", 0, ["a\u0323\u0308"]),
-  assertion("breve after diaeresis", "ä\u0306", 0, ["a\u0308\u0306"]), assertion("diaeresis after breve", "ă\u0308", 0, ["a\u0306\u0308"]),
-  assertion("Hangul", "\u1111\u1171\u11B6", 0, ["퓛"]), assertion("angstrom compatibility", "Å", 0, ["Å"]),
-  assertion("angstrom decomposed", "Å", 0, ["A\u030A"]), assertion("reordered horn and dot", "x\u031B\u0323", 0, ["x\u0323\u031B"]),
-  assertion("Vietnamese precomposed 1", "ự", 0, ["ụ\u031B"]), assertion("Vietnamese decomposed", "ự", 0, ["u\u031B\u0323"]),
-  assertion("Vietnamese precomposed 2", "ự", 0, ["ư\u0323"]), assertion("Vietnamese reordered", "ự", 0, ["u\u0323\u031B"]),
-  assertion("cedilla", "Ç", 0, ["C\u0327"]), assertion("q reordered", "q\u0307\u0323", 0, ["q\u0323\u0307"]),
-  assertion("Hangul syllable", "가", 0, ["\u1100\u1161"]), assertion("ohm", "Ω", 0, ["Ω"]),
-  assertion("angstrom", "Å", 0, ["A\u030A"]), assertion("circumflex", "ô", 0, ["o\u0302"]),
-  assertion("s with marks", "ṩ", 0, ["s\u0323\u0307"]), assertion("d composed plus dot", "ḋ\u0323", 0, ["d\u0323\u0307"]),
+  assertion("D70", "o\u0308", 0, ["ö"]),
+  assertion("reordered diaeresis", "ä\u0323", 0, ["a\u0323\u0308"]),
+  assertion("reordered marks", "a\u0308\u0323", 0, ["a\u0323\u0308"]),
+  assertion("precomposed dot below", "ạ\u0308", 0, ["a\u0323\u0308"]),
+  assertion("breve after diaeresis", "ä\u0306", 0, ["a\u0308\u0306"]),
+  assertion("diaeresis after breve", "ă\u0308", 0, ["a\u0306\u0308"]),
+  assertion("Hangul", "\u1111\u1171\u11B6", 0, ["퓛"]),
+  assertion("angstrom compatibility", "Å", 0, ["Å"]),
+  assertion("angstrom decomposed", "Å", 0, ["A\u030A"]),
+  assertion("reordered horn and dot", "x\u031B\u0323", 0, ["x\u0323\u031B"]),
+  assertion("Vietnamese precomposed 1", "ự", 0, ["ụ\u031B"]),
+  assertion("Vietnamese decomposed", "ự", 0, ["u\u031B\u0323"]),
+  assertion("Vietnamese precomposed 2", "ự", 0, ["ư\u0323"]),
+  assertion("Vietnamese reordered", "ự", 0, ["u\u0323\u031B"]),
+  assertion("cedilla", "Ç", 0, ["C\u0327"]),
+  assertion("q reordered", "q\u0307\u0323", 0, ["q\u0323\u0307"]),
+  assertion("Hangul syllable", "가", 0, ["\u1100\u1161"]),
+  assertion("ohm", "Ω", 0, ["Ω"]),
+  assertion("angstrom", "Å", 0, ["A\u030A"]),
+  assertion("circumflex", "ô", 0, ["o\u0302"]),
+  assertion("s with marks", "ṩ", 0, ["s\u0323\u0307"]),
+  assertion("d composed plus dot", "ḋ\u0323", 0, ["d\u0323\u0307"]),
   assertion("d two precompositions", "ḋ\u0323", 0, ["ḍ\u0307"]),
 ])
 
-add("test/built-ins/String/fromCharCode/S15.5.3.2_A2.js", "fromCharCode", [{ label: "no arguments", expected: "" }], true)
-add("test/built-ins/String/fromCharCode/S15.5.3.2_A3_T1.js", "fromCharCode", [{ label: "ABBA", args: [65, 66, 66, 65], expected: "ABBA" }], true)
-add("test/built-ins/String/fromCharCode/S9.7_A1.js", "fromCharCode", [
-  { label: "NaN", args: [NaN], expected: 0 }, { label: "zero", args: [0], expected: 0 }, { label: "negative zero", args: [-0], expected: 0 },
-  { label: "positive infinity", args: [Infinity], expected: 0 }, { label: "negative infinity", args: [-Infinity], expected: 0 },
-], true)
-add("test/built-ins/String/fromCharCode/S9.7_A2.1.js", "fromCharCode", [
-  [0, 0], [1, 1], [-1, 65535], [65535, 65535], [65534, 65534], [65536, 0], [4294967295, 65535], [4294967294, 65534], [4294967296, 0],
-].map(([input, expected]) => ({ label: String(input), args: [input!], expected })), true)
-add("test/built-ins/String/fromCharCode/S9.7_A2.2.js", "fromCharCode", [
-  [-32767, 32769], [-32768, 32768], [-32769, 32767], [-65535, 1], [-65536, 0], [-65537, 65535], [65535, 65535], [65536, 0], [65537, 1], [131071, 65535], [131072, 0], [131073, 1],
-].map(([input, expected]) => ({ label: String(input), args: [input!], expected })), true)
-add("test/built-ins/String/fromCharCode/S9.7_A3.2_T1.js", "fromCharCode", [
-  { label: "positive fraction", args: [1.2345], expected: 1 }, { label: "negative fraction", args: [-5.4321], expected: 65531 },
-], true)
+add(
+  "test/built-ins/String/fromCharCode/S15.5.3.2_A2.js",
+  "fromCharCode",
+  [{ label: "no arguments", expected: "" }],
+  true,
+)
+add(
+  "test/built-ins/String/fromCharCode/S15.5.3.2_A3_T1.js",
+  "fromCharCode",
+  [{ label: "ABBA", args: [65, 66, 66, 65], expected: "ABBA" }],
+  true,
+)
+add(
+  "test/built-ins/String/fromCharCode/S9.7_A1.js",
+  "fromCharCode",
+  [
+    { label: "NaN", args: [NaN], expected: 0 },
+    { label: "zero", args: [0], expected: 0 },
+    { label: "negative zero", args: [-0], expected: 0 },
+    { label: "positive infinity", args: [Infinity], expected: 0 },
+    { label: "negative infinity", args: [-Infinity], expected: 0 },
+  ],
+  true,
+)
+add(
+  "test/built-ins/String/fromCharCode/S9.7_A2.1.js",
+  "fromCharCode",
+  [
+    [0, 0],
+    [1, 1],
+    [-1, 65535],
+    [65535, 65535],
+    [65534, 65534],
+    [65536, 0],
+    [4294967295, 65535],
+    [4294967294, 65534],
+    [4294967296, 0],
+  ].map(([input, expected]) => ({ label: String(input), args: [input!], expected })),
+  true,
+)
+add(
+  "test/built-ins/String/fromCharCode/S9.7_A2.2.js",
+  "fromCharCode",
+  [
+    [-32767, 32769],
+    [-32768, 32768],
+    [-32769, 32767],
+    [-65535, 1],
+    [-65536, 0],
+    [-65537, 65535],
+    [65535, 65535],
+    [65536, 0],
+    [65537, 1],
+    [131071, 65535],
+    [131072, 0],
+    [131073, 1],
+  ].map(([input, expected]) => ({ label: String(input), args: [input!], expected })),
+  true,
+)
+add(
+  "test/built-ins/String/fromCharCode/S9.7_A3.2_T1.js",
+  "fromCharCode",
+  [
+    { label: "positive fraction", args: [1.2345], expected: 1 },
+    { label: "negative fraction", args: [-5.4321], expected: 65531 },
+  ],
+  true,
+)
 
-add("test/built-ins/String/fromCodePoint/arguments-is-empty.js", "fromCodePoint", [{ label: "no arguments", expected: "" }], true)
-add("test/built-ins/String/fromCodePoint/return-string-value.js", "fromCodePoint", [
-  { label: "NUL", args: [0], expected: "\x00" }, { label: "asterisk", args: [42], expected: "*" },
-  { label: "AZ", args: [65, 90], expected: "AZ" }, { label: "Cyrillic", args: [0x404], expected: "\u0404" },
-  { label: "hex supplementary", args: [0x2f804], expected: "\uD87E\uDC04" }, { label: "decimal supplementary", args: [194564], expected: "\uD87E\uDC04" },
-  { label: "mixed supplementary", args: [0x1d306, 0x61, 0x1d307], expected: "\uD834\uDF06a\uD834\uDF07" },
-  { label: "maximum code point", args: [1114111], expected: "\uDBFF\uDFFF" },
-], true)
-add("test/built-ins/String/fromCodePoint/argument-is-not-integer.js", "fromCodePoint", [
-  { label: "fraction", args: [3.14], outcome: "RangeError" }, { label: "fraction after valid", args: [42, 3.14], outcome: "RangeError" },
-], true)
-add("test/built-ins/String/fromCodePoint/number-is-out-of-range.js", "fromCodePoint", [
-  { label: "negative one", args: [-1], outcome: "RangeError" }, { label: "negative after valid", args: [1, -1], outcome: "RangeError" },
-  { label: "above maximum", args: [1114112], outcome: "RangeError" }, { label: "infinity", args: [Infinity], outcome: "RangeError" },
-], true)
+add(
+  "test/built-ins/String/fromCodePoint/arguments-is-empty.js",
+  "fromCodePoint",
+  [{ label: "no arguments", expected: "" }],
+  true,
+)
+add(
+  "test/built-ins/String/fromCodePoint/return-string-value.js",
+  "fromCodePoint",
+  [
+    { label: "NUL", args: [0], expected: "\x00" },
+    { label: "asterisk", args: [42], expected: "*" },
+    { label: "AZ", args: [65, 90], expected: "AZ" },
+    { label: "Cyrillic", args: [0x404], expected: "\u0404" },
+    { label: "hex supplementary", args: [0x2f804], expected: "\uD87E\uDC04" },
+    { label: "decimal supplementary", args: [194564], expected: "\uD87E\uDC04" },
+    { label: "mixed supplementary", args: [0x1d306, 0x61, 0x1d307], expected: "\uD834\uDF06a\uD834\uDF07" },
+    { label: "maximum code point", args: [1114111], expected: "\uDBFF\uDFFF" },
+  ],
+  true,
+)
+add(
+  "test/built-ins/String/fromCodePoint/argument-is-not-integer.js",
+  "fromCodePoint",
+  [
+    { label: "fraction", args: [3.14], outcome: "RangeError" },
+    { label: "fraction after valid", args: [42, 3.14], outcome: "RangeError" },
+  ],
+  true,
+)
+add(
+  "test/built-ins/String/fromCodePoint/number-is-out-of-range.js",
+  "fromCodePoint",
+  [
+    { label: "negative one", args: [-1], outcome: "RangeError" },
+    { label: "negative after valid", args: [1, -1], outcome: "RangeError" },
+    { label: "above maximum", args: [1114112], outcome: "RangeError" },
+    { label: "infinity", args: [Infinity], outcome: "RangeError" },
+  ],
+  true,
+)
 
 describe("Test262-adapted core String behavior", () => {
   for (const vector of vectors) {
@@ -558,16 +734,18 @@ describe("Test262-adapted core String behavior", () => {
         const expression = vector.static
           ? `String.${vector.method}(${args})`
           : `${JSON.stringify(item.input)}.${vector.method}(${args})`
-        const observed = vector.static && vector.method === "fromCharCode" && typeof item.expected === "number"
-          ? `${expression}.charCodeAt(0)`
-          : expression
-        const checked = item.outcome === "undefined"
-          ? `${observed} === undefined`
-          : item.outcome === "length"
-            ? `${observed}.length`
-            : item.outcome === "RangeError"
-              ? `(() => { try { ${observed}; return false } catch (error) { return error instanceof RangeError } })()`
-              : observed
+        const observed =
+          vector.static && vector.method === "fromCharCode" && typeof item.expected === "number"
+            ? `${expression}.charCodeAt(0)`
+            : expression
+        const checked =
+          item.outcome === "undefined"
+            ? `${observed} === undefined`
+            : item.outcome === "length"
+              ? `${observed}.length`
+              : item.outcome === "RangeError"
+                ? `(() => { try { ${observed}; return false } catch (error) { return error instanceof RangeError } })()`
+                : observed
         return `{ label: ${JSON.stringify(item.label)}, value: ${checked} }`
       })
       const expected = vector.assertions.map((item) => ({

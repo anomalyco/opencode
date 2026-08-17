@@ -1,9 +1,9 @@
-export * as Form from "./form"
+export * as Form from "./form.js"
 
 import { Form } from "@opencode-ai/schema/form"
 import { Cache, Context, Deferred, Duration, Effect, Exit, Layer, Option, Schema } from "effect"
-import { makeLocationNode } from "./effect/app-node"
-import { EventV2 } from "./event"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { Bus } from "./bus.js"
 
 const RETENTION = Duration.minutes(10)
 
@@ -32,7 +32,7 @@ export type Answer = typeof Answer.Type
 export const Reply = Form.Reply
 export type Reply = typeof Reply.Type
 
-export const Event = Form.Event
+export { Event } from "@opencode-ai/schema/form"
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Form.NotFoundError", {
   id: ID,
@@ -99,7 +99,7 @@ interface Entry {
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const forms = yield* Cache.makeWith<ID, Entry>(
       () => Effect.die(new Error("Form cache must be used via set/getSuccess, never get")),
       {
@@ -141,7 +141,7 @@ export const layer = Layer.effect(
             deferred: yield* Deferred.make<TerminalState>(),
           }
           yield* Cache.set(forms, id, entry)
-          yield* events.publish(Event.Created, { form }).pipe(Effect.onError(() => Cache.invalidate(forms, id)))
+          yield* bus.publish(Form.Event.Created, { form }).pipe(Effect.onError(() => Cache.invalidate(forms, id)))
           return form
         }),
       ),
@@ -180,10 +180,14 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           const entry = yield* find(input.id)
           if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id: input.id })
-          const invalid = validateAnswer(entry.form, input.answer)
+          const invalid = validateAnswer(entry.form.fields, input.answer)
           if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
           const next: TerminalState = { status: "answered", answer: input.answer }
-          yield* events.publish(Event.Replied, { id: input.id, sessionID: entry.form.sessionID, answer: input.answer })
+          yield* bus.publish(Form.Event.Replied, {
+            id: input.id,
+            sessionID: entry.form.sessionID,
+            answer: input.answer,
+          })
           yield* Cache.set(forms, input.id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
         }),
@@ -196,7 +200,7 @@ export const layer = Layer.effect(
           const entry = yield* find(id)
           if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id })
           const next: TerminalState = { status: "cancelled" }
-          yield* events.publish(Event.Cancelled, { id, sessionID: entry.form.sessionID })
+          yield* bus.publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
           yield* Cache.set(forms, id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)
         }),
@@ -219,16 +223,14 @@ export const layer = Layer.effect(
   }),
 )
 
-export const locationLayer = layer
+export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node] })
 
-export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node] })
-
-function validateAnswer(form: Info, answer: Answer) {
-  const fields = new Map(form.fields.map((field) => [field.key, field] as const))
+export function validateAnswer(form: ReadonlyArray<Form.Field>, answer: Answer) {
+  const fields = new Map(form.map((field) => [field.key, field] as const))
   for (const key of Object.keys(answer)) {
     if (!fields.has(key)) return `Unknown form field: ${key}`
   }
-  for (const field of form.fields) {
+  for (const field of form) {
     const value = answer[field.key]
     if (field.type === "external") {
       if (value !== true) return `External form field must be acknowledged: ${field.key}`
@@ -264,7 +266,7 @@ function matches(when: Form.When, value: Form.Value | undefined) {
 // carry a value matching that field's type, and use a declared option when the field's options
 // are closed. Rejecting these at creation surfaces authoring mistakes to the caller instead of
 // silently never matching.
-function validateFields(fields: ReadonlyArray<Form.Field>) {
+export function validateFields(fields: ReadonlyArray<Form.Field>) {
   if (fields.length === 0) return "Form must have at least one field"
   const earlier = new Map<string, InputField>()
   const keys = new Set<string>()

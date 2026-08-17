@@ -16,10 +16,13 @@
     "dist"
   ],
   "exports": {
+    "./simulation": "./src/simulation.ts",
     "./*": "./src/*.ts"
   },
   "scripts": {
     "build": "bun run script/build.ts",
+    "generate": "bun run script/generate-openapi.ts",
+    "check:generated": "bun run script/generate-openapi.ts --check",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {

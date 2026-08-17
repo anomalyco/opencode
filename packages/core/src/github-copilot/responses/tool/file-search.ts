@@ -2,7 +2,7 @@ import { createProviderToolFactoryWithOutputSchema } from "@ai-sdk/provider-util
 import type {
   OpenAIResponsesFileSearchToolComparisonFilter,
   OpenAIResponsesFileSearchToolCompoundFilter,
-} from "../openai-responses-api-types"
+} from "../openai-responses-api-types.js"
 import { z } from "zod/v4"
 
 const comparisonFilterSchema = z.object({

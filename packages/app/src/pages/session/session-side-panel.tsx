@@ -23,7 +23,7 @@ import { Mark } from "@opencode-ai/ui/logo"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
-import type { FileDiffInfo, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
@@ -56,14 +56,22 @@ import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/pages/session/v2/session-file-browser-tab"
 
+type ReviewDiff = FileDiffInfo
+type RenderDiff = FileDiffInfo
+const FILE_TREE_WIDTH_MIN = 240
+
+function renderDiff(value: ReviewDiff): value is RenderDiff {
+  return typeof value.file === "string"
+}
+
 export function SessionSidePanel(props: {
-  canReview: () => boolean
-  diffs: () => (FileDiffInfo | VcsFileDiff)[]
-  diffsReady: () => boolean
-  empty: () => string
-  hasReview: () => boolean
-  reviewHasFocusableContent: () => boolean
-  reviewCount: () => number
+  canReview: boolean
+  diffs: ReviewDiff[]
+  diffsReady: boolean
+  empty: string
+  hasReview: boolean
+  reviewHasFocusableContent: boolean
+  reviewCount: number
   reviewPanel: () => JSX.Element
   reviewSidebarToggle?: (disabled: boolean) => JSX.Element
   fileBrowserState?: SessionFileBrowserState
@@ -96,15 +104,16 @@ export function SessionSidePanel(props: {
       }),
   )
   const open = createMemo(() => reviewOpen() || fileOpen())
+  const fileTreeWidth = createMemo(() => Math.max(FILE_TREE_WIDTH_MIN, layout.fileTree.width()))
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
     if (reviewOpen()) return "auto"
-    return `${layout.fileTree.width()}px`
+    return `${fileTreeWidth()}px`
   })
-  const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
+  const treeWidth = createMemo(() => (fileOpen() ? `${fileTreeWidth()}px` : "0px"))
 
-  const diffs = createMemo(() => props.diffs())
+  const diffs = createMemo(() => props.diffs.filter(renderDiff))
   const diffFiles = createMemo(() => diffs().map((d) => d.file))
   const kinds = createMemo(() => {
     const merge = (a: "add" | "del" | "mix" | undefined, b: "add" | "del" | "mix") => {
@@ -168,7 +177,7 @@ export function SessionSidePanel(props: {
     pathFromTab: file.pathFromTab,
     normalizeTab,
     review: reviewTab,
-    hasReview: props.canReview,
+    hasReview: () => props.canReview,
     fileBrowser: () => !!props.fileBrowserState,
   })
   const contextOpen = tabState.contextOpen
@@ -231,6 +240,7 @@ export function SessionSidePanel(props: {
     return active !== "review" && active !== "context" && active !== "empty"
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
+  const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
   })
@@ -338,7 +348,7 @@ export function SessionSidePanel(props: {
                                 onCleanup(stop)
                               }}
                             >
-                              <Show when={reviewTab() && props.canReview()}>
+                              <Show when={reviewTab() && props.canReview}>
                                 <Tabs.Trigger
                                   value="review"
                                   id={reviewTabID}
@@ -346,8 +356,8 @@ export function SessionSidePanel(props: {
                                 >
                                   <div class="flex items-center gap-1.5">
                                     <div>{language.t("session.tab.review")}</div>
-                                    <Show when={props.hasReview()}>
-                                      <div>{props.reviewCount()}</div>
+                                    <Show when={props.hasReview}>
+                                      <div>{props.reviewCount}</div>
                                     </Show>
                                   </div>
                                 </Tabs.Trigger>
@@ -453,12 +463,12 @@ export function SessionSidePanel(props: {
                             </Tabs.List>
                           </div>
 
-                          <Show when={reviewTab() && props.canReview() && activeTab() === "review"}>
+                          <Show when={reviewTab() && props.canReview && activeTab() === "review"}>
                             <div
                               id={reviewTabPanelID}
                               role="tabpanel"
                               aria-labelledby={reviewTabID}
-                              tabIndex={props.reviewHasFocusableContent() ? undefined : 0}
+                              tabIndex={props.reviewHasFocusableContent ? undefined : 0}
                               data-slot="tabs-content"
                               class="flex flex-col h-full overflow-hidden contain-strict"
                             >
@@ -544,19 +554,19 @@ export function SessionSidePanel(props: {
                           >
                             <Show when={props.reviewSidebarToggle}>
                               {(toggle) => (
-                                <div class="h-full shrink-0 flex items-center justify-center">
+                                <div class="session-review-v2-sidebar-toggle-slot h-full shrink-0 sticky left-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
                                   {toggle()(activeTab() === SESSION_OPEN_FILE_TAB)}
                                 </div>
                               )}
                             </Show>
-                            <Show when={reviewTab() && props.canReview()}>
+                            <Show when={reviewTab() && props.canReview}>
                               <Tabs.Trigger
                                 value="review"
                                 id={reviewTabID}
                                 aria-controls={activeTab() === "review" ? reviewTabPanelID : undefined}
                               >
-                                {props.hasReview()
-                                  ? language.t("session.review.filesChanged", { count: props.reviewCount() })
+                                {props.hasReview
+                                  ? language.t("session.review.filesChanged", { count: props.reviewCount })
                                   : language.t("session.tab.review")}
                               </Tabs.Trigger>
                             </Show>
@@ -564,9 +574,15 @@ export function SessionSidePanel(props: {
                               <Tabs.Trigger
                                 value="context"
                                 closeButton={
-                                  <TooltipKeybind
-                                    title={language.t("common.closeTab")}
-                                    keybind={command.keybind("tab.close")}
+                                  <TooltipV2
+                                    value={
+                                      <>
+                                        {language.t("common.closeTab")}
+                                        <Show when={closeTabKeybind().length > 0}>
+                                          <KeybindV2 keys={closeTabKeybind()} variant="neutral" />
+                                        </Show>
+                                      </>
+                                    }
                                     placement="bottom"
                                     gutter={10}
                                   >
@@ -577,7 +593,7 @@ export function SessionSidePanel(props: {
                                       onClick={() => tabs().close("context")}
                                       aria-label={language.t("common.closeTab")}
                                     />
-                                  </TooltipKeybind>
+                                  </TooltipV2>
                                 }
                                 hideCloseButton
                                 onMiddleClick={() => tabs().close("context")}
@@ -595,7 +611,7 @@ export function SessionSidePanel(props: {
                                   fallback={
                                     <SortableTabV2
                                       tab={tab}
-                                      index={() => tabs().all().indexOf(tab)}
+                                      index={tabs().all().indexOf(tab)}
                                       temporary={temporaryTab() === tab}
                                       onTabClose={tabs().close}
                                       onTabDoubleClick={temporaryTab() === tab ? openTab : undefined}
@@ -605,9 +621,15 @@ export function SessionSidePanel(props: {
                                   <Tabs.Trigger
                                     value={SESSION_OPEN_FILE_TAB}
                                     closeButton={
-                                      <TooltipKeybind
-                                        title={language.t("common.closeTab")}
-                                        keybind={command.keybind("tab.close")}
+                                      <TooltipV2
+                                        value={
+                                          <>
+                                            {language.t("common.closeTab")}
+                                            <Show when={closeTabKeybind().length > 0}>
+                                              <KeybindV2 keys={closeTabKeybind()} variant="neutral" />
+                                            </Show>
+                                          </>
+                                        }
                                         placement="bottom"
                                         gutter={10}
                                       >
@@ -618,7 +640,7 @@ export function SessionSidePanel(props: {
                                           onClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
                                           aria-label={language.t("common.closeTab")}
                                         />
-                                      </TooltipKeybind>
+                                      </TooltipV2>
                                     }
                                     hideCloseButton
                                     onMiddleClick={() => tabs().close(SESSION_OPEN_FILE_TAB)}
@@ -669,12 +691,12 @@ export function SessionSidePanel(props: {
                           </div>
                         </div>
 
-                        <Show when={reviewTab() && props.canReview() && activeTab() === "review"}>
+                        <Show when={reviewTab() && props.canReview && activeTab() === "review"}>
                           <div
                             id={reviewTabPanelID}
                             role="tabpanel"
                             aria-labelledby={reviewTabID}
-                            tabIndex={props.reviewHasFocusableContent() ? undefined : 0}
+                            tabIndex={props.reviewHasFocusableContent ? undefined : 0}
                             data-slot="tabs-content"
                             class="flex flex-col h-full overflow-hidden contain-strict"
                           >
@@ -760,14 +782,11 @@ export function SessionSidePanel(props: {
                           when={settings.general.newLayoutDesigns()}
                           fallback={
                             <>
-                              {props.reviewCount()}{" "}
-                              {language.t(
-                                props.reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other",
-                              )}
+                              {props.reviewCount} {language.plural("session.review.change", props.reviewCount)}
                             </>
                           }
                         >
-                          {language.t("session.review.filesChanged", { count: props.reviewCount() })}
+                          {language.t("session.review.filesChanged", { count: props.reviewCount })}
                         </Show>
                       </Tabs.Trigger>
                       <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
@@ -777,9 +796,9 @@ export function SessionSidePanel(props: {
                     <Show when={fileTreeTab() === "changes"}>
                       <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
                         <Switch>
-                          <Match when={props.hasReview() || !props.diffsReady()}>
+                          <Match when={props.hasReview || !props.diffsReady}>
                             <Show
-                              when={props.diffsReady()}
+                              when={props.diffsReady}
                               fallback={
                                 <div class="px-2 py-2 text-12-regular text-text-weak">
                                   {language.t("common.loading")}
@@ -824,8 +843,8 @@ export function SessionSidePanel(props: {
                     <ResizeHandle
                       direction="horizontal"
                       edge="start"
-                      size={layout.fileTree.width()}
-                      min={200}
+                      size={fileTreeWidth()}
+                      min={FILE_TREE_WIDTH_MIN}
                       max={480}
                       onResize={(width) => {
                         props.size.touch()

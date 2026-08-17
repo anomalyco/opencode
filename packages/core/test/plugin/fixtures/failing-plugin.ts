@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode-ai/plugin/v2/effect"
+import { Plugin } from "@opencode-ai/plugin/effect"
 import { Effect } from "effect"
 
 export default Plugin.define({

@@ -1,17 +1,17 @@
-export * as MCPClient from "./client"
+export * as MCPClient from "./client.js"
 
 import path from "node:path"
-import { execFile } from "node:child_process"
 import { pathToFileURL } from "node:url"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   CallToolResultSchema,
   ElicitationCompleteNotificationSchema,
   ElicitRequestSchema,
   GetPromptResultSchema,
+  type Implementation,
   type ElicitRequestFormParams,
   type ElicitRequestParams,
   type ElicitRequestURLParams,
@@ -28,14 +28,12 @@ import {
   ToolSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Exit, Schema } from "effect"
-import { ConfigMCP } from "../config/mcp"
-import { InstallationVersion } from "../installation/version"
+import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
+import { MCPStdio } from "./stdio.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
 const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
-
-type Transport = StdioClientTransport | StreamableHTTPClientTransport
 
 // Some servers advertise tool outputSchemas the SDK's strict validator can't resolve; this drops
 // only that field so a single bad schema doesn't blank out the whole tool list.
@@ -176,7 +174,12 @@ export interface Connection {
   readonly onResourcesChanged: (callback: () => void) => void
 }
 
-/** Connects an MCP server; closing the calling scope tears down the transport and any spawned process. */
+/**
+ * Connects an MCP server; closing the calling scope tears down the transport and any spawned process.
+ *
+ * A stdio server is spawned through the location's `Environment`, so it runs on the same execution
+ * plane as the location's shell commands rather than always on the host.
+ */
 export const connect = Effect.fnUntraced(function* (
   server: string,
   config: typeof ConfigMCP.Server.Type,
@@ -185,17 +188,17 @@ export const connect = Effect.fnUntraced(function* (
   // stored token (and a no-op redirect) surfaces an UnauthorizedError, which we map to needs_auth.
   authProvider?: OAuthClientProvider,
   elicitation?: ElicitationHandler,
+  clientInfo: Implementation = { name: "opencode", version: "unknown" },
 ) {
   const transport: Transport = yield* Effect.gen(function* () {
     if (config.type === "local") {
       const [command, ...args] = config.command
-      return new StdioClientTransport({
+      return yield* MCPStdio.make({
+        server,
         command,
         args,
         cwd: config.cwd ? path.resolve(directory, config.cwd) : directory,
-        stderr: "pipe",
-        env: {
-          ...(process.env as Record<string, string>),
+        environment: {
           ...(command === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...config.environment,
         },
@@ -208,16 +211,13 @@ export const connect = Effect.fnUntraced(function* (
       authProvider,
     })
   })
-  const client = new Client(
-    { name: "opencode", version: InstallationVersion },
-    {
-      capabilities: {
-        ...(elicitation ? { elicitation: { form: { applyDefaults: true }, url: {} } } : {}),
-        // https://github.com/anomalyco/opencode/issues/2308
-        roots: {},
-      },
+  const client = new Client(clientInfo, {
+    capabilities: {
+      ...(elicitation ? { elicitation: { form: { applyDefaults: true }, url: {} } } : {}),
+      // https://github.com/anomalyco/opencode/issues/2308
+      roots: {},
     },
-  )
+  })
   client.setRequestHandler(ListRootsRequestSchema, () =>
     Promise.resolve({ roots: [{ uri: pathToFileURL(directory).href }] }),
   )
@@ -235,9 +235,9 @@ export const connect = Effect.fnUntraced(function* (
     catch: (error) => error,
   }).pipe(Effect.exit)
   if (Exit.isSuccess(exit)) {
-    yield* Effect.addFinalizer(() =>
-      cleanupStdioDescendants(transport).pipe(Effect.andThen(Effect.promise(() => client.close())), Effect.ignore),
-    )
+    // Closing the client closes the transport, which ends stdin and then kills through the spawner
+    // handle if the server does not exit cleanly. The process scope remains a final backstop.
+    yield* Effect.addFinalizer(() => Effect.promise(() => client.close()).pipe(Effect.ignore))
     const catalogTimeout = config.timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT
     const executionTimeout = config.timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
     return {
@@ -436,57 +436,11 @@ export const connect = Effect.fnUntraced(function* (
     } satisfies Connection
   }
 
-  yield* cleanupStdioDescendants(transport).pipe(Effect.andThen(Effect.promise(() => transport.close())), Effect.ignore)
+  yield* Effect.promise(() => transport.close()).pipe(Effect.ignore)
   const error = Cause.squash(exit.cause)
   if (error instanceof UnauthorizedError) return yield* new NeedsAuthError({ server })
   return yield* new ConnectError({ server, message: error instanceof Error ? error.message : String(error) })
 })
-
-// SDK close stops the MCP process, but not child processes it spawned.
-const cleanupStdioDescendants = (transport: Transport) =>
-  Effect.gen(function* () {
-    if (!(transport instanceof StdioClientTransport)) return
-    const pid = transport.pid
-    if (typeof pid !== "number") return
-    yield* Effect.forEach(
-      yield* descendantPids(pid),
-      (pid) =>
-        Effect.try({
-          try: () => process.kill(pid, "SIGTERM"),
-          catch: () => undefined,
-        }).pipe(Effect.ignore),
-      { discard: true },
-    )
-  })
-
-const descendantPids = Effect.fnUntraced(function* (root: number) {
-  if (process.platform === "win32") return []
-  const result: number[] = []
-  const queue = [root]
-  for (let index = 0; index < queue.length; index++) {
-    const parent = queue[index]
-    if (parent === undefined) return result
-    const children = (yield* childPids(parent)).filter((pid) => !result.includes(pid))
-    result.push(...children)
-    queue.push(...children)
-  }
-  return result
-})
-
-const childPids = (pid: number) =>
-  Effect.promise(
-    () =>
-      new Promise<number[]>((resolve) => {
-        execFile("pgrep", ["-P", String(pid)], { encoding: "utf8" }, (_error, stdout) => {
-          resolve(
-            stdout
-              .split("\n")
-              .map((line) => Number.parseInt(line, 10))
-              .filter((pid) => Number.isInteger(pid)),
-          )
-        })
-      }),
-  )
 
 async function paginate<R extends { nextCursor?: string }, T>(
   list: (cursor: string | undefined) => Promise<R>,

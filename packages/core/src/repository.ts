@@ -44,16 +44,6 @@ export class InvalidBranchError extends Schema.TaggedErrorClass<InvalidBranchErr
   message: Schema.String,
 }) {}
 
-export type Error = InvalidReferenceError | UnsupportedLocalRepositoryError | InvalidBranchError
-
-export function isError(error: unknown): error is Error {
-  return (
-    error instanceof InvalidReferenceError ||
-    error instanceof UnsupportedLocalRepositoryError ||
-    error instanceof InvalidBranchError
-  )
-}
-
 export function parse(input: string): Reference | undefined {
   const cleaned = normalizeInput(input)
   if (!cleaned) return
@@ -118,8 +108,14 @@ export function isRemote(reference: Reference): reference is RemoteReference {
   return !isFile(reference)
 }
 
-export function cachePath(root: string, reference: Reference): string {
-  return path.join(root, ...reference.host.split(":"), ...reference.segments)
+/**
+ * Checkouts are keyed by remote and branch: a branch-specific reference gets
+ * its own directory so branchless refreshes can never move it. The branch is
+ * percent-encoded because valid branch names may contain `/`.
+ */
+export function cachePath(root: string, reference: Reference, branch?: string): string {
+  const base = path.join(root, ...reference.host.split(":"), ...reference.segments)
+  return branch ? `${base}@${encodeURIComponent(branch)}` : base
 }
 
 export function cacheIdentity(reference: Reference): string {
@@ -205,4 +201,4 @@ function buildFile(input: { url: URL; remote: string }) {
   } satisfies FileReference
 }
 
-export * as Repository from "./repository"
+export * as Repository from "./repository.js"

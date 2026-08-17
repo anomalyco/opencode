@@ -1,5 +1,5 @@
 import type { Config, Redacted } from "effect"
-import { Auth } from "./auth"
+import { Auth } from "./auth.js"
 
 export type ApiKeyMode = "optional" | "required"
 
@@ -22,13 +22,17 @@ export type ProviderAuthOption<Mode extends ApiKeyMode> =
   | AuthOverride
   | (Mode extends "optional" ? OptionalApiKeyAuth : RequiredApiKeyAuth)
 
-export type ModelOptions<Base, Mode extends ApiKeyMode> = Omit<Base, "apiKey" | "auth"> & ProviderAuthOption<Mode>
+export type LanguageModelOptions<Base, Mode extends ApiKeyMode> = Omit<Base, "apiKey" | "auth"> &
+  ProviderAuthOption<Mode>
 
-export type ModelArgs<Base, Mode extends ApiKeyMode> = Mode extends "optional"
-  ? readonly [options?: ModelOptions<Base, Mode>]
-  : readonly [options: ModelOptions<Base, Mode>]
+export type LanguageModelArgs<Base, Mode extends ApiKeyMode> = Mode extends "optional"
+  ? readonly [options?: LanguageModelOptions<Base, Mode>]
+  : readonly [options: LanguageModelOptions<Base, Mode>]
 
-export type ModelFactory<Base, Mode extends ApiKeyMode, Model> = (id: string, ...args: ModelArgs<Base, Mode>) => Model
+export type LanguageModelFactory<Base, Mode extends ApiKeyMode, LanguageModel> = (
+  id: string,
+  ...args: LanguageModelArgs<Base, Mode>
+) => LanguageModel
 
 /**
  * Require at least one of the keys in `T`. Use for option shapes where any
@@ -57,4 +61,4 @@ export const bearer = (
     .bearer()
 }
 
-export * as AuthOptions from "./auth-options"
+export * as AuthOptions from "./auth-options.js"

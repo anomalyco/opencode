@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
+import os from "os"
 import { Effect, Layer } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Global } from "@opencode-ai/core/global"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Global } from "@opencode-ai/util/global"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
@@ -16,6 +17,7 @@ const directory = AbsolutePath.make(FSUtil.resolve("/repo/packages/core"))
 const projectDirectory = AbsolutePath.make(FSUtil.resolve("/repo"))
 const timestamp = Date.parse("2026-06-03T12:00:00.000Z")
 const sessionID = SessionSchema.ID.make("ses_builtin_test")
+const temporary = os.tmpdir()
 const localDate = (time: number) => new Date(time).toDateString()
 const locationLayer = Layer.succeed(
   Location.Service,
@@ -29,7 +31,7 @@ const locationLayer = Layer.succeed(
 const it = testEffect(
   AppNodeBuilder.build(InstructionBuiltIns.node, [
     [Location.node, locationLayer],
-    [Global.node, Global.layerWith({ config: "/global" })],
+    [Global.node, Global.layerWith({ config: temporary, tmp: temporary })],
   ]),
 )
 
@@ -44,11 +46,12 @@ describe("InstructionBuiltIns", () => {
         [
           "Here is some useful information about the environment you are running in:",
           "<env>",
-          `  Session ID: ${sessionID}`,
+          `  Current conversation session ID: ${sessionID}`,
           `  Working directory: ${directory}`,
           `  Workspace root folder: ${projectDirectory}`,
           "  Is directory a git repo: yes",
           `  Platform: ${process.platform}`,
+          `  Use ${temporary} for temporary work outside the workspace; it already exists and is pre-approved for external directory access.`,
           "</env>",
           "",
           `Today's date: ${localDate(timestamp)}`,

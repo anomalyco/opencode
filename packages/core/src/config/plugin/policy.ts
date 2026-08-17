@@ -1,9 +1,10 @@
-export * as ConfigPolicyPlugin from "./policy"
+export * as ConfigPolicyPlugin from "./policy.js"
 
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Document } from "@opencode-ai/schema/config"
 import { Effect, Stream } from "effect"
-import { Config } from "../../config"
-import { Wildcard } from "../../util/wildcard"
+import { Config } from "../../config.js"
+import { Wildcard } from "../../util/wildcard.js"
 
 export const Plugin = define({
   id: "opencode.config.policy",
@@ -13,7 +14,7 @@ export const Plugin = define({
     yield* ctx.catalog.transform((catalog) => {
       // User-global policy takes priority over policy authored by a repository.
       const policies = loaded.entries
-        .filter((entry): entry is Config.Document => entry.type === "document")
+        .filter((entry): entry is Document => entry.type === "document")
         .toReversed()
         .flatMap((entry) => entry.info.experimental?.policies ?? [])
       for (const record of catalog.provider.list()) {

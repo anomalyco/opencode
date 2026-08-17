@@ -58,6 +58,8 @@ export const MultipleKeys = {
     <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
       <KeybindV2 keys={["⌘", "K"]} variant="neutral" />
       <KeybindV2 keys={["⌘", "K"]} variant="ghost" />
+      <KeybindV2 keys={["Ctrl", "B"]} variant="neutral" />
+      <KeybindV2 keys={["Ctrl", "B"]} variant="ghost" />
     </div>
   ),
 }
@@ -70,12 +72,14 @@ export const AllExamples = {
         <KeybindV2 keys={["⌘"]} variant="neutral" />
         <KeybindV2 keys={["⌘", "K"]} variant="neutral" />
         <KeybindV2 keys={["⌘", "⇧", "P"]} variant="neutral" />
+        <KeybindV2 keys={["Ctrl", "Shift", "B"]} variant="neutral" />
       </div>
       <div style={{ display: "flex", gap: "24px", "align-items": "center" }}>
         <span style={{ "font-size": "11px", color: "#808080", width: "50px" }}>Ghost</span>
         <KeybindV2 keys={["⌘"]} variant="ghost" />
         <KeybindV2 keys={["⌘", "K"]} variant="ghost" />
         <KeybindV2 keys={["⌘", "⇧", "P"]} variant="ghost" />
+        <KeybindV2 keys={["Ctrl", "Shift", "B"]} variant="ghost" />
       </div>
     </div>
   ),

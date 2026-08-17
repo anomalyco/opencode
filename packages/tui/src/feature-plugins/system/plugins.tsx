@@ -1,280 +1,159 @@
-import type { TuiPlugin, TuiPluginApi, TuiPluginStatus } from "@opencode-ai/plugin/tui"
-import type { BuiltinTuiPlugin } from "../builtins"
-import { useTerminalDimensions } from "@opentui/solid"
-import { fileURLToPath } from "url"
+import { Plugin } from "@opencode-ai/plugin/tui"
+import { createEffect, createMemo, createSignal, Show } from "solid-js"
+import { usePlugin } from "../../plugin/context"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
-import { Show, createEffect, createMemo, createSignal } from "solid-js"
-import { Keymap } from "../../context/keymap"
+import { useDialog } from "../../ui/dialog"
+import { DialogErrorDetails } from "../../component/dialog-error-details"
 
-const id = "internal:plugin-manager"
+const id = "opencode.plugins"
 
-function state(api: TuiPluginApi, item: TuiPluginStatus) {
-  if (!item.enabled) {
-    return <span style={{ fg: api.theme.current.textMuted }}>disabled</span>
+function View(props: { context: Plugin.Context; plugins: ReturnType<typeof usePlugin> }) {
+  const [locked, setLocked] = createSignal(false)
+  const [focused, setFocused] = createSignal<string>()
+  const [detail, setDetail] = createSignal<{ title: string; error: string }>()
+  const dialog = useDialog()
+  const options = createMemo(() => {
+    const builtins = props.plugins
+      .registered()
+      .filter((plugin) => plugin.id !== id && plugin.source === "builtin")
+      .map(
+        (plugin): DialogSelectOption<string> => ({
+          title: plugin.id,
+          value: plugin.id,
+          category: "Built-in",
+          footer: plugin.active ? "active" : "inactive",
+          footerColor: plugin.active
+            ? props.context.theme.text.feedback.success.default
+            : props.context.theme.text.subdued,
+        }),
+      )
+    const external = props.plugins
+      .list()
+      .filter((plugin) => plugin.status !== "unsupported")
+      .map(
+        (plugin): DialogSelectOption<string> => ({
+          title: plugin.id ?? plugin.target,
+          value: plugin.id ?? plugin.target,
+          category: "External",
+          searchText: plugin.target,
+          footer: plugin.status,
+          footerColor:
+            plugin.status === "active"
+              ? props.context.theme.text.feedback.success.default
+              : plugin.status === "failed"
+                ? props.context.theme.text.feedback.error.default
+                : props.context.theme.text.subdued,
+        }),
+      )
+    return [...builtins, ...external].sort((a, b) => a.title.localeCompare(b.title))
+  })
+
+  const failure = (value: string | undefined) =>
+    props.plugins.list().find((plugin) => {
+      if (plugin.status !== "failed") return false
+      return (plugin.id ?? plugin.target) === value
+    })
+
+  createEffect(() => {
+    if (focused()) return
+    const first = options()[0]
+    if (first) setFocused(first.value)
+  })
+
+  const toggle = (plugin: DialogSelectOption<string>) => {
+    if (locked()) return
+    const current = props.plugins.registered().find((item) => item.id === plugin.value)
+    if (!current) return
+    setLocked(true)
+    void (current.active ? props.plugins.deactivate(current.id) : props.plugins.activate(current.id))
+      .then((ok) => {
+        if (ok) return
+        props.context.ui.toast.show({ variant: "error", message: `Failed to update plugin ${current.id}` })
+      })
+      .catch((error) => {
+        props.context.ui.toast.show({
+          variant: "error",
+          message: error instanceof Error ? error.message : String(error),
+        })
+      })
+      .finally(() => setLocked(false))
+  }
+
+  const select = (plugin: DialogSelectOption<string>) => {
+    const failed = failure(plugin.value)
+    if (!failed || failed.status !== "failed") return toggle(plugin)
+    setDetail({ title: failed.target, error: failed.error })
   }
 
   return (
-    <span style={{ fg: item.active ? api.theme.current.success : api.theme.current.error }}>
-      {item.active ? "active" : "inactive"}
-    </span>
+    <box>
+      <Show
+        when={detail()}
+        fallback={
+          <DialogSelect
+            title="Plugins"
+            options={options()}
+            locked={locked()}
+            preserveSelection={true}
+            onMove={(option) => setFocused(option.value)}
+            actions={[
+              {
+                title: "toggle",
+                command: "plugins.toggle",
+                disabled: (option) => {
+                  const failed = failure(option?.value)
+                  return Boolean(failed && !("id" in failed && failed.id))
+                },
+                onTrigger: toggle,
+              },
+            ]}
+            onSelect={select}
+            footer={
+              <Show when={failure(focused())}>
+                <text fg={props.context.theme.text.subdued}>enter to view error</text>
+              </Show>
+            }
+          />
+        }
+      >
+        {(item) => (
+          <DialogErrorDetails
+            title={`Plugin: ${item().title}`}
+            error={item().error}
+            onBack={() => {
+              setDetail()
+              dialog.setSize("medium")
+            }}
+          />
+        )}
+      </Show>
+    </box>
   )
 }
 
-function source(spec: string) {
-  if (!spec.startsWith("file://")) return
-  return fileURLToPath(spec)
-}
-
-function meta(item: TuiPluginStatus, width: number) {
-  if (item.source === "internal") {
-    if (width >= 120) return "Built-in plugin"
-    return "Built-in"
-  }
-  const next = source(item.spec)
-  if (next) return next
-  return item.spec
-}
-
-function Install(props: { api: TuiPluginApi }) {
-  const [global, setGlobal] = createSignal(false)
-  const [busy, setBusy] = createSignal(false)
-
-  Keymap.createLayer(() => ({
-    mode: "modal",
-    enabled: !busy(),
+function Commands(props: { context: Plugin.Context }) {
+  const plugins = usePlugin()
+  props.context.keymap.layer(() => ({
+    mode: "global",
     commands: [
       {
-        bind: "tab",
-        title: "Toggle install scope",
-        group: "Plugins",
-        run: () => {
-          setGlobal((value) => !value)
+        id: "plugins.list",
+        title: "Plugins",
+        group: "System",
+        slash: { name: "plugins" },
+        palette: true,
+        run() {
+          props.context.ui.dialog.show(() => <View context={props.context} plugins={plugins} />)
         },
       },
     ],
   }))
-
-  return (
-    <props.api.ui.DialogPrompt
-      title="Install plugin"
-      placeholder="npm package name"
-      busy={busy()}
-      busyText="Installing plugin..."
-      description={() => (
-        <box flexDirection="row" gap={1}>
-          <text fg={props.api.theme.current.textMuted}>scope:</text>
-          <text fg={busy() ? props.api.theme.current.textMuted : props.api.theme.current.text}>
-            {global() ? "global" : "local"}
-          </text>
-          <Show when={!busy()}>
-            <text fg={props.api.theme.current.textMuted}>(tab toggle)</text>
-          </Show>
-        </box>
-      )}
-      onConfirm={(raw) => {
-        if (busy()) return
-        const mod = raw.trim()
-        if (!mod) {
-          props.api.ui.toast({
-            variant: "error",
-            message: "Plugin package name is required",
-          })
-          return
-        }
-
-        setBusy(true)
-        void props.api.plugins
-          .install(mod, { global: global() })
-          .then((out) => {
-            if (!out.ok) {
-              props.api.ui.toast({
-                variant: "error",
-                message: out.message,
-              })
-              if (out.missing) {
-                props.api.ui.toast({
-                  variant: "info",
-                  message: "Check npm registry/auth settings and try again.",
-                })
-              }
-              show(props.api)
-              return
-            }
-
-            props.api.ui.toast({
-              variant: "success",
-              message: `Installed ${mod} (${global() ? "global" : "local"}: ${out.dir})`,
-            })
-            if (!out.tui) {
-              props.api.ui.toast({
-                variant: "info",
-                message: "Package has no TUI target to load in this app.",
-              })
-              show(props.api)
-              return
-            }
-
-            return props.api.plugins.add(mod).then((ok) => {
-              if (!ok) {
-                props.api.ui.toast({
-                  variant: "warning",
-                  message: "Installed plugin, but runtime load failed. See console/logs; restart TUI to retry.",
-                })
-                show(props.api)
-                return
-              }
-
-              props.api.ui.toast({
-                variant: "success",
-                message: `Loaded ${mod} in current session.`,
-              })
-              show(props.api)
-            })
-          })
-          .finally(() => {
-            setBusy(false)
-          })
-      }}
-      onCancel={() => {
-        show(props.api)
-      }}
-    />
-  )
+  return null
 }
 
-function row(api: TuiPluginApi, item: TuiPluginStatus, width: number): DialogSelectOption<string> {
-  return {
-    title: item.id,
-    value: item.id,
-    category: item.source === "internal" ? "Internal" : "External",
-    description: meta(item, width),
-    footer: state(api, item),
-    disabled: item.id === id,
-  }
-}
-
-function showInstall(api: TuiPluginApi) {
-  api.ui.dialog.replace(() => <Install api={api} />)
-}
-
-function View(props: { api: TuiPluginApi }) {
-  const size = useTerminalDimensions()
-  const [list, setList] = createSignal(props.api.plugins.list())
-  const [cur, setCur] = createSignal<string | undefined>()
-  const [lock, setLock] = createSignal(false)
-
-  createEffect(() => {
-    const width = size().width
-    if (width >= 128) {
-      props.api.ui.dialog.setSize("xlarge")
-      return
-    }
-    if (width >= 96) {
-      props.api.ui.dialog.setSize("large")
-      return
-    }
-    props.api.ui.dialog.setSize("medium")
-  })
-
-  const rows = createMemo(() =>
-    [...list()]
-      .sort((a, b) => {
-        const x = a.source === "internal" ? 1 : 0
-        const y = b.source === "internal" ? 1 : 0
-        if (x !== y) return x - y
-        return a.id.localeCompare(b.id)
-      })
-      .map((item) => row(props.api, item, size().width)),
-  )
-
-  const flip = (x: string) => {
-    if (lock()) return
-    const item = list().find((entry) => entry.id === x)
-    if (!item) return
-    setLock(true)
-    const task = item.active ? props.api.plugins.deactivate(x) : props.api.plugins.activate(x)
-    void task
-      .then((ok) => {
-        if (!ok) {
-          props.api.ui.toast({
-            variant: "error",
-            message: `Failed to update plugin ${item.id}`,
-          })
-        }
-        setList(props.api.plugins.list())
-      })
-      .finally(() => {
-        setLock(false)
-      })
-  }
-
-  return (
-    <DialogSelect
-      title="Plugins"
-      options={rows()}
-      current={cur()}
-      onMove={(item) => setCur(item.value)}
-      actions={[
-        {
-          title: "toggle",
-          command: "plugins.toggle",
-          hidden: lock(),
-          onTrigger: (item) => {
-            setCur(item.value)
-            flip(item.value)
-          },
-        },
-        {
-          title: "install",
-          command: "dialog.plugins.install",
-          selection: "none",
-          hidden: lock(),
-          onTrigger: () => {
-            showInstall(props.api)
-          },
-        },
-      ]}
-      onSelect={(item) => {
-        setCur(item.value)
-        flip(item.value)
-      }}
-    />
-  )
-}
-
-function show(api: TuiPluginApi) {
-  api.ui.dialog.replace(() => <View api={api} />)
-}
-
-const tui: TuiPlugin = async (api) => {
-  api.keymap.registerLayer({
-    commands: [
-      {
-        name: "plugins.list",
-        title: "Plugins",
-        category: "System",
-        namespace: "palette",
-        run() {
-          show(api)
-        },
-      },
-      {
-        name: "plugins.install",
-        title: "Install plugin",
-        category: "System",
-        namespace: "palette",
-        run() {
-          showInstall(api)
-        },
-      },
-    ],
-    bindings: ["plugins.list", "plugins.install"].flatMap((command) => api.tuiConfig.keybinds.get(command)),
-  })
-}
-
-const plugin: BuiltinTuiPlugin = {
+export default Plugin.define({
   id,
-  tui,
-}
-
-export default plugin
+  setup(context) {
+    context.ui.slot({ append: "app", render: () => <Commands context={context} /> })
+  },
+})

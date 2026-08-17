@@ -1,6 +1,6 @@
-export * as Integration from "./integration"
+export * as Integration from "./integration.js"
 
-import { makeLocationNode } from "./effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import {
   Cause,
   Clock,
@@ -18,12 +18,13 @@ import {
   Types,
 } from "effect"
 import { Integration } from "@opencode-ai/schema/integration"
-import { Credential } from "./credential"
-import { State } from "./state"
-import { EventV2 } from "./event"
-import { IntegrationConnection } from "./integration/connection"
-import { AppProcess } from "./process"
+import { Credential } from "./credential.js"
+import { State } from "./state.js"
+import { Bus } from "./bus.js"
+import { IntegrationConnection } from "./integration/connection.js"
+import { AppProcess } from "@opencode-ai/util/process"
 import { ChildProcess } from "effect/unstable/process"
+import { Form } from "./form.js"
 
 export const ID = Integration.ID
 export type ID = Integration.ID
@@ -33,18 +34,6 @@ export type MethodID = Integration.MethodID
 
 export const AttemptID = Integration.AttemptID
 export type AttemptID = typeof AttemptID.Type
-
-export const When = Integration.When
-export type When = Integration.When
-
-export const TextPrompt = Integration.TextPrompt
-export type TextPrompt = Integration.TextPrompt
-
-export const SelectPrompt = Integration.SelectPrompt
-export type SelectPrompt = Integration.SelectPrompt
-
-export const Prompt = Integration.Prompt
-export type Prompt = Integration.Prompt
 
 export const OAuthMethod = Integration.OAuthMethod
 export type OAuthMethod = Integration.OAuthMethod
@@ -64,9 +53,6 @@ export type Method = Integration.Method
 export const Info = Integration.Info
 export type Info = Integration.Info
 
-export const Inputs = Integration.Inputs
-export type Inputs = Integration.Inputs
-
 export type OAuthAuthorization = {
   readonly url: string
   readonly instructions: string
@@ -85,7 +71,7 @@ export type OAuthAuthorization = {
 export interface OAuthImplementation {
   readonly integrationID: ID
   readonly method: OAuthMethod
-  readonly authorize: (inputs: Inputs) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
+  readonly authorize: (answer: Form.Answer) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
@@ -129,7 +115,7 @@ export class AuthorizationError extends Schema.TaggedErrorClass<AuthorizationErr
 
 export type Error = CodeRequiredError | AuthorizationError
 
-export const Event = Integration.Event
+export { Event } from "@opencode-ai/schema/integration"
 
 export const Ref = Integration.Ref
 export type Ref = Integration.Ref
@@ -175,6 +161,8 @@ export interface Interface extends State.Transformable<Draft> {
       readonly integrationID: ID
       /** Secret entered by the user. */
       readonly key: string
+      /** Values collected from the method's form fields. */
+      readonly answer?: Form.Answer
       /** User-facing label for the stored credential. */
       readonly label?: string
     }) => Effect.Effect<void, AuthorizationError>
@@ -191,7 +179,7 @@ export interface Interface extends State.Transformable<Draft> {
     readonly connect: (input: {
       readonly integrationID: ID
       readonly methodID: MethodID
-      readonly inputs: Inputs
+      readonly answer?: Form.Answer
       readonly label?: string
     }) => Effect.Effect<Attempt, AuthorizationError>
     /** Returns the current state of an OAuth attempt. */
@@ -222,7 +210,7 @@ export interface Interface extends State.Transformable<Draft> {
   }
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Integration") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Integration") {}
 
 const attemptLifetime = Duration.toMillis(Duration.minutes(10))
 const terminalRetention = Duration.toMillis(Duration.minutes(1))
@@ -271,7 +259,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const credentials = yield* Credential.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const processes = yield* AppProcess.Service
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
@@ -338,7 +326,7 @@ const layer = Layer.effect(
           },
         },
       }),
-      finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
+      finalize: () => bus.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     const resolveConnections = (entry: Entry | undefined, saved: readonly Credential.Info[]) => {
@@ -356,7 +344,7 @@ const layer = Layer.effect(
       return [...credentials, ...env]
     }
 
-    const project = (entry: Entry, connections: IntegrationConnection.Info[]) =>
+    const project = (entry: Entry, connections: IntegrationConnection.Info[]): Info =>
       Info.make({
         id: entry.ref.id,
         name: entry.ref.name,
@@ -433,8 +421,8 @@ const layer = Layer.effect(
             // Persisting attempts cannot be cancelled, expired, or claimed again.
             yield* SynchronizedRef.update(attempts, (current) => new Map(current).set(attemptID, terminal))
             if (Exit.isFailure(persistence)) yield* Effect.failCause(persistence.cause)
-            yield* events.publish(Event.ConnectionUpdated, { integrationID: attempt.integrationID })
-            yield* events.publish(Event.Updated, {})
+            yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: attempt.integrationID })
+            yield* bus.publish(Integration.Event.Updated, {})
           }).pipe(Effect.ensuring(close(attempt.scope)))
         }),
       )
@@ -489,8 +477,8 @@ const layer = Layer.effect(
           yield* SynchronizedRef.update(commandAttempts, (current) => new Map(current).set(attemptID, terminal))
           yield* close(attempt.scope)
           if (Exit.isFailure(persistence)) return
-          yield* events.publish(Event.ConnectionUpdated, { integrationID: attempt.integrationID })
-          yield* events.publish(Event.Updated, {})
+          yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: attempt.integrationID })
+          yield* bus.publish(Integration.Event.Updated, {})
         }),
       )
     })
@@ -547,15 +535,20 @@ const layer = Layer.effect(
     const connectOAuth = Effect.fn("Integration.oauth.connect")(function* (input: {
       readonly integrationID: ID
       readonly methodID: MethodID
-      readonly inputs: Inputs
+      readonly answer?: Form.Answer
       readonly label?: string
     }) {
       const method = state.get().integrations.get(input.integrationID)?.implementations.get(input.methodID)
       if (!method) {
         return yield* Effect.die(new Error(`OAuth method not found: ${input.integrationID}/${input.methodID}`))
       }
+      const answer = input.answer ?? {}
+      if (method.method.form) {
+        const invalid = Form.validateFields(method.method.form) ?? Form.validateAnswer(method.method.form, answer)
+        if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
+      }
       const attemptScope = yield* Scope.fork(scope)
-      const authorization = yield* authorize(method.authorize(input.inputs)).pipe(
+      const authorization = yield* authorize(method.authorize(answer)).pipe(
         Scope.provide(attemptScope),
         Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(attemptScope, exit) : Effect.void)),
       )
@@ -699,31 +692,43 @@ const layer = Layer.effect(
           const method = state
             .get()
             .integrations.get(input.integrationID)
-            ?.methods.some((method) => method.type === "key")
+            ?.methods.find((method) => method.type === "key")
           if (!method) return yield* Effect.die(new Error(`Key method not found: ${input.integrationID}`))
+          const answer = input.answer ?? {}
+          if (method.type === "key" && method.form) {
+            const invalid = Form.validateFields(method.form) ?? Form.validateAnswer(method.form, answer)
+            if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
+          }
+          if (method.type === "key" && !method.form && Object.keys(answer).length > 0) {
+            return yield* new AuthorizationError({ cause: new Error("Key method does not accept a form answer") })
+          }
           yield* credentials.create({
             integrationID: input.integrationID,
             label: input.label,
-            value: Credential.Key.make({ type: "key", key: input.key }),
+            value: Credential.Key.make({
+              type: "key",
+              key: input.key,
+              ...(Object.keys(answer).length > 0 ? { configuration: answer } : {}),
+            }),
           })
-          yield* events.publish(Event.ConnectionUpdated, { integrationID: input.integrationID })
-          yield* events.publish(Event.Updated, {})
+          yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: input.integrationID })
+          yield* bus.publish(Integration.Event.Updated, {})
         }),
         update: Effect.fn("Integration.connection.update")(function* (credentialID, updates) {
           const credential = yield* credentials.get(credentialID)
           yield* credentials.update(credentialID, updates)
           if (credential) {
-            yield* events.publish(Event.ConnectionUpdated, { integrationID: credential.integrationID })
+            yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: credential.integrationID })
           }
-          yield* events.publish(Event.Updated, {})
+          yield* bus.publish(Integration.Event.Updated, {})
         }),
         remove: Effect.fn("Integration.connection.remove")(function* (credentialID) {
           const credential = yield* credentials.get(credentialID)
           yield* credentials.remove(credentialID)
           if (credential) {
-            yield* events.publish(Event.ConnectionUpdated, { integrationID: credential.integrationID })
+            yield* bus.publish(Integration.Event.ConnectionUpdated, { integrationID: credential.integrationID })
           }
-          yield* events.publish(Event.Updated, {})
+          yield* bus.publish(Integration.Event.Updated, {})
         }),
       },
       oauth: {
@@ -809,5 +814,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Credential.node, EventV2.node, AppProcess.node],
+  deps: [Credential.node, Bus.node, AppProcess.node],
 })

@@ -1,14 +1,13 @@
-export * as Database from "./database"
+export * as Database from "./database.js"
 
-import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
-import { layer } from "#sqlite"
-import { Context, Effect, Layer } from "effect"
-import { Global } from "../global"
-import { Flag } from "../flag/flag"
+import { EffectDrizzleSqlite } from "./drizzle.js"
+import { sqliteLayer, supportsForeignKeyToggle, supportsTuningPragmas } from "#sqlite"
+import { Context, Effect, Layer, Schema } from "effect"
+import type { SqlClient } from "effect/unstable/sql"
+import { Global } from "@opencode-ai/util/global"
 import { isAbsolute, join } from "path"
-import { DatabaseMigration } from "./migration"
-import { InstallationChannel } from "../installation/version"
-import { makeGlobalNode } from "../effect/app-node"
+import { DatabaseMigration } from "./migration.js"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>
@@ -17,47 +16,62 @@ export interface Interface {
   db: DatabaseShape
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/storage/Database") {}
+export const Options = Schema.Struct({
+  path: Schema.optional(Schema.String),
+})
+export type Options = typeof Options.Type
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/storage/Database") {}
 
 const databaseLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const db = yield* makeDatabase
 
-    yield* db.run("PRAGMA journal_mode = WAL")
-    yield* db.run("PRAGMA synchronous = NORMAL")
-    yield* db.run("PRAGMA busy_timeout = 5000")
-    yield* db.run("PRAGMA cache_size = -64000")
-    yield* db.run("PRAGMA foreign_keys = ON")
-    yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
+    if (supportsTuningPragmas) {
+      yield* db.run("PRAGMA journal_mode = WAL")
+      yield* db.run("PRAGMA synchronous = NORMAL")
+      yield* db.run("PRAGMA busy_timeout = 5000")
+      yield* db.run("PRAGMA cache_size = -64000")
+      yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
+    }
+    // Durable Object SQLite always enforces foreign keys and rejects the pragma.
+    if (supportsForeignKeyToggle) yield* db.run("PRAGMA foreign_keys = ON")
     yield* DatabaseMigration.apply(db)
 
     return { db }
   }).pipe(Effect.orDie),
 )
 
-export function layerFromPath(filename: string) {
-  return databaseLayer.pipe(Layer.provide(layer({ filename })))
-}
-
-export function path() {
-  if (Flag.OPENCODE_DB) {
-    if (Flag.OPENCODE_DB === ":memory:" || isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
-    return join(Global.Path.data, Flag.OPENCODE_DB)
-  }
-  if (
-    ["latest", "beta", "prod"].includes(InstallationChannel) ||
-    process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
-    process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
+export function layer(options: Options = { path: ":memory:" }) {
+  return Layer.unwrap(
+    Effect.gen(function* () {
+      const provide = (filename: string) => layerFromClient.pipe(Layer.provide(sqliteLayer({ filename })))
+      const filename = options.path ?? ":memory:"
+      if (filename === ":memory:" || isAbsolute(filename)) return provide(filename)
+      const global = yield* Global.Service
+      return provide(join(global.data, filename))
+    }),
   )
-    return join(Global.Path.data, "opencode.db")
-  return join(Global.Path.data, `opencode-${InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`)
 }
 
-// Resolve the database path lazily so tests and embedders that set
-// Flag.OPENCODE_DB after module evaluation still control the storage target.
-export const node = makeGlobalNode({
-  service: Service,
-  layer: Layer.suspend(() => layerFromPath(path())),
-  deps: [],
-})
+// The database service over an injected SqlClient, for runtimes that receive
+// database storage instead of opening a filesystem path. Any client provided
+// here still goes through the pragma guards and migrations; Global is required
+// because migrations may read it (the v1 import).
+export const layerFromClient: Layer.Layer<Service, never, SqlClient.SqlClient | Global.Service> = databaseLayer
+
+export function configured(options?: Options) {
+  return makeGlobalNode({ service: Service, layer: layer(options), deps: [Global.node] })
+}
+
+/** `configured`, but over an injected SqlClient layer instead of a filesystem path. */
+export function configuredClient(client: Layer.Layer<SqlClient.SqlClient>) {
+  return makeGlobalNode({
+    service: Service,
+    layer: layerFromClient.pipe(Layer.provide(client)),
+    deps: [Global.node],
+  })
+}
+
+export const node = configured({ path: ":memory:" })

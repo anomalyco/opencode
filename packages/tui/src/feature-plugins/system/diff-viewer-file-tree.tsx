@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
-import type { ColorInput, RGBA, ScrollBoxRenderable } from "@opentui/core"
+import type { ScrollBoxRenderable } from "@opentui/core"
+import type { Plugin } from "@opencode-ai/plugin/tui"
 import { Locale } from "../../util/locale"
 import { tint } from "../../theme/color"
 import { createEffect, createMemo, For, Match, Switch } from "solid-js"
@@ -8,24 +9,12 @@ import { Panel } from "./diff-viewer-ui"
 
 const FILE_TREE_STATUS_WIDTH = 2
 
-export type DiffViewerFileTreeTheme = {
-  readonly background: RGBA
-  readonly backgroundPanel: ColorInput
-  readonly backgroundElement: ColorInput
-  readonly primary: ColorInput
-  readonly secondary: ColorInput
-  readonly selectedListItemText: ColorInput
-  readonly text: RGBA
-  readonly textMuted: RGBA
-  readonly error: ColorInput
-}
-
 export type DiffViewerFileTreeProps = {
+  readonly context: Plugin.Context
   readonly width: number
   readonly files: readonly FileTreeItem[]
   readonly loading: boolean
   readonly error: unknown
-  readonly theme: DiffViewerFileTreeTheme
   readonly focused?: boolean
   readonly highlightedNode?: number
   readonly selectedFileIndex?: number
@@ -35,6 +24,7 @@ export type DiffViewerFileTreeProps = {
 }
 
 export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
+  const theme = props.context.theme
   const tree = createMemo(() => buildFileTree(props.files))
   const rows = createMemo(() => flattenFileTree(tree(), props.expandedNodes))
   let scroll: ScrollBoxRenderable | undefined
@@ -49,10 +39,10 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
     requestAnimationFrame(scrollSelectedIntoView)
   })
 
-  const fadedColor = () => tint(props.theme.text, props.theme.background, 0.75)
+  const fadedColor = () => tint(theme.text.default, theme.background.default, 0.75)
 
   return (
-    <Panel border="both" width={props.width}>
+    <Panel border="both" width={props.width} context={props.context}>
       <scrollbox
         ref={(element: ScrollBoxRenderable) => (scroll = element)}
         verticalScrollbarOptions={{ visible: false }}
@@ -63,7 +53,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
             <text />
           </Match>
           <Match when={props.files.length === 0}>
-            <text fg={props.theme.text}>No files</text>
+            <text fg={theme.text.default}>No files</text>
           </Match>
           <Match when={props.files.length > 0}>
             <For each={rows()}>
@@ -82,22 +72,26 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                   <box
                     flexDirection="row"
                     width="100%"
-                    backgroundColor={highlighted() ? props.theme.primary : undefined}
+                    backgroundColor={highlighted() ? theme.background.action.primary.focused : undefined}
                     onMouseUp={() => props.onRowClick?.(row)}
                   >
-                    <text fg={highlighted() ? props.theme.background : fadedColor()} wrapMode="none" flexShrink={0}>
+                    <text
+                      fg={highlighted() ? theme.text.action.primary.focused : fadedColor()}
+                      wrapMode="none"
+                      flexShrink={0}
+                    >
                       {prefix()}
                     </text>
                     <box flexGrow={1} minWidth={0}>
                       <text
                         fg={
                           highlighted()
-                            ? props.theme.background
+                            ? theme.text.action.primary.focused
                             : selected()
-                              ? props.theme.primary
+                              ? theme.text.formfield.selected
                               : reviewed() || row.kind === "directory"
-                                ? props.theme.textMuted
-                                : props.theme.text
+                                ? theme.text.subdued
+                                : theme.text.default
                         }
                         wrapMode="none"
                       >
@@ -105,7 +99,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                       </text>
                     </box>
                     <text
-                      fg={highlighted() ? props.theme.background : props.theme.textMuted}
+                      fg={highlighted() ? theme.text.action.primary.focused : theme.text.subdued}
                       wrapMode="none"
                       flexShrink={0}
                     >

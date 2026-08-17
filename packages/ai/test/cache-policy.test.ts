@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, Message } from "../src"
-import { Auth, LLMClient } from "../src/route"
-import { AmazonBedrock } from "../src/providers"
-import * as AnthropicMessages from "../src/protocols/anthropic-messages"
-import * as Gemini from "../src/protocols/gemini"
-import * as OpenAIChat from "../src/protocols/openai-chat"
-import { applyCachePolicy } from "../src/cache-policy"
-import { it } from "./lib/effect"
+import { CacheHint, LLM, Message } from "../src/index.js"
+import { Auth } from "../src/route.js"
+import { compileRequest } from "../src/route/client.js"
+import { AmazonBedrock } from "../src/providers.js"
+import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
+import * as Gemini from "../src/protocols/gemini.js"
+import * as OpenAIChat from "../src/protocols/openai-chat.js"
+import { applyCachePolicy } from "../src/cache-policy.js"
+import { it } from "./lib/effect.js"
 
 const anthropicModel = AnthropicMessages.route
   .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
@@ -31,7 +32,7 @@ const geminiModel = Gemini.route
 describe("applyCachePolicy", () => {
   it.effect("undefined cache resolves to 'auto' (the recommended default)", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: anthropicModel,
           system: "You are concise.",
@@ -39,8 +40,8 @@ describe("applyCachePolicy", () => {
         }),
       )
 
-      // No explicit cache field → auto policy fires → last system part + latest
-      // user message both get cache_control markers.
+      // A single system block is both the first and last boundary, so the auto
+      // policy deduplicates it and still marks the conversation tail.
       expect(prepared.body).toMatchObject({
         system: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
@@ -48,12 +49,15 @@ describe("applyCachePolicy", () => {
     }),
   )
 
-  it.effect("'auto' marks the last tool, last system part, and latest user message on Anthropic", () =>
+  it.effect("'auto' marks the last tool, first and last system parts, and final message boundary on Anthropic", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: anthropicModel,
-          system: "Sys A",
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Project instructions" },
+          ],
           tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
           messages: [
             Message.user("first user"),
@@ -66,7 +70,10 @@ describe("applyCachePolicy", () => {
 
       expect(prepared.body).toMatchObject({
         tools: [{ name: "t1", cache_control: { type: "ephemeral" } }],
-        system: [{ type: "text", text: "Sys A", cache_control: { type: "ephemeral" } }],
+        system: [
+          { type: "text", text: "Base agent", cache_control: { type: "ephemeral" } },
+          { type: "text", text: "Project instructions", cache_control: { type: "ephemeral" } },
+        ],
         messages: [
           { role: "user", content: [{ type: "text", text: "first user" }] },
           { role: "assistant", content: [{ type: "text", text: "assistant reply" }] },
@@ -81,7 +88,7 @@ describe("applyCachePolicy", () => {
 
   it.effect("'auto' is a no-op on OpenAI (implicit caching protocol)", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: openaiModel,
           system: "Sys",
@@ -100,7 +107,7 @@ describe("applyCachePolicy", () => {
 
   it.effect("'auto' is a no-op on Gemini (out-of-band caching protocol)", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: geminiModel,
           system: "Sys",
@@ -117,10 +124,13 @@ describe("applyCachePolicy", () => {
 
   it.effect("'auto' on Bedrock emits cachePoint markers in the right places", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: bedrockModel,
-          system: "Sys",
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Project instructions" },
+          ],
           tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
           messages: [Message.user("first user"), Message.assistant("reply"), Message.user("latest user")],
           cache: "auto",
@@ -131,7 +141,12 @@ describe("applyCachePolicy", () => {
         toolConfig: {
           tools: [{ toolSpec: { name: "t1" } }, { cachePoint: { type: "default" } }],
         },
-        system: [{ text: "Sys" }, { cachePoint: { type: "default" } }],
+        system: [
+          { text: "Base agent" },
+          { cachePoint: { type: "default" } },
+          { text: "Project instructions" },
+          { cachePoint: { type: "default" } },
+        ],
         messages: [
           { role: "user", content: [{ text: "first user" }] },
           { role: "assistant", content: [{ text: "reply" }] },
@@ -143,7 +158,7 @@ describe("applyCachePolicy", () => {
 
   it.effect("'none' disables auto placement even when manual hints exist", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: anthropicModel,
           system: "Sys",
@@ -162,7 +177,7 @@ describe("applyCachePolicy", () => {
 
   it.effect("granular object form: tools-only marks just tools", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: anthropicModel,
           system: "Sys",
@@ -181,7 +196,7 @@ describe("applyCachePolicy", () => {
 
   it.effect("auto policy preserves manual CacheHints on other parts", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: anthropicModel,
           system: [
@@ -193,15 +208,61 @@ describe("applyCachePolicy", () => {
         }),
       )
 
-      const body = prepared.body as { system: Array<{ text: string; cache_control?: unknown }> }
+      const body = prepared.body as {
+        system: Array<{ text: string; cache_control?: unknown }>
+        messages: Array<{ content: Array<{ cache_control?: unknown }> }>
+      }
       expect(body.system[0]?.cache_control).toEqual({ type: "ephemeral", ttl: "1h" })
       expect(body.system[1]?.cache_control).toEqual({ type: "ephemeral" })
+      expect(body.messages[0]?.content[0]?.cache_control).toEqual({ type: "ephemeral" })
+    }),
+  )
+
+  it.effect("auto policy stays within the four-breakpoint cap when preserving manual hints", () =>
+    Effect.gen(function* () {
+      const request = LLM.request({
+        model: anthropicModel,
+        system: [
+          { type: "text", text: "Base agent" },
+          {
+            type: "text",
+            text: "Manual context",
+            cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }),
+          },
+          { type: "text", text: "Project instructions" },
+        ],
+        tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
+        prompt: "hi",
+        cache: "auto",
+      })
+      const applied = applyCachePolicy(request)
+      expect(applied.tools[0]?.cache).toBeDefined()
+      expect(applied.system.map((part) => part.cache !== undefined)).toEqual([true, true, true])
+      const tail = applied.messages[0]!.content[0]!
+      expect("cache" in tail ? tail.cache : undefined).toBeUndefined()
+      expect(applyCachePolicy(applied)).toBe(applied)
+
+      const prepared = yield* compileRequest(request)
+
+      const body = prepared.body as {
+        tools: Array<{ cache_control?: unknown }>
+        system: Array<{ cache_control?: unknown }>
+        messages: Array<{ content: Array<{ cache_control?: unknown }> }>
+      }
+      const marked = [
+        ...body.tools.map((tool) => tool.cache_control),
+        ...body.system.map((part) => part.cache_control),
+        ...body.messages.flatMap((message) => message.content.map((part) => part.cache_control)),
+      ].filter((cache) => cache !== undefined)
+      expect(marked).toHaveLength(4)
+      expect(body.system[1]?.cache_control).toEqual({ type: "ephemeral", ttl: "1h" })
+      expect(body.messages[0]?.content[0]?.cache_control).toBeUndefined()
     }),
   )
 
   it.effect("ttlSeconds in the policy flows through to wire markers", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: anthropicModel,
           system: "Sys",
@@ -218,7 +279,7 @@ describe("applyCachePolicy", () => {
 
   it.effect("messages: { tail: 2 } marks the last 2 message boundaries", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: anthropicModel,
           messages: [Message.user("u1"), Message.assistant("a1"), Message.user("u2"), Message.assistant("a2")],
@@ -236,7 +297,7 @@ describe("applyCachePolicy", () => {
 
   it.effect("'latest-assistant' marks the last assistant message", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: anthropicModel,
           messages: [Message.user("u1"), Message.assistant("a1"), Message.user("u2")],

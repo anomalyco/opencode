@@ -1,6 +1,9 @@
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { ProviderV2 } from "../../provider"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Form } from "@opencode-ai/schema/form"
+import { Provider } from "../../provider.js"
+import { iife } from "../../util/iife.js"
+import { configuredSettings } from "./configured.js"
 
 function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
   if (useChat && sdk.chat) return sdk.chat(modelID)
@@ -13,32 +16,66 @@ function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
 export const AzurePlugin = define({
   id: "opencode.provider.azure",
   effect: Effect.fn(function* (ctx) {
+    const configured = yield* configuredSettings(Provider.ID.azure)
+    const form = iife(() => {
+      if (resolveResourceName(configured) || typeof configured?.baseURL === "string") return
+      return Form.Fields.make([
+        {
+          type: "string",
+          key: "resourceName",
+          title: "Enter Azure Resource Name",
+          placeholder: "e.g. my-models",
+          required: true,
+        },
+      ])
+    })
+    yield* ctx.integration.transform((draft) => {
+      draft.method.update({
+        integrationID: Provider.ID.azure,
+        method: {
+          type: "key",
+          label: "API key",
+          form,
+        },
+      })
+    })
     yield* ctx.catalog.transform((evt) => {
       for (const item of evt.provider.list()) {
-        if (!ProviderV2.isAISDK(item.provider.package)) continue
-        if (ProviderV2.packageName(item.provider.package) !== "@ai-sdk/azure") continue
-        const configured = item.provider.settings?.resourceName
-        const resourceName =
-          typeof configured === "string" && configured.trim() !== "" ? configured : process.env.AZURE_RESOURCE_NAME
+        if (item.provider.id !== Provider.ID.azure && Provider.packageName(item.provider.package) !== "@ai-sdk/azure")
+          continue
+        const resourceName = resolveResourceName(item.provider.settings)
         if (!resourceName) continue
         evt.provider.update(item.provider.id, (provider) => {
-          provider.settings = { ...provider.settings, resourceName }
+          provider.settings = {
+            ...provider.settings,
+            resourceName,
+            ...(typeof provider.settings?.baseURL === "string"
+              ? { baseURL: expandResourceName(provider.settings.baseURL, resourceName) }
+              : {}),
+          }
         })
+        for (const model of item.models.values()) {
+          evt.model.update(item.provider.id, model.id, (draft) => {
+            if (typeof draft.settings?.baseURL !== "string") return
+            draft.settings.baseURL = expandResourceName(
+              draft.settings.baseURL,
+              resolveResourceName(draft.settings, resourceName) ?? resourceName,
+            )
+          })
+        }
       }
     })
     yield* ctx.aisdk.hook(
       "sdk",
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/azure") return
-        if (evt.model.providerID === ProviderV2.ID.azure) {
+        if (evt.model.providerID === Provider.ID.azure) {
           if (
             !evt.options.resourceName &&
             !evt.options.baseURL &&
-            (!ProviderV2.isAISDK(evt.model.package) || typeof evt.model.settings?.baseURL !== "string")
+            (!Provider.isAISDK(evt.model.package) || typeof evt.model.settings?.baseURL !== "string")
           ) {
-            throw new Error(
-              "AZURE_RESOURCE_NAME is missing, set it using env var or reconnecting the azure provider and setting it",
-            )
+            throw new Error("Azure resource name is missing; set AZURE_RESOURCE_NAME or configure resourceName/baseURL")
           }
         }
         const mod = yield* Effect.promise(() => import("@ai-sdk/azure"))
@@ -48,7 +85,7 @@ export const AzurePlugin = define({
     yield* ctx.aisdk.hook(
       "language",
       Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.azure) return
+        if (evt.model.providerID !== Provider.ID.azure) return
         evt.language = selectLanguage(
           evt.sdk,
           evt.model.modelID ?? evt.model.id,
@@ -59,34 +96,14 @@ export const AzurePlugin = define({
   }),
 })
 
-export const AzureCognitiveServicesPlugin = define({
-  id: "opencode.provider.azure-cognitive-services",
-  effect: Effect.fn(function* (ctx) {
-    yield* ctx.catalog.transform((evt) => {
-      const resourceName = process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME
-      if (!resourceName) return
-      for (const item of evt.provider.list()) {
-        if (!ProviderV2.isAISDK(item.provider.package)) continue
-        if (ProviderV2.packageName(item.provider.package) !== "@ai-sdk/openai-compatible") continue
-        if (!item.provider.id.includes("azure-cognitive-services")) continue
-        evt.provider.update(item.provider.id, (provider) => {
-          provider.settings = {
-            ...provider.settings,
-            baseURL: `https://${resourceName}.cognitiveservices.azure.com/openai`,
-          }
-        })
-      }
-    })
-    yield* ctx.aisdk.hook(
-      "language",
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== ProviderV2.ID.make("azure-cognitive-services")) return
-        evt.language = selectLanguage(
-          evt.sdk,
-          evt.model.modelID ?? evt.model.id,
-          Boolean(evt.options.useCompletionUrls),
-        )
-      }),
-    )
-  }),
-})
+function resolveResourceName(settings: Readonly<Record<string, unknown>> | undefined, fallback?: string) {
+  const configured = settings?.resourceName
+  if (typeof configured === "string" && configured.trim() !== "") return configured
+  return fallback ?? process.env.AZURE_RESOURCE_NAME ?? process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME
+}
+
+function expandResourceName(baseURL: string, resourceName: string) {
+  return baseURL
+    .replaceAll("${AZURE_RESOURCE_NAME}", resourceName)
+    .replaceAll("${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}", resourceName)
+}

@@ -1,12 +1,12 @@
-export * as Credential from "./credential"
+export * as Credential from "./credential.js"
 
 import { asc, eq } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Credential } from "@opencode-ai/schema/credential"
 import { Integration } from "@opencode-ai/schema/integration"
-import { Database } from "./database/database"
-import { makeGlobalNode } from "./effect/app-node"
-import { CredentialTable } from "./credential/sql"
+import { Database } from "./database/database.js"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { CredentialTable } from "./credential/sql.js"
 
 export const ID = Credential.ID
 export type ID = Credential.ID
@@ -46,7 +46,7 @@ export interface Interface {
   readonly remove: (id: ID) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Credential") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Credential") {}
 
 const layer = Layer.effect(
   Service,

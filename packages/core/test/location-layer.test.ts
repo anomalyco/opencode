@@ -2,36 +2,43 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Config } from "@opencode-ai/schema/config"
-import { Plugin } from "@opencode-ai/schema/plugin"
 import { Money } from "@opencode-ai/schema/money"
 import { DateTime, Deferred, Effect, Equal, Fiber, Hash, RcMap, Schema, Stream } from "effect"
-import { Plugin as EffectPlugin } from "@opencode-ai/plugin/v2/effect"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect"
+import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Global } from "@opencode-ai/util/global"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { Location } from "@opencode-ai/core/location"
-import { PluginV2 } from "@opencode-ai/core/plugin"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProjectV2 } from "@opencode-ai/core/project"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Model } from "@opencode-ai/core/model"
+import { Project } from "@opencode-ai/core/project"
+import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { tmpdir } from "./fixture/tmpdir"
+import { tempGlobalLayer } from "./fixture/global"
 import { testEffect } from "./lib/effect"
 import { toolDefinitions, waitForTool } from "./lib/tool"
 import { Database } from "../src/database/database"
-import { EventV2 } from "../src/event"
+import { Bus } from "../src/bus"
 import { Reference } from "../src/reference"
-import { ToolRegistry } from "../src/tool/registry"
+import { Tool } from "../src/tool"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, LocationServiceMap.node])))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
+    [Global.node, tempGlobalLayer],
+  ]),
+)
 const itWithSdk = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SdkPlugins.node, LocationServiceMap.node])),
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
+    [Global.node, tempGlobalLayer],
+  ]),
 )
 
 describe("LocationServiceMap", () => {
@@ -44,7 +51,7 @@ describe("LocationServiceMap", () => {
         Effect.gen(function* () {
           const sdk = yield* SdkPlugins.Service
           const locations = yield* LocationServiceMap.Service
-          const id = AgentV2.ID.make("persistent-sdk-agent")
+          const id = Agent.ID.make("persistent-sdk-agent")
           const plugin = EffectPlugin.define({
             id: "persistent-sdk-plugin",
             effect: (ctx) => ctx.agent.transform((agents) => agents.update(id, () => {})),
@@ -55,7 +62,7 @@ describe("LocationServiceMap", () => {
           const read = Effect.gen(function* () {
             const supervisor = yield* PluginSupervisor.Service
             yield* supervisor.flush
-            const agents = yield* AgentV2.Service
+            const agents = yield* Agent.Service
             return yield* agents.get(id)
           })
 
@@ -101,7 +108,7 @@ describe("LocationServiceMap", () => {
           )
 
           const explorer = yield* Effect.gen(function* () {
-            const agents = yield* AgentV2.Service
+            const agents = yield* Agent.Service
             return yield* agents.resolve("explore")
           }).pipe(Effect.provide(context))
 
@@ -193,8 +200,8 @@ describe("LocationServiceMap", () => {
           const context = yield* locations.contextEffect(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
           yield* Deferred.await(firstStarted)
 
-          const events = yield* EventV2.Service
-          const updated = yield* events.subscribe(Config.Event.Updated).pipe(
+          const bus = yield* Bus.Service
+          const updated = yield* bus.subscribe(Config.Event.Updated).pipe(
             Stream.filter((event) => event.location?.directory === dir.path),
             Stream.runHead,
             Effect.forkChild({ startImmediately: true }),
@@ -235,11 +242,11 @@ describe("LocationServiceMap", () => {
             Effect.provide(context),
             Effect.forkChild({ startImmediately: true }),
           )
-          const events = yield* EventV2.Service
+          const bus = yield* Bus.Service
 
           yield* Effect.forEach(
             Array.from({ length: 5 }),
-            () => events.publish(SdkPlugins.Updated, {}).pipe(Effect.andThen(Effect.sleep("50 millis"))),
+            () => bus.publish(SdkPlugins.Updated, {}).pipe(Effect.andThen(Effect.sleep("50 millis"))),
             { discard: true },
           )
           expect(flushFiber.pollUnsafe()).toBeUndefined()
@@ -270,7 +277,7 @@ describe("LocationServiceMap", () => {
           yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(Effect.provide(context))
           expect(activations.count).toBe(1)
 
-          yield* EventV2.Service.use((events) => events.publish(Config.Event.Updated, {})).pipe(Effect.provide(context))
+          yield* Bus.Service.use((bus) => bus.publish(Config.Event.Updated, {})).pipe(Effect.provide(context))
           yield* Effect.sleep("200 millis")
 
           expect(activations.count).toBe(1)
@@ -306,11 +313,13 @@ describe("LocationServiceMap", () => {
           )
           yield* Deferred.await(started)
 
-          yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
+          const flushFiber = yield* PluginSupervisor.Service.use((supervisor) => supervisor.flush).pipe(
             Effect.provide(context),
-            Effect.timeout("1 second"),
+            Effect.forkChild({ startImmediately: true }),
           )
+          expect(flushFiber.pollUnsafe()).toBeUndefined()
           yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(flushFiber)
           yield* Deferred.await(completed)
         }),
       ),
@@ -370,7 +379,7 @@ describe("LocationServiceMap", () => {
             fs.writeFile(path.join(dir.path, "opencode.json"), JSON.stringify({ plugins: ["-*", "opencode.agent"] })),
           )
           const plugins = yield* Effect.gen(function* () {
-            const plugins = yield* PluginV2.Service
+            const plugins = yield* Plugin.Service
             yield* (yield* PluginSupervisor.Service).flush
             return yield* plugins.list()
           }).pipe(
@@ -396,7 +405,7 @@ describe("LocationServiceMap", () => {
           const file = path.join(dir.path, "opencode.json")
           yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ plugins: ["-*", "opencode.agent"] })))
           yield* Effect.gen(function* () {
-            const registry = yield* PluginV2.Service
+            const registry = yield* Plugin.Service
             const supervisor = yield* PluginSupervisor.Service
             yield* supervisor.flush
             expect((yield* registry.list()).map((plugin) => String(plugin.id))).toEqual(["opencode.agent"])
@@ -449,25 +458,25 @@ describe("LocationServiceMap", () => {
         Effect.scoped(
           Effect.gen(function* () {
             const locations = yield* LocationServiceMap.Service
-            const events = yield* EventV2.Service
+            const bus = yield* Bus.Service
             const firstRef = Location.Ref.make({ directory: AbsolutePath.make(first.path) })
             const secondRef = Location.Ref.make({ directory: AbsolutePath.make(second.path) })
             const firstContext = yield* locations.contextEffect(firstRef)
             const secondContext = yield* locations.contextEffect(secondRef)
             const received = { first: 0, second: 0 }
-            yield* events.subscribe(Config.Event.Updated).pipe(
+            yield* bus.subscribe(Config.Event.Updated).pipe(
               Stream.runForEach(() => Effect.sync(() => received.first++)),
               Effect.provideContext(firstContext),
               Effect.forkScoped({ startImmediately: true }),
             )
-            yield* events.subscribe(Config.Event.Updated).pipe(
+            yield* bus.subscribe(Config.Event.Updated).pipe(
               Stream.runForEach(() => Effect.sync(() => received.second++)),
               Effect.provideContext(secondContext),
               Effect.forkScoped({ startImmediately: true }),
             )
             yield* Effect.sleep("10 millis")
 
-            yield* events.publish(Config.Event.Updated, {}, { location: firstRef })
+            yield* bus.publish(Config.Event.Updated, {}, { location: firstRef })
             yield* Effect.sleep("10 millis")
 
             expect(received).toEqual({ first: 1, second: 0 })
@@ -501,7 +510,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  it.live("normalizes ref key shapes to one cached location graph", () =>
+  it.live("normalizes equivalent refs to one cached location graph", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -511,16 +520,20 @@ describe("LocationServiceMap", () => {
           Effect.gen(function* () {
             const locations = yield* LocationServiceMap.Service
             const directory = AbsolutePath.make(dir.path)
-            const absent = Location.Ref.make({ directory })
+            const alternate = AbsolutePath.make(directory.replaceAll("\\", "/"))
+            const absent = Location.Ref.make({ directory: alternate })
             const present = Location.Ref.make({ directory, workspaceID: undefined })
             // The two shapes are not structurally Equal: own-key sets differ.
             expect(Object.keys(absent)).toEqual(["directory"])
             expect(Object.keys(present)).toEqual(["directory", "workspaceID"])
             expect(Equal.equals(absent, present)).toBe(false)
+            if (process.platform === "win32") expect(absent.directory).not.toBe(present.directory)
 
             const first = yield* locations.contextEffect(absent)
             expect(yield* locations.contextEffect(present)).toBe(first)
-            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(1)
+            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([
+              Location.Ref.make({ directory, workspaceID: undefined }),
+            ])
 
             // Invalidating with the shape opposite to the one that booted must evict.
             yield* locations.invalidate(present)
@@ -538,12 +551,12 @@ describe("LocationServiceMap", () => {
     ).pipe(
       Effect.flatMap(([blocked, allowed]) =>
         Effect.gen(function* () {
-          const update = (directory: string, providerID: ProviderV2.ID) =>
+          const update = (directory: string, providerID: Provider.ID) =>
             Effect.gen(function* () {
               yield* Reference.Service
               const catalog = yield* Catalog.Service
               yield* catalog.transform((editor) => editor.provider.update(providerID, () => {}))
-              const registry = yield* ToolRegistry.Service
+              const registry = yield* Tool.Service
               // Tool plugins register during the forked PluginSupervisor boot; wait for
               // every expected tool rather than relying on batch ordering.
               yield* Effect.forEach(
@@ -573,12 +586,13 @@ describe("LocationServiceMap", () => {
               ),
             )
 
-          const blockedID = ProviderV2.ID.make("blocked-location")
-          const allowedID = ProviderV2.ID.make("allowed-location")
+          const blockedID = Provider.ID.make("blocked-location")
+          const allowedID = Provider.ID.make("allowed-location")
           const blockedState = yield* update(blocked.path, blockedID)
           expect(blockedState.providers.some((provider) => provider.id === blockedID)).toBe(true)
           expect(blockedState.providers.some((provider) => provider.id === allowedID)).toBe(false)
-          expect(blockedState.tools.map((tool) => tool.name).sort()).toEqual([
+          const blockedTools = blockedState.tools.map((tool) => tool.name)
+          expect(blockedTools.filter((name) => name !== "execute").sort()).toEqual([
             "edit",
             "glob",
             "grep",
@@ -595,7 +609,9 @@ describe("LocationServiceMap", () => {
           const allowedState = yield* update(allowed.path, allowedID)
           expect(allowedState.providers.some((provider) => provider.id === allowedID)).toBe(true)
           expect(allowedState.providers.some((provider) => provider.id === blockedID)).toBe(false)
-          expect(allowedState.tools.map((tool) => tool.name).sort()).toEqual([
+          const allowedTools = allowedState.tools.map((tool) => tool.name)
+          expect(blockedTools.includes("execute")).toBe(allowedTools.includes("execute"))
+          expect(allowedTools.filter((name) => name !== "execute").sort()).toEqual([
             "edit",
             "glob",
             "grep",
@@ -638,13 +654,13 @@ describe("LocationServiceMap", () => {
           )
           const failure = yield* SessionRunnerModel.Service.use((models) =>
             models.resolve(
-              SessionV2.Info.make({
-                id: SessionV2.ID.make("ses_unavailable_model"),
-                projectID: ProjectV2.ID.global,
+              Session.Info.make({
+                id: Session.ID.make("ses_unavailable_model"),
+                projectID: Project.ID.global,
                 title: "test",
                 model: {
-                  id: ModelV2.ID.make("chat"),
-                  providerID: ProviderV2.ID.make("unavailable"),
+                  id: Model.ID.make("chat"),
+                  providerID: Provider.ID.make("unavailable"),
                 },
                 cost: Money.USD.zero,
                 tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -664,6 +680,50 @@ describe("LocationServiceMap", () => {
     ),
   )
 
+  it.live("explains replacements for unavailable legacy provider models", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          for (const [providerID, replacement] of [
+            ["azure-cognitive-services", "azure"],
+            ["google-vertex-anthropic", "google-vertex"],
+          ] as const) {
+            const failure = yield* SessionRunnerModel.Service.use((models) =>
+              models.resolve(
+                Session.Info.make({
+                  id: Session.ID.make(`ses_removed_${providerID}`),
+                  projectID: Project.ID.global,
+                  title: "test",
+                  model: {
+                    id: Model.ID.make("chat"),
+                    providerID: Provider.ID.make(providerID),
+                  },
+                  cost: Money.USD.zero,
+                  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                  time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+                  location,
+                }),
+              ),
+            ).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
+
+            expect(failure).toMatchObject({
+              _tag: "SessionRunnerModel.ModelUnavailableError",
+              providerID,
+              modelID: "chat",
+            })
+            expect(failure.message).toBe(
+              `Model unavailable: ${providerID}/chat. This provider has been deprecated; use ${replacement}/chat instead.`,
+            )
+          }
+        }),
+      ),
+    ),
+  )
+
   it.live("preserves the selected catalog identity when the package model id differs", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -675,25 +735,25 @@ describe("LocationServiceMap", () => {
           const resolved = yield* Effect.gen(function* () {
             const catalog = yield* Catalog.Service
             yield* catalog.transform((editor) => {
-              editor.provider.update(ProviderV2.ID.make("aliased"), (provider) => {
-                provider.package = ProviderV2.aisdk("@ai-sdk/openai")
+              editor.provider.update(Provider.ID.make("aliased"), (provider) => {
+                provider.package = Provider.aisdk("@ai-sdk/openai")
               })
-              editor.model.update(ProviderV2.ID.make("aliased"), ModelV2.ID.make("fast"), (model) => {
+              editor.model.update(Provider.ID.make("aliased"), Model.ID.make("fast"), (model) => {
                 // Catalog id and package model id intentionally differ, like gpt-5.5-fast -> gpt-5.5.
-                model.modelID = ModelV2.ID.make("base")
-                model.variants = [{ id: ModelV2.VariantID.make("high") }]
+                model.modelID = Model.ID.make("base")
+                model.variants = [{ id: Model.VariantID.make("high") }]
               })
             })
             const models = yield* SessionRunnerModel.Service
             return yield* models.resolve(
-              SessionV2.Info.make({
-                id: SessionV2.ID.make("ses_aliased_model"),
-                projectID: ProjectV2.ID.global,
+              Session.Info.make({
+                id: Session.ID.make("ses_aliased_model"),
+                projectID: Project.ID.global,
                 title: "test",
                 model: {
-                  id: ModelV2.ID.make("fast"),
-                  providerID: ProviderV2.ID.make("aliased"),
-                  variant: ModelV2.VariantID.make("high"),
+                  id: Model.ID.make("fast"),
+                  providerID: Provider.ID.make("aliased"),
+                  variant: Model.VariantID.make("high"),
                 },
                 cost: Money.USD.zero,
                 tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -704,10 +764,10 @@ describe("LocationServiceMap", () => {
           }).pipe(Effect.provide(LocationServiceMap.Service.get(location)))
 
           expect(resolved.ref).toEqual(
-            ModelV2.Ref.make({
-              id: ModelV2.ID.make("fast"),
-              providerID: ProviderV2.ID.make("aliased"),
-              variant: ModelV2.VariantID.make("high"),
+            Model.Ref.make({
+              id: Model.ID.make("fast"),
+              providerID: Provider.ID.make("aliased"),
+              variant: Model.VariantID.make("high"),
             }),
           )
           expect(String(resolved.model.id)).toBe("base")
@@ -723,7 +783,7 @@ describe("LocationServiceMap", () => {
     ).pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
-          const plugins = yield* PluginV2.Service
+          const plugins = yield* Plugin.Service
           const reviewer = EffectPlugin.define({
             id: "reviewer",
             effect: (ctx) =>
@@ -738,7 +798,7 @@ describe("LocationServiceMap", () => {
           })
           yield* plugins.activate([{ ...reviewer, version: "1" }])
 
-          expect(yield* (yield* AgentV2.Service).get(AgentV2.ID.make("reviewer"))).toMatchObject({
+          expect(yield* (yield* Agent.Service).get(Agent.ID.make("reviewer"))).toMatchObject({
             description: "Reviews code",
             mode: "subagent",
           })

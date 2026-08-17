@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ConfigModel } from "@opencode-ai/core/config/model"
+import { ConfigModel } from "@opencode-ai/schema/config/model"
 import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "@opencode-ai/schema/provider"
 import { Schema } from "effect"

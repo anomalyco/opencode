@@ -1,5 +1,5 @@
 import { JsonPointer, Schema } from "effect"
-import type { Definition, JsonSchema, SchemaType } from "./tool.js"
+import type { Tool, JsonSchema, SchemaType } from "./tool.js"
 
 const isEffectSchema = (schema: SchemaType): schema is Schema.Decoder<unknown> & Schema.Top => Schema.isSchema(schema)
 
@@ -192,16 +192,16 @@ export type InputProperty = {
   readonly required: boolean
 }
 
-export const inputProperties = <R>(definition: Definition<R>): Array<InputProperty> => {
+export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
   try {
-    const document = isEffectSchema(definition.input)
-      ? (Schema.toJsonSchemaDocument(definition.input) as {
+    const document = isEffectSchema(tool.input)
+      ? (Schema.toJsonSchemaDocument(tool.input) as {
           readonly schema: JsonSchema
           readonly definitions?: Readonly<Record<string, JsonSchema>>
         })
       : {
-          schema: definition.input,
-          definitions: { ...(definition.input.definitions ?? {}), ...(definition.input.$defs ?? {}) },
+          schema: tool.input,
+          definitions: { ...(tool.input.definitions ?? {}), ...(tool.input.$defs ?? {}) },
         }
     const definitions = document.definitions ?? {}
     let schema = document.schema
@@ -223,22 +223,22 @@ export const inputProperties = <R>(definition: Definition<R>): Array<InputProper
   }
 }
 
-export const inputTypeScript = <R>(definition: Definition<R>, pretty = false): string =>
-  isEffectSchema(definition.input)
-    ? toTypeScript(definition.input, false, pretty)
-    : jsonSchemaToTypeScript(definition.input, pretty)
+export const inputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
+  isEffectSchema(tool.input) ? toTypeScript(tool.input, false, pretty) : jsonSchemaToTypeScript(tool.input, pretty)
 
-export const outputTypeScript = <R>(definition: Definition<R>, pretty = false): string =>
-  definition.output === undefined
-    ? "unknown"
-    : isEffectSchema(definition.output)
-      ? toTypeScript(definition.output, true, pretty)
-      : jsonSchemaToTypeScript(definition.output, pretty)
+export const outputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
+  tool.output === undefined
+    ? "void"
+    : isEffectSchema(tool.output)
+      ? toTypeScript(tool.output, true, pretty)
+      : jsonSchemaToTypeScript(tool.output, pretty)
 
-export const decodeInput = <R>(definition: Definition<R>, value: unknown): unknown =>
-  isEffectSchema(definition.input) ? Schema.decodeUnknownSync(definition.input)(value) : value
+export const decodeInput = <R>(tool: Tool<R>, value: unknown): unknown =>
+  isEffectSchema(tool.input) ? Schema.decodeUnknownSync(tool.input)(value) : value
 
-export const decodeOutput = <R>(definition: Definition<R>, value: unknown): unknown =>
-  definition.output !== undefined && isEffectSchema(definition.output)
-    ? Schema.decodeUnknownSync(definition.output)(value)
-    : value
+export const decodeOutput = <R>(tool: Tool<R>, value: unknown): unknown =>
+  tool.output === undefined
+    ? undefined
+    : isEffectSchema(tool.output)
+      ? Schema.decodeUnknownSync(tool.output)(value)
+      : value

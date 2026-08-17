@@ -367,9 +367,11 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                                 </span>
                               )}
                             </Show>
-                            {props.divider && (i() !== group.items.length - 1 || (showAdd() && isLastGroup())) && (
+                            <Show
+                              when={props.divider && (i() !== group.items.length - 1 || (showAdd() && isLastGroup()))}
+                            >
                               <span data-slot="list-item-divider" />
-                            )}
+                            </Show>
                           </button>
                         )
                         if (props.itemWrapper) return props.itemWrapper(item, node)

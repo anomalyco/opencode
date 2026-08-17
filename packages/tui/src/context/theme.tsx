@@ -1,67 +1,84 @@
 import { CliRenderEvents, SyntaxStyle, type TerminalColors } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import {
+  generateSyntax,
+  resolveThemeDocument,
+  themeModes,
+  type ResolvedTheme,
+  type ContextName,
+} from "@opencode-ai/theme/tui"
+import {
   DEFAULT_THEMES,
   addTheme,
   allThemes,
-  generateSyntax,
   hasTheme,
-  isTheme,
-  resolveTheme,
+  parseTheme,
   selectedForeground,
   setCustomThemes,
   setSystemTheme,
   subscribeThemes,
   upsertTheme,
   type Theme,
-  type ThemeJson,
+  type ThemeDocumentSource,
 } from "../theme"
 import { generateSystem, terminalMode } from "../theme/system"
-import { createComponentTheme, type ComponentTheme } from "../theme/v2/component"
-import { resolveThemeFile } from "../theme/v2/resolve"
-import { migrateV1 } from "../theme/v2/v1-migrate"
-import { createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { discoverThemes } from "../theme/discovery"
+import { createComponentTheme, type ComponentTheme } from "../theme/component"
+import { createEffect, createMemo, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useConfig } from "../config"
-import { Global } from "@opencode-ai/core/global"
-import { Glob } from "@opencode-ai/core/util/glob"
-import { readFile } from "node:fs/promises"
-import path from "node:path"
 import { DevTools } from "../devtools"
+import { configDirectories } from "../util/config-directories"
 
 const themePerformance = DevTools.register({ id: "theme-performance", title: "Theme performance" })
+export type ThemeError = { name: string; error: Error }
+type ThemeErrorHandler = (event: ThemeError) => void
+
+function createThemeErrors() {
+  let handler: ThemeErrorHandler | undefined
+  let pending: ThemeError | undefined
+
+  return {
+    emit(name: string, cause: unknown) {
+      const event = { name, error: cause instanceof Error ? cause : new Error(String(cause)) }
+      if (handler) {
+        handler(event)
+        return
+      }
+      pending = event
+    },
+    onError(next: ThemeErrorHandler) {
+      handler = next
+      if (pending) {
+        next(pending)
+        pending = undefined
+      }
+      return () => {
+        if (handler === next) handler = undefined
+      }
+    },
+  }
+}
+
+const themeErrors = createThemeErrors()
 
 export type ThemeSource = Readonly<{
   discover(): Promise<Record<string, unknown>>
   subscribeRefresh?(refresh: () => void): () => void
 }>
 
-const themeSource: ThemeSource = {
+export const createThemeSource = (config: string): ThemeSource => ({
   async discover() {
-    const directories = [Global.Path.config]
-    for (let current = process.cwd(); ; current = path.dirname(current)) {
-      directories.push(path.join(current, ".opencode"))
-      if (path.dirname(current) === current) break
-    }
-    return discoverThemes(directories)
+    return discoverThemes(configDirectories(config, process.cwd()))
   },
   subscribeRefresh(refresh) {
     process.on("SIGUSR2", refresh)
     return () => process.off("SIGUSR2", refresh)
   },
-}
+})
 
-export async function discoverThemes(directories: string[]) {
-  const result: Record<string, unknown> = {}
-  for (const directory of directories) {
-    const files = await Glob.scan("themes/*.json", { cwd: directory, absolute: true, dot: true, symlink: true })
-    for (const file of files) {
-      result[path.basename(file, ".json")] = JSON.parse(await readFile(file, "utf8")) as unknown
-    }
-  }
-  return result
-}
+export { discoverThemes } from "../theme/discovery"
 
 export {
   DEFAULT_THEMES,
@@ -77,28 +94,35 @@ export {
 const THEME_REFRESH_DELAYS = [250, 1000] as const
 
 type State = {
-  themes: Record<string, ThemeJson>
+  themes: Record<string, ThemeDocumentSource>
   mode: "dark" | "light"
   lock: "dark" | "light" | undefined
   active: string
   ready: boolean
 }
 
-type ContextName = "elevated" | "overlay"
-type ThemeService = {
-  theme: Theme
-  themeV2: ComponentTheme
-  contextual(context: ContextName): ThemeService
+type Themes = {
+  current: ComponentTheme
+  currentTokens: Accessor<ResolvedTheme>
   readonly selected: string
   all: typeof allThemes
   has: typeof hasTheme
-  syntax: Accessor<SyntaxStyle>
+  currentSyntax: Accessor<SyntaxStyle>
   mode: Accessor<"dark" | "light">
+  modes: Accessor<readonly ("dark" | "light")[]>
+  supports(mode: "dark" | "light"): boolean
   locked: Accessor<boolean>
   lock(): void
   unlock(): void
-  setMode(mode?: "dark" | "light", persist?: boolean): void
+  setMode(mode?: "dark" | "light", persist?: boolean): boolean
   set(theme: string): boolean
+  onError(handler: ThemeErrorHandler): () => void
+  readonly ready: boolean
+}
+
+type ThemeContextValue = {
+  current: ComponentTheme["contextual"][ContextName]
+  themes: Themes
   readonly ready: boolean
 }
 
@@ -112,13 +136,13 @@ const [store, setStore] = createStore<State>({
 
 subscribeThemes((themes) => setStore("themes", themes))
 
-export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
+const themeContext = createSimpleContext({
   name: "Theme",
-  init: (props: { mode: "dark" | "light"; source?: ThemeSource }) => {
+  init: (props: { mode: "dark" | "light"; source: ThemeSource }): ThemeContextValue => {
     const renderer = useRenderer()
     const configState = useConfig()
     const config = configState.data
-    const themes = props.source ?? themeSource
+    const themes = props.source
     const pick = (value: unknown) => {
       if (value === "dark" || value === "light") return value
       return
@@ -154,12 +178,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       return themes
         .discover()
         .then((themes) => {
-          setCustomThemes(
-            Object.entries(themes).reduce<Record<string, ThemeJson>>((result, [name, theme]) => {
-              if (isTheme(theme)) result[name] = theme
-              return result
-            }, {}),
-          )
+          setCustomThemes(themes)
         })
         .catch(() => setStore("active", "opencode"))
     }
@@ -175,7 +194,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     let systemThemeMode: "dark" | "light" | undefined
     let hasResolvedSystemTheme = false
     function resolveSystemTheme(mode: "dark" | "light" = store.mode) {
-      const started = performance.now()
       return renderer
         .getPalette({ size: 16 })
         .then((colors: TerminalColors) => {
@@ -199,7 +217,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           setSystemTheme(undefined)
           if (store.active === "system") setStore("active", "opencode")
         })
-        .finally(() => themePerformance.set("Resolve system palette", duration(performance.now() - started)))
     }
 
     let systemRefreshRunning = false
@@ -285,61 +302,48 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       themeRefreshTimeouts.length = 0
     })
 
-    const source = createMemo(() => store.themes[store.active] ?? store.themes.opencode)
-    const sourceName = createMemo(() => (store.themes[store.active] ? store.active : "opencode"))
-    const values = createMemo(() => resolveTheme(source(), store.mode))
-    const valuesV2 = createMemo(() => {
-      const started = performance.now()
-      const file = migrateV1(source())
-      themePerformance.set("Convert V1 to V2", duration(performance.now() - started))
-      const resolveStarted = performance.now()
-      const result = resolveThemeFile(file, store.mode, sourceName())
-      themePerformance.set("Resolve final theme", duration(performance.now() - resolveStarted))
-      return result
+    const initStarted = performance.now()
+    const selected = createMemo(() => {
+      const name = store.themes[store.active] ? store.active : "opencode"
+      try {
+        return loadTheme(store.themes[name], name, store.mode)
+      } catch (error) {
+        if (name === "opencode") throw error
+        themeErrors.emit(name, error)
+        setStore("active", "opencode")
+        return loadTheme(store.themes.opencode, "opencode", store.mode)
+      }
     })
-    const mode = () => store.mode
-    const themeV2 = createComponentTheme(valuesV2, mode)
-    const contextsV2 = {
-      elevated: createComponentTheme(() => {
-        const theme = valuesV2().contexts["@context:elevated"]
-        if (!theme) throw new Error("Theme context is not defined: elevated")
-        return theme
-      }, mode),
-      overlay: createComponentTheme(() => {
-        const theme = valuesV2().contexts["@context:overlay"]
-        if (!theme) throw new Error("Theme context is not defined: overlay")
-        return theme
-      }, mode),
-    }
+    const modes = () => selected().modes
+    const mode = () => selected().mode
+    const valuesV2 = () => selected().theme
+    valuesV2()
+    themePerformance.set("Init", `${(performance.now() - initStarted).toFixed(2)} ms`)
+    const current = createComponentTheme(valuesV2, mode)
 
-    createEffect(() => renderer.setBackgroundColor(values().background))
+    createEffect(() => renderer.setBackgroundColor(valuesV2().background.default))
 
-    const syntax = createSyntaxStyleMemo(() => generateSyntax(values()))
-
-    const theme = new Proxy(values(), {
-      get(_target, prop) {
-        // @ts-expect-error Properties are forwarded to the current reactive value.
-        return values()[prop]
-      },
-    })
-    function contextual(context: ContextName) {
-      return contextualServices[context]
-    }
-    const service: ThemeService = {
-      theme,
-      themeV2,
-      contextual,
+    const currentSyntax = createSyntaxStyleMemo(() => generateSyntax(valuesV2(), mode()))
+    const service: Themes = {
+      current,
+      currentTokens: valuesV2,
+      currentSyntax,
       get selected() {
         return store.active
       },
       all: allThemes,
       has: hasTheme,
-      syntax,
-      mode: () => store.mode,
+      mode,
+      modes,
+      supports: (requested) => modes().includes(requested),
       locked: () => store.lock !== undefined,
-      lock: () => pin(store.mode),
+      lock: () => pin(mode()),
       unlock: free,
-      setMode: pin,
+      setMode(requested = mode(), persist = true) {
+        if (!modes().includes(requested)) return false
+        pin(requested, persist)
+        return true
+      },
       set(theme: string) {
         if (!hasTheme(theme)) return false
         setStore("active", theme)
@@ -350,20 +354,48 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           .catch(() => {})
         return true
       },
+      onError: themeErrors.onError,
       get ready() {
         return store.ready
       },
     }
-    const contextualServices = {
-      elevated: Object.assign(Object.create(service) as ThemeService, { themeV2: contextsV2.elevated }),
-      overlay: Object.assign(Object.create(service) as ThemeService, { themeV2: contextsV2.overlay }),
+    return {
+      current,
+      themes: service,
+      get ready() {
+        return service.ready
+      },
     }
-    return service
   },
 })
 
-function duration(milliseconds: number) {
-  return `${milliseconds.toFixed(2)} ms`
+export function useThemes() {
+  return themeContext.use().themes
+}
+export function useTheme(): ComponentTheme
+export function useTheme(context: ContextName): ComponentTheme["contextual"][ContextName]
+export function useTheme(context?: ContextName) {
+  const value = themeContext.use()
+  return context ? value.themes.current.contextual[context] : value.current
+}
+export const ThemeProvider = themeContext.provider
+
+export function ThemeContextProvider(props: ParentProps<{ context: ContextName }>) {
+  const value = themeContext.use()
+  return (
+    <themeContext.context.Provider
+      value={{ current: value.themes.current.contextual[props.context], themes: value.themes, ready: value.ready }}
+    >
+      {props.children}
+    </themeContext.context.Provider>
+  )
+}
+
+function loadTheme(source: ThemeDocumentSource, name: string, requested: "dark" | "light") {
+  const document = parseTheme(source, name)
+  const modes = themeModes(document)
+  const mode = modes.includes(requested) ? requested : (modes[0] ?? requested)
+  return { modes, mode, theme: resolveThemeDocument(document, mode) }
 }
 
 export function createSyntaxStyleMemo(factory: () => SyntaxStyle) {

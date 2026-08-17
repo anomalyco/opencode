@@ -6,7 +6,7 @@ snapshots:
       createdAt: integer("time_created").notNull(),
     })
   : labels:
-    - source: text("project_id")
-      style: primary
-      start: 52
-      end: 70
+      - source: text("project_id")
+        style: primary
+        start: 52
+        end: 70

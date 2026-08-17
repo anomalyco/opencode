@@ -1,53 +1,57 @@
-export * as PluginV2 from "./plugin"
+export * as Plugin from "./plugin.js"
+export { Event, ID, Info } from "@opencode-ai/schema/plugin"
 
-import type { Plugin } from "@opencode-ai/plugin/v2/effect/plugin"
-import { Event, ID, type Info } from "@opencode-ai/schema/plugin"
-import { makeLocationNode } from "./effect/app-node"
-import { Context, Effect, Exit, Layer, Scope, Semaphore } from "effect"
-import { AgentV2 } from "./agent"
-import { AISDK } from "./aisdk"
-import { Catalog } from "./catalog"
-import { CommandV2 } from "./command"
-import { EventV2 } from "./event"
-import { Integration } from "./integration"
-import { Location } from "./location"
-import { PluginHost } from "./plugin/host"
-import { PluginRuntime } from "./plugin/runtime"
-import { Reference } from "./reference"
-import { SkillV2 } from "./skill"
-import { State } from "./state"
-import { ToolRegistry } from "./tool/registry"
-import { ToolHooks } from "./tool/hooks"
-import { PluginHooks } from "./plugin/hooks"
+import { Plugin } from "@opencode-ai/schema/plugin"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { App } from "./app.js"
+import { Context, Effect, Exit, Layer, Logger, References, Scope, Semaphore } from "effect"
+import { Agent } from "./agent.js"
+import { AISDK } from "./aisdk.js"
+import { Catalog } from "./catalog.js"
+import { Command } from "./command.js"
+import { Bus } from "./bus.js"
+import { Integration } from "./integration.js"
+import { Location } from "./location.js"
+import { PluginHost } from "./plugin/host.js"
+import { PluginRuntime } from "./plugin/runtime.js"
+import { WebSearch } from "./websearch.js"
+import { Reference } from "./reference.js"
+import { Skill } from "./skill.js"
+import { State } from "./state.js"
+import { Tool } from "./tool.js"
+import { PluginHooks } from "./plugin/hooks.js"
 
 export interface Interface {
   readonly activate: (plugins: readonly Versioned[]) => Effect.Effect<void>
-  readonly list: () => Effect.Effect<Info[]>
+  readonly list: () => Effect.Effect<Plugin.Info[]>
 }
 
-export interface Versioned extends Plugin {
-  readonly version: string
-}
+export type Versioned = import("@opencode-ai/plugin/effect/plugin").Plugin & { readonly version: string }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Plugin") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const scope = yield* Scope.make()
-    const active = new Map<typeof ID.Type, { readonly plugin: Versioned; readonly scope: Scope.Closeable }>()
+    const active = new Map<Plugin.ID, { readonly plugin: Versioned; readonly scope: Scope.Closeable }>()
     const lock = Semaphore.makeUnsafe(1)
-    let host: Parameters<Plugin["effect"]>[0]
+    let host: Parameters<import("@opencode-ai/plugin/effect/plugin").Plugin["effect"]>[0]
 
     const load = Effect.fnUntraced(function* (plugin: Versioned) {
       const child = yield* Scope.fork(scope)
       const inherit = yield* State.inherit()
       const loaded = yield* Effect.suspend(() => plugin.effect(host)).pipe(
         inherit,
-        Effect.updateContext((_context: Context.Context<never>) => Context.make(Scope.Scope, child)),
+        Effect.updateContext((context: Context.Context<never>) =>
+          Context.make(Scope.Scope, child).pipe(
+            Context.add(Logger.CurrentLoggers, Context.get(context, Logger.CurrentLoggers)),
+            Context.add(References.MinimumLogLevel, Context.get(context, References.MinimumLogLevel)),
+          ),
+        ),
         Effect.withSpan("Plugin.load", { attributes: { "plugin.id": plugin.id } }),
-        Effect.andThen(events.publish(Event.Added, { id: ID.make(plugin.id) })),
+        Effect.andThen(bus.publish(Plugin.Event.Added, { id: Plugin.ID.make(plugin.id) })),
         Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void)),
         Effect.exit,
       )
@@ -60,8 +64,8 @@ const layer = Layer.effect(
     })
 
     const activate = Effect.fn("Plugin.activate")(function* (plugins: readonly Versioned[]) {
-      const definitions = plugins.map((plugin) => ({ ...plugin, id: ID.make(plugin.id) }))
-      const ids = new Set<typeof ID.Type>()
+      const definitions = plugins.map((plugin) => ({ ...plugin, id: Plugin.ID.make(plugin.id) }))
+      const ids = new Set<Plugin.ID>()
       for (const definition of definitions) {
         if (ids.has(definition.id)) yield* Effect.die(new Error(`Duplicate plugin ID: ${definition.id}`))
         ids.add(definition.id)
@@ -116,7 +120,7 @@ const layer = Layer.effect(
               })
             }),
           )
-          yield* events.publish(Event.Updated, {})
+          yield* bus.publish(Plugin.Event.Updated, {})
         }),
       )
     })
@@ -143,18 +147,19 @@ export const node = makeLocationNode({
   service: Service,
   layer,
   deps: [
-    EventV2.node,
-    AgentV2.node,
+    Bus.node,
+    App.node,
+    Agent.node,
     AISDK.node,
     Catalog.node,
-    CommandV2.node,
+    Command.node,
     Integration.node,
     Location.node,
     Reference.node,
-    SkillV2.node,
-    ToolRegistry.toolsNode,
-    ToolHooks.node,
+    Skill.node,
+    Tool.node,
     PluginHooks.node,
     PluginRuntime.node,
+    WebSearch.node,
   ],
 })

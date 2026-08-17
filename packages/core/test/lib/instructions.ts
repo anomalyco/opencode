@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect"
-import { Instructions } from "@opencode-ai/core/instructions"
+import { Instructions } from "@opencode-ai/core/instructions/index"
 
 export interface State {
   readonly values: Readonly<Record<string, Schema.Json>>
@@ -10,7 +10,7 @@ export const state = (values: Readonly<Record<string, Schema.Json>>): State => (
 const hashes = (values: Readonly<Record<string, Schema.Json>>): Instructions.Values =>
   Object.fromEntries(Object.entries(values).map(([key, value]) => [key, Instructions.hash(value)]))
 
-export const readInitial = (instructions: Instructions.Instructions) =>
+export const readInitial = (instructions: Instructions.List) =>
   Effect.gen(function* () {
     const admission = yield* Instructions.read(instructions).pipe(Effect.flatMap(Instructions.diff))
     const current = state(
@@ -23,7 +23,7 @@ export const readInitial = (instructions: Instructions.Instructions) =>
     return { ...current, text: Instructions.renderInitial(instructions, current.values) }
   })
 
-export const readUpdate = (instructions: Instructions.Instructions, previous: State) =>
+export const readUpdate = (instructions: Instructions.List, previous: State) =>
   Effect.gen(function* () {
     const admission = yield* Instructions.read(instructions).pipe(
       Effect.flatMap((observed) => Instructions.diff(observed, hashes(previous.values))),
@@ -34,7 +34,11 @@ export const readUpdate = (instructions: Instructions.Instructions, previous: St
         hash === "removed" ? Option.none() : Option.some(admission.blobs[hash]),
       ]),
     ) as Readonly<Record<string, Option.Option<Schema.Json>>>
-    const values = Instructions.applyDelta(previous.values, delta)
+    const values: Record<string, Schema.Json> = { ...previous.values }
+    for (const [key, value] of Object.entries(delta)) {
+      if (Option.isNone(value)) delete values[key]
+      else values[key] = value.value
+    }
     return {
       values,
       text: Instructions.renderUpdate(instructions, previous.values, delta),

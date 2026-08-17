@@ -1,6 +1,6 @@
-import type { JsonSchema, ModelToolSchemaCompatibility } from "../../schema"
-import { isRecord } from "../../utils/record"
-import { GeminiToolSchema } from "./gemini-tool-schema"
+import type { JsonSchema, LanguageModelToolSchemaCompatibility } from "../../schema/index.js"
+import { isRecord } from "../../utils/record.js"
+import { GeminiToolSchema } from "./gemini-tool-schema.js"
 
 const removeNullSchemas = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(removeNullSchemas)
@@ -63,11 +63,13 @@ const openAI = (schema: JsonSchema): JsonSchema => {
   return isRecord(normalized) ? normalized : { type: "object" }
 }
 
+const responses = openAI
+
 const gemini = (schema: JsonSchema): JsonSchema => GeminiToolSchema.convert(schema) ?? {}
 
 const modelCompatibility = (
   schema: JsonSchema,
-  compatibility: ModelToolSchemaCompatibility | undefined,
+  compatibility: LanguageModelToolSchemaCompatibility | undefined,
 ): JsonSchema => {
   if (compatibility === undefined) return schema
   switch (compatibility) {
@@ -83,4 +85,5 @@ export const ToolSchemaProjection = {
   modelCompatibility,
   moonshot,
   openAI,
+  responses,
 } as const

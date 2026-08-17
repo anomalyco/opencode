@@ -6,10 +6,11 @@ import {
   parseDeepLink,
   parseNewSessionDeepLink,
 } from "./deep-links"
-import { type Session } from "@opencode-ai/sdk/v2/client"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import {
   childSessionOnPath,
   closeHomeProject,
+  compareSessionTime,
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
@@ -18,23 +19,26 @@ import {
   homeProjectDirectories,
   homeSessionServerStatus,
   latestRootSession,
+  sortedRootSessions,
   toggleHomeProjectSelection,
 } from "./helpers"
 import { pathKey } from "@/utils/path-key"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 
 const serverKey = ServerConnection.Key.make
 
-const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
+const session = (input: Partial<SessionInfo> & Pick<SessionInfo, "id"> & { directory: string }) =>
   ({
+    projectID: "project",
     title: "",
-    version: "v2",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     parentID: undefined,
-    messageCount: 0,
-    permissions: { session: {}, share: {} },
     time: { created: 0, updated: 0, archived: undefined },
     ...input,
-  }) as Session
+    location: { directory: input.directory },
+    directory: undefined,
+  }) as SessionInfo
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
@@ -151,6 +155,30 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("workspace")
+  })
+
+  test("sorts recent sessions by persisted update time instead of id", () => {
+    const result = sortedRootSessions(
+      {
+        path: { directory: "/workspace" },
+        session: [
+          session({ id: "ses_z", directory: "/workspace", time: { created: 1, updated: 2, archived: undefined } }),
+          session({ id: "ses_a", directory: "/workspace", time: { created: 1, updated: 3, archived: undefined } }),
+        ],
+      },
+      3,
+    )
+
+    expect(result.map((item) => item.id)).toEqual(["ses_a", "ses_z"])
+  })
+
+  test("uses id only to break equal session timestamps", () => {
+    const sessions = [
+      session({ id: "ses_z", directory: "/workspace", time: { created: 1, updated: 2, archived: undefined } }),
+      session({ id: "ses_a", directory: "/workspace", time: { created: 1, updated: 2, archived: undefined } }),
+    ]
+
+    expect(sessions.sort(compareSessionTime).map((item) => item.id)).toEqual(["ses_a", "ses_z"])
   })
 
   test("detects project permissions with a filter", () => {

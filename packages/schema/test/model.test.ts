@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Schema } from "effect"
 import { Model } from "../src/model.js"
 
 describe("Model.Ref", () => {
@@ -18,5 +19,33 @@ describe("Model.Ref", () => {
     expect(() => Model.Ref.parse("gpt-5")).toThrow()
     expect(() => Model.Ref.parse("openai/gpt-5#")).toThrow()
     expect(() => Model.Ref.parse("openai/gpt-5#high#extra")).toThrow()
+  })
+})
+
+describe("Model.ReasoningField", () => {
+  test("accepts suggested and custom fields", () => {
+    const decode = Schema.decodeUnknownSync(Model.ReasoningField)
+
+    for (const field of ["reasoning", "reasoning_content", "reasoning_text", "vendor_reasoning"])
+      expect(decode(field)).toBe(field)
+  })
+})
+
+describe("Model.Compatibility", () => {
+  test("decodes model compatibility overrides", () => {
+    const decode = Schema.decodeUnknownSync(Model.Compatibility)
+
+    expect(decode({})).toEqual({})
+    expect(
+      decode({
+        reasoningField: "vendor_reasoning",
+        maxTokensField: "max_completion_tokens",
+        requireFinishReason: false,
+      }),
+    ).toEqual({
+      reasoningField: "vendor_reasoning",
+      maxTokensField: "max_completion_tokens",
+      requireFinishReason: false,
+    })
   })
 })

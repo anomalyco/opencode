@@ -5,7 +5,12 @@ import type {
   IntegrationInfo,
   IntegrationOauthConnectOutput,
   IntegrationOAuthMethod,
+  FormAnswer,
+  FormField,
+  FormFields,
+  FormValue,
 } from "@opencode-ai/client"
+import open from "open"
 import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
@@ -17,6 +22,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect } from "../ui/dialog-select"
 import { Link } from "../ui/link"
 import { useToast } from "../ui/toast"
+import { formLabel, formToggleMultiselect, formValidateValue, type FormAnswerField } from "../util/form"
 
 const INTEGRATION_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -31,6 +37,10 @@ type ConnectMethod = Exclude<IntegrationInfo["methods"][number], { type: "env" }
 type IntegrationAttempt = IntegrationOauthConnectOutput["data"]
 type CommandAttempt = IntegrationCommandConnectOutput["data"]
 type OnIntegrationConnected = (providerID?: string) => void
+const CANCELLED = Symbol("cancelled")
+const CUSTOM = Symbol("custom")
+const OPEN = Symbol("open")
+const SUBMIT = Symbol("submit")
 
 export function integrationOptions(list: IntegrationInfo[]) {
   return list.toSorted(
@@ -59,42 +69,56 @@ export function connectionSummary(integration: IntegrationInfo) {
     .join(", ")
 }
 
-export function DialogIntegration(props: { onConnected?: OnIntegrationConnected } = {}) {
+export function DialogIntegration(
+  props: { onConnected?: OnIntegrationConnected; integrationID?: string; connectionOnly?: boolean } = {},
+) {
   const data = useData()
   const dialog = useDialog()
-  const { themeV2 } = useTheme().contextual("elevated")
-  const options = createMemo(() =>
-    integrationOptions(data.location.integration.list() ?? []).map((integration) => {
+  const theme = useTheme("elevated")
+  const options = createMemo(() => {
+    const providers = data.location.websearch.list() ?? []
+    const providersByID = new Map(providers.map((provider) => [provider.id, provider]))
+    const integrations = integrationOptions(data.location.integration.list() ?? []).filter(
+      (integration) => props.integrationID === undefined || integration.id === props.integrationID,
+    )
+    return integrations.map((integration) => {
       const methods = connectMethods(integration)
-      const connected = integration.connections.length > 0
+      const provider = providersByID.get(integration.id)
+      const credentials = credentialConnections(integration)
+      let category = "Services"
+      if (integration.id in INTEGRATION_PRIORITY) category = "Popular"
+      if (provider) category = "Web search"
       return {
         title: integration.name,
         value: integration.id,
-        description: methods.length ? undefined : "Environment only",
+        description: methods.length === 0 ? "Environment only" : undefined,
         footer: connectionSummary(integration) || undefined,
-        category: integration.id in INTEGRATION_PRIORITY ? "Popular" : "Services",
-        disabled: methods.length === 0,
-        gutter: connected ? () => <text fg={themeV2.text.feedback.success()}>✓</text> : undefined,
-        onSelect: () =>
-          credentialConnections(integration).length
-            ? manageConnections(integration, methods, dialog, props.onConnected)
-            : selectMethod(integration, methods, dialog, props.onConnected),
+        category,
+        disabled: methods.length === 0 && credentials.length === 0,
+        gutter:
+          integration.connections.length > 0
+            ? () => <text fg={theme.text.feedback.success.default}>✓</text>
+            : undefined,
+        onSelect: () => {
+          if (credentials.length) return manageConnections(integration, methods, dialog, props.onConnected)
+          return selectMethod(integration, methods, dialog, props.onConnected)
+        },
       }
-    }),
-  )
+    })
+  })
 
   return (
     <DialogSelect
-      title="Connect a service"
+      title="Connect an integration"
       options={options()}
       emptyView={
-        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={themeV2.text.subdued()}>No integrations available</text>
+        <box paddingLeft={4} paddingRight={4}>
+          <text fg={theme.text.subdued}>No integrations available</text>
         </box>
       }
       noMatchView={
-        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={themeV2.text.subdued()}>No integrations found</text>
+        <box paddingLeft={4} paddingRight={4}>
+          <text fg={theme.text.subdued}>No integrations found</text>
         </box>
       }
     />
@@ -166,7 +190,7 @@ function openMethod(
   onConnected?: OnIntegrationConnected,
 ) {
   if (method.type === "key") {
-    dialog.replace(() => <KeyMethod integration={integration} method={method} onConnected={onConnected} />)
+    void beginKey(integration, method, dialog, onConnected)
     return
   }
   if (method.type === "command") {
@@ -174,6 +198,21 @@ function openMethod(
     return
   }
   void beginOAuth(integration, method, dialog, onConnected)
+}
+
+async function beginKey(
+  integration: IntegrationInfo,
+  method: Extract<ConnectMethod, { type: "key" }>,
+  dialog: ReturnType<typeof useDialog>,
+  onConnected?: OnIntegrationConnected,
+) {
+  const answer = method.form
+    ? await formAnswer(dialog, method.label ?? `Connect ${integration.name}`, method.form)
+    : undefined
+  if (answer === null) return
+  dialog.replace(() => (
+    <KeyMethod integration={integration} method={method} answer={answer} onConnected={onConnected} />
+  ))
 }
 
 function CommandStarting(props: {
@@ -289,30 +328,30 @@ function CommandPending(props: {
 
 function CommandView(props: { title: string; output: string; message: string }) {
   const dialog = useDialog()
-  const { themeV2 } = useTheme().contextual("elevated")
-  const { themeV2: overlayTheme } = useTheme().contextual("overlay")
+  const theme = useTheme("elevated")
+  const overlayTheme = useTheme("overlay")
   onMount(() => dialog.setSize("large"))
   return (
     <box gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
-        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
           {props.title}
         </text>
-        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc close
         </text>
       </box>
       <box
-        backgroundColor={overlayTheme.background()}
+        backgroundColor={overlayTheme.background.default}
         paddingLeft={2}
         paddingRight={2}
         paddingTop={1}
         paddingBottom={1}
       >
-        <text fg={overlayTheme.text()}>{props.output.trim()}</text>
+        <text fg={overlayTheme.text.default}>{props.output.trim()}</text>
       </box>
       <box paddingLeft={2} paddingRight={2}>
-        <text fg={themeV2.text.subdued()}>{props.message}</text>
+        <text fg={theme.text.subdued}>{props.message}</text>
       </box>
     </box>
   )
@@ -321,13 +360,14 @@ function CommandView(props: { title: string; output: string; message: string }) 
 function KeyMethod(props: {
   integration: IntegrationInfo
   method: Extract<ConnectMethod, { type: "key" }>
+  answer?: FormAnswer
   onConnected?: OnIntegrationConnected
 }) {
   const data = useData()
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useTheme("elevated")
   const [error, setError] = createSignal<string>()
 
   return (
@@ -341,12 +381,13 @@ function KeyMethod(props: {
             integrationID: props.integration.id,
             location: location(data),
             key,
+            ...(props.answer ? { answer: props.answer } : {}),
           })
           .then(() => connected(props.integration, data, dialog, toast, props.onConnected))
           .catch((cause) => setError(message(cause)))
       }}
       description={() => (
-        <Show when={error()}>{(value) => <text fg={themeV2.text.feedback.error()}>{value()}</text>}</Show>
+        <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.default}>{value()}</text>}</Show>
       )}
     />
   )
@@ -358,17 +399,17 @@ async function beginOAuth(
   dialog: ReturnType<typeof useDialog>,
   onConnected?: OnIntegrationConnected,
 ) {
-  const inputs = method.prompts?.length ? await promptInputs(dialog, method.prompts) : {}
-  if (inputs === null) return
+  const answer = method.form ? await formAnswer(dialog, method.label, method.form) : undefined
+  if (answer === null) return
   dialog.replace(() => (
-    <OAuthStarting integration={integration} method={method} inputs={inputs} onConnected={onConnected} />
+    <OAuthStarting integration={integration} method={method} answer={answer} onConnected={onConnected} />
   ))
 }
 
 function OAuthStarting(props: {
   integration: IntegrationInfo
   method: IntegrationOAuthMethod
-  inputs: Record<string, string>
+  answer?: FormAnswer
   onConnected?: OnIntegrationConnected
 }) {
   const data = useData()
@@ -382,7 +423,7 @@ function OAuthStarting(props: {
         integrationID: props.integration.id,
         location: location(data),
         methodID: props.method.id,
-        inputs: props.inputs,
+        ...(props.answer ? { answer: props.answer } : {}),
       })
       .then((result) => {
         if (result.data.mode === "code") {
@@ -432,13 +473,26 @@ function OAuthAuto(props: {
     mode: "modal",
     commands: [
       {
+        bind: "o",
+        title: "Open authorization URL",
+        group: "Dialog",
+        run: () => {
+          open(props.attempt.url).catch(() =>
+            toast.show({
+              message: "Could not open the browser. Copy the URL and continue manually.",
+              variant: "error",
+            }),
+          )
+        },
+      },
+      {
         bind: "c",
         title: "Copy authorization details",
         group: "Dialog",
         run: () => {
           const value = props.attempt.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4,5}/)?.[0] ?? props.attempt.url
           clipboard
-            .write?.(value)
+            .write(value)
             .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
             .catch(toast.error)
         },
@@ -488,6 +542,7 @@ function OAuthAuto(props: {
       instructions={props.attempt.instructions}
       message="Waiting for authorization..."
       copy
+      open
     />
   )
 }
@@ -502,7 +557,7 @@ function OAuthCode(props: {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useTheme("elevated")
   const [error, setError] = createSignal<string>()
   let settled = false
 
@@ -536,91 +591,290 @@ function OAuthCode(props: {
       }}
       description={() => (
         <box gap={1}>
-          <text fg={themeV2.text.subdued()}>{props.attempt.instructions}</text>
-          <Link href={props.attempt.url} fg={themeV2.markdown.link()} />
-          <Show when={error()}>{(value) => <text fg={themeV2.text.feedback.error()}>{value()}</text>}</Show>
+          <text fg={theme.text.subdued}>{props.attempt.instructions}</text>
+          <Link href={props.attempt.url} fg={theme.markdown.link} />
+          <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.default}>{value()}</text>}</Show>
         </box>
       )}
     />
   )
 }
 
-function OAuthView(props: { title: string; url?: string; instructions?: string; message: string; copy?: boolean }) {
+function OAuthView(props: {
+  title: string
+  url?: string
+  instructions?: string
+  message: string
+  copy?: boolean
+  open?: boolean
+}) {
   const dialog = useDialog()
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useTheme("elevated")
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
           {props.title}
         </text>
-        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
       <Show when={props.url}>
         {(url) => (
           <box gap={1}>
-            <Link href={url()} fg={themeV2.markdown.link()} />
+            <Link href={url()} fg={theme.markdown.link} />
             <Show when={props.instructions}>
-              {(instructions) => <text fg={themeV2.text.subdued()}>{instructions()}</text>}
+              {(instructions) => <text fg={theme.text.subdued}>{instructions()}</text>}
             </Show>
           </box>
         )}
       </Show>
-      <text fg={themeV2.text.subdued()}>{props.message}</text>
-      <Show when={props.copy}>
-        <text fg={themeV2.text()}>
-          c <span style={{ fg: themeV2.text.subdued() }}>copy</span>
-        </text>
-      </Show>
+      <text fg={theme.text.subdued}>{props.message}</text>
+      <box flexDirection="row" gap={2}>
+        <Show when={props.open}>
+          <text fg={theme.text.default}>
+            o <span style={{ fg: theme.text.subdued }}>open</span>
+          </text>
+        </Show>
+        <Show when={props.copy}>
+          <text fg={theme.text.default}>
+            c <span style={{ fg: theme.text.subdued }}>copy</span>
+          </text>
+        </Show>
+      </box>
     </box>
   )
 }
 
-async function promptInputs(
+async function formAnswer(dialog: ReturnType<typeof useDialog>, title: string, fields: FormFields) {
+  const answer: FormAnswer = {}
+  for (const field of fields) {
+    if (!active(field, answer)) continue
+    const value = await fieldAnswer(dialog, title, field)
+    if (value === CANCELLED) return null
+    if (value !== undefined) answer[field.key] = value
+  }
+  return answer
+}
+
+function active(field: FormField, answer: FormAnswer) {
+  if (field.type === "external" || !field.when) return true
+  return field.when.every((when) => {
+    const value = answer[when.key]
+    if (value === undefined) return false
+    const hit = Array.isArray(value) ? value.includes(String(when.value)) : value === when.value
+    return when.op === "eq" ? hit : !hit
+  })
+}
+
+function fieldAnswer(
   dialog: ReturnType<typeof useDialog>,
-  prompts: NonNullable<IntegrationOAuthMethod["prompts"]>,
-) {
-  const inputs: Record<string, string> = {}
-  for (const prompt of prompts) {
-    if (prompt.when) {
-      const value = inputs[prompt.when.key]
-      if (value === undefined) continue
-      const matches = prompt.when.op === "eq" ? value === prompt.when.value : value !== prompt.when.value
-      if (!matches) continue
-    }
-    if (prompt.type === "select") {
-      const value = await new Promise<string | null>((resolve) => {
-        dialog.replace(
-          () => (
-            <DialogSelect
-              title={prompt.message}
-              options={prompt.options.map((option) => ({
-                title: option.label,
-                value: option.value,
-                description: option.hint,
-              }))}
-              onSelect={(option) => resolve(option.value)}
-            />
-          ),
-          () => resolve(null),
+  title: string,
+  field: FormField,
+): Promise<FormValue | undefined | typeof CANCELLED> {
+  if (field.type === "external") return externalAnswer(dialog, title, field)
+  if (field.type === "multiselect") return multiselectAnswer(dialog, title, field)
+  if (field.type === "boolean" || (field.type === "string" && field.options)) {
+    return selectAnswer(dialog, title, field)
+  }
+  return textAnswer(dialog, title, field)
+}
+
+async function selectAnswer(
+  dialog: ReturnType<typeof useDialog>,
+  title: string,
+  field: Extract<FormAnswerField, { type: "boolean" | "string" }>,
+): Promise<FormValue | undefined | typeof CANCELLED> {
+  const options =
+    field.type === "boolean"
+      ? field.default === false
+        ? [
+            { title: "No", value: false as FormValue },
+            { title: "Yes", value: true as FormValue },
+          ]
+        : [
+            { title: "Yes", value: true as FormValue },
+            { title: "No", value: false as FormValue },
+          ]
+      : (field.options ?? []).map((option) => ({
+          title: option.label,
+          value: option.value as FormValue,
+          description: option.description,
+        }))
+  const choice = await new Promise<FormValue | typeof CUSTOM | undefined | typeof CANCELLED>((resolve) => {
+    dialog.replace(
+      () => (
+        <DialogSelect<FormValue | typeof CUSTOM | undefined>
+          title={formLabel(field) || title}
+          options={[
+            ...options,
+            ...(field.type === "string" && field.custom
+              ? [{ title: "Type your own answer", value: CUSTOM as typeof CUSTOM }]
+              : []),
+            ...(!field.required ? [{ title: "Skip", value: undefined }] : []),
+          ]}
+          current={field.type === "string" ? field.default : undefined}
+          onSelect={(option) => resolve(option.value)}
+        />
+      ),
+      () => resolve(CANCELLED),
+    )
+  })
+  if (choice === CUSTOM) {
+    if (field.type !== "string") return CANCELLED
+    return textAnswer(dialog, title, field, "")
+  }
+  return choice
+}
+
+function textAnswer(
+  dialog: ReturnType<typeof useDialog>,
+  title: string,
+  field: Extract<FormAnswerField, { type: "string" | "number" | "integer" }>,
+  initial = field.default === undefined ? undefined : String(field.default),
+): Promise<FormValue | undefined | typeof CANCELLED> {
+  return new Promise<FormValue | undefined | typeof CANCELLED>((resolve) => {
+    dialog.replace(
+      () => {
+        const theme = useTheme("elevated")
+        const [error, setError] = createSignal<string>()
+        return (
+          <DialogPrompt
+            title={formLabel(field) || title}
+            placeholder={field.type === "string" ? field.placeholder : undefined}
+            value={initial}
+            onConfirm={(input) => {
+              const text = input.trim()
+              const value = text === "" && !field.required ? undefined : field.type === "string" ? text : Number(text)
+              const invalid = formValidateValue(field, value)
+              if (invalid) {
+                setError(invalid)
+                return
+              }
+              resolve(value)
+            }}
+            description={() => (
+              <box gap={1}>
+                <Show when={field.description}>
+                  {(description) => <text fg={theme.text.subdued}>{description()}</text>}
+                </Show>
+                <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.default}>{value()}</text>}</Show>
+              </box>
+            )}
+          />
         )
-      })
-      if (value === null) return null
-      inputs[prompt.key] = value
-      continue
-    }
-    const value = await new Promise<string | null>((resolve) => {
+      },
+      () => resolve(CANCELLED),
+    )
+  })
+}
+
+async function multiselectAnswer(
+  dialog: ReturnType<typeof useDialog>,
+  title: string,
+  field: Extract<FormAnswerField, { type: "multiselect" }>,
+): Promise<FormValue | typeof CANCELLED> {
+  const selected = field.default ? [...field.default] : []
+  while (true) {
+    const invalid = formValidateValue(field, selected)
+    const choice = await new Promise<string | typeof CUSTOM | typeof SUBMIT | typeof CANCELLED>((resolve) => {
       dialog.replace(
-        () => <DialogPrompt title={prompt.message} placeholder={prompt.placeholder} onConfirm={resolve} />,
-        () => resolve(null),
+        () => (
+          <DialogSelect<string | typeof CUSTOM | typeof SUBMIT>
+            title={formLabel(field) || title}
+            options={[
+              ...field.options.map((option) => ({
+                title: `[${selected.includes(option.value) ? "x" : " "}] ${option.label}`,
+                value: option.value,
+                description: option.description,
+                disabled:
+                  !selected.includes(option.value) && field.maxItems !== undefined && selected.length >= field.maxItems,
+              })),
+              ...(field.custom ? [{ title: "Type your own answer", value: CUSTOM as typeof CUSTOM }] : []),
+              {
+                title: "Continue",
+                value: SUBMIT as typeof SUBMIT,
+                description: invalid,
+                disabled: invalid !== undefined,
+              },
+            ]}
+            onSelect={(option) => resolve(option.value)}
+          />
+        ),
+        () => resolve(CANCELLED),
       )
     })
-    if (value === null) return null
-    inputs[prompt.key] = value
+    if (choice === CANCELLED) return CANCELLED
+    if (choice === SUBMIT) return selected
+    if (choice === CUSTOM) {
+      const value = await customAnswer(dialog, title, field)
+      if (value === CANCELLED) return CANCELLED
+      if (value && !selected.includes(value)) selected.push(value)
+      continue
+    }
+    selected.splice(0, selected.length, ...formToggleMultiselect(selected, choice))
   }
-  return inputs
+}
+
+function customAnswer(
+  dialog: ReturnType<typeof useDialog>,
+  title: string,
+  field: Extract<FormAnswerField, { type: "multiselect" }>,
+): Promise<string | typeof CANCELLED> {
+  return new Promise<string | typeof CANCELLED>((resolve) => {
+    dialog.replace(
+      () => (
+        <DialogPrompt
+          title={formLabel(field) || title}
+          placeholder="Type your own answer"
+          onConfirm={(value) => {
+            if (value) resolve(value)
+          }}
+        />
+      ),
+      () => resolve(CANCELLED),
+    )
+  })
+}
+
+async function externalAnswer(
+  dialog: ReturnType<typeof useDialog>,
+  title: string,
+  field: Extract<FormField, { type: "external" }>,
+): Promise<true | typeof CANCELLED> {
+  let opened = false
+  while (true) {
+    const choice = await new Promise<true | typeof OPEN | typeof CANCELLED>((resolve) => {
+      dialog.replace(
+        () => (
+          <DialogSelect<true | typeof OPEN>
+            title={formLabel(field) || title}
+            options={[
+              { title: opened ? "Open link again" : "Open link", value: OPEN as typeof OPEN, description: field.url },
+              { title: "I finished", value: true as const, description: field.description, disabled: !opened },
+            ]}
+            onSelect={(option) => resolve(option.value)}
+          />
+        ),
+        () => resolve(CANCELLED),
+      )
+    })
+    if (choice === CANCELLED) return CANCELLED
+    if (choice === true) return true
+    const result = await new Promise<boolean | typeof CANCELLED>((resolve) => {
+      dialog.replace(
+        () => <OAuthView title={formLabel(field) || title} message="Opening link..." />,
+        () => resolve(CANCELLED),
+      )
+      void open(field.url).then(
+        () => resolve(true),
+        () => resolve(false),
+      )
+    })
+    if (result === CANCELLED) return CANCELLED
+    opened ||= result
+  }
 }
 
 async function connected(

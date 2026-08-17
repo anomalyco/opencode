@@ -1,10 +1,11 @@
+import { For } from "solid-js"
 import { ButtonV2 } from "./button-v2"
 
 const docs = `### Overview
 Button v2 with visual variants and three sizes.
 
 ### API
-- \`variant\`: "neutral" | "danger" | "contrast" | "ghost" | "ghost-muted" | "loading".
+- \`variant\`: "neutral" | "danger" | "warning" | "contrast" | "ghost" | "ghost-muted" | "loading".
 - \`size\`: "small" | "normal" | "large".
 - \`icon\`: Optional icon name.
 - Inherits Kobalte Button props and native button attributes.
@@ -39,7 +40,7 @@ export default {
     },
     variant: {
       control: "select",
-      options: ["neutral", "danger", "contrast", "ghost", "ghost-muted", "loading"],
+      options: ["neutral", "danger", "warning", "contrast", "ghost", "ghost-muted", "loading"],
     },
     size: {
       control: "select",
@@ -62,6 +63,7 @@ export const Variants = {
     >
       <ButtonV2 variant="neutral">Neutral</ButtonV2>
       <ButtonV2 variant="danger">Danger</ButtonV2>
+      <ButtonV2 variant="warning">Warning</ButtonV2>
       <ButtonV2 variant="contrast">Contrast</ButtonV2>
       <ButtonV2 variant="ghost">Ghost</ButtonV2>
       <ButtonV2 variant="ghost-muted" icon="edit">
@@ -117,35 +119,39 @@ export const Icon = {
 
 export const AllStates = {
   render: () => {
-    const variants = ["neutral", "danger", "contrast", "ghost", "ghost-muted", "loading"] as const
+    const variants = ["neutral", "danger", "warning", "contrast", "ghost", "ghost-muted", "loading"] as const
     const states = ["default", "hover", "pressed", "focus", "disabled"] as const
     const toTitleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1)
     return (
       <div style={{ display: "grid", gap: "12px" }}>
-        {variants.map((variant) => (
-          <div style={{ display: "grid", gap: "8px" }}>
-            <div
-              style={{
-                "font-size": "12px",
-                color: "var(--text-weak)",
-                "text-transform": "capitalize",
-              }}
-            >
-              {variant}
+        <For each={variants}>
+          {(variant) => (
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div
+                style={{
+                  "font-size": "12px",
+                  color: "var(--text-weak)",
+                  "text-transform": "capitalize",
+                }}
+              >
+                {variant}
+              </div>
+              <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
+                <For each={states}>
+                  {(state) => (
+                    <ButtonV2
+                      variant={variant}
+                      data-state={state === "default" ? undefined : state}
+                      disabled={state === "disabled"}
+                    >
+                      {toTitleCase(state)}
+                    </ButtonV2>
+                  )}
+                </For>
+              </div>
             </div>
-            <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
-              {states.map((state) => (
-                <ButtonV2
-                  variant={variant}
-                  data-state={state === "default" ? undefined : state}
-                  disabled={state === "disabled"}
-                >
-                  {toTitleCase(state)}
-                </ButtonV2>
-              ))}
-            </div>
-          </div>
-        ))}
+          )}
+        </For>
       </div>
     )
   },

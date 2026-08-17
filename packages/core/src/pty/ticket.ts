@@ -1,10 +1,10 @@
-export * as PtyTicket from "./ticket"
+export * as PtyTicket from "./ticket.js"
 
-import { WorkspaceV2 } from "../workspace"
+import { Workspace } from "../workspace.js"
 import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
-import { PtyID } from "./schema"
+import { PtyID } from "./schema.js"
 import { Cache, Context, Duration, Effect, Layer } from "effect"
-import { makeGlobalNode } from "../effect/app-node"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 
 const DEFAULT_TTL = Duration.seconds(60)
 const CAPACITY = 10_000
@@ -14,7 +14,7 @@ export const ConnectToken = PtyTicket.ConnectToken
 export type Scope = {
   readonly ptyID: PtyID
   readonly directory?: string
-  readonly workspaceID?: WorkspaceV2.ID
+  readonly workspaceID?: Workspace.ID
 }
 
 export interface Interface {

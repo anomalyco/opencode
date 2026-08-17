@@ -1,12 +1,12 @@
 import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM } from "../../src"
-import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare"
-import { LLMClient } from "../../src/route"
-import { it } from "../lib/effect"
-import { dynamicResponse } from "../lib/http"
-import { sseEvents } from "../lib/sse"
+import { LLM, LLMEvent } from "../../src/index.js"
+import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare.js"
+import { compileRequest } from "../../src/route/client.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse } from "../lib/http.js"
+import { sseEvents } from "../lib/sse.js"
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
@@ -34,7 +34,7 @@ describe("Cloudflare", () => {
       })
       expect(model.route.endpoint.baseURL).toBe("https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat")
 
-      const prepared = yield* LLMClient.prepare(LLM.request({ model, prompt: "Say hello." }))
+      const prepared = yield* compileRequest(LLM.request({ model, prompt: "Say hello." }))
 
       expect(prepared.route).toBe("cloudflare-ai-gateway")
       expect(prepared.body).toMatchObject({
@@ -83,6 +83,59 @@ describe("Cloudflare", () => {
     }),
   )
 
+  it.effect("preserves reasoning details for AI Gateway continuation", () =>
+    Effect.gen(function* () {
+      const model = CloudflareAIGateway.configure({
+        accountId: "test-account",
+        gatewayId: "test-gateway",
+        apiKey: "test-token",
+      }).model("anthropic/claude-sonnet-4.6")
+      const details = [
+        { type: "reasoning.text", text: "Think", format: "anthropic-claude-v1", index: 0 },
+        { type: "reasoning.text", text: "ing", format: "anthropic-claude-v1", index: 0 },
+        { type: "reasoning.text", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const merged = [
+        {
+          type: "reasoning.text",
+          text: "Thinking",
+          signature: "signed",
+          format: "anthropic-claude-v1",
+          index: 0,
+        },
+      ]
+      const response = yield* LLM.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.succeed(
+              input.respond(
+                sseEvents(
+                  deltaChunk({ reasoning: "Think", reasoning_details: [details[0]] }),
+                  deltaChunk({ reasoning: "ing", reasoning_details: [details[1]] }),
+                  deltaChunk({ reasoning_details: [details[2]] }),
+                  deltaChunk({ content: "Hello" }),
+                  deltaChunk({}, "stop"),
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              ),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Thinking")
+      expect(response.events.filter(LLMEvent.is.reasoningDelta)).toHaveLength(2)
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning", reasoningDetails: merged },
+      })
+
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning: "Thinking", reasoning_details: merged },
+      ])
+    }),
+  )
+
   it.effect("defaults AI Gateway id to default when omitted or blank", () =>
     Effect.gen(function* () {
       expect(
@@ -127,7 +180,7 @@ describe("Cloudflare", () => {
 
   it.effect("allows a fully configured baseURL override", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: CloudflareAIGateway.configure({
             baseURL: "https://gateway.proxy.test/v1/custom/compat",
@@ -155,7 +208,7 @@ describe("Cloudflare", () => {
       })
       expect(model.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1")
 
-      const prepared = yield* LLMClient.prepare(LLM.request({ model, prompt: "Say hello." }))
+      const prepared = yield* compileRequest(LLM.request({ model, prompt: "Say hello." }))
 
       expect(prepared.route).toBe("cloudflare-workers-ai")
       expect(prepared.body).toMatchObject({

@@ -96,7 +96,7 @@ contains identity, capabilities, pricing metadata, provider-specific option
 types, reusable request-behavior defaults, and hidden execution behavior.
 
 Normal users do not need to learn the current `Route` composite. Protocol,
-endpoint, auth, transport, and hooks are bound behind `Model`.
+endpoint, auth, transport, and hooks are bound behind `LanguageModel`.
 
 ### Request
 
@@ -315,7 +315,8 @@ const longer = {
 }
 ```
 
-There is no `LLM.updateRequest(...)` helper and no request Schema class.
+There is no `LLM.updateRequest(...)` helper. The current Schema-backed implementation
+uses `LLMRequest.update(...)` when canonical request data must be derived.
 
 ### Conversation history
 
@@ -436,7 +437,7 @@ const call = Array.from(events).find(LLMEvent.is.toolCall)
 
 if (call && !call.providerExecuted) {
   const dispatched = yield * ToolRuntime.dispatch(tools, call)
-  const followUp = LLM.updateRequest(request, {
+  const followUp = LLMRequest.update(request, {
     messages: [...request.messages, Message.assistant([call]), Message.tool({ ...call, result: dispatched.result })],
   })
   // Caller must invoke the provider again and repeat the loop.
@@ -538,7 +539,7 @@ Hosted tools do not pretend to have local handlers, and callers do not inspect a
 
 ### Run stream
 
-`LLM.stream` returns an Effect `Stream<RunEvent, LLMError, Requirements>`.
+`LLM.stream` returns an Effect `Stream<RunEvent, AIError, Requirements>`.
 Run events explicitly expose orchestration boundaries:
 
 ```ts
@@ -827,11 +828,11 @@ portable semantic guarantee.
 
 ## Error Model
 
-The Effect error channel is a tagged domain union rather than one `LLMError`
+The Effect error channel is a tagged domain union rather than one `AIError`
 wrapper with nested reasons. Illustrative categories:
 
 ```ts
-type LLMError =
+type AIError =
   | AuthenticationError
   | InvalidRequestError
   | UnsupportedCapabilityError
@@ -1078,7 +1079,7 @@ The redesign intentionally removes or changes these current concepts:
 | `LLM.generate` means one turn           | `LLM.generate` means complete run                           |
 | `LLMClient.generate/stream`             | `LLM.generateTurn/streamTurn` for one turn                  |
 | `LLMClient.layer` requirement           | Standard Effect requirements exposed directly               |
-| Public `Route` mental model             | Hidden behind executable `Model`                            |
+| Public `Route` mental model             | Hidden behind executable `LanguageModel`                    |
 | `Provider.make` structural helper       | Experimental declarative `Provider.define`                  |
 | Schema classes as canonical values      | Plain immutable values plus schema subpath                  |
 | `LLM.updateRequest`                     | Object spread                                               |
@@ -1088,7 +1089,7 @@ The redesign intentionally removes or changes these current concepts:
 | `generateObject`                        | Typed `output` option on `generate`                         |
 | One event union for provider output     | Separate `TurnEvent` and `RunEvent` unions                  |
 | `providerExecuted` dispatch check       | Distinct hosted-tool constructors                           |
-| One wrapped `LLMError`                  | Tagged domain error union                                   |
+| One wrapped `AIError`                   | Tagged domain error union                                   |
 
 OpenCode should migrate to `generateTurn` / `streamTurn`, preserving its durable
 prompt admission, persistence, permission, tool settlement, and continuation

@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises"
 import * as path from "node:path"
 
 const RECORDINGS_DIR = path.resolve(import.meta.dir, "..", "test", "fixtures", "recordings")
-const MODELS_DEV_URL = "https://models.dev/api.json"
+const MODELS_DEV_URL = "https://models.opencode.ai/api.json"
 
 type JsonRecord = Record<string, unknown>
 

@@ -1,24 +1,19 @@
-export * as EventLogger from "./event-logger"
+export * as EventLogger from "./event-logger.js"
 
 import { Effect, Layer } from "effect"
-import { makeGlobalNode } from "./effect/app-node"
-import { EventV2 } from "./event"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { Bus } from "./bus.js"
 
-const Types = new Set([
-  "agent.updated",
-  "catalog.updated",
-  "command.updated",
-  "config.updated",
-])
+const Types = new Set(["agent.updated", "catalog.updated", "command.updated", "config.updated"])
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
-    const unsubscribe = yield* events.listen((event) =>
+    const bus = yield* Bus.Service
+    const unsubscribe = yield* bus.listen((event) =>
       Types.has(event.type) ? Effect.logInfo("event", { event }) : Effect.void,
     )
     yield* Effect.addFinalizer(() => unsubscribe)
   }),
 )
 
-export const node = makeGlobalNode({ name: "event-logger", layer, deps: [EventV2.node] })
+export const node = makeGlobalNode({ name: "event-logger", layer, deps: [Bus.node] })

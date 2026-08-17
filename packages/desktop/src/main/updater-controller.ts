@@ -4,10 +4,14 @@ export type { UpdaterState } from "@opencode-ai/app/updater"
 
 export type UpdaterReadyRecord = { version: string }
 
-export type UpdaterBackend = {
-  checkForUpdates(): Promise<{ isUpdateAvailable?: boolean; updateInfo?: { version?: string } } | null | undefined>
-  downloadUpdate(): Promise<unknown>
-  quitAndInstall(): void
+export type UpdaterPlatform = {
+  checkForUpdate(): Promise<string | undefined>
+  stageUpdate(): Promise<unknown>
+  installAndRestart(): Promise<never>
+}
+
+export type UpdaterLifecycle = {
+  prepareToRestart(): Promise<void>
 }
 
 type UpdaterPersistence = {
@@ -17,15 +21,15 @@ type UpdaterPersistence = {
 }
 
 export function createUpdaterController(input: {
-  enabled: boolean
   currentVersion: string
-  backend: UpdaterBackend
+  platform?: UpdaterPlatform
+  lifecycle: UpdaterLifecycle
   persistence: UpdaterPersistence
-  stop: () => Promise<void>
   log?: (message: string, data?: object) => void
 }) {
-  let state: UpdaterState = input.enabled ? { status: "idle" } : { status: "disabled" }
+  let state: UpdaterState = input.platform ? { status: "idle" } : { status: "disabled" }
   let pending: Promise<UpdaterState> | undefined
+  let installing: Promise<void> | undefined
   const listeners = new Set<(state: UpdaterState) => void>()
 
   const transition = (next: UpdaterState) => {
@@ -36,31 +40,75 @@ export function createUpdaterController(input: {
   }
 
   const check = () => {
-    if (!input.enabled) return Promise.resolve(state)
-    if (state.status === "ready") return Promise.resolve(state)
+    const platform = input.platform
+    if (!platform) return Promise.resolve(state)
+    if (state.status === "installing") return Promise.resolve(state)
     if (pending) return pending
 
-    pending = (async () => {
+    pending = (state.status === "ready" ? refreshStaged(platform, state.version) : findAndStage(platform)).finally(
+      () => {
+        pending = undefined
+      },
+    )
+    return pending
+  }
+
+  const findAndStage = (platform: UpdaterPlatform) =>
+    (async () => {
       transition({ status: "checking" })
-      const result = await input.backend.checkForUpdates()
-      const version = result?.updateInfo?.version
-      if (!result?.isUpdateAvailable || !version || version === input.currentVersion) {
+      const version = await platform.checkForUpdate()
+      if (!version || version === input.currentVersion) {
         await input.persistence.clear()
         return transition({ status: "up-to-date" })
       }
 
       transition({ status: "downloading", version })
-      await input.backend.downloadUpdate()
+      await platform.stageUpdate()
       await input.persistence.set({ version })
       return transition({ status: "ready", version })
-    })()
-      .catch((error) =>
-        transition({ status: "error", message: error instanceof Error ? error.message : String(error) }),
-      )
-      .finally(() => {
-        pending = undefined
+    })().catch((error) =>
+      transition({ status: "error", message: error instanceof Error ? error.message : String(error) }),
+    )
+
+  // A staged update stays visible and installable throughout: the refresh makes no
+  // transitions until a newer version is staged, and a failure keeps the current one.
+  const refreshStaged = (platform: UpdaterPlatform, staged: string) =>
+    (async () => {
+      const version = await platform.checkForUpdate()
+      if (!version || version === staged || version === input.currentVersion) return state
+
+      await platform.stageUpdate()
+      await input.persistence.set({ version })
+      // An install may have started while this stage was in flight; keep its status
+      // and show the newer version instead of flickering back to ready.
+      return transition({ status: installing ? "installing" : "ready", version })
+    })().catch((error) => {
+      input.log?.("updater refresh failed, keeping staged update", {
+        staged,
+        message: error instanceof Error ? error.message : String(error),
       })
-    return pending
+      return state
+    })
+
+  const install = () => {
+    if (installing) return installing
+    const platform = input.platform
+    if (!platform || state.status !== "ready") return Promise.reject(new Error("Update is not ready to install"))
+
+    const staged = state.version
+    transition({ status: "installing", version: staged })
+    installing = (async () => {
+      // Installation is the commit point: refresh once more so one restart lands
+      // on the newest release, or keep the known-good staged update if checking fails.
+      await (pending ?? refreshStaged(platform, staged))
+      await input.lifecycle.prepareToRestart()
+      await platform.installAndRestart()
+    })().catch((error) => {
+      installing = undefined
+      if (state.status === "installing") transition({ status: "ready", version: state.version })
+      throw error
+    })
+    return installing
   }
 
   return {
@@ -76,21 +124,7 @@ export function createUpdaterController(input: {
       return check()
     },
     check,
-    async install() {
-      if (state.status !== "ready") throw new Error("Update is not ready to install")
-      const version = state.version
-      transition({ status: "installing", version })
-      await input
-        .stop()
-        .then(() => {
-          input.backend.quitAndInstall()
-          transition({ status: "ready", version })
-        })
-        .catch((error) => {
-          transition({ status: "ready", version })
-          throw error
-        })
-    },
+    install,
   }
 }
 

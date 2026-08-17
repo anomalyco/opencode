@@ -1,7 +1,33 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "opencode-www",
-  "compatibility_date": "2026-07-12",
-  "compatibility_flags": ["nodejs_compat"],
-  "main": "@tanstack/react-start/server-entry",
+  "compatibility_date": "2026-07-25",
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist/client",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page",
+  },
+  "env": {
+    "dev": {
+      "name": "opencode-www-dev",
+      "routes": [
+        {
+          "pattern": "dev.opencode.ai/v2*",
+          "zone_name": "opencode.ai",
+        },
+      ],
+    },
+    "production": {
+      "name": "opencode-www-production",
+      "routes": [
+        {
+          "pattern": "opencode.ai/v2*",
+          "zone_name": "opencode.ai",
+        },
+      ],
+    },
+  },
 }

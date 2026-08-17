@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../../src"
-import { LLMClient } from "../../src/route"
-import * as OpenAI from "../../src/providers/openai"
-import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios"
-import { recordedTests } from "../recorded-test"
+import { LLM } from "../../src/index.js"
+import { LLMClient } from "../../src/route.js"
+import * as OpenAI from "../../src/providers/openai.js"
+import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
+import { recordedTests } from "../recorded-test.js"
 
 const model = OpenAI.configure({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",
@@ -20,7 +20,7 @@ const cacheRequest = LLM.request({
   system: LARGE_CACHEABLE_SYSTEM,
   prompt: "Say hi.",
   generation: { maxTokens: 16, temperature: 0 },
-  providerOptions: { openai: { promptCacheKey: "recorded-cache-test" } },
+  promptCacheKey: "recorded-cache-test",
 })
 
 const recorded = recordedTests({

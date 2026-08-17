@@ -1,19 +1,19 @@
 import { Buffer } from "node:buffer"
+import { Tool } from "@opencode-ai/schema/tool"
 import { Effect, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
   InvalidProviderOutputReason,
   InvalidRequestReason,
-  LLMError,
+  AIError,
   type ContentPart,
   type LLMRequest,
   type MediaPart,
-  type ToolFileContent,
   type TextPart,
   type ToolResultPart,
-} from "../schema"
-import { isRecord } from "../utils/record"
+} from "../schema/index.js"
+import { isRecord } from "../utils/record.js"
 export { isRecord }
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
@@ -41,7 +41,7 @@ export interface ToolAccumulator {
  * when at least one is defined. Returns `undefined` when neither input nor
  * output is known so routes don't publish a misleading `0`.
  *
- * Under the additive `LLM.Usage` contract, `inputTokens` and `outputTokens`
+ * Under the additive `AI.Usage` contract, `inputTokens` and `outputTokens`
  * are the non-cached input and visible output only. The provider-supplied
  * `total` is the source of truth when present; the computed fallback
  * under-counts cache and reasoning by design and exists mainly so
@@ -88,7 +88,7 @@ export const sumTokens = (...values: ReadonlyArray<number | undefined>): number 
 }
 
 export const eventError = (route: string, message: string, raw?: string) =>
-  new LLMError({
+  new AIError({
     module: "ProviderShared",
     method: "stream",
     reason: new InvalidProviderOutputReason({ route, message, raw }),
@@ -155,58 +155,24 @@ export const wrappedSystemUpdate = Effect.fn("ProviderShared.wrappedSystemUpdate
 export const parseToolInput = (route: string, name: string, raw: string) =>
   parseJson(route, raw || "{}", `Invalid JSON input for ${route} tool call ${name}`)
 
-export const IMAGE_MIMES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const
-export const VIDEO_MIMES = ["video/mp4", "video/webm", "video/quicktime"] as const
-export const AUDIO_MIMES = ["audio/wav", "audio/mp3", "audio/aiff", "audio/aac", "audio/ogg", "audio/flac"] as const
-export const MEDIA_MIMES = [...IMAGE_MIMES, ...VIDEO_MIMES, ...AUDIO_MIMES] as const
-export const MAX_MEDIA_ENCODED_BYTES = 28 * 1024 * 1024
-export const MAX_MEDIA_DECODED_BYTES = 20 * 1024 * 1024
-
-const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
-
-export interface ValidatedMedia {
+export interface NormalizedMedia {
   readonly mime: string
   readonly base64: string
   readonly dataUrl: string
-  readonly bytes: Uint8Array
 }
 
-export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function* (
-  route: string,
-  part: MediaPart,
-  supportedMimes: ReadonlySet<string>,
-) {
+export const normalizeMedia = (part: MediaPart): NormalizedMedia => {
   const mime = part.mediaType.toLowerCase()
-  if (!supportedMimes.has(mime)) return yield* invalidRequest(`${route} does not support media type ${part.mediaType}`)
-
-  let base64: string
   if (typeof part.data !== "string") {
-    if (part.data.byteLength > MAX_MEDIA_DECODED_BYTES)
-      return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_DECODED_BYTES} byte decoded limit`)
-    base64 = Buffer.from(part.data).toString("base64")
-  } else if (part.data.startsWith("data:")) {
-    const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/s.exec(part.data)
-    if (!match) return yield* invalidRequest(`${route} media data URL must contain valid base64`)
-    if (match[1]!.toLowerCase() !== mime)
-      return yield* invalidRequest(`${route} media type ${part.mediaType} does not match data URL type ${match[1]}`)
-    base64 = match[2]!
-  } else {
-    base64 = part.data
+    const base64 = Buffer.from(part.data).toString("base64")
+    return { mime, base64, dataUrl: `data:${mime};base64,${base64}` }
   }
+  if (!part.data.startsWith("data:")) return { mime, base64: part.data, dataUrl: `data:${mime};base64,${part.data}` }
+  return { mime, base64: part.data.slice(part.data.indexOf(",") + 1), dataUrl: part.data }
+}
 
-  if (Buffer.byteLength(base64, "utf8") > MAX_MEDIA_ENCODED_BYTES)
-    return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_ENCODED_BYTES} byte encoded limit`)
-  if (!base64 || base64.length % 4 !== 0 || !base64Pattern.test(base64))
-    return yield* invalidRequest(`${route} media must contain valid base64`)
-  const bytes = Buffer.from(base64, "base64")
-  if (bytes.byteLength > MAX_MEDIA_DECODED_BYTES)
-    return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_DECODED_BYTES} byte decoded limit`)
-  if (bytes.toString("base64") !== base64) return yield* invalidRequest(`${route} media must contain canonical base64`)
-  return { mime, base64, dataUrl: `data:${mime};base64,${base64}`, bytes } satisfies ValidatedMedia
-})
-
-export const validateToolFile = (route: string, part: ToolFileContent, supportedMimes: ReadonlySet<string>) =>
-  validateMedia(route, { type: "media", mediaType: part.mime, data: part.uri, filename: part.name }, supportedMimes)
+export const normalizeToolFile = (part: Tool.FileContent) =>
+  normalizeMedia({ type: "media", mediaType: part.mime, data: part.uri, filename: part.name })
 
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
@@ -237,9 +203,9 @@ export const errorText = (error: unknown) => {
  * `decodeChunk` sees one JSON string per element. The SSE channel emits a
  * `Retry` control event on its error channel; we drop it here (we don't
  * implement client-driven retries) so the public error channel stays
- * `LLMError`.
+ * `AIError`.
  */
-export const sseFraming = (bytes: Stream.Stream<Uint8Array, LLMError>): Stream.Stream<string, LLMError> =>
+export const sseFraming = (bytes: Stream.Stream<Uint8Array, AIError>): Stream.Stream<string, AIError> =>
   bytes.pipe(
     Stream.decodeText(),
     Stream.pipeThroughChannel(Sse.decode()),
@@ -256,7 +222,7 @@ export const sseFraming = (bytes: Stream.Stream<Uint8Array, LLMError>): Stream.S
  * lands here.
  */
 export const invalidRequest = (message: string) =>
-  new LLMError({
+  new AIError({
     module: "ProviderShared",
     method: "request",
     reason: new InvalidRequestReason({ message }),
@@ -303,7 +269,7 @@ export const unsupportedContent = (
  * Build a `validate` step from a Schema decoder. Replaces the per-route
  * lambda body `(payload) => decode(payload).pipe(Effect.mapError((e) =>
  * invalid(e.message)))`. Any decode error is translated into
- * `LLMError` carrying the original parse-error message.
+ * `AIError` carrying the original parse-error message.
  */
 export const validateWith =
   <A, I, E extends { readonly message: string }>(decode: (input: I) => Effect.Effect<A, E>) =>
@@ -323,4 +289,4 @@ export const jsonPost = (input: { readonly url: string; readonly body: string; r
     HttpClientRequest.bodyText(input.body, "application/json"),
   )
 
-export * as ProviderShared from "./shared"
+export * as ProviderShared from "./shared.js"

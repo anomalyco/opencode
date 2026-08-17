@@ -1,0 +1,75 @@
+---
+title: "Session warming"
+---
+
+Session warming sends periodic model requests for recently active sessions.
+This can preserve provider-side prompt caches or other short-lived session
+state while you pause between prompts.
+
+Warming is disabled by default. Enable it with the default settings in any
+[OpenCode configuration file](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+With the defaults, OpenCode sends a warming request after a session has made no
+model request for four minutes. It repeats this while the session remains idle,
+but stops 30 minutes after the last non-warming request. New model activity
+starts a new 30-minute window.
+
+## Configuration
+
+Use the object form to customize the prompt, idle interval, or active duration:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "4 minutes",
+    "duration": "30 minutes",
+  },
+}
+```
+
+| Field      | Default                | Description                                                                                             |
+| ---------- | ---------------------- | ------------------------------------------------------------------------------------------------------- |
+| `prompt`   | Keep-alive instruction | Prompt sent in each warming request. The default instructs the model to do no work and reply with `OK`. |
+| `interval` | `"4 minutes"`          | Idle time between warming requests.                                                                     |
+| `duration` | `"30 minutes"`         | Maximum warming window after the latest non-warming model request.                                      |
+
+`interval` and `duration` accept duration strings such as `"30 seconds"`,
+`"4 minutes"`, or `"1 hour"`. Both must be finite and greater than zero.
+
+To disable warming explicitly:
+
+```jsonc
+{
+  "warming": false,
+}
+```
+
+## Request behavior
+
+A warming request uses the session's current model, agent, instructions, and
+conversation context. Tools are disabled. The configured prompt is appended as
+a transient user message, and the response is discarded.
+
+Warming does not admit input, add messages to session history, or otherwise
+mutate durable session state. A warming request resets the idle interval but
+does not extend the active duration; without new model activity, warming still
+ends when the configured duration expires.
+
+## Costs and limits
+
+Warming requests are real provider requests. They can consume tokens, incur
+costs, count against rate limits, and fail for the same reasons as other model
+requests. OpenCode logs warming failures without failing or changing the
+session, then waits for the next interval before trying again.
+
+Enable warming only when the provider-side benefit is worth the additional
+requests. A shorter interval or longer duration increases request volume.

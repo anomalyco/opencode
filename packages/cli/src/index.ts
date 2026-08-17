@@ -4,24 +4,26 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Effect } from "effect"
 import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
-import { Observability } from "@opencode-ai/core/observability"
+import { Observability } from "@opencode-ai/util/observability"
 import { Updater } from "./services/updater"
-import { InstallationChannel, InstallationVersion, InstallationLocal } from "@opencode-ai/core/installation/version"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Global } from "@opencode-ai/core/global"
-import { AppProcess } from "@opencode-ai/core/process"
+import { OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "./version"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Global } from "@opencode-ai/util/global"
+import { AppProcess } from "@opencode-ai/util/process"
 import { Config } from "./config"
-import { Npm } from "@opencode-ai/core/npm"
+import { Npm } from "@opencode-ai/util/npm"
+import { Heap } from "./heap"
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
+  acp: () => import("./commands/handlers/acp"),
   api: () => import("./commands/handlers/api"),
   auth: {
-    connect: () => import("./commands/handlers/auth/connect"),
+    login: () => import("./commands/handlers/auth/login"),
   },
   debug: {
     agents: () => import("./commands/handlers/debug/agents"),
+    config: () => import("./commands/handlers/debug/config"),
   },
   console: {
     login: () => import("./commands/handlers/console/login"),
@@ -35,7 +37,9 @@ const Handlers = Runtime.handlers(Commands, {
   plugin: {
     list: () => import("./commands/handlers/plugin/list"),
   },
-  migrate: () => import("./commands/handlers/migrate"),
+  models: () => import("./commands/handlers/models"),
+  export: () => import("./commands/handlers/export"),
+  import: () => import("./commands/handlers/import"),
   mini: () => import("./commands/handlers/mini"),
   run: () => import("./commands/handlers/run"),
   pair: () => import("./commands/handlers/pair"),
@@ -51,18 +55,36 @@ const Handlers = Runtime.handlers(Commands, {
   serve: () => import("./commands/handlers/serve"),
 })
 
-Effect.logInfo("cli starting", {
-  version: InstallationVersion,
-  channel: InstallationChannel,
-  local: InstallationLocal,
-  args: process.argv.slice(2),
+Effect.gen(function* () {
+  yield* Heap.listen
+  yield* Effect.logInfo("cli starting", {
+    version: OPENCODE_VERSION,
+    channel: OPENCODE_CHANNEL,
+    local: OPENCODE_LOCAL,
+    args: process.argv.slice(2),
+  })
+  return yield* Runtime.run(Commands, Handlers, { version: OPENCODE_VERSION })
 }).pipe(
-  Effect.flatMap(() => Runtime.run(Commands, Handlers, { version: InstallationVersion })),
   Effect.annotateLogs({ role: "cli" }),
   Effect.provide(Config.layer),
   Effect.provide(Updater.layer),
-  Effect.provide(AppNodeBuilder.build(LayerNode.group([Global.node, AppProcess.node, Npm.node]))),
-  Effect.provide(Observability.layer),
+  Effect.provide(
+    LayerNode.compile(LayerNode.group([Global.node, AppProcess.node, Npm.node]), [
+      [
+        Global.node,
+        Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
+      ],
+    ]),
+  ),
+  Effect.provide(
+    Observability.layer({
+      endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+      headers: process.env.OTEL_EXPORTER_OTLP_HEADERS,
+      client: process.env.OPENCODE_CLIENT ?? "cli",
+      version: OPENCODE_VERSION,
+      channel: OPENCODE_CHANNEL,
+    }),
+  ),
   Effect.provide(NodeServices.layer),
   Effect.scoped,
   Effect.tap(() => Effect.sync(() => process.exit(process.exitCode ?? 0))),

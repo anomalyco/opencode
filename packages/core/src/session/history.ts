@@ -1,12 +1,12 @@
 import { and, asc, desc, eq, gte, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
-import { Database } from "../database/database"
-import { MessageDecodeError } from "./error"
-import { SessionMessage } from "./message"
-import { SessionSchema } from "./schema"
-import { Instructions } from "../instructions/index"
-import { InstructionState } from "./instruction-state"
-import { SessionMessageTable } from "./sql"
+import { Database } from "../database/database.js"
+import { MessageDecodeError } from "./error.js"
+import { SessionMessage } from "./message.js"
+import { SessionSchema } from "./schema.js"
+import { Instructions } from "../instructions/index.js"
+import { InstructionState } from "./instruction-state.js"
+import { SessionMessageTable } from "./sql.js"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -74,16 +74,15 @@ export const load = Effect.fn("SessionHistory.load")(function* (db: DatabaseServ
 export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  instructions: Instructions.Instructions,
+  instructions: Instructions.List,
 ) {
   return yield* db
     .transaction(() =>
       Effect.gen(function* () {
         const messages = yield* messageEntries(db, sessionID)
-        const assembled = yield* InstructionState.assemble(db, sessionID, instructions)
         return {
-          initial: assembled.initial,
-          entries: [...messages, ...assembled.updates].toSorted((a, b) => a.seq - b.seq),
+          initial: yield* InstructionState.initial(db, sessionID, instructions),
+          entries: messages,
         }
       }),
     )
@@ -93,7 +92,7 @@ export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(fun
 export const preview = Effect.fn("SessionHistory.preview")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
-  instructions: Instructions.Instructions,
+  instructions: Instructions.List,
 ) {
   const observed = yield* Instructions.read(instructions)
   return yield* db
@@ -106,10 +105,9 @@ export const preview = Effect.fn("SessionHistory.preview")(function* (
         )
         const settled = unsettled === -1 ? messages : messages.slice(0, unsettled)
         const assembled = yield* InstructionState.preview(db, sessionID, instructions, observed)
-        const entries = [...settled, ...assembled.updates].toSorted((a, b) => a.seq - b.seq)
         return {
           initial: assembled.initial,
-          messages: entries.map((entry) => entry.message),
+          messages: settled.map((entry) => entry.message),
           instructionUpdate: assembled.update,
         }
       }),
@@ -117,22 +115,21 @@ export const preview = Effect.fn("SessionHistory.preview")(function* (
     .pipe(Effect.catch((error) => (error instanceof Instructions.InitializationBlocked ? error : Effect.die(error))))
 })
 
-/** Returns the session's sole user message, or `undefined` once a second one exists. */
-export const firstUserMessageIfOnly = Effect.fn("SessionHistory.firstUserMessageIfOnly")(function* (
+/** Returns the session's first user message. */
+export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
 ) {
-  const rows = yield* db
+  const row = yield* db
     .select()
     .from(SessionMessageTable)
     .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "user")))
     .orderBy(asc(SessionMessageTable.seq))
-    .limit(2)
-    .all()
+    .get()
     .pipe(Effect.orDie)
-  if (rows.length !== 1) return undefined
-  const message = yield* decodeMessageRow(rows[0]).pipe(Effect.catch(() => Effect.succeed(undefined)))
+  if (!row) return undefined
+  const message = yield* decodeMessageRow(row).pipe(Effect.catch(() => Effect.succeed(undefined)))
   return message?.type === "user" ? message : undefined
 })
 
-export * as SessionHistory from "./history"
+export * as SessionHistory from "./history.js"

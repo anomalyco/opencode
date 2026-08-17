@@ -1,11 +1,11 @@
-export * as PermissionSaved from "./saved"
+export * as PermissionSaved from "./saved.js"
 
 import { eq } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Database } from "../database/database"
-import { makeGlobalNode } from "../effect/app-node"
-import { ProjectV2 } from "../project"
-import { PermissionTable } from "./sql"
+import { Database } from "../database/database.js"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { Project } from "../project.js"
+import { PermissionTable } from "./sql.js"
 import { PermissionSaved } from "@opencode-ai/schema/permission-saved"
 
 export const ID = PermissionSaved.ID
@@ -15,12 +15,12 @@ export const Info = PermissionSaved.Info
 export type Info = typeof Info.Type
 
 export const ListInput = Schema.Struct({
-  projectID: ProjectV2.ID.pipe(Schema.optional),
+  projectID: Project.ID.pipe(Schema.optional),
 }).annotate({ identifier: "PermissionSaved.ListInput" })
 export type ListInput = typeof ListInput.Type
 
 export const AddInput = Schema.Struct({
-  projectID: ProjectV2.ID,
+  projectID: Project.ID,
   action: Schema.String,
   resources: Schema.Array(Schema.String),
 }).annotate({ identifier: "PermissionSaved.AddInput" })
@@ -32,7 +32,7 @@ export interface Interface {
   readonly remove: (id: ID) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/PermissionSaved") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/PermissionSaved") {}
 
 const layer = Layer.effect(
   Service,
@@ -47,7 +47,12 @@ const layer = Layer.effect(
         .all()
         .pipe(Effect.orDie)
       return rows.map(
-        (row): Info => ({ id: row.id, projectID: row.project_id, action: row.action, resource: row.resource }),
+        (row): Info => ({
+          id: row.id,
+          projectID: row.project_id,
+          action: row.action,
+          resource: row.resource,
+        }),
       )
     })
 

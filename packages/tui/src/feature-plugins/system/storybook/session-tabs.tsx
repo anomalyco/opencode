@@ -1,0 +1,369 @@
+import { Plugin } from "@opencode-ai/plugin/tui"
+import { useTerminalDimensions } from "@opentui/solid"
+import { batch, createSignal, For } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
+import { EMPTY_SESSION_TAB_STATUS, SessionTabs, type SessionTabsController } from "../../../component/session-tabs"
+import { closeSessionTab, cycleSessionTab, moveSessionTab } from "../../../context/session-tabs-model"
+import { StoryFooter } from "./footer"
+import type { Story } from "./index"
+
+type FixtureStatus = ReturnType<SessionTabsController["status"]>
+
+const FIXTURE_TABS = [
+  { sessionID: "fixture-1", title: "Implement session tabs", project: "opencode" },
+  { sessionID: "fixture-2", title: "Investigate rendering", project: "opencode" },
+  { sessionID: "fixture-3", title: "A deliberately long session title for truncation", project: "opencode-slack" },
+  { sessionID: "fixture-4", title: "Fix provider state", project: "opencode" },
+  { sessionID: "fixture-5", title: "Review animation", project: "opencode-slack" },
+  { sessionID: "fixture-6", title: "Untitled behavior", project: "opencode-drive" },
+  { sessionID: "fixture-7", title: "Queue follow-up work", project: "opencode" },
+  { sessionID: "fixture-8", title: "Check narrow layout", project: "opencode-drive" },
+  { sessionID: "fixture-9", title: "Profile terminal output", project: "opencode" },
+  { sessionID: "fixture-10", title: "Handle permission", project: "opencode-slack" },
+  { sessionID: "fixture-11", title: "Run focused tests", project: "opencode" },
+  { sessionID: "fixture-12", title: "Prepare review", project: "opencode-drive" },
+]
+
+// Plausible targets for the fake transcript's tool calls, picked per fixture index.
+const TRANSCRIPT_FILES = [
+  "packages/tui/src/component/session-tabs.tsx",
+  "packages/tui/src/component/tab-pulse.tsx",
+  "packages/tui/src/context/session-tabs-model.ts",
+  "packages/core/src/session/runner.ts",
+  "packages/server/src/routes/session.ts",
+  "packages/tui/src/ui/animation.ts",
+]
+
+function SessionTabsStory(props: { context: Plugin.Context }) {
+  const dimensions = useTerminalDimensions()
+  const theme = props.context.theme
+  // A keyed store mirrors production: retitles mutate rows in place instead of remounting them.
+  const [tabStore, setTabStore] = createStore<{ items: { sessionID: string; title?: string }[] }>({
+    items: FIXTURE_TABS.slice(0, 6).map((tab) => ({ ...tab })),
+  })
+  const tabs = () => tabStore.items
+  const setItems = (next: { sessionID: string; title?: string }[]) =>
+    setTabStore("items", reconcile(next, { key: "sessionID" }))
+  const [active, setActive] = createSignal<string | undefined>("fixture-1")
+  const [lastEvent, setLastEvent] = createSignal("press space to start a random tab")
+  const [statuses, setStatuses] = createSignal<Record<string, FixtureStatus>>({})
+  const [orientation, setOrientation] = createSignal<"horizontal" | "vertical">("vertical")
+  // Unread clears on select, so the transcript remembers how each session's last run ended.
+  const [outcomes, setOutcomes] = createSignal<Record<string, "completed" | "failed">>({})
+  const number = (sessionID: string) => tabs().findIndex((tab) => tab.sessionID === sessionID) + 1
+
+  function finishRun(sessionID: string) {
+    if (!tabs().some((item) => item.sessionID === sessionID)) return
+    const roll = Math.random()
+    const failed = roll >= 0.75
+    const unread = active() === sessionID ? undefined : failed ? ("error" as const) : ("activity" as const)
+    batch(() => {
+      setOutcomes((current) => ({ ...current, [sessionID]: failed ? "failed" : "completed" }))
+      setStatuses((current) => ({
+        ...current,
+        [sessionID]: { ...(current[sessionID] ?? EMPTY_SESSION_TAB_STATUS), busy: false, unread },
+      }))
+      // An untitled session earns its title after its first completed run, like a real summarization.
+      const index = number(sessionID) - 1
+      const fixture = FIXTURE_TABS.find((tab) => tab.sessionID === sessionID)
+      if (!failed && fixture && tabs()[index]?.title === undefined) setTabStore("items", index, "title", fixture.title)
+    })
+    setLastEvent(
+      `tab ${number(sessionID)} ${failed ? "failed" : "completed"}${unread ? " (unread)" : " while selected"}`,
+    )
+  }
+
+  const select = (sessionID: string) => {
+    const status = statuses()[sessionID]
+    batch(() => {
+      setActive(sessionID)
+      if (status && (status.unread || status.attention))
+        setStatuses((current) => ({ ...current, [sessionID]: { ...status, unread: undefined, attention: false } }))
+    })
+  }
+
+  const addTab = () => {
+    const next = FIXTURE_TABS.find((fixture) => !tabs().some((tab) => tab.sessionID === fixture.sessionID))
+    if (!next) {
+      setLastEvent("all fixture tabs are open")
+      return
+    }
+    setItems([...tabs().map((tab) => ({ ...tab })), { sessionID: next.sessionID }])
+    select(next.sessionID)
+    setLastEvent(`tab ${number(next.sessionID)} opened untitled; run it to earn its title`)
+  }
+
+  const controller = {
+    tabs,
+    current: active,
+    add: addTab,
+    detail(sessionID) {
+      return FIXTURE_TABS.find((tab) => tab.sessionID === sessionID)?.project
+    },
+    status(sessionID) {
+      return statuses()[sessionID] ?? EMPTY_SESSION_TAB_STATUS
+    },
+    select,
+    move(sessionID: string, index: number) {
+      const next = moveSessionTab(tabs(), sessionID, index)
+      if (next === tabs()) return
+      setItems(next.map((tab) => ({ ...tab })))
+    },
+    close(sessionID?: string) {
+      const target = sessionID ?? active()
+      if (!target) return
+      const result = closeSessionTab(tabs(), target)
+      if (result.tabs === tabs()) return
+      batch(() => {
+        setItems(result.tabs.map((tab) => ({ ...tab })))
+        setStatuses((current) => {
+          const updated = { ...current }
+          delete updated[target]
+          return updated
+        })
+        if (active() === target && result.next) select(result.next)
+        if (active() === target && !result.next) setActive(undefined)
+      })
+    },
+  } satisfies SessionTabsController
+
+  const cycle = (direction: 1 | -1) => {
+    const tab = cycleSessionTab(tabs(), active(), direction)
+    if (tab) select(tab.sessionID)
+  }
+  const startRun = (sessionID: string) => {
+    setStatuses((current) => ({
+      ...current,
+      [sessionID]: { ...(current[sessionID] ?? EMPTY_SESSION_TAB_STATUS), busy: true, unread: undefined },
+    }))
+    setOutcomes((current) => {
+      const next = { ...current }
+      delete next[sessionID]
+      return next
+    })
+    setLastEvent(`tab ${number(sessionID)} running`)
+  }
+  const prompt = (sessionID: string) => {
+    const wasBusy = controller.status(sessionID).busy
+    setStatuses((current) => {
+      const status = current[sessionID] ?? EMPTY_SESSION_TAB_STATUS
+      return {
+        ...current,
+        [sessionID]: {
+          ...status,
+          busy: true,
+          unread: undefined,
+          promptPulse: status.promptPulse + 1,
+        },
+      }
+    })
+    setLastEvent(`prompt sent to tab ${number(sessionID)}${wasBusy ? " while running" : ""}`)
+  }
+  const randomInactiveTab = () => {
+    const candidates = tabs().filter((tab) => {
+      const status = controller.status(tab.sessionID)
+      return !status.busy && !status.unread && !status.attention
+    })
+    // Untitled sessions run first so their title arrival is easy to trigger.
+    const untitled = candidates.filter((tab) => tab.title === undefined)
+    const pool = untitled.length > 0 ? untitled : candidates
+    return pool[Math.floor(Math.random() * pool.length)]
+  }
+  const randomRunningTab = () => {
+    const candidates = tabs().filter((tab) => controller.status(tab.sessionID).busy)
+    return candidates[Math.floor(Math.random() * candidates.length)]
+  }
+  // A fake transcript for the selected session so tab switches feel like moving between real
+  // sessions; the tail line tracks the live status of the current run.
+  const transcript = () => {
+    const current = active()
+    if (!current) return [{ text: "no session selected", color: theme.text.subdued }]
+    const index = Math.max(
+      0,
+      FIXTURE_TABS.findIndex((fixture) => fixture.sessionID === current),
+    )
+    const fixture = FIXTURE_TABS[index]
+    const status = controller.status(current)
+    const outcome = outcomes()[current]
+    const file = TRANSCRIPT_FILES[index % TRANSCRIPT_FILES.length]
+    const lines = [
+      { text: `> ${fixture.title}`, color: theme.text.default },
+      { text: "", color: theme.text.default },
+    ]
+    if (!status.busy && outcome === undefined) {
+      lines.push({ text: "no activity yet — press s to run this session", color: theme.text.subdued })
+      return lines
+    }
+    lines.push(
+      { text: "● Taking a look — reading the relevant code first.", color: theme.text.default },
+      { text: "", color: theme.text.default },
+      { text: `  ✱ Read ${file}`, color: theme.text.subdued },
+      { text: `  ✱ Edit ${file}`, color: theme.text.subdued },
+      { text: `  ✱ Bash bun run test`, color: theme.text.subdued },
+      { text: "", color: theme.text.default },
+    )
+    if (status.busy) lines.push({ text: "● Working…", color: theme.text.subdued })
+    else if (outcome === "failed")
+      lines.push({
+        text: `✗ bun run test failed — 3 tests failing in ${file}`,
+        color: theme.text.feedback.error.default,
+      })
+    else
+      lines.push({
+        text: `✓ Done — updated ${file} and the tests pass.`,
+        color: theme.text.feedback.success.default,
+      })
+    return lines
+  }
+
+  const stateSummary = () => {
+    const values = tabs().map((tab) => controller.status(tab.sessionID))
+    const running = values.filter((status) => status.busy).length
+    const unread = values.filter((status) => status.unread !== undefined).length
+    return [`selected ${number(active() ?? "")}`, `${running} running`, `${unread} unread`].join("  ·  ")
+  }
+
+  props.context.keymap.layer(() => ({
+    commands: [
+      {
+        bind: "escape",
+        title: "Back to storybook",
+        group: "Storybook",
+        run() {
+          props.context.ui.router.navigate({ type: "plugin", name: "storybook" })
+        },
+      },
+      { bind: "up,k,left,h", title: "Previous tab", group: "Storybook", run: () => cycle(-1) },
+      { bind: "down,j,right,l", title: "Next tab", group: "Storybook", run: () => cycle(1) },
+      ...Array.from({ length: 10 }, (_, index) => ({
+        bind: String((index + 1) % 10),
+        title: `Select tab ${index + 1}`,
+        group: "Storybook",
+        run() {
+          const tab = tabs()[index]
+          if (tab) select(tab.sessionID)
+        },
+      })),
+      {
+        bind: "space",
+        title: "Start a random tab",
+        group: "Storybook",
+        run() {
+          const tab = randomInactiveTab()
+          if (!tab) {
+            setLastEvent("every tab is busy or unread; select tabs to read them, or press r")
+            return
+          }
+          startRun(tab.sessionID)
+        },
+      },
+      {
+        bind: "e",
+        title: "End a random running tab",
+        group: "Storybook",
+        run() {
+          const tab = randomRunningTab()
+          if (!tab) {
+            setLastEvent("no tabs are running; press space to start one")
+            return
+          }
+          finishRun(tab.sessionID)
+        },
+      },
+      {
+        bind: "p",
+        title: "Prompt selected tab",
+        group: "Storybook",
+        run() {
+          const current = active()
+          if (!current) return
+          prompt(current)
+        },
+      },
+      {
+        // Random runs stay off the selected tab, so this is the way to watch the edge flash
+        // and running sweep under the cursor.
+        bind: "s",
+        title: "Run selected tab",
+        group: "Storybook",
+        run() {
+          const current = active()
+          if (!current) return
+          if (controller.status(current).busy) {
+            setLastEvent(`tab ${number(current)} is already running`)
+            return
+          }
+          startRun(current)
+        },
+      },
+      { bind: "t", title: "Add tab", group: "Storybook", run: addTab },
+      { bind: "d", title: "Close tab", group: "Storybook", run: () => controller.close() },
+      {
+        bind: "o",
+        title: "Toggle tab orientation",
+        group: "Storybook",
+        run() {
+          setOrientation((value) => (value === "vertical" ? "horizontal" : "vertical"))
+        },
+      },
+      {
+        bind: "r",
+        title: "Reset",
+        group: "Storybook",
+        run() {
+          batch(() => {
+            setItems(FIXTURE_TABS.slice(0, 6).map((tab) => ({ ...tab })))
+            setStatuses({})
+            setOutcomes({})
+            setActive("fixture-1")
+          })
+          setLastEvent("reset; press space to start a random tab")
+        },
+      },
+    ],
+  }))
+
+  return (
+    <box
+      width={dimensions().width}
+      height={dimensions().height}
+      flexDirection="column"
+      backgroundColor={theme.background.default}
+    >
+      <box flexGrow={1} flexDirection={orientation() === "vertical" ? "row" : "column"}>
+        <SessionTabs controller={controller} orientation={orientation()} />
+        <box flexGrow={1} paddingLeft={2} paddingRight={2} paddingTop={1} flexDirection="column">
+          <For each={transcript()}>
+            {(line) => (
+              <text fg={line.color} wrapMode="none" selectable={false}>
+                {line.text || " "}
+              </text>
+            )}
+          </For>
+        </box>
+      </box>
+      <StoryFooter
+        context={props.context}
+        title="storybook / tabs"
+        details={[orientation() === "vertical" ? "left rail" : "top strip"]}
+        status={stateSummary()}
+        message={lastEvent()}
+        controls={[
+          { shortcut: "space", label: "start" },
+          { shortcut: "p", label: "prompt" },
+          { shortcut: "e", label: "end" },
+          { shortcut: "↑/↓", label: "select" },
+          { shortcut: "o", label: "layout" },
+          { shortcut: "r", label: "reset" },
+          { shortcut: "esc", label: "back" },
+        ]}
+      />
+    </box>
+  )
+}
+
+export const sessionTabsStory: Story = {
+  id: "session-tabs",
+  title: "Tabs",
+  render: (context) => <SessionTabsStory context={context} />,
+}

@@ -1,8 +1,9 @@
-import type { ProviderPackage } from "../provider-package"
-import { OpenAICompatibleChat } from "../protocols/openai-compatible-chat"
-import type { RouteDefaultsInput } from "../route/client"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
-import { GoogleVertexShared } from "./google-vertex-shared"
+import type { ProviderPackage } from "../provider-package.js"
+import { OpenAICompatibleChat } from "../protocols/openai-compatible-chat.js"
+import type { RouteDefaultsInput } from "../route/client.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
+import { GoogleVertexShared } from "./google-vertex-shared.js"
+import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("google-vertex")
 
@@ -11,6 +12,7 @@ export type Config = RouteDefaultsInput &
     readonly baseURL?: string
     readonly location?: string
     readonly project?: string
+    readonly providerOptions?: OpenAIProviderOptionsInput
   }
 
 export interface Settings extends ProviderPackage.Settings {
@@ -19,7 +21,7 @@ export interface Settings extends ProviderPackage.Settings {
   readonly baseURL?: string
   readonly location?: string
   readonly project?: string
-  readonly providerOptions?: ProviderOptions
+  readonly providerOptions?: OpenAIProviderOptionsInput
 }
 
 const route = OpenAICompatibleChat.route.with({
@@ -56,7 +58,7 @@ export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
   return {
     id,
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => route.model<OpenAIProviderOptionsInput>({ id: modelID }),
     configure,
   }
 }
@@ -66,7 +68,7 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
+export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) => {
   if (settings.apiKey !== undefined) throw new Error("Google Vertex Chat does not support API keys")
   return configure({
     accessToken: settings.accessToken,

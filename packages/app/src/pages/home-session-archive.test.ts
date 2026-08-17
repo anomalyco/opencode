@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { SESSION_TABS_REMOVED_EVENT, readSessionTabsRemovedDetail } from "@/components/titlebar-session-events"
 import { archiveHomeSession } from "./home-session-archive"
-import type { ServerConnection } from "@/context/server"
+import type { ServerConnection } from "@/context/servers"
 
 const remote = "remote" as ServerConnection.Key
 
@@ -18,8 +18,8 @@ test("archiving a Home session removes its open titlebar tab", async () => {
 
   await archiveHomeSession({
     server: remote,
-    session: { id: "ses_1", directory: "/workspace" },
-    update: async () => undefined,
+    session: { id: "ses_1", location: { directory: "/workspace" } },
+    archive: async () => undefined,
     remove: () => {
       removed = true
     },
@@ -36,8 +36,8 @@ test("reports archive failures without removing the session", async () => {
 
   await archiveHomeSession({
     server: remote,
-    session: { id: "ses_1", directory: "/workspace" },
-    update: async () => Promise.reject(failure),
+    session: { id: "ses_1", location: { directory: "/workspace" } },
+    archive: async () => Promise.reject(failure),
     remove: () => {
       removed = true
     },

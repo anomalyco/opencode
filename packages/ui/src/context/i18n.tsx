@@ -1,13 +1,39 @@
 import { createContext, useContext, type Accessor, type ParentProps } from "solid-js"
+import { I18nProvider } from "@kobalte/core/i18n"
 import { dict as en } from "../i18n/en"
+import type { Key, LocaleKey, PluralCategory, PluralKey, PluralLookupKey } from "../i18n/en"
 
-export type UiI18nKey = keyof typeof en
+export type UiI18nKey = Key
+export type UiI18nPluralKey = PluralKey
+export type UiPluralCategory = PluralCategory
+export type UiI18nPluralLookupKey = PluralLookupKey
+export type UiI18nLocaleKey = LocaleKey
+type UiTranslationKey<Value extends string> = Value extends UiI18nPluralLookupKey ? never : Value
 
 export type UiI18nParams = Record<string, string | number | boolean>
+export type UiTranslate = <Value extends string>(key: UiTranslationKey<Value>, params?: UiI18nParams) => string
 
 export type UiI18n = {
   locale: Accessor<string>
-  t: (key: UiI18nKey, params?: UiI18nParams) => string
+  layoutLocale?: Accessor<string>
+  t: UiTranslate
+  plural: (key: UiI18nPluralKey, count: number, params?: UiI18nParams) => string
+  pluralForm?: (key: UiI18nPluralKey, category: UiPluralCategory, params?: UiI18nParams) => string
+}
+
+const rules = new Map<string, Intl.PluralRules>()
+
+export function pluralCategory(locale: string, count: number): UiPluralCategory {
+  const cached = rules.get(locale)
+  if (cached) return cached.select(count)
+  const next = new Intl.PluralRules(locale)
+  if (rules.size >= 32) rules.delete(rules.keys().next().value!)
+  rules.set(locale, next)
+  return next.select(count)
+}
+
+export function pluralKey(key: UiI18nPluralKey, category: UiPluralCategory) {
+  return `${key}.${category}` as UiI18nPluralLookupKey
 }
 
 function resolveTemplate(text: string, params?: UiI18nParams) {
@@ -22,16 +48,29 @@ function resolveTemplate(text: string, params?: UiI18nParams) {
 const fallback: UiI18n = {
   locale: () => "en",
   t: (key, params) => {
-    const value = en[key] ?? String(key)
+    const value = en[key as UiI18nKey] ?? String(key)
+    return resolveTemplate(value, params)
+  },
+  plural: (key, count, params) =>
+    fallback.pluralForm!(key, pluralCategory(fallback.locale(), count), { ...params, count }),
+  pluralForm: (key, category, params) => {
+    const values = en as Partial<Record<UiI18nLocaleKey, string>>
+    const value = values[pluralKey(key, category)] ?? values[`${key}.other`] ?? `${key}.other`
     return resolveTemplate(value, params)
   },
 }
 
 const Context = createContext<UiI18n>(fallback)
 
-export function I18nProvider(props: ParentProps<{ value: UiI18n }>) {
-  return <Context.Provider value={props.value}>{props.children}</Context.Provider>
+function UiI18nProvider(props: ParentProps<{ value: UiI18n }>) {
+  return (
+    <I18nProvider locale={(props.value.layoutLocale ?? props.value.locale)()}>
+      <Context.Provider value={props.value}>{props.children}</Context.Provider>
+    </I18nProvider>
+  )
 }
+
+export { UiI18nProvider as I18nProvider }
 
 export function useI18n() {
   return useContext(Context)

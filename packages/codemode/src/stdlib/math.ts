@@ -1,3 +1,14 @@
+import { Effect } from "effect"
+import { preserveConsumerError, type SyncIteratorRunner } from "../interpreter/iterator.js"
+import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+
+// Bun exposes ES2026 Math.sumPrecise before TypeScript's standard library types.
+declare global {
+  interface Math {
+    sumPrecise(values: Iterable<number>): number
+  }
+}
+
 export const mathConstants = new Set(["PI", "E", "LN2", "LN10", "LOG2E", "LOG10E", "SQRT2", "SQRT1_2"])
 
 export const mathMethods = new Set([
@@ -37,10 +48,11 @@ export const mathMethods = new Set([
   "fround",
   "clz32",
   "imul",
+  "sumPrecise",
 ])
 
 export const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNode): number => {
-  if (!mathMethods.has(name)) throw new InterpreterRuntimeError(`Math.${name} is not available in CodeMode.`, node)
+  if (!mathMethods.has(name)) throw new InterpreterRuntimeError(`Math.${name} is not available.`, node)
   if (name === "random") return Math.random()
   // Validate only the arguments the method consumes; like JS, extras are ignored
   // (so built-ins work as callbacks receiving (element, index, array)).
@@ -129,6 +141,31 @@ export const invokeMathMethod = (name: string, args: Array<unknown>, node: AstNo
     case "imul":
       return Math.imul(a, b())
   }
-  throw new InterpreterRuntimeError(`Math.${name} is not available in CodeMode.`, node)
+  throw new InterpreterRuntimeError(`Math.${name} is not available.`, node)
 }
-import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+
+export const invokeMathSumPrecise = <R>(
+  runner: SyncIteratorRunner<R>,
+  source: unknown,
+  node: AstNode,
+): Effect.Effect<number, unknown, R> =>
+  Effect.gen(function* () {
+    const cursor = yield* runner.syncIterator(source, node)
+    if (cursor === undefined) {
+      throw new InterpreterRuntimeError("Math.sumPrecise expects a synchronous iterable.", node).as("TypeError")
+    }
+    const numbers: Array<number> = []
+    while (true) {
+      const step = yield* cursor.next
+      if (step.done) return Math.sumPrecise(numbers)
+      yield* preserveConsumerError(
+        cursor,
+        Effect.sync(() => {
+          if (typeof step.value !== "number") {
+            throw new InterpreterRuntimeError("Math.sumPrecise expects an iterable of numbers.", node).as("TypeError")
+          }
+          numbers.push(step.value)
+        }),
+      )
+    }
+  })
