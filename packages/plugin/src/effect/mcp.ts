@@ -6,7 +6,6 @@ import type { Transform } from "./registration.js"
 export interface MCPDraft {
   list(): readonly [string, Types.DeepMutable<Mcp.ServerConfig>][]
   get(name: string): Types.DeepMutable<Mcp.ServerConfig> | undefined
-  timeout(value: Mcp.TimeoutConfig): void
   set(name: string, config: Mcp.ServerConfig): void
   update(name: string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void): void
   remove(name: string): void

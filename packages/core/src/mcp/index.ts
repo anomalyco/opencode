@@ -129,13 +129,11 @@ const URL_ELICITATION_FIELD_KEY = "elicitation"
 type Data = {
   servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
   blocked: Set<ServerName>
-  timeout: Mcp.TimeoutConfig
 }
 
 export type Draft = {
   list: () => readonly [ServerName, Types.DeepMutable<Mcp.ServerConfig>][]
   get: (server: ServerName | string) => Types.DeepMutable<Mcp.ServerConfig> | undefined
-  timeout: (value: Mcp.TimeoutConfig) => void
   set: (server: ServerName | string, config: Mcp.ServerConfig) => void
   update: (server: ServerName | string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void) => void
   remove: (server: ServerName | string) => void
@@ -674,14 +672,10 @@ export const layer = (options?: Options) =>
           blocked: new Set(
             Array.from(overrides).flatMap(([name, config]) => (config === false ? [name] : [])),
           ),
-          timeout: {},
         }),
         draft: (draft) => ({
           list: () => Array.from(draft.servers),
           get: (server) => draft.servers.get(ServerName.make(server)),
-          timeout: (value) => {
-            draft.timeout = value
-          },
           set: (server, serverConfig) => {
             const name = ServerName.make(server)
             if (draft.blocked.has(name)) return
@@ -714,7 +708,7 @@ export const layer = (options?: Options) =>
         }),
         add: Effect.fn("MCP.add")(function* (server, config) {
           const name = ServerName.make(server)
-          overrides.set(name, { ...config, timeout: { ...state.get().timeout, ...config.timeout } })
+          overrides.set(name, config)
           yield* state.reload()
         }),
         connect: Effect.fn("MCP.connect")(function* (server) {

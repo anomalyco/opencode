@@ -287,7 +287,6 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
           callback({
             list: () => draft.list().map(([name, config]) => [name, mutable(config)]),
             get: (name) => mutable(draft.get(name)),
-            timeout: (value) => draft.timeout(Schema.decodeUnknownSync(Mcp.TimeoutConfig)(value)),
             set: (name, config) => draft.set(name, Schema.decodeUnknownSync(Mcp.ServerConfig)(config)),
             update: draft.update,
             remove: draft.remove,
