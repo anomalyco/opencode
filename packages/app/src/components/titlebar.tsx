@@ -254,13 +254,14 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 }
                 case "home": {
                   const selection = layout.home.selection()
-                  const conn = global.servers.list().find((item) => ServerConnection.key(item) === selection.server)
-                  const project = conn
-                    ? global
-                        .ensureServerCtx(conn)
-                        .projects.list()
-                        .find((item) => item.worktree === selection.directory)
-                    : undefined
+                  const conn =
+                    global.servers.list().find((item) => ServerConnection.key(item) === selection.server) ??
+                    global.servers.list()[0]
+                  const projects = conn ? global.ensureServerCtx(conn).projects : undefined
+                  const project =
+                    projects?.list().find((item) => item.worktree === selection.directory) ??
+                    projects?.list().find((item) => item.worktree === projects.last()) ??
+                    projects?.list()[0]
                   if (conn && project) {
                     tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
                     return
