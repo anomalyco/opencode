@@ -128,6 +128,7 @@ const URL_ELICITATION_FIELD_KEY = "elicitation"
 
 type Data = {
   servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
+  blocked: Set<ServerName>
   timeout: Mcp.TimeoutConfig
 }
 
@@ -593,6 +594,7 @@ export const layer = (options?: Options) =>
         initialized: false,
         servers: new Map<ServerName, Mcp.ServerConfig>(),
       }
+      const overrides = new Map<ServerName, Mcp.ServerConfig | false>()
       const reconcile = Effect.fnUntraced(function* (next: Draft) {
         yield* reloadLock.withPermit(
           Effect.gen(function* () {
@@ -663,7 +665,17 @@ export const layer = (options?: Options) =>
       )
       const state = State.create<Data, Draft>({
         name: "mcp",
-        initial: () => ({ servers: new Map(), timeout: {} }),
+        initial: () => ({
+          servers: new Map(
+            Array.from(overrides).flatMap(([name, config]) =>
+              config === false ? [] : [[name, config as Types.DeepMutable<Mcp.ServerConfig>] as const],
+            ),
+          ),
+          blocked: new Set(
+            Array.from(overrides).flatMap(([name, config]) => (config === false ? [name] : [])),
+          ),
+          timeout: {},
+        }),
         draft: (draft) => ({
           list: () => Array.from(draft.servers),
           get: (server) => draft.servers.get(ServerName.make(server)),
@@ -671,7 +683,9 @@ export const layer = (options?: Options) =>
             draft.timeout = value
           },
           set: (server, serverConfig) => {
-            draft.servers.set(ServerName.make(server), serverConfig as Types.DeepMutable<Mcp.ServerConfig>)
+            const name = ServerName.make(server)
+            if (draft.blocked.has(name)) return
+            draft.servers.set(name, serverConfig as Types.DeepMutable<Mcp.ServerConfig>)
           },
           update: (server, update) => {
             const current = draft.servers.get(ServerName.make(server))
@@ -700,9 +714,8 @@ export const layer = (options?: Options) =>
         }),
         add: Effect.fn("MCP.add")(function* (server, config) {
           const name = ServerName.make(server)
-          yield* replaceServer(name, { ...config, timeout: { ...state.get().timeout, ...config.timeout } }).pipe(
-            locks.withLock(name),
-          )
+          overrides.set(name, { ...config, timeout: { ...state.get().timeout, ...config.timeout } })
+          yield* state.reload()
         }),
         connect: Effect.fn("MCP.connect")(function* (server) {
           const name = ServerName.make(server)
@@ -723,10 +736,9 @@ export const layer = (options?: Options) =>
         }),
         remove: Effect.fn("MCP.remove")(function* (server) {
           const name = ServerName.make(server)
-          yield* Effect.gen(function* () {
-            yield* requireServer(name)
-            yield* removeServer(name)
-          }).pipe(locks.withLock(name))
+          yield* requireServer(name)
+          overrides.set(name, false)
+          yield* state.reload()
         }),
         tools: Effect.fn("MCP.tools")(function* () {
           yield* whenAllReady

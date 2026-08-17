@@ -811,7 +811,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  itWithSdk.live("lets public plugins mutate configured MCP servers", () =>
+  itWithSdk.live("lets public plugins mutate configured and runtime MCP servers", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -825,7 +825,7 @@ describe("LocationServiceMap", () => {
               JSON.stringify({ mcp: { servers: { example: { type: "remote", url, disabled: true } } } }),
             ),
           )
-          const observed: { server?: string } = {}
+          const observed: Record<string, boolean | undefined> = {}
           const sdk = yield* SdkPlugins.Service
           yield* sdk.register(
             EffectPlugin.define({
@@ -834,11 +834,11 @@ describe("LocationServiceMap", () => {
                 ctx.mcp
                   .transform((mcp) => {
                     for (const [name, server] of mcp.list()) {
-                      if (server.type !== "remote" || server.url !== url) continue
+                      if (server.type !== "remote" || new URL(server.url).hostname !== "example.com") continue
                       mcp.update(name, (current) => {
                         current.codemode = false
+                        observed[name] = current.codemode
                       })
-                      observed.server = name
                     }
                   })
                   .pipe(Effect.asVoid),
@@ -849,8 +849,14 @@ describe("LocationServiceMap", () => {
             const supervisor = yield* PluginSupervisor.Service
             const mcp = yield* MCP.Service
             yield* supervisor.flush
-            expect(observed.server).toBe("example")
-            expect((yield* mcp.servers()).map((server) => String(server.name))).toEqual(["example"])
+            expect(observed.example).toBe(false)
+            yield* mcp.add("dynamic", {
+              type: "remote",
+              url: "https://example.com/dynamic",
+              disabled: true,
+            })
+            expect(observed.dynamic).toBe(false)
+            expect((yield* mcp.servers()).map((server) => String(server.name))).toEqual(["dynamic", "example"])
           }).pipe(
             Effect.scoped,
             Effect.provide(

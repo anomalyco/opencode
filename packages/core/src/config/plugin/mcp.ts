@@ -2,6 +2,7 @@ export * as ConfigMCPPlugin from "./mcp.js"
 
 import { define } from "@opencode-ai/plugin/effect/plugin"
 import { Document, type Entry } from "@opencode-ai/schema/config"
+import { Mcp } from "@opencode-ai/schema/mcp"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config.js"
 import { MCP } from "../../mcp/index.js"
@@ -43,10 +44,15 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
       ...documents.flatMap((entry) => (entry.info.mcp?.timeout ? [entry.info.mcp.timeout] : [])),
     )
     draft.timeout(timeout)
+    const servers = new Map<string, Mcp.ServerConfig>()
     for (const document of documents) {
       for (const [name, server] of Object.entries(document.info.mcp?.servers ?? {})) {
-        draft.set(name, { ...server, timeout: { ...timeout, ...server.timeout } })
+        servers.set(name, { ...server, timeout: { ...timeout, ...server.timeout } })
       }
+    }
+    for (const [name, server] of servers) {
+      if (draft.get(name)) continue
+      draft.set(name, server)
     }
   })
 })
