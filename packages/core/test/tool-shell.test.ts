@@ -782,6 +782,40 @@ describe("ShellTool", () => {
     ),
   )
 
+  if (!isWindows) {
+    it.live("settles a shell terminated by an external signal", () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const shell = yield* Shell.Service
+              const settled = yield* executeTool(
+                registry,
+                call({ command: idleCommand, background: true }, "call-external-signal"),
+              )
+              const shellID = settled.metadata?.shellID
+              expect(typeof shellID).toBe("string")
+              if (typeof shellID !== "string") return
+              const id = ShellSchema.ID.make(shellID)
+              const info = yield* shell.get(id)
+              expect(typeof info.pid).toBe("number")
+              if (info.pid === undefined) return
+
+              process.kill(-info.pid, "SIGTERM")
+              const result = yield* shell.wait(id).pipe(Effect.timeoutOption(Duration.seconds(1)))
+              expect(result._tag).toBe("Some")
+              if (result._tag === "Some") expect(result.value.status).toBe("exited")
+              expect((yield* shell.list()).map((item) => item.id)).not.toContain(id)
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    )
+  }
+
   it.live("backgrounds a foreground command when the session is signaled", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
