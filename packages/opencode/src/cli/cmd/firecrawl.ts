@@ -33,9 +33,9 @@ export const FirecrawlScrapeCommand = effectCmd({
         type: "string",
       })
       .option("only-main-content", {
-        describe: "extract only main content",
+        describe: "extract only main content (set to false to include sidebar, navbar, etc.)",
         type: "boolean",
-        default: true,
+        default: false,
       })
       .option("provider", {
         describe: "provider to use",
