@@ -1956,4 +1956,72 @@ describe("SessionNs.getUsage", () => {
     expect(result.tokens.cache.read).toBe(200)
     expect(result.tokens.cache.write).toBe(300)
   })
+
+  test("degrades to a partial cost when a provider cost field is not a number", () => {
+    const model = createModel({
+      context: 100_000,
+      output: 32_000,
+      // a provider whose models.dev cost payload is malformed: `input` is not a number
+      cost: { input: {}, output: 15, cache: { read: 0.3, write: 3.75 } } as unknown as Provider.Model["cost"],
+    })
+    const input = {
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    }
+
+    expect(() => SessionNs.getUsage(input)).not.toThrow()
+
+    const result = SessionNs.getUsage(input)
+
+    // input priced at 0 because the provider field is malformed, output still billed
+    expect(result.cost).toBe(1.5)
+    expect(Number.isFinite(result.cost)).toBe(true)
+  })
+
+  test("degrades to a partial cost when provider cache cost fields are not numbers", () => {
+    const model = createModel({
+      context: 100_000,
+      output: 32_000,
+      cost: { input: 3, output: 15, cache: { read: {}, write: {} } } as unknown as Provider.Model["cost"],
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: usage({
+        inputTokens: 1_000_000,
+        outputTokens: 100_000,
+        totalTokens: 1_100_000,
+        cacheReadInputTokens: 200_000,
+      }),
+      metadata: { anthropic: { cacheCreationInputTokens: 300_000 } },
+    })
+
+    // input 500_000 @ 3 + output 100_000 @ 15, cache priced at 0
+    expect(result.cost).toBe(1.5 + 1.5)
+    expect(Number.isFinite(result.cost)).toBe(true)
+  })
+
+  test("keeps the full cost when every provider cost field is a number", () => {
+    const model = createModel({
+      context: 100_000,
+      output: 32_000,
+      cost: {
+        input: 3,
+        output: 15,
+        cache: { read: 0.3, write: 3.75 },
+      },
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: usage({
+        inputTokens: 1_000_000,
+        outputTokens: 100_000,
+        totalTokens: 1_100_000,
+        cacheReadInputTokens: 200_000,
+      }),
+      metadata: { anthropic: { cacheCreationInputTokens: 300_000 } },
+    })
+
+    // input 500_000 @ 3 + output 100_000 @ 15 + cache read 200_000 @ 0.3 + cache write 300_000 @ 3.75
+    expect(result.cost).toBe(4.185)
+  })
 })
