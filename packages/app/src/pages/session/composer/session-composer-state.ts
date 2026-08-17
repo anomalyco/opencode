@@ -20,8 +20,13 @@ export function createSessionComposerController() {
   const language = useLanguage()
   const permission = usePermission()
   createEffect(() => {
-    if (!params.id || serverSDK.connection.status() !== "connected") return
-    void data.shell.sync({ directory: sdk().directory }).catch(() => undefined)
+    const id = params.id
+    if (!id || serverSDK.connection.status() !== "connected") return
+    void Promise.all([
+      data.shell.sync({ directory: sdk().directory }),
+      data.session.permission.sync(id),
+      data.session.form.sync(id),
+    ]).catch(() => undefined)
   })
 
   const questionRequest = createMemo((): FormInfo | undefined => {

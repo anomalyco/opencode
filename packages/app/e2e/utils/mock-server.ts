@@ -182,6 +182,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, { location: location(config), data: currentDefaultModel(providerConfig(config)) })
     if (path === "/api/integration") return json(route, { location: location(config), data: [] })
     if (path === "/api/command") return json(route, { location: location(config), data: [] })
+    if (path === "/api/skill") return json(route, { location: location(config), data: [] })
     if (path === "/api/plugin") return json(route, { location: location(config), data: [] })
     if (path === "/api/mcp") return json(route, { location: location(config), data: [] })
     if (path === "/api/mcp/resource")
@@ -366,6 +367,13 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     if (/^\/api\/session\/[^/]+\/inbox$/.test(path) && route.request().method() === "GET")
       return json(route, { data: [] })
+    const sessionPermission = path.match(/^\/api\/session\/([^/]+)\/permission$/)?.[1]
+    if (sessionPermission && route.request().method() === "GET") {
+      const permissions = typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? [])
+      return json(route, {
+        data: permissions.map(currentPermission).filter((permission) => permission.sessionID === sessionPermission),
+      })
+    }
     if (/^\/api\/session\/[^/]+\/permission\/[^/]+\/reply$/.test(path) && route.request().method() === "POST") {
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
