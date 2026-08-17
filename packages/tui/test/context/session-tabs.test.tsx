@@ -239,6 +239,23 @@ test("stores session tabs for the current working directory by default", async (
   }
 })
 
+test("keeps scroll anchors for open session tabs", async () => {
+  const setup = await renderSessionTabs("first")
+
+  try {
+    await wait(() => setup.tabs.current() === "first")
+    setup.tabs.setScrollAnchor("first", { messageID: "msg_1", screenY: -3 })
+
+    expect(setup.tabs.scrollAnchor("first")).toEqual({ messageID: "msg_1", screenY: -3 })
+
+    setup.tabs.close("first")
+    await wait(() => setup.tabs.tabs().every((tab) => tab.sessionID !== "first"))
+    expect(setup.tabs.scrollAnchor("first")).toBeUndefined()
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("only the foreground TUI mutates unread state", async () => {
   await using temporary = await tmpdir()
   let foreground: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
