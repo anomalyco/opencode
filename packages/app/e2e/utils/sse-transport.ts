@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test"
+import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 
 export type SseConnectionRecord = {
   id: number
@@ -27,7 +28,7 @@ export type SseEventOptions = {
   marker?: string
 }
 
-export type SseTransport<T> = {
+export type SseTransport<T extends OpenCodeEvent> = {
   server: string
   waitForConnection(options?: { after?: number; timeout?: number }): Promise<SseConnectionRecord>
   send(payload: T, options?: SseEventOptions): Promise<SseDeliveryAcknowledgement>
@@ -55,13 +56,13 @@ type BrowserTransport = Window & {
   }
 }
 
-export async function installSseTransport<T>(
+export async function installSseTransport<T extends OpenCodeEvent = OpenCodeEvent>(
   page: Page,
-  options: { server: string; retry?: number; existingTools?: readonly string[] },
+  options: { server: string; retry?: number },
 ): Promise<SseTransport<T>> {
   const server = new URL(options.server).origin
   await page.addInitScript(
-    ({ server, retry, existingTools }) => {
+    ({ server, retry }) => {
       type Connection = SseConnectionRecord & { controller: ReadableStreamDefaultController<Uint8Array> }
       type ProbeWindow = Window & {
         __visualStabilityProbe?: { startedAt: number; markers: { at: number; label: string }[] }
@@ -72,9 +73,6 @@ export async function installSseTransport<T>(
       const encoder = new TextEncoder()
       let nextConnectionID = 0
       let nextDeliveryID = 0
-      const textOrdinals = new Map<string, number>()
-      const reasoningOrdinals = new Map<string, number>()
-      const startedTools = new Set(existingTools)
 
       const current = () => connections.findLast((connection) => connection.endedAt === undefined)
       const chunks = (bytes: Uint8Array, cuts?: readonly number[]) => {
@@ -96,170 +94,6 @@ export async function installSseTransport<T>(
           eventOptions.retry === undefined ? "" : `retry: ${eventOptions.retry}\n`,
           `data: ${JSON.stringify(payload)}\n\n`,
         ].join("")
-      const currentEvents = (input: unknown) => {
-        if (!input || typeof input !== "object" || !("payload" in input)) return [input]
-        const envelope = input as { directory?: string; payload?: unknown }
-        if (!envelope.payload || typeof envelope.payload !== "object") return [input]
-        const payload = envelope.payload as { id?: string; type?: string; properties?: unknown }
-        if (!payload.type) return [input]
-        const properties = (payload.properties ?? {}) as Record<string, unknown>
-        const base = {
-          created: Date.now(),
-          location: envelope.directory && envelope.directory !== "global" ? { directory: envelope.directory } : undefined,
-        }
-        const events = (items: { type: string; data: Record<string, unknown> }[]) =>
-          items.map((item, index) => ({
-            ...base,
-            id: `${payload.id ?? `evt_mock_${Date.now()}`}${index ? `_${index}` : ""}`,
-            ...item,
-          }))
-        if (payload.type === "session.status") {
-          const status = properties.status as { type?: string; attempt?: number; message?: string; next?: number }
-          if (status.type === "busy")
-            return events([{ type: "session.execution.started", data: { sessionID: properties.sessionID } }])
-          if (status.type === "retry")
-            return events([
-              {
-                type: "session.retry.scheduled",
-                data: {
-                  sessionID: properties.sessionID,
-                  assistantMessageID: "msg_1001_timeline_assistant",
-                  attempt: status.attempt ?? 1,
-                  at: status.next ?? Date.now(),
-                  error: { type: "provider.error", message: status.message ?? "Retry scheduled" },
-                },
-              },
-            ])
-          return events([{ type: "session.execution.succeeded", data: { sessionID: properties.sessionID } }])
-        }
-        if (payload.type === "message.updated") {
-          const info = properties.info as Record<string, unknown>
-          const time = info.time as { completed?: number } | undefined
-          if (info.role !== "assistant" || time?.completed === undefined) return []
-          const error = info.error as { name?: string; data?: { message?: string } } | undefined
-          if (error)
-            return events([
-              {
-                type: "session.step.failed",
-                data: {
-                  sessionID: properties.sessionID,
-                  assistantMessageID: info.id,
-                  error: { type: error.name ?? "session.error", message: error.data?.message ?? "Session failed" },
-                  cost: info.cost ?? 0,
-                  tokens: info.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-                },
-              },
-            ])
-          return events([
-            {
-              type: "session.step.ended",
-              data: {
-                sessionID: properties.sessionID,
-                assistantMessageID: info.id,
-                finish: "stop",
-                cost: info.cost ?? 0,
-                tokens: info.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-              },
-            },
-          ])
-        }
-        if (payload.type === "message.part.updated") {
-          const part = properties.part as Record<string, unknown>
-          const sessionID = properties.sessionID
-          const assistantMessageID = part.messageID
-          if (part.type === "text") {
-            const existing = document.querySelector(`[data-timeline-part-id="${String(part.id)}"]`)
-            if (existing) {
-              const parts = Array.from(
-                document.querySelectorAll(`[data-message-id="${assistantMessageID}"] [data-component="text-part"]`),
-              )
-              return events([
-                {
-                  type: "session.text.ended",
-                  data: { sessionID, assistantMessageID, ordinal: parts.indexOf(existing), text: part.text },
-                },
-              ])
-            }
-            const ordinal =
-              textOrdinals.get(String(assistantMessageID)) ??
-              document.querySelectorAll(`[data-message-id="${assistantMessageID}"] [data-component="text-part"]`).length
-            textOrdinals.set(String(assistantMessageID), ordinal + 1)
-            return events([
-              { type: "session.text.started", data: { sessionID, assistantMessageID, ordinal } },
-              { type: "session.text.ended", data: { sessionID, assistantMessageID, ordinal, text: part.text } },
-            ])
-          }
-          if (part.type === "reasoning") {
-            const ordinal =
-              reasoningOrdinals.get(String(assistantMessageID)) ??
-              document.querySelectorAll(`[data-message-id="${assistantMessageID}"] [data-component="reasoning-part"]`)
-                .length
-            reasoningOrdinals.set(String(assistantMessageID), ordinal + 1)
-            return events([
-              { type: "session.reasoning.started", data: { sessionID, assistantMessageID, ordinal } },
-              { type: "session.reasoning.ended", data: { sessionID, assistantMessageID, ordinal, text: part.text } },
-            ])
-          }
-          if (part.type === "tool") {
-            const state = part.state as Record<string, unknown>
-            const id = part.callID ?? part.id
-            const toolID = String(id)
-            const exists =
-              startedTools.has(toolID) ||
-              document.querySelector(`[data-timeline-part-id="${String(part.id)}"]`) !== null ||
-              Array.from(document.querySelectorAll("[data-timeline-part-ids]")).some((element) =>
-                element.getAttribute("data-timeline-part-ids")?.split(",").includes(String(part.id)),
-              )
-            startedTools.add(toolID)
-            const started = exists
-              ? []
-              : [{ type: "session.tool.input.started", data: { sessionID, assistantMessageID, id, name: part.tool } }]
-            if (state.status === "pending") return events(started)
-            const called = {
-              type: "session.tool.called",
-              data: { sessionID, assistantMessageID, id, input: state.input ?? {}, executed: false },
-            }
-            if (state.status === "running")
-              return events([
-                ...started,
-                called,
-                { type: "session.tool.progress", data: { sessionID, assistantMessageID, id, metadata: state.metadata ?? {} } },
-              ])
-            if (state.status === "error")
-              return events([
-                ...started,
-                called,
-                {
-                  type: "session.tool.failed",
-                  data: {
-                    sessionID,
-                    assistantMessageID,
-                    id,
-                    error: { type: "tool.error", message: state.error ?? "Tool failed" },
-                    metadata: state.metadata ?? {},
-                    executed: false,
-                  },
-                },
-              ])
-            return events([
-              ...started,
-              called,
-              {
-                type: "session.tool.success",
-                data: {
-                  sessionID,
-                  assistantMessageID,
-                  id,
-                  content: [{ type: "text", text: state.output ?? "" }],
-                  metadata: state.metadata ?? {},
-                  executed: false,
-                },
-              },
-            ])
-          }
-        }
-        return events([{ type: payload.type, data: properties }])
-      }
       const acknowledge = (
         connection: Connection,
         bytes: number,
@@ -307,13 +141,11 @@ export async function installSseTransport<T>(
           output.forEach((chunk) => connection.controller.enqueue(chunk))
           return acknowledge(connection, input.bytes.length, output.length)
         }
-        const encoded = input.deliveries.map((delivery) => {
-          const payloads = connection.path === "/api/event" ? currentEvents(delivery.payload) : [delivery.payload]
-          return {
-            delivery,
-            bytes: encoder.encode(payloads.map((payload) => frame(payload, delivery.options)).join("")),
-          }
-        })
+        const encoded = input.deliveries.map((delivery) => ({
+          delivery,
+          payload: delivery.payload,
+          bytes: encoder.encode(frame(delivery.payload, delivery.options)),
+        }))
         encoded.forEach((item) => marker(item.delivery.options?.marker))
         if (input.burst) {
           const bytes = encoder.encode(encoded.map((item) => new TextDecoder().decode(item.bytes)).join(""))
@@ -376,7 +208,7 @@ export async function installSseTransport<T>(
       }
       Object.defineProperty(window, "fetch", { configurable: true, writable: true, value: fetch })
     },
-    { server, retry: options.retry, existingTools: options.existingTools ?? [] },
+    { server, retry: options.retry },
   )
 
   const command = <Result>(input: BrowserCommand<T>) =>
@@ -421,15 +253,11 @@ export async function installSseTransport<T>(
       return command({ type: "send", deliveries: [{ payload, options: eventOptions }], burst: false, cuts: [...cuts] })
     },
     heartbeat(eventOptions) {
+      const bytes = new TextEncoder().encode(": heartbeat\n\n")
       return command({
-        type: "send",
-        deliveries: [
-          {
-            payload: { directory: "global", payload: { type: "server.heartbeat", properties: {} } } as T,
-            options: eventOptions,
-          },
-        ],
-        burst: false,
+        type: "raw",
+        bytes: Array.from(bytes),
+        marker: eventOptions?.marker,
       })
     },
     writeRaw(value, cuts, marker) {

@@ -202,14 +202,15 @@ export const errorText = (error: unknown) => {
  * decoder, and drops empty / `[DONE]` keep-alive events so the downstream
  * `decodeChunk` sees one JSON string per element. The SSE channel emits a
  * `Retry` control event on its error channel; we drop it here (we don't
- * implement client-driven retries) so the public error channel stays
- * `AIError`.
+ * implement client-driven retries). Decoder failures become provider output
+ * errors so the public error channel stays `AIError`.
  */
 export const sseFraming = (bytes: Stream.Stream<Uint8Array, AIError>): Stream.Stream<string, AIError> =>
   bytes.pipe(
     Stream.decodeText(),
     Stream.pipeThroughChannel(Sse.decode()),
     Stream.catchTag("Retry", () => Stream.empty),
+    Stream.catchTag("SseError", (error) => Stream.fail(eventError("sse", error.message))),
     Stream.filter((event) => event.data.length > 0 && event.data !== "[DONE]"),
     Stream.map((event) => event.data),
   )

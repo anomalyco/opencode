@@ -6,6 +6,7 @@ import { expectAppVisible } from "../utils/waits"
 const directory = "C:/OpenCode/PromptInputV2Editing"
 const projectID = "proj_prompt_input_v2_editing"
 const sessionID = "ses_prompt_input_v2_editing"
+const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
 test("preserves the draft when a populated command menu triggers a built-in", async ({ page }) => {
   await mockOpenCodeServer(page, {
@@ -32,7 +33,7 @@ test("preserves the draft when a populated command menu triggers a built-in", as
     ],
     pageMessages: () => ({ items: [] }),
   })
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   const composer = page.locator('[data-component="prompt-input-v2"]')
   const input = composer.locator('[data-component="prompt-input"]')
   await expectAppVisible(composer)

@@ -69,7 +69,7 @@ void window.api.updater.subscribe(setUpdaterState)
 const deepLinkEvent = "opencode:deep-link"
 
 type DesktopWindowState = {
-  id?: string
+  id: string
 }
 
 const emitDeepLinks = (urls: string[]) => {
@@ -93,7 +93,10 @@ function getLastActiveUrl(windowID: string) {
   if (typeof localStorage !== "object") return "/"
   try {
     const value = localStorage.getItem(windowLastActiveUrlKey(windowID))
-    if (value?.startsWith("/") && !value.startsWith("//")) return value
+    if (value === "/") return value
+    const path = value?.split(/[?#]/, 1)[0]
+    if (path === "/new-session") return value ?? "/"
+    if (/^\/server\/[^/]+\/session\/[^/]+$/.test(path ?? "")) return value ?? "/"
   } catch {}
   return "/"
 }
@@ -249,10 +252,7 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
 
     recordFatalRendererError: (error) => window.api.recordFatalRendererError(error),
 
-    restart: async () => {
-      await window.api.killSidecar().catch(() => undefined)
-      window.api.relaunch()
-    },
+    restart: async () => window.api.relaunch(),
 
     notify: async (title, description, onClick) => {
       const focused = await window.api.getWindowFocused().catch(() => document.hasFocus())
@@ -286,14 +286,6 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     },
 
     wslServers: wslServersApi,
-
-    getDisplayBackend: async () => {
-      return window.api.getDisplayBackend().catch(() => null)
-    },
-
-    setDisplayBackend: async (backend) => {
-      await window.api.setDisplayBackend(backend)
-    },
 
     webviewZoom,
 
@@ -337,9 +329,7 @@ function LoadingSplash() {
 function DesktopRoot(props: { windowState: DesktopWindowState }) {
   const platform = createPlatform(props.windowState)
   const loadLocale = async () => {
-    const current = await platform.storage?.("opencode.global.dat").getItem("language")
-    const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
-    const raw = current ?? legacy
+    const raw = await platform.storage?.("opencode.global.dat").getItem("language")
     if (!raw) return
     const locale = raw.match(/"locale"\s*:\s*"([^"]+)"/)?.[1]
     if (!locale) return
@@ -353,11 +343,9 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
 
   const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(loadLocale)
-  const router = (props: BaseRouterProps) => (
-    <DesktopMemoryRouter {...props} windowID={platform.windowID ?? "browser"} />
+  const router = (routerProps: BaseRouterProps) => (
+    <DesktopMemoryRouter {...routerProps} windowID={props.windowState.id} />
   )
-  const onboarding = Promise.withResolvers<void>()
-
   function DesktopEffects() {
     const cmd = useCommand()
     menuTrigger = (id) => cmd.trigger(id)
@@ -407,12 +395,8 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
       <Show when={ready()} fallback={<LoadingSplash />}>
         <Show when={effectiveDefaultServer()} keyed>
           {(key) => (
-            <AppInterface defaultServer={key} servers={servers()} router={router} startup={onboarding.promise}>
-              <DesktopFirstLaunchOnboarding
-                initialUrl={getLastActiveUrl(platform.windowID ?? "browser")}
-                onLoaded={onboarding.resolve}
-                serverKey={key}
-              />
+            <AppInterface defaultServer={key} servers={servers()} router={router}>
+              <DesktopFirstLaunchOnboarding initialUrl={getLastActiveUrl(props.windowState.id)} serverKey={key} />
               <DesktopEffects />
               <Show when={initializationData(sidecar)} keyed>
                 {(server) => <MigrationStatus server={server} />}
@@ -437,12 +421,7 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
 }
 
 render(() => {
-  const [windowState] = createResource(async () => {
-    const api = window.api as typeof window.api & {
-      getWindowID?: () => Promise<string>
-    }
-    return { id: await api.getWindowID?.() }
-  })
+  const [windowState] = createResource(() => window.api.getWindowID().then((id) => ({ id })))
 
   return (
     <Show when={windowState.latest} fallback={<LoadingSplash />} keyed>

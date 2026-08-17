@@ -12,15 +12,14 @@ import { useSettings } from "@/context/settings"
 import { useWorkspaceLocation } from "@/context/location"
 import { useTabs } from "@/context/tabs"
 import type { SessionController } from "@/pages/session/session-controller"
-import { requireServerKey, sessionHref } from "@/utils/session-route"
 import { useServerSDK } from "@/context/server-sdk"
+import { sessionHref } from "@/utils/session-route"
 import { sessionTitle } from "@/utils/session-title"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { showToast } from "@/utils/toast"
 import { timelineChildTitle, timelineRemovedSessionIDs } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
 import { useServer } from "@/context/server"
-import { ServerConnection } from "@/context/servers"
 import { normalizeSessionMessages } from "@/utils/session-message"
 
 const emptyMessages: Message[] = []
@@ -141,23 +140,12 @@ export function createTimelineController(input: {
     const id = input.session.identity.sessionID()
     if (!id || pending.unshare || !shareEnabled()) return
   }
-  const href = (id: string) =>
-    sessionHref(
-      input.session.identity.params.serverKey
-        ? requireServerKey(input.session.identity.params.serverKey)
-        : ServerConnection.key(serverSDK.server),
-      id,
-    )
+  const href = (id: string) => sessionHref(server.key, id)
   const navigateAfterRemoval = (id: string, parent?: string, next?: string) => {
     if (input.session.identity.params.id !== id) return
     if (parent) return navigate(href(parent))
     if (next) return navigate(href(next))
-    return tabs.newDraft({
-      server: input.session.identity.params.serverKey
-        ? requireServerKey(input.session.identity.params.serverKey)
-        : ServerConnection.key(serverSDK.server),
-      directory: sdk().directory,
-    })
+    return tabs.newDraft({ server: server.key, directory: sdk().directory })
   }
   const exportSession = async (id: string) => {
     try {

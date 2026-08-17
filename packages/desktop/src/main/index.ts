@@ -19,9 +19,8 @@ import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as 
 import { createMenu } from "./menu"
 import {
   finishFirstLaunchOnboarding,
-  initializeOldLayoutEligibility,
+  initializeFirstLaunchOnboarding,
   isFirstLaunchOnboardingPending,
-  isOldLayoutEligible,
 } from "./onboarding"
 import { getDefaultServerUrl, preferAppEnv, setDefaultServerUrl } from "./server"
 import { registerUpdaterIpc, setupAutoUpdater, showUpdaterDialog } from "./updater"
@@ -36,7 +35,6 @@ import {
   restoreMainWindows,
 } from "./windows"
 import { registerWslIpcHandlers } from "./wsl/ipc"
-import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
@@ -127,7 +125,7 @@ const main = Effect.gen(function* () {
     onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId),
   )
   if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
-  initializeOldLayoutEligibility(app.getPath("userData"))
+  initializeFirstLaunchOnboarding(app.getPath("userData"))
   logger = initLogging()
   initCrashReporter()
 
@@ -218,7 +216,6 @@ const main = Effect.gen(function* () {
 
   yield* Effect.promise(() => app.whenReady())
 
-  if (!TEST_ONBOARDING) migrate()
   yield* Effect.promise(() => cleanupStoreFiles(app.getPath("userData"))).pipe(
     Effect.tap((result) =>
       Effect.sync(() => {
@@ -245,7 +242,6 @@ const main = Effect.gen(function* () {
     relaunch,
   }
   registerIpcHandlers({
-    killSidecar: () => undefined,
     relaunch,
     awaitInitialization: Effect.fnUntraced(
       function* () {
@@ -261,9 +257,6 @@ const main = Effect.gen(function* () {
     setDefaultServerUrl: (url) => setDefaultServerUrl(url),
     isFirstLaunchOnboardingPending,
     finishFirstLaunchOnboarding,
-    isOldLayoutEligible,
-    getDisplayBackend: async () => null,
-    setDisplayBackend: async () => undefined,
     checkAppExists: (appName) => checkAppExists(appName),
     resolveAppPath: async (appName) => resolveAppPath(appName),
     showUpdater: () => showUpdaterDialog(updater),

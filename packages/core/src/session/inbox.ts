@@ -61,7 +61,7 @@ type PendingRef = { readonly id: SessionMessage.ID; readonly sessionID: SessionS
 export const serialized = <A, E, R>(sessionID: SessionSchema.ID, effect: Effect.Effect<A, E, R>) =>
   inboxLocks.withLock(sessionID)(effect)
 
-export class LifecycleConflict extends Schema.TaggedErrorClass<LifecycleConflict>()("SessionInbox.LifecycleConflict", {
+export class LifecycleConflict extends Schema.TaggedError<LifecycleConflict>()("SessionInbox.LifecycleConflict", {
   id: SessionMessage.ID,
 }) {}
 

@@ -210,15 +210,6 @@
   color: var(--v2-text-text-faint);
 }
 
-.settings-v2-legacy-panel {
-  height: 100%;
-  overflow: hidden;
-}
-
-.settings-v2-legacy-panel [data-component="dialog"] {
-  display: contents;
-}
-
 .settings-v2-provider-row {
   display: flex;
   flex-wrap: wrap;

@@ -3,7 +3,7 @@ import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 import { normalizeSessionMessages } from "./session-message"
 
 describe("normalizeSessionMessages", () => {
-  test("projects current turns into stable legacy rendering records", () => {
+  test("projects current turns into stable timeline rendering records", () => {
     const source = [
       { id: "msg_1", type: "agent-switched", agent: "build", time: { created: 1 } },
       {
@@ -153,7 +153,7 @@ describe("normalizeSessionMessages", () => {
     ])
   })
 
-  test("adapts current edit fields for the legacy edit renderer", () => {
+  test("adapts current edit fields for the edit renderer", () => {
     const source = [
       { id: "msg_user", type: "user", text: "edit it", time: { created: 1 } },
       {

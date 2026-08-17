@@ -8,12 +8,12 @@ import { List } from "@opencode-ai/ui/list"
 import { showToast } from "@/utils/toast"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
-import { sessionHref } from "@/utils/session-route"
-import { ServerConnection } from "@/context/servers"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { normalizeSessionMessages } from "@/utils/session-message"
 import { useWorkspaceLocation } from "@/context/location"
+import { useServer } from "@/context/server"
+import { sessionHref } from "@/utils/session-route"
 
 interface ForkableMessage {
   id: string
@@ -34,6 +34,7 @@ export const DialogFork: Component = () => {
   const prompt = usePrompt()
   const dialog = useDialog()
   const language = useLanguage()
+  const server = useServer()
 
   const messages = createMemo((): ForkableMessage[] => {
     const sessionID = params.id
@@ -67,14 +68,15 @@ export const DialogFork: Component = () => {
         attachmentName: language.t("common.attachment"),
       },
     )
+    const dir = base64Encode(location().directory)
 
     serverSDK.api.session
       .fork({ sessionID, boundary: { type: "before", messageID: item.id } })
       .then((forked) => {
         data.session.remember(forked)
         dialog.close()
-        prompt.set(restored, undefined, { dir: base64Encode(location().directory), id: forked.id })
-        navigate(sessionHref(ServerConnection.key(serverSDK.server), forked.id))
+        prompt.set(restored, undefined, { dir, id: forked.id })
+        navigate(sessionHref(server.key, forked.id))
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)

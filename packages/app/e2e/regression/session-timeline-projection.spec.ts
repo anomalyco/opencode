@@ -71,33 +71,20 @@ test.describe("session timeline projection", () => {
   test("projects gaps, dividers, assistant parts, and errors together", async ({ page }) => {
     const firstUser = userMessage(
       [
-        userText("The user made the following comment regarding lines 4 through 8 of src/a.ts: Keep this stable", {
-          id: "prt_comment",
-          synthetic: true,
-          metadata: {
-            opencodeComment: {
-              path: "src/a.ts",
-              selection: { startLine: 4, startChar: 0, endLine: 8, endChar: 0 },
-              comment: "Keep this stable",
-            },
-          },
-        }),
+        userText("Keep this stable", { id: "prt_comment" }),
         userText("Continue after the comment", { id: "prt_visible_user" }),
       ],
       { summary: { diffs: Array.from({ length: 11 }, (_, index) => summaryDiff(index)) } },
     )
     const aborted = assistantMessage([{ id: "prt_before_abort", type: "text", text: "Before interruption" }], {
       id: "msg_1001_assistant_aborted",
-      error: { name: "MessageAbortedError", data: { message: "Stopped" } },
+      error: { type: "MessageAbortedError", message: "Stopped" },
     })
     const failed = assistantMessage([{ id: "prt_after_abort", type: "text", text: "After interruption" }], {
       id: "msg_1002_assistant_failed",
       error: {
-        name: "APIError",
-        data: {
-          message: JSON.stringify({ error: { type: "provider_error", message: "Visible provider failure" } }),
-          isRetryable: false,
-        },
+        type: "APIError",
+        message: "Visible provider failure",
       },
       created: 1700000003000,
     })
@@ -122,48 +109,11 @@ test.describe("session timeline projection", () => {
     await expect(page.locator('[data-timeline-row="TurnGap"]')).toBeVisible()
   })
 
-  test("renders legacy synthetic comments as ordinary V2 user text", async ({ page }) => {
-    const user = userMessage(
-      [
-        userText("The user made the following comment regarding lines 4 through 8 of src/a.ts: Keep this stable", {
-          id: "prt_comment_only",
-          synthetic: true,
-          metadata: {
-            opencodeComment: {
-              path: "src/a.ts",
-              selection: { startLine: 4, startChar: 0, endLine: 8, endChar: 0 },
-              comment: "Keep this stable",
-            },
-          },
-        }),
-        userText("Continue after the comment", { id: "prt_comment_visible" }),
-      ],
-      { summary: { diffs: Array.from({ length: 11 }, (_, index) => summaryDiff(index)) } },
-    )
-    const nextUser = userMessage(undefined, { id: "msg_2000_diff_next_user", created: 1700000010000 })
-    const nextAssistant = assistantMessage([], {
-      id: "msg_2001_diff_next_assistant",
-      parentID: "msg_2000_diff_next_user",
-      created: 1700000011000,
-    })
-    await setupTimeline(page, { messages: [user, assistantMessage(), nextUser, nextAssistant] })
-    const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
-    await scroller.evaluate((element) => (element.scrollTop = 0))
-
-    await expect(
-      page.getByText(
-        "The user made the following comment regarding lines 4 through 8 of src/a.ts: Keep this stable Continue after the comment",
-        { exact: true },
-      ),
-    ).toBeVisible()
-    await expect(page.locator('[data-timeline-row="DiffSummary"]')).toHaveCount(0)
-  })
-
   test("renders interruption independently when the turn is not compacted", async ({ page }) => {
     const user = userMessage()
     const before = assistantMessage([{ id: "prt_before", type: "text", text: "Before" }], {
       id: "msg_1001_before",
-      error: { name: "MessageAbortedError", data: { message: "Stopped" } },
+      error: { type: "MessageAbortedError", message: "Stopped" },
     })
     const after = assistantMessage([{ id: "prt_after", type: "text", text: "After" }], {
       id: "msg_1002_after",

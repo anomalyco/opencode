@@ -1,4 +1,5 @@
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import type { JsonValue, OpenCodeEvent, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type { Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../../utils/waits"
@@ -10,37 +11,20 @@ const sessionID = "ses_timeline_state_regression"
 const userMessageID = "msg_user_regression"
 const assistantMessageID = "msg_assistant_regression"
 const editPartID = "prt_0001_edit"
-export const textPartID = "prt_9999_text"
+export const textPartID = `${assistantMessageID}:text:0`
 const title = "Timeline collapse state regression"
 const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
 
-type EventPayload = {
-  directory: string
-  payload: Record<string, unknown>
-}
+type EventPayload = OpenCodeEvent
 
 const userMessage = {
-  info: {
-    id: userMessageID,
-    sessionID,
-    role: "user",
-    time: { created: 1700000000000 },
-    summary: { diffs: [] },
-    agent: "build",
-    model,
-  },
-  parts: [
-    {
-      id: "prt_user_text",
-      sessionID,
-      messageID: userMessageID,
-      type: "text",
-      text: "Please edit the file.",
-    },
-  ],
-}
+  id: userMessageID,
+  type: "user",
+  time: { created: 1700000000000 },
+  text: "Please edit the file.",
+} satisfies SessionMessageInfo
 
-const editPart = {
+const editPart: ToolSeed = {
   id: editPartID,
   sessionID,
   messageID: assistantMessageID,
@@ -66,32 +50,16 @@ const editPart = {
   },
 }
 
-const streamedTextPart = {
-  id: textPartID,
-  sessionID,
-  messageID: assistantMessageID,
-  type: "text",
-  text: "Streaming added a later assistant text part.",
-}
-
 const assistantMessage = {
-  info: {
-    id: assistantMessageID,
-    sessionID,
-    role: "assistant",
-    time: { created: 1700000001000 },
-    parentID: userMessageID,
-    modelID: model.modelID,
-    providerID: model.providerID,
-    mode: "build",
-    agent: "build",
-    path: { cwd: directory, root: directory },
-    cost: 0.01,
-    tokens: { input: 100, output: 200, reasoning: 0, cache: { read: 0, write: 0 } },
-    variant: "max",
-  },
-  parts: [editPart],
-}
+  id: assistantMessageID,
+  type: "assistant",
+  time: { created: 1700000001000 },
+  model: { id: model.modelID, providerID: model.providerID, variant: model.variant },
+  agent: "build",
+  cost: 0.01,
+  tokens: { input: 100, output: 200, reasoning: 0, cache: { read: 0, write: 0 } },
+  content: [toolContent(editPart)],
+} satisfies SessionMessageInfo
 
 export async function setupTimelineBenchmark(
   page: Page,
@@ -105,7 +73,7 @@ export async function setupTimelineBenchmark(
   const events: EventPayload[] = []
   let eventBatch = options.eventBatch
   const currentUserMessage = options.turnDiffs
-    ? { ...userMessage, info: { ...userMessage.info, summary: { diffs: options.turnDiffs } } }
+    ? { ...userMessage, metadata: { diffs: options.turnDiffs as JsonValue } }
     : userMessage
   await mockOpenCodeServer(page, {
     directory,
@@ -138,7 +106,8 @@ export async function setupTimelineBenchmark(
   await page.setViewportSize({ width: 1366, height: 768 })
   const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
   const text = page.locator(`[data-timeline-part-id="${textPartID}"]`).first()
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionTitle(page, title)
   await expectAppVisible(scroller)
   return {
@@ -182,34 +151,27 @@ export async function setupTimelineBenchmark(
   }
 }
 
-export function buildInitialStreamEvent(deltaCount: number): EventPayload {
-  return {
-    directory,
-    payload: {
-      type: "message.part.updated",
-      properties: {
-        part: {
-          ...streamedTextPart,
-          text: `Streaming${streamChunk(0, deltaCount + 1)}\n\n\`\`\`ts\nconst initial = true\n\`\`\``,
-        },
-      },
-    },
-  }
+export function buildInitialStreamEvent(deltaCount: number): EventPayload[] {
+  return [
+    timelineEvent("session.text.started", { sessionID, assistantMessageID, ordinal: 0 }, true),
+    timelineEvent("session.text.delta", {
+      sessionID,
+      assistantMessageID,
+      ordinal: 0,
+      delta: `Streaming${streamChunk(0, deltaCount + 1)}\n\n\`\`\`ts\nconst initial = true\n\`\`\``,
+    }),
+  ]
 }
 
 export function buildStreamDeltaEvents(deltaCount: number): EventPayload[] {
-  return Array.from({ length: deltaCount }, (_, index) => ({
-    directory,
-    payload: {
-      type: "message.part.delta",
-      properties: {
-        messageID: assistantMessageID,
-        partID: textPartID,
-        field: "text",
-        delta: streamChunk(index + 1, deltaCount + 1),
-      },
-    },
-  }))
+  return Array.from({ length: deltaCount }, (_, index) =>
+    timelineEvent("session.text.delta", {
+      sessionID,
+      assistantMessageID,
+      ordinal: 0,
+      delta: streamChunk(index + 1, deltaCount + 1),
+    }),
+  )
 }
 
 function performanceTurn(index: number) {
@@ -315,48 +277,92 @@ function performanceTurn(index: number) {
           },
         ]
       : []),
-  ]
+  ] as unknown as ContentSeed[]
   return [
     {
-      info: {
-        id: userID,
-        sessionID,
-        role: "user",
-        time: { created: 1690000000000 + index * 2_000 },
-        summary: { diffs: [] },
-        agent: "build",
-        model,
-      },
-      parts: [
-        {
-          id: `prt_0000_${suffix}_user`,
-          sessionID,
-          messageID: userID,
-          type: "text",
-          text: `Historical prompt ${index}`,
-        },
-      ],
+      id: userID,
+      type: "user",
+      time: { created: 1690000000000 + index * 2_000 },
+      text: `Historical prompt ${index}`,
     },
     {
-      info: {
-        id: assistantID,
-        sessionID,
-        role: "assistant",
-        time: { created: 1690000001000 + index * 2_000, completed: 1690000001500 + index * 2_000 },
-        parentID: userID,
-        modelID: model.modelID,
-        providerID: model.providerID,
-        mode: "build",
-        agent: "build",
-        path: { cwd: directory, root: directory },
-        cost: 0.01,
-        tokens: { input: 100, output: 200, reasoning: 0, cache: { read: 0, write: 0 } },
-        variant: "max",
-        finish: "stop",
-      },
-      parts,
+      id: assistantID,
+      type: "assistant",
+      time: { created: 1690000001000 + index * 2_000, completed: 1690000001500 + index * 2_000 },
+      model: { id: model.modelID, providerID: model.providerID, variant: model.variant },
+      agent: "build",
+      cost: 0.01,
+      tokens: { input: 100, output: 200, reasoning: 0, cache: { read: 0, write: 0 } },
+      finish: "stop",
+      content: parts.map((part) => {
+        if (part.type === "text") return { type: "text" as const, text: part.text }
+        if (part.type === "reasoning")
+          return {
+            type: "reasoning" as const,
+            text: part.text,
+            time: { created: part.time.start, completed: part.time.end },
+          }
+        return toolContent(part)
+      }),
     },
-  ]
+  ] satisfies SessionMessageInfo[]
+}
+
+type ToolSeed = {
+  id?: string
+  sessionID?: string
+  messageID?: string
+  type: "tool"
+  callID: string
+  tool: string
+  state: {
+    status: string
+    input: Record<string, unknown>
+    output: string
+    title?: string
+    metadata: Record<string, unknown>
+    time: { start: number; end: number }
+  }
+}
+
+type ContentSeedBase = { id?: string; sessionID?: string; messageID?: string }
+
+type ContentSeed =
+  | (ContentSeedBase & { type: "text"; text: string })
+  | (ContentSeedBase & { type: "reasoning"; text: string; time: { start: number; end: number } })
+  | ToolSeed
+
+function toolContent(part: ToolSeed): SessionMessageAssistant["content"][number] {
+  return {
+    type: "tool",
+    id: part.callID,
+    name: part.tool,
+    time: { created: part.state.time.start, ran: part.state.time.start, completed: part.state.time.end },
+    state: {
+      status: "completed",
+      input: part.state.input as Record<string, JsonValue>,
+      content: [{ type: "text", text: part.state.output }],
+      metadata: part.state.metadata as Record<string, JsonValue>,
+    },
+  }
+}
+
+let eventSequence = 0
+
+function timelineEvent<Type extends "session.text.started" | "session.text.delta">(
+  type: Type,
+  data: Extract<OpenCodeEvent, { type: Type }>["data"],
+  durable = false,
+): Extract<OpenCodeEvent, { type: Type }> {
+  eventSequence++
+  return {
+    id: `evt_timeline_benchmark_${eventSequence}`,
+    created: 1700000002000 + eventSequence,
+    type,
+    data,
+    location: { directory },
+    ...(durable ? { durable: { aggregateID: sessionID, seq: eventSequence, version: 1 } } : {}),
+  } as unknown as Extract<OpenCodeEvent, { type: Type }>
 }
 
 function historicalMarkdown(index: number) {

@@ -105,11 +105,11 @@ export type CommandAttempt = Integration.CommandAttempt
 export const CommandAttemptStatus = Integration.CommandAttemptStatus
 export type CommandAttemptStatus = Integration.CommandAttemptStatus
 
-export class CodeRequiredError extends Schema.TaggedErrorClass<CodeRequiredError>()("Integration.CodeRequired", {
+export class CodeRequiredError extends Schema.TaggedError<CodeRequiredError>()("Integration.CodeRequired", {
   attemptID: AttemptID,
 }) {}
 
-export class AuthorizationError extends Schema.TaggedErrorClass<AuthorizationError>()("Integration.Authorization", {
+export class AuthorizationError extends Schema.TaggedError<AuthorizationError>()("Integration.Authorization", {
   cause: Schema.Defect(),
 }) {}
 

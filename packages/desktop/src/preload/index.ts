@@ -11,7 +11,6 @@ const updaterHandler = (_: unknown, state: UpdaterState) => {
 }
 
 const api: ElectronAPI = {
-  killSidecar: () => ipcRenderer.invoke("kill-sidecar"),
   awaitInitialization: () => ipcRenderer.invoke("await-initialization"),
   wslServers: {
     getState: () => ipcRenderer.invoke("wsl-servers-get-state"),
@@ -61,9 +60,6 @@ const api: ElectronAPI = {
   isFirstLaunchOnboardingPending: () => ipcRenderer.invoke("is-first-launch-onboarding-pending"),
   finishFirstLaunchOnboarding: (createDefaultProject) =>
     ipcRenderer.invoke("finish-first-launch-onboarding", createDefaultProject),
-  isOldLayoutEligible: () => ipcRenderer.invoke("is-old-layout-eligible"),
-  getDisplayBackend: () => ipcRenderer.invoke("get-display-backend"),
-  setDisplayBackend: (backend) => ipcRenderer.invoke("set-display-backend", backend),
   checkAppExists: (appName) => ipcRenderer.invoke("check-app-exists", appName),
   resolveAppPath: (appName) => ipcRenderer.invoke("resolve-app-path", appName),
   storeGet: (name, key) => ipcRenderer.invoke("store-get", name, key),

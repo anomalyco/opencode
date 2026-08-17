@@ -34,7 +34,7 @@ export type Reply = typeof Reply.Type
 
 export { Event } from "@opencode-ai/schema/form"
 
-export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Form.NotFoundError", {
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Form.NotFoundError", {
   id: ID,
 }) {
   override get message() {
@@ -42,7 +42,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("For
   }
 }
 
-export class AlreadySettledError extends Schema.TaggedErrorClass<AlreadySettledError>()("Form.AlreadySettledError", {
+export class AlreadySettledError extends Schema.TaggedError<AlreadySettledError>()("Form.AlreadySettledError", {
   id: ID,
 }) {
   override get message() {
@@ -50,7 +50,7 @@ export class AlreadySettledError extends Schema.TaggedErrorClass<AlreadySettledE
   }
 }
 
-export class AlreadyExistsError extends Schema.TaggedErrorClass<AlreadyExistsError>()("Form.AlreadyExistsError", {
+export class AlreadyExistsError extends Schema.TaggedError<AlreadyExistsError>()("Form.AlreadyExistsError", {
   id: ID,
 }) {
   override get message() {
@@ -58,12 +58,12 @@ export class AlreadyExistsError extends Schema.TaggedErrorClass<AlreadyExistsErr
   }
 }
 
-export class InvalidAnswerError extends Schema.TaggedErrorClass<InvalidAnswerError>()("Form.InvalidAnswerError", {
+export class InvalidAnswerError extends Schema.TaggedError<InvalidAnswerError>()("Form.InvalidAnswerError", {
   id: ID,
   message: Schema.String,
 }) {}
 
-export class InvalidFormError extends Schema.TaggedErrorClass<InvalidFormError>()("Form.InvalidFormError", {
+export class InvalidFormError extends Schema.TaggedError<InvalidFormError>()("Form.InvalidFormError", {
   message: Schema.String,
 }) {}
 

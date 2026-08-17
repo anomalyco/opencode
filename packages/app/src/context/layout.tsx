@@ -12,7 +12,7 @@ import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
-import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
+import { SessionStateKey } from "@/utils/server-scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
 import { requireServerKey } from "@/utils/session-route"
 import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } from "./layout-tabs"
@@ -131,11 +131,6 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
     }
   }
 
-  const dirBase64 = parts[0]
-  const dir = decode64(dirBase64)
-  if (!dir) return { type: "home" }
-  if (parts[1] === "session") return { type: "home" }
-
   throw new Error("Unrecognised route!")
 }
 
@@ -153,6 +148,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const isRecord = (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null && !Array.isArray(value)
+
+    const currentSessionState = (value: unknown) => {
+      if (!isRecord(value)) return value
+      const entries = Object.entries(value)
+      if (entries.every(([key]) => SessionStateKey.is(key))) return value
+      return Object.fromEntries(entries.filter(([key]) => SessionStateKey.is(key)))
+    }
 
     const migrate = (value: unknown) => {
       if (!isRecord(value)) return value
@@ -195,8 +197,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }
       })()
 
-      const sessionTabs = migrateLegacySessionStateKeys(value.sessionTabs)
-      const sessionView = migrateLegacySessionStateKeys(value.sessionView)
+      const sessionTabs = currentSessionState(value.sessionTabs)
+      const sessionView = currentSessionState(value.sessionView)
       const migratedSessionTabs = (() => {
         if (!isRecord(sessionTabs)) return sessionTabs
 
@@ -242,7 +244,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     const [store, setStore, _, ready] = persisted(
-      { ...Persist.global("layout", ["layout.v6"]), migrate },
+      { ...Persist.global("layout"), previousKey: "layout.v6", migrate },
       createStore({
         sidebar: {
           opened: false,
@@ -289,11 +291,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       used: new Map<string, number>(),
     }
 
-    const SESSION_STATE_KEYS = [
-      { key: "prompt", legacy: "prompt", version: "v2" },
-      { key: "terminal", legacy: "terminal", version: "v1" },
-      { key: "file-view", legacy: "file", version: "v1" },
-    ] as const
+    const SESSION_STATE_KEYS = ["prompt", "terminal", "file-view"] as const
 
     const dropSessionState = (keys: string[]) => {
       for (const key of keys) {
@@ -305,13 +303,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
         for (const entry of SESSION_STATE_KEYS) {
           const target = session
-            ? Persist.serverSession(scope, dir, session, entry.key)
-            : Persist.serverWorkspace(scope, dir, entry.key)
+            ? Persist.serverSession(scope, dir, session, entry)
+            : Persist.serverWorkspace(scope, dir, entry)
           void removePersisted(target, platform)
-
-          if (scope !== ServerScope.local) continue
-          const legacyKey = `${dir}/${entry["legacy"]}${session ? "/" + session : ""}.${entry.version}`
-          void removePersisted({ key: legacyKey }, platform)
         }
       }
     }

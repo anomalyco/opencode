@@ -1,36 +1,26 @@
 import { ServerConnection, useServers, useTabs } from "@opencode-ai/app"
 import { onMount } from "solid-js"
 
-export function DesktopFirstLaunchOnboarding(props: {
-  serverKey: ServerConnection.Key
-  initialUrl: string
-  onLoaded: () => void
-}) {
+export function DesktopFirstLaunchOnboarding(props: { serverKey: ServerConnection.Key; initialUrl: string }) {
   const server = useServers()
   const tabs = useTabs()
 
   onMount(() => {
-    void runFirstLaunchOnboarding().finally(props.onLoaded)
+    void runFirstLaunchOnboarding()
   })
 
   async function runFirstLaunchOnboarding() {
     try {
       await Promise.all([tabs.ready.promise, tabs.recentReady.promise].map((p) => p ?? Promise.resolve()))
-      const existingInstall = await window.api.isOldLayoutEligible()
-
       const pending = await window.api.isFirstLaunchOnboardingPending()
       if (!pending) return
 
       const shouldTrigger =
-        !existingInstall &&
-        props.initialUrl === "/" &&
-        tabs.store.length === 0 &&
-        server.list.every(ServerConnection.builtin)
+        props.initialUrl === "/" && tabs.store.length === 0 && server.list.every(ServerConnection.builtin)
 
       console.info("[desktop-onboarding] first launch onboarding evaluated", {
         pending,
         shouldTrigger,
-        existingInstall,
         initialUrl: props.initialUrl,
         tabs: tabs.store.length,
         servers: server.list.map(ServerConnection.key),

@@ -12,7 +12,6 @@ import { type BaseRouterProps, Navigate, Route, Router, useParams, useSearchPara
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import {
   type Component,
-  createEffect,
   createMemo,
   createRenderEffect,
   ErrorBoundary,
@@ -32,7 +31,7 @@ import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { usePlatform } from "@/context/platform"
 import { PromptProvider } from "@/context/prompt"
-import { ServerConnection, ServersProvider, useServers } from "@/context/servers"
+import { ServerConnection, ServersProvider } from "@/context/servers"
 import { SettingsProvider } from "@/context/settings"
 import { TabsProvider, useTabs, type DraftTab } from "@/context/tabs"
 import { LocationProvider } from "@/context/location"
@@ -40,30 +39,13 @@ import { WslServersProvider } from "@/wsl/context"
 import { SessionUIProvider } from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
-import { legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
-import { decode64 } from "@/utils/base64"
+import { requireServerKey } from "./utils/session-route"
 
 import { TargetSessionRouteContent } from "@/pages/session"
 import { Home } from "@/pages/home"
 import { ServerProvider } from "./context/server"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
-
-const DirectoryDraftRedirect = () => {
-  const params = useParams()
-  const [search] = useSearchParams<{ draftId?: string; prompt?: string }>()
-  const server = useServers()
-  const tabs = useTabs()
-
-  createEffect(() => {
-    if (search.draftId || !tabs.ready()) return
-    const directory = decode64(params.dir)
-    if (!directory) return
-    tabs.newDraft({ server: ServerConnection.key(server.list[0])!, directory }, search.prompt)
-  })
-
-  return null
-}
 
 function TargetServerRoute(props: ParentProps) {
   const params = useParams<{ serverKey: string }>()
@@ -259,8 +241,6 @@ export function AppInterface(props: {
   canonicalLocalServer?: ServerConnection.Key
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>
-  disableHealthCheck?: boolean
-  startup?: Promise<void>
 }) {
   // The visual layout lives in the router root so it remains mounted across
   // route changes. Draft and session routes override only their server-bound data
@@ -287,7 +267,6 @@ export function AppInterface(props: {
       <SettingsProvider>
         <GlobalProvider>
           <Dynamic component={props.router ?? Router} root={Root}>
-            {/* Proper Routes */}
             <Route component={AppLayout}>
               <Route path="/" component={Home} />
               <Route
@@ -300,36 +279,9 @@ export function AppInterface(props: {
               />
               <Route path="/new-session" component={DraftRoute} />
             </Route>
-            {/* Legacy Routes */}
-            <Route>
-              <Route path="/:dir" component={DirectoryDraftRedirect} />
-              <Route path="/:dir/session" component={DirectoryDraftRedirect} />
-              <Route path="/:dir/session/:id" component={LegacySessionRedirect} />
-            </Route>
           </Dynamic>
         </GlobalProvider>
       </SettingsProvider>
     </ServersProvider>
-  )
-}
-
-function LegacySessionRedirect() {
-  const server = useServers()
-  const tabs = useTabs()
-  const params = useParams<{ id: string }>()
-
-  return (
-    <Show when={tabs.ready()}>
-      <Navigate
-        href={sessionHref(
-          legacySessionServer(
-            tabs.store.filter((item) => item.type === "session"),
-            params.id,
-            ServerConnection.key(server.list[0]!),
-          ),
-          params.id,
-        )}
-      />
-    </Show>
   )
 }

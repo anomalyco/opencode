@@ -78,7 +78,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const [saved, setSaved, , savedReady] = persisted(
       {
-        ...Persist.serverWorkspace(serverSDK.scope, sdk().directory, "model-selection", ["model-selection.v1"]),
+        ...Persist.serverWorkspace(serverSDK.scope, sdk().directory, "model-selection"),
         migrate,
       },
       createStore<Saved>({

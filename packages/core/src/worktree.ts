@@ -56,27 +56,27 @@ export const ListEntry = Schema.Struct({
 }).annotate({ identifier: "Worktree.ListEntry" })
 export type ListEntry = typeof ListEntry.Type
 
-export class SourceDirectoryNotFoundError extends Schema.TaggedErrorClass<SourceDirectoryNotFoundError>()(
+export class SourceDirectoryNotFoundError extends Schema.TaggedError<SourceDirectoryNotFoundError>()(
   "Worktree.SourceDirectoryNotFoundError",
   { projectID: ProjectSchema.ID, directory: Schema.optional(AbsolutePath) },
 ) {}
 
-export class DestinationExistsError extends Schema.TaggedErrorClass<DestinationExistsError>()(
+export class DestinationExistsError extends Schema.TaggedError<DestinationExistsError>()(
   "Worktree.DestinationExistsError",
   { directory: AbsolutePath },
 ) {}
 
-export class InvalidDirectoryError extends Schema.TaggedErrorClass<InvalidDirectoryError>()(
+export class InvalidDirectoryError extends Schema.TaggedError<InvalidDirectoryError>()(
   "Worktree.InvalidDirectoryError",
   { directory: AbsolutePath },
 ) {}
 
-export class StrategyUnavailableError extends Schema.TaggedErrorClass<StrategyUnavailableError>()(
+export class StrategyUnavailableError extends Schema.TaggedError<StrategyUnavailableError>()(
   "Worktree.StrategyUnavailableError",
   { strategy: StrategyID },
 ) {}
 
-export class DuplicateStrategyError extends Schema.TaggedErrorClass<DuplicateStrategyError>()(
+export class DuplicateStrategyError extends Schema.TaggedError<DuplicateStrategyError>()(
   "Worktree.DuplicateStrategyError",
   { strategy: StrategyID },
 ) {}

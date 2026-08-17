@@ -29,7 +29,6 @@ export type UpdaterAPI = {
   install: () => Promise<void>
 }
 
-export type LinuxDisplayBackend = "wayland" | "auto"
 export type TitlebarTheme = {
   mode: "light" | "dark"
   scheme?: "system" | "light" | "dark"
@@ -43,7 +42,6 @@ export type FatalRendererError = {
 }
 
 export type ElectronAPI = {
-  killSidecar: () => Promise<void>
   awaitInitialization: () => Promise<ServerReadyData>
   wslServers: WslServersAPI
   updater: UpdaterAPI
@@ -52,9 +50,6 @@ export type ElectronAPI = {
   setDefaultServerUrl: (url: string | null) => Promise<void>
   isFirstLaunchOnboardingPending: () => Promise<boolean>
   finishFirstLaunchOnboarding: (createDefaultProject: boolean) => Promise<string | null>
-  isOldLayoutEligible: () => Promise<boolean>
-  getDisplayBackend: () => Promise<LinuxDisplayBackend | null>
-  setDisplayBackend: (backend: LinuxDisplayBackend | null) => Promise<void>
   checkAppExists: (appName: string) => Promise<boolean>
   resolveAppPath: (appName: string) => Promise<string | null>
   storeGet: (name: string, key: string) => Promise<string | null>

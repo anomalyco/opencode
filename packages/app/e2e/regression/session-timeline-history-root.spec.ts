@@ -1,4 +1,5 @@
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import type { SessionMessageAssistant } from "@opencode-ai/client/promise"
 import { expect, test, type Page } from "@playwright/test"
 import {
   assistantMessage,
@@ -17,6 +18,7 @@ import { installSseTransport } from "../utils/sse-transport"
 import { expectSessionTitle } from "../utils/waits"
 
 const messagePageSize = 200
+const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const messages = Array.from({ length: messagePageSize / 2 + 1 }, (_, index) => {
   const id = `msg_${String(index + 1001).padStart(4, "0")}_history_root_user`
   return [
@@ -29,19 +31,19 @@ const messages = Array.from({ length: messagePageSize / 2 + 1 }, (_, index) => {
     }),
   ]
 }).flat()
-const assistants = messages.filter((message) => message.info.role === "assistant")
+const assistants = messages.filter((message): message is SessionMessageAssistant => message.type === "assistant")
 const lastAssistant = assistants.at(-1)!
-const lastPartID = `${assistants.at(-1)!.info.id}:text:0`
-const userPartID = `${messages.at(-2)!.info.id}:text:0`
+const lastPartID = `${assistants.at(-1)!.id}:text:0`
+const userPartID = `${messages.at(-2)!.id}:text:0`
 const completed = {
-  ...lastAssistant.info,
-  time: { ...lastAssistant.info.time, completed: lastAssistant.info.time.created + 15_000 },
+  ...lastAssistant,
+  time: { ...lastAssistant.time, completed: lastAssistant.time.created + 15_000 },
 }
 const scenarios = [
   { name: "completion", info: completed, idleFirst: false, interrupted: false },
   {
     name: "interruption",
-    info: { ...completed, error: { name: "MessageAbortedError", data: { message: "Stopped" } } },
+    info: { ...completed, error: { type: "MessageAbortedError", message: "Stopped" } },
     idleFirst: true,
     interrupted: true,
   },
@@ -56,12 +58,11 @@ for (const scenario of scenarios) {
     const roots: { sessionID: string; messageID: string }[] = []
     const sequence: string[] = []
     const history = Promise.withResolvers<void>()
-    const transport = await installSseTransport<{ directory: string; payload: Record<string, unknown> }>(page, {
-      server: `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`,
+    const transport = await installSseTransport(page, {
+      server,
       retry: 20,
     })
     await mockOpenCodeServer(page, {
-      protocol: "v2",
       directory,
       project: project(),
       provider: {
@@ -94,15 +95,15 @@ for (const scenario of scenarios) {
       },
       message: (requestedSessionID, messageID) => {
         if (requestedSessionID !== sessionID) return
-        return messages.find((item) => item.info.id === messageID)
+        return messages.find((item) => item.id === messageID)
       },
       pageMessages: (_, limit, before) => {
         pages.push({ before, limit })
-        const end = before ? messages.findIndex((message) => message.info.id === before) : messages.length
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
         const start = Math.max(0, end - limit)
         return {
           items: messages.slice(start, end),
-          cursor: start > 0 ? messages[start]!.info.id : undefined,
+          cursor: start > 0 ? messages[start]!.id : undefined,
         }
       },
     })
@@ -152,7 +153,7 @@ for (const scenario of scenarios) {
       requestAnimationFrame(() => setTimeout(sample, 0))
     })
 
-    await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+    await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
     await transport.waitForConnection()
     await expectSessionTitle(page, title)
     await expect(page.locator(`[data-timeline-part-id="${lastPartID}"]`)).toBeVisible()
@@ -169,7 +170,7 @@ for (const scenario of scenarios) {
     expect(sequence.slice(0, 3)).toEqual([
       "messages:start:latest",
       "messages:end:latest",
-      `messages:start:${messages.at(-messagePageSize)!.info.id}`,
+      `messages:start:${messages.at(-messagePageSize)!.id}`,
     ])
     await page.evaluate(() => {
       ;(
@@ -187,7 +188,7 @@ for (const scenario of scenarios) {
     await waitForProbeSamples(page, beforeHistory)
     expect(pages).toEqual([
       { before: undefined, limit: messagePageSize },
-      { before: messages.at(-messagePageSize)!.info.id, limit: messagePageSize },
+      { before: messages.at(-messagePageSize)!.id, limit: messagePageSize },
     ])
     expect(roots).toEqual([])
 

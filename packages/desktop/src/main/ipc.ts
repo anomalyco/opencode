@@ -31,7 +31,6 @@ const pickerFilters = (ext?: string[]) => {
 const pickedFiles = createPickedFileAuthorizations()
 
 type Deps = {
-  killSidecar: () => Promise<void> | void
   relaunch: () => void
   awaitInitialization: () => Promise<ServerReadyData>
   consumeInitialDeepLinks: () => Promise<string[]> | string[]
@@ -39,9 +38,6 @@ type Deps = {
   setDefaultServerUrl: (url: string | null) => Promise<void> | void
   isFirstLaunchOnboardingPending: () => Promise<boolean> | boolean
   finishFirstLaunchOnboarding: (createDefaultProject: boolean) => Promise<string | null> | string | null
-  isOldLayoutEligible: () => Promise<boolean> | boolean
-  getDisplayBackend: () => Promise<string | null>
-  setDisplayBackend: (backend: string | null) => Promise<void> | void
   checkAppExists: (appName: string) => Promise<boolean> | boolean
   resolveAppPath: (appName: string) => Promise<string | null>
   showUpdater: () => Promise<void> | void
@@ -57,7 +53,6 @@ export function registerIpcHandlers(deps: Deps) {
   app.once("will-quit", () => drafts.close())
   app.on("browser-window-created", (_event, win) => win.on("session-end", () => drafts.flush()))
 
-  ipcMain.handle("kill-sidecar", () => deps.killSidecar())
   ipcMain.handle("await-initialization", () => deps.awaitInitialization())
   ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
   ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
@@ -67,11 +62,6 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("is-first-launch-onboarding-pending", () => deps.isFirstLaunchOnboardingPending())
   ipcMain.handle("finish-first-launch-onboarding", (_event: IpcMainInvokeEvent, createDefaultProject: boolean) =>
     deps.finishFirstLaunchOnboarding(createDefaultProject),
-  )
-  ipcMain.handle("is-old-layout-eligible", () => deps.isOldLayoutEligible())
-  ipcMain.handle("get-display-backend", () => deps.getDisplayBackend())
-  ipcMain.handle("set-display-backend", (_event: IpcMainInvokeEvent, backend: string | null) =>
-    deps.setDisplayBackend(backend),
   )
   ipcMain.handle("check-app-exists", (_event: IpcMainInvokeEvent, appName: string) => deps.checkAppExists(appName))
   ipcMain.handle("resolve-app-path", (_event: IpcMainInvokeEvent, appName: string) => deps.resolveAppPath(appName))

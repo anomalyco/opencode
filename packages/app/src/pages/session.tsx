@@ -479,7 +479,7 @@ export default function Page() {
   })
 
   const [followup, setFollowup] = persisted(
-    Persist.serverWorkspace(serverSDK.scope, sdk().directory, "followup", ["followup.v1"]),
+    Persist.serverWorkspace(serverSDK.scope, sdk().directory, "followup"),
     createStore<{
       items: Record<string, FollowupItem[] | undefined>
       failed: Record<string, string | undefined>
@@ -1871,14 +1871,7 @@ export default function Page() {
             openParent: () => {
               const id = controller.data.parentID()
               if (!id) return
-              navigate(
-                sessionHref(
-                  controller.identity.params.serverKey
-                    ? requireServerKey(controller.identity.params.serverKey)
-                    : ServerConnection.key(serverSDK.server),
-                  id,
-                ),
-              )
+              navigate(sessionHref(requireServerKey(controller.identity.params.serverKey), id))
             },
             setPromptRef: (el) => {
               inputRef = el

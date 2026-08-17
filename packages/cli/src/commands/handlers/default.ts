@@ -10,15 +10,17 @@ import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
 import { Npm } from "@opencode-ai/util/npm"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
+import { Env } from "../../env"
 
 export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
+    const requestedServer = Option.getOrUndefined(input.server)
     if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
     const server = yield* ServerConnection.resolve({
-      server: Option.getOrUndefined(input.server),
+      server: requestedServer,
       standalone: input.standalone,
       mismatch: "replace",
       onStart: (reason, previousVersion) => {
@@ -75,6 +77,7 @@ export default Runtime.handler(Commands, (input) =>
         resolve: (spec) =>
           runPromise(npm.add(spec, { subpaths: ["tui"] }).pipe(Effect.map((result) => result.entrypoint))),
       },
+      environment: requestedServer === undefined ? Env.session() : undefined,
       terminalHandoff: () => preflight.finish(),
       log: (level, message, tags) => {
         const effect =

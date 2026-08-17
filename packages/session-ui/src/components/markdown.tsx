@@ -31,6 +31,7 @@ import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
+import { renderMermaidSvg } from "./markdown-mermaid"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -229,6 +230,47 @@ function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
   }
 }
 
+function decorateMermaid(wrapper: HTMLElement, code: HTMLElement, complete: boolean) {
+  if (!code.classList.contains("language-mermaid")) {
+    clearMermaid(wrapper)
+    return
+  }
+
+  const source = code.textContent ?? ""
+  if (!source) return
+  const diagram = wrapper.querySelector('[data-component="markdown-mermaid"]') ?? document.createElement("div")
+  diagram.setAttribute("data-component", "markdown-mermaid")
+  if (!diagram.parentElement) wrapper.appendChild(diagram)
+  wrapper.dataset.mermaidPending = "true"
+  const input = complete ? source : source.slice(0, source.lastIndexOf("\n") + 1)
+  if (!input) return
+  const attempt = `${complete ? "complete" : "streaming"}:${input.length}`
+  if (wrapper.dataset.mermaidAttempt === attempt) return
+  wrapper.dataset.mermaidAttempt = attempt
+  void renderMermaidSvg(input)
+    .then((svg) => {
+      if (!svg) {
+        if (complete && code.textContent === source) clearMermaid(wrapper)
+        return
+      }
+      if (!(code.textContent ?? "").startsWith(input)) return
+      diagram.innerHTML = svg
+      delete wrapper.dataset.mermaidPending
+      wrapper.dataset.mermaidReady = "true"
+    })
+    .catch(() => {
+      if (!complete || code.textContent !== source) return
+      clearMermaid(wrapper)
+    })
+}
+
+function clearMermaid(wrapper: HTMLElement) {
+  delete wrapper.dataset.mermaidAttempt
+  delete wrapper.dataset.mermaidPending
+  delete wrapper.dataset.mermaidReady
+  wrapper.querySelector('[data-component="markdown-mermaid"]')?.remove()
+}
+
 function markCodeLinks(root: HTMLDivElement) {
   const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
   for (const code of codeNodes) {
@@ -268,10 +310,13 @@ function markInlineCode(root: HTMLDivElement) {
   }
 }
 
-function decorate(root: HTMLDivElement, labels: CopyLabels) {
+function decorate(root: HTMLDivElement, labels: CopyLabels, complete: boolean) {
   const blocks = Array.from(root.querySelectorAll("pre"))
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
+    const wrapper = block.parentElement
+    const code = block.querySelector("code")
+    if (wrapper instanceof HTMLElement && code instanceof HTMLElement) decorateMermaid(wrapper, code, complete)
   }
   markInlineCode(root)
   markCodeLinks(root)
@@ -598,7 +643,7 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
   next.dataset.markdownHash = block.hash
   next.style.display = "contents"
   next.innerHTML = block.html
-  decorate(next, labels)
+  decorate(next, labels, block.mode === "full")
 
   if (!(current instanceof HTMLDivElement)) {
     container.appendChild(next)
@@ -668,6 +713,7 @@ function updateCodeBlock(
       unstable: block.unstable,
       raw: block.raw,
     })
+    if (wrapper instanceof HTMLElement) decorateMermaid(wrapper, code, block.complete)
     return
   }
 
@@ -682,6 +728,7 @@ function updateCodeBlock(
   pre.appendChild(codeElement)
   wrapper.appendChild(pre)
   wrapper.appendChild(createCopyButton(labels))
+  decorateMermaid(wrapper, codeElement, block.complete)
   next.appendChild(wrapper)
   renderedCodeTokens.set(next, {
     language: block.language,

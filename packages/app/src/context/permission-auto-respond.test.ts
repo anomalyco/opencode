@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { PermissionRequest, SessionInfo } from "@opencode-ai/client/promise"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { autoRespondsPermission, isDirectoryAutoAccepting, sessionAutoAccept } from "./permission-auto-respond"
+import {
+  autoRespondsPermission,
+  isDirectoryAutoAccepting,
+  relocateAutoAccept,
+  sessionAutoAccept,
+} from "./permission-auto-respond"
 
 const session = (input: { id: string; parentID?: string }) =>
   ({
@@ -25,13 +30,7 @@ describe("autoRespondsPermission", () => {
     expect(autoRespondsPermission(autoAccept, sessions, permission("child"), directory)).toBe(true)
   })
 
-  test("uses a parent session's legacy auto-accept key", () => {
-    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
-
-    expect(autoRespondsPermission({ root: true }, sessions, permission("child"), "/tmp/project")).toBe(true)
-  })
-
-  test("defaults to requiring approval when no family override exists", () => {
+  test("defaults to requiring approval when no lineage override exists", () => {
     const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" }), session({ id: "other" })]
     const autoAccept = {
       other: true,
@@ -122,4 +121,14 @@ describe("isDirectoryAutoAccepting", () => {
     const autoAccept = { [`${base64Encode(directory)}/*`]: false }
     expect(isDirectoryAutoAccepting(autoAccept, directory)).toBe(false)
   })
+})
+
+test("relocates bare session settings when the directory becomes known", () => {
+  const directory = "/tmp/project"
+  expect(relocateAutoAccept({ root: true }, [{ id: "root" }], directory)).toEqual({
+    [`${base64Encode(directory)}/root`]: true,
+  })
+  expect(
+    relocateAutoAccept({ root: true, [`${base64Encode(directory)}/root`]: false }, [{ id: "root" }], directory),
+  ).toEqual({ [`${base64Encode(directory)}/root`]: false })
 })

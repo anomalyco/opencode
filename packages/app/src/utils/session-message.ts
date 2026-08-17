@@ -10,7 +10,7 @@ import { Option, Schema } from "effect"
 
 const emptyTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 const emptyModel: { id: string; providerID: string; variant?: string } = { id: "", providerID: "" }
-const decodeToolInput = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+const decodeToolInput = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 export function compareMessages(a: Pick<Message, "id" | "time">, b: Pick<Message, "id" | "time">) {
   const left = messageKey(a)

@@ -30,7 +30,7 @@ export type VisualPlan<RegionName extends string = string> = {
   aggregateMotion?: boolean
 }
 
-export type LegacyVisualStabilityOptions<RegionName extends string = string> = {
+export type VisualStabilityOptions<RegionName extends string = string> = {
   flow?: RegionName[]
   motionTolerance?: number
   opacityFloor?: number
@@ -58,8 +58,8 @@ export function visualPlan<const Regions extends Record<string, VisualRegionDefi
   return { ...options, regionNames: Object.keys(regions) as Extract<keyof Regions, string>[], invariants }
 }
 
-export function legacyVisualPlan<RegionName extends string>(
-  options: LegacyVisualStabilityOptions<RegionName> = {},
+export function stabilityPlan<RegionName extends string>(
+  options: VisualStabilityOptions<RegionName> = {},
 ): VisualPlan<RegionName> {
   const inferred =
     options.inferRequired === false

@@ -14,7 +14,6 @@ test.use({ viewport: { width: 1440, height: 900 } })
 test("opens and searches project files inline", async ({ page }) => {
   const searches: { query: string; dirs?: string; limit?: number }[] = []
   await mockOpenCodeServer(page, {
-    protocol: "v2",
     directory,
     project: {
       id: projectID,

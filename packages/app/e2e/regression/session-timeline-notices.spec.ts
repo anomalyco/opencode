@@ -39,7 +39,7 @@ test("renders current protocol notices in CLI order", async ({ page }) => {
       ownerWarnings.push(message.text())
   })
   await setupTimeline(page, {
-    currentMessages: [
+    sessionMessages: [
       user,
       { id: "msg_agent", type: "agent-switched", agent: "explore", time: { created: 2 } },
       assistant(true),
@@ -74,7 +74,7 @@ test("renders current protocol notices in CLI order", async ({ page }) => {
 })
 
 test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
-  await setupTimeline(page, { currentMessages: [user, assistant(false, true)] })
+  await setupTimeline(page, { sessionMessages: [user, assistant(false, true)] })
   const card = page.locator('[data-component="task-tool-card"]')
   await expect(card).toBeVisible()
   await expect(card).toContainText("Inspect code")
@@ -92,14 +92,14 @@ test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
 })
 
 test("waits for completion before labeling requested background work", async ({ page }) => {
-  await setupTimeline(page, { currentMessages: [user, assistant(false, true, undefined, true)] })
+  await setupTimeline(page, { sessionMessages: [user, assistant(false, true, undefined, true)] })
   await expect(page.locator('[data-component="task-tool-card"]')).not.toContainText("(background)")
 })
 
 test("navigates from a running subagent card and hides background controls in the child", async ({ page }) => {
   const childID = "ses_running_child"
   await setupTimeline(page, {
-    currentMessages: [user, assistant(false, true, childID)],
+    sessionMessages: [user, assistant(false, true, childID)],
     sessions: [session(), session({ id: childID, parentID: sessionID, title: "Sleep for 5 minutes" })],
     sessionStatus: { [sessionID]: { type: "busy" }, [childID]: { type: "busy" } },
   })
@@ -113,7 +113,7 @@ test("navigates from a running subagent card and hides background controls in th
 test("shows a badge for active background work", async ({ page }) => {
   const childID = "ses_background_child"
   await setupTimeline(page, {
-    currentMessages: [user, assistant(true)],
+    sessionMessages: [user, assistant(true)],
     sessions: [session(), session({ id: childID, parentID: sessionID })],
     sessionStatus: { [childID]: { type: "busy" } },
   })
@@ -125,7 +125,7 @@ test("separates blocking and already-backgrounded work into two rows", async ({ 
   const backgroundID = "ses_background_existing"
   const blockingID = "ses_background_blocking"
   const timeline = await setupTimeline(page, {
-    currentMessages: [
+    sessionMessages: [
       user,
       {
         id: "msg_backgrounded",

@@ -116,7 +116,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
   const empty: Notification[] = []
 
   const [store, setStore, _, ready] = persisted(
-    Persist.serverGlobal(input.sdk.scope, "notification", ["notification.v1"]),
+    Persist.serverGlobal(input.sdk.scope, "notification"),
     createStore({
       list: [] as Notification[],
     }),

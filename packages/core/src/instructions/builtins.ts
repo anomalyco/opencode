@@ -33,7 +33,7 @@ const layer = Layer.effect(
                   `  Workspace root folder: ${location.project.directory}`,
                   `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,
                   `  Platform: ${process.platform}`,
-                  `  Use ${global.tmp} for temporary work outside the workspace; it already exists and is pre-approved for external directory access.`,
+                  `  Prefer ${global.tmp} over generic system temporary directories such as /tmp; it is pre-created and approved for external access.`,
                   "</env>",
                 ].join("\n"),
               ),

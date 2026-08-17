@@ -11,13 +11,10 @@ import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { SessionMessageTable } from "./sql.js"
 
-export class MessageNotFoundError extends Schema.TaggedErrorClass<MessageNotFoundError>()(
-  "Session.MessageNotFoundError",
-  {
-    sessionID: SessionSchema.ID,
-    messageID: SessionMessage.ID,
-  },
-) {}
+export class MessageNotFoundError extends Schema.TaggedError<MessageNotFoundError>()("Session.MessageNotFoundError", {
+  sessionID: SessionSchema.ID,
+  messageID: SessionMessage.ID,
+}) {}
 
 interface BoundaryInput {
   readonly sessionID: SessionSchema.ID

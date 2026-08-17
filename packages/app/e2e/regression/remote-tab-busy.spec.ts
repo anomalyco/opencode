@@ -57,47 +57,33 @@ async function mockServers(page: Page) {
     const current = url.origin === serverA ? sessionA : sessionB
     const directory = url.searchParams.get("directory")
     if (directory && directory !== current.directory) return json(route, { name: "InvalidDirectory" }, 500)
-    if (url.pathname === "/api/event") return sse(route, url.pathname === "/api/event")
+    if (url.pathname === "/api/event") return sse(route)
     if (url.pathname === "/api/health") return json(route, { pid: 1 })
     if (url.pathname === "/api/session/active")
       return json(route, { data: url.origin === serverB ? { [sessionB.id]: { type: "running" } } : {} })
     if (url.pathname === "/api/session") return json(route, { data: [currentSession(current)], cursor: {} })
     if (url.pathname === `/api/session/${current.id}`) return json(route, { data: currentSession(current) })
     if (url.pathname === `/api/session/${current.id}/message`) return json(route, { data: [], cursor: {} })
-    if (/^\/session\/[^/]+$/.test(url.pathname)) return json(route, { name: "NotFoundError" }, 404)
-    if (/^\/session\/[^/]+\/(children|todo|diff)$/.test(url.pathname)) return json(route, [])
-    if (["/skill", "/command", "/lsp", "/formatter", "/permission", "/question", "/vcs/diff"].includes(url.pathname))
-      return json(route, [])
-    if (url.pathname === "/provider")
-      return json(route, { all: [], connected: [], default: { providerID: "", modelID: "" } })
-    if (url.pathname === "/agent") return json(route, [{ name: "build", mode: "primary" }])
-    if (url.pathname === "/project" || url.pathname === "/project/current") {
+    if (["/api/agent", "/api/provider", "/api/model", "/api/command", "/api/reference"].includes(url.pathname))
+      return json(route, { location: { directory: current.directory }, data: [] })
+    if (url.pathname === "/api/model/default")
+      return json(route, { location: { directory: current.directory }, data: null })
+    if (url.pathname === "/api/permission/request" || url.pathname === "/api/question/request")
+      return json(route, { location: { directory: current.directory }, data: [] })
+    if (url.pathname === "/api/mcp") return json(route, { location: { directory: current.directory }, data: [] })
+    if (url.pathname === "/api/mcp/resource")
+      return json(route, { location: { directory: current.directory }, data: { resources: [], templates: [] } })
+    if (url.pathname === "/api/project" || url.pathname === "/api/project/current") {
       const project = {
         id: current.projectID,
-        worktree: current.directory,
+        canonical: current.directory,
         vcs: "git",
         time: { created: 1, updated: 1 },
         sandboxes: [],
       }
-      return json(route, url.pathname === "/project" ? [project] : project)
+      return json(route, url.pathname === "/api/project" ? [project] : { id: project.id, directory: current.directory })
     }
-    if (url.pathname === "/path")
-      return json(route, {
-        state: current.directory,
-        config: current.directory,
-        worktree: current.directory,
-        directory: current.directory,
-        home: current.directory,
-      })
-    if (url.pathname === "/api/path")
-      return json(route, {
-        state: current.directory,
-        config: current.directory,
-        worktree: current.directory,
-        directory: current.directory,
-        home: current.directory,
-      })
-    if (url.pathname === "/vcs") return json(route, { branch: "main", default_branch: "main" })
+    if (url.pathname === "/api/location") return json(route, { directory: current.directory })
     if (url.pathname === "/api/vcs")
       return json(route, {
         location: { directory: current.directory },
@@ -116,10 +102,10 @@ function json(route: Route, body: unknown, status = 200) {
   })
 }
 
-function sse(route: Route, current: boolean) {
+function sse(route: Route) {
   return route.fulfill({
     status: 200,
     contentType: "text/event-stream",
-    body: current ? 'data: {"id":"evt_connected","type":"server.connected","data":{}}\n\n' : ": ok\n\n",
+    body: 'data: {"id":"evt_connected","type":"server.connected","data":{}}\n\n',
   })
 }

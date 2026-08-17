@@ -85,8 +85,7 @@ async function mockServer(page: Page) {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
     if (url.origin !== server) return route.fallback()
-    if ([`/api/session/${unresolvedSessionID}`, `/session/${unresolvedSessionID}`].includes(url.pathname))
-      return new Promise(() => {})
+    if (url.pathname === `/api/session/${unresolvedSessionID}`) return new Promise(() => {})
     if (url.pathname === "/api/event") return sse(route)
     if (url.pathname === "/api/session")
       return json(route, { data: sessions.map((session) => currentSession(session)), cursor: {} })
@@ -95,41 +94,29 @@ async function mockServer(page: Page) {
     if (currentSessionInfo) return json(route, { data: currentSession(currentSessionInfo) })
     if (sessions.some((item) => url.pathname === `/api/session/${item.id}/message`))
       return json(route, { data: [], cursor: {} })
-    if (/^\/session\/[^/]+$/.test(url.pathname)) return json(route, { name: "NotFoundError" }, 404)
-    if (/^\/session\/[^/]+\/message$/.test(url.pathname)) return json(route, [])
-    if (/^\/session\/[^/]+\/(children|todo|diff)$/.test(url.pathname)) return json(route, [])
-    if (["/skill", "/command", "/lsp", "/formatter", "/permission", "/question", "/vcs/diff"].includes(url.pathname))
-      return json(route, [])
-    if (url.pathname === "/provider")
-      return json(route, { all: [], connected: [], default: { providerID: "", modelID: "" } })
-    if (url.pathname === "/agent") return json(route, [{ name: "build", mode: "primary" }])
-    if (url.pathname === "/project" || url.pathname === "/project/current") {
+    if (["/api/agent", "/api/provider", "/api/model", "/api/command", "/api/reference"].includes(url.pathname))
+      return json(route, { location: { directory: sessionA.directory }, data: [] })
+    if (url.pathname === "/api/model/default")
+      return json(route, { location: { directory: sessionA.directory }, data: null })
+    if (url.pathname === "/api/permission/request" || url.pathname === "/api/question/request")
+      return json(route, { location: { directory: sessionA.directory }, data: [] })
+    if (url.pathname === "/api/mcp") return json(route, { location: { directory: sessionA.directory }, data: [] })
+    if (url.pathname === "/api/mcp/resource")
+      return json(route, { location: { directory: sessionA.directory }, data: { resources: [], templates: [] } })
+    if (url.pathname === "/api/project" || url.pathname === "/api/project/current") {
       const project = {
         id: sessionA.projectID,
-        worktree: sessionA.directory,
+        canonical: sessionA.directory,
         vcs: "git",
         time: { created: 1, updated: 1 },
         sandboxes: [],
       }
-      return json(route, url.pathname === "/project" ? [project] : project)
+      return json(
+        route,
+        url.pathname === "/api/project" ? [project] : { id: project.id, directory: sessionA.directory },
+      )
     }
-    if (url.pathname === "/path")
-      return json(route, {
-        state: sessionA.directory,
-        config: sessionA.directory,
-        worktree: sessionA.directory,
-        directory: sessionA.directory,
-        home: sessionA.directory,
-      })
-    if (url.pathname === "/api/path")
-      return json(route, {
-        state: sessionA.directory,
-        config: sessionA.directory,
-        worktree: sessionA.directory,
-        directory: sessionA.directory,
-        home: sessionA.directory,
-      })
-    if (url.pathname === "/vcs") return json(route, { branch: "main", default_branch: "main" })
+    if (url.pathname === "/api/location") return json(route, { directory: sessionA.directory })
     if (url.pathname === "/api/vcs")
       return json(route, {
         location: { directory: sessionA.directory },

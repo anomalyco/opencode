@@ -6,6 +6,7 @@ import { expectAppVisible } from "../utils/waits"
 const directory = "C:/OpenCode/PromptThinkingLevelRegression"
 const projectID = "proj_prompt_thinking_level_regression"
 const sessionID = "ses_prompt_thinking_level_regression"
+const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
 test("shows the V2 thinking level control while relevant", async ({ page }) => {
   await mockOpenCodeServer(page, {
@@ -49,7 +50,7 @@ test("shows the V2 thinking level control while relevant", async ({ page }) => {
     ],
     pageMessages: () => ({ items: [] }),
   })
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   const composer = page.locator('[data-component="prompt-input-v2"]')
   const input = composer.locator('[data-component="prompt-input"]')
   const control = composer.getByRole("button", { name: "Choose model variant" })

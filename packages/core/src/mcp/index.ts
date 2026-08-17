@@ -97,7 +97,7 @@ export type ResourceContentPart = Mcp.ResourceContentPart
 export const ResourceContent = Mcp.ResourceContent
 export type ResourceContent = Mcp.ResourceContent
 
-export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP.NotFoundError", {
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("MCP.NotFoundError", {
   server: ServerName,
 }) {
   override get message() {
@@ -105,7 +105,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP
   }
 }
 
-export class ToolCallError extends Schema.TaggedErrorClass<ToolCallError>()("MCP.ToolCallError", {
+export class ToolCallError extends Schema.TaggedError<ToolCallError>()("MCP.ToolCallError", {
   server: ServerName,
   tool: Schema.String,
   message: Schema.String,

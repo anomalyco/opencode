@@ -8,6 +8,7 @@ const directory = "C:/OpenCode/RequestDocks"
 const projectID = "proj_request_docks"
 const sessionID = "ses_request_docks"
 const title = "Request dock regression"
+const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
 test("shows a pending question dock", async ({ page }) => {
   await mockServer(page, {
@@ -34,7 +35,7 @@ test("shows a pending question dock", async ({ page }) => {
     ],
   })
 
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionTitle(page, title)
 
   const question = page.locator('[data-component="dock-prompt"][data-kind="question"]')
@@ -92,7 +93,7 @@ test("shows a pending permission dock", async ({ page }) => {
     ],
   })
 
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await expectSessionTitle(page, title)
 
   const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
@@ -111,11 +112,11 @@ test("shows a pending permission dock", async ({ page }) => {
 
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {
   const transport = await installSseTransport(page, {
-    server: `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`,
+    server,
     retry: 20,
   })
   await mockServer(page, { forms: [] })
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   await transport.waitForConnection()
   await expectSessionTitle(page, title)
 
@@ -138,26 +139,26 @@ test("restores the draft caret before typing after a request dock closes", async
     )
     .toBe(cursor)
   await transport.send({
-    directory,
-    payload: {
-      type: "form.created",
-      properties: {
-        form: {
-          id: "frm_question_caret",
-          sessionID,
-          title: "Questions",
-          metadata: { kind: "question", tool: { messageID: "message-caret", id: "call-caret" } },
-          fields: [
-            {
-              key: "q0",
-              type: "string",
-              title: "Continue",
-              description: "Continue?",
-              options: [{ value: "yes", label: "Yes", description: "Continue the session" }],
-              custom: true,
-            },
-          ],
-        },
+    id: "evt_form_created",
+    created: 1700000001000,
+    type: "form.created",
+    location: { directory },
+    data: {
+      form: {
+        id: "frm_question_caret",
+        sessionID,
+        title: "Questions",
+        metadata: { kind: "question", tool: { messageID: "message-caret", id: "call-caret" } },
+        fields: [
+          {
+            key: "q0",
+            type: "string",
+            title: "Continue",
+            description: "Continue?",
+            options: [{ value: "yes", label: "Yes", description: "Continue the session" }],
+            custom: true,
+          },
+        ],
       },
     },
   })
@@ -166,11 +167,11 @@ test("restores the draft caret before typing after a request dock closes", async
   await expect(editor).toHaveCount(0)
 
   await transport.send({
-    directory,
-    payload: {
-      type: "form.cancelled",
-      properties: { sessionID, id: "frm_question_caret" },
-    },
+    id: "evt_form_cancelled",
+    created: 1700000002000,
+    type: "form.cancelled",
+    location: { directory },
+    data: { sessionID, id: "frm_question_caret" },
   })
   await expect(question).toHaveCount(0)
   await expect(editor).toBeVisible()
@@ -183,13 +184,11 @@ async function mockServer(
   page: Page,
   requests: {
     permissions?: unknown[] | (() => unknown[])
-    questions?: unknown[] | (() => unknown[])
     forms?: unknown[] | (() => unknown[])
     sessionStatus?: Record<string, unknown>
   },
 ) {
   await mockOpenCodeServer(page, {
-    protocol: "v2",
     directory,
     project: {
       id: projectID,
@@ -229,7 +228,6 @@ async function mockServer(
     ],
     pageMessages: () => ({ items: [] }),
     permissions: requests.permissions,
-    questions: requests.questions,
     forms: requests.forms,
     sessionStatus: requests.sessionStatus,
   })

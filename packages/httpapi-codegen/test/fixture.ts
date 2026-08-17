@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
 
-export class Missing extends Schema.TaggedErrorClass<Missing>()("Missing", {
+export class Missing extends Schema.TaggedError<Missing>()("Missing", {
   message: Schema.String,
 }) {}
 

@@ -13,7 +13,7 @@ import {
   sessionTabComplete,
   sessionTabDetail,
   sessionTabOverflowWidth,
-  sessionTabShortcutLabel,
+  sessionTabNumberLabel,
 } from "../../src/context/session-tabs-model"
 
 describe("session tabs", () => {
@@ -25,8 +25,8 @@ describe("session tabs", () => {
     expect(sessionTabDetail("opencode", undefined, "main", true)).toBe("opencode")
   })
 
-  test("labels direct shortcut tabs and marks unbound tabs with a dot", () => {
-    expect(Array.from({ length: 12 }, (_, index) => sessionTabShortcutLabel(index))).toEqual([
+  test("labels tabs by ordinal", () => {
+    expect(Array.from({ length: 12 }, (_, index) => sessionTabNumberLabel(index))).toEqual([
       "1",
       "2",
       "3",
@@ -36,9 +36,9 @@ describe("session tabs", () => {
       "7",
       "8",
       "9",
-      "0",
-      "·",
-      "·",
+      "10",
+      "11",
+      "12",
     ])
   })
 

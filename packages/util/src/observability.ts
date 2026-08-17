@@ -4,7 +4,7 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
 import { LayerNode } from "./effect/layer-node.js"
 import { Effect, Layer, Logger, References, Schema } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
-import { OtlpSerialization } from "effect/unstable/observability"
+import { OtlpExporter, OtlpSerialization } from "effect/unstable/observability"
 import { Logging } from "./observability/logging.js"
 import { Otlp } from "./observability/otlp.js"
 
@@ -42,6 +42,7 @@ export function layer(
         Layer.provide(NodeFileSystem.layer),
         Layer.provide(OtlpSerialization.layerJson),
         Layer.provide(FetchHttpClient.layer),
+        Layer.provide(OtlpExporter.layerFlusher),
         Layer.orDie,
         Layer.merge(Layer.succeed(References.MinimumLogLevel, Logging.minimumLogLevel())),
       )

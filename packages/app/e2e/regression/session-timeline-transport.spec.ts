@@ -1,45 +1,44 @@
 import { expect, test, type Page } from "@playwright/test"
-import { partUpdated, setupTimeline, textPart } from "../performance/timeline-stability/fixture"
-
-const streamedTextID = (ordinal: number) => `msg_1001_timeline_assistant:text:${ordinal}`
+import { partUpdated, renderedPartID, setupTimeline, textPart } from "../performance/timeline-stability/fixture"
 
 test("keeps one connection open while delivering multiple events", async ({ page }) => {
   const timeline = await setupTimeline(page)
 
-  const first = await timeline.transport.send(partUpdated(textPart("prt_transport_first", "first event")))
-  const second = await timeline.transport.send(partUpdated(textPart("prt_transport_second", "second event")))
+  const first = (await timeline.transport.burst(partUpdated(textPart("prt_transport_first", "first event")))).at(-1)!
+  const second = (await timeline.transport.burst(partUpdated(textPart("prt_transport_second", "second event")))).at(-1)!
 
-  await timeline.waitForPart(streamedTextID(0))
-  await timeline.waitForPart(streamedTextID(1))
+  await timeline.waitForPart("prt_transport_first")
+  await timeline.waitForPart("prt_transport_second")
   expect(first.connectionID).toBe(second.connectionID)
   await expect.poll(async () => (await timeline.transport.connections()).length).toBe(1)
-  expect(await timeline.transport.acknowledgements()).toHaveLength(2)
+  expect(await timeline.transport.acknowledgements()).toHaveLength(4)
 })
 
 test("delivers a burst from one stream chunk", async ({ page }) => {
   const timeline = await setupTimeline(page)
   const acknowledgements = await timeline.transport.burst([
-    partUpdated(textPart("prt_transport_burst_a", "burst a")),
-    partUpdated(textPart("prt_transport_burst_b", "burst b")),
+    ...partUpdated(textPart("prt_transport_burst_a", "burst a")),
+    ...partUpdated(textPart("prt_transport_burst_b", "burst b")),
   ])
 
-  await timeline.waitForPart(streamedTextID(0))
-  await timeline.waitForPart(streamedTextID(1))
-  expect(acknowledgements.map((item) => item.chunkCount)).toEqual([1, 1])
-  expect(new Set(acknowledgements.map((item) => item.deliveryID)).size).toBe(2)
+  await timeline.waitForPart("prt_transport_burst_a")
+  await timeline.waitForPart("prt_transport_burst_b")
+  expect(acknowledgements.map((item) => item.chunkCount)).toEqual([1, 1, 1, 1])
+  expect(new Set(acknowledgements.map((item) => item.deliveryID)).size).toBe(4)
 })
 
 test("parses split JSON and a split multibyte code point", async ({ page }) => {
   const timeline = await setupTimeline(page)
-  const payload = partUpdated(textPart("prt_transport_split", "split snowman \u2603\u2603\u2603"))
+  const [started, payload] = partUpdated(textPart("prt_transport_split", "split snowman \u2603\u2603\u2603"))
+  await timeline.transport.send(started!)
   const encoded = new TextEncoder().encode(`data: ${JSON.stringify(payload)}\n\n`)
   const snowman = new TextEncoder().encode("\u2603")[0]!
   const multibyte = encoded.indexOf(snowman)
 
-  const acknowledgement = await timeline.transport.split(payload, [9, multibyte + 1, multibyte + 2])
+  const acknowledgement = await timeline.transport.split(payload!, [9, multibyte + 1, multibyte + 2])
 
-  await timeline.waitForPart(streamedTextID(0))
-  await expect(page.locator(`[data-timeline-part-id="${streamedTextID(0)}"]`)).toContainText(
+  await timeline.waitForPart("prt_transport_split")
+  await expect(page.locator(`[data-timeline-part-id="${renderedPartID("prt_transport_split")}"]`)).toContainText(
     "split snowman \u2603\u2603\u2603",
   )
   expect(acknowledgement.chunkCount).toBe(4)
@@ -47,12 +46,12 @@ test("parses split JSON and a split multibyte code point", async ({ page }) => {
 
 test("delivers server heartbeat without mutating the timeline", async ({ page }) => {
   const timeline = await setupTimeline(page)
-  const sentinel = await timeline.transport.send(partUpdated(textPart("prt_transport_heartbeat_sentinel", "heartbeat sentinel")))
-  await timeline.waitForPart(streamedTextID(0))
-  await expect(page.locator(`[data-timeline-part-id="${streamedTextID(0)}"] [data-component="markdown"]`)).toHaveAttribute(
-    "data-markdown-ready",
-    "",
-  )
+  const partID = "prt_transport_heartbeat_sentinel"
+  const sentinel = (await timeline.transport.burst(partUpdated(textPart(partID, "heartbeat sentinel")))).at(-1)!
+  await timeline.waitForPart(partID)
+  await expect(
+    page.locator(`[data-timeline-part-id="${renderedPartID(partID)}"] [data-component="markdown"]`),
+  ).toHaveAttribute("data-markdown-ready", "")
   const before = await timelineRows(page)
   const heartbeat = await timeline.transport.heartbeat()
 
@@ -67,9 +66,9 @@ test("reconnects after a clean close", async ({ page }) => {
 
   await timeline.transport.close()
   const second = await timeline.transport.waitForConnection({ after: first.id })
-  await timeline.transport.send(partUpdated(textPart("prt_transport_close", "after close")))
+  await timeline.transport.burst(partUpdated(textPart("prt_transport_close", "after close")))
 
-  await timeline.waitForPart(streamedTextID(0))
+  await timeline.waitForPart("prt_transport_close")
   expect(second.id).toBeGreaterThan(first.id)
   expect((await timeline.transport.connections())[0]?.endedBy).toBe("close")
 })
@@ -80,9 +79,9 @@ test("reconnects after a stream error", async ({ page }) => {
 
   await timeline.transport.error("contract failure")
   const second = await timeline.transport.waitForConnection({ after: first.id })
-  await timeline.transport.send(partUpdated(textPart("prt_transport_error", "after error")))
+  await timeline.transport.burst(partUpdated(textPart("prt_transport_error", "after error")))
 
-  await timeline.waitForPart(streamedTextID(0))
+  await timeline.waitForPart("prt_transport_error")
   await expect.poll(async () => (await timeline.transport.connections()).length).toBe(2)
   expect(second.id).toBeGreaterThan(first.id)
   expect((await timeline.transport.connections())[0]?.endedBy).toBe("error")
@@ -90,10 +89,14 @@ test("reconnects after a stream error", async ({ page }) => {
 
 test("does not request replay when reconnecting the volatile V2 event stream", async ({ page }) => {
   const timeline = await setupTimeline(page, { eventRetry: 10 })
-  const first = await timeline.transport.send(partUpdated(textPart("prt_transport_id", "event with id")), {
-    id: "timeline-event-7",
-  })
-  await timeline.waitForPart(streamedTextID(0))
+  const events = partUpdated(textPart("prt_transport_id", "event with id"))
+  const first = (
+    await timeline.transport.burst(
+      events,
+      events.map((_, index) => (index === events.length - 1 ? { id: "timeline-event-7" } : {})),
+    )
+  ).at(-1)!
+  await timeline.waitForPart("prt_transport_id")
 
   await timeline.transport.error("retry with event id")
   const connection = await timeline.transport.waitForConnection({ after: first.connectionID })

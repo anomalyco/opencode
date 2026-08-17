@@ -57,7 +57,7 @@ export const isContextOverflowFailure = (failure: unknown) =>
     ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
     : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
 
-const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 const QUOTA_CODES = new Set(["insufficient_quota", "usage_not_included", "billing_error"])
 const SERVER_CODES = new Set([
   "api_error",

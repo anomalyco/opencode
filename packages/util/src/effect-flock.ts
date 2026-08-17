@@ -14,15 +14,15 @@ export namespace EffectFlock {
   // Errors
   // ---------------------------------------------------------------------------
 
-  export class LockTimeoutError extends Schema.TaggedErrorClass<LockTimeoutError>()("LockTimeoutError", {
+  export class LockTimeoutError extends Schema.TaggedError<LockTimeoutError>()("LockTimeoutError", {
     key: Schema.String,
   }) {}
 
-  export class LockCompromisedError extends Schema.TaggedErrorClass<LockCompromisedError>()("LockCompromisedError", {
+  export class LockCompromisedError extends Schema.TaggedError<LockCompromisedError>()("LockCompromisedError", {
     detail: Schema.String,
   }) {}
 
-  class ReleaseError extends Schema.TaggedErrorClass<ReleaseError>()("ReleaseError", {
+  class ReleaseError extends Schema.TaggedError<ReleaseError>()("ReleaseError", {
     detail: Schema.String,
     cause: Schema.optional(Schema.Defect()),
   }) {
@@ -32,7 +32,7 @@ export namespace EffectFlock {
   }
 
   /** Internal: signals "lock is held, retry later". Never leaks to callers. */
-  class NotAcquired extends Schema.TaggedErrorClass<NotAcquired>()("NotAcquired", {}) {}
+  class NotAcquired extends Schema.TaggedError<NotAcquired>()("NotAcquired", {}) {}
 
   export type LockError = LockTimeoutError | LockCompromisedError
 

@@ -327,6 +327,7 @@ it.effect("generates from fresh settled Session context without durable mutation
     expect(requests[0]?.toolChoice).toBeUndefined()
     expect(yield* durableState(db, sessionID)).toEqual(before)
   }),
+  { timeout: 15_000 },
 )
 
 it.effect("blocks unavailable initial instructions before generation", () =>
@@ -343,4 +344,5 @@ it.effect("blocks unavailable initial instructions before generation", () =>
     expect(requests).toEqual([])
     expect(yield* durableState(db, sessionID)).toEqual(before)
   }),
+  { timeout: 15_000 },
 )

@@ -328,7 +328,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
               >
                 <ChannelIndicator debugTools={props.debugTools} />
                 <Show when={windows() || linux()}>
-                  <WindowsAppMenu command={command} platform={platform} variant="v2" />
+                  <WindowsAppMenu command={command} platform={platform} />
                 </Show>
                 <TooltipV2
                   placement="bottom"

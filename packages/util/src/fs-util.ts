@@ -11,7 +11,7 @@ import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem } from "./effect/app-node-platform.js"
 
 export namespace FSUtil {
-  export class FileSystemError extends Schema.TaggedErrorClass<FileSystemError>()("FileSystemError", {
+  export class FileSystemError extends Schema.TaggedError<FileSystemError>()("FileSystemError", {
     method: Schema.String,
     cause: Schema.optional(Schema.Defect()),
   }) {

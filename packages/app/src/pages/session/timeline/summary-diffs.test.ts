@@ -24,7 +24,7 @@ describe("uniqueSummaryDiffs", () => {
     expect(result[1]).toBe(beta)
   })
 
-  test("keeps the last diff per file in the legacy display order", () => {
+  test("keeps the last diff per file in display order", () => {
     const oldAlpha = diff("alpha.ts", 1)
     const oldBeta = diff("beta.ts", 1)
     const newAlpha = diff("alpha.ts", 2)

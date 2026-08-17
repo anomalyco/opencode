@@ -20,7 +20,7 @@ export type PromptHistoryEntry = {
   comments: PromptHistoryComment[]
 }
 
-export type PromptHistoryStoredEntry = Prompt | PromptHistoryEntry
+export type PromptHistoryStoredEntry = PromptHistoryEntry
 
 export function canNavigateHistoryAtCursor(direction: "up" | "down", text: string, cursor: number, inHistory = false) {
   const position = Math.max(0, Math.min(cursor, text.length))
@@ -60,12 +60,6 @@ export function clonePromptHistoryComments(comments: PromptHistoryComment[]) {
 }
 
 export function normalizePromptHistoryEntry(entry: PromptHistoryStoredEntry): PromptHistoryEntry {
-  if (Array.isArray(entry)) {
-    return {
-      prompt: clonePromptParts(entry),
-      comments: [],
-    }
-  }
   return {
     prompt: clonePromptParts(entry.prompt),
     comments: clonePromptHistoryComments(entry.comments),

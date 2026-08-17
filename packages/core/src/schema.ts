@@ -58,7 +58,7 @@ export type DeepMutable<T> = T extends string | number | boolean | bigint | symb
 type NewtypeSchema<Self, Tag extends string, S extends Schema.Top> = (abstract new (_: never) => {
   readonly _newtype: Tag
 }) &
-  Schema.Bottom<
+  Schema.BottomWithoutNew<
     Self,
     S["Encoded"],
     S["DecodingServices"],

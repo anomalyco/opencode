@@ -181,7 +181,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
   init: (props: { locale?: Locale; onNativeTranslations?: (bundle: DesktopNativeBundle) => void }) => {
     const initial = props.locale ?? readStoredLocale() ?? detectLocale()
     const [store, setStore, _, ready] = persisted(
-      Persist.global("language", ["language.v1"]),
+      Persist.global("language"),
       createStore({
         locale: initial,
       }),
