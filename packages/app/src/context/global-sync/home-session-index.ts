@@ -32,7 +32,7 @@ export async function loadHomeSessionIndex(
 }
 
 // The V2 API cannot yet filter roots, archives, or several directories, so Home
-// seeds createServerData from a full scan and derives its visible index there.
+// seeds createData from a full scan and derives its visible index there.
 export function parseHomeSessionIndex(sessions: SessionInfo[]) {
   return sessions.filter((session) => !session.parentID && typeof session.time.archived !== "number")
 }

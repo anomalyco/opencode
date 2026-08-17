@@ -7,7 +7,7 @@ import { useServerHealth } from "@/utils/server-health"
 import { createServerSdkContext } from "./server-sdk"
 import { createServerSyncContext } from "./server-sync"
 import { getOwner } from "solid-js/web"
-import { createServerData } from "@opencode-ai/client/solid"
+import { createData } from "@opencode-ai/client/solid"
 import type { ServerScope } from "@/utils/server-scope"
 import { createServerPermissionState } from "./permission"
 import { createServerNotificationState } from "./notification"
@@ -100,7 +100,7 @@ function createServerController(
 ) {
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
-  const data = createServerData({
+  const data = createData({
     api: () => sdk.api,
     event: sdk.event,
     connection: sdk.connection,
