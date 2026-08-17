@@ -105,3 +105,32 @@ test("preserves output schema validation across paginated tool discovery", async
     await Promise.all([client.close(), server.close()])
   }
 })
+
+test("forwards request metadata through the MCP transport", async () => {
+  const traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  const server = new Server({ name: "metadata", version: "1.0.0" }, { capabilities: { tools: {} } })
+  let request: { arguments?: Record<string, unknown>; _meta?: Record<string, unknown> } | undefined
+  server.setRequestHandler(CallToolRequestSchema, ({ params }) => {
+    request = params
+    return Promise.resolve({ content: [{ type: "text", text: "ok" }] })
+  })
+
+  const client = new Client({ name: "metadata-test", version: "1.0.0" })
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+
+  try {
+    await McpCatalog.callTool(mcpTool(), client, { target: "screen" }, options, undefined, {
+      traceparent,
+      "com.example/correlation-id": "request-1",
+    })
+    expect(request?.arguments).toEqual({ target: "screen" })
+    expect(request?._meta).toMatchObject({
+      traceparent,
+      "com.example/correlation-id": "request-1",
+    })
+    expect(request?._meta?.progressToken).toBeDefined()
+  } finally {
+    await Promise.all([client.close(), server.close()])
+  }
+})
