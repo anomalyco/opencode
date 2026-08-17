@@ -55,8 +55,13 @@ export const ModelsDevPlugin = define({
 })
 
 function environmentNames(provider: ModelsDev.Snapshot) {
-  if (provider.info.id !== Provider.ID.azure) return [...provider.environment]
-  return [...provider.environment.filter((name) => name.endsWith("_API_KEY")), "AZURE_COGNITIVE_SERVICES_API_KEY"]
+  if (provider.info.id === Provider.ID.azure)
+    return [...provider.environment.filter((name) => name.endsWith("_API_KEY")), "AZURE_COGNITIVE_SERVICES_API_KEY"]
+  // models.dev advertises project, location, and the ADC credentials file path for
+  // Vertex. Those configure Google auth rather than carrying a key, so only the
+  // Express Mode key may become a credential; GoogleVertexPlugin handles activation.
+  if (provider.info.id === Provider.ID.googleVertex) return ["GOOGLE_VERTEX_API_KEY"]
+  return [...provider.environment]
 }
 
 function snapshots(data: readonly ModelsDev.Snapshot[]) {
