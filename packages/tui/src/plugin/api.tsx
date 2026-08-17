@@ -168,17 +168,22 @@ export function createPluginContext(input: {
           host.route.navigate(destination)
         },
         current() {
+          if (host.route.data.type === "workspace") return { type: "home" }
           return host.route.data
         },
       },
       tabs: {
         enabled: host.sessionTabs.enabled,
         list: () =>
-          host.sessionTabs.tabs().map((tab) => ({
-            ...tab,
-            active: host.sessionTabs.current() === tab.sessionID,
-            ...host.sessionTabs.status(tab.sessionID),
-          })),
+          host.sessionTabs
+            .tabs()
+            .filter((tab) => !tab.groupID)
+            .map((tab) => ({
+              sessionID: tab.sessionID,
+              title: tab.title,
+              active: host.sessionTabs.current() === tab.sessionID,
+              ...host.sessionTabs.status(tab.sessionID),
+            })),
         open(sessionID) {
           if (!host.sessionTabs.enabled()) return false
           host.sessionTabs.select(sessionID)
@@ -186,14 +191,14 @@ export function createPluginContext(input: {
         },
         focus(sessionID) {
           if (!host.sessionTabs.enabled()) return false
-          if (!host.sessionTabs.tabs().some((tab) => tab.sessionID === sessionID)) return false
+          if (!host.sessionTabs.tabs().some((tab) => !tab.groupID && tab.sessionID === sessionID)) return false
           host.sessionTabs.select(sessionID)
           return true
         },
         close(sessionID) {
           if (!host.sessionTabs.enabled()) return false
           const target = sessionID ?? host.sessionTabs.current()
-          if (!target || !host.sessionTabs.tabs().some((tab) => tab.sessionID === target)) return false
+          if (!target || !host.sessionTabs.tabs().some((tab) => !tab.groupID && tab.sessionID === target)) return false
           host.sessionTabs.close(target)
           return true
         },

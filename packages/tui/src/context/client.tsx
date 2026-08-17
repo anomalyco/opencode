@@ -1,4 +1,5 @@
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode-ai/client"
+import type { Endpoint } from "@opencode-ai/client/service"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -18,7 +19,7 @@ export type ClientConnectionEvent = {
 }
 
 type ManagedService = {
-  reconnect: (signal: AbortSignal) => Promise<{ api: OpenCodeClient }>
+  reconnect: (signal: AbortSignal) => Promise<{ api: OpenCodeClient; endpoint?: Endpoint }>
   restart: () => Promise<void>
 }
 
@@ -29,11 +30,12 @@ const eventFlushInterval = 10
 
 export const { use: useClient, provider: ClientProvider } = createSimpleContext({
   name: "Client",
-  init: (props: { api: OpenCodeClient; service?: ManagedService }) => {
+  init: (props: { api: OpenCodeClient; endpoint?: Endpoint; service?: ManagedService }) => {
     const log = useLog({ component: "client" })
     const abort = new AbortController()
     const history: ClientConnectionEvent[] = []
     let api = props.api
+    let endpoint = props.endpoint
     const events = createGlobalEmitter<ClientEventMap>()
     let pending: OpenCodeEvent[] = []
     let flushTimer: ReturnType<typeof setTimeout> | undefined
@@ -158,6 +160,7 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
             if (abort.signal.aborted || controller.signal.aborted) return
             if (next) {
               api = next.api
+              if (next.endpoint) endpoint = next.endpoint
               if (attempt === 1) continue
             }
           }
@@ -178,6 +181,9 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
     return {
       get api() {
         return api
+      },
+      get endpoint() {
+        return endpoint
       },
       event: {
         on: events.on,

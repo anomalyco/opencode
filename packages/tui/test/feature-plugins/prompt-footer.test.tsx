@@ -43,3 +43,28 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
     app.renderer.destroy()
   }
 })
+
+test("home prompt footer offers a new terminal instead of agent and command hints", async () => {
+  const color = RGBA.fromInts(200, 200, 200)
+  const context = {
+    theme: { text: { default: color, subdued: color } },
+    keymap: { shortcuts: () => [] },
+    data: {
+      session: { family: () => [], status: () => "idle" },
+      shell: { list: () => [] },
+    },
+  } as unknown as Context
+  const app = await testRender(() => <PromptFooter context={context} mode="normal" onNewTerminal={async () => {}} />, {
+    width: 80,
+    height: 2,
+  })
+
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("new terminal")
+    expect(app.captureCharFrame()).not.toContain("agents")
+    expect(app.captureCharFrame()).not.toContain("commands")
+  } finally {
+    app.renderer.destroy()
+  }
+})

@@ -10,6 +10,7 @@ import { Event } from "./event.js"
 import { FileSystem } from "./filesystem.js"
 import { FileSystemV1 } from "./filesystem-v1.js"
 import { Form } from "./form.js"
+import { Group } from "./group.js"
 import { InstallationEvent } from "./installation-event.js"
 import { Integration } from "./integration.js"
 import { LegacyEventV1 } from "./legacy-event.js"
@@ -56,6 +57,7 @@ const featureDefinitions = Event.inventory(
   ...Pty.Event.Definitions,
   ...Shell.Event.Definitions,
   ...Form.Event.Definitions,
+  ...Group.Event.Definitions,
   ...WebSearch.Event.Definitions,
 )
 

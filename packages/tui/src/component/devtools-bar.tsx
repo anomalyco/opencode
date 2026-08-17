@@ -17,12 +17,13 @@ import { useDialog } from "../ui/dialog"
 import { DialogExperiments } from "./dialog-experiments"
 import { usePlugin } from "../plugin/context"
 import { errorMessage } from "../util/error"
+import { usePaneLayout } from "../context/pane-layout"
 
 const graphWidth = 23
 const sampleIntervalMilliseconds = 2_000
 const sampleRetentionMilliseconds = 30_000
 const statusWindowMilliseconds = 6_000
-type Panel = "server" | "theme" | "tools" | "ui"
+type Panel = "server" | "theme" | "tools" | "ui" | "layout"
 type ProcessSample = Readonly<{ cpu: number; memory: number; delay: number; time: number }>
 export type RuntimeStatus = "normal" | "medium" | "high"
 
@@ -38,6 +39,7 @@ export function DevToolsBar() {
   const keymap = Keymap.use()
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
+  const panes = usePaneLayout()
   const { current: theme, mode, supports, setMode } = themes
   const elevatedTheme = useTheme("elevated")
   const [panel, setPanel] = createSignal<Panel>()
@@ -46,6 +48,8 @@ export function DevToolsBar() {
   const [dumpError, setDumpError] = createSignal<string>()
   const [frontendSamples, setFrontendSamples] = createSignal<readonly ProcessSample[]>([])
   const [debugOverlay, setDebugOverlay] = createSignal(renderer.debugOverlay.enabled)
+  const [creatingTerminal, setCreatingTerminal] = createSignal(false)
+  const [terminalError, setTerminalError] = createSignal<string>()
   let focus: Renderable | null
   const connected = createMemo(() => client.connection.status() === "connected")
   const serverIndicator = createMemo(() => connectionIndicator(client.connection.status(), client.connection.attempt()))
@@ -218,6 +222,18 @@ export function DevToolsBar() {
         (error) => setDumpError(errorMessage(error)),
       )
     setDumping(false)
+  }
+
+  async function newTerminal() {
+    const routeData = route.data
+    if (routeData.type !== "session") return
+    setCreatingTerminal(true)
+    setTerminalError()
+    await panes.newTerminal(routeData.sessionID).then(
+      () => close(),
+      (error) => setTerminalError(errorMessage(error)),
+    )
+    setCreatingTerminal(false)
   }
 
   return (
@@ -415,6 +431,31 @@ export function DevToolsBar() {
                 </box>
               )}
             </For>
+          </PanelBox>
+        </Show>
+      </BarItem>
+      <BarItem active={panel() === "layout"} onClick={() => toggle("layout")}>
+        <text fg={panel() === "layout" ? theme.text.action.primary.focused : theme.text.subdued}>Layout</text>
+        <Show when={panel() === "layout"}>
+          <PanelBox>
+            <PanelTitle>Layout</PanelTitle>
+            <Action
+              onClick={() => void newTerminal()}
+              disabled={route.data.type !== "session" || creatingTerminal()}
+              hoverBackground
+            >
+              {creatingTerminal() ? "Creating terminal..." : "New terminal"}
+            </Action>
+            <Show when={route.data.type !== "session"}>
+              <text fg={elevatedTheme.text.subdued}>Open a session first.</text>
+            </Show>
+            <Show when={terminalError()}>
+              {(error) => (
+                <text fg={elevatedTheme.text.feedback.error.default} wrapMode="word">
+                  {error()}
+                </text>
+              )}
+            </Show>
           </PanelBox>
         </Show>
       </BarItem>
