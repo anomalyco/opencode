@@ -18,7 +18,7 @@ export const username = Config.String("OPENCODE_SERVER_USERNAME").pipe(Config.wi
 
 // Whether servers require authentication. Prefer a positive environment
 // variable so deployments can opt out with an explicit `false`.
-export const serverAuth = Config.Boolean("OPENCODE_SERVER_AUTH").pipe(Config.withDefault(true))
+export const auth = Config.Boolean("OPENCODE_AUTH").pipe(Config.withDefault(true))
 
 export function session() {
   return Object.fromEntries(
