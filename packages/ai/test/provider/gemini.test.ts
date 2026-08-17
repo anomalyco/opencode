@@ -862,6 +862,51 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("preserves candidate-less prompt safety blocks as content-filter outcomes", () =>
+    Effect.gen(function* () {
+      const blocked = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              promptFeedback: {
+                blockReason: "FUTURE_SAFETY_REASON",
+                blockReasonMessage: "Prompt blocked",
+                safetyRatings: [{ category: "HARM_CATEGORY_HARASSMENT", blocked: true }],
+              },
+            }),
+          ),
+        ),
+      )
+      const blockedWithUsage = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { promptFeedback: { blockReason: "SAFETY" } },
+              { usageMetadata: { promptTokenCount: 7, totalTokenCount: 7 } },
+            ),
+          ),
+        ),
+      )
+
+      expect(blocked.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
+      expect(blocked.events.at(-1)).toMatchObject({
+        type: "finish",
+        reason: { normalized: "content-filter", raw: "FUTURE_SAFETY_REASON" },
+        providerMetadata: {
+          google: {
+            promptFeedback: {
+              blockReason: "FUTURE_SAFETY_REASON",
+              blockReasonMessage: "Prompt blocked",
+              safetyRatings: [{ category: "HARM_CATEGORY_HARASSMENT", blocked: true }],
+            },
+          },
+        },
+      })
+      expect(blockedWithUsage.finishReason).toEqual({ normalized: "content-filter", raw: "SAFETY" })
+      expect(blockedWithUsage.usage).toMatchObject({ inputTokens: 7, totalTokens: 7 })
+    }),
+  )
+
   it.effect("maps current blocking and invalid-output finish reasons", () =>
     Effect.gen(function* () {
       const reasons = [

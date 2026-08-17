@@ -190,8 +190,19 @@ const GeminiCandidate = Schema.Struct({
   finishReason: Schema.optional(Schema.String),
 })
 
+const GeminiPromptFeedback = Schema.StructWithRest(
+  Schema.Struct({
+    blockReason: Schema.optional(Schema.String),
+    blockReasonMessage: Schema.optional(Schema.String),
+    safetyRatings: Schema.optional(Schema.Unknown),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
+type GeminiPromptFeedback = Schema.Schema.Type<typeof GeminiPromptFeedback>
+
 const GeminiEvent = Schema.Struct({
   candidates: optionalArray(GeminiCandidate),
+  promptFeedback: Schema.optional(GeminiPromptFeedback),
   usageMetadata: Schema.optional(GeminiUsage),
 })
 type GeminiEvent = Schema.Schema.Type<typeof GeminiEvent>
@@ -200,6 +211,7 @@ interface ParserState {
   readonly finishReason?: string
   readonly hasToolCalls: boolean
   readonly nextToolCallId: number
+  readonly promptFeedback?: GeminiPromptFeedback
   readonly usage?: Usage
   readonly lifecycle: Lifecycle.State
   readonly reasoningSignature?: string
@@ -503,8 +515,9 @@ const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean
   return "unknown"
 }
 
-const finish = (state: ParserState): ReadonlyArray<LLMEvent> =>
-  state.finishReason || state.usage
+const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
+  const promptBlockReason = state.finishReason === undefined ? state.promptFeedback?.blockReason : undefined
+  return state.finishReason || state.usage || promptBlockReason
     ? (() => {
         const events: LLMEvent[] = []
         const lifecycle = state.reasoningSignature
@@ -517,18 +530,24 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> =>
           : state.lifecycle
         Lifecycle.finish(lifecycle, events, {
           reason: {
-            normalized: mapFinishReason(state.finishReason, state.hasToolCalls),
-            raw: state.finishReason,
+            normalized: promptBlockReason === undefined ? mapFinishReason(state.finishReason, state.hasToolCalls) : "content-filter",
+            raw: state.finishReason ?? promptBlockReason,
           },
           usage: state.usage,
+          providerMetadata:
+            state.promptFeedback === undefined
+              ? undefined
+              : googleMetadata({ promptFeedback: state.promptFeedback }),
         })
         return events
       })()
     : []
+}
 
 const step = (state: ParserState, event: GeminiEvent) => {
   const nextState = {
     ...state,
+    promptFeedback: event.promptFeedback ?? state.promptFeedback,
     usage: event.usageMetadata ? (mapUsage(event.usageMetadata) ?? state.usage) : state.usage,
   }
   const candidate = event.candidates?.[0]
