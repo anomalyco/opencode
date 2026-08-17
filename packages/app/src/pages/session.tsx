@@ -97,7 +97,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
 import { requireServerKey, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
-import { createSessionLineage } from "./session/session-lineage"
+import { createSessionResolution } from "./session/session-resolution"
 
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
@@ -123,7 +123,7 @@ function isCurrentSessionNotFoundError(error: unknown, sessionID: string | undef
 export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
   const data = useData()
-  const directory = createMemo(() => data.session.lineage.peek(params.id)?.session.location.directory)
+  const directory = createMemo(() => data.session.get(params.id)?.location.directory)
   return (
     // Settings must keep the target-server SDK, sync, and models context and remain registered
     // when session content falls back to the route error boundary.
@@ -211,24 +211,24 @@ function ResolvedTargetSessionRoute() {
   const tabs = useTabs()
   const data = useData()
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
-  const current = createSessionLineage(
+  const current = createSessionResolution(
     () => params.id,
-    () => data.session.lineage,
+    () => data.session,
   )
-  const directory = createMemo(() => current()?.session.location.directory)
+  const directory = createMemo(() => current()?.location.directory)
 
   createEffect(() => {
     const session = current()
     if (!session) return
     tabs.addSessionTab({
       server: serverKey(),
-      sessionId: session.root.id,
+      sessionId: data.session.root(session.id),
     })
   })
 
   return (
     // Non-keyed: closes only while the target's directory is unknown (uncached
-    // lineage mid-resolution), which tears down the workspace subtree including
+    // session mid-resolution), which tears down the workspace subtree including
     // the terminal. Same-workspace tab switches keep it open because warm
     // targets resolve synchronously from the sync cache.
     <Show when={directory()}>

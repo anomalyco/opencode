@@ -1017,38 +1017,6 @@ export function createData(config: CreateDataInput) {
       setStatus(sessionID: string, status: DataSessionStatus) {
         setSessionActive(sessionID, status)
       },
-      lineage: {
-        peek(sessionID: string) {
-          const session = store.session.info[sessionID]
-          if (!session) return
-          const seen = new Set([session.id])
-          let root = session
-          while (root.parentID) {
-            if (seen.has(root.parentID)) return { session, root }
-            seen.add(root.parentID)
-            const parent = store.session.info[root.parentID]
-            if (!parent) return
-            root = parent
-          }
-          return { session, root }
-        },
-        async resolve(sessionID: string) {
-          await result.session.sync(sessionID)
-          const session = store.session.info[sessionID]
-          if (!session) throw new Error(`Session not found: ${sessionID}`)
-          const seen = new Set([session.id])
-          let root = session
-          while (root.parentID) {
-            if (seen.has(root.parentID)) return { session, root }
-            seen.add(root.parentID)
-            await result.session.sync(root.parentID)
-            const parent = store.session.info[root.parentID]
-            if (!parent) throw new Error(`Session not found: ${root.parentID}`)
-            root = parent
-          }
-          return { session, root }
-        },
-      },
       root(sessionID: string) {
         return resolveRoot(sessionID)
       },

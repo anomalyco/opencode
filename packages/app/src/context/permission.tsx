@@ -166,9 +166,14 @@ export function createServerPermissionState(input: { sdk: ServerSDK; sync: Serve
   async function shouldAutoRespondResolved(permission: PermissionRequest, directory?: string) {
     const override = sessionAutoAccept(store.autoAccept, sessions(directory), permission, directory)
     if (override !== undefined) return override
-    if (input.data.session.lineage.peek(permission.sessionID)) return shouldAutoRespond(permission, directory)
-    const lineage = await input.data.session.lineage.resolve(permission.sessionID).catch(() => undefined)
-    if (meta.disposed || !lineage) return false
+    const loaded = new Set<string>()
+    while (!loaded.has(input.data.session.root(permission.sessionID))) {
+      const root = input.data.session.root(permission.sessionID)
+      loaded.add(root)
+      if (input.data.session.get(root)) break
+      await input.data.session.sync(root).catch(() => undefined)
+    }
+    if (meta.disposed || !input.data.session.get(permission.sessionID)) return false
     return shouldAutoRespond(permission, directory)
   }
 

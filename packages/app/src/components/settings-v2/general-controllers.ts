@@ -33,7 +33,7 @@ export function createPermissionScopeController(
     const s = server()
     const id = sessionID()
     if (!s || !id) return undefined
-    return serverCtx()?.data.session.lineage.peek(id)?.session.location.directory
+    return serverCtx()?.data.session.get(id)?.location.directory
   })
 
   return {

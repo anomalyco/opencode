@@ -31,7 +31,7 @@ describe("autoRespondsPermission", () => {
     expect(autoRespondsPermission({ root: true }, sessions, permission("child"), "/tmp/project")).toBe(true)
   })
 
-  test("defaults to requiring approval when no lineage override exists", () => {
+  test("defaults to requiring approval when no family override exists", () => {
     const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" }), session({ id: "other" })]
     const autoAccept = {
       other: true,

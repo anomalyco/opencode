@@ -34,7 +34,7 @@ export function DirectoryDataProvider(
     return `/${slug()}/session/${sessionID}`
   }
   const navigateToSession = async (sessionID: string) => {
-    await data.session.lineage.resolve(sessionID).catch(() => undefined)
+    await data.session.sync(sessionID).catch(() => undefined)
     navigate(href(sessionID))
   }
   const legacyData = createMemo(() => {

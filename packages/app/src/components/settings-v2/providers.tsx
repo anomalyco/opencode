@@ -53,15 +53,12 @@ export const SettingsProvidersV2: Component<{
   }
 
   const connected = createMemo(() => {
-    return providers.connected().filter(
-      (provider) =>
-        provider.id !== "opencode" ||
-        Object.values(provider.models).some((model) => {
-          if (typeof model !== "object" || model === null || !("cost" in model)) return false
-          const cost = model.cost
-          return typeof cost === "object" && cost !== null && "input" in cost && cost.input > 0
-        }),
-    )
+    return providers
+      .connected()
+      .filter(
+        (provider) =>
+          provider.id !== "opencode" || Object.values(provider.models).some((model) => model.cost.input > 0),
+      )
   })
 
   const popular = createMemo(() => {

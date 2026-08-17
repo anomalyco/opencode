@@ -27,7 +27,7 @@ test("navigates to a subagent child session missing from the session list", asyn
   await expect(titlebarRight.getByRole("button", { name: "Toggle review" })).toHaveCount(1)
 })
 
-test("keeps the parent visible while child lineage resolves", async ({ page }) => {
+test("keeps the parent visible while the child session resolves", async ({ page }) => {
   await setup(page)
   const requested = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
