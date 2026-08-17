@@ -15,6 +15,7 @@ import {
 import { Document, Event, Info } from "@opencode-ai/schema/config"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { Config } from "@opencode-ai/core/config"
+import { ConfigMCPPlugin } from "@opencode-ai/core/config/plugin/mcp"
 import { Credential } from "@opencode-ai/core/credential"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/util/effect/layer-node"
@@ -178,7 +179,13 @@ function resourceMcpLayer(
 ) {
   const directory = AbsolutePath.make(import.meta.dir)
   const unusedIntegration = () => Effect.die("unused integration service")
-  return MCP.layer(options).pipe(
+  return Layer.effectDiscard(
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      yield* ConfigMCPPlugin.register(bus.subscribe())
+    }),
+  ).pipe(
+    Layer.provideMerge(MCP.layer(options)),
     Layer.provideMerge(Form.layer),
     Layer.provide(
       Layer.mergeAll(
@@ -1066,35 +1073,6 @@ test("reconciles only changed MCP server config", async () => {
           ),
         )
       }),
-    ),
-  )
-})
-
-test("reconciles MCP config changed during startup", async () => {
-  const server = new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true })
-  let reads = 0
-  const entries = () =>
-    Effect.sync(() => {
-      reads += 1
-      return [
-        new Document({
-          type: "document",
-          info: new Info({
-            mcp: new ConfigMCP.Info({
-              servers: reads === 1 ? { initial: server } : { initial: server, added: server },
-            }),
-          }),
-        }),
-      ]
-    })
-
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const service = yield* MCP.Service
-        expect((yield* service.servers()).map((item) => String(item.name))).toEqual(["added", "initial"])
-        expect(reads).toBeGreaterThanOrEqual(2)
-      }).pipe(Effect.provide(resourceMcpLayer(server, undefined, undefined, { entries }))),
     ),
   )
 })

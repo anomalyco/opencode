@@ -3,13 +3,11 @@ export * as MCP from "./index.js"
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Command } from "@opencode-ai/schema/command"
-import { Document, Event, type Entry } from "@opencode-ai/schema/config"
 import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Config } from "../config.js"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
@@ -129,7 +127,22 @@ type ServerEntry = {
 const GLOBAL_ELICITATION_SESSION_ID = "global"
 const URL_ELICITATION_FIELD_KEY = "elicitation"
 
-export interface Interface {
+type Data = {
+  servers: Map<ServerName, typeof ConfigMCP.Server.Type>
+  timeout: typeof ConfigMCP.Timeout.Type
+}
+
+export type Draft = {
+  list: () => readonly [ServerName, typeof ConfigMCP.Server.Type][]
+  timeout: {
+    get: () => typeof ConfigMCP.Timeout.Type
+    set: (value: typeof ConfigMCP.Timeout.Type) => void
+  }
+  update: (server: ServerName | string, config: typeof ConfigMCP.Server.Type) => void
+  remove: (server: ServerName | string) => void
+}
+
+export interface Interface extends State.Transformable<Draft> {
   readonly servers: () => Effect.Effect<ServerInfo[]>
   readonly add: (server: ServerName | string, config: typeof ConfigMCP.Server.Type) => Effect.Effect<void>
   readonly connect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
@@ -171,7 +184,6 @@ export const layer = (options?: Options) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
-      const config = yield* Config.Service
       const location = yield* Location.Service
       const environment = yield* Environment.Service
       const bus = yield* Bus.Service
@@ -181,37 +193,14 @@ export const layer = (options?: Options) =>
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
 
-      const loadConfig = (entries: readonly Entry[]) => {
-        const documents = entries.filter((entry): entry is Document => entry.type === "document")
-        // Global MCP timeout defaults, later config files overriding earlier ones.
-        const timeout = Object.assign(
-          {},
-          ...documents.flatMap((entry) => (entry.info.mcp?.timeout ? [entry.info.mcp.timeout] : [])),
-        )
-        const servers = new Map<ServerName, typeof ConfigMCP.Server.Type>()
-        for (const entry of documents) {
-          for (const [name, server] of Object.entries(entry.info.mcp?.servers ?? {})) {
-            servers.set(ServerName.make(name), { ...server, timeout: { ...timeout, ...server.timeout } })
-          }
-        }
-        return { timeout, servers }
-      }
-      const initial = loadConfig(yield* config.entries())
-      const configState = { servers: initial.servers, timeout: initial.timeout }
-      // Later config files win for duplicate server names; per-server timeout overrides globals.
+      // Materialized definitions and live connections are kept separate so operational additions
+      // survive unrelated definition reloads.
       const runtime = new Map<ServerName, ServerEntry>()
       // Serializes lifecycle operations per server. Anything taking this lock from a connection
       // callback must stay forked: lifecycle operations close scopes while holding it, firing onClose.
       const locks = KeyedMutex.makeUnsafe<ServerName>()
       const reloadLock = Semaphore.makeUnsafe(1)
       const urlElicitations = new Map<string, Form.ID>()
-      for (const [name, server] of initial.servers) {
-        runtime.set(name, {
-          config: server,
-          status: { status: "pending" },
-          startup: Deferred.makeUnsafe<void>(),
-        })
-      }
 
       // Register every remote server as an OAuth integration so credentials live in the global store
       // rather than in committed config. Servers that connect anonymously simply never use the method.
@@ -253,8 +242,6 @@ export const layer = (options?: Options) =>
           })
           .pipe(Scope.provide(scope))
       })
-      yield* Effect.forEach(runtime, ([name, entry]) => register(name, entry), { discard: true })
-
       const requireServer = Effect.fnUntraced(function* (server: ServerName | string) {
         const name = ServerName.make(server)
         const entry = runtime.get(name)
@@ -604,14 +591,42 @@ export const layer = (options?: Options) =>
         yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
       })
 
-      const reloadConfig = Effect.fnUntraced(function* () {
+      const configured = {
+        initialized: false,
+        servers: new Map<ServerName, typeof ConfigMCP.Server.Type>(),
+      }
+      const reconcile = Effect.fnUntraced(function* (next: Draft) {
         yield* reloadLock.withPermit(
           Effect.gen(function* () {
-            const next = loadConfig(yield* config.entries())
-            const names = new Set([...configState.servers.keys(), ...next.servers.keys()])
+            const servers = new Map(next.list())
+            if (!configured.initialized && runtime.size === 0) {
+              for (const [name, server] of servers) {
+                runtime.set(name, {
+                  config: server,
+                  status: { status: "pending" },
+                  startup: Deferred.makeUnsafe<void>(),
+                })
+              }
+              yield* Effect.forEach(runtime, ([name, entry]) => register(name, entry), { discard: true })
+              configured.initialized = true
+              configured.servers = servers
+
+              // Initial connections stay asynchronous so one slow server does not block Location startup.
+              for (const [name, entry] of runtime) {
+                if (entry.config.disabled) {
+                  entry.status = { status: "disabled" }
+                  Deferred.doneUnsafe(entry.startup, Exit.void)
+                  continue
+                }
+                fork(startServer(name, entry).pipe(locks.withLock(name)))
+              }
+              return
+            }
+
+            const names = new Set([...configured.servers.keys(), ...servers.keys()])
             for (const name of names) {
-              const previous = configState.servers.get(name)
-              const updated = next.servers.get(name)
+              const previous = configured.servers.get(name)
+              const updated = servers.get(name)
               if (isDeepStrictEqual(previous, updated)) continue
               if (!updated) {
                 yield* removeServer(name).pipe(locks.withLock(name))
@@ -619,21 +634,11 @@ export const layer = (options?: Options) =>
               }
               yield* replaceServer(name, updated).pipe(locks.withLock(name))
             }
-            configState.servers = next.servers
-            configState.timeout = next.timeout
+            configured.initialized = true
+            configured.servers = servers
           }),
         )
       })
-
-      // Disabled servers settle their startup immediately so queries never block on them.
-      for (const [name, entry] of runtime) {
-        if (entry.config.disabled) {
-          entry.status = { status: "disabled" }
-          Deferred.doneUnsafe(entry.startup, Exit.void)
-          continue
-        }
-        fork(startServer(name, entry).pipe(locks.withLock(name)))
-      }
 
       // Bring a server online (or back to needs_auth) when its integration's credential changes, so an
       // OAuth login takes effect without a restart. Only fires for the integrations we registered.
@@ -658,14 +663,22 @@ export const layer = (options?: Options) =>
           Effect.ignore,
         ),
       )
-      yield* bus.subscribe(Event.Updated).pipe(
-        Stream.runForEach(() =>
-          reloadConfig().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload MCP config", { cause }))),
-        ),
-        Effect.forkScoped({ startImmediately: true }),
-      )
-      // Close the gap between the initial snapshot and the live subscription becoming active.
-      yield* reloadConfig()
+      const state = State.create<Data, Draft>({
+        name: "mcp",
+        initial: () => ({ servers: new Map(), timeout: {} }),
+        draft: (draft) => ({
+          list: () => Array.from(draft.servers),
+          timeout: {
+            get: () => draft.timeout,
+            set: (value) => {
+              draft.timeout = value
+            },
+          },
+          update: (server, serverConfig) => draft.servers.set(ServerName.make(server), serverConfig),
+          remove: (server) => draft.servers.delete(ServerName.make(server)),
+        }),
+        finalize: reconcile,
+      })
 
       // Suspend so each await sees current entries; a bare Map iterator is exhausted after one run.
       const whenAllReady = Effect.suspend(() =>
@@ -675,6 +688,8 @@ export const layer = (options?: Options) =>
         }),
       )
       return Service.of({
+        transform: state.transform,
+        reload: state.reload,
         servers: Effect.fn("MCP.servers")(function* () {
           return Array.from(runtime)
             .toSorted(([a], [b]) => a.localeCompare(b))
@@ -682,7 +697,7 @@ export const layer = (options?: Options) =>
         }),
         add: Effect.fn("MCP.add")(function* (server, config) {
           const name = ServerName.make(server)
-          yield* replaceServer(name, { ...config, timeout: { ...configState.timeout, ...config.timeout } }).pipe(
+          yield* replaceServer(name, { ...config, timeout: { ...state.get().timeout, ...config.timeout } }).pipe(
             locks.withLock(name),
           )
         }),
@@ -831,7 +846,7 @@ export function configured(options?: Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Config.node, Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node],
+    deps: [Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node],
   })
 }
 
