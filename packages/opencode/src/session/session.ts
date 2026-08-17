@@ -340,9 +340,10 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
     if (!Number.isFinite(value)) return 0
     return Math.max(0, value)
   }
-  // provider cost/usage fields are typed as finite numbers but never decoded against that
-  // schema, so anything non-numeric reaching decimal.js would throw and abort the turn
-  const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0)
+  // provider cost fields are typed as finite numbers but never decoded against that schema,
+  // so anything non-numeric reaching decimal.js would throw and abort the turn
+  const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value)
+  const num = (value: unknown) => (finite(value) ? value : 0)
   const inputTokens = safe(input.usage.inputTokens ?? 0)
   const outputTokens = safe(input.usage.outputTokens ?? 0)
   const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
@@ -384,7 +385,9 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   const contextTokens = inputTokens
   const costInfo =
     input.model.cost?.tiers
-      ?.filter((item) => item.tier.type === "context" && contextTokens > item.tier.size)
+      // a malformed tier is dropped rather than trusted: a missing `tier` used to throw here,
+      // and a non-numeric `size` must not be coerced to 0 (that would match every context)
+      ?.filter((item) => item.tier?.type === "context" && finite(item.tier.size) && contextTokens > item.tier.size)
       .sort((a, b) => b.tier.size - a.tier.size)[0] ??
     (input.model.cost?.experimentalOver200K && contextTokens > 200_000
       ? input.model.cost.experimentalOver200K
@@ -393,7 +396,7 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   return {
     cost:
       typeof totalNanoAiu === "number" && Number.isFinite(totalNanoAiu) && totalNanoAiu >= 0
-        ? new Decimal(num(totalNanoAiu)).div(100_000_000_000).toNumber()
+        ? new Decimal(totalNanoAiu).div(100_000_000_000).toNumber()
         : safe(
             new Decimal(0)
               .add(new Decimal(num(tokens.input)).mul(num(costInfo?.input)).div(1_000_000))

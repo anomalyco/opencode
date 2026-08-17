@@ -2000,6 +2000,33 @@ describe("SessionNs.getUsage", () => {
     expect(Number.isFinite(result.cost)).toBe(true)
   })
 
+  test("ignores malformed cost tiers instead of throwing", () => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: {
+        input: 3,
+        output: 15,
+        cache: { read: 0, write: 0 },
+        tiers: [
+          // no `tier` key at all
+          { input: 5, output: 20, cache: { read: 0, write: 0 } },
+          // `tier.size` is not a number
+          { input: 7, output: 30, cache: { read: 0, write: 0 }, tier: { type: "context", size: {} } },
+        ],
+      } as unknown as Provider.Model["cost"],
+    })
+    const input = {
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    }
+
+    expect(() => SessionNs.getUsage(input)).not.toThrow()
+
+    // both tiers discarded, so the base pricing applies
+    expect(SessionNs.getUsage(input).cost).toBe(3 + 1.5)
+  })
+
   test("keeps the full cost when every provider cost field is a number", () => {
     const model = createModel({
       context: 100_000,
