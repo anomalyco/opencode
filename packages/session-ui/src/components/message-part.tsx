@@ -248,7 +248,7 @@ function MessageActionButton(
 }
 
 function SaveLearningsButton(props: {
-  label: JSX.Element
+  label: string
   useV2?: boolean
   onClick: () => void
 }) {
@@ -263,7 +263,7 @@ function SaveLearningsButton(props: {
             variant="ghost"
             onMouseDown={(event) => event.preventDefault()}
             onClick={props.onClick}
-            aria-label={String(props.label)}
+            aria-label={props.label}
           />
         </Tooltip>
       }
@@ -275,7 +275,7 @@ function SaveLearningsButton(props: {
           variant="ghost-muted"
           onMouseDown={(event) => event.preventDefault()}
           onClick={props.onClick}
-          aria-label={String(props.label)}
+          aria-label={props.label}
         />
       </TooltipV2>
     </Show>
@@ -987,7 +987,7 @@ export function Message(props: MessageProps) {
       <Match when={props.message.role === "assistant" && props.message}>
         {(assistantMessage) => (
               <AssistantMessageDisplay
-                message={assistantMessage() as AssistantMessage}
+                message={assistantMessage()}
                 parts={props.parts}
                 showAssistantCopyPartID={props.showAssistantCopyPartID}
                 showReasoningSummaries={props.showReasoningSummaries}

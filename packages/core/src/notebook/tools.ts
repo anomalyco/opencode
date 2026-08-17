@@ -294,7 +294,7 @@ const layer = Layer.effectDiscard(
             yield* permission.assert({
               action: "write-notes",
               resources: edits.map((edit) => edit.abs),
-              save: edits.map((edit) => `${edit.label}`),
+              save: edits.map((edit) => edit.label),
               metadata: {
                 title: "Save notebook memory",
                 filepath: edits.length === 1 ? edits[0].abs : "",

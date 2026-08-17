@@ -21,7 +21,7 @@ export function SessionPermissionDock(props: {
 
   const notebookDiff = () =>
     props.request.permission === "write-notes" && typeof props.request.metadata?.diff === "string"
-      ? (props.request.metadata.diff as string)
+      ? props.request.metadata.diff
       : ""
 
   return (
