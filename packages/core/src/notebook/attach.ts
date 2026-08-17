@@ -3,6 +3,7 @@ export * as NotebookAttach from "./attach"
 import { basename, dirname, resolve, sep } from "path"
 import { Context, Effect, Layer } from "effect"
 import { makeLocationNode } from "../effect/app-node"
+import { Config } from "../config"
 import { FSUtil } from "../fs-util"
 import { Location } from "../location"
 import { itemFreshness, loadNotebook, notebookPathFor } from "./store"
@@ -54,7 +55,11 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
+    const config = yield* Config.Service
     const root = location.project.directory
+    // Opt-out knob: `experimental.notebook.attach = false` disables the
+    // mid-task note prepending (notes_get/notes_commit and the digest still work).
+    const attachEnabled = Config.latest(yield* config.entries(), "experimental")?.notebook?.attach ?? true
 
     // Per-session set of files already surfaced a note for, so each file is
     // attached at most once per session (its first touch).
@@ -73,7 +78,7 @@ const layer = Layer.effect(
     }
 
     const note = (sessionID: string, tool: string, input: unknown): Effect.Effect<string> => {
-      if (!ATTACH_TOOLS.has(tool)) return Effect.succeed("")
+      if (!attachEnabled || !ATTACH_TOOLS.has(tool)) return Effect.succeed("")
       const rel = fileRel(input)
       if (!rel || !resolved(root, rel) || seenFor(sessionID).has(rel)) return Effect.succeed("")
       return Effect.gen(function* () {
@@ -96,7 +101,7 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [FSUtil.node, Location.node],
+  deps: [FSUtil.node, Location.node, Config.node],
 })
 
 /** Prepend a note to a tool's model-visible text, preserving a single-text result type. */
