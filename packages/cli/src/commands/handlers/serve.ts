@@ -7,6 +7,8 @@ export default Runtime.handler(
   Commands.commands.serve,
   Effect.fnUntraced(function* (input) {
     if (input.service && input.stdio) return yield* Effect.fail(new Error("--service and --stdio cannot be combined"))
+    if (input.service && input.noAuth)
+      return yield* Effect.fail(new Error("--service and --no-auth cannot be combined"))
     return yield* ServerProcess.run({
       mode: input.service ? "service" : input.stdio ? "stdio" : "default",
       hostname: Option.getOrUndefined(input.hostname),
