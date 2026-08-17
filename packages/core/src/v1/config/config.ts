@@ -210,8 +210,32 @@ export const Patch = Schema.Struct({
   command: Schema.optional(Removable(ConfigCommandV1.Info)),
   references: Schema.optional(Removable(ConfigReference.Entry)),
   reference: Schema.optional(Removable(ConfigReference.Entry)),
-  mode: Schema.optional(Removable(ConfigAgentV1.Info)),
-  agent: Schema.optional(Removable(ConfigAgentV1.Info)),
+  // `mode` and `agent` keep the exact named-key shape `Info` declares — only
+  // the open rest becomes removable. The built-in agents are not deletable
+  // (there is no config entry to remove), and leaving them as-is keeps a plain
+  // `Config` assignable to `ConfigPatch` for existing callers: the named
+  // optional keys are what put `undefined` in the index signature, and making
+  // them nullable would drop it.
+  mode: Schema.optional(
+    Schema.StructWithRest(
+      Schema.Struct({ build: Schema.optional(ConfigAgentV1.Info), plan: Schema.optional(ConfigAgentV1.Info) }),
+      [Removable(ConfigAgentV1.Info)],
+    ),
+  ),
+  agent: Schema.optional(
+    Schema.StructWithRest(
+      Schema.Struct({
+        plan: Schema.optional(ConfigAgentV1.Info),
+        build: Schema.optional(ConfigAgentV1.Info),
+        general: Schema.optional(ConfigAgentV1.Info),
+        explore: Schema.optional(ConfigAgentV1.Info),
+        title: Schema.optional(ConfigAgentV1.Info),
+        summary: Schema.optional(ConfigAgentV1.Info),
+        compaction: Schema.optional(ConfigAgentV1.Info),
+      }),
+      [Removable(ConfigAgentV1.Info)],
+    ),
+  ),
   provider: Schema.optional(Removable(ConfigProviderV1.Info)),
   mcp: Schema.optional(Removable(Schema.Union([ConfigMCPV1.Info, Schema.Struct({ enabled: Schema.Boolean })]))),
   tools: Schema.optional(Removable(Schema.Boolean)),
