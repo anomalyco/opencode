@@ -33,7 +33,7 @@ function createFixture(initial: Record<string, Lineage> = {}) {
     fail(id: string, error: unknown) {
       deferred.get(id)?.reject(error)
       // The real store does not cache failures: the inflight request entry is
-      // dropped on rejection so the next resolve retries (server-session.ts).
+      // dropped on rejection so the next resolve retries.
       deferred.delete(id)
     },
     remove(id: string) {

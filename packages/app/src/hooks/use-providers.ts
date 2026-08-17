@@ -28,33 +28,23 @@ export function useProviders(directory: Accessor<string | undefined>) {
   createEffect(() => {
     if (sdk.connection.status() !== "connected") return
     const ref = location()
-    void Promise.all([
-      data.location.provider.sync(ref),
-      data.location.model.sync(ref),
-      data.location.model.syncDefault(ref),
-    ]).catch(() => undefined)
+    void Promise.all([data.location.provider.sync(ref), data.location.model.sync(ref)]).catch(() => undefined)
   })
 
   const providers = createMemo(() => {
     const ref = location()
     const provider = data.location.provider.list(ref)
     const model = data.location.model.list(ref)
-    const defaultModel = data.location.model.default(ref)
-    if (!provider || !model || defaultModel === undefined) return emptyProviderCatalog
-    return normalizeProviderList(provider, model, defaultModel)
+    if (!provider || !model) return emptyProviderCatalog
+    return normalizeProviderList(provider, model)
   })
 
   return {
     ready: () => {
       const ref = location()
-      return (
-        data.location.provider.list(ref) !== undefined &&
-        data.location.model.list(ref) !== undefined &&
-        data.location.model.default(ref) !== undefined
-      )
+      return data.location.provider.list(ref) !== undefined && data.location.model.list(ref) !== undefined
     },
     all: () => providers().all,
-    default: () => providers().default,
     popular: () =>
       pipe(
         providers().all,

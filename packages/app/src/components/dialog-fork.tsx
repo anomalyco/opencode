@@ -1,6 +1,7 @@
 import { Component, createMemo } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useData } from "@/context/server"
+import { usePrompt } from "@/context/prompt"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
@@ -9,6 +10,10 @@ import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
 import { sessionHref } from "@/utils/session-route"
 import { ServerConnection } from "@/context/servers"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { extractPromptFromParts } from "@/utils/prompt"
+import { normalizeSessionMessages } from "@/utils/session-message"
+import { useWorkspaceLocation } from "@/context/location"
 
 interface ForkableMessage {
   id: string
@@ -25,6 +30,8 @@ export const DialogFork: Component = () => {
   const navigate = useNavigate()
   const data = useData()
   const serverSDK = useServerSDK()
+  const location = useWorkspaceLocation()
+  const prompt = usePrompt()
   const dialog = useDialog()
   const language = useLanguage()
 
@@ -53,11 +60,20 @@ export const DialogFork: Component = () => {
 
     const sessionID = params.id
     if (!sessionID) return
+    const restored = extractPromptFromParts(
+      normalizeSessionMessages(sessionID, data.session.message.list(sessionID)).parts.get(item.id) ?? [],
+      {
+        directory: location().directory,
+        attachmentName: language.t("common.attachment"),
+      },
+    )
 
     serverSDK.api.session
       .fork({ sessionID, boundary: { type: "before", messageID: item.id } })
       .then((forked) => {
+        data.session.remember(forked)
         dialog.close()
+        prompt.set(restored, undefined, { dir: base64Encode(location().directory), id: forked.id })
         navigate(sessionHref(ServerConnection.key(serverSDK.server), forked.id))
       })
       .catch((err: unknown) => {

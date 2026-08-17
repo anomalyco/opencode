@@ -3,6 +3,7 @@ import { createMemo, type Accessor } from "solid-js"
 import { useFile } from "@/context/file"
 import { useData } from "@/context/server"
 import { same } from "@/utils/same"
+import { normalizeSessionMessages } from "@/utils/session-message"
 import { createSessionTabs } from "./helpers"
 import {
   normalizeSessionTab,
@@ -39,8 +40,12 @@ export function createSessionController(input: {
     const id = sessionID()
     return id && data.session.status(id) === "running" ? { type: "busy" as const } : idle
   })
-  // TODO: Restore transcript projections when current session messages can be rendered without V1 Message/Part data.
-  const messages = createMemo(() => emptyMessages)
+  const transcript = createMemo(() => {
+    const id = sessionID()
+    return id ? normalizeSessionMessages(id, data.session.message.list(id)) : undefined
+  })
+  const messages = createMemo(() => transcript()?.messages ?? emptyMessages)
+  const parts = (messageID: string) => transcript()?.parts.get(messageID) ?? []
   const userMessages = createMemo(() => selectSessionUserMessages(messages()), emptyUserMessages, { equals: same })
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const visibleUserMessages = createMemo(
@@ -79,6 +84,7 @@ export function createSessionController(input: {
     },
     history: {
       messages,
+      parts,
       userMessages,
       visibleUserMessages,
       lastUserMessage: createMemo(() => visibleUserMessages().at(-1)),

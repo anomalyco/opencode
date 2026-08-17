@@ -12,6 +12,7 @@ import type { ServerConnection } from "@/context/servers"
 import { sessionHref } from "@/utils/session-route"
 import { useData } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
+import { normalizeSessionMessages } from "@/utils/session-message"
 
 export function DirectoryDataProvider(
   props: ParentProps<{
@@ -36,6 +37,21 @@ export function DirectoryDataProvider(
     await data.session.lineage.resolve(sessionID).catch(() => undefined)
     navigate(href(sessionID))
   }
+  const legacyData = createMemo(() => {
+    const sessionID = params.id
+    const transcript = sessionID ? normalizeSessionMessages(sessionID, data.session.message.list(sessionID)) : undefined
+    return {
+      session: data.session.list(),
+      session_status: sessionID
+        ? {
+            [sessionID]: data.session.status(sessionID) === "running" ? ({ type: "busy" } as const) : ({ type: "idle" } as const),
+          }
+        : {},
+      session_diff: {},
+      message: sessionID && transcript ? { [sessionID]: transcript.messages } : {},
+      part: transcript ? Object.fromEntries(transcript.parts) : {},
+    }
+  })
 
   createEffect(() => {
     // A draft lives at /new-session?draftId=… and has no directory segment to normalize.
@@ -48,8 +64,6 @@ export function DirectoryDataProvider(
 
   createEffect(() => {
     if (serverSDK.connection.status() !== "connected") return
-    const ref = { directory: directory() }
-    void data.location.sync(ref).catch(() => undefined)
     void data.project.sync().catch(() => undefined)
     const sessionID = params.id
     if (!sessionID) return
@@ -66,8 +80,7 @@ export function DirectoryDataProvider(
     <Show when={directory()} keyed>
       {(directory) => (
         <DataProvider
-          // TODO: Remove this legacy session-ui bridge once message parts use the current Data projections.
-          data={{ session: [], session_status: {}, session_diff: {}, message: {}, part: {} }}
+          data={legacyData()}
           directory={directory}
           sessionID={params.id}
           onNavigateToSession={navigateToSession}

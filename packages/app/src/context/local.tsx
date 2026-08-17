@@ -153,13 +153,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       setStore("promoting", undefined)
     })
 
-    const configuredModel = () => {
-      const configured = data.location.model.default({ directory: sdk().directory })
-      if (!configured) return
-      const model = { providerID: configured.providerID, modelID: configured.modelID }
-      if (validModel(model)) return model
-    }
-
     const recentModel = () => {
       for (const item of models.recent.list()) {
         if (validModel(item)) return item
@@ -167,14 +160,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const defaultModel = () => {
-      const defaults = providers.default()
       for (const provider of providers.connected()) {
-        const configured = defaults[provider.id]
-        if (configured) {
-          const model = { providerID: provider.id, modelID: configured }
-          if (validModel(model)) return model
-        }
-
         const first = Object.values(provider.models)[0]
         if (!first) continue
         const model = { providerID: provider.id, modelID: first.id }
@@ -182,7 +168,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     }
 
-    const fallback = createMemo<ModelKey | undefined>(() => configuredModel() ?? recentModel() ?? defaultModel())
+    const fallback = createMemo<ModelKey | undefined>(() => recentModel() ?? defaultModel())
 
     const agent = {
       list,

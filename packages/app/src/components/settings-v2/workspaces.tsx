@@ -94,14 +94,12 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
   }
   const loadSessions = async (context = captureDeleteContext()) => {
     const fetched = await listAllSessions(context.sdk.api.session, { order: "desc" })
-    return mergeWorkspaceSessionInventory(
-      fetched,
-      context.data.session.list(),
-    )
+    fetched.forEach(context.data.session.remember)
+    return mergeWorkspaceSessionInventory(fetched, context.data.session.list())
   }
   const sessionQuery = useQuery(() => ({
     queryKey: [serverSDK.scope, null, "settings-workspace-sessions"] as const,
-    queryFn: () => loadSessions(),
+    queryFn: () => loadSessions().then(() => Date.now()),
     refetchOnMount: "always",
   }))
   const sessionsByWorkspace = createMemo(
@@ -109,7 +107,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
       new Map(
         workspaces().map((workspace) => [
           pathKey(workspace.directory),
-          sessionQuery.isSuccess ? sessionsForWorkspace(sessionQuery.data ?? [], workspace.directory) : [],
+          sessionQuery.isSuccess ? sessionsForWorkspace(data.session.list(), workspace.directory) : [],
         ]),
       ),
   )

@@ -2,21 +2,15 @@ import type { Config, Path, Project, ProviderAuthResponse } from "@/types"
 import type {
   LocationGetInput,
   LocationGetOutput,
-  PermissionRequest,
   ProjectCurrentInput,
   ProjectCurrentOutput,
   ProjectListOutput,
-  QuestionRequest,
-  SessionApi,
-  SessionInfo,
 } from "@opencode-ai/client/promise"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { retry } from "@opencode-ai/core/util/retry"
-import { batch } from "solid-js"
-import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
+import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State } from "./types"
-import type { ServerSession } from "../server-session"
 import { cmp, normalizeProjectInfo } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
@@ -89,9 +83,6 @@ type ProjectApi = {
 type WorktreeApi = Pick<ServerApi["worktree"], "list">
 type LocationApi = { readonly get: (input?: LocationGetInput) => Promise<LocationGetOutput> }
 
-type PermissionApi = ServerApi["permission"]
-type QuestionApi = ServerApi["question"]
-
 export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi, worktrees: WorktreeApi) =>
   queryOptions({
     queryKey: [scope, "project"],
@@ -158,48 +149,8 @@ export async function bootstrapGlobal(input: {
   // })
 }
 
-function groupBySession<T extends { id: string; sessionID: string }>(input: T[]) {
-  return input.reduce<Record<string, T[]>>((acc, item) => {
-    if (!item?.id || !item.sessionID) return acc
-    const list = acc[item.sessionID]
-    if (list) list.push(item)
-    if (!list) acc[item.sessionID] = [item]
-    return acc
-  }, {})
-}
-
 function projectID(directory: string, projects: Project[]) {
   return projects.find((project) => project.worktree === directory || project.sandboxes?.includes(directory))?.id
-}
-
-function mergeSession(setStore: SetStoreFunction<State>, session: SessionInfo) {
-  setStore("session", (list) => {
-    const next = list.slice()
-    const idx = next.findIndex((item) => item.id >= session.id)
-    if (idx === -1) return [...next, session]
-    if (next[idx]?.id === session.id) {
-      next[idx] = session
-      return next
-    }
-    next.splice(idx, 0, session)
-    return next
-  })
-}
-
-function warmSessions(input: {
-  ids: string[]
-  store: Store<State>
-  setStore: SetStoreFunction<State>
-  api: SessionApi
-}) {
-  const known = new Set(input.store.session.map((item) => item.id))
-  const ids = [...new Set(input.ids)].filter((id) => !!id && !known.has(id))
-  if (ids.length === 0) return Promise.resolve()
-  return Promise.all(
-    ids.map((sessionID) =>
-      retry(() => input.api.get({ sessionID })).then((session) => mergeSession(input.setStore, session)),
-    ),
-  ).then(() => undefined)
 }
 
 export const loadPathQuery = (scope: ServerScope, directory: string | null, api: LocationApi) =>
@@ -220,14 +171,10 @@ export async function bootstrapDirectory(input: {
   scope: ServerScope
   mcp: boolean
   api: {
-    readonly permission: PermissionApi
     readonly project: ProjectApi
-    readonly question: QuestionApi
-    readonly session: SessionApi
   }
   store: Store<State>
   setStore: SetStoreFunction<State>
-  loadSessions: (directory: string) => Promise<void> | void
   translate: (key: string, vars?: Record<string, string | number>) => string
   global: {
     config: Config
@@ -235,7 +182,6 @@ export async function bootstrapDirectory(input: {
     project: Project[]
   }
   queryClient: QueryClient
-  session?: ServerSession
 }) {
   const loading = input.store.status !== "complete"
   const seededProject = projectID(input.directory, input.global.project)
@@ -246,81 +192,11 @@ export async function bootstrapDirectory(input: {
   if (loading) input.setStore("status", "partial")
 
   const slow = [
-    () => Promise.resolve(input.loadSessions(input.directory)),
     !seededProject &&
       (() =>
         retry(() => input.api.project.current({ location: { directory: input.directory } })).then((project) =>
           input.setStore("project", project.id),
         )),
-    () =>
-      retry(() =>
-        input.api.permission.request
-          .list({ location: { directory: input.directory } })
-          .then((result) => result.data)
-          .then((permissions) => {
-            const ids = permissions.map((permission) => permission.sessionID)
-            const grouped = groupBySession(
-              permissions.filter((permission) => !!permission.id && !!permission.sessionID),
-            )
-            const warm = input.session
-              ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
-              : warmSessions({ ids, store: input.store, setStore: input.setStore, api: input.api.session })
-            return warm.then(() =>
-              batch(() => {
-                const current = input.session?.data.permission ?? input.store.permission
-                for (const sessionID of Object.keys(current)) {
-                  if (grouped[sessionID]) continue
-                  if (input.session?.get(sessionID)?.location.directory !== input.directory) continue
-                  if (input.session) input.session.set("permission", sessionID, [])
-                  if (!input.session) input.setStore("permission", sessionID, [])
-                }
-                for (const [sessionID, permissions] of Object.entries(grouped)) {
-                  const value = reconcile(
-                    permissions.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
-                    { key: "id" },
-                  )
-                  if (input.session) input.session.set("permission", sessionID, value)
-                  if (!input.session) input.setStore("permission", sessionID, value)
-                }
-              }),
-            )
-          }),
-      ),
-    () =>
-      retry(() =>
-        input.api.question.request
-          .list({ location: { directory: input.directory } })
-          .then((result) => result.data)
-          .then((questions) => {
-            const ids = questions.map((question) => question.sessionID)
-            const grouped = groupBySession(
-              questions.filter((question) => !!question.id && !!question.sessionID) as QuestionRequest[],
-            )
-            const warm = input.session
-              ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
-              : warmSessions({ ids, store: input.store, setStore: input.setStore, api: input.api.session })
-            return warm.then(() =>
-              batch(() => {
-                const current = input.session?.data.question ?? input.store.question
-                for (const sessionID of Object.keys(current)) {
-                  if (grouped[sessionID]) continue
-                  if (input.session?.get(sessionID)?.location.directory !== input.directory) continue
-                  if (input.session) input.session.set("question", sessionID, [])
-                  if (!input.session) input.setStore("question", sessionID, [])
-                }
-                for (const [sessionID, questions] of Object.entries(grouped)) {
-                  const value = reconcile(
-                    questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
-                    { key: "id" },
-                  )
-                  if (input.session) input.session.set("question", sessionID, value)
-                  if (!input.session) input.setStore("question", sessionID, value)
-                }
-              }),
-            )
-          }),
-      ),
-    () => Promise.resolve(input.loadSessions(input.directory)),
   ].filter(Boolean) as (() => Promise<any>)[]
 
   await waitForPaint()

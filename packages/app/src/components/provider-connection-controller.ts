@@ -119,12 +119,10 @@ export function createProviderConnectionController(options: {
     data.location.integration.invalidate(ref)
     data.location.provider.invalidate(ref)
     data.location.model.invalidate(ref)
-    data.location.model.invalidateDefault(ref)
     await Promise.all([
       data.location.integration.sync(ref),
       data.location.provider.sync(ref),
       data.location.model.sync(ref),
-      data.location.model.syncDefault(ref),
     ]).catch(() => undefined)
     if (polling.disposed) return
     options.onComplete()

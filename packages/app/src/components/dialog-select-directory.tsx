@@ -10,6 +10,7 @@ import { ServerConnection } from "@/context/servers"
 import { useGlobal } from "@/context/global"
 import { cleanPickerInput, createDirectorySearch, displayPickerPath } from "./directory-picker-domain"
 import type { Path } from "@/types"
+import { pathKey } from "@/utils/path-key"
 
 interface DialogSelectDirectoryProps {
   title?: string
@@ -96,7 +97,9 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
       let at = 0
       const dirs = [project.worktree, ...(project.sandboxes ?? [])]
       for (const directory of dirs) {
-        const sessions = sync.child(directory, { bootstrap: false })[0].session
+        const sessions = serverCtx.data.session
+          .list()
+          .filter((session) => pathKey(session.location.directory) === pathKey(directory))
         for (const session of sessions) {
           if (session.time.archived) continue
           const updated = session.time.updated ?? session.time.created

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type {
   AgentListOutput,
-  ModelDefaultOutput,
   ModelListOutput,
   ProviderListOutput,
 } from "@opencode-ai/client/promise"
@@ -75,7 +74,6 @@ describe("normalizeProviderList", () => {
           limit: { context: 1, output: 1 },
         },
       ] as ModelListOutput["data"],
-      { id: "gpt-5", providerID: "openai" } as ModelDefaultOutput["data"],
     )
 
     expect(result.connected).toEqual(["openai"])

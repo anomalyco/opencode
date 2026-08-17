@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, createRoot, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createResource, For, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
@@ -89,7 +89,7 @@ function SessionTabEntry(props: {
   const [loadedSession] = createResource(
     () => {
       const ctx = props.serverCtx
-      return ctx ? { id: props.tab.sessionId, ctx } : null
+      return ctx?.sdk.connection.status() === "connected" ? { id: props.tab.sessionId, ctx } : null
     },
     ({ id, ctx }) =>
       ctx.data.session
@@ -100,7 +100,6 @@ function SessionTabEntry(props: {
   const session = createMemo(() => cachedSession() ?? loadedSession())
   const missingSession = createMemo(() => !!props.serverCtx && !loadedSession.loading && !session())
   const visible = createMemo(() => !!session() || missingSession() || !!persisted()?.title)
-  let prefetched = false
 
   const rename = async (title: string) => {
     const value = session()
@@ -126,23 +125,19 @@ function SessionTabEntry(props: {
   createEffect(() => {
     const ctx = props.serverCtx
     const value = session()
-    if (!ctx || !value || prefetched) return
-    prefetched = true
-    createRoot((dispose) => {
-      try {
+    if (!ctx || !value || props.active || ctx.sdk.connection.status() !== "connected") return
+    const timer = window.setTimeout(
+      () =>
         void Promise.allSettled([
           ctx.data.session.sync(value.id, { children: true }),
           ctx.data.session.pending.sync(value.id),
           ctx.data.session.message.sync(value.id),
           ctx.data.session.permission.sync(value.id),
           ctx.data.session.form.sync(value.id),
-        ])
-          .catch(() => {})
-          .finally(dispose)
-      } catch {
-        dispose()
-      }
-    })
+        ]),
+      300 + props.index * 50,
+    )
+    onCleanup(() => window.clearTimeout(timer))
   })
 
   createEffect(() => {

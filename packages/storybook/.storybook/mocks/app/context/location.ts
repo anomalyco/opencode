@@ -1,5 +1,8 @@
 const location = {
   directory: "/tmp/story",
+  ref: { directory: "/tmp/story" },
+  current: undefined,
+  error: undefined,
   event: {
     on: () => () => undefined,
     listen: () => () => undefined,

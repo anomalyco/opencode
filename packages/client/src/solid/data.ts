@@ -75,7 +75,6 @@ type LocationData = {
     resource?: McpResource[]
   }
   model?: ModelInfo[]
-  modelDefault?: ModelInfo | null
   provider?: ProviderInfo[]
   reference?: ReferenceInfo[]
   websearch?: WebSearchProvider[]
@@ -381,6 +380,12 @@ export function createServerData(config: CreateServerDataInput) {
         sync.complete(`session.pending:${event.data.sessionID}`)
         sync.complete(`session.message:${event.data.sessionID}`)
         return
+      case "session.forked":
+        result.session.invalidate(event.data.sessionID)
+        result.session.pending.invalidate(event.data.sessionID)
+        result.session.message.invalidate(event.data.sessionID)
+        void result.session.sync(event.data.sessionID)
+        return
       case "session.deleted":
         removeSession(event.data.sessionID)
         return
@@ -468,8 +473,14 @@ export function createServerData(config: CreateServerDataInput) {
           setStore("session", "info", sessionID, "projectID", adopted.projectID)
           setStore("session", "info", sessionID, "subpath", adopted.subpath)
         }
+        result.project.invalidate()
+        void result.project.sync()
         return
       }
+      case "worktree.updated":
+        result.project.invalidate()
+        void result.project.sync()
+        return
       case "session.inbox.delivered": {
         const admitted = store.session.input[event.data.sessionID]?.includes(event.data.inboxID) ?? false
         removePending(event.data.sessionID, event.data.inboxID)
@@ -921,13 +932,8 @@ export function createServerData(config: CreateServerDataInput) {
     switch (event.type) {
       case "catalog.updated":
         result.location.model.invalidate(location)
-        result.location.model.invalidateDefault(location)
         result.location.provider.invalidate(location)
-        void Promise.all([
-          result.location.model.sync(location),
-          result.location.model.syncDefault(location),
-          result.location.provider.sync(location),
-        ])
+        void Promise.all([result.location.model.sync(location), result.location.provider.sync(location)])
         break
       case "agent.updated":
         result.location.agent.invalidate(location)
@@ -982,12 +988,10 @@ export function createServerData(config: CreateServerDataInput) {
       case "integration.updated":
         result.location.integration.invalidate(location)
         result.location.model.invalidate(location)
-        result.location.model.invalidateDefault(location)
         result.location.provider.invalidate(location)
         void Promise.all([
           result.location.integration.sync(location),
           result.location.model.sync(location),
-          result.location.model.syncDefault(location),
           result.location.provider.sync(location),
         ])
         break
@@ -1294,6 +1298,11 @@ export function createServerData(config: CreateServerDataInput) {
           const key = locationKey(location)
           if (!store.location[key]) setStore("location", key, {})
           setStore("location", key, "info", location)
+          const requested = locationKey(current)
+          if (requested !== key) {
+            if (!store.location[requested]) setStore("location", requested, {})
+            setStore("location", requested, "info", location)
+          }
           if (!ref) {
             setDefaultLocation({ directory: location.directory, workspaceID: location.workspaceID })
           }
@@ -1301,7 +1310,11 @@ export function createServerData(config: CreateServerDataInput) {
       },
       async sync(ref?: LocationRef) {
         await result.location.syncInfo(ref)
-        const location = ref ?? defaultLocation()
+        const requested = ref ?? defaultLocation()
+        const info = result.location.info(requested)
+        const location = info
+          ? { directory: info.directory, workspaceID: info.workspaceID }
+          : requested
         await Promise.all([
           result.location.vcs.sync(location),
           result.location.agent.sync(location),
@@ -1310,7 +1323,6 @@ export function createServerData(config: CreateServerDataInput) {
           result.location.mcp.server.sync(location),
           result.location.mcp.resource.sync(location),
           result.location.model.sync(location),
-          result.location.model.syncDefault(location),
           result.location.provider.sync(location),
           result.location.reference.sync(location),
           result.location.skill.sync(location),
@@ -1328,7 +1340,6 @@ export function createServerData(config: CreateServerDataInput) {
         result.location.mcp.server.invalidate(location)
         result.location.mcp.resource.invalidate(location)
         result.location.model.invalidate(location)
-        result.location.model.invalidateDefault(location)
         result.location.provider.invalidate(location)
         result.location.reference.invalidate(location)
         result.location.skill.invalidate(location)
@@ -1455,20 +1466,6 @@ export function createServerData(config: CreateServerDataInput) {
         },
         invalidate(ref?: LocationRef) {
           sync.invalidate(`location.model:${locationKey(ref ?? defaultLocation())}`)
-        },
-        default(location?: LocationRef) {
-          return store.location[locationKey(location ?? defaultLocation())]?.modelDefault
-        },
-        syncDefault(ref?: LocationRef) {
-          const id = locationKey(ref ?? defaultLocation())
-          return sync.run(`location.model.default:${id}`, async () => {
-            const response = await api().model.default({ location: locationQuery(ref ?? defaultLocation()) })
-            const key = locationKey(response.location)
-            setStore("location", key, { ...store.location[key], modelDefault: response.data })
-          })
-        },
-        invalidateDefault(ref?: LocationRef) {
-          sync.invalidate(`location.model.default:${locationKey(ref ?? defaultLocation())}`)
         },
       },
       provider: {

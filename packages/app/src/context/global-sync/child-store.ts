@@ -198,16 +198,14 @@ export function createChildStoreManager(input: {
             get provider_ready() {
               return (
                 input.data.location.provider.list({ directory }) !== undefined &&
-                input.data.location.model.list({ directory }) !== undefined &&
-                input.data.location.model.default({ directory }) !== undefined
+                input.data.location.model.list({ directory }) !== undefined
               )
             },
             get provider() {
               const provider = input.data.location.provider.list({ directory })
               const model = input.data.location.model.list({ directory })
-              const defaultModel = input.data.location.model.default({ directory })
-              if (!provider || !model || defaultModel === undefined) return { all: new Map(), connected: [], default: {} }
-              return normalizeProviderList(provider, model, defaultModel)
+              if (!provider || !model) return { all: new Map(), connected: [], default: {} }
+              return normalizeProviderList(provider, model)
             },
             config: {},
             get path() {
@@ -230,17 +228,6 @@ export function createChildStoreManager(input: {
             get reference() {
               return input.data.location.reference.list({ directory }) ?? []
             },
-            session: [],
-            sessionTotal: 0,
-            session_status: {},
-            session_working(id: string) {
-              const type = this.session_status[id]?.type
-              return (type ?? "idle") !== "idle"
-            },
-            session_diff: {},
-            todo: {},
-            permission: {},
-            question: {},
             get mcp_ready() {
               return input.data.location.mcp.server.list({ directory }) !== undefined
             },
@@ -268,11 +255,6 @@ export function createChildStoreManager(input: {
               if (!vcs) return vcsStore.value
               return { branch: vcs.branch.current, default_branch: vcs.branch.default }
             },
-            limit: 5,
-            message: {},
-            session_message: {},
-            part: {},
-            part_text_accum_delta: {},
           })
           children[key] = child
           disposers.set(key, dispose)
@@ -342,10 +324,8 @@ export function createChildStoreManager(input: {
     if (childStore[0].status !== "loading") input.onMcp(directory, childStore[1])
   }
 
-  // Passive Home/project metadata reads must not initialize the directory.
+  // Passive project metadata reads must not initialize the directory.
   // A real directory access enables these queries once for the store lifetime.
-  // TODO(v2): After Home switches to v2.project.list and root-filtered,
-  // updated-time v2.session.list, remove any Home-only passive child creation.
   function activate(key: DirectoryKey) {
     if (activeDirectories.has(key)) return
     activeDirectories.add(key)

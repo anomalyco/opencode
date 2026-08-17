@@ -23,9 +23,9 @@ import { timelineChildTitle, timelineRemovedSessionIDs } from "./controller-proj
 import { createTimelineProjection } from "./projection"
 import { useServer } from "@/context/server"
 import { ServerConnection } from "@/context/servers"
+import { normalizeSessionMessages } from "@/utils/session-message"
 
 const emptyMessages: Message[] = []
-const emptyParts: Part[] = []
 const taskDescription = (part: Part, sessionID: string): string | undefined => {
   if (part.type !== "tool" || part.tool !== "task") return undefined
   const metadata = "metadata" in part.state ? part.state.metadata : undefined
@@ -38,7 +38,7 @@ const taskDescription = (part: Part, sessionID: string): string | undefined => {
 export type TimelineSessionSource = {
   identity: Pick<SessionController["identity"], "params" | "sessionID" | "sessionKey">
   data: Pick<SessionController["data"], "info" | "parent" | "parentID" | "status">
-  history: Pick<SessionController["history"], "messages">
+  history: Pick<SessionController["history"], "messages" | "parts">
 }
 
 export function createTimelineController(input: {
@@ -71,21 +71,21 @@ export function createTimelineController(input: {
   const titleLabel = createMemo(() => sessionTitle(titleValue()))
   const shareUrl = (): string | undefined => undefined
   const shareEnabled = () => false
-  const parentMessages = createMemo(() => {
-    // TODO: Restore child task labels when current transcript messages expose the legacy task projection.
-    return emptyMessages
+  const parentTranscript = createMemo(() => {
+    const id = input.session.data.parentID()
+    return id ? normalizeSessionMessages(id, data.session.message.list(id)) : undefined
   })
+  const parentMessages = createMemo(() => parentTranscript()?.messages ?? emptyMessages)
   const parentTitle = createMemo(
     () => sessionTitle(input.session.data.parent()?.title) ?? language.t("command.session.new"),
   )
-  // TODO: Remove legacy Part access once the timeline renders current session message content directly.
-  const parts = (_messageID: string) => emptyParts
+  const parts = input.session.history.parts
   const part = (messageID: string, partID: string) => parts(messageID).find((item) => item.id === partID)
   const childTaskDescription = createMemo(() => {
     const id = input.session.identity.sessionID()
     if (!id) return undefined
     return parentMessages()
-      .flatMap((message) => parts(message.id))
+      .flatMap((message) => parentTranscript()?.parts.get(message.id) ?? [])
       .map((item) => taskDescription(item, id))
       .findLast((value): value is string => !!value)
   })
