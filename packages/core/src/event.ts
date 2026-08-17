@@ -165,6 +165,7 @@ export const allBounded = (events: Interface, capacity: number) =>
 
 export interface LayerOptions {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
+  readonly persistDurableEvents?: boolean
 }
 
 export const layerWith = (options?: LayerOptions) =>
@@ -180,6 +181,7 @@ export const layerWith = (options?: LayerOptions) =>
       // TODO: Bind durable projectors to exact type+version before supporting incompatible historical payloads.
       const listeners = new Array<Subscriber>()
       const { db } = yield* Database.Service
+      const persistDurableEvents = options?.persistDurableEvents ?? true
 
       const getOrCreate = (definition: Definition) =>
         Effect.gen(function* () {
@@ -333,19 +335,20 @@ export const layerWith = (options?: LayerOptions) =>
                             })
                             .run()
                             .pipe(Effect.orDie)
-                          yield* db
-                            .insert(EventTable)
-                            .values([
-                              {
-                                id: event.id,
-                                aggregate_id: aggregateID,
-                                seq,
-                                type: versionedType(definition.type, durable.version),
-                                data: encoded,
-                              },
-                            ])
-                            .run()
-                            .pipe(Effect.orDie)
+                          if (persistDurableEvents)
+                            yield* db
+                              .insert(EventTable)
+                              .values([
+                                {
+                                  id: event.id,
+                                  aggregate_id: aggregateID,
+                                  seq,
+                                  type: versionedType(definition.type, durable.version),
+                                  data: encoded,
+                                },
+                              ])
+                              .run()
+                              .pipe(Effect.orDie)
                           return { aggregateID, seq }
                         }),
                       { behavior: "immediate" },
@@ -634,5 +637,8 @@ export const layerWith = (options?: LayerOptions) =>
     }),
   )
 
-const layer = layerWith()
-export const node = makeGlobalNode({ service: Service, layer: layer, deps: [Database.node] })
+export const nodeWith = (options?: LayerOptions) =>
+  makeGlobalNode({ service: Service, layer: layerWith(options), deps: [Database.node] })
+
+export const node = nodeWith()
+export const sequenceOnlyNode = nodeWith({ persistDurableEvents: false })

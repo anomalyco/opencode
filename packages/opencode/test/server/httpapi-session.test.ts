@@ -48,7 +48,7 @@ const appLayer = AppNodeBuilder.build(
   [[InstanceStore.bootstrapNode, noopBootstrapLayer]],
 )
 const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
-  HttpApiApp.routes,
+  HttpApiApp.createRoutes(undefined, true),
   {
     disableListenLog: true,
     disableLogger: true,

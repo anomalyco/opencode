@@ -270,8 +270,10 @@ const app = LayerNode.group([
 
 export function createRoutes(
   corsOptions?: CorsOptions,
+  persistDurableEvents = false,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
   const locationServiceMapV2 = buildLocationServiceMap()
+  const eventNode = persistDurableEvents ? EventV2.node : EventV2.sequenceOnlyNode
 
   return Layer.mergeAll(
     rootApiRoutes,
@@ -288,7 +290,10 @@ export function createRoutes(
       corsVaryFix,
       fenceLayer,
       cors(corsOptions),
-      AppNodeBuilderV1.build(MoveSession.node, [[LocationServiceMap.node, locationServiceMapV2]]),
+      AppNodeBuilderV1.build(MoveSession.node, [
+        [LocationServiceMap.node, locationServiceMapV2],
+        [EventV2.node, eventNode],
+      ]),
       HttpServer.layerServices,
     ]),
     Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
@@ -299,11 +304,12 @@ export function createRoutes(
       AppNodeBuilderV1.build(SessionV2.node, [
         [LocationServiceMap.node, locationServiceMapV2],
         [SessionExecution.node, SessionExecutionLocal.node],
+        [EventV2.node, eventNode],
       ]),
     ),
     Layer.provide(locationServiceMapV2),
 
-    Layer.provide(AppNodeBuilderV1.build(app)),
+    Layer.provide(AppNodeBuilderV1.build(app, [[EventV2.node, eventNode]])),
     // Must stay last: layers provided later in this pipe build beneath earlier ones,
     // so Observability must come after every service graph. Otherwise eagerly forked
     // fibers (e.g. the ModelsDev background refresh) capture Effect's default stdout
