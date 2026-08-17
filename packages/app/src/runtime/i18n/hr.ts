@@ -1151,7 +1151,7 @@ export const dict = {
   "project.settings.extensions.lsp.detected": "Otkriveni jezični poslužitelji",
   "project.settings.extensions.lsp.description": "Automatski otkriveno iz vrsta datoteka",
   "project.settings.extensions.setupRequired": "Potrebna postavka",
-  "settings.general.section.general": "General",
+  "settings.general.section.general": "Općenito",
   "common.viewAll": "Pogledaj sve",
   "session.new.workspace.local.tooltip": "Upotrijebi trenutačnu radnu kopiju",
   "session.new.workspace.new.tooltip": "Stvori izoliranu radnu kopiju",

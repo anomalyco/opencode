@@ -1160,7 +1160,7 @@ export const dict = {
   "session.timeline.notice.cancelled": "{{actor}} tika atcelts",
   "session.timeline.notice.instructionsUpdated": "Norādījumi atjaunināti: {{sources}}",
   "session.timeline.notice.restart": "Turpina pēc pārstartēšanas",
-  "settings.tab.preferences": "Preferences",
+  "settings.tab.preferences": "Iestatījumi",
   "settings.tab.notifications": "Paziņojumi",
   "settings.tab.projects": "Projekti",
   "settings.tab.extensions": "Paplašinājumi",
