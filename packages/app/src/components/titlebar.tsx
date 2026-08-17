@@ -10,6 +10,7 @@ import {
   Switch,
   untrack,
 } from "solid-js"
+import { Portal } from "solid-js/web"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -29,6 +30,7 @@ import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 import { TitlebarTabStrip } from "@/components/titlebar-tab-strip"
+import { railMount } from "@/components/titlebar-tab-rail"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
@@ -73,6 +75,8 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const params = useParams()
   const useV2Titlebar = createMemo(() => settings.general.newLayoutDesigns())
   const mobile = createMediaQuery("(max-width: 767px)")
+  // A 224px rail would swallow a phone screen, so the rail is desktop-only.
+  const verticalTabs = createMemo(() => useV2Titlebar() && !mobile() && settings.general.verticalTabs())
   const bottom = createMemo(() => useV2Titlebar() && mobile() && settings.general.mobileTitlebarPosition() === "bottom")
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
@@ -395,21 +399,36 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   />
                 </TooltipV2>
 
-                <TitlebarTabStrip
-                  tabs={tabsStore}
-                  currentTab={currentTab}
-                  forceTruncate={tabsAreOverflowing()}
-                  onOverflowChange={setTabsAreOverflowing}
-                  onNavigate={(tab, el) => {
-                    tabs.select(tab)
-                    el?.scrollIntoView({ behavior: "instant" })
-                  }}
-                  onClose={(tab) => {
-                    const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
-                    if (index !== -1) tabsStoreActions.closeTab(index)
-                  }}
-                  onReorder={(keys) => tabsStoreActions.reorder(keys)}
-                />
+                {(() => {
+                  const strip = (vertical: boolean) => (
+                    <TitlebarTabStrip
+                      tabs={tabsStore}
+                      currentTab={currentTab}
+                      vertical={vertical}
+                      forceTruncate={tabsAreOverflowing()}
+                      onOverflowChange={setTabsAreOverflowing}
+                      onNavigate={(tab, el) => {
+                        tabs.select(tab)
+                        el?.scrollIntoView({ behavior: "instant", block: "nearest" })
+                      }}
+                      onClose={(tab) => {
+                        const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                        if (index !== -1) tabsStoreActions.closeTab(index)
+                      }}
+                      onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                    />
+                  )
+
+                  // The vertical rail is owned by the layout (see titlebar-tab-rail.ts
+                  // for why this is a portal). Waiting on the mount element matters:
+                  // the layout has not attached its ref on first paint, and Portal
+                  // throws on an undefined target.
+                  return (
+                    <Show when={verticalTabs()} fallback={strip(false)}>
+                      <Show when={railMount()}>{(mount) => <Portal mount={mount()}>{strip(true)}</Portal>}</Show>
+                    </Show>
+                  )
+                })()}
                 <TooltipV2
                   placement="bottom"
                   value={

@@ -59,6 +59,15 @@
   background: var(--tab-separator);
 }
 
+/* Vertical tabs stack, so the separator becomes a rule above each tab. */
+[data-titlebar-tab-slot][data-orientation="vertical"]:not(:first-child):not([data-active="true"])::before {
+  top: -3.75px;
+  inset-inline-start: 8px;
+  inset-inline-end: 8px;
+  width: auto;
+  height: 1.5px;
+}
+
 [data-titlebar-tab-slot][data-active="true"] + [data-titlebar-tab-slot]::before {
   display: none;
 }
@@ -131,18 +140,20 @@
   display: none;
 }
 
+/* Icon-only collapse for very narrow tabs. Scoped to horizontal slots: a vertical
+   rail is narrow by design but still has room for the title. */
 @container (max-width: 64px) {
-  [data-titlebar-tab-link] {
+  [data-titlebar-tab-slot]:not([data-orientation="vertical"]) [data-titlebar-tab-link] {
     justify-content: center;
     gap: 0;
     padding-inline: 0;
   }
 
-  [data-titlebar-tab-title] {
+  [data-titlebar-tab-slot]:not([data-orientation="vertical"]) [data-titlebar-tab-title] {
     display: none;
   }
 
-  [data-slot="tab-close"] {
+  [data-titlebar-tab-slot]:not([data-orientation="vertical"]) [data-slot="tab-close"] {
     right: auto;
     left: 50%;
     transform: translateX(-50%);

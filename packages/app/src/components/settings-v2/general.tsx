@@ -369,6 +369,20 @@ export const SettingsGeneralV2: Component<{
           </div>
         </SettingsRowV2>
 
+        <Show when={!mobile()}>
+          <SettingsRowV2
+            title={language.t("settings.general.row.verticalTabs.title")}
+            description={language.t("settings.general.row.verticalTabs.description")}
+          >
+            <div data-action="settings-vertical-tabs">
+              <Switch
+                checked={settings.general.verticalTabs()}
+                onChange={(checked) => settings.general.setVerticalTabs(checked)}
+              />
+            </div>
+          </SettingsRowV2>
+        </Show>
+
         <Show when={mobile() && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
           <SettingsRowV2
             title={language.t("settings.general.row.mobileTitlebarBottom.title")}

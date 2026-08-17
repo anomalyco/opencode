@@ -29,7 +29,7 @@
   background-image: var(--active-bg);
 }
 
-@keyframes titlebar-tab-fade-left {
+@keyframes titlebar-tab-fade-start {
   from {
     visibility: hidden;
   }
@@ -38,7 +38,7 @@
   }
 }
 
-@keyframes titlebar-tab-fade-right {
+@keyframes titlebar-tab-fade-end {
   from {
     visibility: visible;
   }
@@ -47,7 +47,7 @@
   }
 }
 
-/* The narrow ranges preserve the binary thresholds of scrollLeft > 0 and
+/* The narrow ranges preserve the binary thresholds of scroll offset > 0 and
    remaining scroll distance > 1px. Hidden defaults make an inactive timeline
    (no overflow) a no-op. Unsupported browsers also degrade to no fades. */
 [data-slot="titlebar-tabs"] {
@@ -63,14 +63,22 @@
     scroll-timeline: --titlebar-tabs-scroll x;
   }
 
-  [data-slot="titlebar-tabs-fade-left"] {
-    animation: titlebar-tab-fade-left linear both;
+  /* Vertical tabs scroll on the block axis; left on x the timeline never advances
+     and the fades stay permanently hidden. */
+  [data-slot="titlebar-tabs"][data-orientation="vertical"] [data-slot="titlebar-tabs-scroll"] {
+    scroll-timeline: --titlebar-tabs-scroll y;
+  }
+
+  [data-slot="titlebar-tabs-fade-left"],
+  [data-slot="titlebar-tabs-fade-top"] {
+    animation: titlebar-tab-fade-start linear both;
     animation-timeline: --titlebar-tabs-scroll;
     animation-range: 0 0.1px;
   }
 
-  [data-slot="titlebar-tabs-fade-right"] {
-    animation: titlebar-tab-fade-right linear both;
+  [data-slot="titlebar-tabs-fade-right"],
+  [data-slot="titlebar-tabs-fade-bottom"] {
+    animation: titlebar-tab-fade-end linear both;
     animation-timeline: --titlebar-tabs-scroll;
     animation-range: calc(100% - 1.1px) calc(100% - 1px);
   }
