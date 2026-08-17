@@ -398,7 +398,7 @@ export function SessionTurn(
               data-slot="session-turn-message-container"
               class={props.classes?.container}
             >
-              <div data-slot="session-turn-message-content" aria-live="off">
+              <div data-slot="session-turn-message-content" aria-live="polite">
                 <Message message={message()!} parts={parts()} actions={props.actions} />
               </div>
               <Show when={divider()}>
@@ -407,7 +407,7 @@ export function SessionTurn(
                 </div>
               </Show>
               <Show when={assistantMessages().length > 0}>
-                <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
+                <div data-slot="session-turn-assistant-content" aria-busy={working()}>
                   <AssistantParts
                     messages={assistantMessages()}
                     showAssistantCopyPartID={assistantCopyPartID()}

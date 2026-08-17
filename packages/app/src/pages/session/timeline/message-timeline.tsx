@@ -1180,7 +1180,7 @@ export function MessageTimeline(props: {
             <Show when={message()}>
               {(message) => (
                 <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-                  <div data-slot="session-turn-message-content" aria-live="off">
+                  <div data-slot="session-turn-message-content" aria-live="polite">
                     <Message
                       message={message()}
                       parts={getMsgParts(userMessageRow().userMessageID)}
@@ -1218,7 +1218,7 @@ export function MessageTimeline(props: {
             <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
               <div
                 data-slot="session-turn-assistant-content"
-                aria-hidden={workingTurn(assistantPartRow().userMessageID)}
+                aria-busy={workingTurn(assistantPartRow().userMessageID)}
               >
                 {renderAssistantPartGroup(assistantPartRow, onSizeChange)}
               </div>
