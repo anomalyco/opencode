@@ -2089,6 +2089,7 @@ export type Config = {
     batch_tool?: boolean
     openTelemetry?: boolean
     primary_tools?: Array<string>
+    subagent_depth?: number
     continue_loop_on_deny?: boolean
     mcp_timeout?: number
   }
@@ -2888,9 +2889,15 @@ export type InstructionEntryValueTooLargeError = {
   message: string
 }
 
+export type SessionGenerateResponse = {
+  data: {
+    text: string
+  }
+}
+
 export type SessionLogItem = SessionEventDurable | EventLogSynced
 
-export type SessionLogItemStream = string
+export type SessionLogItemJsonString = string
 
 export type SessionMessagesResponse = {
   data: Array<SessionMessageInfo>
@@ -3102,7 +3109,7 @@ export type V2Event =
   | ServerConnected
   | GlobalDisposed
 
-export type V2EventStream = string
+export type V2EventJsonString = string
 
 export type ForbiddenError = {
   _tag: "ForbiddenError"
@@ -5552,6 +5559,27 @@ export type SessionRevertCommitted = {
   }
 }
 
+export type SessionUsageRecorded = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.usage.recorded"
+  durable: {
+    aggregateID: string
+    seq: number
+    version: 1
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    source: "title" | "compaction"
+    cost: MoneyUsd
+    tokens: TokenUsageInfo
+  }
+}
+
 export type SessionEventDurable =
   | SessionAgentSelected
   | SessionModelSelected
@@ -5591,6 +5619,7 @@ export type SessionEventDurable =
   | SessionRevertStaged
   | SessionRevertCleared
   | SessionRevertCommitted
+  | SessionUsageRecorded
 
 export type EventLogSynced = {
   type: "log.synced"
@@ -9889,6 +9918,27 @@ export type SessionRevertCommittedV2 = {
   data: {
     sessionID: string
     to: string
+  }
+}
+
+export type SessionUsageRecordedV2 = {
+  id: string
+  created: number
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.usage.recorded"
+  durable: {
+    aggregateID: string
+    seq: number
+    version: 1
+  }
+  location?: LocationRefV2
+  data: {
+    sessionID: string
+    source: "title" | "compaction"
+    cost: MoneyUsd
+    tokens: TokenUsageInfo
   }
 }
 
@@ -16373,6 +16423,47 @@ export type V2SessionInstructionsEntryPutResponses = {
 export type V2SessionInstructionsEntryPutResponse =
   V2SessionInstructionsEntryPutResponses[keyof V2SessionInstructionsEntryPutResponses]
 
+export type V2SessionGenerateData = {
+  body: {
+    prompt: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/generate"
+}
+
+export type V2SessionGenerateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestErrorV2
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+  /**
+   * ServiceUnavailableError
+   */
+  503: ServiceUnavailableErrorV2
+}
+
+export type V2SessionGenerateError = V2SessionGenerateErrors[keyof V2SessionGenerateErrors]
+
+export type V2SessionGenerateResponses = {
+  /**
+   * SessionGenerateResponse
+   */
+  200: SessionGenerateResponse
+}
+
+export type V2SessionGenerateResponse = V2SessionGenerateResponses[keyof V2SessionGenerateResponses]
+
 export type V2SessionLogData = {
   body?: never
   path: {
@@ -16409,7 +16500,7 @@ export type V2SessionLogResponses = {
   200: {
     id: string | null
     event: string
-    data: SessionLogItemStream
+    data: SessionLogItemJsonString
   }
 }
 

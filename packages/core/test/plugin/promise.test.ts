@@ -24,6 +24,27 @@ import { host as testHost } from "./host"
 const it = testEffect(PluginTestLayer)
 
 describe("fromPromise", () => {
+  it.effect("forwards transient session generation", () =>
+    Effect.gen(function* () {
+      const host = testHost({
+        session: {
+          generate: (input) => Effect.succeed({ text: `${input.sessionID}: ${input.prompt}` }),
+        },
+      })
+
+      yield* PluginPromise.fromPromise(
+        Plugin.define({
+          id: "promise-session-generate",
+          setup: async (ctx) => {
+            expect(await ctx.session.generate({ sessionID: "ses_generate", prompt: "Summarize" })).toEqual({
+              text: "ses_generate: Summarize",
+            })
+          },
+        }),
+      ).effect(host)
+    }),
+  )
+
   it.effect("forwards synthetic session input", () =>
     Effect.gen(function* () {
       const input = {

@@ -1,10 +1,10 @@
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Effect, Schema, Stream } from "effect"
+import { Deferred, Effect, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { randomBytes } from "node:crypto"
-import path from "node:path"
+import { selfCommand } from "../util/process"
 
 const Ready = Schema.Struct({ url: Schema.String })
 const decodeReady = Schema.decodeUnknownPromise(Schema.fromJsonString(Ready))
@@ -14,10 +14,7 @@ type Options = {
 }
 
 function command(password: string, options: Options) {
-  const compiled = path.basename(process.execPath).replace(/\.exe$/, "") !== "bun"
-  const entrypoint = compiled ? [] : process.argv[1] ? [process.argv[1]] : []
-  if (!compiled && entrypoint.length === 0) throw new Error("Failed to resolve CLI entrypoint")
-  const [executable, ...args] = options.command ?? [process.execPath, ...entrypoint, "serve"]
+  const [executable, ...args] = options.command ?? [...selfCommand(), "serve"]
   if (!executable) throw new Error("Failed to resolve standalone server command")
   return ChildProcess.make(executable, [...args, "--stdio", "--port", "0"], {
     cwd: process.cwd(),
@@ -39,8 +36,16 @@ const makeEndpoint = Effect.fn("cli.standalone.endpoint")(
     const password = randomBytes(32).toString("base64url")
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const proc = yield* spawner.spawn(command(password, options))
-    const output = yield* proc.stdout.pipe(Stream.decodeText(), Stream.splitLines, Stream.take(1), Stream.mkString)
-    if (!output) return yield* Effect.fail(new Error("Standalone server exited before reporting readiness"))
+    const readyLine = yield* Deferred.make<string, Error>()
+    // Keep draining stdout after readiness so later server writes cannot hit EPIPE.
+    yield* proc.stdout.pipe(
+      Stream.decodeText(),
+      Stream.splitLines,
+      Stream.runForEach((line) => Deferred.succeed(readyLine, line)),
+      Effect.ensuring(Deferred.fail(readyLine, new Error("Standalone server exited before reporting readiness"))),
+      Effect.forkScoped,
+    )
+    const output = yield* Deferred.await(readyLine)
     const ready = yield* Effect.tryPromise(() => decodeReady(output))
     return {
       url: ready.url,

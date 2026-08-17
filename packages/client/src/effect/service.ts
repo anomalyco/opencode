@@ -3,12 +3,7 @@ import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { spawn, type ChildProcess } from "node:child_process"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import type {
-  DiscoverOptions,
-  Endpoint,
-  EnsureOptions,
-  StopOptions,
-} from "../service.js"
+import type { DiscoverOptions, Endpoint, EnsureOptions, StopOptions } from "../service.js"
 
 export * from "../service.js"
 /** Contents of the local service registration file. */
@@ -82,7 +77,8 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       spawnDelay = 5_000
       const compatible = !service.legacy && (options.version === undefined || service.version === options.version)
       if (compatible && service.state === "ready") return Option.some(service)
-      if (compatible && service.state === "failed") return yield* Effect.fail(new Error("Background service failed to start"))
+      if (compatible && service.state === "failed")
+        return yield* Effect.fail(new Error("Background service failed to start"))
       if (compatible) return Option.none<LocalService>()
       yield* announce("version-mismatch", service.version)
       yield* kill(service, options).pipe(Effect.ignore)
@@ -221,7 +217,7 @@ const find = Effect.fnUntraced(function* (options: { readonly file?: string }) {
 
 // 50ms cadence bounded at ~5s, shared by stop escalation and each ensure
 // discovery window.
-const poll = Schedule.spaced("50 millis").pipe(Schedule.both(Schedule.recurs(100)))
+const poll = Schedule.max([Schedule.spaced("50 millis"), Schedule.recurs(100)])
 
 const signal = (pid: number, name: NodeJS.Signals) =>
   Effect.try({ try: () => process.kill(pid, name), catch: (cause) => cause }).pipe(Effect.ignore)
@@ -238,10 +234,7 @@ function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
-const kill = Effect.fnUntraced(function* (
-  service: LocalService,
-  options: { readonly file?: string },
-) {
+const kill = Effect.fnUntraced(function* (service: LocalService, options: { readonly file?: string }) {
   const requested = yield* requestStop(service)
   if (requested === "rejected") return
   if (requested === "unsupported") {

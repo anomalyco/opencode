@@ -68,13 +68,14 @@ import { nextThinkingMode, reasoningSummary, type ThinkingMode } from "../../con
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
+import { PluginSlot } from "../../plugin/context"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
 import { createSessionRows, messageBoundaryIDs, resolvePart, type PartRef, type SessionRow } from "./rows"
 import { switchLabel } from "../../util/model"
 import { findMessageBoundary, messageNavigationSlack } from "./message-navigation"
-import type { ComponentTheme } from "../../theme/v2/component"
+import { stringWidth } from "../../util/string-width"
 
 addDefaultParsers(parsers.parsers)
 
@@ -99,11 +100,6 @@ function use() {
   return ctx
 }
 
-function offsetBackground(themeV2: ComponentTheme, mode: "light" | "dark") {
-  if (mode === "light") return themeV2.increase(themeV2.background.surface.offset(), 1)
-  return themeV2.decrease(themeV2.background.surface.offset(), 1)
-}
-
 export function Session() {
   const setEpilogue = useEpilogue()
   const clipboard = useClipboard()
@@ -118,7 +114,7 @@ export function Session() {
   const paths = useTuiPaths()
   const configState = useConfig()
   const config = configState.data
-  const { themeV2, mode } = useTheme()
+  const { themeV2 } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
   const messages = () => data.session.message.list(route.sessionID)
@@ -887,6 +883,7 @@ export function Session() {
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
         <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
+          <PluginSlot name="session.header" input={{ sessionID: route.sessionID }} />
           <Show when={session()}>
             <scrollbox
               ref={(r) => (scroll = r)}
@@ -897,7 +894,7 @@ export function Session() {
                 paddingLeft: 1,
                 visible: showScrollbar(),
                 trackOptions: {
-                  backgroundColor: offsetBackground(themeV2, mode()),
+                  backgroundColor: themeV2.raise(themeV2.background.surface.offset()),
                   foregroundColor: themeV2.border(),
                 },
               }}
@@ -931,6 +928,7 @@ export function Session() {
               </Show>
             </scrollbox>
             <box flexShrink={0}>
+              <PluginSlot name="session.composer.top" input={{ sessionID: route.sessionID }} />
               <Composer
                 sessionID={route.sessionID}
                 open={composer.open || (!!session()?.parentID && forms().length === 0)}
@@ -1139,7 +1137,7 @@ function SessionReasoningGroupView(props: {
   message: (messageID: string) => SessionMessageInfo | undefined
 }) {
   const ctx = use()
-  const { themeV2, syntax, mode } = useTheme()
+  const { themeV2, syntax } = useTheme()
   const renderer = useRenderer()
   const [expanded, setExpanded] = createSignal(false)
   const [hover, setHover] = createSignal(false)
@@ -1228,7 +1226,7 @@ function SessionReasoningGroupView(props: {
                         <box
                           border={["left"]}
                           customBorderChars={SplitBorder.customBorderChars}
-                          borderColor={offsetBackground(themeV2, mode())}
+                          borderColor={themeV2.raise(themeV2.background.surface.offset())}
                           paddingLeft={1}
                         >
                           <code
@@ -1404,8 +1402,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
     return state() ?? "finished"
   }
   const heading = () => `${state() === "completed" ? "↳" : "!"} ${actor()} ${status()}`
-  const suffix = () =>
-    Locale.truncateWidth(` · ${description()}`, Math.max(0, ctx.width - 3 - Bun.stringWidth(heading())))
+  const suffix = () => Locale.truncateWidth(` · ${description()}`, Math.max(0, ctx.width - 3 - stringWidth(heading())))
   const color = () => {
     if (state() === "error") return themeV2.text.feedback.error()
     if (state() === "cancelled") return themeV2.text.feedback.warning()
@@ -1513,7 +1510,7 @@ function RevertMessage(props: {
   }>
 }) {
   const ctx = use()
-  const { themeV2, mode } = useTheme().contextual("elevated")
+  const { themeV2 } = useTheme().contextual("elevated")
   const route = useRouteData("session")
   const client = useClient()
   const toast = useToast()
@@ -1544,7 +1541,7 @@ function RevertMessage(props: {
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
-        backgroundColor={hover() ? offsetBackground(themeV2, mode()) : themeV2.background()}
+        backgroundColor={hover() ? themeV2.raise(themeV2.background()) : themeV2.background()}
       >
         <text fg={themeV2.text.subdued()}>
           {props.count} message{props.count === 1 ? "" : "s"} reverted
@@ -1561,8 +1558,8 @@ function RevertMessage(props: {
                       2,
                       ctx.width -
                         5 -
-                        (file.additions > 0 ? Bun.stringWidth(`+${file.additions}`) + 1 : 0) -
-                        (file.deletions > 0 ? Bun.stringWidth(`-${file.deletions}`) + 1 : 0),
+                        (file.additions > 0 ? stringWidth(`+${file.additions}`) + 1 : 0) -
+                        (file.deletions > 0 ? stringWidth(`-${file.deletions}`) + 1 : 0),
                     )}
                     fg={themeV2.text()}
                   />
@@ -1613,7 +1610,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const data = useData()
   const local = useLocal()
   const files = createMemo(() => props.message.files ?? [])
-  const { themeV2, mode } = useTheme().contextual("elevated")
+  const { themeV2 } = useTheme().contextual("elevated")
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
   const queued = createMemo(
@@ -1650,7 +1647,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
           paddingTop={1}
           paddingBottom={1}
           paddingLeft={2}
-          backgroundColor={hover() ? offsetBackground(themeV2, mode()) : themeV2.background()}
+          backgroundColor={hover() ? themeV2.raise(themeV2.background()) : themeV2.background()}
           flexShrink={0}
         >
           <text fg={themeV2.text()}>{props.message.text}</text>
@@ -1670,7 +1667,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
                       >
                         {` ${label} `}
                       </span>
-                      <span style={{ bg: offsetBackground(themeV2, mode()), fg: themeV2.text.subdued() }}>
+                      <span style={{ bg: themeV2.raise(themeV2.background()), fg: themeV2.text.subdued() }}>
                         {" "}
                         {file.name ?? (file.source.type === "uri" ? file.source.uri : "attachment")}{" "}
                       </span>
@@ -1858,7 +1855,7 @@ function ReasoningPart(props: {
   part: SessionMessageAssistantReasoning
   message: SessionMessageAssistant
 }) {
-  const { themeV2, syntax, mode } = useTheme()
+  const { themeV2, syntax } = useTheme()
   const ctx = use()
   // Collapsed by default in hide mode: a single line throughout, so the
   // layout never shifts. Click to open the full markdown block, click to close.
@@ -1886,7 +1883,7 @@ function ReasoningPart(props: {
         <box
           border={!inMinimal() || expanded() ? ["left"] : undefined}
           customBorderChars={SplitBorder.customBorderChars}
-          borderColor={offsetBackground(themeV2, mode())}
+          borderColor={themeV2.raise(themeV2.background())}
           paddingLeft={!inMinimal() || expanded() ? 1 : 0}
         >
           <box onMouseUp={toggle}>
@@ -1904,7 +1901,7 @@ function ReasoningPart(props: {
             <box
               border={["left"]}
               customBorderChars={SplitBorder.customBorderChars}
-              borderColor={offsetBackground(themeV2, mode())}
+              borderColor={themeV2.raise(themeV2.background())}
               paddingLeft={inMinimal() ? 3 : 1}
             >
               <code
@@ -2081,7 +2078,7 @@ type ToolProps = {
   part: SessionMessageAssistantTool
 }
 function GenericTool(props: ToolProps) {
-  const { themeV2, syntax, mode } = useTheme()
+  const { themeV2, syntax } = useTheme()
   const output = createMemo(() => props.output?.trim() ?? "")
   const args = createMemo(() => JSON.stringify(props.input, null, 2))
   const [expanded, setExpanded] = createSignal(false)
@@ -2099,7 +2096,7 @@ function GenericTool(props: ToolProps) {
           <Show when={Object.keys(props.input).length > 0}>
             <box gap={1}>
               <text>
-                <span style={{ bg: offsetBackground(themeV2, mode()), fg: themeV2.text.subdued() }}> Input </span>
+                <span style={{ bg: themeV2.raise(themeV2.background()), fg: themeV2.text.subdued() }}> Input </span>
               </text>
               <box paddingLeft={1}>
                 <code
@@ -2117,7 +2114,7 @@ function GenericTool(props: ToolProps) {
             {(value) => (
               <box gap={1}>
                 <text>
-                  <span style={{ bg: offsetBackground(themeV2, mode()), fg: themeV2.text.subdued() }}> Output </span>
+                  <span style={{ bg: themeV2.raise(themeV2.background()), fg: themeV2.text.subdued() }}> Output </span>
                 </text>
                 <box paddingLeft={1}>
                   <text fg={themeV2.text()} wrapMode="word">
@@ -2305,9 +2302,9 @@ function InlineToolLabel(props: { color?: RGBA; denied?: boolean; status: JSX.El
 }
 
 function StatusBadge(props: { children: string }) {
-  const { themeV2, mode } = useTheme()
+  const { themeV2 } = useTheme()
   return (
-    <text flexShrink={0} bg={offsetBackground(themeV2, mode())} fg={themeV2.text.subdued()}>
+    <text flexShrink={0} bg={themeV2.raise(themeV2.background())} fg={themeV2.text.subdued()}>
       {" "}
       {props.children}{" "}
     </text>
@@ -2322,7 +2319,7 @@ function BlockTool(props: {
   part?: SessionMessageAssistantTool
   spinner?: boolean
 }) {
-  const { themeV2, mode } = useTheme().contextual("elevated")
+  const { themeV2 } = useTheme().contextual("elevated")
   const ctx = use()
   const data = useData()
   const renderer = useRenderer()
@@ -2341,7 +2338,7 @@ function BlockTool(props: {
       paddingLeft={2}
       gap={1}
       backgroundColor={
-        hover() ? offsetBackground(themeV2, mode()) : themeV2.background()
+        hover() ? themeV2.raise(themeV2.background()) : themeV2.background()
       }
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={themeV2.background()}
@@ -2383,7 +2380,7 @@ function BlockTool(props: {
             </Show>
             <FilePath
               value={path().value}
-              maxWidth={Math.max(2, ctx.width - 4 - Bun.stringWidth(path().label) - (props.spinner ? 2 : 0))}
+              maxWidth={Math.max(2, ctx.width - 4 - stringWidth(path().label) - (props.spinner ? 2 : 0))}
               fg={permission() ? themeV2.text.feedback.warning() : themeV2.text.subdued()}
             />
           </box>

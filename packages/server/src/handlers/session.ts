@@ -628,6 +628,22 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.generate",
+        Effect.fn(function* (ctx) {
+          const text = yield* session.generate({ sessionID: ctx.params.sessionID, prompt: ctx.payload.prompt }).pipe(
+            Effect.mapError((error) =>
+              error._tag === "Session.NotFoundError"
+                ? new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  })
+                : new ServiceUnavailableError({ message: error.message, service: "session generation" }),
+            ),
+          )
+          return { data: { text } }
+        }),
+      )
+      .handle(
         "session.log",
         Effect.fn((ctx) =>
           Effect.succeed(

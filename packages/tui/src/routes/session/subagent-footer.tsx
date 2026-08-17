@@ -83,7 +83,7 @@ export function SubagentFooter() {
               onMouseOver={() => setHover("parent")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatch("session.parent")}
-              backgroundColor={hover() === "parent" ? themeV2.background.action("focused") : themeV2.background()}
+              backgroundColor={hover() === "parent" ? themeV2.background.action("hovered") : themeV2.background()}
             >
               <text fg={themeV2.text()}>
                 Parent <span style={{ fg: themeV2.text.subdued() }}>{shortcuts.get("session.parent")}</span>
@@ -93,7 +93,7 @@ export function SubagentFooter() {
               onMouseOver={() => setHover("prev")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatch("session.child.previous")}
-              backgroundColor={hover() === "prev" ? themeV2.background.action("focused") : themeV2.background()}
+              backgroundColor={hover() === "prev" ? themeV2.background.action("hovered") : themeV2.background()}
             >
               <text fg={themeV2.text()}>
                 Prev <span style={{ fg: themeV2.text.subdued() }}>{shortcuts.get("session.child.previous")}</span>
@@ -103,7 +103,7 @@ export function SubagentFooter() {
               onMouseOver={() => setHover("next")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatch("session.child.next")}
-              backgroundColor={hover() === "next" ? themeV2.background.action("focused") : themeV2.background()}
+              backgroundColor={hover() === "next" ? themeV2.background.action("hovered") : themeV2.background()}
             >
               <text fg={themeV2.text()}>
                 Next <span style={{ fg: themeV2.text.subdued() }}>{shortcuts.get("session.child.next")}</span>

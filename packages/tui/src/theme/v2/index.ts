@@ -32,6 +32,7 @@ export {
 export type {
   FormfieldColor,
   Hue,
+  HueSource,
   HueScale,
   ResolvedActionState,
   ResolvedFormfieldState,

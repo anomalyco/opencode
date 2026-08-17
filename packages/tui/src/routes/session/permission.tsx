@@ -516,7 +516,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={themeV2.background.action("focused")}
+        backgroundColor={themeV2.raise(themeV2.background())}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
         gap={1}
@@ -693,7 +693,7 @@ function Prompt<const T extends Record<string, string>>(props: {
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={themeV2.background.action("focused")}
+        backgroundColor={themeV2.raise(themeV2.background())}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
       >

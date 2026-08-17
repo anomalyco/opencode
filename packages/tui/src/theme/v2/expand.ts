@@ -1,12 +1,11 @@
 import type {
   BackgroundDefinition,
-  FormfieldColorDefinition,
   ModeDefinition,
   StatefulColorDefinition,
   TextDefinition,
   ThemeTokensDefinition,
 } from "./index"
-import { ActionState, FormfieldState } from "./schema"
+import { ActionState } from "./schema"
 
 export function expandTheme<Definition extends ModeDefinition>(definition: Definition): Definition {
   return {
@@ -73,12 +72,12 @@ function expandBackground(definition: BackgroundDefinition | undefined): Backgro
   }
 }
 
-function expandFormfield(definition: FormfieldColorDefinition | undefined, path: string) {
+function expandFormfield(definition: StatefulColorDefinition | undefined, path: string) {
   if (!definition?.default) return definition
   return {
     ...definition,
     ...Object.fromEntries(
-      FormfieldState.literals.map((state) => [`$${state}`, definition[`$${state}`] ?? `$${path}.default`]),
+      ActionState.literals.map((state) => [`$${state}`, definition[`$${state}`] ?? `$${path}.default`]),
     ),
   }
 }
