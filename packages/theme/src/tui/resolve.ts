@@ -26,7 +26,7 @@ import type {
 } from "./index.js"
 import { selectTheme, selectThemeMode } from "./select.js"
 
-const decodeThemeDefinitionSchema = Schema.decodeUnknownSync(ThemeDefinition)
+const decodeThemeDefinitionSchema = Schema.decodeUnknownSync(ThemeDefinition, { reportInput: true })
 
 function decodeThemeDefinition(input: unknown) {
   try {
