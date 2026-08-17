@@ -21,7 +21,7 @@ import type {
   PromptInputV2Prompt,
   PromptInputV2Suggestion,
 } from "./types"
-import type { PromptInputV2Interaction, PromptInputV2SelectControl } from "./interaction"
+import { setEditorCursor, type PromptInputV2Interaction, type PromptInputV2SelectControl } from "./interaction"
 import "./attachments.css"
 
 export type {
@@ -168,6 +168,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
               const images = props.controller.parts().filter((part) => part.type === "image")
               localInput = true
               props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
+              if (!event.isComposing) normalizePromptInputV2Editor(event.currentTarget, prompt, cursor)
             }}
             onKeyDown={(event) => {
               if (props.controller.onKeyDown(event)) return
@@ -298,6 +299,19 @@ function renderPromptInputV2Editor(editor: HTMLDivElement, prompt: PromptInputV2
   selection?.addRange(range)
 }
 
+// The browser inserts one DOM node per line (Enter or a multi-line paste), which the
+// editor never cleans up during local typing. parsePromptInputV2Editor and
+// promptInputV2Cursor walk every node on each keystroke, so an unflattened editor makes
+// typing cost grow with line count instead of staying flat. Collapsing back to text nodes
+// keeps that cost bounded.
+const PROMPT_INPUT_V2_NODE_LIMIT = 24
+
+function normalizePromptInputV2Editor(editor: HTMLDivElement, prompt: PromptInputV2Prompt, cursor: number) {
+  if (editor.childNodes.length <= PROMPT_INPUT_V2_NODE_LIMIT) return
+  renderPromptInputV2Editor(editor, prompt)
+  setEditorCursor(editor, cursor)
+}
+
 function parsePromptInputV2Editor(editor: HTMLDivElement) {
   const parts: Exclude<PromptInputV2Prompt[number], PromptInputV2Attachment>[] = []
   let buffer = ""
@@ -351,9 +365,12 @@ function parsePromptInputV2Editor(editor: HTMLDivElement) {
     Array.from(node.childNodes).forEach(visit)
   }
 
-  Array.from(editor.childNodes).forEach((node, index, nodes) => {
+  let previousWasBlock = false
+  Array.from(editor.childNodes).forEach((node, index) => {
+    const isBlock = node instanceof HTMLElement && ["DIV", "P"].includes(node.tagName)
+    if (index > 0 && (isBlock || previousWasBlock)) buffer += "\n"
     visit(node)
-    if (node instanceof HTMLElement && ["DIV", "P"].includes(node.tagName) && index < nodes.length - 1) buffer += "\n"
+    previousWasBlock = isBlock
   })
   flush()
   if (
