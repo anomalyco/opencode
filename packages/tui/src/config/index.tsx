@@ -155,6 +155,9 @@ export const Info = Schema.Struct({
       layout: Schema.optional(Schema.Literals(["horizontal", "vertical"])).annotate({
         description: "Show tabs in a horizontal strip or vertical sidebar",
       }),
+      numbers: Schema.optional(Schema.Boolean).annotate({
+        description: "Show numeric shortcuts beside session tabs",
+      }),
     }),
   ).annotate({ description: "Tab strip settings" }),
   mini: Schema.optional(
@@ -226,6 +229,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     enabled: boolean
     scope: "global" | "cwd"
     layout: "horizontal" | "vertical"
+    numbers: boolean
   }
 }
 
@@ -271,6 +275,7 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
       enabled: input.tabs?.enabled ?? true,
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
+      numbers: input.tabs?.numbers ?? false,
     },
   }
 }

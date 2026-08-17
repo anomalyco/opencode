@@ -38,6 +38,7 @@ import { projectName } from "../util/project"
 import { marqueeCycleWidth, marqueeOverflows, marqueeTextParts } from "../util/marquee"
 import { useDialog } from "../ui/dialog"
 import { DialogSessionRename } from "./dialog-session-rename"
+import { Spinner } from "./spinner"
 
 // A long title fades out over its last cells instead of cutting hard.
 const FADE_WIDTH = 4
@@ -658,14 +659,23 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       onLevel={setSweepLevel}
                     />
                     <box zIndex={1} width="100%" flexDirection="row" paddingLeft={1} paddingRight={1}>
-                      <text
-                        width={numberWidth()}
-                        fg={numberColor()}
-                        selectable={false}
-                        attributes={selected() ? TextAttributes.BOLD : undefined}
+                      <Show
+                        when={!config.tabs.numbers && runs()}
+                        fallback={
+                          <text
+                            width={numberWidth()}
+                            fg={numberColor()}
+                            selectable={false}
+                            attributes={selected() ? TextAttributes.BOLD : undefined}
+                          >
+                            {config.tabs.numbers ? sessionTabShortcutLabel(index()) : ""}
+                          </text>
+                        }
                       >
-                        {sessionTabShortcutLabel(index())}
-                      </text>
+                        <box width={numberWidth()}>
+                          <Spinner color={numberColor()} />
+                        </box>
+                      </Show>
                       <text
                         width={titleWidth()}
                         fg={foreground()}
@@ -1144,9 +1154,22 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                 <text width={1} selectable={false}>
                   {" "}
                 </text>
-                <text width={numberWidth()} fg={numberColor()} selectable={false} attributes={bold()}>
-                  {tab === NEW_SESSION_TAB ? "+" : sessionTabShortcutLabel(tabNumber() - 1)}
-                </text>
+                <Show
+                  when={tab !== NEW_SESSION_TAB && !config.tabs.numbers && runs()}
+                  fallback={
+                    <text width={numberWidth()} fg={numberColor()} selectable={false} attributes={bold()}>
+                      {tab === NEW_SESSION_TAB
+                        ? "+"
+                        : config.tabs.numbers
+                          ? sessionTabShortcutLabel(tabNumber() - 1)
+                          : ""}
+                    </text>
+                  }
+                >
+                  <box width={numberWidth()}>
+                    <Spinner color={numberColor()} />
+                  </box>
+                </Show>
                 <text
                   width={availableTitleWidth()}
                   fg={foreground()}

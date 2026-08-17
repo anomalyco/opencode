@@ -127,6 +127,15 @@ export const settings: Setting[] = [
     keywords: ["sidebar", "orientation", "left"],
   },
   {
+    title: "Shortcut numbers",
+    category: "Tabs",
+    path: ["tabs", "numbers"],
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["keys", "numeric", "labels"],
+  },
+  {
     title: "Layout",
     category: "Diffs",
     path: ["diffs", "view"],

@@ -22,12 +22,12 @@ test("releasing a transcript selection over tab controls does not activate them"
     close() {},
     move() {},
     add: () => setAdded((value) => value + 1),
-    status: () => EMPTY_SESSION_TAB_STATUS,
+    status: () => ({ ...EMPTY_SESSION_TAB_STATUS, busy: true }),
   } satisfies SessionTabsController
   const app = await testRender(
     () => (
       <TestTuiContexts>
-        <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
+        <ConfigProvider config={createTuiResolvedConfig({ animations: false, tabs: { enabled: true } })}>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
             <box flexDirection="column">
               <SessionTabs controller={controller} animations={false} />
@@ -43,6 +43,8 @@ test("releasing a transcript selection over tab controls does not activate them"
   try {
     app.renderer.start()
     await app.waitForFrame((frame) => frame.includes("Second"))
+    expect(app.captureCharFrame()).not.toContain("1 First")
+    expect(app.captureCharFrame()).toContain("⋯ First")
     await app.mockMouse.pressDown(5, 1)
     await app.mockMouse.release(40, 0)
     expect(active()).toBe("first")
