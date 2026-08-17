@@ -38,7 +38,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   const dialog = useDialog()
   const client = useClient()
   const dimensions = useTerminalDimensions()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
   const sessionData = useData()
   const route = useRoute()
   const toast = useToast()
@@ -172,16 +172,18 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       return {
         title,
         titleView: isRemoving ? (
-          <span style={{ fg: theme.error }}>Deleting {item.location}</span>
+          <span style={{ fg: themeV2.text.feedback.error() }}>Deleting {item.location}</span>
         ) : deleting ? (
-          <span style={{ fg: theme.text }}>Press {shortcuts.get("dialog.move_session.delete")} again to confirm</span>
+          <span style={{ fg: themeV2.text.action.destructive() }}>
+            Press {shortcuts.get("dialog.move_session.delete")} again to confirm
+          </span>
         ) : suffix ? (
           <>
             {visible.slice(0, split)}
-            <span style={{ fg: theme.textMuted }}>{visible.slice(split)}</span>
+            <span style={{ fg: themeV2.text.subdued() }}>{visible.slice(split)}</span>
           </>
         ) : undefined,
-        bg: deleting ? theme.error : undefined,
+        bg: deleting ? themeV2.background.action.destructive() : undefined,
         value: {
           type: "directory",
           directory: item.location,
@@ -314,7 +316,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         title="Move session"
         titleView={
           <box flexDirection="row" gap={1}>
-            <text fg={theme.text} attributes={TextAttributes.BOLD}>
+            <text fg={themeV2.text()} attributes={TextAttributes.BOLD}>
               Move session
             </text>
             <Show when={working() || directories.loading || loadedProject.loading}>
@@ -327,25 +329,25 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         emptyView={
           showError() ? (
             <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-              <text fg={theme.error} attributes={TextAttributes.BOLD}>
+              <text fg={themeV2.text.feedback.error()} attributes={TextAttributes.BOLD}>
                 Could not load project directories
               </text>
-              <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
-              <text fg={theme.textMuted}>Close and reopen Move session to try again.</text>
+              <text fg={themeV2.text.subdued()}>{errorMessage(loadError())}</text>
+              <text fg={themeV2.text.subdued()}>Close and reopen Move session to try again.</text>
             </box>
           ) : directories.loading || loadedProject.loading ? (
             <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-              <text fg={theme.textMuted}>Loading project directories…</text>
+              <text fg={themeV2.text.subdued()}>Loading project directories…</text>
             </box>
           ) : (
             <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-              <text fg={theme.textMuted}>No project directories available</text>
+              <text fg={themeV2.text.subdued()}>No project directories available</text>
             </box>
           )
         }
         noMatchView={
           <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-            <text fg={theme.textMuted}>No project directories found</text>
+            <text fg={themeV2.text.subdued()}>No project directories found</text>
           </box>
         }
         locked={showError() || directories.loading || loadedProject.loading || Boolean(removing())}

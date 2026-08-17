@@ -108,7 +108,9 @@ const runtime = CodeMode.make({ tools: { opencode: api.tools } })
 
 It is synchronous and returns `{ tools, skipped }`: operations with unsupported encodings, non-JSON bodies, binary
 responses, or streaming land in `skipped` instead of producing broken tools. Auth is resolved host-side and never
-model-visible; generated tools require `HttpClient.HttpClient` in the environment. See the option docstrings in
+model-visible; generated tools require `HttpClient.HttpClient` in the environment. `readOnly` properties are omitted
+from request signatures and `writeOnly` properties from response signatures. These JSON Schemas are model-facing, not
+runtime filters: nested value bodies and server responses pass through unchanged. See the option docstrings in
 `src/openapi/types.ts` for full semantics.
 
 ## Outputs

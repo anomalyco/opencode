@@ -39,6 +39,7 @@ import { WellKnown } from "../wellknown"
 import { PluginInternal } from "./internal"
 import { PluginRuntime } from "./runtime"
 import { SdkPlugins } from "./sdk"
+import { importModule } from "#runtime-import"
 
 const PluginModule = Schema.Struct({
   default: Schema.Union([
@@ -141,7 +142,11 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       continue
     }
 
-    const plugin = yield* load(operation).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+    const plugin = yield* load(operation).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("failed to load plugin", { target: operation.target, cause }).pipe(Effect.as(undefined)),
+      ),
+    )
     if (!plugin) continue
     const previous = packages.get(operation.target)
     if (previous) enabled.delete(previous.id)
@@ -164,9 +169,13 @@ const load = Effect.fn("PluginSupervisor.load")(function* (operation: Extract<Op
   if (!entrypoint) return
   // Bun currently ignores query parameters when caching file:// imports.
   const source =
-    operation.mtime === undefined ? entrypoint : `${operation.target.replaceAll("\\", "/")}?mtime=${operation.mtime}`
+    operation.mtime === undefined
+      ? entrypoint
+      : typeof Bun !== "undefined"
+        ? `${operation.target.replaceAll("\\", "/")}?mtime=${operation.mtime}`
+        : `${entrypoint}?mtime=${operation.mtime}`
   yield* Effect.log({ msg: "loading plugin", id: operation.target, entrypoint: source })
-  const mod = yield* Effect.promise(() => import(source))
+  const mod = yield* Effect.promise(() => importModule(source))
   const value = (yield* Schema.decodeUnknownEffect(PluginModule)(mod)).default
   const plugin = "effect" in value ? value : PluginPromise.fromPromise(value)
   return {
@@ -179,7 +188,7 @@ const load = Effect.fn("PluginSupervisor.load")(function* (operation: Extract<Op
 function discoverDirectory(fs: FSUtil.Interface, directory: string) {
   return Effect.gen(function* () {
     const files = yield* fs
-      .glob("{plugin,plugins}/*.{ts,js}", {
+      .scan("{plugin,plugins}/*.{ts,js}", {
         cwd: directory,
         absolute: true,
         include: "file",

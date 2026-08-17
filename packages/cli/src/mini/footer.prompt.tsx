@@ -5,14 +5,15 @@
 // It produces a PromptState that RunPromptBody renders as a slim single-line
 // composer while the footer view renders any active menus below it.
 /** @jsxImportSource @opentui/solid */
-import { pathToFileURL } from "bun"
 import { StyledText, fg, type ColorInput, type KeyEvent, type TextareaRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { normalizePromptContent } from "@opencode-ai/tui/prompt/content"
 import fuzzysort from "fuzzysort"
 import path from "path"
+import { pathToFileURL } from "node:url"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
 import { Locale } from "@opencode-ai/tui/util/locale"
+import { stringWidth } from "@opencode-ai/tui/util/string-width"
 import {
   createPromptHistory,
   displayCharAt,
@@ -602,7 +603,7 @@ export function createPromptState(input: PromptInput): PromptState {
     })
   }
 
-  const restore = (value: RunPrompt, cursor = Bun.stringWidth(value.text)) => {
+  const restore = (value: RunPrompt, cursor = stringWidth(value.text)) => {
     draft = clonePrompt(value)
     setShell(value.mode === "shell")
     if (!area || area.isDestroyed) {
@@ -612,7 +613,7 @@ export function createPromptState(input: PromptInput): PromptState {
     hide()
     area.setText(value.text)
     restoreParts(value.parts)
-    area.cursorOffset = Math.min(cursor, Bun.stringWidth(area.plainText))
+    area.cursorOffset = Math.min(cursor, stringWidth(area.plainText))
     scheduleRows()
     area.focus()
   }
@@ -643,7 +644,7 @@ export function createPromptState(input: PromptInput): PromptState {
     area.setText(text)
     clearParts()
     draft = shell() ? { text: area.plainText, parts: [], mode: "shell" } : { text: area.plainText, parts: [] }
-    area.cursorOffset = Math.min(Bun.stringWidth(text), Bun.stringWidth(area.plainText))
+    area.cursorOffset = Math.min(stringWidth(text), stringWidth(area.plainText))
     scheduleRows()
     area.focus()
   }
@@ -777,7 +778,7 @@ export function createPromptState(input: PromptInput): PromptState {
     if (move(dir, event)) return
     if (!area || area.isDestroyed) return false
 
-    const endOffset = Bun.stringWidth(area.plainText)
+    const endOffset = stringWidth(area.plainText)
     if (dir === -1) {
       if (area.cursorOffset === 0) return false
       if (area.visualCursor.visualRow === 0) {
@@ -886,16 +887,12 @@ export function createPromptState(input: PromptInput): PromptState {
       area.cursorOffset = 0
       const start = area.logicalCursor
       area.cursorOffset =
-        shell() || !head
-          ? cursor
-          : local
-            ? Bun.stringWidth(area.plainText)
-            : Bun.stringWidth(area.plainText.slice(0, head.end))
+        shell() || !head ? cursor : local ? stringWidth(area.plainText) : stringWidth(area.plainText.slice(0, head.end))
       const end = area.logicalCursor
 
       area.deleteRange(start.row, start.col, end.row, end.col)
       area.insertText(text)
-      area.cursorOffset = Bun.stringWidth(text)
+      area.cursorOffset = stringWidth(text)
       hide()
       syncDraft()
       if (!shell()) {
@@ -920,7 +917,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
     const text = "@" + next.value
     const startOffset = at()
-    const endOffset = startOffset + Bun.stringWidth(text)
+    const endOffset = startOffset + stringWidth(text)
     const part = structuredClone(next.part)
     if (part.type === "agent") {
       part.source = {

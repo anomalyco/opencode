@@ -31,14 +31,15 @@ export function DialogWorkspaceFileChanges(props: {
   message?: string
 }) {
   const dialog = useDialog()
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme().contextual("elevated")
+  const { themeV2: overlayTheme } = useTheme().contextual("overlay")
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const [store, setStore] = createStore({ active: "yes" as WorkspaceFileChangesChoice })
   const height = createMemo(() => Math.min(props.files.length, 8))
-  const fileNameWidth = createMemo(
-    () => Math.max(2, Math.min(60, dimensions().width - 2) - 6 - Math.max(7, ...props.files.map(changeCountWidth))),
+  const fileNameWidth = createMemo(() =>
+    Math.max(2, Math.min(60, dimensions().width - 2) - 6 - Math.max(7, ...props.files.map(changeCountWidth))),
   )
 
   function confirm() {
@@ -71,21 +72,21 @@ export function DialogWorkspaceFileChanges(props: {
   return (
     <box gap={1}>
       <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
-        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+        <text attributes={TextAttributes.BOLD} fg={themeV2.text()}>
           {props.title ?? "File Changes Found"}
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
       <box paddingLeft={2} paddingRight={2}>
-        <text fg={theme.textMuted} wrapMode="word">
+        <text fg={themeV2.text.subdued()} wrapMode="word">
           {props.message ?? "Do you want to move these changes with the session?"}
         </text>
       </box>
       <scrollbox
         height={height()}
-        backgroundColor={theme.backgroundElement}
+        backgroundColor={overlayTheme.background()}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={scrollAcceleration()}
       >
@@ -94,15 +95,19 @@ export function DialogWorkspaceFileChanges(props: {
             <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
               <box flexDirection="row" minWidth={0} flexShrink={1}>
                 <box width={2} flexShrink={0}>
-                  <text fg={theme.textMuted}>{statusLabel(item.status)}</text>
+                  <text fg={overlayTheme.text.subdued()}>{statusLabel(item.status)}</text>
                 </box>
-                <FilePath value={item.file} maxWidth={fileNameWidth()} fg={theme.textMuted} />
+                <FilePath value={item.file} maxWidth={fileNameWidth()} fg={overlayTheme.text.subdued()} />
               </box>
               <box flexDirection="row" gap={1} minWidth={7} flexShrink={0} justifyContent="flex-end">
                 <text>
                   {" "}
-                  {item.additions ? <span style={{ fg: theme.diffAdded }}>+{item.additions}</span> : null}
-                  {item.deletions ? <span style={{ fg: theme.diffRemoved }}> -{item.deletions}</span> : null}
+                  {item.additions ? (
+                    <span style={{ fg: overlayTheme.diff.text.added() }}>+{item.additions}</span>
+                  ) : null}
+                  {item.deletions ? (
+                    <span style={{ fg: overlayTheme.diff.text.removed() }}> -{item.deletions}</span>
+                  ) : null}
                 </text>
               </box>
             </box>
@@ -115,14 +120,14 @@ export function DialogWorkspaceFileChanges(props: {
             <box
               paddingLeft={2}
               paddingRight={2}
-              backgroundColor={item === store.active ? theme.primary : undefined}
+              backgroundColor={item === store.active ? themeV2.background.action("focused") : undefined}
               onMouseUp={() => {
                 setStore("active", item)
                 props.onSelect(item)
                 dialog.clear()
               }}
             >
-              <text fg={item === store.active ? theme.selectedListItemText : theme.textMuted}>{item}</text>
+              <text fg={item === store.active ? themeV2.text.action("focused") : themeV2.text.subdued()}>{item}</text>
             </box>
           )}
         </For>

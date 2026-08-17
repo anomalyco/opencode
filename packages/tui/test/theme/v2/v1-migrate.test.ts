@@ -85,7 +85,7 @@ test("infers chromatic hues, anchors light and dark colors, and aliases ambiguou
   expect(() => resolveThemeFile(migrated, "dark")).not.toThrow()
 })
 
-test("builds gray from V1 surfaces and text without using borders", () => {
+test("builds gray from V1 surfaces and text without using menus or borders", () => {
   const source = structuredClone(DEFAULT_THEMES.opencode)
   source.theme.backgroundMenu = { light: "#ededed", dark: "#252525" }
   const light = resolveV1(source, "light")
@@ -97,12 +97,12 @@ test("builds gray from V1 surfaces and text without using borders", () => {
 
   expect(lightGray[100]).toBe(hex(light.background))
   expect(lightGray[200]).toBe(hex(light.backgroundPanel))
-  expect(lightGray[300]).toBe(hex(light.backgroundMenu))
+  expect(lightGray[300]).toBe(hex(light.backgroundElement))
   expect(lightGray[700]).toBe(hex(light.textMuted))
   expect(lightGray[900]).toBe(hex(light.text))
   expect(darkGray[100]).toBe(hex(dark.text))
   expect(darkGray[300]).toBe(hex(dark.textMuted))
-  expect(darkGray[700]).toBe(hex(dark.backgroundMenu))
+  expect(darkGray[700]).toBe(hex(dark.backgroundElement))
   expect(darkGray[800]).toBe(hex(dark.backgroundPanel))
   expect(darkGray[900]).toBe(hex(dark.background))
 

@@ -6,6 +6,7 @@ import { useTuiPaths } from "../../context/runtime"
 import { useTheme } from "../../context/theme"
 import { abbreviateHome } from "../../runtime"
 import { FilePath } from "../../ui/file-path"
+import { stringWidth } from "../../util/string-width"
 
 function Directory(props: { context: Plugin.Context; maxWidth: number }) {
   const { themeV2 } = useTheme()
@@ -56,7 +57,7 @@ function View(props: { context: Plugin.Context }) {
     const list = props.context.data.location.mcp.server.list(props.context.location) ?? []
     if (list.length === 0) return 0
     const count = list.filter((item) => item.status.status === "connected").length
-    return Bun.stringWidth(`⊙ ${count} MCP /status`) + 2
+    return stringWidth(`⊙ ${count} MCP /status`) + 2
   })
 
   return (
@@ -72,7 +73,7 @@ function View(props: { context: Plugin.Context }) {
     >
       <Directory
         context={props.context}
-        maxWidth={Math.max(2, dimensions().width - 8 - Bun.stringWidth(InstallationVersion) - mcpWidth())}
+        maxWidth={Math.max(2, dimensions().width - 8 - stringWidth(InstallationVersion) - mcpWidth())}
       />
       <Mcp context={props.context} />
       <box flexGrow={1} />
