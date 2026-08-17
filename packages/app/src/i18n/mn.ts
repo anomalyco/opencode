@@ -174,6 +174,8 @@ export const dict = {
   "command.session.redo": "Дахин хий",
   "command.session.redo.description": "Сүүлийн буцаагдсан мессежийг дахин хийнэ үү",
   "command.session.compact": "Компакт сесс",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Контекстийн хэмжээг багасгахын тулд сессийг нэгтгэн дүгнэ",
   "command.session.fork": "Зурвасаас салаалах",
   "command.session.fork.description": "Өмнөх зурвасаас шинэ сесс үүсгэнэ үү",

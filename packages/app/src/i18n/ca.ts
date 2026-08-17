@@ -173,6 +173,8 @@ export const dict = {
   "command.session.redo": "Refer",
   "command.session.redo.description": "Torna a fer l'últim missatge desfet",
   "command.session.compact": "Sessió compacta",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Resumeix la sessió per reduir la mida del context",
   "command.session.fork": "Bifurcació del missatge",
   "command.session.fork.description": "Crea una sessió nova a partir d'un missatge anterior",

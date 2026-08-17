@@ -177,6 +177,8 @@ export const dict = {
   "command.session.redo": "إعادة",
   "command.session.redo.description": "إعادة الرسالة التي تم التراجع عنها",
   "command.session.compact": "ضغط الجلسة",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "تلخيص الجلسة لتقليل حجم السياق",
   "command.session.fork": "تشعب من الرسالة",
   "command.session.fork.description": "إنشاء جلسة جديدة من رسالة سابقة",

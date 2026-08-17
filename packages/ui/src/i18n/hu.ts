@@ -180,6 +180,7 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Elágazás az új munkamenethez",
   "ui.message.revertMessage": "Üzenet visszaállítása",
   "ui.message.copyResponse": "Válasz másolása",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Másolva",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",

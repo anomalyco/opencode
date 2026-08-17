@@ -172,6 +172,8 @@ export const dict = {
   "command.session.redo": "Ribëje",
   "command.session.redo.description": "Ribërë mesazhin e fundit të zhbërë",
   "command.session.compact": "Sesion kompakt",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Përmblidhni seancën për të zvogëluar madhësinë e kontekstit",
   "command.session.fork": "Fork nga mesazhi",
   "command.session.fork.description": "Krijoni një seancë të re nga një mesazh i mëparshëm",

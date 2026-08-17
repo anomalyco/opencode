@@ -171,6 +171,8 @@ export const dict = {
   "command.session.redo": "Endurtak",
   "command.session.redo.description": "Ger seinastu ógjørt boðini aftur",
   "command.session.compact": "Kompakt seta",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Samanber setuna fyri at minka um samanhangsstøddina",
   "command.session.fork": "Greina frá boðum",
   "command.session.fork.description": "Stovna eina nýggja setu frá einum undanfarnum boði",
