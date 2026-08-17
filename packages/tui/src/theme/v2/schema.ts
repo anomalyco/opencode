@@ -12,12 +12,12 @@ export type HueAlias = Schema.Schema.Type<typeof HueAlias>
 export const ActionVariant = Schema.Literals(["primary", "destructive"])
 export type ActionVariant = Schema.Schema.Type<typeof ActionVariant>
 
-export const ActionState = Schema.Literals(["disabled", "pressed", "focused", "selected"])
+export const ActionState = Schema.Literals(["disabled", "pressed", "focused", "selected", "hovered"])
 export type ActionState = Schema.Schema.Type<typeof ActionState>
 export type ActionStateKey = `$${ActionState}`
 
-export const FormfieldState = Schema.Literals(["focused", "pressed", "disabled", "selected"])
-export type FormfieldState = Schema.Schema.Type<typeof FormfieldState>
+export const FormfieldState = ActionState
+export type FormfieldState = ActionState
 export type FormfieldStateKey = `$${FormfieldState}`
 
 export const FeedbackKind = Schema.Literals(["error", "warning", "success", "info"])
@@ -75,6 +75,7 @@ export type HueOverrideDefinition = Schema.Schema.Type<typeof HueOverrideDefinit
 
 const StatefulColorDefinition = Schema.Struct({
   default: Schema.optional(ColorValue),
+  $hovered: Schema.optional(ColorValue),
   $focused: Schema.optional(ColorValue),
   $pressed: Schema.optional(ColorValue),
   $selected: Schema.optional(ColorValue),
@@ -82,14 +83,7 @@ const StatefulColorDefinition = Schema.Struct({
 })
 export type StatefulColorDefinition = Schema.Schema.Type<typeof StatefulColorDefinition>
 
-const FormfieldColorDefinition = Schema.Struct({
-  default: Schema.optional(ColorValue),
-  $focused: Schema.optional(ColorValue),
-  $pressed: Schema.optional(ColorValue),
-  $disabled: Schema.optional(ColorValue),
-  $selected: Schema.optional(ColorValue),
-})
-export type FormfieldColorDefinition = Schema.Schema.Type<typeof FormfieldColorDefinition>
+export type FormfieldColorDefinition = StatefulColorDefinition
 
 const ActionColorDefinition = Schema.Struct({
   primary: Schema.optional(StatefulColorDefinition),
@@ -109,7 +103,7 @@ const TextDefinition = Schema.Struct({
   default: Schema.optional(ColorValue),
   subdued: Schema.optional(ColorValue),
   action: Schema.optional(ActionColorDefinition),
-  formfield: Schema.optional(FormfieldColorDefinition),
+  formfield: Schema.optional(StatefulColorDefinition),
   feedback: Schema.optional(
     Schema.Struct({
       error: Schema.optional(TextFeedbackDefinition),
@@ -130,7 +124,7 @@ const BackgroundDefinition = Schema.Struct({
     }),
   ),
   action: Schema.optional(ActionColorDefinition),
-  formfield: Schema.optional(FormfieldColorDefinition),
+  formfield: Schema.optional(StatefulColorDefinition),
   feedback: Schema.optional(
     Schema.Struct({
       error: Schema.optional(BackgroundFeedbackDefinition),

@@ -12,6 +12,7 @@ import { filesystem } from "./effect/app-node-platform"
 import { LayerNode } from "./effect/layer-node"
 import { makeRuntime } from "./effect/runtime"
 import { NpmConfig } from "./npm-config"
+import { resolveModule } from "#runtime-import"
 
 export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
   add: Schema.Array(Schema.String).pipe(Schema.optional),
@@ -54,9 +55,7 @@ const resolveEntryPoint = (name: string, dir: string, subpaths: readonly string[
   const entrypoint = subpaths
     .map((subpath) => {
       try {
-        return typeof Bun !== "undefined"
-          ? import.meta.resolve([name, subpath].filter(Boolean).join("/"), dir)
-          : import.meta.resolve(dir)
+        return resolveModule([name, subpath].filter(Boolean).join("/"), dir)
       } catch {
         return undefined
       }

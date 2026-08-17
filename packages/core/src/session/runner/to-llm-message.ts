@@ -206,7 +206,7 @@ function toLLMMessage(message: SessionMessage.Info, model: ModelV2.Ref, provider
         Message.make({
           id: message.id,
           role: "user",
-          content: `Shell command: ${message.command}\n\n${message.output?.output ?? ""}`,
+          content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${message.output?.output ?? ""}`,
           metadata: message.metadata,
         }),
       ]

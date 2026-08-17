@@ -26,6 +26,7 @@ import { editorSelectionKey, useEditorContext, type EditorSelection } from "../.
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
 import { promptOffsetWidth } from "../../prompt/display"
+import { stringWidth } from "../../util/string-width"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
@@ -187,7 +188,7 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const exit = useExit()
   const dimensions = useTerminalDimensions()
-  const { themeV2, syntax, mode } = useTheme()
+  const { themeV2, syntax } = useTheme()
   const animationsEnabled = createMemo(() => config.animations ?? true)
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
@@ -529,7 +530,7 @@ export function Prompt(props: PromptProps) {
             pasted: [],
           })
           restoreExtmarksFromPrompt(store.prompt)
-          input.cursorOffset = Bun.stringWidth(normalized)
+          input.cursorOffset = stringWidth(normalized)
         },
       },
       {
@@ -1378,11 +1379,7 @@ export function Prompt(props: PromptProps) {
   })
   const maxHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height / 3)))
 
-  const promptBg = createMemo(() =>
-    mode() === "light"
-      ? themeV2.increase(themeV2.background.surface.offset(), 1)
-      : themeV2.decrease(themeV2.background.surface.offset(), 1),
-  )
+  const promptBg = createMemo(() => themeV2.raise(themeV2.background.surface.offset()))
 
   return (
     <>

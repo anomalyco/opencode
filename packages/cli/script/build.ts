@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import fs from "fs"
 import { rm } from "fs/promises"
 import path from "path"
 import { Script } from "@opencode-ai/script"
@@ -11,9 +10,14 @@ import { modelsData } from "./generate"
 
 const dir = path.resolve(import.meta.dirname, "..")
 const binary = "opencode2"
+const outdir = path.resolve(
+  dir,
+  process.argv.find((arg) => arg.startsWith("--outdir="))?.slice("--outdir=".length) ?? "dist",
+)
+if (outdir === dir) throw new Error("--outdir must not be the package directory")
 process.chdir(dir)
 
-await rm("dist", { recursive: true, force: true })
+await rm(outdir, { recursive: true, force: true })
 
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
@@ -50,10 +54,6 @@ const targets = singleFlag
 
 if (!skipInstall) await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
 
-const localParserWorker = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
-const rootParserWorker = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
-const parserWorker = fs.realpathSync(fs.existsSync(localParserWorker) ? localParserWorker : rootParserWorker)
-
 for (const item of targets) {
   const target = [
     binary,
@@ -67,7 +67,7 @@ for (const item of targets) {
   const name = target.replace(binary, "cli")
   console.log(`building ${name}`)
   const result = await Bun.build({
-    entrypoints: ["./src/index.ts", parserWorker],
+    entrypoints: ["./src/index.ts"],
     tsconfig: "./tsconfig.json",
     plugins: [plugin],
     external: ["node-gyp"],
@@ -81,7 +81,7 @@ for (const item of targets) {
       autoloadTsconfig: true,
       autoloadPackageJson: true,
       target: target.replace(binary, "bun") as Bun.Build.CompileTarget,
-      outfile: `./dist/${name}/bin/${binary}`,
+      outfile: path.join(outdir, name, "bin", binary),
       execArgv: [`--user-agent=${binary}/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
@@ -93,10 +93,6 @@ for (const item of targets) {
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "undefined",
       // FFF_LIBC selects the fff native lib variant: "musl" or "gnu".
       FFF_LIBC: item.os === "linux" ? `'${item.abi ?? "gnu"}'` : "undefined",
-      OTUI_TREE_SITTER_WORKER_PATH:
-        (item.os === "win32" ? '"B:/~BUN/root/' : '"/$bunfs/root/') +
-        path.relative(dir, parserWorker).replaceAll("\\", "/") +
-        '"',
       ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
     },
   })
@@ -107,7 +103,7 @@ for (const item of targets) {
   }
 
   await Bun.write(
-    `./dist/${name}/package.json`,
+    path.join(outdir, name, "package.json"),
     JSON.stringify(
       {
         name: `@opencode-ai/${name}`,

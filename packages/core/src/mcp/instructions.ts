@@ -17,7 +17,7 @@ type Summary = typeof Summary.Type
 const entries = (servers: ReadonlyArray<Summary>) =>
   servers.flatMap((server) => [
     `  <server name="${server.server}">`,
-    `    Use tools from this server through \`execute\` under \`tools[${JSON.stringify(McpTool.group(server.server))}]\`.`,
+    `    Use tools from this server through \`execute\` under \`tools[${JSON.stringify(McpTool.namespace(server.server))}]\`.`,
     ...server.instructions.split("\n").map((line) => `    ${line}`),
     "  </server>",
   ])

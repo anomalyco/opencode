@@ -19,6 +19,9 @@ export interface SessionHooks {
   readonly context: SessionContext
 }
 
-export type SessionDomain = Pick<SessionApi, "create" | "get" | "prompt" | "command" | "synthetic" | "interrupt"> & {
+export type SessionDomain = Pick<
+  SessionApi,
+  "create" | "get" | "prompt" | "generate" | "command" | "synthetic" | "interrupt"
+> & {
   readonly hook: Hooks<SessionHooks>
 }

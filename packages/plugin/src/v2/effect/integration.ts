@@ -17,6 +17,7 @@ import type { Transform } from "./registration.js"
 export type IntegrationOAuthAuthorization = {
   readonly url: string
   readonly instructions: string
+  readonly expiresAt?: number
 } & (
   | {
       readonly mode: "auto"

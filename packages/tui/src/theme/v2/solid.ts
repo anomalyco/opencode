@@ -1,18 +1,20 @@
 import { createComponent, createContext, useContext, type Accessor, type ParentProps } from "solid-js"
 import { createComponentTheme, type ComponentTheme } from "./component"
-import type { ContextKey, ResolvedTheme } from "./index"
+import type { ContextKey, Mode, ResolvedTheme } from "./index"
 
 type ThemeRuntime = {
   readonly resolved: Accessor<ResolvedTheme>
+  readonly mode: Accessor<Mode>
   readonly component: ComponentTheme
 }
 
 const ThemeContext = createContext<ThemeRuntime>()
 
-export function ThemeProvider(props: ParentProps<{ theme: ResolvedTheme }>) {
+export function ThemeProvider(props: ParentProps<{ theme: ResolvedTheme; mode?: Mode }>) {
   const resolved = () => props.theme
+  const mode = () => props.mode ?? "light"
   return createComponent(ThemeContext.Provider, {
-    value: { resolved, component: createComponentTheme(resolved) },
+    value: { resolved, mode, component: createComponentTheme(resolved, mode) },
     get children() {
       return props.children
     },
@@ -28,7 +30,7 @@ export function ContextProvider(props: ParentProps<{ context: ContextKey }>) {
   }
   context()
   return createComponent(ThemeContext.Provider, {
-    value: { resolved: parent.resolved, component: createComponentTheme(context) },
+    value: { resolved: parent.resolved, mode: parent.mode, component: createComponentTheme(context, parent.mode) },
     get children() {
       return props.children
     },

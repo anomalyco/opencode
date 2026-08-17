@@ -42,7 +42,7 @@ export namespace FSUtil {
     readonly findUp: (target: string, start: string, stop?: string) => Effect.Effect<string[], Error>
     readonly up: (options: { targets: string[]; start: string; stop?: string }) => Effect.Effect<string[], Error>
     readonly globUp: (pattern: string, start: string, stop?: string) => Effect.Effect<string[], Error>
-    readonly glob: (pattern: string, options?: Glob.Options) => Effect.Effect<string[], Error>
+    readonly scan: (pattern: string, options?: Glob.Options) => Effect.Effect<string[], Error>
     readonly globMatch: (pattern: string, filepath: string) => boolean
   }
 
@@ -51,7 +51,7 @@ export namespace FSUtil {
   export const use = serviceUse(Service)
 
   // Exported so simulation can wrap this layer and override the methods that
-  // bypass the injected FileSystem (readDirectoryEntries, glob, globUp).
+  // bypass the injected FileSystem (readDirectoryEntries, scan, globUp).
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -146,7 +146,7 @@ export namespace FSUtil {
         if (mode) yield* fs.chmod(path, mode)
       })
 
-      const glob = Effect.fn("FileSystem.glob")(function* (pattern: string, options?: Glob.Options) {
+      const scan = Effect.fn("FileSystem.scan")(function* (pattern: string, options?: Glob.Options) {
         return yield* Effect.tryPromise({
           try: () => Glob.scan(pattern, options),
           catch: (cause) => new FileSystemError({ method: "glob", cause }),
@@ -187,7 +187,7 @@ export namespace FSUtil {
         const result: string[] = []
         let current = start
         while (true) {
-          const matches = yield* glob(pattern, { cwd: current, absolute: true, include: "file", dot: true }).pipe(
+          const matches = yield* scan(pattern, { cwd: current, absolute: true, include: "file", dot: true }).pipe(
             Effect.catch(() => Effect.succeed([] as string[])),
           )
           result.push(...matches)
@@ -214,7 +214,7 @@ export namespace FSUtil {
         findUp,
         up,
         globUp,
-        glob,
+        scan,
         globMatch: Glob.match,
       })
     }),

@@ -47,8 +47,8 @@ function remappedFs(root: string) {
         writeWithDirs: (file, content, mode) => fs.writeWithDirs(remap(root, file), content, mode),
         readFileString: (file) => fs.readFileString(remap(root, file)),
         remove: (file) => fs.remove(remap(root, file)),
-        glob: (pattern, options) =>
-          fs.glob(pattern, options?.cwd ? { ...options, cwd: remap(root, options.cwd) } : options),
+        scan: (pattern, options) =>
+          fs.scan(pattern, options?.cwd ? { ...options, cwd: remap(root, options.cwd) } : options),
       })
     }),
   ).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))

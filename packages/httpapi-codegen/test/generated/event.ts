@@ -19,7 +19,7 @@ export const Group1 = HttpApiGroup.make("event", { topLevel: false }).add(
   }),
 )
 
-type RawGroup = HttpApiClient.Client.Group<typeof Group1, "event", never, never>
+type RawGroup = HttpApiClient.Client.Group<typeof Group1, never, never>
 
 const Endpoint0DeclaredError = Schema.Union([Endpoint0SuccessError])
 const mapEndpoint0Error = (error: unknown) =>
