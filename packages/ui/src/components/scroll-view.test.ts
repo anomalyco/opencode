@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { canScrollKey, scrollKey, scrollTopFromThumbPointer } from "./scroll-view"
+import { canScrollKey, createKeyboardScroll, scrollKey, scrollTopFromThumbPointer } from "./scroll-view"
 
 describe("scrollKey", () => {
   test("maps plain navigation keys", () => {
@@ -38,6 +38,53 @@ describe("canScrollKey", () => {
     expect(canScrollKey(element(0, 100, 100), "page-down")).toBe(false)
   })
 })
+
+describe("createKeyboardScroll", () => {
+  test("accumulates repeated page movement and settles quickly", () => {
+    const harness = keyboardScrollHarness(0)
+
+    harness.scroll.move(800)
+    harness.advance(30)
+    harness.scroll.move(800)
+    harness.advance(150)
+
+    expect(harness.element.scrollTop).toBe(1_600)
+  })
+
+  test("reverses from the current position instead of the queued target", () => {
+    const harness = keyboardScrollHarness(1_000)
+
+    harness.scroll.move(800)
+    harness.advance(30)
+    const current = harness.element.scrollTop
+    harness.scroll.move(-800)
+    harness.advance(150)
+
+    expect(harness.element.scrollTop).toBe(current - 800)
+  })
+})
+
+function keyboardScrollHarness(scrollTop: number) {
+  const element = { scrollTop, clientHeight: 1_000, scrollHeight: 10_000 }
+  const callbacks = new Map<number, FrameRequestCallback>()
+  let time = 0
+  let handle = 0
+  const scroll = createKeyboardScroll(element, {
+    now: () => time,
+    requestFrame: (callback) => {
+      callbacks.set(++handle, callback)
+      return handle
+    },
+    cancelFrame: (id) => callbacks.delete(id),
+  })
+  const advance = (next: number) => {
+    time = next
+    const queued = [...callbacks.values()]
+    callbacks.clear()
+    queued.forEach((callback) => callback(time))
+  }
+  return { element, scroll, advance }
+}
 
 describe("scrollTopFromThumbPointer", () => {
   test("keeps downward thumb movement monotonic when content height changes", () => {

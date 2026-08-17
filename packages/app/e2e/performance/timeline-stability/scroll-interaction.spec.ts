@@ -134,6 +134,22 @@ test("does not pull a keyboard-scrolled user during shell remeasurement", async 
   await reportVisualStability(testInfo, "keyboard-during-resize", trace, anchorPlan(regions))
 })
 
+test("accumulates rapid page key presses", async ({ page }) => {
+  await setupTimeline(page, {
+    messages: history(80),
+    viewport: { width: 1400, height: 700 },
+  })
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight))
+  await scroller.focus()
+  const before = await scroller.evaluate((element) => ({ top: element.scrollTop, height: element.clientHeight }))
+
+  for (let index = 0; index < 3; index++) await scroller.press("PageUp")
+
+  await page.waitForTimeout(150)
+  expect(before.top - (await scroller.evaluate((element) => element.scrollTop))).toBeGreaterThan(before.height * 2.2)
+})
+
 test("tracks keyboard scrolling from a focused timeline descendant", async ({ page }, testInfo) => {
   const shellID = "prt_descendant_keyboard_01_shell"
   const timeline = await setupTimeline(page, {
