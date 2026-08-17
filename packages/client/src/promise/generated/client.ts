@@ -26,6 +26,8 @@ import type {
   SessionRemoveOutput,
   SessionForkInput,
   SessionForkOutput,
+  SessionSelectInput,
+  SessionSelectOutput,
   SessionSwitchAgentInput,
   SessionSwitchAgentOutput,
   SessionSwitchModelInput,
@@ -549,6 +551,18 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      select: (input: SessionSelectInput, requestOptions?: RequestOptions) =>
+        request<SessionSelectOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/selection`,
+            body: { agent: input["agent"], model: input["model"] },
+            successStatus: 204,
+            declaredStatuses: [404, 503, 400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
       switchAgent: (input: SessionSwitchAgentInput, requestOptions?: RequestOptions) =>
         request<SessionSwitchAgentOutput>(
           {

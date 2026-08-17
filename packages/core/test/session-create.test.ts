@@ -728,6 +728,34 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("atomically selects a different agent and model", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const previous = Model.Ref.make({ id: Model.ID.make("haiku"), providerID: Provider.ID.anthropic })
+      const created = yield* session.create({ location, agent: Agent.ID.make("build"), model: previous })
+      const model = Model.Ref.make({ id: Model.ID.make("sonnet"), providerID: Provider.ID.anthropic })
+
+      yield* session.select({ sessionID: created.id, agent: Agent.ID.make("plan"), model })
+
+      expect(yield* session.get(created.id)).toMatchObject({ agent: "plan", model })
+      expect(
+        Array.from(yield* logEvents(session, created.id).pipe(Stream.runCollect)).map((event) => event.type),
+      ).toEqual(["session.created", "session.agent.selected", "session.model.selected"])
+    }),
+  )
+
+  it.effect("does not emit redundant selection events", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const model = Model.Ref.make({ id: Model.ID.make("sonnet"), providerID: Provider.ID.anthropic })
+      const created = yield* session.create({ location, agent: Agent.ID.make("build"), model })
+
+      yield* session.select({ sessionID: created.id, agent: Agent.ID.make("build"), model })
+
+      expect(Array.from(yield* logEvents(session, created.id).pipe(Stream.runCollect))).toHaveLength(1)
+    }),
+  )
+
   it.effect("rejects an agent switch for a missing Session", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service

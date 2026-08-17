@@ -1,5 +1,11 @@
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
-import { OpenCode, type OpenCodeClient, type SessionMessageAssistantTool } from "@opencode-ai/client/promise"
+import {
+  OpenCode,
+  type ModelRef,
+  type OpenCodeClient,
+  type SessionInfo,
+  type SessionMessageAssistantTool,
+} from "@opencode-ai/client/promise"
 import { FSUtil } from "@opencode-ai/util/fs-util"
 import { open } from "node:fs/promises"
 import path from "node:path"
@@ -116,8 +122,13 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     return undefined
   })
   if (!target) return
-  const model = target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined
-  const variant = target.model?.variant
+  await applyRunSelection({
+    client,
+    sessionID: target.session.id,
+    agent: input.agent,
+    model: target.model,
+    explicit: explicit !== undefined || options.variant !== undefined,
+  })
   if (!target.resume && input.title !== undefined) {
     await client.session.rename({
       sessionID: target.session.id,
@@ -131,9 +142,6 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     location: target.location,
     message: prepared.message,
     files: prepared.files,
-    agent: target.agent,
-    model,
-    variant,
     thinking: input.thinking ?? false,
     format: input.format,
     auto: input.auto ?? false,
@@ -142,6 +150,25 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     renderTool: (part) => renderTool(part, target.location.directory),
     renderToolError: (part) => renderToolError(part, target.location.directory),
   }).catch((error) => reportRunError(input, errorMessage(error), target.session.id))
+}
+
+/** @internal Exported for CLI boundary tests. */
+export function applyRunSelection(input: {
+  client: OpenCodeClient
+  sessionID: SessionInfo["id"]
+  agent?: string
+  model?: ModelRef
+  explicit: boolean
+}) {
+  if (input.agent)
+    return input.client.session.select({
+      sessionID: input.sessionID,
+      agent: input.agent,
+      model: input.explicit && input.model ? { type: "explicit", model: input.model } : { type: "configured" },
+    })
+  if (input.explicit && input.model)
+    return input.client.session.switchModel({ sessionID: input.sessionID, model: input.model })
+  return Promise.resolve()
 }
 
 export function mergeInput(message: string | undefined, piped: string | undefined) {

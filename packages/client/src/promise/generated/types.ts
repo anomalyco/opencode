@@ -2146,6 +2146,14 @@ export type MessageNotFoundError = {
 export const isMessageNotFoundError = (value: unknown): value is MessageNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "MessageNotFoundError"
 
+export type ServiceUnavailableError = {
+  readonly _tag: "ServiceUnavailableError"
+  readonly message: string
+  readonly service?: string | undefined
+}
+export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
+
 export type CommandNotFoundError = {
   readonly _tag: "CommandNotFoundError"
   readonly command: string
@@ -2169,14 +2177,6 @@ export type SkillNotFoundError = {
 }
 export const isSkillNotFoundError = (value: unknown): value is SkillNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillNotFoundError"
-
-export type ServiceUnavailableError = {
-  readonly _tag: "ServiceUnavailableError"
-  readonly message: string
-  readonly service?: string | undefined
-}
-export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
 
 export type SessionBusyError = {
   readonly _tag: "SessionBusyError"
@@ -3286,6 +3286,32 @@ export type SessionForkInput = {
 }
 
 export type SessionForkOutput = { data: SessionInfo }["data"]
+
+export type SessionSelectInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly agent: {
+    readonly agent: string
+    readonly model:
+      | { readonly type: "preserve" }
+      | { readonly type: "configured" }
+      | {
+          readonly type: "explicit"
+          readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+        }
+  }["agent"]
+  readonly model: {
+    readonly agent: string
+    readonly model:
+      | { readonly type: "preserve" }
+      | { readonly type: "configured" }
+      | {
+          readonly type: "explicit"
+          readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
+        }
+  }["model"]
+}
+
+export type SessionSelectOutput = void
 
 export type SessionSwitchAgentInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]

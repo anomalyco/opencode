@@ -1,4 +1,6 @@
 import { Session } from "@opencode-ai/core/session"
+import { Agent } from "@opencode-ai/core/agent"
+import { PluginSupervisor } from "@opencode-ai/core/plugin/supervisor"
 import { SessionTransfer } from "@opencode-ai/core/session/transfer"
 import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
 import { DateTime, Effect, Stream } from "effect"
@@ -224,6 +226,41 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               ),
             ),
           }
+        }),
+      )
+      .handle(
+        "session.select",
+        Effect.fn(function* (ctx) {
+          const model = yield* Effect.gen(function* () {
+            if (ctx.payload.model.type === "preserve") return undefined
+            if (ctx.payload.model.type === "explicit") return ctx.payload.model.model
+            const plugins = yield* PluginSupervisor.Service
+            yield* plugins.flush.pipe(
+              Effect.timeoutOrElse({
+                duration: "5 seconds",
+                orElse: () =>
+                  Effect.fail(
+                    new ServiceUnavailableError({
+                      message: "Agent initialization timed out",
+                      service: "agent.catalog",
+                    }),
+                  ),
+              }),
+            )
+            const agents = yield* Agent.Service
+            return (yield* agents.get(ctx.payload.agent))?.model
+          })
+          yield* session.select({ sessionID: ctx.params.sessionID, agent: ctx.payload.agent, model }).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+          )
+          return HttpApiSchema.NoContent.make()
         }),
       )
       .handle(

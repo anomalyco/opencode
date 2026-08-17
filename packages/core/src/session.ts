@@ -205,6 +205,11 @@ export interface Interface {
   }) => Stream.Stream<SessionEvent.DurableEvent | EventLog.Synced, NotFoundError>
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: Agent.ID }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: { sessionID: SessionSchema.ID; model: Model.Ref }) => Effect.Effect<void, NotFoundError>
+  readonly select: (input: {
+    sessionID: SessionSchema.ID
+    agent: Agent.ID
+    model?: Model.Ref
+  }) => Effect.Effect<void, NotFoundError>
   readonly rename: (input: { sessionID: SessionSchema.ID; title: string }) => Effect.Effect<void, NotFoundError>
   readonly move: (input: {
     sessionID: SessionSchema.ID
@@ -713,22 +718,45 @@ const layer = Layer.effect(
             .resume(input.sessionID)
             .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
       }),
-      switchAgent: Effect.fn("Session.switchAgent")(function* (input) {
+      select: Effect.fn("Session.select")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        yield* bus.publish(SessionEvent.AgentSelected, {
-          sessionID: input.sessionID,
-          agent: input.agent,
-          previous: session.agent,
-        })
+        const agent =
+          session.agent === input.agent
+            ? undefined
+            : {
+                sessionID: input.sessionID,
+                agent: input.agent,
+                previous: session.agent,
+              }
+        const model = !input.model || sameModel(session.model, input.model) ? undefined : input.model
+        if (agent && model) {
+          yield* bus.publishAll([
+            [SessionEvent.AgentSelected, agent],
+            [
+              SessionEvent.ModelSelected,
+              {
+                sessionID: input.sessionID,
+                model,
+                previous: session.model,
+              },
+            ],
+          ])
+          return
+        }
+        if (agent) yield* bus.publish(SessionEvent.AgentSelected, agent)
+        if (model)
+          yield* bus.publish(SessionEvent.ModelSelected, {
+            sessionID: input.sessionID,
+            model,
+            previous: session.model,
+          })
+      }),
+      switchAgent: Effect.fn("Session.switchAgent")(function* (input) {
+        yield* result.select({ sessionID: input.sessionID, agent: input.agent })
       }),
       switchModel: Effect.fn("Session.switchModel")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        if (
-          session.model?.providerID === input.model.providerID &&
-          session.model.id === input.model.id &&
-          (session.model.variant ?? "default") === (input.model.variant ?? "default")
-        )
-          return
+        if (sameModel(session.model, input.model)) return
         yield* bus.publish(SessionEvent.ModelSelected, {
           sessionID: input.sessionID,
           model: input.model,
@@ -1092,6 +1120,14 @@ function positiveInt(value: string | null) {
   if (value === null) return
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+}
+
+function sameModel(left: Model.Ref | undefined, right: Model.Ref) {
+  return (
+    left?.providerID === right.providerID &&
+    left.id === right.id &&
+    (left.variant ?? "default") === (right.variant ?? "default")
+  )
 }
 
 // Mirrors the shell tool's in-memory preview safety limit.

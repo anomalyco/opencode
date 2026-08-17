@@ -54,6 +54,12 @@ const SessionsQueryFields = {
   parentID: ParentIDFilter.pipe(Schema.optional),
 }
 
+const SelectionModelPolicy = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("preserve") }),
+  Schema.Struct({ type: Schema.Literal("configured") }),
+  Schema.Struct({ type: Schema.Literal("explicit"), model: Model.Ref }),
+])
+
 const SessionsDirectoryQuery = Schema.Struct({
   ...SessionsQueryFields,
   directory: AbsolutePath,
@@ -247,6 +253,22 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.fork",
             summary: "Fork session",
             description: "Create a child session by copying projected history through or before a message boundary.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.select", "/api/session/:sessionID/selection", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({ agent: Agent.ID, model: SelectionModelPolicy }),
+        success: HttpApiSchema.NoContent,
+        error: [SessionNotFoundError, ServiceUnavailableError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.select",
+            summary: "Select session agent and model",
+            description: "Atomically select the agent and model policy used by subsequent provider turns.",
           }),
         ),
     )
