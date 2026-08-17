@@ -324,7 +324,7 @@ export const layer = (options?: ShellSelect.Options) =>
               runFork(
                 handle.exitCode.pipe(
                   Effect.flatMap((code) => finish("exited", code)),
-                  Effect.catch(() => Effect.void),
+                  Effect.catch(() => finish("exited")),
                 ),
               )
 

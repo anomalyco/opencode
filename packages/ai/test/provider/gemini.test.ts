@@ -767,6 +767,31 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("defaults omitted function call args to an empty object", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "ping", description: "Ping", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [
+                {
+                  content: { role: "model", parts: [{ functionCall: { name: "ping" } }] },
+                  finishReason: "STOP",
+                },
+              ],
+            }),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toEqual([{ type: "tool-call", id: "tool_0", name: "ping", input: {} }])
+    }),
+  )
+
   it.effect("maps tool calls without a finish reason", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
@@ -859,6 +884,51 @@ describe("Gemini route", () => {
         type: "finish",
         reason: { normalized: "content-filter", raw: "SAFETY" },
       })
+    }),
+  )
+
+  it.effect("preserves candidate-less prompt safety blocks as content-filter outcomes", () =>
+    Effect.gen(function* () {
+      const blocked = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              promptFeedback: {
+                blockReason: "FUTURE_SAFETY_REASON",
+                blockReasonMessage: "Prompt blocked",
+                safetyRatings: [{ category: "HARM_CATEGORY_HARASSMENT", blocked: true }],
+              },
+            }),
+          ),
+        ),
+      )
+      const blockedWithUsage = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { promptFeedback: { blockReason: "SAFETY" } },
+              { usageMetadata: { promptTokenCount: 7, totalTokenCount: 7 } },
+            ),
+          ),
+        ),
+      )
+
+      expect(blocked.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
+      expect(blocked.events.at(-1)).toMatchObject({
+        type: "finish",
+        reason: { normalized: "content-filter", raw: "FUTURE_SAFETY_REASON" },
+        providerMetadata: {
+          google: {
+            promptFeedback: {
+              blockReason: "FUTURE_SAFETY_REASON",
+              blockReasonMessage: "Prompt blocked",
+              safetyRatings: [{ category: "HARM_CATEGORY_HARASSMENT", blocked: true }],
+            },
+          },
+        },
+      })
+      expect(blockedWithUsage.finishReason).toEqual({ normalized: "content-filter", raw: "SAFETY" })
+      expect(blockedWithUsage.usage).toMatchObject({ inputTokens: 7, totalTokens: 7 })
     }),
   )
 

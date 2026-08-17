@@ -1062,7 +1062,7 @@ export function Session(props: { verticalTabsWidth: number }) {
     {
       title: "View queued prompts",
       id: "session.queued_prompts",
-      group: "Session",
+      group: "Prompt",
       enabled: queuedPrompts().length > 0,
       run: openQueuedPrompts,
     },
