@@ -38,7 +38,6 @@ import { toggleMcp } from "./global-sync/mcp"
 import { createServerSession, type ServerSession } from "./server-session"
 import { createConnectionSync } from "./server-sync/connection"
 import { usePlatform } from "./platform"
-import { useServer } from "./server"
 import type { Data } from "@opencode-ai/client/solid"
 
 export function shouldRefreshWorkspaceSessions(event: ServerEvent) {
@@ -679,8 +678,3 @@ export function createServerSyncContext(serverSDK: ServerSDK, data: Data) {
 }
 
 export type ServerSync = ReturnType<typeof createServerSyncContext>
-
-export const useServerSync = () => {
-  const server = useServer()
-  return server.ctx.sync
-}

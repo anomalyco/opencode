@@ -1,6 +1,6 @@
 import type { Component } from "solid-js"
 import { For, Show, createMemo } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { useQuery } from "@tanstack/solid-query"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
@@ -13,7 +13,6 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { useLanguage } from "@/context/language"
 import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
 import { useData } from "@/context/server"
 import { showToast } from "@/utils/toast"
 import { getRelativeTime } from "@/utils/time"
@@ -38,6 +37,7 @@ import {
 } from "@/utils/workspace"
 import { listAllSessions } from "@/utils/session"
 import type { ServerScope } from "@/utils/server-scope"
+import { normalizeProjectInfo } from "@/context/global-sync/utils"
 import "./settings-v2.css"
 
 type Workspace = {
@@ -49,7 +49,6 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
   const dialog = useDialog()
   const language = useLanguage()
   const serverSDK = useServerSDK()
-  const serverSync = useServerSync()
   const data = useData()
   const tabs = useTabs()
   const platform = usePlatform()
@@ -58,9 +57,22 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
     transaction: undefined as "confirm" | "running" | undefined,
   })
 
-  const workspaces = createMemo(() => workspaceInventory(serverSync.data.project))
+  const projectQuery = useQuery(() => ({
+    queryKey: [serverSDK.scope, "settings-workspace-projects"] as const,
+    queryFn: async () =>
+      Promise.all(
+        (await serverSDK.api.project.list()).map(async (project) => {
+          const worktrees = await serverSDK.api.worktree
+            .list({ projectID: project.id })
+            .catch(() => [{ directory: project.canonical }, ...project.sandboxes.map((directory) => ({ directory }))])
+          return normalizeProjectInfo({ ...project, worktrees })
+        }),
+      ),
+    refetchOnMount: "always",
+  }))
+  const workspaces = createMemo(() => workspaceInventory(projectQuery.data ?? []))
   const projects = createMemo(() =>
-    serverSync.data.project.filter((project) => managedWorkspaceDirectories(project).length > 0),
+    (projectQuery.data ?? []).filter((project) => managedWorkspaceDirectories(project).length > 0),
   )
   const projectName = (project: Project) => project.name || getFilename(project.worktree)
   const projectOptions = createMemo(() => [
@@ -76,7 +88,6 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
     return {
       sdk,
       data,
-      sync: serverSync,
       server: ServerConnection.key(sdk.server),
       activeDirectory: props.activeDirectory,
     }
@@ -190,19 +201,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
       platform,
       context.sdk.scope,
     )
-    context.sync.set(
-      "project",
-      produce((draft) => {
-        const project = draft.find((item) => item.id === workspace.project.id)
-        if (!project) return
-        project.sandboxes = (project.sandboxes ?? []).filter(
-          (directory) => pathKey(directory) !== pathKey(workspace.directory),
-        )
-        project.worktrees = project.worktrees.filter(
-          (worktree) => pathKey(worktree.directory) !== pathKey(workspace.directory),
-        )
-      }),
-    )
+    await projectQuery.refetch()
   }
 
   let inspectionID = 0

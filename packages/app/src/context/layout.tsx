@@ -149,7 +149,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
   name: "Layout",
   gate: false,
   init: () => {
-    // const serverSync = useServerSync()
     const servers = useServers()
     const platform = usePlatform()
 

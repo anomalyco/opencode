@@ -53,7 +53,6 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 import { useLanguage } from "@/context/language"
 import { useData } from "@/context/server"
 import { useSDK } from "@/context/sdk"
-import { useSync } from "@/context/sync"
 import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
@@ -416,7 +415,6 @@ function MessageTimelineView(
   const language = useLanguage()
   const data = useData()
   const sdk = useSDK()
-  const sync = useSync()
   const shouldAnchorBottom = createMemo(() => props.shouldAnchorBottom)
   const hasScrollGesture = createMemo(() => props.hasScrollGesture)
   const ownerSessionKey = props.data.sessionKey()
@@ -437,9 +435,17 @@ function MessageTimelineView(
   const getMsgPart = props.data.part
   const projection = props.data.projection
   const sessionDirectory = createMemo(() => props.session.data.info()?.location.directory ?? sdk().directory)
-  const workspaceSession = createMemo(() => isWorkspaceDirectory(sync().project, sessionDirectory()))
+  const project = createMemo(() => {
+    const projectID = props.session.data.info()?.projectID
+    const value = projectID
+      ? data.project.get(projectID)
+      : data.project.list().find((item) => containsDirectory(item.canonical, sessionDirectory()))
+    if (!value) return
+    return { ...value, worktree: value.canonical, worktrees: [] }
+  })
+  const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
   createEffect(() => {
-    const directory = sync().project?.worktree
+    const directory = project()?.worktree
     if (!directory) return
     void data.location.vcs.sync({ directory }).catch(() => undefined)
   })
@@ -1132,7 +1138,7 @@ function MessageTimelineView(
           diffSummaryRow().userMessageID === props.userMessages.at(-1)?.id &&
           !workspaceSession() &&
           props.workspaceMoveEligible &&
-          sync().project?.vcs === "git" &&
+          project()?.vcs === "git" &&
           sessionStatus().type === "idle"
         return (
           <TimelineRowFrame row={diffSummaryRow()}>
@@ -1140,7 +1146,7 @@ function MessageTimelineView(
               <TimelineDiffSummaryRow
                 diffs={diffSummaryRow().diffs}
                 action={
-                  <Show when={canMove() && sync().project}>
+                  <Show when={canMove() && project()}>
                     {(project) => (
                       <WorkspaceMoveAction
                         variant="inline"
@@ -1450,7 +1456,7 @@ function MessageTimelineView(
                       placement="bottom"
                       buttonAppearance={props.data.newLayoutDesigns() ? "v2" : "default"}
                     />
-                    <Show when={props.data.newLayoutDesigns() && !parentID() && sync().project}>
+                    <Show when={props.data.newLayoutDesigns() && !parentID() && project()}>
                       {(project) => (
                         <KobaltePopover
                           open={summaryOpen()}

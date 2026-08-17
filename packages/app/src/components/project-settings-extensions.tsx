@@ -6,9 +6,7 @@ import { useLanguage } from "@/context/language"
 import { useMcpToggle } from "@/context/mcp"
 import { useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
 import { useData } from "@/context/server"
-import { useSync } from "@/context/sync"
 import { ExternalLink } from "./external-link"
 
 type SkillItem = {
@@ -16,7 +14,6 @@ type SkillItem = {
   location: string
 }
 
-const pluginName = (item: string | [string, Record<string, unknown>]) => (typeof item === "string" ? item : item[0])
 const skillKey = (item: SkillItem) => `${item.name}\n${item.location}`
 
 const ExtensionCard: Component<{ children: unknown }> = (props) => (
@@ -24,9 +21,8 @@ const ExtensionCard: Component<{ children: unknown }> = (props) => (
 )
 
 const ExtensionRow: Component<{
-  icon: "mcp" | "cube" | "post-skill" | "code"
+  icon: "mcp" | "cube" | "post-skill"
   name: string
-  status?: string
   children?: unknown
 }> = (props) => (
   <div class="project-settings-extension-row">
@@ -34,14 +30,6 @@ const ExtensionRow: Component<{
       <Icon name={props.icon} class="project-settings-extension-row-icon" />
       <span class="project-settings-extension-row-name">{props.name}</span>
     </div>
-    <Show when={props.status}>
-      {(status) => (
-        <span class="project-settings-extension-row-status">
-          <span class="project-settings-extension-row-status-dot" />
-          {status()}
-        </span>
-      )}
-    </Show>
     {props.children as any}
   </div>
 )
@@ -77,10 +65,8 @@ export const ProjectSettingsExtensions: Component = () => {
   const language = useLanguage()
   const serverSDK = useServerSDK()
   const directorySDK = useSDK()
-  const serverSync = useServerSync()
   const data = useData()
-  const sync = useSync()
-  const toggleMcp = useMcpToggle()
+  const toggleMcp = useMcpToggle(() => directorySDK().directory)
 
   createEffect(() => {
     if (serverSDK.connection.status() !== "connected") return
@@ -94,17 +80,10 @@ export const ProjectSettingsExtensions: Component = () => {
   })
 
   const globalMcpNames = createMemo(() =>
-    [
-      ...new Set([
-        ...Object.keys(serverSync.data.config.mcp ?? {}),
-        ...(data.location.mcp.server.list() ?? []).map((server) => server.name),
-      ]),
-    ].sort(),
+    [...new Set((data.location.mcp.server.list() ?? []).map((server) => server.name))].sort(),
   )
   const projectMcpNames = createMemo(() => {
     const shared = new Set(globalMcpNames())
-    const configured = Object.keys(sync().data.config.mcp ?? {}).filter((name) => !shared.has(name))
-    if (configured.length > 0) return configured.sort()
     return (data.location.mcp.server.list({ directory: directorySDK().directory }) ?? [])
       .map((server) => server.name)
       .filter((name) => !shared.has(name))
@@ -114,10 +93,18 @@ export const ProjectSettingsExtensions: Component = () => {
     data.location.mcp.server.list({ directory: directorySDK().directory })?.find((server) => server.name === name)?.status
       .status === "connected"
 
-  const globalPlugins = createMemo(() => (serverSync.data.config.plugin ?? []).map(pluginName))
+  const [globalPluginList] = createResource(
+    () => serverSDK.connection.status() === "connected",
+    () => serverSDK.api.plugin.list().then((result) => result.data),
+  )
+  const [projectPluginList] = createResource(
+    () => (serverSDK.connection.status() === "connected" ? directorySDK().directory : undefined),
+    (directory) => serverSDK.api.plugin.list({ location: { directory } }).then((result) => result.data),
+  )
+  const globalPlugins = createMemo(() => (globalPluginList.latest ?? []).map((item) => item.id))
   const projectPlugins = createMemo(() => {
     const shared = new Set(globalPlugins())
-    return (sync().data.config.plugin ?? []).map(pluginName).filter((name) => !shared.has(name))
+    return (projectPluginList.latest ?? []).map((item) => item.id).filter((name) => !shared.has(name))
   })
 
   const serverSkills = createMemo(() => data.location.skill.list() ?? [])
@@ -166,7 +153,7 @@ export const ProjectSettingsExtensions: Component = () => {
           <TabsV2.Trigger value="mcps">{language.t("settings.extensions.tab.mcps")}</TabsV2.Trigger>
           <TabsV2.Trigger value="plugins">{language.t("status.popover.tab.plugins")}</TabsV2.Trigger>
           <TabsV2.Trigger value="skills">{language.t("settings.extensions.tab.skills")}</TabsV2.Trigger>
-          <TabsV2.Trigger value="lsps">{language.t("project.settings.extensions.tab.lsps")}</TabsV2.Trigger>
+          {/* TODO: Restore LSP status when V2 exposes it. */}
         </TabsV2.List>
 
         <TabsV2.Content value="mcps">
@@ -210,29 +197,6 @@ export const ProjectSettingsExtensions: Component = () => {
           </div>
         </TabsV2.Content>
 
-        <TabsV2.Content value="lsps">
-          <div class="project-settings-extension-section">
-            <div class="project-settings-extension-section-header">
-              <span>{language.t("project.settings.extensions.lsp.detected")}</span>
-              <span>{language.t("project.settings.extensions.lsp.description")}</span>
-            </div>
-            <Show when={sync().data.lsp.length > 0}>
-              <ExtensionCard>
-                <For each={sync().data.lsp}>
-                  {(item) => (
-                    <ExtensionRow
-                      icon="code"
-                      name={item.name || item.id}
-                      status={
-                        item.status === "error" ? language.t("project.settings.extensions.setupRequired") : undefined
-                      }
-                    />
-                  )}
-                </For>
-              </ExtensionCard>
-            </Show>
-          </div>
-        </TabsV2.Content>
       </TabsV2>
     </div>
   )

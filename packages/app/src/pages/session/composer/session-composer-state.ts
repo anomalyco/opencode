@@ -4,12 +4,10 @@ import type { Todo } from "@/types"
 import type { FormInfo, PermissionRequest } from "@opencode-ai/client/promise"
 import { useParams } from "@solidjs/router"
 import { showToast } from "@/utils/toast"
-import { useServerSync } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { useSDK } from "@/context/sdk"
-import { useSync } from "@/context/sync"
 import { sessionPermissionRequest, sessionQuestionForm } from "./session-request-tree"
 import { useData } from "@/context/server"
 
@@ -31,8 +29,6 @@ const idle = { type: "idle" as const }
 export function createSessionComposerController(options?: { closeMs?: number | (() => number) }) {
   const params = useParams()
   const sdk = useSDK()
-  const sync = useSync()
-  const serverSync = useServerSync()
   const serverSDK = useServerSDK()
   const data = useData()
   const language = useLanguage()
@@ -58,11 +54,8 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     return !!permissionRequest() || !!questionRequest()
   })
 
-  const todos = createMemo((): Todo[] => {
-    const id = params.id
-    if (!id) return []
-    return serverSync.session.data.todo[id] ?? []
-  })
+  // TODO: Restore todos when they are available from the current session API.
+  const todos = createMemo((): Todo[] => [])
 
   const done = createMemo(
     () => todos().length > 0 && todos().every((todo) => todo.status === "completed" || todo.status === "cancelled"),
@@ -232,13 +225,6 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     }, closeMs())
   }
 
-  // Keep stale turn todos from reopening if the model never clears them.
-  const clear = () => {
-    const id = params.id
-    if (!id) return
-    sync().set("todo", id, [])
-  }
-
   createEffect(
     on(
       () => [params.id, todos().length, done(), live()] as const,
@@ -256,7 +242,6 @@ export function createSessionComposerController(options?: { closeMs?: number | (
           if (timer) window.clearTimeout(timer)
           timer = undefined
           setStore({ sessionID: id, dock: todoDockAtBoundary(next), closing: false, opening: false })
-          if (next === "clear") clear()
           return
         }
 
@@ -270,7 +255,6 @@ export function createSessionComposerController(options?: { closeMs?: number | (
         if (next === "clear") {
           if (timer) window.clearTimeout(timer)
           timer = undefined
-          clear()
           return
         }
 

@@ -1,7 +1,6 @@
 import type { Message, UserMessage } from "@/types"
 import { createMemo, type Accessor } from "solid-js"
 import { useFile } from "@/context/file"
-import { useSync } from "@/context/sync"
 import { useData } from "@/context/server"
 import { same } from "@/utils/same"
 import { createSessionTabs } from "./helpers"
@@ -24,7 +23,6 @@ export function createSessionController(input: {
   fileBrowser?: (sessionID: string | undefined) => boolean
 }) {
   const file = useFile()
-  const sync = useSync()
   const data = useData()
   const layout = useSessionLayout()
   const sessionID = createMemo(() => layout.params.id)
@@ -39,12 +37,10 @@ export function createSessionController(input: {
   })
   const status = createMemo(() => {
     const id = sessionID()
-    return id ? (sync().data.session_status[id] ?? idle) : idle
+    return id && data.session.status(id) === "running" ? { type: "busy" as const } : idle
   })
-  const messages = createMemo(() => {
-    const id = sessionID()
-    return id ? (sync().data.message[id] ?? emptyMessages) : emptyMessages
-  })
+  // TODO: Restore transcript projections when current session messages can be rendered without V1 Message/Part data.
+  const messages = createMemo(() => emptyMessages)
   const userMessages = createMemo(() => selectSessionUserMessages(messages()), emptyUserMessages, { equals: same })
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const visibleUserMessages = createMemo(

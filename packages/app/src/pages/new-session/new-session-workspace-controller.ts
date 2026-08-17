@@ -3,7 +3,7 @@ import { useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
 import { useData } from "@/context/server"
 import { useSettings } from "@/context/settings"
-import { useSync } from "@/context/sync"
+import { normalizeProjectInfo } from "@/context/global-sync/utils"
 import {
   isWorkspaceDirectory,
   isWorkspaceSelection,
@@ -45,19 +45,23 @@ export function createNewSessionWorkspaceController(input: {
   onViewAll: () => void
 }) {
   const sdk = useSDK()
-  const sync = useSync()
   const serverSDK = useServerSDK()
   const data = useData()
   const settings = useSettings()
-  const visible = createMemo(() => sync().project?.vcs === "git")
+  const currentProject = createMemo(() => {
+    const projectID = data.location.info({ directory: sdk().directory })?.project.id
+    const current = projectID ? data.project.get(projectID) : undefined
+    return current ? normalizeProjectInfo(current) : undefined
+  })
+  const visible = createMemo(() => currentProject()?.vcs === "git")
   const selected = createMemo(() => {
-    const project = sync().project
+    const project = currentProject()
     const worktree = input.selected()
     if (!project || !worktree) return
     return isWorkspaceSelection(project, worktree) ? worktree : undefined
   })
   const fallback = createMemo(() => {
-    const project = sync().project
+    const project = currentProject()
     if (!project) return "main"
     return workspaceDefaultSelection(
       settings.workspaces.defaultDestination(),
@@ -69,13 +73,14 @@ export function createNewSessionWorkspaceController(input: {
       enabled: visible(),
       selected: selected(),
       directory: sdk().directory,
-      projectWorktree: sync().project?.worktree,
+      projectWorktree: currentProject()?.worktree,
       fallback: fallback(),
     }),
   )
-  const projectRoot = createMemo(() => sync().project?.worktree ?? sdk().directory)
+  const projectRoot = createMemo(() => currentProject()?.worktree ?? sdk().directory)
   createEffect(() => {
-    const project = sync().project
+    void Promise.all([data.location.syncInfo({ directory: sdk().directory }), data.project.sync()]).catch(() => undefined)
+    const project = currentProject()
     const directories = project ? [project.worktree, ...workspaceDirectories(project)] : [sdk().directory]
     directories.forEach((directory) => void data.location.vcs.sync({ directory }).catch(() => undefined))
   })
@@ -88,7 +93,7 @@ export function createNewSessionWorkspaceController(input: {
     }),
   )
   const remember = (worktree = value()) => {
-    const project = sync().project
+    const project = currentProject()
     if (!project) return
     const local = worktree === "main" || sameDirectory(worktree, project.worktree)
     settings.workspaces.setLastUsed(serverSDK.scope, project.id, local ? "local" : "workspace")
@@ -98,24 +103,24 @@ export function createNewSessionWorkspaceController(input: {
     selection: {
       value,
       workspace: createMemo(() => {
-        const project = sync().project
+        const project = currentProject()
         const current = value()
         return current === "create" || (!!project && isWorkspaceDirectory(project, current))
       }),
       reset: () => input.setSelected(undefined),
       remember,
       set: (worktree: string) => {
-        input.setSelected(normalizeNewSessionWorktree(worktree, sdk().directory, sync().project?.worktree))
+        input.setSelected(normalizeNewSessionWorktree(worktree, sdk().directory, currentProject()?.worktree))
         remember(worktree)
       },
     },
     project: {
       root: projectRoot,
       workspaces: () => {
-        const project = sync().project
+        const project = currentProject()
         return project ? workspaceDirectories(project) : []
       },
-      git: () => sync().project?.vcs === "git",
+      git: () => currentProject()?.vcs === "git",
       openAll: input.onViewAll,
     },
     bar: {

@@ -9,12 +9,9 @@ import { usePermission } from "@/context/permission"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
-import { useSync } from "@/context/sync"
-import { useData } from "@/context/server"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
-import { extractPromptFromParts } from "@/utils/prompt"
 import type { UserMessage } from "@/types"
 import type { SessionController } from "./session-controller"
 
@@ -54,8 +51,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const prompt = usePrompt()
   const sdk = useSDK()
   const settings = useSettings()
-  const sync = useSync()
-  const data = useData()
   const terminal = useTerminal()
   const layout = useLayout()
   const navigate = useNavigate()
@@ -64,18 +59,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const value = await load()
     owner.run(() => show(value))
   }
-  const runCommand = async <T,>(input: {
-    owner: ReturnType<SessionController["ownership"]["capture"]>
-    prompt: T
-    request: () => Promise<unknown>
-    updatePrompt: (prompt: T) => void
-    updateViewport: () => void
-  }) => {
-    await input.request()
-    input.updatePrompt(input.prompt)
-    input.owner.run(input.updateViewport)
-  }
-
   const shown = settings.visibility.fileTree
 
   const showAllFiles = () => {
@@ -103,7 +86,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const navigateMessageByOffset = actions.navigateMessageByOffset
-  const setActiveMessage = actions.setActiveMessage
   const focusInput = actions.focusInput
 
   const sessionCommand = withCategory(language.t("command.category.session"))
@@ -291,70 +273,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     })
   }
 
-  const undo = async () => {
-    const sessionID = actions.session.identity.params.id
-    if (!sessionID) return
-    const owner = actions.session.ownership.capture()
-    const session = sdk().api.session
-    const directory = sdk().directory
-    const promptSession = prompt.capture()
-    const revert = actions.session.data.revertMessageID()
-    const messages = actions.session.history.userMessages()
-    const boundary = revert ? messages.findIndex((message) => message.id === revert) : messages.length
-    if (boundary < 0) return
-    const message = messages[boundary - 1]
-    if (!message) return
-    const parts = sync().data.part[message.id]
-
-    if (data.session.status(sessionID) === "running") {
-      await session.interrupt({ sessionID }).catch(() => {})
-    }
-
-    await runCommand({
-      owner,
-      prompt: promptSession,
-      request: () => session.revert.stage({ sessionID, messageID: message.id }),
-      updatePrompt: (promptSession) => {
-        if (parts) promptSession.set(extractPromptFromParts(parts, { directory }))
-      },
-      updateViewport: () => setActiveMessage(messages[boundary - 2]),
-    })
-  }
-
-  const redo = async () => {
-    const sessionID = actions.session.identity.params.id
-    if (!sessionID) return
-    const owner = actions.session.ownership.capture()
-    const session = sdk().api.session
-    const messages = actions.session.history.userMessages()
-    const promptSession = prompt.capture()
-
-    const revertMessageID = actions.session.data.revertMessageID()
-    if (!revertMessageID) return
-
-    const boundary = messages.findIndex((message) => message.id === revertMessageID)
-    if (boundary < 0) return
-    const next = messages[boundary + 1]
-    if (!next) {
-      await runCommand({
-        owner,
-        prompt: promptSession,
-        request: () => session.revert.clear({ sessionID }),
-        updatePrompt: (promptSession) => promptSession.reset(),
-        updateViewport: () => setActiveMessage(messages.at(-1)),
-      })
-      return
-    }
-
-    await runCommand({
-      owner,
-      prompt: promptSession,
-      request: () => session.revert.stage({ sessionID, messageID: next.id }),
-      updatePrompt: () => undefined,
-      updateViewport: () => setActiveMessage(messages[boundary]),
-    })
-  }
-
   const compact = async () => {
     const sessionID = actions.session.identity.params.id
     if (!sessionID) return
@@ -373,7 +291,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const shareCmds = () => {
     // TODO: Restore these commands when the V2 client exposes session sharing.
-    // if (sync().data.config.share === "disabled") return []
+    // Sharing remains disabled until the current API exposes it.
     return []
     /*
     return [
@@ -420,16 +338,18 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.undo"),
       description: language.t("command.session.undo.description"),
       slash: "undo",
-      disabled: !actions.session.identity.params.id || actions.session.history.visibleUserMessages().length === 0,
-      onSelect: undo,
+      // TODO: Restore undo when current transcript parts can reconstruct the prompt draft.
+      disabled: true,
+      onSelect: () => undefined,
     }),
     sessionCommand({
       id: "session.redo",
       title: language.t("command.session.redo"),
       description: language.t("command.session.redo.description"),
       slash: "redo",
-      disabled: !actions.session.identity.params.id || !actions.session.data.info()?.revert?.messageID,
-      onSelect: redo,
+      // TODO: Restore redo with the current transcript projection.
+      disabled: true,
+      onSelect: () => undefined,
     }),
     sessionCommand({
       id: "session.compact",

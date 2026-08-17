@@ -1,7 +1,4 @@
 import { Binary } from "@opencode-ai/core/util/binary"
-import { createMemo } from "solid-js"
-import { useServerSync } from "./server-sync"
-import { useSDK } from "./sdk"
 import type { Message, Part } from "@/types"
 import { messageKey } from "@/utils/session-message"
 
@@ -109,12 +106,3 @@ export function applyOptimisticRemove(draft: OptimisticStore, input: OptimisticR
   }
   delete draft.part[input.messageID]
 }
-
-export const useSync = () => {
-  const serverSync = useServerSync()
-  const sdk = useSDK()
-
-  return createMemo(() => serverSync.ensureDirSyncContext(sdk().directory))
-}
-
-export type DirectorySync = ReturnType<ReturnType<typeof useSync>>

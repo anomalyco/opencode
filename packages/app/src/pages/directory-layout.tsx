@@ -2,16 +2,14 @@ import { DataProvider } from "@opencode-ai/session-ui/context"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { createEffect, createMemo, createResource, onCleanup, type ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, type ParentProps, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
-import { useSync } from "@/context/sync"
 import { decode64 } from "@/utils/base64"
 import { Schema } from "effect"
 import type { ServerConnection } from "@/context/servers"
 import { sessionHref } from "@/utils/session-route"
-import { useServerSync } from "@/context/server-sync"
 import { useData } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 
@@ -25,8 +23,6 @@ export function DirectoryDataProvider(
   const location = useLocation()
   const navigate = useNavigate()
   const params = useParams()
-  const sync = useSync()
-  const serverSync = useServerSync()
   const data = useData()
   const serverSDK = useServerSDK()
   const language = useLanguage()
@@ -44,21 +40,17 @@ export function DirectoryDataProvider(
   createEffect(() => {
     // A draft lives at /new-session?draftId=… and has no directory segment to normalize.
     if (props.draftID || props.server) return
-    const next = sync().data.path.directory
+    const next = data.location.info({ directory: directory() })?.directory
     if (!next || next === directory()) return
     const path = location.pathname.slice(slug().length + 1)
     navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
   })
 
-  createResource(
-    () => params.id,
-    (id) => serverSync.session.hydrate(id).catch(() => {}),
-  )
-
   createEffect(() => {
     if (serverSDK.connection.status() !== "connected") return
     const ref = { directory: directory() }
     void data.location.sync(ref).catch(() => undefined)
+    void data.project.sync().catch(() => undefined)
     const sessionID = params.id
     if (!sessionID) return
     void Promise.allSettled([
@@ -70,18 +62,12 @@ export function DirectoryDataProvider(
     ])
   })
 
-  createEffect(() => {
-    const sessionID = params.id
-    if (!sessionID) return
-    serverSync.session.pin(sessionID)
-    onCleanup(() => serverSync.session.unpin(sessionID))
-  })
-
   return (
     <Show when={directory()} keyed>
       {(directory) => (
         <DataProvider
-          data={sync().data}
+          // TODO: Remove this legacy session-ui bridge once message parts use the current Data projections.
+          data={{ session: [], session_status: {}, session_diff: {}, message: {}, part: {} }}
           directory={directory}
           sessionID={params.id}
           onNavigateToSession={navigateToSession}

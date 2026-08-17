@@ -24,7 +24,6 @@ import { type ImageAttachmentPart, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useData } from "@/context/server"
-import { useSync } from "@/context/sync"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { showToast } from "@/utils/toast"
 import { PromptInputV2, type PromptInputV2Suggestion } from "@opencode-ai/session-ui/v2/prompt-input"
@@ -84,7 +83,6 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
 export function usePromptInputV2Controller(props: PromptInputV2ControllerProps): PromptInputV2ComposerController {
   const sdk = useSDK()
   const data = useData()
-  const sync = useSync()
   const files = useFile()
   const layout = useLayout()
   const comments = useComments()
@@ -228,8 +226,8 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   const referenceDescription = (reference: ReferenceInfo) =>
     reference.source.type === "git" ? reference.source.repository : reference.source.path
   const references = createMemo(() =>
-    sync()
-      .data.reference.filter((reference) => !reference.hidden)
+    (data.location.reference.list({ directory: sdk().directory }) ?? [])
+      .filter((reference) => !reference.hidden)
       .map((reference) => ({
         id: `reference:${reference.name}`,
         kind: "reference" as const,
@@ -354,7 +352,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       dialog.show(() => <ImagePreview src={attachment.blob.url} alt={attachment.filename} />),
     openContext(key) {
       const item = controller.contextItem(key)
-      if (item) openComment(item, props, sync, layout, files, comments)
+      if (item) openComment(item, props, layout, files, comments)
     },
     onEditor(element) {
       editor = element as HTMLDivElement
@@ -557,7 +555,6 @@ function PromptInputV2ModelControl(props: {
 function openComment(
   item: { path: string; commentID?: string; commentOrigin?: "review" | "file" },
   props: PromptInputV2ControllerProps,
-  sync: ReturnType<typeof useSync>,
   layout: ReturnType<typeof useLayout>,
   files: ReturnType<typeof useFile>,
   comments: ReturnType<typeof useComments>,
@@ -575,9 +572,7 @@ function openComment(
       })
     })
   }
-  const diffs = props.controls.session.id ? sync().data.session_diff[props.controls.session.id] : undefined
-  const review =
-    item.commentOrigin === "review" || (item.commentOrigin !== "file" && diffs?.some((diff) => diff.file === item.path))
+  const review = item.commentOrigin === "review"
   if (!props.controls.session.reviewPanel.opened()) props.controls.session.reviewPanel.open()
   if (review) {
     layout.fileTree.setTab("changes")

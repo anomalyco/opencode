@@ -1,20 +1,15 @@
-import type { Message } from "@/types"
-import type { SessionInfo } from "@opencode-ai/client/promise"
 import type { Data } from "@opencode-ai/client/solid"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { Binary } from "@opencode-ai/core/util/binary"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
-import { batch, startTransition, type Accessor } from "solid-js"
+import { startTransition, type Accessor } from "solid-js"
 import { useTabs } from "@/context/tabs"
-import { useServerSync, type ServerSync } from "@/context/server-sync"
 import { useData } from "@/context/server"
 import { useLanguage } from "@/context/language"
 import { useLocal, type ModelSelection } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, type usePrompt } from "@/context/prompt"
 import { useSDK, type DirectorySDK } from "@/context/sdk"
-import { useSync, type DirectorySync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
 import { getDirectory } from "@opencode-ai/core/util/path"
 import { buildRequestParts } from "./build-request-parts"
@@ -40,7 +35,6 @@ export type FollowupDraft = {
 type FollowupSendInput = {
   api: DirectorySDK["api"]["session"]
   data: Data
-  sync: DirectorySync
   session: Accessor<{ agent?: string; model?: { id: string; providerID: string; variant?: string } } | undefined>
   draft: FollowupDraft
   messageID?: string
@@ -102,7 +96,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       dataUrl: await blobDataUrl(attachment.blob, attachment.mime),
     })),
   )
-  const { requestParts, optimisticParts } = buildRequestParts({
+  const { requestParts } = buildRequestParts({
     prompt: input.draft.prompt,
     context: input.draft.context,
     images: encodedImages,
@@ -112,34 +106,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     sessionDirectory: input.draft.sessionDirectory,
   })
 
-  const message: Message = {
-    id: messageID,
-    sessionID: input.draft.sessionID,
-    role: "user",
-    time: { created: Date.now() },
-    agent: input.draft.agent,
-    model: { ...input.draft.model, variant: input.draft.variant },
-  }
-
-  const add = () =>
-    input.sync.session.optimistic.add({
-      directory: input.draft.sessionDirectory,
-      sessionID: input.draft.sessionID,
-      message,
-      parts: optimisticParts,
-    })
-
-  const remove = () =>
-    input.sync.session.optimistic.remove({
-      directory: input.draft.sessionDirectory,
-      sessionID: input.draft.sessionID,
-      messageID,
-    })
-
-  batch(() => {
-    setBusy()
-    add()
-  })
+  setBusy()
 
   try {
     const session = input.session()
@@ -191,10 +158,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     })
     return true
   } catch (err) {
-    batch(() => {
-      setIdle()
-      remove()
-    })
+    setIdle()
     throw err
   }
 }
@@ -228,8 +192,6 @@ type PromptSubmitInput = {
 export function createPromptSubmit(input: PromptSubmitInput) {
   const navigate = useNavigate()
   const sdk = useSDK()
-  const sync = useSync()
-  const serverSync = useServerSync()
   const data = useData()
   const local = useLocal()
   const permission = usePermission()
@@ -251,8 +213,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const abort = async () => {
     const sessionID = params.id
     if (!sessionID) return Promise.resolve()
-    serverSync.session.set("todo", sessionID, [])
-
     input.onAbort?.()
 
     return sdk()
@@ -281,22 +241,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     for (const item of target.context.items()) {
       target.context.remove(item.key)
     }
-  }
-
-  const seed = (target: ServerSync, dir: string, info: SessionInfo) => {
-    data.session.remember(info)
-    target.session.remember(info)
-    const [, setStore] = target.child(dir)
-    setStore("session", (list: SessionInfo[]) => {
-      const result = Binary.search(list, info.id, (item) => item.id)
-      const next = [...list]
-      if (result.found) {
-        next[result.index] = info
-        return next
-      }
-      next.splice(result.index, 0, info)
-      return next
-    })
   }
 
   const handleSubmit = async (event: Event) => {
@@ -331,8 +275,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     const submissionSDK = sdk()
-    const submissionSync = sync()
-    const submissionServerSync = serverSync
     const submissionData = data
     const submissionScope = submissionSDK.scope
     const projectDirectory = submissionSDK.directory
@@ -364,9 +306,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         if (worktreeSelection === "create") {
           const createdWorktree = await submissionSDK.api.worktree
             .create({
-              projectID: submissionSync.data.project,
+              projectID: submissionData.location.info({ directory: projectDirectory })?.project.id ?? "",
               strategy: "git",
-              directory: getDirectory(submissionSync.project?.worktree ?? projectDirectory),
+              directory: getDirectory(
+                submissionData.location.info({ directory: projectDirectory })?.project.directory ?? projectDirectory,
+              ),
             })
             .then(async (created) => {
               await submissionSDK.api.location.get({ location: { directory: created.directory } })
@@ -386,10 +330,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         if (worktreeSelection !== "main" && worktreeSelection !== "create") {
           sessionDirectory = worktreeSelection
         }
-
-        if (sessionDirectory !== projectDirectory) {
-          submissionServerSync.child(sessionDirectory)
-        }
       }
 
       let session = currentSession
@@ -408,7 +348,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             return undefined
           })
         if (created) {
-          seed(submissionServerSync, sessionDirectory, created)
+          submissionData.session.remember(created)
           session = created
           await startTransition(() => {
             if (!session) return
@@ -545,20 +485,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       const commentItems = context.filter((item) => item.type === "file" && !!item.comment?.trim())
       const messageID = Identifier.ascending("message")
 
-      const removeOptimisticMessage = () => {
-        submissionSync.session.optimistic.remove({
-          directory: sessionDirectory,
-          sessionID: session.id,
-          messageID,
-        })
-      }
-
       for (const item of commentItems) submission.target().context.remove(item.key)
       clearInput()
 
       void sendFollowupDraft({
         api: submissionSDK.api.session,
-        sync: submissionSync,
         data: submissionData,
         session: () => session,
         draft,
@@ -572,7 +503,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           title: language.t("prompt.toast.promptSendFailed.title"),
           description: errorMessage(err),
         })
-        removeOptimisticMessage()
         if (restoreInput()) restoreCommentItems(submission.target(), commentItems)
       })
     } finally {

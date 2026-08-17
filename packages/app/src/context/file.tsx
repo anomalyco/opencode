@@ -6,7 +6,6 @@ import { useParams } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { useSDK } from "./sdk"
-import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { createPathHelpers } from "./file/path"
@@ -57,7 +56,6 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
   gate: false,
   init: () => {
     const sdk = useSDK()
-    useSync()
     const params = useParams()
     const serverSDK = useServerSDK()
     const language = useLanguage()

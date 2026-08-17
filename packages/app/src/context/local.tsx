@@ -10,7 +10,6 @@ import { Persist, persisted } from "@/utils/persist"
 import { hasCustomAgent, resolveAgent } from "./local-agent"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
 import { useSDK } from "./sdk"
-import { useSync } from "./sync"
 import { useData } from "./server"
 import { normalizeAgentList } from "./global-sync/utils"
 import { useServerSDK } from "./server-sdk"
@@ -62,7 +61,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   init: () => {
     const params = useParams()
     const sdk = useSDK()
-    const sync = useSync()
     const data = useData()
     const serverSDK = useServerSDK()
     const providers = useProviders(() => sdk().directory)
@@ -156,10 +154,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const configuredModel = () => {
-      const configured = sync().data.config.model
+      const configured = data.location.model.default({ directory: sdk().directory })
       if (!configured) return
-      const [providerID, modelID] = configured.split("/")
-      const model = { providerID, modelID }
+      const model = { providerID: configured.providerID, modelID: configured.modelID }
       if (validModel(model)) return model
     }
 

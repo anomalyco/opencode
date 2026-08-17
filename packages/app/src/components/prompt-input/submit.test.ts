@@ -11,16 +11,6 @@ type SessionCreateInput = {
   model?: { id: string; providerID: string; variant?: string }
   location?: { directory: string }
 }
-const optimistic: Array<{
-  directory?: string
-  sessionID?: string
-  message: {
-    agent: string
-    model: { providerID: string; modelID: string }
-    variant?: string
-  }
-}> = []
-const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const sentShell: Array<{ sessionID: string; id?: string; command: string }> = []
 const sentShellDirectories: string[] = []
 const promotedDrafts: Array<{ draftID: string; server: string; sessionId: string }> = []
@@ -34,8 +24,6 @@ const switchedModels: Array<{
 }> = []
 const sessionRequestOrder: string[] = []
 const updatedDrafts: Array<{ draftID: string; worktree?: string }> = []
-const syncedServers: string[] = []
-const optimisticServers: string[] = []
 const promptCaptures: Array<{ scope?: unknown; target?: unknown }> = []
 let serverSessionSyncs = 0
 
@@ -49,8 +37,6 @@ let worktreeFailure: Error | undefined
 let locationFailure: Error | undefined
 let worktreeCreates = 0
 let activeSDK = "server-a"
-let activeServerSync = "server-a"
-let activeDirectorySync = "server-a"
 let commands: Array<{ name: string }> = []
 let worktreeDirectory = "/repo/new-0"
 let worktreeID = 0
@@ -229,63 +215,6 @@ beforeAll(async () => {
     },
   }))
 
-  mock.module("@/context/sync", () => ({
-    useSync: () => () => {
-      const server = activeDirectorySync
-      return {
-        data: { command: commands, project: "project" },
-        session: {
-          optimistic: {
-            add: (value: {
-              directory?: string
-              sessionID?: string
-              message: { agent: string; model: { providerID: string; modelID: string; variant?: string } }
-            }) => {
-              optimisticServers.push(server)
-              optimistic.push(value)
-            },
-            remove: () => undefined,
-          },
-        },
-        set: () => undefined,
-        project: { worktree: server === "server-a" ? "/repo/main" : "/repo/other" },
-      }
-    },
-  }))
-
-  mock.module("@/context/server-sync", () => ({
-    useServerSync: () => {
-      const server = activeServerSync
-      return {
-        session: {
-          remember: () => undefined,
-          set: () => undefined,
-          sync: async () => {
-            serverSessionSyncs++
-          },
-        },
-        child: (directory: string) => {
-          syncedServers.push(server)
-          storedSessions[directory] ??= []
-          return [
-            { session: storedSessions[directory] },
-            (...args: unknown[]) => {
-              if (args[0] !== "session") return
-              const next = args[1]
-              if (typeof next === "function") {
-                storedSessions[directory] = next(storedSessions[directory]) as Array<{ id: string; title?: string }>
-                return
-              }
-              if (Array.isArray(next)) {
-                storedSessions[directory] = next as Array<{ id: string; title?: string }>
-              }
-            },
-          ]
-        },
-      }
-    },
-  }))
-
   mock.module("@/context/server", () => ({
     useData: () => ({
       session: {
@@ -293,6 +222,7 @@ beforeAll(async () => {
         setStatus: () => undefined,
       },
       location: {
+        info: () => ({ project: { id: "project", directory: "/repo/main" } }),
         command: {
           list: () => commands,
         },
@@ -318,7 +248,6 @@ beforeAll(async () => {
 
 beforeEach(() => {
   createdSessions.length = 0
-  optimistic.length = 0
   promotedDrafts.length = 0
   updatedDrafts.length = 0
   sentCommands.length = 0
@@ -327,8 +256,6 @@ beforeEach(() => {
   switchedAgents.length = 0
   switchedModels.length = 0
   sessionRequestOrder.length = 0
-  syncedServers.length = 0
-  optimisticServers.length = 0
   promptCaptures.length = 0
   params = {}
   search = {}
@@ -337,8 +264,6 @@ beforeEach(() => {
   selected = "/repo/worktree-a"
   variant = undefined
   activeSDK = "server-a"
-  activeServerSync = "server-a"
-  activeDirectorySync = "server-a"
   commands = []
   promptValue = [{ type: "text", content: "ls", start: 0, end: 2 }]
   worktreeDirectory = `/repo/new-${++worktreeID}`
@@ -350,7 +275,6 @@ beforeEach(() => {
   worktreeCreates = 0
   for (const key of Object.keys(draftServers)) delete draftServers[key]
   for (const key of Object.keys(sessionDirectories)) delete sessionDirectories[key]
-  for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
 
 const event = { preventDefault: () => undefined } as unknown as Event
@@ -425,8 +349,6 @@ describe("prompt submit worktree selection", () => {
 
     const result = submit.handleSubmit(event)
     activeSDK = "server-b"
-    activeServerSync = "server-b"
-    activeDirectorySync = "server-b"
     search.draftId = "draft-2"
     release()
     await result
@@ -434,8 +356,6 @@ describe("prompt submit worktree selection", () => {
 
     expect(updatedDrafts).toEqual([{ draftID: "draft-1", worktree: undefined }])
     expect(promotedDrafts).toEqual([{ draftID: "draft-1", server: "project-server-a", sessionId: "session-1" }])
-    expect(syncedServers.every((server) => server === "server-a")).toBe(true)
-    expect(optimisticServers).toEqual(["server-a"])
     expect(promptCaptures.at(-1)?.target).toEqual({ server: "project-server-a", scope: ServerScope.local })
     expect(submitted).toBe(0)
   })
@@ -455,13 +375,6 @@ describe("prompt submit worktree selection", () => {
     await submit.handleSubmit(event)
     await Bun.sleep(0)
 
-    expect(optimistic).toHaveLength(1)
-    expect(optimistic[0]).toMatchObject({
-      message: {
-        agent: "agent",
-        model: { providerID: "provider", modelID: "model", variant: "high" },
-      },
-    })
     expect(sentPrompts).toEqual(["/repo/main"])
     expect(switchedAgents).toEqual([{ sessionID: "session-1", agent: "agent" }])
     expect(switchedModels).toEqual([

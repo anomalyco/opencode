@@ -4,12 +4,10 @@ import type { ModelKey, ModelSelection } from "@/context/local"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "@/context/model-variant"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
-import { useSync } from "@/context/sync"
 import { useProviders } from "@/hooks/use-providers"
 
 export function createPromptModelSelection(input: { agent: () => { model?: ModelKey; variant?: string } | undefined }) {
   const sdk = useSDK()
-  const sync = useSync()
   const models = useModels()
   const prompt = usePrompt()
   const providers = useProviders(() => sdk().directory)
@@ -21,11 +19,8 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
   }
 
   const configured = () => {
-    const value = sync().data.config.model
-    if (!value) return
-    const [providerID, modelID] = value.split("/")
-    const model = { providerID, modelID }
-    if (valid(model)) return model
+    // TODO: Restore the configured model fallback when current location data exposes config.
+    return undefined
   }
 
   const recent = () => models.recent.list().find(valid)

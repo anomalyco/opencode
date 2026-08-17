@@ -5,14 +5,13 @@ import { DialogFooter, DialogHeader, DialogTitleGroup, DialogV2 } from "@opencod
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, on, type Accessor } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
-import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import type { SessionController } from "@/pages/session/session-controller"
 import { requireServerKey, sessionHref } from "@/utils/session-route"
@@ -49,7 +48,6 @@ export function createTimelineController(input: {
   const navigate = useNavigate()
   const sdk = useSDK()
   const serverSDK = useServerSDK()
-  const sync = useSync()
   const server = useServer()
   const data = server.ctx.data
   const settings = useSettings()
@@ -74,13 +72,14 @@ export function createTimelineController(input: {
   const shareUrl = (): string | undefined => undefined
   const shareEnabled = () => false
   const parentMessages = createMemo(() => {
-    const id = input.session.data.parentID()
-    return id ? (sync().data.message[id] ?? emptyMessages) : emptyMessages
+    // TODO: Restore child task labels when current transcript messages expose the legacy task projection.
+    return emptyMessages
   })
   const parentTitle = createMemo(
     () => sessionTitle(input.session.data.parent()?.title) ?? language.t("command.session.new"),
   )
-  const parts = (messageID: string) => sync().data.part[messageID] ?? emptyParts
+  // TODO: Remove legacy Part access once the timeline renders current session message content directly.
+  const parts = (_messageID: string) => emptyParts
   const part = (messageID: string, partID: string) => parts(messageID).find((item) => item.id === partID)
   const childTaskDescription = createMemo(() => {
     const id = input.session.identity.sessionID()
@@ -133,12 +132,8 @@ export function createTimelineController(input: {
       })
     setPending("rename", false)
     if (!success) return false
-    sync().set(
-      produce((draft) => {
-        const index = draft.session.findIndex((session) => session.id === id)
-        if (index !== -1) draft.session[index].title = next
-      }),
-    )
+    const current = data.session.get(id)
+    if (current) data.session.remember({ ...current, title: next })
     return true
   }
   const share = async () => {
@@ -189,7 +184,7 @@ export function createTimelineController(input: {
   const remove = async (id: string) => {
     const session = data.session.get(id)
     if (!session) return false
-    const sessions = sync().data.session.filter((item) => !item.parentID && !item.time?.archived)
+    const sessions = data.session.list().filter((item) => !item.parentID && !item.time?.archived)
     const index = sessions.findIndex((item) => item.id === id)
     const next = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
     const success = await sdk()
@@ -200,10 +195,8 @@ export function createTimelineController(input: {
         return false
       })
     if (!success) return false
-    const removed = timelineRemovedSessionIDs(sync().data.session, id)
+    const removed = timelineRemovedSessionIDs(data.session.list(), id)
     void navigateAfterRemoval(id, session.parentID, next?.id)
-    sync().set(produce((draft) => void (draft.session = draft.session.filter((item) => !removed.has(item.id)))))
-    removed.forEach((sessionID) => sync().session.evict(sessionID))
     notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: [...removed] })
     return true
   }
@@ -260,8 +253,8 @@ export function createTimelineController(input: {
     on(
       () => [input.session.data.parentID(), childTaskDescription()] as const,
       ([id, description]) => {
-        if (!id || description || sync().data.message[id] !== undefined) return
-        void Promise.all([data.session.sync(id), sync().session.sync(id)])
+        if (!id || description || data.session.message.list(id).length > 0) return
+        void Promise.all([data.session.sync(id), data.session.message.sync(id)])
       },
       { defer: true },
     ),

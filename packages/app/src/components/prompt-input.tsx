@@ -28,7 +28,6 @@ import {
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useData } from "@/context/server"
-import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
@@ -118,7 +117,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
   const data = useData()
 
-  const sync = useSync()
   const files = useFile()
   const prompt = props.state ?? usePrompt()
   const layout = useLayout()
@@ -186,15 +184,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     normalizeTab: (tab) => (tab.startsWith("file://") ? files.tab(tab) : tab),
   }).activeFileTab
 
-  const commentInReview = (path: string) => {
-    const sessionID = props.controls.session.id
-    if (!sessionID) return false
-
-    const diffs = sync().data.session_diff[sessionID]
-    if (!diffs) return false
-    return diffs.some((diff) => diff.file === path)
-  }
-
   const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {
     if (!item.commentID) return
 
@@ -218,7 +207,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       schedule(attempts)
     }
 
-    const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
+    const wantsReview = item.commentOrigin === "review"
     if (wantsReview) {
       if (!props.controls.session.reviewPanel.opened()) props.controls.session.reviewPanel.open()
       layout.fileTree.setTab("changes")
@@ -312,9 +301,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const hasUserPrompt = createMemo(() => {
     const sessionID = props.controls.session.id
     if (!sessionID) return false
-    const messages = sync().data.message[sessionID]
-    if (!messages) return false
-    return messages.some((m) => m.role === "user")
+    return data.session.message.list(sessionID).some((message) => message.type === "user")
   })
 
   const history = props.history ?? createPersistedPromptInputHistory()
@@ -567,8 +554,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     reference.source.type === "git" ? reference.source.repository : reference.source.path
 
   const referenceList = createMemo(() =>
-    sync()
-      .data.reference.filter((reference) => !reference.hidden)
+    (data.location.reference.list({ directory: sdk().directory }) ?? [])
+      .filter((reference) => !reference.hidden)
       .map(
         (reference): AtOption => ({
           type: "reference",
