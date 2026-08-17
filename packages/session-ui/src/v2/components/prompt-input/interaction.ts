@@ -302,6 +302,9 @@ export function createPromptInputV2Controller(input: {
       return draft.state.prompt
     },
     addPart,
+    insertText(value: string) {
+      insertEditorText(editor, value, "insertLineBreak")
+    },
     contextItem(id: string) {
       return draft.state.context.items.find((item) => item.key === id)
     },
@@ -385,19 +388,7 @@ export function createPromptInputV2Controller(input: {
       const text = clipboard?.getData("text/plain")
       if (!text) return
       event.preventDefault()
-      if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return
-      const target = event.currentTarget
-      const selection = window.getSelection()
-      if (!(target instanceof HTMLElement) || !selection?.rangeCount || !target.contains(selection.anchorNode)) return
-      const range = selection.getRangeAt(0)
-      range.deleteContents()
-      const node = document.createTextNode(text)
-      range.insertNode(node)
-      range.setStartAfter(node)
-      range.collapse(true)
-      selection.removeAllRanges()
-      selection.addRange(range)
-      target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: text }))
+      insertEditorText(event.currentTarget, text, "insertFromPaste")
     },
     onDragEnter(event: DragEvent) {
       event.preventDefault()
@@ -433,6 +424,27 @@ export function createPromptInputV2Controller(input: {
 }
 
 export type PromptInputV2Interaction = ReturnType<typeof createPromptInputV2Controller>
+
+function insertEditorText(
+  target: EventTarget | null | undefined,
+  text: string,
+  inputType: "insertLineBreak" | "insertFromPaste",
+) {
+  if (!(target instanceof HTMLElement)) return
+  const selection = window.getSelection()
+  if (!selection?.rangeCount) return
+  const range = selection.getRangeAt(0)
+  if (!target.contains(range.startContainer) || !target.contains(range.endContainer)) return
+  if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return
+  range.deleteContents()
+  const node = document.createTextNode(text)
+  range.insertNode(node)
+  range.setStartAfter(node)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType, data: text }))
+}
 
 function canNavigateHistory(direction: "up" | "down", text: string, cursor: number, inHistory: boolean) {
   const position = Math.max(0, Math.min(cursor, text.length))

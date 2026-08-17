@@ -22,6 +22,7 @@ import type {
   PromptInputV2Suggestion,
 } from "./types"
 import type { PromptInputV2Interaction, PromptInputV2SelectControl } from "./interaction"
+import { resolvePromptInputV2KeyAction, type PromptInputV2Keybinds } from "./keybind"
 import "./attachments.css"
 
 export type {
@@ -45,6 +46,8 @@ export type PromptInputV2Props = {
   variantControlVisible?: boolean
   attachKeybind?: string[]
   attachShortcut?: string
+  keybinds?: PromptInputV2Keybinds
+  submitKeybind?: string[]
 }
 
 export function PromptInputV2(props: PromptInputV2Props) {
@@ -53,6 +56,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
   const view = props.controller.view
   let editor: HTMLDivElement | undefined
   let localInput = false
+  let composing = false
   const updateCursor = () => {
     if (!editor || !window.getSelection()?.isCollapsed) return
     props.controller.onCursor(promptInputV2Cursor(editor))
@@ -63,6 +67,18 @@ export function PromptInputV2(props: PromptInputV2Props) {
     "pointer-events": mode() === "normal" ? ("auto" as const) : ("none" as const),
     transition: "opacity 200ms ease",
   }))
+  const submitPrompt = (event: KeyboardEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.repeat) return
+    const popover = state.popover
+    if (popover.type !== "closed") {
+      const item = props.controller.suggestions().find((entry) => entry.id === popover.activeID)
+      if (item) props.controller.dispatch({ type: "popover.select", item })
+      return
+    }
+    props.controller.submit()
+  }
 
   createEffect(() => {
     const parts = props.controller.parts()
@@ -176,13 +192,26 @@ export function PromptInputV2(props: PromptInputV2Props) {
               props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
             }}
             onKeyDown={(event) => {
-              if (props.controller.onKeyDown(event)) return
-              if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+              const ime = event.isComposing || composing || event.keyCode === 229
+              const action = props.keybinds ? resolvePromptInputV2KeyAction(event, props.keybinds, ime) : undefined
+              if (action === "newline") {
                 event.preventDefault()
-                if (event.repeat) return
-                props.controller.submit()
+                event.stopPropagation()
+                props.controller.insertText("\n")
+                return
               }
+              if (ime) return
+              if (action === "submit") return submitPrompt(event)
+              if (props.controller.onKeyDown(event)) return
+              if (props.keybinds && event.key === "Enter") {
+                event.preventDefault()
+                event.stopPropagation()
+                return
+              }
+              if (!props.keybinds && event.key === "Enter" && !event.shiftKey) return submitPrompt(event)
             }}
+            onCompositionStart={() => (composing = true)}
+            onCompositionEnd={() => (composing = false)}
             onKeyUp={updateCursor}
             onPointerUp={updateCursor}
             onPaste={props.controller.onPaste}
@@ -267,6 +296,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             accent={props.accentSubmit}
             sendLabel={i18n.t("ui.promptInput.send")}
             stopLabel={i18n.t("ui.promptInput.stop")}
+            sendKeybind={props.submitKeybind}
             onSubmit={props.controller.submit}
             onStop={props.controller.stop}
           />
@@ -683,6 +713,7 @@ export function PromptInputV2SubmitButton(props: {
   accent?: boolean
   sendLabel: string
   stopLabel: string
+  sendKeybind?: string[]
   onSubmit: () => void
   onStop: () => void
 }) {
@@ -690,7 +721,18 @@ export function PromptInputV2SubmitButton(props: {
     <TooltipV2
       placement="top"
       inactive={!props.stopping && props.disabled}
-      value={props.stopping ? props.stopLabel : props.sendLabel}
+      value={
+        props.stopping ? (
+          props.stopLabel
+        ) : (
+          <>
+            {props.sendLabel}
+            <Show when={props.sendKeybind?.length}>
+              <KeybindV2 keys={props.sendKeybind ?? []} variant="neutral" />
+            </Show>
+          </>
+        )
+      }
     >
       <IconButton
         data-action="prompt-submit"
