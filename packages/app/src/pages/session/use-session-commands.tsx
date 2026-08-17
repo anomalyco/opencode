@@ -7,7 +7,8 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePermission } from "@/context/permission"
 import { usePrompt } from "@/context/prompt"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
+import { useServerSDK } from "@/context/server-sdk"
 import { useSettings } from "@/context/settings"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
@@ -49,7 +50,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const language = useLanguage()
   const permission = usePermission()
   const prompt = usePrompt()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
+  const serverSDK = useServerSDK()
   const settings = useSettings()
   const terminal = useTerminal()
   const layout = useLayout()
@@ -183,7 +185,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     try {
       const data = await fetchSessionExport({
         sessionID,
-        api: sdk().api,
+        api: serverSDK.api,
       })
       const filename = sessionExportFilename(data.info)
       downloadSessionExport(filename, data)
@@ -277,7 +279,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = actions.session.identity.params.id
     if (!sessionID) return
 
-    await sdk().api.session.compact({ sessionID })
+    await serverSDK.api.session.compact({ sessionID })
   }
 
   const fork = () => {

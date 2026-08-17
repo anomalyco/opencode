@@ -16,7 +16,7 @@ import {
 } from "@/components/prompt-project-selector"
 import { StatusPopoverV2 } from "@/components/status-popover"
 import { useLanguage } from "@/context/language"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useProviders } from "@/hooks/use-providers"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 import { Persist, persisted } from "@/utils/persist"
@@ -105,7 +105,7 @@ export function NewSessionStatus(props: { mount: HTMLElement | null; visible: bo
 function ProviderTip() {
   const language = useLanguage()
   const dialog = useDialog()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const providers = useProviders(() => sdk().directory)
   const [persistedState, setPersistedState, , persistedReady] = persisted(
     Persist.global("new-session.provider-tip"),

@@ -9,7 +9,7 @@ import { useLayout } from "@/context/layout"
 import { useLocal, type ModelSelection } from "@/context/local"
 import { useServerSDK } from "@/context/server-sdk"
 import { serverName, ServerConnection, useServers } from "@/context/servers"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useTabs } from "@/context/tabs"
 import { useProviders } from "@/hooks/use-providers"
 import { useData } from "@/context/server"
@@ -22,7 +22,7 @@ export function createPromptInputController(input: {
 }) {
   const layout = useLayout()
   const local = useLocal()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const data = useData()
   const providers = useProviders(() => sdk().directory)
   const view = layout.view(input.sessionKey)
@@ -54,7 +54,7 @@ export function createPromptInputController(input: {
 export function createPromptProjectControls(props: { draftId: string }) {
   const server = useServers()
   const serverSDK = useServerSDK()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const tabs = useTabs()
   const global = useGlobal()
   const pickDirectory = useDirectoryPicker()

@@ -26,7 +26,7 @@ import {
   FileAttachmentPart,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useData } from "@/context/server"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -114,7 +114,7 @@ const EXAMPLES = [
 ] as const
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const data = useData()
 
   const files = useFile()

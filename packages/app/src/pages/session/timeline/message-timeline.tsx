@@ -52,7 +52,7 @@ import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useLanguage } from "@/context/language"
 import { useData } from "@/context/server"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
@@ -414,7 +414,7 @@ function MessageTimelineView(
   let touchGesture: number | undefined
   const language = useLanguage()
   const data = useData()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const shouldAnchorBottom = createMemo(() => props.shouldAnchorBottom)
   const hasScrollGesture = createMemo(() => props.hasScrollGesture)
   const ownerSessionKey = props.data.sessionKey()

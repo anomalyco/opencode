@@ -35,7 +35,7 @@ import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServersProvider, useServers } from "@/context/servers"
 import { SettingsProvider } from "@/context/settings"
 import { TabsProvider, useTabs, type DraftTab } from "@/context/tabs"
-import { SDKProvider } from "@/context/sdk"
+import { LocationProvider } from "@/context/location"
 import { WslServersProvider } from "@/wsl/context"
 import { DirectoryDataProvider } from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
@@ -109,13 +109,13 @@ function ResolvedDraftRoute(props: { draft: DraftTab }) {
         {(conn) => (
           <ServerProvider conn={conn}>
             <ModelsProvider directory={props.draft.directory}>
-              <SDKProvider directory={props.draft.directory}>
+              <LocationProvider directory={props.draft.directory}>
                 <DirectoryDataProvider directory={props.draft.directory} server={props.draft.server}>
                   <DraftProviders>
                     <NewSession draftId={props.draft.draftID} />
                   </DraftProviders>
                 </DirectoryDataProvider>
-              </SDKProvider>
+              </LocationProvider>
             </ModelsProvider>
           </ServerProvider>
         )}

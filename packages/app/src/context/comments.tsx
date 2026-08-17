@@ -9,7 +9,7 @@ import type { ServerScope } from "@/utils/server-scope"
 import { createScopedCache } from "@/utils/scoped-cache"
 import { uuid } from "@/utils/uuid"
 import type { SelectedLineRange } from "@/context/file"
-import { useSDK } from "./sdk"
+import { useWorkspaceLocation } from "./location"
 
 export type LineComment = {
   id: string
@@ -212,7 +212,7 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
   gate: false,
   init: () => {
     const params = useParams()
-    const sdk = useSDK()
+    const sdk = useWorkspaceLocation()
     const serverSDK = useServerSDK()
     const cache = createScopedCache(
       (key) => {

@@ -1,5 +1,5 @@
 import { createEffect, createMemo } from "solid-js"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useServerSDK } from "@/context/server-sdk"
 import { useData } from "@/context/server"
 import { useSettings } from "@/context/settings"
@@ -44,7 +44,7 @@ export function createNewSessionWorkspaceController(input: {
   setSelected: (worktree: string | undefined) => void
   onViewAll: () => void
 }) {
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const data = useData()
   const settings = useSettings()

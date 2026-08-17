@@ -1,6 +1,6 @@
 import { Show, createMemo } from "solid-js"
 import { DateTime } from "luxon"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useLanguage } from "@/context/language"
 import { useData } from "@/context/server"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -16,7 +16,7 @@ interface NewSessionViewProps {
 }
 
 export function NewSessionView(props: NewSessionViewProps) {
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const language = useLanguage()
   const data = useData()
 

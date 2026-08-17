@@ -15,7 +15,8 @@ import { showToast } from "@/utils/toast"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
+import { useServerSDK } from "@/context/server-sdk"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionContextFormatter } from "./session-context-format"
 
@@ -83,7 +84,8 @@ const emptyMessages: SessionMessageInfo[] = []
 export function SessionContextTab() {
   const data = useData()
   const language = useLanguage()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
+  const serverSDK = useServerSDK()
   const providers = useProviders(() => sdk().directory)
   const { params, view } = useSessionLayout()
 
@@ -195,7 +197,7 @@ export function SessionContextTab() {
     try {
       const data = await fetchSessionExport({
         sessionID,
-        api: sdk().api,
+        api: serverSDK.api,
       })
       const filename = sessionExportFilename(data.info)
       downloadSessionExport(filename, data)

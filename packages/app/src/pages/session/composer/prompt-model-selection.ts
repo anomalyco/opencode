@@ -3,11 +3,11 @@ import { useModels } from "@/context/models"
 import type { ModelKey, ModelSelection } from "@/context/local"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "@/context/model-variant"
 import { usePrompt } from "@/context/prompt"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useProviders } from "@/hooks/use-providers"
 
 export function createPromptModelSelection(input: { agent: () => { model?: ModelKey; variant?: string } | undefined }) {
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const models = useModels()
   const prompt = usePrompt()
   const providers = useProviders(() => sdk().directory)

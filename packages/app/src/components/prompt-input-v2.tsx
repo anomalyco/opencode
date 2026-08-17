@@ -22,7 +22,7 @@ import { useLayout } from "@/context/layout"
 import { usePermission } from "@/context/permission"
 import { type ImageAttachmentPart, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useData } from "@/context/server"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { showToast } from "@/utils/toast"
@@ -81,7 +81,7 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
 }
 
 export function usePromptInputV2Controller(props: PromptInputV2ControllerProps): PromptInputV2ComposerController {
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const data = useData()
   const files = useFile()
   const layout = useLayout()

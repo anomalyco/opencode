@@ -8,7 +8,8 @@ import type {
   SessionReviewCommentUpdate,
 } from "@opencode-ai/session-ui/session-review"
 import type { SelectedLineRange } from "@/context/file"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
+import { useServerSDK } from "@/context/server-sdk"
 import { useLayout } from "@/context/layout"
 import type { LineComment } from "@/context/comments"
 
@@ -49,12 +50,13 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
   let userInteracted = false
   let restored: { x: number; y: number } | undefined
 
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
+  const serverSDK = useServerSDK()
   const layout = useLayout()
 
   const readFile = async (path: string) => {
-    return sdk()
-      .api.file.read({ path, location: { directory: sdk().directory } })
+    return serverSDK.api.file
+      .read({ path, location: { directory: sdk().directory } })
       .then((data) => ({ type: "text" as const, content: new TextDecoder().decode(data) }))
       .catch((error) => {
         console.debug("[session-review] failed to read file", { path, error })

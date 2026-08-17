@@ -9,7 +9,8 @@ import { useLanguage } from "@/context/language"
 import { useLocal, type ModelSelection } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, type usePrompt } from "@/context/prompt"
-import { useSDK, type DirectorySDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
+import { useServerSDK, type ServerSDK } from "@/context/server-sdk"
 import { Identifier } from "@/utils/id"
 import { getDirectory } from "@opencode-ai/core/util/path"
 import { buildRequestParts } from "./build-request-parts"
@@ -33,7 +34,7 @@ export type FollowupDraft = {
 }
 
 type FollowupSendInput = {
-  api: DirectorySDK["api"]["session"]
+  api: ServerSDK["api"]["session"]
   data: Data
   session: Accessor<{ agent?: string; model?: { id: string; providerID: string; variant?: string } } | undefined>
   draft: FollowupDraft
@@ -191,7 +192,8 @@ type PromptSubmitInput = {
 
 export function createPromptSubmit(input: PromptSubmitInput) {
   const navigate = useNavigate()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
+  const serverSDK = useServerSDK()
   const data = useData()
   const local = useLocal()
   const permission = usePermission()
@@ -215,8 +217,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     if (!sessionID) return Promise.resolve()
     input.onAbort?.()
 
-    return sdk()
-      .api.session.interrupt({ sessionID })
+    return serverSDK.api.session.interrupt({ sessionID })
       .catch(() => {})
   }
 
@@ -275,8 +276,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     const submissionSDK = sdk()
+    const submissionServerSDK = serverSDK
     const submissionData = data
-    const submissionScope = submissionSDK.scope
+    const submissionScope = submissionServerSDK.scope
     const projectDirectory = submissionSDK.directory
     const sessionID = params.id
     const isNewSession = !sessionID
@@ -304,7 +306,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       let sessionDirectory = projectDirectory
       if (isNewSession) {
         if (worktreeSelection === "create") {
-          const createdWorktree = await submissionSDK.api.worktree
+          const createdWorktree = await submissionServerSDK.api.worktree
             .create({
               projectID: submissionData.location.info({ directory: projectDirectory })?.project.id ?? "",
               strategy: "git",
@@ -313,7 +315,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
               ),
             })
             .then(async (created) => {
-              await submissionSDK.api.location.get({ location: { directory: created.directory } })
+              await submissionServerSDK.api.location.get({ location: { directory: created.directory } })
               return created
             })
             .catch((err) => {
@@ -334,7 +336,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
       let session = currentSession
       if (!session && isNewSession) {
-        const created = await submissionSDK.api.session
+        const created = await submissionServerSDK.api.session
           .create({
             agent: currentAgent.name,
             model: { id: currentModel.id, providerID: currentModel.provider.id, variant },
@@ -429,7 +431,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       if (mode === "shell") {
         clearInput()
         const eventID = Event.ID.create()
-        void submissionSDK.api.session
+        void submissionServerSDK.api.session
           .shell({
             sessionID: session.id,
             id: eventID,
@@ -455,7 +457,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           clearInput()
           const messageID = Identifier.ascending("message")
           submissionData.session.setStatus(session.id, "running")
-          void submissionSDK.api.session
+          void submissionServerSDK.api.session
             .command({
               sessionID: session.id,
               id: messageID,
@@ -489,7 +491,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       clearInput()
 
       void sendFollowupDraft({
-        api: submissionSDK.api.session,
+        api: submissionServerSDK.api.session,
         data: submissionData,
         session: () => session,
         draft,

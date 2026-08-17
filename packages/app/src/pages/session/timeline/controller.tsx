@@ -11,7 +11,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useTabs } from "@/context/tabs"
 import type { SessionController } from "@/pages/session/session-controller"
 import { requireServerKey, sessionHref } from "@/utils/session-route"
@@ -46,7 +46,7 @@ export function createTimelineController(input: {
   userMessages: Accessor<UserMessage[]>
 }) {
   const navigate = useNavigate()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const server = useServer()
   const data = server.ctx.data
@@ -123,8 +123,8 @@ export function createTimelineController(input: {
     const next = title.trim()
     if (!next || next === (titleLabel() ?? "")) return true
     setPending("rename", true)
-    const success = await sdk()
-      .api.session.rename({ sessionID: id, title: next })
+    const success = await serverSDK.api.session
+      .rename({ sessionID: id, title: next })
       .then(() => true)
       .catch((error) => {
         showToast({ title: language.t("common.requestFailed"), description: errorMessage(error) })
@@ -164,7 +164,7 @@ export function createTimelineController(input: {
   }
   const exportSession = async (id: string) => {
     try {
-      const data = await fetchSessionExport({ sessionID: id, api: sdk().api })
+      const data = await fetchSessionExport({ sessionID: id, api: serverSDK.api })
       const filename = sessionExportFilename(data.info)
       downloadSessionExport(filename, data)
       showToast({
@@ -187,8 +187,8 @@ export function createTimelineController(input: {
     const sessions = data.session.list().filter((item) => !item.parentID && !item.time?.archived)
     const index = sessions.findIndex((item) => item.id === id)
     const next = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-    const success = await sdk()
-      .api.session.remove({ sessionID: id })
+    const success = await serverSDK.api.session
+      .remove({ sessionID: id })
       .then(() => true)
       .catch((error) => {
         showToast({ title: language.t("session.delete.failed.title"), description: errorMessage(error) })

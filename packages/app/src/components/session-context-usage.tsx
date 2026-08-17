@@ -11,7 +11,7 @@ import { useLayout } from "@/context/layout"
 import { useData } from "@/context/server"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { useSettings } from "@/context/settings"
@@ -46,7 +46,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const file = useFile()
   const layout = useLayout()
   const language = useLanguage()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const settings = useSettings()
   const providers = useProviders(() => sdk().directory)
   const { params, tabs, view } = useSessionLayout()

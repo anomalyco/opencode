@@ -103,15 +103,12 @@ type SDKEventMap = {
   [key in Event["type"]]: Extract<ServerEvent, { type: key }>
 }
 
-export type DirectorySDK = {
-  scope: ServerScope
+export type LocationContext = {
   directory: string
-  api: ServerApi
   event: ReturnType<typeof createGlobalEmitter<SDKEventMap>>
-  readonly url: string
 }
 
-function createDirSdkContext(directory: string, serverSDK: ServerSDKBase): DirectorySDK {
+function createDirSdkContext(directory: string, serverSDK: ServerSDKBase): LocationContext {
   const emitter = createGlobalEmitter<SDKEventMap>()
 
   const unsub = serverSDK.eventByDir.on(directory, (event) => {
@@ -120,12 +117,7 @@ function createDirSdkContext(directory: string, serverSDK: ServerSDKBase): Direc
   onCleanup(unsub)
 
   return {
-    scope: serverSDK.scope,
     directory,
-    api: serverSDK.api,
     event: emitter,
-    get url() {
-      return serverSDK.url
-    },
   }
 }

@@ -7,7 +7,7 @@ import FileTreeV2, { type Kind } from "@/components/file-tree-v2"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useServerSDK } from "@/context/server-sdk"
 import { displayName } from "@/pages/layout/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -39,7 +39,7 @@ export function SessionFileBrowserTab(props: {
   const file = useFile()
   const language = useLanguage()
   const layout = useLayout()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const server = useServer()
   const serverSDK = useServerSDK()
   const { workspaceKey } = useSessionLayout()

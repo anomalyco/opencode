@@ -204,15 +204,19 @@ beforeAll(async () => {
     usePrompt: () => prompt,
   }))
 
-  mock.module("@/context/sdk", () => ({
-    useSDK: () => {
+  mock.module("@/context/location", () => ({
+    useWorkspaceLocation: () => {
       return () => ({
-        scope: activeSDK === "server-a" ? ServerScope.local : "server-b",
         directory: activeSDK === "server-a" ? "/repo/main" : "/repo/other",
-        api: rootClient.api,
-        url: "http://localhost:4096",
       })
     },
+  }))
+
+  mock.module("@/context/server-sdk", () => ({
+    useServerSDK: () => ({
+      scope: activeSDK === "server-a" ? ServerScope.local : "server-b",
+      api: rootClient.api,
+    }),
   }))
 
   mock.module("@/context/server", () => ({

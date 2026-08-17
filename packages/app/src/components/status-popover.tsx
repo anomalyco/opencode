@@ -12,7 +12,7 @@ import {
   serverStatusDotClass,
 } from "./status-popover-indicator"
 import { useData, useServer } from "@/context/server"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 
 const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
 
@@ -21,7 +21,7 @@ export function StatusPopover() {
   const server = useServer()
   const global = useGlobal()
   const data = useData()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const [shown, setShown] = createSignal(false)
   const serverHealth = () => global.servers.health[server.key]?.healthy
   const mcp = () => data.location.mcp.server.list({ directory: sdk().directory })
@@ -87,7 +87,7 @@ export function StatusPopoverV2() {
   const server = useServer()
   const global = useGlobal()
   const data = useData()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const [shown, setShown] = createSignal(false)
   const serverHealth = () => global.servers.health[server.key]?.healthy
   const mcp = () => data.location.mcp.server.list({ directory: sdk().directory })

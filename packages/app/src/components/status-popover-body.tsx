@@ -3,8 +3,9 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { createMemo, createResource, For, type JSXElement, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useMcpToggle } from "@/context/mcp"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useData } from "@/context/server"
+import { useServerSDK } from "@/context/server-sdk"
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -20,7 +21,8 @@ const pluginEmptyMessage = (value: string, file: string): JSXElement => {
 
 export function StatusPopoverBody(props: { shown: boolean }) {
   const data = useData()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
+  const serverSDK = useServerSDK()
   const language = useLanguage()
 
   const toggleMcp = useMcpToggle(() => sdk().directory)
@@ -31,8 +33,8 @@ export function StatusPopoverBody(props: { shown: boolean }) {
   const [pluginList] = createResource(
     () => (props.shown ? sdk().directory : undefined),
     (directory) =>
-      sdk()
-        .api.plugin.list({ location: { directory } })
+      serverSDK.api.plugin
+        .list({ location: { directory } })
         .then((result) => result.data),
   )
   const plugins = createMemo(() => (pluginList.latest ?? []).map((item) => item.id))

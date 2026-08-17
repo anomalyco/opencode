@@ -5,7 +5,7 @@ import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, type ParentProps, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
-import { SDKProvider } from "@/context/sdk"
+import { LocationProvider } from "@/context/location"
 import { decode64 } from "@/utils/base64"
 import { Schema } from "effect"
 import type { ServerConnection } from "@/context/servers"
@@ -120,9 +120,9 @@ export default function Layout(props: ParentProps) {
   return (
     <Show when={resolved()} keyed>
       {(resolved) => (
-        <SDKProvider directory={resolved}>
+        <LocationProvider directory={resolved}>
           <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
-        </SDKProvider>
+        </LocationProvider>
       )}
     </Show>
   )

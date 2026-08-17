@@ -1,6 +1,6 @@
 import { Component, createMemo, Show } from "solid-js"
 import { useData } from "@/context/server"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
@@ -16,7 +16,7 @@ const statusLabels = {
 
 export const DialogSelectMcp: Component = () => {
   const data = useData()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const language = useLanguage()
 
   const items = createMemo(() =>

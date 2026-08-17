@@ -9,7 +9,7 @@ import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
 import { hasCustomAgent, resolveAgent } from "./local-agent"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
-import { useSDK } from "./sdk"
+import { useWorkspaceLocation } from "./location"
 import { useData } from "./server"
 import { normalizeAgentList } from "./global-sync/utils"
 import { useServerSDK } from "./server-sdk"
@@ -60,7 +60,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
     const params = useParams()
-    const sdk = useSDK()
+    const sdk = useWorkspaceLocation()
     const data = useData()
     const serverSDK = useServerSDK()
     const providers = useProviders(() => sdk().directory)

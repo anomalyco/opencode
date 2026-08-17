@@ -4,7 +4,7 @@ import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { type Component, For, Show, createEffect, createMemo, createResource, createSignal } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useMcpToggle } from "@/context/mcp"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useServerSDK } from "@/context/server-sdk"
 import { useData } from "@/context/server"
 import { ExternalLink } from "./external-link"
@@ -64,7 +64,7 @@ const SharedSection: Component<{
 export const ProjectSettingsExtensions: Component = () => {
   const language = useLanguage()
   const serverSDK = useServerSDK()
-  const directorySDK = useSDK()
+  const directorySDK = useWorkspaceLocation()
   const data = useData()
   const toggleMcp = useMcpToggle(() => directorySDK().directory)
 

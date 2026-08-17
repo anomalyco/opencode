@@ -7,7 +7,7 @@ import { showToast } from "@/utils/toast"
 import { useServerSDK } from "@/context/server-sdk"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { sessionPermissionRequest, sessionQuestionForm } from "./session-request-tree"
 import { useData } from "@/context/server"
 
@@ -28,7 +28,7 @@ const idle = { type: "idle" as const }
 
 export function createSessionComposerController(options?: { closeMs?: number | (() => number) }) {
   const params = useParams()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const data = useData()
   const language = useLanguage()
@@ -166,8 +166,8 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     if (!primary()) return
     const sessionID = params.id
     if (!sessionID) return
-    await sdk()
-      .api.session.background({ sessionID })
+    await serverSDK.api.session
+      .background({ sessionID })
       .catch((error) => {
         showToast({
           title: language.t("common.requestFailed"),
@@ -196,8 +196,8 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     if (store.responding === perm.id) return
 
     setStore("responding", perm.id)
-    sdk()
-      .api.permission.reply({ sessionID: perm.sessionID, requestID: perm.id, reply: response })
+    serverSDK.api.permission
+      .reply({ sessionID: perm.sessionID, requestID: perm.id, reply: response })
       .catch((err: unknown) => {
         const description = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description })

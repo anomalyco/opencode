@@ -8,7 +8,6 @@ import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { showToast } from "@/utils/toast"
 import type { FormAnswer, FormInfo, FormMultiselectField, FormStringField } from "@opencode-ai/client/promise"
 import { useLanguage } from "@/context/language"
-import { useSDK } from "@/context/sdk"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useServerSDK } from "@/context/server-sdk"
@@ -68,7 +67,6 @@ function Option(props: {
 }
 
 export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () => void }> = (props) => {
-  const sdk = useSDK()
   const serverSDK = useServerSDK()
   const language = useLanguage()
   const cacheKey = ScopedKey.from(serverSDK.scope, props.request.id)
@@ -238,7 +236,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
   const replyMutation = useMutation(() => ({
     mutationFn: (answer: FormAnswer) =>
-      sdk().api.form.reply({ sessionID: props.request.sessionID, formID: props.request.id, answer }),
+      serverSDK.api.form.reply({ sessionID: props.request.sessionID, formID: props.request.id, answer }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -250,7 +248,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   }))
 
   const rejectMutation = useMutation(() => ({
-    mutationFn: () => sdk().api.form.cancel({ sessionID: props.request.sessionID, formID: props.request.id }),
+    mutationFn: () => serverSDK.api.form.cancel({ sessionID: props.request.sessionID, formID: props.request.id }),
     onMutate: () => {
       props.onSubmit()
     },

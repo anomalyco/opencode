@@ -1,6 +1,5 @@
 import { Component, createMemo } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
-import { useSDK } from "@/context/sdk"
 import { useData } from "@/context/server"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -25,7 +24,6 @@ export const DialogFork: Component = () => {
   const params = useParams()
   const navigate = useNavigate()
   const data = useData()
-  const sdk = useSDK()
   const serverSDK = useServerSDK()
   const dialog = useDialog()
   const language = useLanguage()
@@ -56,8 +54,8 @@ export const DialogFork: Component = () => {
     const sessionID = params.id
     if (!sessionID) return
 
-    sdk()
-      .api.session.fork({ sessionID, boundary: { type: "before", messageID: item.id } })
+    serverSDK.api.session
+      .fork({ sessionID, boundary: { type: "before", messageID: item.id } })
       .then((forked) => {
         dialog.close()
         navigate(sessionHref(ServerConnection.key(serverSDK.server), forked.id))

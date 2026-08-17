@@ -16,7 +16,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSettings } from "@/context/settings"
 import { useTerminal } from "@/context/terminal"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
@@ -26,7 +26,7 @@ export function TerminalPanel() {
   const delays = [120, 240]
   const layout = useLayout()
   const terminal = useTerminal()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const language = useLanguage()
   const command = useCommand()
   const settings = useSettings()

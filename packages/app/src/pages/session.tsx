@@ -53,7 +53,7 @@ import { ModelsProvider } from "@/context/models"
 import { useNotification } from "@/context/notification"
 import { PromptProvider, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
-import { SDKProvider, useSDK } from "@/context/sdk"
+import { LocationProvider, useWorkspaceLocation } from "@/context/location"
 import { useServerSDK } from "@/context/server-sdk"
 import { ServerConnection, serverName, useServers } from "@/context/servers"
 import { useSettings } from "@/context/settings"
@@ -237,11 +237,11 @@ function ResolvedTargetSessionRoute() {
     // targets resolve synchronously from the sync cache.
     <Show when={directory()}>
       {(dir) => (
-        <SDKProvider directory={dir()}>
+        <LocationProvider directory={dir()}>
           <DirectoryDataProvider directory={dir()} server={serverKey()}>
             <TargetSessionPage />
           </DirectoryDataProvider>
-        </SDKProvider>
+        </LocationProvider>
       )}
     </Show>
   )
@@ -251,10 +251,10 @@ function ResolvedTargetSessionRoute() {
 // key: SessionPage handles session changes reactively, and remounting here
 // destroys workspace-scoped state (terminal PTYs, file/prompt providers).
 function TargetSessionPage() {
-  const sdk = useSDK()
+  const location = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   return (
-    <Show when={`${serverSDK.scope}\0${sdk().directory}`} keyed>
+    <Show when={`${serverSDK.scope}\0${location().directory}`} keyed>
       <TerminalProvider>
         <FileProvider>
           <PromptProvider>
@@ -311,7 +311,7 @@ export default function Page() {
   const queryClient = useQueryClient()
   const dialog = useDialog()
   const language = useLanguage()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const settings = useSettings()
   const platform = usePlatform()
@@ -600,8 +600,10 @@ export default function Page() {
       refetchOnWindowFocus: true,
       queryFn: mode
         ? () =>
-            sdk()
-              .api.vcs.diff({ location: { directory: sdk().directory }, mode: mode === "git" ? "working" : mode })
+            serverSDK.api.vcs.diff({
+              location: { directory: sdk().directory },
+              mode: mode === "git" ? "working" : mode,
+            })
               .then((result) => result.data)
         : skipToken,
     }
@@ -610,8 +612,8 @@ export default function Page() {
     queryKey: [serverSDK.scope, "session-details", sessionDirectory()] as const,
     enabled: store.sessionDetailsOpen && serverSDK.connection.status() === "connected" && project()?.vcs === "git",
     queryFn: () =>
-      sdk()
-        .api.vcs.diff({ location: { directory: sessionDirectory() }, mode: "working" })
+      serverSDK.api.vcs
+        .diff({ location: { directory: sessionDirectory() }, mode: "working" })
         .then((result) => result.data)
         .catch((error) => {
           console.debug("[session-review] failed to load session details diff", { error })
@@ -675,8 +677,8 @@ export default function Page() {
           staleTime: Number.POSITIVE_INFINITY,
           retry: 2,
           queryFn: () =>
-            sdk()
-              .api.vcs.diff({
+            serverSDK.api.vcs
+              .diff({
                 location: { directory: scope },
                 mode: mode === "git" ? "working" : mode,
                 context,
