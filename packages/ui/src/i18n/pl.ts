@@ -220,4 +220,9 @@ export const dict = {
   "ui.toolErrorCard.copyError": "Kopiuj błąd",
   "ui.message.duration.seconds": "{{count}} s",
   "ui.message.duration.minutesSeconds": "{{minutes}} min {{seconds}} s",
+  "ui.messagePart.context.match.one": "({{count}} dopasowanie)",
+  "ui.messagePart.context.match.other": "({{count}} dopasowania)",
+  "ui.tool.execute": "Wykonaj",
+  "ui.messagePart.context.match.few": "({{count}} dopasowania)",
+  "ui.messagePart.context.match.many": "({{count}} dopasowań)",
 }

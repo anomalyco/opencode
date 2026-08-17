@@ -228,4 +228,11 @@ export const dict = {
   "ui.toolErrorCard.copyError": "نسخ الخطأ",
   "ui.message.duration.seconds": "{{count}}ث",
   "ui.message.duration.minutesSeconds": "{{minutes}}د {{seconds}}ث",
+  "ui.messagePart.context.match.zero": "(عدد التطابقات: {{count}})",
+  "ui.messagePart.context.match.one": "({{count}} تطابق)",
+  "ui.messagePart.context.match.two": "(عدد التطابقات: {{count}})",
+  "ui.messagePart.context.match.few": "({{count}} تطابقات)",
+  "ui.messagePart.context.match.many": "({{count}} تطابقًا)",
+  "ui.messagePart.context.match.other": "(التطابقات: {{count}})",
+  "ui.tool.execute": "تنفيذ",
 }

@@ -191,4 +191,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "የሚመለከተውን ሁሉንም መልሶች ይምረጡ",
   "ui.question.singleHint": "አንድ መልስ ምረጥ",
   "ui.question.custom.placeholder": "መልስዎን ይተይቡ…",
+  "ui.messagePart.context.match.one": "({{count}} ተዛማጅ)",
+  "ui.messagePart.context.match.other": "({{count}} ተዛማጆች)",
+  "ui.tool.execute": "አስፈጽም",
 }

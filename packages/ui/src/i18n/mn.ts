@@ -192,4 +192,7 @@ export const dict = {
   "ui.question.multiHint": "Холбогдох бүх хариултыг сонгоно уу",
   "ui.question.singleHint": "Нэг хариултыг сонгоно уу",
   "ui.question.custom.placeholder": "Хариугаа бичнэ үү…",
+  "ui.messagePart.context.match.one": "({{count}} тохирол)",
+  "ui.messagePart.context.match.other": "({{count}} тохирол)",
+  "ui.tool.execute": "Ажиллуулах",
 }

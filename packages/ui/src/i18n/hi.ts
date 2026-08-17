@@ -194,4 +194,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "लागू होने वाले सभी उत्तर चुनें",
   "ui.question.singleHint": "एक उत्तर चुनें",
   "ui.question.custom.placeholder": "अपना उत्तर लिखें…",
+  "ui.messagePart.context.match.one": "({{count}} मिलान)",
+  "ui.messagePart.context.match.other": "({{count}} मिलान)",
+  "ui.tool.execute": "निष्पादित करें",
 }

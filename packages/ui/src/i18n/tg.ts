@@ -192,4 +192,7 @@ export const dict = {
   "ui.question.multiHint": "Ҳамаи ҷавобҳои мувофиқро интихоб кунед",
   "ui.question.singleHint": "Як ҷавобро интихоб кунед",
   "ui.question.custom.placeholder": "Ҷавоби худро нависед…",
+  "ui.messagePart.context.match.one": "({{count}} мувофиқат)",
+  "ui.messagePart.context.match.other": "({{count}} мувофиқат)",
+  "ui.tool.execute": "Иҷро кардан",
 }

@@ -192,4 +192,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "აირჩიეთ ყველა შესაბამისი პასუხი",
   "ui.question.singleHint": "აირჩიეთ ერთი პასუხი",
   "ui.question.custom.placeholder": "აკრიფეთ თქვენი პასუხი…",
+  "ui.messagePart.context.match.one": "({{count}} დამთხვევა)",
+  "ui.messagePart.context.match.other": "({{count}} დამთხვევა)",
+  "ui.tool.execute": "შესრულება",
 }

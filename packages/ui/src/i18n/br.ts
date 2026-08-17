@@ -216,4 +216,9 @@ export const dict = {
   "ui.toolErrorCard.copyError": "Copiar erro",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
+
+  "ui.messagePart.context.match.one": "(correspondência {{count}})",
+  "ui.messagePart.context.match.other": "(correspondências {{count}})",
+  "ui.tool.execute": "Executar",
+  "ui.messagePart.context.match.many": "({{count}} correspondências)",
 }

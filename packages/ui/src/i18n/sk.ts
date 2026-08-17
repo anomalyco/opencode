@@ -200,4 +200,9 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Vyberte všetky platné odpovede",
   "ui.question.singleHint": "Vyberte jednu odpoveď",
   "ui.question.custom.placeholder": "Napíšte svoju odpoveď…",
+  "ui.messagePart.context.match.one": "({{count}} zhoda)",
+  "ui.messagePart.context.match.other": "({{count}} zhôd)",
+  "ui.tool.execute": "Spustiť",
+  "ui.messagePart.context.match.few": "({{count}} zhody)",
+  "ui.messagePart.context.match.many": "({{count}} zhody)",
 }

@@ -211,4 +211,8 @@ export const dict = {
   "ui.promptInput.stop": "Stop",
 
   "ui.tabs.close": "Luk fane",
+
+  "ui.messagePart.context.match.one": "({{count}} resultat)",
+  "ui.messagePart.context.match.other": "({{count}} resultater)",
+  "ui.tool.execute": "Udfør",
 }
