@@ -5,7 +5,7 @@ import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Command } from "@opencode-ai/schema/command"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Stream, Types } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -196,7 +196,6 @@ export const layer = (options?: Options) =>
       // Serializes lifecycle operations per server. Anything taking this lock from a connection
       // callback must stay forked: lifecycle operations close scopes while holding it, firing onClose.
       const locks = KeyedMutex.makeUnsafe<ServerName>()
-      const reloadLock = Semaphore.makeUnsafe(1)
       const urlElicitations = new Map<string, Form.ID>()
 
       // Register every remote server as an OAuth integration so credentials live in the global store
@@ -422,13 +421,11 @@ export const layer = (options?: Options) =>
 
       const refreshPrompts = (name: ServerName, entry: ServerEntry, connection: MCPClient.Connection) =>
         connection.prompts().pipe(
+          Effect.catch(() => Effect.succeed([])),
           Effect.map((defs) => {
             entry.prompts = defs.map((def) => toPrompt(name, def))
           }),
           Effect.andThen(bus.publish(Command.Event.Updated, {})),
-          Effect.catch(() =>
-            Effect.sync(() => (entry.prompts = [])).pipe(Effect.andThen(bus.publish(Command.Event.Updated, {}))),
-          ),
         )
 
       // Runs a connection callback under the server lock, dropping it if the connection is no longer
@@ -588,54 +585,45 @@ export const layer = (options?: Options) =>
         yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
       })
 
-      const configured = {
-        initialized: false,
-        servers: new Map<ServerName, Mcp.ServerConfig>(),
-      }
+      let applied: Map<ServerName, Mcp.ServerConfig> | undefined
       const overrides = new Map<ServerName, Mcp.ServerConfig | false>()
       const reconcile = Effect.fnUntraced(function* (next: Draft) {
-        yield* reloadLock.withPermit(
-          Effect.gen(function* () {
-            const servers = new Map(next.list())
-            if (!configured.initialized && entries.size === 0) {
-              for (const [name, server] of servers) {
-                entries.set(name, {
-                  config: server,
-                  status: { status: "pending" },
-                  startup: Deferred.makeUnsafe<void>(),
-                })
-              }
-              yield* Effect.forEach(entries, ([name, entry]) => register(name, entry), { discard: true })
-              configured.initialized = true
-              configured.servers = new Map(servers)
+        const servers = new Map(next.list())
+        if (!applied && entries.size === 0) {
+          for (const [name, server] of servers) {
+            entries.set(name, {
+              config: server,
+              status: { status: "pending" },
+              startup: Deferred.makeUnsafe<void>(),
+            })
+          }
+          yield* Effect.forEach(entries, ([name, entry]) => register(name, entry), { discard: true })
+          applied = servers
 
-              // Initial connections stay asynchronous so one slow server does not block Location startup.
-              for (const [name, entry] of entries) {
-                if (entry.config.disabled) {
-                  entry.status = { status: "disabled" }
-                  Deferred.doneUnsafe(entry.startup, Exit.void)
-                  continue
-                }
-                fork(startServer(name, entry).pipe(locks.withLock(name)))
-              }
-              return
+          // Initial connections stay asynchronous so one slow server does not block Location startup.
+          for (const [name, entry] of entries) {
+            if (entry.config.disabled) {
+              entry.status = { status: "disabled" }
+              Deferred.doneUnsafe(entry.startup, Exit.void)
+              continue
             }
+            fork(startServer(name, entry).pipe(locks.withLock(name)))
+          }
+          return
+        }
 
-            const names = new Set([...configured.servers.keys(), ...servers.keys()])
-            for (const name of names) {
-              const previous = configured.servers.get(name)
-              const updated = servers.get(name)
-              if (isDeepStrictEqual(previous, updated)) continue
-              if (!updated) {
-                yield* removeServer(name).pipe(locks.withLock(name))
-                continue
-              }
-              yield* replaceServer(name, updated).pipe(locks.withLock(name))
-            }
-            configured.initialized = true
-            configured.servers = new Map(servers)
-          }),
-        )
+        const names = new Set([...(applied?.keys() ?? []), ...servers.keys()])
+        for (const name of names) {
+          const previous = applied?.get(name)
+          const updated = servers.get(name)
+          if (isDeepStrictEqual(previous, updated)) continue
+          if (!updated) {
+            yield* removeServer(name).pipe(locks.withLock(name))
+            continue
+          }
+          yield* replaceServer(name, updated).pipe(locks.withLock(name))
+        }
+        applied = servers
       })
 
       // Bring a server online (or back to needs_auth) when its integration's credential changes, so an
