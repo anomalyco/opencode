@@ -190,10 +190,20 @@ export const AssistantReasoning = Schema.Struct({
   }).pipe(optional),
 }).annotate({ identifier: "Session.Message.Assistant.Reasoning" })
 
-export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantTool]).pipe(
+export interface AssistantFile extends Schema.Schema.Type<typeof AssistantFile> {}
+export const AssistantFile = Schema.Struct({
+  type: Schema.tag("file"),
+  id: Schema.String,
+  mime: Schema.String,
+  filename: Schema.String.pipe(optional),
+  url: Schema.String,
+  state: ProviderState.pipe(optional),
+}).annotate({ identifier: "Session.Message.Assistant.File" })
+
+export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantFile, AssistantTool]).pipe(
   Schema.toTaggedUnion("type"),
 )
-export type AssistantContent = AssistantText | AssistantReasoning | AssistantTool
+export type AssistantContent = AssistantText | AssistantReasoning | AssistantFile | AssistantTool
 
 export interface AssistantRetry extends Schema.Schema.Type<typeof AssistantRetry> {}
 export const AssistantRetry = Schema.Struct({

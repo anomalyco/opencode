@@ -285,6 +285,19 @@ function assistantParts(sessionID: string, message: SessionMessageAssistant): Pa
       }
       return content.text.trim() ? [part] : []
     }
+    if (content.type === "file") {
+      return [
+        {
+          id: content.id,
+          sessionID,
+          messageID: message.id,
+          type: "file",
+          mime: content.mime,
+          filename: content.filename,
+          url: content.url,
+        },
+      ]
+    }
     return [toolPart(sessionID, message.id, content)]
   })
 }

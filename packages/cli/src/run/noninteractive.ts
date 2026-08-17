@@ -571,6 +571,7 @@ export async function runNonInteractivePrompt(input: Input) {
           writeReasoning(part, timestamp)
           continue
         }
+        if (item.type === "file") continue
 
         const key = toolKey(message.id, item.id)
         if (renderedTools.has(key) || item.state.status === "streaming" || item.state.status === "running") continue

@@ -223,6 +223,55 @@ describe("v2 session reducer", () => {
     })
   })
 
+  test("projects model-generated files into live assistant content", () => {
+    const reducer = createV2SessionReducer()
+    let messages: SessionMessageInfo[] = []
+    const apply = (input: object) => {
+      const result = reducer.reduce(messages, event(input))
+      if (result) messages = result.messages
+      return result
+    }
+
+    apply({
+      ...base,
+      id: "evt_step",
+      type: "session.step.started",
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_assistant",
+        agent: "build",
+        model: { id: "image-model", providerID: "google" },
+      },
+    })
+    const generated = {
+      ...base,
+      id: "evt_file",
+      type: "session.file.generated",
+      data: {
+        sessionID: "ses_1",
+        assistantMessageID: "msg_assistant",
+        file: {
+          type: "file",
+          id: "generated-msg_assistant-0",
+          mime: "image/jpeg",
+          filename: "generated-msg_assistant-0.jpg",
+          url: "data:image/jpeg;base64,/9j/",
+        },
+      },
+    }
+    const result = apply(generated)
+    apply(generated)
+
+    expect(result?.touched).toEqual(["msg_assistant"])
+    expect(messages).toEqual([
+      expect.objectContaining({
+        id: "msg_assistant",
+        type: "assistant",
+        content: [generated.data.file],
+      }),
+    ])
+  })
+
   test("requests hydration when promotion admission was missed", () => {
     const result = createV2SessionReducer().reduce(
       [],

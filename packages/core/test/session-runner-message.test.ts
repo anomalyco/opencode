@@ -34,6 +34,9 @@ describe("toLLMMessages", () => {
       [
         assistant("empty", []),
         assistant("empty-text", [SessionMessage.AssistantText.make({ type: "text", text: "" })]),
+        assistant("empty-text-state", [
+          SessionMessage.AssistantText.make({ type: "text", text: "", state: { thoughtSignature: "sig_0" } }),
+        ]),
         assistant("empty-reasoning", [SessionMessage.AssistantReasoning.make({ type: "reasoning", text: "" })]),
         assistant("text", [SessionMessage.AssistantText.make({ type: "text", text: "Partial" })]),
         assistant("reasoning", [
@@ -47,7 +50,45 @@ describe("toLLMMessages", () => {
       model,
     )
 
-    expect(messages.map((message) => message.id)).toEqual([id("text"), id("reasoning")])
+    expect(messages.map((message) => message.id)).toEqual([id("empty-text-state"), id("text"), id("reasoning")])
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "", providerMetadata: { provider: { thoughtSignature: "sig_0" } } },
+    ])
+  })
+
+  test("restores generated file provider metadata", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("generated-file"),
+          type: "assistant",
+          agent: build,
+          model,
+          content: [
+            SessionMessage.AssistantFile.make({
+              type: "file",
+              id: "generated-image",
+              mime: "image/png",
+              filename: "generated-image.png",
+              url: "data:image/png;base64,aGVsbG8=",
+              state: { thoughtSignature: "image-signature" },
+            }),
+          ],
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      {
+        type: "media",
+        mediaType: "image/png",
+        data: "data:image/png;base64,aGVsbG8=",
+        filename: "generated-image.png",
+        providerMetadata: { provider: { thoughtSignature: "image-signature" } },
+      },
+    ])
   })
 
   test("maps every top-level Session message type", () => {

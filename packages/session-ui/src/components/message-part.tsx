@@ -1692,6 +1692,43 @@ PART_MAPPING["compaction"] = function CompactionPartDisplay() {
   return <MessageDivider label={i18n.t("ui.messagePart.compaction")} />
 }
 
+PART_MAPPING["file"] = function FilePartDisplay(props) {
+  const dialog = useDialog()
+  const i18n = useI18n()
+  const part = () => props.part as FilePart
+  const type = createMemo(() => kind(part()))
+  const name = createMemo(() => part().filename ?? i18n.t("ui.message.attachment.alt"))
+
+  const openImagePreview = () => {
+    if (type() !== "image") return
+    dialog.show(() => <ImagePreview src={part().url} alt={name()} />)
+  }
+
+  return (
+    <div data-component="file-part" data-kind={type()} data-timeline-part-id={part().id}>
+      <Show
+        when={type() === "image"}
+        fallback={
+          <div data-slot="file-part-attachment" data-type="file" title={name()}>
+            <FileIcon node={{ path: name(), type: "file" }} />
+            <span data-slot="file-part-name">{name()}</span>
+          </div>
+        }
+      >
+        <button
+          type="button"
+          data-slot="file-part-attachment"
+          data-type="image"
+          data-clickable="true"
+          onClick={openImagePreview}
+        >
+          <img data-slot="file-part-image" src={part().url} alt={name()} />
+        </button>
+      </Show>
+    </div>
+  )
+}
+
 PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()

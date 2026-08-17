@@ -377,6 +377,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
             })
           continue
         }
+        if (item.type === "file") continue
         childTool(child, item, message.id)
       }
       if (message.error) {

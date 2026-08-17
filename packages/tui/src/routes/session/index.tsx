@@ -32,6 +32,7 @@ import type {
   ModelInfo,
   SessionMessageInfo,
   SessionMessageAssistant,
+  SessionMessageAssistantFile,
   SessionMessageAssistantReasoning,
   SessionMessageAssistantText,
   SessionMessageAssistantTool,
@@ -1581,6 +1582,7 @@ function SessionMessageView(props: { message: SessionMessageInfo }) {
 }
 
 function SessionPartView(props: { partRef: PartRef; message: (messageID: string) => SessionMessageInfo | undefined }) {
+  const ctx = use()
   const message = createMemo(() => props.message(props.partRef.messageID))
   const part = createMemo(() => {
     const item = message()
@@ -1600,6 +1602,9 @@ function SessionPartView(props: { partRef: PartRef; message: (messageID: string)
               message={message() as SessionMessageAssistant}
               last={false}
             />
+          </Match>
+          <Match when={item().type === "file"}>
+            <GeneratedFile part={item() as SessionMessageAssistantFile} width={ctx.width} />
           </Match>
           <Match when={item().type === "tool"}>
             <ToolPart part={item() as SessionMessageAssistantTool} />
@@ -2428,6 +2433,33 @@ function TextPart(props: { last: boolean; part: SessionMessageAssistantText }) {
         />
       </box>
     </Show>
+  )
+}
+
+export function GeneratedFile(props: { part: SessionMessageAssistantFile; width: number }) {
+  const theme = useTheme()
+  const [failed, setFailed] = createSignal(false)
+  const image = createMemo(
+    () => props.part.mime.startsWith("image/") && props.part.url.startsWith("data:image/") && !failed(),
+  )
+  const height = createMemo(() => Math.max(6, Math.min(18, Math.floor((props.width - 6) / 4))))
+  return (
+    <box paddingLeft={3} paddingRight={2} flexShrink={0} gap={1}>
+      <Show when={image()}>
+        <box width="100%" maxWidth={70} height={height()} flexShrink={0} alignItems="center" justifyContent="center">
+          <image
+            id={`session-generated-image-${props.part.id}`}
+            source={props.part.url}
+            fit="fit"
+            protocol="auto"
+            width="100%"
+            height="100%"
+            onError={() => setFailed(true)}
+          />
+        </box>
+      </Show>
+      <text fg={theme.text.subdued}>Generated file: {props.part.filename ?? props.part.mime}</text>
+    </box>
   )
 }
 
@@ -3614,6 +3646,12 @@ function formatSessionTranscript(session: SessionInfo, messages: SessionMessageI
     const content = message.content.flatMap((item) => {
       if (item.type === "text") return [item.text]
       if (item.type === "reasoning") return thinking ? [`_Thinking:_\n\n${item.text}`] : []
+      if (item.type === "file") {
+        const name = item.filename ?? item.mime
+        if (!item.url.startsWith("http://") && !item.url.startsWith("https://") && !item.url.startsWith("file://"))
+          return [`Generated file: ${name}`]
+        return [`[${name}](${item.url})`]
+      }
       const input = typeof item.state.input === "string" ? item.state.input : JSON.stringify(item.state.input, null, 2)
       const output =
         item.state.status === "error"

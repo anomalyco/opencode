@@ -103,6 +103,8 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   let stepFailed = false
   let providerFailed = false
   let outputStarted = false
+  let retryEvidence = false
+  let nextFile = 0
   let stepFailure: SessionError.Error | undefined
   let stepSettlement: StepRecord["finish"]
 
@@ -416,6 +418,25 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       case "reasoning-end":
         yield* reasoning.end(event.id, providerState(event.providerMetadata))
         return
+      case "file": {
+        retryEvidence = true
+        const messageID = yield* startAssistant()
+        const index = nextFile++
+        const id = `generated-${messageID}-${index}`
+        yield* bus.publish(SessionEvent.File.Generated, {
+          sessionID: input.sessionID,
+          assistantMessageID: messageID,
+          file: {
+            type: "file",
+            id,
+            mime: event.mediaType,
+            filename: `${id}.${fileExtension(event.mediaType)}`,
+            url: fileDataUrl(event),
+            state: providerState(event.providerMetadata),
+          },
+        })
+        return
+      }
       case "tool-input-start":
         outputStarted = true
         yield* startToolInput(event)
@@ -597,4 +618,19 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     startAssistant,
     assistantMessageID: assistantMessageIDForTool,
   }
+}
+
+function fileDataUrl(event: Extract<LLMEvent, { type: "file" }>) {
+  if (typeof event.data === "string") {
+    if (event.data.startsWith("data:")) return event.data
+    return `data:${event.mediaType};base64,${event.data}`
+  }
+  return `data:${event.mediaType};base64,${Buffer.from(event.data).toString("base64")}`
+}
+
+function fileExtension(mediaType: string) {
+  const subtype = mediaType.split(";")[0]?.split("/")[1]?.toLowerCase()
+  if (subtype === "jpeg") return "jpg"
+  if (subtype === "svg+xml") return "svg"
+  return subtype?.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "bin"
 }

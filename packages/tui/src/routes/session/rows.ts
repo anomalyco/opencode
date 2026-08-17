@@ -253,6 +253,10 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
           { type: "reasoning" },
         )
     }),
+    data.on("session.file.generated", (event) => {
+      if (event.data.sessionID === sessionID())
+        appendPart({ messageID: event.data.assistantMessageID, partID: event.data.file.id }, { type: "file" })
+    }),
     data.on("session.tool.input.started", (event) => {
       if (event.data.sessionID === sessionID())
         appendPart(
@@ -304,7 +308,7 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
     usage?.steps.push(message)
     const ordinals = { text: 0, reasoning: 0 }
     message.content.forEach((part) => {
-      const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
+      const partID = part.type === "tool" || part.type === "file" ? part.id : `${part.type}:${ordinals[part.type]++}`
       if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
       append(rows, { messageID: message.id, partID }, part)
     })
@@ -396,15 +400,17 @@ function rowBoundaryMessageID(row: SessionRow, messages: Map<string, SessionMess
 }
 
 export function resolvePart(message: SessionMessageAssistant, partID: string) {
-  const tool = message.content.find((part) => part.type === "tool" && part.id === partID)
-  if (tool) return tool
+  const identified = message.content.find(
+    (part) => (part.type === "tool" || part.type === "file") && part.id === partID,
+  )
+  if (identified) return identified
   const match = /^(text|reasoning):(\d+)$/.exec(partID)
   if (!match) return
   const ordinal = Number(match[2])
   return message.content.filter((part) => part.type === match[1])[ordinal]
 }
 
-type AppendPart = { type: "text" } | { type: "reasoning" } | { type: "tool"; name: string }
+type AppendPart = { type: "text" } | { type: "reasoning" } | { type: "file" } | { type: "tool"; name: string }
 
 function append(rows: SessionRow[], ref: PartRef, part: AppendPart, index = rows.length) {
   if (part.type === "reasoning") {

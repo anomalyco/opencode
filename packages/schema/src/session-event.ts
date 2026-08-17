@@ -399,6 +399,19 @@ export namespace Reasoning {
   export type Ended = typeof Ended.Type
 }
 
+export namespace File {
+  export const Generated = Event.durable({
+    type: "session.file.generated",
+    ...options,
+    schema: {
+      ...Base,
+      assistantMessageID: SessionMessage.ID,
+      file: SessionMessage.AssistantFile,
+    },
+  })
+  export type Generated = typeof Generated.Type
+}
+
 export namespace Tool {
   const ToolBase = {
     ...Base,
@@ -605,6 +618,7 @@ export const Definitions = Event.inventory(
   Reasoning.Started,
   Reasoning.Delta,
   Reasoning.Ended,
+  File.Generated,
   Tool.Input.Started,
   Tool.Input.Delta,
   Tool.Input.Ended,

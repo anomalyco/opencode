@@ -836,6 +836,7 @@ describe("SessionTransfer", () => {
       const template = yield* session.create({ location, title: "Exported" })
       const sessionID = Session.ID.create()
       const sourceMessageID = SessionMessage.ID.create()
+      const assistantMessageID = SessionMessage.ID.create()
       const errorMessageID = SessionMessage.ID.create()
 
       const imported = yield* transfer.import({
@@ -849,12 +850,29 @@ describe("SessionTransfer", () => {
               time: { created: DateTime.makeUnsafe(100) },
             },
             {
+              id: assistantMessageID,
+              type: "assistant",
+              agent: Agent.defaultID,
+              model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+              content: [
+                {
+                  type: "file",
+                  id: "file_1",
+                  mime: "image/png",
+                  filename: "secret.png",
+                  url: "data:image/png;base64,aW1hZ2U=",
+                  state: { thoughtSignature: "secret" },
+                },
+              ],
+              time: { created: DateTime.makeUnsafe(101) },
+            },
+            {
               id: errorMessageID,
               type: "compaction",
               status: "failed",
               reason: "manual",
               error: { type: "test_error", message: "Original error" },
-              time: { created: DateTime.makeUnsafe(101) },
+              time: { created: DateTime.makeUnsafe(102) },
             },
           ],
         },
@@ -865,12 +883,24 @@ describe("SessionTransfer", () => {
       expect(imported).toMatchObject({ id: sessionID, title: "Exported", location })
       expect(messages).toMatchObject([
         { id: sourceMessageID, type: "user", text: "Imported message" },
+        { id: assistantMessageID, type: "assistant" },
         { id: errorMessageID, type: "compaction", error: { type: "test_error", message: "Original error" } },
       ])
-      expect(yield* Bus.latestSequence(db, sessionID)).toBe(2)
+      expect(yield* Bus.latestSequence(db, sessionID)).toBe(3)
       expect((yield* transfer.export({ sessionID })).messages).toEqual(messages)
       expect((yield* transfer.export({ sessionID, sanitize: true })).messages).toMatchObject([
         { id: sourceMessageID, text: `[redacted:text:${sourceMessageID}]` },
+        {
+          id: assistantMessageID,
+          content: [
+            {
+              type: "file",
+              filename: "[redacted:assistant-file-name:file_1]",
+              url: "[redacted:assistant-file-url:file_1]",
+              state: { redacted: `file-state:${assistantMessageID}` },
+            },
+          ],
+        },
         { id: errorMessageID, error: { type: "test_error", message: "Original error" } },
       ])
 
@@ -879,10 +909,11 @@ describe("SessionTransfer", () => {
 
       expect((yield* session.messages({ sessionID, order: "asc" })).map((message) => message.type)).toEqual([
         "user",
+        "assistant",
         "compaction",
         "user",
       ])
-      expect(yield* Bus.latestSequence(db, sessionID)).toBe(4)
+      expect(yield* Bus.latestSequence(db, sessionID)).toBe(5)
     }),
   )
 

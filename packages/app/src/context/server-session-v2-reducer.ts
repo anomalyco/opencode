@@ -315,6 +315,13 @@ export function createV2SessionReducer() {
             time: { created: item.time?.created ?? event.created, completed: event.created },
           }),
         )
+      case "session.file.generated":
+        return updateAssistant(source, event.data.assistantMessageID, sessionID, (item) => ({
+          ...item,
+          content: item.content.some((content) => content.type === "file" && content.id === event.data.file.id)
+            ? item.content
+            : [...item.content, event.data.file],
+        }))
       case "session.tool.input.started":
         return updateAssistant(source, event.data.assistantMessageID, sessionID, (item) => ({
           ...item,

@@ -251,6 +251,14 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
             text: redact("reasoning", message.id, content.text),
             state: content.state ? { redacted: `reasoning-state:${message.id}` } : undefined,
           }
+        if (content.type === "file")
+          return {
+            ...content,
+            filename:
+              content.filename === undefined ? undefined : redact("assistant-file-name", content.id, content.filename),
+            url: redact("assistant-file-url", content.id, content.url),
+            state: content.state ? { redacted: `file-state:${message.id}` } : undefined,
+          }
         return {
           ...content,
           providerState: content.providerState ? { redacted: `tool-provider-state:${message.id}` } : undefined,

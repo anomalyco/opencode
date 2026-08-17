@@ -472,6 +472,15 @@ async function replayMessage(
       })
       continue
     }
+    if (part.type === "file") {
+      for (const chunk of partsToContentChunks([part])) {
+        await connection.sessionUpdate({
+          sessionId: sessionID,
+          update: { sessionUpdate: "agent_message_chunk", messageId: message.id, ...chunk },
+        })
+      }
+      continue
+    }
     await connection.sessionUpdate({
       sessionId: sessionID,
       update: {

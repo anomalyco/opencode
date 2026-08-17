@@ -761,6 +761,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           ])
         continue
       }
+      if (item.type === "file") continue
       renderTool(message.id, item, render)
     }
     if (message.error && !state.errors.has(message.id)) {
