@@ -280,6 +280,10 @@ const scenarios: Scenario[] = [
     }))
     .status(400),
   http.protected.get("/permission", "permission.list").json(200, array),
+  http.protected.get("/permission/validator/health", "permission.validator.health").json(200, (body) => {
+    object(body)
+    check(typeof body.ok === "boolean", "validator health should report an ok boolean")
+  }),
   http.protected
     .post("/permission/{requestID}/reply", "permission.reply.invalid")
     .at((ctx) => ({
@@ -1272,6 +1276,49 @@ const scenarios: Scenario[] = [
     .seeded((ctx) => ctx.session({ title: "Diff session" }))
     .at((ctx) => ({ path: route("/session/{sessionID}/diff", { sessionID: ctx.state.id }), headers: ctx.headers() }))
     .json(200, array),
+  http.protected
+    .get("/session/{sessionID}/permission_decisions", "session.permission_decisions")
+    .seeded((ctx) => ctx.session({ title: "Permission decisions session" }))
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/permission_decisions", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      array(body)
+      check(body.length === 0, "session without validator activity should have no decisions")
+    }),
+  http.protected
+    .get("/session/{sessionID}/auto_summary", "session.auto_summary")
+    .seeded((ctx) => ctx.session({ title: "Auto summary session" }))
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/auto_summary", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      check(body === null, "session without auto summary should return null")
+    }),
+  http.protected
+    .get("/session/{sessionID}/permission-validator", "session.permission_validator.get")
+    .seeded((ctx) => ctx.session({ title: "Permission validator session" }))
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/permission-validator", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      check(body === null, "session without an override should return null")
+    }),
+  http.protected
+    .patch("/session/{sessionID}/permission-validator", "session.permission_validator.update")
+    .mutating()
+    .seeded((ctx) => ctx.session({ title: "Permission validator update session" }))
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/permission-validator", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: { config: { mode: "disabled" } },
+    }))
+    .json(200, (body) => {
+      check(isRecord(body) && body.mode === "disabled", "session validator should persist disabled mode")
+    }),
   http.protected
     .get("/session/{sessionID}/message", "session.messages")
     .seeded((ctx) => ctx.session({ title: "Messages session" }))

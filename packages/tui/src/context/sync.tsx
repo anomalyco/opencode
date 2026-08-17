@@ -8,6 +8,8 @@ import type {
   Todo,
   Command,
   PermissionRequest,
+  PermissionDecision,
+  SessionAutoSummary,
   QuestionRequest,
   LspStatus,
   McpStatus,
@@ -82,6 +84,12 @@ export const {
       permission: {
         [sessionID: string]: PermissionRequest[]
       }
+      decision: {
+        [sessionID: string]: PermissionDecision[]
+      }
+      auto_summary: {
+        [sessionID: string]: SessionAutoSummary | null
+      }
       question: {
         [sessionID: string]: QuestionRequest[]
       }
@@ -126,6 +134,8 @@ export const {
       status: "loading",
       agent: [],
       permission: {},
+      decision: {},
+      auto_summary: {},
       question: {},
       command: [],
       provider: [],
@@ -173,6 +183,33 @@ export const {
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
+    // Validator audit trail ("auto" mode), keyed by session. Fetched once with
+    // the session payload, then refetched when validator activity lands: an
+    // escalated ask (uncertain/fallback) or a tool part leaving "pending"
+    // (allow/deny are audited before the tool runs). In-flight guard only —
+    // tool completion always emits another update, so state converges.
+    const decisionFetches = new Set<string>()
+    function refreshDecisions(sessionID: string) {
+      if (decisionFetches.has(sessionID)) return
+      decisionFetches.add(sessionID)
+      void sdk.client.session
+        .permissionDecisions({ sessionID })
+        .then((x) => setStore("decision", sessionID, reconcile(x.data ?? [])))
+        .catch(() => {})
+        .finally(() => decisionFetches.delete(sessionID))
+      void sdk.client.session
+        .autoSummary({ sessionID })
+        .then((x) => setStore("auto_summary", sessionID, x.data ?? null))
+        .catch(() => {})
+    }
+
+    // A session validates through the LLM only while its latest user message
+    // was sent with the "auto" agent; anything else skips the refetch.
+    function autoSession(sessionID: string) {
+      const last = (store.message[sessionID] ?? []).findLast((message) => message.role === "user")
+      return last?.agent === "auto"
+    }
+
     event.subscribe((event, { directory, workspace }) => {
       switch (event.type) {
         case "server.instance.disposed":
@@ -195,6 +232,7 @@ export const {
 
         case "permission.asked": {
           const request = event.properties
+          if (request.auto) refreshDecisions(request.sessionID)
           if (permission.mode === "auto") {
             void sdk.client.permission.reply({
               requestID: request.id,
@@ -280,6 +318,18 @@ export const {
               }),
             )
           }
+          setStore(
+            "decision",
+            produce((draft) => {
+              delete draft[event.properties.info.id]
+            }),
+          )
+          setStore(
+            "auto_summary",
+            produce((draft) => {
+              delete draft[event.properties.info.id]
+            }),
+          )
           break
         }
         case "session.updated": {
@@ -375,6 +425,10 @@ export const {
         }
         case "message.part.updated": {
           touchPart(event.properties.part.sessionID, event.properties.part.id)
+          const part = event.properties.part
+          if (part.type === "tool" && part.state.status !== "pending" && autoSession(part.sessionID)) {
+            refreshDecisions(part.sessionID)
+          }
           const parts = store.part[event.properties.part.messageID]
           if (!parts) {
             setStore("part", event.properties.part.messageID, [event.properties.part])
@@ -598,11 +652,13 @@ export const {
           const tracker = { messages: new Set<string>(), parts: new Set<string>() }
           hydratingSessions.set(sessionID, tracker)
           const task = (async () => {
-            const [session, messages, todo, diff] = await Promise.all([
+            const [session, messages, todo, diff, decisions, autoSummary] = await Promise.all([
               sdk.client.session.get({ sessionID }, { throwOnError: true }),
               sdk.client.session.messages({ sessionID, limit: 100 }),
               sdk.client.session.todo({ sessionID }),
               sdk.client.session.diff({ sessionID }),
+              sdk.client.session.permissionDecisions({ sessionID }),
+              sdk.client.session.autoSummary({ sessionID }),
             ])
             setStore(
               produce((draft) => {
@@ -610,6 +666,8 @@ export const {
                 if (match.found) draft.session[match.index] = session.data!
                 if (!match.found) draft.session.splice(match.index, 0, session.data!)
                 draft.todo[sessionID] = todo.data ?? []
+                draft.decision[sessionID] = decisions.data ?? []
+                draft.auto_summary[sessionID] = autoSummary.data ?? null
                 const currentMessages = draft.message[sessionID] ?? []
                 const infos = (messages.data ?? []).flatMap((message) => {
                   if (!tracker.messages.has(message.info.id)) return [message.info]

@@ -388,6 +388,49 @@ describe("session HttpApi", () => {
     { git: true, config: { formatter: false, lsp: false } },
   )
 
+  it.instance(
+    "updates the permission validator for one session",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const session = yield* createSession({ title: "permission validator" })
+        const endpoint = pathFor(SessionPaths.permissionValidator, { sessionID: session.id })
+
+        const inherited = yield* request(endpoint, { headers })
+        expect(inherited.status).toBe(200)
+        expect(yield* responseJson(inherited)).toBeNull()
+
+        const selected = yield* request(endpoint, {
+          method: "PATCH",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ config: { mode: "model", model: "test/test-model" } }),
+        })
+        expect(selected.status).toBe(200)
+        expect(yield* responseJson(selected)).toEqual({ mode: "model", model: "test/test-model" })
+        expect(
+          yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: session.id }), { headers }),
+        ).toMatchObject({ permissionValidator: { mode: "model", model: "test/test-model" } })
+
+        const disabled = yield* request(endpoint, {
+          method: "PATCH",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ config: { mode: "disabled" } }),
+        })
+        expect(disabled.status).toBe(200)
+        expect(yield* responseJson(disabled)).toEqual({ mode: "disabled" })
+
+        const cleared = yield* request(endpoint, {
+          method: "PATCH",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ config: null }),
+        })
+        expect(cleared.status).toBe(200)
+        expect(yield* responseJson(cleared)).toBeNull()
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
   it.live("uses the persisted session directory for prompt requests", () =>
     Effect.gen(function* () {
       const llm = yield* TestLLMServer

@@ -27,7 +27,7 @@ Primary agents are the main assistants you interact with directly. You can cycle
 You can use the **Tab** key to switch between primary agents during a session.
 :::
 
-OpenCode comes with two built-in primary agents, **Build** and **Plan**. We'll
+OpenCode comes with three built-in primary agents, **Build**, **Plan**, and **Auto**. We'll
 look at these below.
 
 ---
@@ -42,7 +42,7 @@ OpenCode comes with three built-in subagents, **General**, **Explore**, and **Sc
 
 ## Built-in
 
-OpenCode comes with two built-in primary agents and three built-in subagents.
+OpenCode comes with three built-in primary agents and three built-in subagents.
 
 ---
 
@@ -65,6 +65,16 @@ By default, all of the following are set to `ask`:
 - `bash`: All bash commands
 
 This agent is useful when you want the LLM to analyze code, suggest changes, or create plans without making any actual modifications to your codebase.
+
+---
+
+### Use auto
+
+_Mode_: `primary`
+
+Build with LLM-approved permissions. Auto has the same tools and permission rules as Build, but requests that would normally ask for your approval are first answered by a validator LLM — informed by a running summary of the session — instead of blocking on you.
+
+The validator can allow the call, deny it (the agent receives the reason and can correct course), or escalate back to you when it is uncertain. If the validator is unreachable or its answer is invalid, the ask falls back to you, so a validator failure never approves or blocks anything on its own. Every decision is persisted for audit, with raw command inputs and validator prompts redacted from the audit trail. [Learn more](/docs/permissions#auto-agent-llm-validator) about how auto mode changes the permission flow.
 
 ---
 
@@ -113,6 +123,22 @@ Hidden system agent that generates short session titles. It runs automatically a
 _Mode_: `primary`
 
 Hidden system agent that creates session summaries. It runs automatically and is not selectable in the UI.
+
+---
+
+### Use command-validator
+
+_Mode_: `primary`
+
+Hidden system agent that answers permission asks when the [auto agent](#use-auto) is active, returning `ALLOW`, `DENY`, or `UNCERTAIN` for each request. Its model and prompt are configurable via `agent.command-validator` — the default is the session's small model. It runs automatically and is not selectable in the UI.
+
+---
+
+### Use session-summarizer
+
+_Mode_: `primary`
+
+Hidden system agent that maintains the incremental session summary (what was done, tested, and how) that the command-validator reads. It runs at the end of every completed turn in auto mode, off the critical path. Its model and prompt are configurable via `agent.session-summarizer`. It runs automatically and is not selectable in the UI.
 
 ---
 

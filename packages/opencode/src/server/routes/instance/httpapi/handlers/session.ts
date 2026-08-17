@@ -12,6 +12,8 @@ import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
+import { PermissionDecisionsStore } from "@opencode-ai/core/session/permission-decisions-store"
+import { AutoSummaryStore } from "@opencode-ai/core/session/auto-summary-store"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
@@ -30,6 +32,7 @@ import {
   ListQuery,
   MessagesQuery,
   PermissionResponsePayload,
+  PermissionValidatorPayload,
   PromptPayload,
   RevertPayload,
   ShellPayload,
@@ -56,6 +59,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const agentSvc = yield* Agent.Service
     const permissionSvc = yield* Permission.Service
     const statusSvc = yield* SessionStatus.Service
+    const decisionsSvc = yield* PermissionDecisionsStore.Service
+    const autoSummarySvc = yield* AutoSummaryStore.Service
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
     const events = yield* EventV2Bridge.Service
@@ -94,6 +99,58 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const todo = Effect.fn("SessionHttpApi.todo")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* requireSession(ctx.params.sessionID)
       return yield* todoSvc.get(ctx.params.sessionID)
+    })
+
+    const permissionDecisions = Effect.fn("SessionHttpApi.permissionDecisions")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      const rows = yield* decisionsSvc.listBySession(ctx.params.sessionID)
+      return rows.map((row) => ({
+        id: row.id,
+        session_id: row.sessionID,
+        permission: row.permission,
+        patterns: row.patterns,
+        ...(row.metadata ? { metadata: row.metadata } : {}),
+        verdict: row.verdict,
+        ...(row.reason ? { reason: row.reason } : {}),
+        model: row.model,
+        latency_ms: row.latencyMs,
+        created_at: row.createdAt,
+      }))
+    })
+
+    const autoSummary = Effect.fn("SessionHttpApi.autoSummary")(function* (ctx: { params: { sessionID: SessionID } }) {
+      yield* requireSession(ctx.params.sessionID)
+      const row = yield* autoSummarySvc.get(ctx.params.sessionID)
+      if (!row) return null
+      return {
+        session_id: row.sessionID,
+        summary: row.summary,
+        model: row.model,
+        turn_count: row.turnCount,
+        updated_at: row.updatedAt,
+      }
+    })
+
+    const permissionValidator = Effect.fn("SessionHttpApi.permissionValidator")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      const current = yield* requireSession(ctx.params.sessionID)
+      return current.permissionValidator ?? null
+    })
+
+    const permissionValidatorUpdate = Effect.fn("SessionHttpApi.permissionValidatorUpdate")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof PermissionValidatorPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      yield* session.setPermissionValidator({
+        sessionID: ctx.params.sessionID,
+        config: ctx.payload.config ?? undefined,
+      })
+      const current = yield* requireSession(ctx.params.sessionID)
+      return current.permissionValidator ?? null
     })
 
     const diff = Effect.fn("SessionHttpApi.diff")(function* (ctx: {
@@ -416,6 +473,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("get", get)
       .handle("children", children)
       .handle("todo", todo)
+      .handle("permissionDecisions", permissionDecisions)
+      .handle("autoSummary", autoSummary)
+      .handle("permissionValidator", permissionValidator)
+      .handle("permissionValidatorUpdate", permissionValidatorUpdate)
       .handle("diff", diff)
       .handle("messages", messages)
       .handle("message", message)

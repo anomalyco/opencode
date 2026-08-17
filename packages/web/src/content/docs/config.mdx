@@ -525,6 +525,26 @@ You can configure specialized agents for specific tasks through the `agent` opti
 
 You can also define agents using markdown files in `~/.config/opencode/agents/` or `.opencode/agents/`. [Learn more here](/docs/agents).
 
+The built-in `command-validator` and `session-summarizer` agents — used by the [auto agent](/docs/agents#use-auto) to approve permission asks with an LLM — accept the same options. Point them at a cheaper or local model, or override their prompts:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "command-validator": {
+      "model": "openrouter/anthropic/claude-haiku-4.5",
+      "prompt": "{file:./prompts/command-validator.txt}"
+    },
+    "session-summarizer": {
+      "model": "ollama/qwen3:4b-instruct",
+      "prompt": "{file:./prompts/session-summarizer.txt}"
+    }
+  }
+}
+```
+
+With no config, both default to the session provider's small model. The `docs/auto-mode.md` design record in the repository covers the full flow, provider examples (OpenRouter, Ollama), and the audit trail.
+
 ---
 
 ### Default agent

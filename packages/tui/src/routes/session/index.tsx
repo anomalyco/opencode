@@ -51,6 +51,7 @@ import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
+import { DialogDecisions } from "./dialog-decisions"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
@@ -117,6 +118,7 @@ const sessionBindingCommands = [
   "session.share",
   "session.rename",
   "session.timeline",
+  "session.decisions",
   "session.fork",
   "session.compact",
   "session.unshare",
@@ -301,7 +303,6 @@ export function Session() {
 
       if (result.data.workspaceID !== previousWorkspace) {
         project.workspace.set(result.data.workspaceID)
-
         // Sync all the data for this workspace. Note that this
         // workspace may not exist anymore which is why this is not
         // fatal. If it doesn't we still want to show the session
@@ -535,6 +536,17 @@ export function Session() {
             setPrompt={(promptInfo) => prompt?.set(promptInfo)}
           />
         ))
+      },
+    },
+    {
+      title: "Auto mode decisions",
+      value: "session.decisions",
+      category: "Session",
+      slash: {
+        name: "decisions",
+      },
+      run: () => {
+        dialog.replace(() => <DialogDecisions sessionID={route.sessionID} />)
       },
     },
     {
@@ -1841,6 +1853,33 @@ function GenericTool(props: ToolProps) {
   )
 }
 
+// Discreet marker for tool calls the LLM validator ("auto" mode) decided
+// without a human dialog, correlated through the audited callID. Only
+// allow/deny appear — uncertain/fallback already surfaced as the dialog.
+// The short model name identifies which LLM made the call; full detail lives
+// in the sidebar "Auto" section and the /decisions dialog.
+function AutoDecisionSuffix(props: { part?: ToolPart }) {
+  const { theme } = useTheme()
+  const ctx = use()
+  const sync = useSync()
+  const decision = createMemo(() => {
+    const part = props.part
+    if (!part) return undefined
+    return sync.data.decision[ctx.sessionID]?.find(
+      (item) => (item.verdict === "allow" || item.verdict === "deny") && item.metadata?.callID === part.callID,
+    )
+  })
+  const model = createMemo(() => {
+    const value = decision()?.model
+    return value ? (value.split("/").pop() ?? value) : undefined
+  })
+  return (
+    <Show when={decision()}>
+      {(item) => <span style={{ fg: theme.textMuted }}>{` · auto: ${item().verdict} · ${model()}`}</span>}
+    </Show>
+  )
+}
+
 function InlineTool(props: {
   icon: string
   iconColor?: RGBA
@@ -1915,6 +1954,7 @@ function InlineTool(props: {
       }}
     >
       {props.children}
+      <AutoDecisionSuffix part={props.part} />
     </InlineToolRow>
   )
 }
@@ -2036,10 +2076,14 @@ function BlockTool(props: {
             fallback={
               <text paddingLeft={3} fg={theme.textMuted}>
                 {title()}
+                <AutoDecisionSuffix part={props.part} />
               </text>
             }
           >
-            <Spinner color={theme.textMuted}>{title().replace(/^# /, "")}</Spinner>
+            <Spinner color={theme.textMuted}>
+              {title().replace(/^# /, "")}
+              <AutoDecisionSuffix part={props.part} />
+            </Spinner>
           </Show>
         )}
       </Show>
@@ -2089,7 +2133,15 @@ function Shell(props: ToolProps) {
           onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <Show when={isRunning()} fallback={<text fg={theme.text}>$ {stringValue(props.input.command)}</text>}>
+            <Show
+              when={isRunning()}
+              fallback={
+                <text fg={theme.text}>
+                  $ {stringValue(props.input.command)}
+                  {!title() && <AutoDecisionSuffix part={props.part} />}
+                </text>
+              }
+            >
               <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
             </Show>
             <Show when={output()}>

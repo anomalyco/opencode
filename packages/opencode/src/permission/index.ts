@@ -9,10 +9,30 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 
 export const Event = PermissionV1.Event
 
+// Contract between Permission (below LLM in the layer graph) and the LLM
+// permission validator (above it). The validator registers a handler at layer
+// build; "auto"-mode asks call it after static rule evaluation. A missing
+// handler degrades "auto" asks to the normal human flow.
+export interface AutoInput {
+  readonly sessionID: PermissionV1.Request["sessionID"]
+  readonly permission: string
+  readonly patterns: readonly string[]
+  readonly metadata: Record<string, unknown>
+  readonly tool?: { messageID: string; callID: string }
+}
+
+export type AutoOutcome =
+  | { readonly verdict: "allow" }
+  | { readonly verdict: "uncertain"; readonly reason: string; readonly model: string }
+  | { readonly verdict: "fallback"; readonly reason: string; readonly model: string }
+
+export type AutoValidator = (input: AutoInput) => Effect.Effect<AutoOutcome | undefined, PermissionV1.CorrectedError>
+
 export interface Interface {
   readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>
   readonly reply: (input: PermissionV1.ReplyInput) => Effect.Effect<void, PermissionV1.NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<PermissionV1.Request>>
+  readonly registerValidator: (fn: AutoValidator) => Effect.Effect<void>
 }
 
 interface PendingEntry {
@@ -43,6 +63,9 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    // Set once by the validator's layer build (runtime-global, unlike the
+    // per-instance state below).
+    const validator: { current?: AutoValidator } = {}
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         void ctx
@@ -64,6 +87,20 @@ const layer = Layer.effect(
       }),
     )
 
+    const validateAuto = (request: Omit<PermissionV1.AskInput, "ruleset">) =>
+      Effect.gen(function* () {
+        if (request.agent !== "auto") return undefined
+        const fn = validator.current
+        if (!fn) return undefined
+        return yield* fn({
+          sessionID: request.sessionID,
+          permission: request.permission,
+          patterns: request.patterns,
+          metadata: request.metadata,
+          tool: request.tool,
+        })
+      })
+
     const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
@@ -83,6 +120,25 @@ const layer = Layer.effect(
 
       if (!needsAsk) return
 
+      // "auto" mode: a registered LLM validator answers first. ALLOW returns
+      // here; DENY fails with CorrectedError; UNCERTAIN/fallback continue to
+      // the human flow below with the verdict attached to the request.
+      const auto = yield* validateAuto(request)
+      if (auto?.verdict === "allow") {
+        // Learn the approval like a human "always" reply, but stricter: only
+        // the exact patterns just approved (never the broader always-globs a
+        // human reply records), only literal patterns (a learned glob would
+        // auto-approve commands the validator never saw), and never over a
+        // static deny. Identical future asks short-circuit in the ruleset
+        // evaluation above without spending an LLM call.
+        for (const pattern of request.patterns) {
+          if (pattern.includes("*") || pattern.includes("?")) continue
+          if (evaluate(request.permission, pattern, ruleset).action === "deny") continue
+          approved.push({ permission: request.permission, pattern, action: "allow" })
+        }
+        return
+      }
+
       const id = request.id ?? PermissionV1.ID.ascending()
       const info: PermissionV1.Request = {
         id,
@@ -92,6 +148,7 @@ const layer = Layer.effect(
         metadata: request.metadata,
         always: request.always,
         tool: request.tool,
+        ...(auto ? { auto } : {}),
       }
       yield* Effect.logInfo("asking", { id, permission: info.permission, patterns: info.patterns })
 
@@ -171,7 +228,12 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.info)
     })
 
-    return Service.of({ ask, reply, list })
+    const registerValidator: Interface["registerValidator"] = (fn) =>
+      Effect.sync(() => {
+        validator.current = fn
+      })
+
+    return Service.of({ ask, reply, list, registerValidator })
   }),
 )
 

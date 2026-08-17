@@ -10,6 +10,8 @@ import type {
   Part,
   Provider,
   PermissionRequest,
+  PermissionDecision,
+  SessionAutoSummary,
   QuestionRequest,
   Session,
   SessionStatus,
@@ -201,11 +203,13 @@ export type TuiPromptInfo = {
 export type TuiPromptRef = {
   focused: boolean
   current: TuiPromptInfo
+  cursorAtStart?: boolean
   set(prompt: TuiPromptInfo): void
   reset(): void
   blur(): void
   focus(): void
   submit(): void
+  stashAndClear?(): "armed" | "stashed"
 }
 
 export type TuiPromptProps = {
@@ -391,6 +395,8 @@ export type TuiState = {
     messages: (sessionID: string) => ReadonlyArray<Message>
     status: (sessionID: string) => SessionStatus | undefined
     permission: (sessionID: string) => ReadonlyArray<PermissionRequest>
+    decisions: (sessionID: string) => ReadonlyArray<PermissionDecision>
+    autoSummary: (sessionID: string) => SessionAutoSummary | null | undefined
     question: (sessionID: string) => ReadonlyArray<QuestionRequest>
   }
   part: (messageID: string) => ReadonlyArray<Part>

@@ -21,6 +21,7 @@ ts-dist
 refs
 Session.vim
 /opencode.json
+/packages/opencode/config.json
 a.out
 target
 .scripts

@@ -74,6 +74,32 @@ export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput
 export const PermissionResponsePayload = Schema.Struct({
   response: PermissionV1.Reply,
 })
+// Wire shape mirrors the permission_decisions audit table (snake_case).
+export const PermissionDecision = Schema.Struct({
+  id: Schema.String,
+  session_id: Schema.String,
+  permission: Schema.String,
+  patterns: Schema.Array(Schema.String),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  verdict: Schema.Literals(["allow", "deny", "uncertain", "fallback"]),
+  reason: Schema.optional(Schema.String),
+  model: Schema.String,
+  latency_ms: Schema.Number,
+  created_at: Schema.Number,
+}).annotate({ identifier: "PermissionDecision" })
+
+// Wire shape mirrors the session_auto_summary table (snake_case).
+export const SessionAutoSummary = Schema.Struct({
+  session_id: Schema.String,
+  summary: Schema.String,
+  model: Schema.String,
+  turn_count: Schema.Number,
+  updated_at: Schema.Number,
+}).annotate({ identifier: "SessionAutoSummary" })
+
+export const PermissionValidatorPayload = Schema.Struct({
+  config: Schema.NullOr(Session.PermissionValidatorConfig),
+})
 
 export const SessionPaths = {
   list: root,
@@ -99,6 +125,9 @@ export const SessionPaths = {
   revert: `${root}/:sessionID/revert`,
   unrevert: `${root}/:sessionID/unrevert`,
   permissions: `${root}/:sessionID/permissions/:permissionID`,
+  permissionDecisions: `${root}/:sessionID/permission_decisions`,
+  autoSummary: `${root}/:sessionID/auto_summary`,
+  permissionValidator: `${root}/:sessionID/permission-validator`,
   deleteMessage: `${root}/:sessionID/message/:messageID`,
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
   updatePart: `${root}/:sessionID/message/:messageID/part/:partID`,
@@ -163,6 +192,43 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.todo",
             summary: "Get session todos",
             description: "Retrieve the todo list associated with a specific session, showing tasks and action items.",
+          }),
+        ),
+        HttpApiEndpoint.get("permissionDecisions", SessionPaths.permissionDecisions, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(PermissionDecision), "Permission decisions"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.permission_decisions",
+            summary: "List permission decisions",
+            description: "Get the LLM permission validator audit trail for a session (auto mode), oldest first.",
+          }),
+        ),
+        HttpApiEndpoint.get("autoSummary", SessionPaths.autoSummary, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Union([SessionAutoSummary, Schema.Null]), "Session auto summary"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.auto_summary",
+            summary: "Get session auto summary",
+            description:
+              "Get the incremental summary maintained by the session-summarizer agent (auto mode), or null when none exists.",
+          }),
+        ),
+        HttpApiEndpoint.get("permissionValidator", SessionPaths.permissionValidator, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.NullOr(Session.PermissionValidatorConfig), "Session permission validator"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.permission_validator.get",
+            summary: "Get session permission validator",
+            description: "Get the per-session model or disabled state for the auto permission validator.",
           }),
         ),
         HttpApiEndpoint.get("diff", SessionPaths.diff, {
@@ -440,6 +506,19 @@ export const SessionApi = HttpApi.make("session")
           OpenApi.annotations({
             identifier: "part.update",
             description: "Update a part in a message.",
+          }),
+        ),
+        HttpApiEndpoint.patch("permissionValidatorUpdate", SessionPaths.permissionValidator, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: PermissionValidatorPayload,
+          success: described(Schema.NullOr(Session.PermissionValidatorConfig), "Updated session permission validator"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.permission_validator.update",
+            summary: "Update session permission validator",
+            description: "Select, disable, or inherit the model used by the auto permission validator.",
           }),
         ),
       )

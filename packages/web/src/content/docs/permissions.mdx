@@ -39,6 +39,60 @@ In the TUI, open the command palette and select **Enable auto-approve permission
 
 ---
 
+## Auto agent (LLM validator)
+
+The built-in **auto** agent is a semantic alternative to `--auto`: instead of blanket-approving every ask, a validator LLM reads each request — the exact command or patterns, the tool metadata, and a running summary of the session — and decides per call. Select it like any primary agent (**Tab** in the TUI, or `--agent auto` with `opencode run`).
+
+Static rules keep precedence and are never seen by the validator:
+
+- `"deny"` rules still block immediately, without spending an LLM call.
+- `"allow"` rules still run without approval.
+- Only requests that evaluate to `"ask"` go to the validator.
+
+That last point matters with the default configuration: the default ruleset is `{"*": "allow"}`, so almost nothing ever reaches the validator. To have it actually review the risky tools, mark them as `"ask"` — a recommended minimum:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "ask",
+    "edit": "ask"
+  }
+}
+```
+
+Do not combine the **auto** agent with the `--auto` flag: the flag blanket-approves every pending ask before anyone reads it, so an `UNCERTAIN` escalation gets approved without a human ever seeing the validator's reason.
+
+The validator answers one of three verdicts:
+
+- `ALLOW` — the tool call runs.
+- `DENY <reason>` — the tool call fails and the agent receives the reason as feedback, so it can correct course.
+- `UNCERTAIN <reason>` — the request escalates to the normal approval dialog, with the validator's reason shown.
+
+The flow is fail-closed: on timeout (15s), error, or an unparseable answer, the request falls back to the normal approval dialog. A validator failure never approves or rejects on its own. When the validator is unreachable, the TUI warns once on activation and the session behaves like Build.
+
+Every decision is written to a `permission_decisions` audit table (no TTL) with the verdict, reason, model, and latency, readable via `GET /session/:sessionID/permission_decisions` on the server or plain SQL. The validator and its session summarizer are configurable via `agent.command-validator` and `agent.session-summarizer` — see the [agents docs](/docs/agents#use-auto) and the `docs/auto-mode.md` design record in the repository for the full flow, configuration examples, and failure modes.
+
+### Choose the validator per session
+
+Inside a session, open the command palette and choose **Choose permission validator**. You can inherit the normal small-model resolution, select an exact `provider/model`, or choose **Disable session validator**. Disabling the validator keeps the normal human permission dialog; it does not allow commands automatically. The selection is persisted for that session and can change while the session is running.
+
+The same setting is available through the local API:
+
+```bash
+curl -X PATCH "http://127.0.0.1:4096/session/SESSION_ID/permission-validator" \
+  -H 'content-type: application/json' \
+  -H 'x-opencode-directory: /path/to/project' \
+  -d '{"config":{"mode":"model","model":"provider/model"}}'
+```
+
+Use `{"config":{"mode":"inherit"}}` to select the session default,
+`{"config":{"mode":"disabled"}}` to keep human approval, or
+`{"config":null}` to clear the session override. This is separate from
+`--auto`, which broadly approves pending asks.
+
+---
+
 ## Configuration
 
 You can set permissions globally (with `*`), and override specific tools.
@@ -154,6 +208,7 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 - `glob` — file globbing (matches the glob pattern)
 - `grep` — content search (matches the regex pattern)
 - `bash` — running shell commands (matches parsed commands like `git status --porcelain`)
+- `destructive_bash` — one-time confirmation for destructive or sensitive shell commands
 - `task` — launching subagents (matches the subagent type)
 - `skill` — loading a skill (matches the skill name)
 - `lsp` — running LSP queries (currently non-granular)
@@ -197,6 +252,70 @@ When OpenCode prompts for approval, the UI offers three outcomes:
 - `reject` — deny the request
 
 The set of patterns that `always` would approve is provided by the tool (for example, bash approvals typically whitelist a safe command prefix like `git status*`).
+
+---
+
+## Secure development sandbox
+
+For autonomous development without granting the agent authority over the host, configure the `bash` tool to run in Docker. The container has no network, no host credentials, no Linux capabilities, a read-only root filesystem, and only the active working directory mounted read-write.
+
+Build the supplied image once. Its build context contains only the Dockerfile, so project files and credentials are not sent to Docker during the build.
+
+```bash
+docker build --tag opencode-secure-dev:1.3.13 packages/opencode/src/sandbox
+```
+
+Then use the secure-development profile:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "*": "ask",
+    "read": "allow",
+    "edit": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "bash": "allow",
+    "destructive_bash": "ask",
+    "external_directory": "ask",
+    "webfetch": "ask",
+    "websearch": "ask"
+  },
+  "sandbox": {
+    "type": "docker",
+    "image": "opencode-secure-dev:1.3.13"
+  }
+}
+```
+
+Normal project work such as edits, tests, builds, and Git inspection stays autonomous. Destructive shell operations (`rm`, `mv`, potentially overwriting `cp`, destructive Git operations, in-place rewrites, disk tools, database writes, and publishing) use `destructive_bash`, which is one-time only and cannot create an `always` rule. Network access remains disabled in the container; use an explicitly reviewed integration when an operation must reach an external service.
+
+The sandbox is not a replacement for project permissions: `external_directory` remains `ask`, and a mounted workspace is intentionally writable so the agent can develop in it. Do not set global `bash: "allow"` without either sandbox isolation or the host guardrails below.
+
+## Trusted host developer profile
+
+When a development workflow needs the host toolchain, local Git credentials, or network access, omit `sandbox` and keep the same permission split:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "*": "ask",
+    "read": "allow",
+    "edit": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "bash": "allow",
+    "destructive_bash": "ask",
+    "external_directory": "ask",
+    "webfetch": "ask",
+    "websearch": "ask"
+  }
+}
+```
+
+The shell gate routes direct destructive operations, shell interpreters, database mutations, and known credential paths through a one-time confirmation. Sensitive server environment variables are not inherited by shell commands. This is a guardrail, not host isolation: do not use this profile for untrusted repositories or instructions, and do not approve a command whose effect you cannot justify.
 
 ---
 

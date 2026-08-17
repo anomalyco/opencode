@@ -146,6 +146,31 @@ export default {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`permission_decisions\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`permission\` text NOT NULL,
+          \`patterns\` text NOT NULL,
+          \`metadata\` text,
+          \`verdict\` text NOT NULL,
+          \`reason\` text,
+          \`model\` text NOT NULL,
+          \`latency_ms\` integer NOT NULL,
+          \`created_at\` integer NOT NULL,
+          CONSTRAINT \`fk_permission_decisions_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`session_auto_summary\` (
+          \`session_id\` text PRIMARY KEY,
+          \`summary\` text NOT NULL,
+          \`model\` text NOT NULL,
+          \`turn_count\` integer NOT NULL,
+          \`updated_at\` integer NOT NULL,
+          CONSTRAINT \`fk_session_auto_summary_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`session_context_epoch\` (
           \`session_id\` text PRIMARY KEY,
           \`baseline\` text NOT NULL,
@@ -203,6 +228,7 @@ export default {
           \`tokens_cache_write\` integer DEFAULT 0 NOT NULL,
           \`revert\` text,
           \`permission\` text,
+          \`permission_validator\` text,
           \`agent\` text,
           \`model\` text,
           \`time_created\` integer NOT NULL,
@@ -246,6 +272,7 @@ export default {
       )
       yield* tx.run(`CREATE INDEX \`part_message_id_id_idx\` ON \`part\` (\`message_id\`,\`id\`);`)
       yield* tx.run(`CREATE INDEX \`part_session_idx\` ON \`part\` (\`session_id\`);`)
+      yield* tx.run(`CREATE INDEX \`permission_decisions_session_idx\` ON \`permission_decisions\` (\`session_id\`);`)
       yield* tx.run(
         `CREATE INDEX \`session_input_session_pending_delivery_seq_idx\` ON \`session_input\` (\`session_id\`,\`promoted_seq\`,\`delivery\`,\`admitted_seq\`);`,
       )

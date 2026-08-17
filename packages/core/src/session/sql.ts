@@ -8,12 +8,25 @@ import type { Snapshot } from "../snapshot"
 import { PermissionV1 } from "../v1/permission"
 import { ProjectV2 } from "../project"
 import type { SessionSchema } from "./schema"
+import type { PermissionDecisionsStore } from "./permission-decisions-store"
 import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
 import type { SystemContext } from "../system-context/index"
 import { AgentV2 } from "../agent"
 import type { Revert } from "@opencode-ai/schema/revert"
+
+export type PermissionValidatorConfig =
+  | {
+      mode: "model"
+      model: string
+    }
+  | {
+      mode: "disabled"
+    }
+  | {
+      mode: "inherit"
+    }
 
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
@@ -48,6 +61,7 @@ export const SessionTable = sqliteTable(
     tokens_cache_write: integer().notNull().default(0),
     revert: text({ mode: "json" }).$type<Revert.State>(),
     permission: text({ mode: "json" }).$type<PermissionV1.Ruleset>(),
+    permission_validator: text({ mode: "json" }).$type<PermissionValidatorConfig>(),
     agent: text(),
     model: text({ mode: "json" }).$type<{
       id: string
@@ -173,4 +187,37 @@ export const SessionContextEpochTable = sqliteTable("session_context_epoch", {
   baseline: text().notNull(),
   snapshot: text({ mode: "json" }).notNull().$type<SystemContext.Snapshot>(),
   baseline_seq: integer().notNull(),
+})
+
+export const PermissionDecisionsTable = sqliteTable(
+  "permission_decisions",
+  {
+    id: text().primaryKey(),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    permission: text().notNull(),
+    patterns: text({ mode: "json" }).notNull().$type<string[]>(),
+    metadata: text({ mode: "json" }).$type<Record<string, unknown>>(),
+    verdict: text().$type<PermissionDecisionsStore.Verdict>().notNull(),
+    reason: text(),
+    model: text().notNull(),
+    latency_ms: integer().notNull(),
+    created_at: integer()
+      .notNull()
+      .$default(() => Date.now()),
+  },
+  (table) => [index("permission_decisions_session_idx").on(table.session_id)],
+)
+
+export const SessionAutoSummaryTable = sqliteTable("session_auto_summary", {
+  session_id: text()
+    .$type<SessionSchema.ID>()
+    .primaryKey()
+    .references(() => SessionTable.id, { onDelete: "cascade" }),
+  summary: text().notNull(),
+  model: text().notNull(),
+  turn_count: integer().notNull(),
+  updated_at: integer().notNull(),
 })

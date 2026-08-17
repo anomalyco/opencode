@@ -283,6 +283,22 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               }
             }
 
+            if (permission === "destructive_bash") {
+              const command = typeof data.command === "string" ? data.command : ""
+              return {
+                icon: "!",
+                title: "Destructive shell command",
+                body: (
+                  <box flexDirection="column" gap={1} paddingLeft={1}>
+                    <Show when={command}>
+                      <text fg={theme.text}>{"$ " + command}</text>
+                    </Show>
+                    <text fg={theme.warning}>One-time approval only. This command cannot be always allowed.</text>
+                  </box>
+                ),
+              }
+            }
+
             if (permission === "task") {
               const type = typeof data.subagent_type === "string" ? data.subagent_type : "Unknown"
               const desc = typeof data.description === "string" ? data.description : ""
@@ -394,6 +410,13 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 </text>
                 <text fg={theme.text}>{current.title}</text>
               </box>
+              <Show when={props.request.auto}>
+                {(auto) => (
+                  <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
+                    <text fg={theme.textMuted}>{`auto (${auto().model}): ${auto().verdict} — ${auto().reason}`}</text>
+                  </box>
+                )}
+              </Show>
             </box>
           )
 
@@ -402,7 +425,11 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               title="Permission required"
               header={header()}
               body={current.body}
-              options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
+              options={{
+                once: "Allow once",
+                ...(props.request.always.length ? { always: "Allow always" } : {}),
+                reject: "Reject",
+              }}
               escapeKey="reject"
               fullscreen
               onSelect={(option) => {
