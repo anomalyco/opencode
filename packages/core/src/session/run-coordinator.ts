@@ -11,8 +11,6 @@ export interface Coordinator<Key, E, Reason = never> {
   readonly run: (key: Key) => Effect.Effect<void, E>
   /** Rings the doorbell: an idle key starts an execution; an active one drains again before settling. */
   readonly wake: (key: Key, scope?: Promotable) => Effect.Effect<void>
-  /** Rings the current execution's doorbell with its existing scope. Idle keys remain idle. */
-  readonly wakeActive: (key: Key) => Effect.Effect<void>
   /** Stops the active execution, clears its doorbell, and waits for cleanup. No-op when idle. */
   readonly interrupt: (key: Key, reason?: Reason) => Effect.Effect<void>
   /** Resolves once no execution is active for the key. Returns immediately when already idle and never starts work. */
@@ -131,12 +129,6 @@ export const make = <Key, E, Reason = never>(options: {
         start(key, false, scope)
       })
 
-    const wakeActive = (key: Key) =>
-      Effect.suspend(() => {
-        const execution = executions.get(key)
-        return execution ? wake(key, execution.scope) : Effect.void
-      })
-
     const interrupt = (key: Key, reason?: Reason): Effect.Effect<void> =>
       Effect.suspend(() => {
         const execution = executions.get(key)
@@ -158,5 +150,5 @@ export const make = <Key, E, Reason = never>(options: {
         return Deferred.await(execution.done).pipe(Effect.exit, Effect.andThen(awaitIdle(key)))
       })
 
-    return { active: Effect.sync(() => new Set(executions.keys())), run, wake, wakeActive, interrupt, awaitIdle }
+    return { active: Effect.sync(() => new Set(executions.keys())), run, wake, interrupt, awaitIdle }
   })

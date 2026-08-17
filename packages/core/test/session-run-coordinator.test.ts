@@ -420,34 +420,6 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
-  it.effect("an active wake inherits scope without starting idle work", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const firstStarted = yield* Deferred.make<void>()
-        const release = yield* Deferred.make<void>()
-        const scopes: SessionInbox.Promotable[] = []
-        const coordinator = yield* SessionRunCoordinator.make({
-          drain: (_key, _force, scope) =>
-            Effect.gen(function* () {
-              scopes.push(scope)
-              if (scopes.length !== 1) return
-              yield* Deferred.succeed(firstStarted, undefined)
-              yield* Deferred.await(release)
-            }),
-        })
-
-        yield* coordinator.wakeActive("session")
-        yield* coordinator.wake("session", "steer")
-        yield* Deferred.await(firstStarted)
-        yield* coordinator.wakeActive("session")
-        yield* Deferred.succeed(release, undefined)
-        yield* coordinator.awaitIdle("session")
-
-        expect(scopes).toEqual(["steer", "steer"])
-      }),
-    ),
-  )
-
   it.effect("a cleanup-era wake starts a successor with its own scope", () =>
     Effect.scoped(
       Effect.gen(function* () {
