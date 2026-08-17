@@ -109,6 +109,11 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const info = data.session.get(sessionID)
       return info?.time.idle !== undefined && (info.time.viewed === undefined || info.time.idle > info.time.viewed)
     }
+    const family = (sessionID: string) => {
+      const session = root(sessionID)
+      const members = data.session.family(session)
+      return members.length > 0 ? members : [session]
+    }
     const normalize = (value: TabsState) => ({
       tabs: value.tabs.reduce<SessionTab[]>((tabs, tab) => {
         const sessionID = root(tab.sessionID)
@@ -124,15 +129,14 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     }, false)
     const status = (sessionID: string) => {
       const session = root(sessionID)
-      const members = data.session.family(session)
-      const family = members.length > 0 ? members : [session]
+      const members = family(session)
       return {
-        unread: family.some(isUnread) ? ("activity" as const) : undefined,
+        unread: members.some(isUnread) ? ("activity" as const) : undefined,
         promptPulse: promptPulses()[session] ?? 0,
-        attention: family.some(
+        attention: members.some(
           (id) => (data.session.permission.list(id)?.length ?? 0) > 0 || (data.session.form.list(id)?.length ?? 0) > 0,
         ),
-        busy: family.some((id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0),
+        busy: members.some((id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0),
       }
     }
 
@@ -158,10 +162,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     createEffect(() => {
       if (!enabled() || !focused()) return
       if (route.data.type !== "session" || route.data.sessionID === "dummy") return
-      const sessionID = root(route.data.sessionID)
-      const members = data.session.family(sessionID)
-      const family = members.length > 0 ? members : [sessionID]
-      const unread = family.filter(isUnread)
+      const unread = family(route.data.sessionID).filter(isUnread)
       if (unread.length === 0) return
       void Promise.allSettled(unread.map((id) => client.api.session.view({ sessionID: id })))
     })

@@ -99,7 +99,7 @@ describe("Session.view", () => {
           .select({ type: EventTable.type })
           .from(EventTable)
           .where(eq(EventTable.aggregate_id, created.id))
-          .all()).filter((event) => event.type === "session.viewed.1"),
+          .all()).filter((event) => event.type === Bus.versionedType(SessionEvent.Viewed.type, 1)),
       ).toHaveLength(2)
     }),
   )
