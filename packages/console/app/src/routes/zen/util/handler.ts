@@ -139,7 +139,7 @@ export async function handler(
     if (
       authInfo &&
       opts.modelList === "lite" &&
-      modelInfo.id === "deepseek-v4-flash" &&
+      ["deepseek-v4-flash", "deepseek-v4-pro"].includes(modelInfo.id) &&
       !allowedRegions?.includes("cn")
     )
       throw new RegionError(
@@ -197,7 +197,9 @@ export async function handler(
                   if (Array.isArray(v)) return [[k, v]]
                   if (typeof v === "object") return [[k, replacer(v)]]
                   if (typeof v === "string") {
-                    if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
+                    if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo.workspaceID]] : []
+                    if (v === "$org")
+                      return authInfo?.workspaceID ? [[k, authInfo.workspaceID.replace("wrk_", "org_")]] : []
                     if (v === "$user") return stickyId ? [[k, stickyId]] : []
                     if (v.startsWith("$header.")) {
                       const headerValue = input.request.headers.get(v.slice(8))
@@ -234,6 +236,10 @@ export async function handler(
               if (v === "$project") return headers.set(k, projectId)
               if (v === "$workspace") {
                 if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID)
+                return
+              }
+              if (v === "$org") {
+                if (authInfo?.workspaceID) headers.set(k, authInfo.workspaceID.replace("wrk_", "org_"))
                 return
               }
               headers.set(k, v)
@@ -1026,11 +1032,14 @@ export async function handler(
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
       usageInfo
 
+    const hour = new Date().getUTCHours()
     const modelCost =
-      modelInfo.cost200K &&
-      inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) > 200_000
-        ? modelInfo.cost200K
-        : modelInfo.cost
+      modelInfo.costPeak && ((hour >= 1 && hour < 4) || (hour >= 6 && hour < 10))
+        ? modelInfo.costPeak
+        : modelInfo.cost200K &&
+            inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) > 200_000
+          ? modelInfo.cost200K
+          : modelInfo.cost
 
     const inputCost = modelCost.input * inputTokens * 100
     const outputCost = modelCost.output * outputTokens * 100

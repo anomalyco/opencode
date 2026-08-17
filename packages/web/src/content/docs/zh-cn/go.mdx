@@ -50,6 +50,7 @@ OpenCode Go 的工作方式与 OpenCode 中的其他提供商一样。
 当前支持的模型列表包括：
 
 - **Grok 4.5**
+- **GLM-5.3**
 - **GLM-5.2**
 - **GLM-5.1**
 - **GPT 5.6 Luna**
@@ -80,7 +81,7 @@ OpenCode Go 包含以下限制：
 - **每周限制** — 30 美元使用额度
 - **每月限制** — 60 美元使用额度
 
-限制以美元价值定义。这意味着你的实际请求数取决于你所使用的模型。较便宜的模型（如 DeepSeek V4 Flash）允许更多请求，而较高成本的模型（如 GLM-5.2）允许较少请求。
+限制以美元价值定义。这意味着你的实际请求数取决于你所使用的模型。较便宜的模型（如 MiMo-V2.5）允许更多请求，而较高成本的模型（如 GLM-5.2）允许较少请求。
 
 下表提供了基于典型 Go 使用模式的预估请求数：
 
@@ -88,6 +89,7 @@ OpenCode Go 包含以下限制：
 | ----------------- | --------------- | ---------- | ---------- |
 | Grok 4.5          | 120             | 300        | 600        |
 | GPT 5.6 Luna      | 2,050           | 5,100      | 10,250     |
+| GLM-5.3           | 220             | 540        | 1,080      |
 | GLM-5.2           | 880             | 2,150      | 4,300      |
 | GLM-5.1           | 880             | 2,150      | 4,300      |
 | Kimi K3           | 110             | 250        | 490        |
@@ -101,19 +103,19 @@ OpenCode Go 包含以下限制：
 | Qwen3.7 Max       | 340             | 840        | 1,690      |
 | Qwen3.7 Plus      | 4,300           | 10,800     | 21,600     |
 | Qwen3.6 Plus      | 3,300           | 8,200      | 16,300     |
-| DeepSeek V4 Pro   | 3,450           | 8,550      | 17,150     |
-| DeepSeek V4 Flash | 31,650          | 79,050     | 158,150    |
+| DeepSeek V4 Pro   | 1,050           | 2,600      | 5,200      |
+| DeepSeek V4 Flash | 3,800           | 9,450      | 18,900     |
 | Hy3               | 4,300           | 10,750     | 21,500     |
 
 预估值基于观察到的请求模式：
 
 - Grok 4.5 — 每次请求 1,100 个输入 token，71,500 个缓存 token，220 个输出 token
-- GLM-5.2/5.1 — 每次请求 700 个输入 token，52,000 个缓存 token，150 个输出 token
+- GLM-5.3/5.2/5.1 — 每次请求 700 个输入 token，52,000 个缓存 token，150 个输出 token
 - GPT 5.6 Luna — 每次请求 1,000 个输入 token，50,000 个缓存 token，220 个输出 token
 - Kimi K3 — 每次请求 1,050 个输入 token，76,500 个缓存 token，300 个输出 token
 - Kimi K2.7/K2.6 — 每次请求 870 个输入 token，55,000 个缓存 token，200 个输出 token
 - DeepSeek V4 Pro — 每次请求 750 个输入 token，82,000 个缓存 token，290 个输出 token
-- DeepSeek V4 Flash — 每次请求 790 个输入 token，68,000 个缓存 token，280 个输出 token
+- DeepSeek V4 Flash — 每次请求 410 个输入 token，71,300 个缓存 token，310 个输出 token
 - MiMo-V2.5 — 每次请求 830 个输入 token，71,500 个缓存 token，295 个输出 token
 - MiMo-V2.5-Pro — 每次请求 790 个输入 token，86,000 个缓存 token，305 个输出 token
 - MiniMax M3 — 每次请求 510 个输入 token，56,000 个缓存 token，190 个输出 token
@@ -131,6 +133,7 @@ OpenCode Go 包含以下限制：
 | Grok 4.5                     | $2.00  | $6.00  | $0.30     | -        | $15      |
 | GPT 5.6 Luna (≤ 272K tokens) | $0.20  | $1.20  | $0.02     | $0.25    | $15      |
 | GPT 5.6 Luna (> 272K tokens) | $0.40  | $1.80  | $0.04     | $0.50    | $15      |
+| GLM-5.3                      | $1.40  | $4.40  | $0.26     | -        | $15      |
 | GLM-5.2                      | $1.40  | $4.40  | $0.26     | -        | $60      |
 | GLM-5.1                      | $1.40  | $4.40  | $0.26     | -        | $60      |
 | Kimi K3                      | $3.00  | $15.00 | $0.30     | -        | $15      |
@@ -147,9 +150,13 @@ OpenCode Go 包含以下限制：
 | Qwen3.7 Plus (> 256K tokens) | $1.20  | $4.80  | $0.12     | $1.50    | $60      |
 | Qwen3.6 Plus (≤ 256K tokens) | $0.50  | $3.00  | $0.05     | $0.625   | $60      |
 | Qwen3.6 Plus (> 256K tokens) | $2.00  | $6.00  | $0.20     | $2.50    | $60      |
-| DeepSeek V4 Pro              | $0.435 | $0.87  | $0.003625 | -        | $15      |
-| DeepSeek V4 Flash            | $0.14  | $0.28  | $0.0028   | -        | $60      |
+| DeepSeek V4 Pro (Off-Peak)   | $0.66  | $1.98  | $0.022    | -        | $15      |
+| DeepSeek V4 Pro (Peak)       | $1.32  | $3.96  | $0.044    | -        | $15      |
+| DeepSeek V4 Flash (Off-Peak) | $0.22  | $0.66  | $0.007    | -        | $15      |
+| DeepSeek V4 Flash (Peak)     | $0.44  | $1.32  | $0.014    | -        | $15      |
 | Hy3                          | $0.14  | $0.58  | $0.035    | -        | $60      |
+
+**DeepSeek V4 Flash / Pro:** Peak 时段为 01:00-04:00 和 06:00-10:00 UTC；其他所有时段均为 Off-Peak。[了解更多](https://api-docs.deepseek.com/quick_start/pricing/)。
 
 你可以在 **<a href={console}>控制台</a>** 中跟踪你当前的使用情况。
 
@@ -185,8 +192,9 @@ OpenCode Go 包含以下限制：
 
 | 模型              | 模型 ID           | 端点                                             | AI SDK 包                   |
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
-| Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Grok 4.5          | grok-4.5          | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna      | gpt-5.6-luna      | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| GLM-5.3           | glm-5.3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K3           | kimi-k3           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -225,6 +233,7 @@ https://opencode.ai/zen/go/v1/models
 | ----------------- | -------- | -------- |
 | Grok 4.5          | 不使用   | 30 天    |
 | GPT 5.6 Luna      | 不使用   | 30 天    |
+| GLM-5.3           | 不使用   | 0 天     |
 | GLM-5.2           | 不使用   | 0 天     |
 | GLM-5.1           | 不使用   | 0 天     |
 | Kimi K3           | 不使用   | 0 天     |
