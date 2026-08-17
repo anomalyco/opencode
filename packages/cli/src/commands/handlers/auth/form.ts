@@ -1,14 +1,14 @@
 import { confirm, log, multiselect, password, select, text, type Option } from "@clack/prompts"
 import { Effect } from "effect"
 import type { FormAnswer, FormField, FormFields } from "@opencode-ai/client"
-import { interactive, openUrl, prompt } from "../../../ui/prompt"
+import { openUrl, prompt, requireInteractive } from "../../../ui/prompt"
 
 const skip = Symbol("skip")
 const custom = Symbol("custom")
 
 export const answerForm = Effect.fn("cli.auth.form")(function* (fields: FormFields | undefined) {
   if (!fields) return undefined
-  yield* interactive("Authentication form input requires an interactive terminal")
+  yield* requireInteractive("Authentication form input requires an interactive terminal")
   const answer: FormAnswer = {}
   for (const field of fields) {
     if (!active(field, answer)) continue
@@ -19,7 +19,7 @@ export const answerForm = Effect.fn("cli.auth.form")(function* (fields: FormFiel
 })
 
 export const secret = Effect.fn("cli.auth.secret")(function* (message: string) {
-  yield* interactive("API key input requires an interactive terminal")
+  yield* requireInteractive("API key input requires an interactive terminal")
   return yield* prompt<string>(() => password({ message, validate: (value) => (!value ? "Required" : undefined) }))
 })
 
@@ -37,20 +37,20 @@ const answerField = Effect.fn("cli.auth.form.field")(function* (field: FormField
   }
   if (field.type === "boolean") {
     if (field.required) return yield* prompt<boolean>(() => confirm({ message, initialValue: field.default ?? true }))
-    const options: Array<Option<"true" | "false" | typeof skip>> = [
-      { value: "true", label: "Yes" },
-      { value: "false", label: "No" },
+    const options: Array<Option<boolean | typeof skip>> = [
+      { value: true, label: "Yes" },
+      { value: false, label: "No" },
       { value: skip, label: "Skip" },
     ]
-    const value = yield* prompt<"true" | "false" | typeof skip>(() =>
-      select<"true" | "false" | typeof skip>({
+    const value = yield* prompt<boolean | typeof skip>(() =>
+      select<boolean | typeof skip>({
         message,
         options,
-        initialValue: field.default === undefined ? skip : field.default ? "true" : "false",
+        initialValue: field.default ?? skip,
       }),
     )
     if (value === skip) return undefined
-    return value === "true"
+    return value
   }
   if (field.type === "multiselect") {
     const options: Array<Option<string | typeof custom>> = field.options.map((option) => ({

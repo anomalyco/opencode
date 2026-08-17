@@ -2,14 +2,14 @@ import { EOL } from "node:os"
 import { Effect, Option } from "effect"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
-import { connect, listIntegrations } from "./shared"
+import { createClient, loadIntegrations } from "./shared"
 import { handleCommandErrors } from "../../../ui/prompt"
 
 export default Runtime.handler(Commands.commands.auth.commands.list, (input) => list(input).pipe(handleCommandErrors))
 
 const list = Effect.fn("cli.auth.list")(function* (input) {
-  const client = yield* connect({ server: Option.getOrUndefined(input.server), standalone: input.standalone })
-  const integrations = (yield* listIntegrations(client)).filter((integration) => integration.connections.length > 0)
+  const client = yield* createClient({ server: Option.getOrUndefined(input.server), standalone: input.standalone })
+  const integrations = (yield* loadIntegrations(client)).filter((integration) => integration.connections.length > 0)
   if (input.format === "json") {
     process.stdout.write(
       JSON.stringify(

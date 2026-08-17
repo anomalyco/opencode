@@ -3,18 +3,18 @@ import { Effect, Option } from "effect"
 import type { IntegrationInfo } from "@opencode-ai/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
-import { handlePromptErrors, interactive, prompt } from "../../../ui/prompt"
-import { connect, listIntegrations, location, request, resolveIntegration } from "./shared"
+import { handlePromptErrors, prompt, requireInteractive } from "../../../ui/prompt"
+import { createClient, loadIntegrations, location, request, resolveIntegration } from "./shared"
 
 export default Runtime.handler(
   Commands.commands.auth.commands.logout,
-  Effect.fn("cli.auth.logout")(function* (input) {
-    return yield* logout({
+  Effect.fn("cli.auth.logout")((input) =>
+    logout({
       target: Option.getOrUndefined(input.target),
       server: Option.getOrUndefined(input.server),
       standalone: input.standalone,
-    }).pipe(handlePromptErrors)
-  }),
+    }).pipe(handlePromptErrors),
+  ),
 )
 
 const logout = Effect.fn("cli.auth.logout.run")(function* (input: {
@@ -22,10 +22,11 @@ const logout = Effect.fn("cli.auth.logout.run")(function* (input: {
   server?: string
   standalone: boolean
 }) {
-  if (!input.target) yield* interactive("Pass an integration ID or name when running without an interactive terminal")
+  if (!input.target)
+    yield* requireInteractive("Pass an integration ID or name when running without an interactive terminal")
   intro("Remove credential")
-  const client = yield* connect(input)
-  const integrations = yield* listIntegrations(client)
+  const client = yield* createClient({ server: input.server, standalone: input.standalone })
+  const integrations = yield* loadIntegrations(client)
   const integration = yield* chooseIntegration(integrations, input.target)
   const credentials = integration.connections.filter((connection) => connection.type === "credential")
   if (credentials.length === 0) {

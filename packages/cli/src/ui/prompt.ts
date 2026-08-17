@@ -19,7 +19,7 @@ export function prompt<A>(run: () => Promise<A | symbol>) {
   })
 }
 
-export function interactive(message: string) {
+export function requireInteractive(message: string) {
   if (process.stdin.isTTY && process.stdout.isTTY) return Effect.void
   return Effect.fail(new Error(message))
 }

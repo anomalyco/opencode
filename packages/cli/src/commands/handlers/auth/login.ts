@@ -3,12 +3,12 @@ import { Effect, Option } from "effect"
 import type { FormAnswer, IntegrationInfo, OpenCodeClient } from "@opencode-ai/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
-import { handlePromptErrors, interactive, openUrl, prompt } from "../../../ui/prompt"
+import { handlePromptErrors, openUrl, prompt, requireInteractive } from "../../../ui/prompt"
 import { answerForm, secret } from "./form"
 import {
-  connect,
+  createClient,
   connectMethods,
-  listIntegrations,
+  loadIntegrations,
   location,
   methodID,
   methodLabel,
@@ -18,27 +18,27 @@ import {
   type ConnectMethod,
 } from "./shared"
 
-const integrationPriority = [
-  "opencode",
-  "opencode-go",
-  "openai",
-  "github-copilot",
-  "google",
-  "anthropic",
-  "openrouter",
-  "vercel",
-]
+const integrationPriority = new Map([
+  ["opencode", 0],
+  ["opencode-go", 1],
+  ["openai", 2],
+  ["github-copilot", 3],
+  ["google", 4],
+  ["anthropic", 5],
+  ["openrouter", 6],
+  ["vercel", 7],
+])
 
 export default Runtime.handler(
   Commands.commands.auth.commands.login,
-  Effect.fn("cli.auth.login")(function* (input) {
-    return yield* login({
+  Effect.fn("cli.auth.login")((input) =>
+    login({
       target: Option.getOrUndefined(input.target),
       method: Option.getOrUndefined(input.method),
       server: Option.getOrUndefined(input.server),
       standalone: input.standalone,
-    }).pipe(handlePromptErrors)
-  }),
+    }).pipe(handlePromptErrors),
+  ),
 )
 
 const login = Effect.fn("cli.auth.login.run")(function* (input: {
@@ -47,9 +47,10 @@ const login = Effect.fn("cli.auth.login.run")(function* (input: {
   server?: string
   standalone: boolean
 }) {
-  if (!input.target) yield* interactive("Pass an integration ID or name when running without an interactive terminal")
+  if (!input.target)
+    yield* requireInteractive("Pass an integration ID or name when running without an interactive terminal")
   intro("Connect an integration")
-  const client = yield* connect(input)
+  const client = yield* createClient({ server: input.server, standalone: input.standalone })
   const integration = yield* findIntegration(client, input.target)
   const methods = connectMethods(integration)
   if (methods.length === 0) yield* Effect.fail(new Error(`${integration.name} has no interactive login methods`))
@@ -68,25 +69,28 @@ const findIntegration = Effect.fn("cli.auth.login.integration")(function* (clien
       Effect.tapCause(() => Effect.sync(() => progress.stop("Discovery failed", 1))),
     )
   }
-  const integrations = yield* listIntegrations(client)
+  const integrations = yield* loadIntegrations(client)
   if (target) return yield* resolveIntegration(integrations, target)
   const available = integrations
     .filter((integration) => connectMethods(integration).length > 0)
-    .toSorted((a, b) => priority(a.id) - priority(b.id) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+    .toSorted(
+      (a, b) =>
+        (integrationPriority.get(a.id) ?? integrationPriority.size) -
+          (integrationPriority.get(b.id) ?? integrationPriority.size) ||
+        a.name.localeCompare(b.name) ||
+        a.id.localeCompare(b.id),
+    )
   if (available.length === 0) return yield* Effect.fail(new Error("No authentication integrations are available"))
   const id = yield* prompt<string>(() =>
     autocomplete({
       message: "Select integration",
       maxItems: 8,
-      options: available.map((integration) => ({
-        value: integration.id,
-        label: integration.name,
-        hint: integration.connections.length
-          ? "connected"
-          : integration.id === "opencode"
-            ? "recommended"
-            : integration.id,
-      })),
+      options: available.map((integration) => {
+        const option = { value: integration.id, label: integration.name, hint: integration.id }
+        if (integration.connections.length > 0) return { ...option, hint: "connected" }
+        if (integration.id === "opencode") return { ...option, hint: "recommended" }
+        return option
+      }),
     }),
   )
   return yield* resolveIntegration(available, id)
@@ -95,7 +99,7 @@ const findIntegration = Effect.fn("cli.auth.login.integration")(function* (clien
 const chooseMethod = Effect.fn("cli.auth.login.method")(function* (methods: ConnectMethod[], target?: string) {
   if (target) return yield* resolveMethod(methods, target)
   if (methods.length === 1) return methods[0]
-  yield* interactive("Pass --method when running without an interactive terminal")
+  yield* requireInteractive("Pass --method when running without an interactive terminal")
   const id = yield* prompt<string>(() =>
     select({
       message: "Select login method",
@@ -162,7 +166,7 @@ const oauthLogin = Effect.fn("cli.auth.login.oauth")(function* (
   if (process.stdin.isTTY && process.stdout.isTTY) yield* openUrl(attempt.url)
 
   if (attempt.mode === "code") {
-    yield* interactive("This login requires an interactive terminal to enter the authorization code")
+    yield* requireInteractive("This login requires an interactive terminal to enter the authorization code")
     const code = yield* prompt<string>(() =>
       text({ message: "Paste the authorization code", validate: (value) => (!value ? "Required" : undefined) }),
     )
@@ -262,9 +266,4 @@ function isURL(value: string) {
   if (!URL.canParse(value)) return false
   const protocol = new URL(value).protocol
   return protocol === "http:" || protocol === "https:"
-}
-
-function priority(id: string) {
-  const index = integrationPriority.indexOf(id)
-  return index === -1 ? integrationPriority.length : index
 }
