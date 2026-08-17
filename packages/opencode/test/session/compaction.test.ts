@@ -2009,6 +2009,8 @@ describe("SessionNs.getUsage", () => {
         output: 15,
         cache: { read: 0, write: 0 },
         tiers: [
+          // a null entry
+          null,
           // no `tier` key at all
           { input: 5, output: 20, cache: { read: 0, write: 0 } },
           // `tier.size` is not a number
@@ -2023,7 +2025,22 @@ describe("SessionNs.getUsage", () => {
 
     expect(() => SessionNs.getUsage(input)).not.toThrow()
 
-    // both tiers discarded, so the base pricing applies
+    // every tier discarded, so the base pricing applies
+    expect(SessionNs.getUsage(input).cost).toBe(3 + 1.5)
+  })
+
+  test("ignores a cost.tiers that is not an array", () => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: { input: 3, output: 15, cache: { read: 0, write: 0 }, tiers: {} } as unknown as Provider.Model["cost"],
+    })
+    const input = {
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    }
+
+    expect(() => SessionNs.getUsage(input)).not.toThrow()
     expect(SessionNs.getUsage(input).cost).toBe(3 + 1.5)
   })
 
