@@ -103,7 +103,7 @@ describe("NotebookAttach.prependNote", () => {
   test("merges the note into a single-text output, preserving the text result type", () => {
     const output: ToolOutput = { structured: {}, content: [{ type: "text", text: "file body" }] }
     const decorated = NotebookAttach.prependNote(output, "## Local notebook · a.ts [✓]")
-    expect(decorated.content).toEqual([{ type: "text", text: "## Local notebook · a.ts [✓]" + "\n\n" + "file body" }])
+    expect(decorated.content).toEqual([{ type: "text", text: `## Local notebook · a.ts [✓]\n\nfile body` }])
   })
 
   test("prepends a text part when the output has multiple parts or media", () => {
