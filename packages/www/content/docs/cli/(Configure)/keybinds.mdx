@@ -1,0 +1,358 @@
+---
+title: "Keybinds"
+---
+
+Customize bindings in `cli.json`:
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "command.palette.show": "ctrl+k",
+    "app.exit": ["ctrl+c", "ctrl+d"],
+    "app.debug": false
+  },
+  "leader": {
+    "timeout": 1500
+  }
+}
+```
+
+Use a string for one key:
+
+```json
+{
+  "keybinds": {
+    "command.palette.show": "ctrl+k"
+  }
+}
+```
+
+Separate alternatives with commas:
+
+```json
+{
+  "keybinds": {
+    "app.exit": "ctrl+c,ctrl+d"
+  }
+}
+```
+
+Disable a binding with `"none"` or `false`:
+
+```json
+{
+  "keybinds": {
+    "app.debug": "none",
+    "help.show": false
+  }
+}
+```
+
+Use an object for event behavior:
+
+```json
+{
+  "keybinds": {
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    }
+  }
+}
+```
+
+`leader` defaults to `ctrl+x`. `<leader>` in another binding refers to that key.
+
+```json
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "model.list": "<leader>m"
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+Unknown command IDs are rejected.
+
+## Application
+
+| ID                         | Default                   | Description                         |
+| -------------------------- | ------------------------- | ----------------------------------- |
+| `leader`                   | `ctrl+x`                  | Leader key for keybind combinations |
+| `app.exit`                 | `ctrl+c,ctrl+d,<leader>q` | Exit the application                |
+| `app.debug`                | `none`                    | Toggle debug panel                  |
+| `app.console`              | `none`                    | Toggle console                      |
+| `app.scrap`                | `none`                    | Open scrap screen                   |
+| `app.toggle.animations`    | `none`                    | Toggle animations                   |
+| `app.toggle.file_context`  | `none`                    | Toggle file context                 |
+| `app.toggle.diffwrap`      | `none`                    | Toggle diff wrapping                |
+| `app.toggle.paste_summary` | `none`                    | Toggle paste summary                |
+| `command.palette.show`     | `ctrl+p`                  | List available commands             |
+| `help.show`                | `none`                    | Open help dialog                    |
+| `docs.open`                | `none`                    | Open documentation                  |
+| `opencode.settings`        | `none`                    | Open settings                       |
+| `server.pair`              | `none`                    | Pair device                         |
+| `service.restart`          | `none`                    | Restart service                     |
+| `permission.mode`          | `none`                    | Toggle auto-approve permissions     |
+
+## Diff Viewer
+
+| ID                      | Default           | Description                              |
+| ----------------------- | ----------------- | ---------------------------------------- |
+| `diff.open`             | `none`            | Open diff viewer                         |
+| `diff.close`            | `escape,q`        | Close diff viewer                        |
+| `diff.down`             | `j,down`          | Move diff viewer down                    |
+| `diff.up`               | `k,up`            | Move diff viewer up                      |
+| `diff.page.down`        | `pagedown,ctrl+f` | Page diff viewer down                    |
+| `diff.page.up`          | `pageup,ctrl+b`   | Page diff viewer up                      |
+| `diff.toggle`           | `enter,space`     | Toggle diff viewer item                  |
+| `diff.expand`           | `right`           | Expand diff viewer item                  |
+| `diff.expand_all`       | `E`               | Expand all diff viewer folders           |
+| `diff.collapse`         | `left`            | Collapse diff viewer item                |
+| `diff.switch_focus`     | `tab`             | Switch diff viewer focus                 |
+| `diff.next_hunk`        | `]`               | Jump to next diff hunk                   |
+| `diff.previous_hunk`    | `[`               | Jump to previous diff hunk               |
+| `diff.next_file`        | `n`               | Jump to next diff file                   |
+| `diff.previous_file`    | `p`               | Jump to previous diff file               |
+| `diff.toggle_file_tree` | `b`               | Toggle diff viewer file tree             |
+| `diff.single_patch`     | `s`               | Toggle single patch view                 |
+| `diff.switch_source`    | `d`               | Switch diff viewer source                |
+| `diff.toggle_view`      | `v`               | Toggle diff viewer split or unified view |
+| `diff.mark_reviewed`    | `m`               | Toggle selected diff file reviewed       |
+| `diff.help`             | `?`               | Show more diff viewer shortcuts          |
+
+## Appearance And Navigation
+
+| ID                         | Default     | Description                              |
+| -------------------------- | ----------- | ---------------------------------------- |
+| `prompt.editor`            | `<leader>e` | Open external editor                     |
+| `theme.switch`             | `<leader>t` | List available themes                    |
+| `theme.switch_mode`        | `none`      | Switch between light and dark theme mode |
+| `theme.mode.lock`          | `none`      | Lock or unlock theme mode                |
+| `session.sidebar.toggle`   | `<leader>b` | Toggle sidebar                           |
+| `session.toggle.scrollbar` | `none`      | Toggle session scrollbar                 |
+| `opencode.status`          | `<leader>s` | View status                              |
+| `opencode.debug`           | `none`      | View debug info                          |
+
+## Sessions
+
+| ID                                    | Default                 | Description                              |
+| ------------------------------------- | ----------------------- | ---------------------------------------- |
+| `session.export`                      | `<leader>x`             | Export session to editor                 |
+| `session.copy`                        | `none`                  | Copy session transcript                  |
+| `session.move`                        | `none`                  | Move session                             |
+| `session.new`                         | `<leader>n`             | Create a new session                     |
+| `session.list`                        | `<leader>l`             | List all sessions                        |
+| `open.menu`                           | `ctrl+o`                | Open recent sessions and projects        |
+| `session.tab.next`                    | `ctrl+tab,alt+down`     | Switch to next open session tab          |
+| `session.tab.previous`                | `ctrl+shift+tab,alt+up` | Switch to previous open session tab      |
+| `session.tab.history.back`            | `none`                  | Go back in session tab history           |
+| `session.tab.history.forward`         | `ctrl+i`                | Go forward in session tab history        |
+| `session.tab.next_unread`             | `alt+shift+down`        | Switch to next unread session tab        |
+| `session.tab.previous_unread`         | `alt+shift+up`          | Switch to previous unread session tab    |
+| `session.tab.close`                   | `<leader>w`             | Close current session tab                |
+| `session.tab.reopen`                  | `ctrl+shift+t`          | Reopen last closed session tab           |
+| `session.timeline`                    | `<leader>g`             | Show session timeline                    |
+| `session.fork`                        | `none`                  | Fork session from message                |
+| `session.rename`                      | `ctrl+r`                | Rename session                           |
+| `session.delete`                      | `ctrl+d`                | Delete session                           |
+| `session.share`                       | `none`                  | Share current session                    |
+| `session.unshare`                     | `none`                  | Unshare current session                  |
+| `session.interrupt`                   | `escape`                | Interrupt current session                |
+| `session.background`                  | `ctrl+b`                | Background blocking session tools        |
+| `session.compact`                     | `<leader>c`             | Compact the session                      |
+| `session.cd`                          | `none`                  | Change working directory                 |
+| `session.queued_prompts`              | `<leader>q`             | Manage queued prompts                    |
+| `queued_prompt.delete`                | `ctrl+d`                | Delete queued prompt                     |
+| `session.toggle.exploration_grouping` | `none`                  | Toggle related tool call grouping        |
+| `session.child.first`                 | `down`                  | Toggle subagent picker                   |
+| `session.child.next`                  | `right`                 | Go to next child session                 |
+| `session.child.previous`              | `left`                  | Go to previous child session             |
+| `session.parent`                      | `up`                    | Go to parent session                     |
+| `session.pin.toggle`                  | `ctrl+f`                | Pin or unpin session in the session list |
+| `session.quick_switch.1`              | `<leader>1`             | Switch to session in quick slot 1        |
+| `session.quick_switch.2`              | `<leader>2`             | Switch to session in quick slot 2        |
+| `session.quick_switch.3`              | `<leader>3`             | Switch to session in quick slot 3        |
+| `session.quick_switch.4`              | `<leader>4`             | Switch to session in quick slot 4        |
+| `session.quick_switch.5`              | `<leader>5`             | Switch to session in quick slot 5        |
+| `session.quick_switch.6`              | `<leader>6`             | Switch to session in quick slot 6        |
+| `session.quick_switch.7`              | `<leader>7`             | Switch to session in quick slot 7        |
+| `session.quick_switch.8`              | `<leader>8`             | Switch to session in quick slot 8        |
+| `session.quick_switch.9`              | `<leader>9`             | Switch to session in quick slot 9        |
+| `session.tab.select.1`                | `<leader>1,ctrl+1`      | Switch to session tab 1                  |
+| `session.tab.select.2`                | `<leader>2,ctrl+2`      | Switch to session tab 2                  |
+| `session.tab.select.3`                | `<leader>3,ctrl+3`      | Switch to session tab 3                  |
+| `session.tab.select.4`                | `<leader>4,ctrl+4`      | Switch to session tab 4                  |
+| `session.tab.select.5`                | `<leader>5,ctrl+5`      | Switch to session tab 5                  |
+| `session.tab.select.6`                | `<leader>6,ctrl+6`      | Switch to session tab 6                  |
+| `session.tab.select.7`                | `<leader>7,ctrl+7`      | Switch to session tab 7                  |
+| `session.tab.select.8`                | `<leader>8,ctrl+8`      | Switch to session tab 8                  |
+| `session.tab.select.9`                | `<leader>9,ctrl+9`      | Switch to session tab 9                  |
+| `session.tab.select.10`               | `<leader>0,ctrl+0`      | Switch to session tab 10                 |
+
+## Models And Agents
+
+| ID                             | Default     | Description                          |
+| ------------------------------ | ----------- | ------------------------------------ |
+| `stash.delete`                 | `ctrl+d`    | Delete stash entry                   |
+| `model.dialog.provider`        | `ctrl+a`    | Open provider list from model dialog |
+| `model.dialog.favorite`        | `ctrl+f`    | Toggle model favorite status         |
+| `model.list`                   | `<leader>m` | List available models                |
+| `model.cycle_recent`           | `f2`        | Next recently used model             |
+| `model.cycle_recent_reverse`   | `shift+f2`  | Previous recently used model         |
+| `model.cycle_favorite`         | `none`      | Next favorite model                  |
+| `model.cycle_favorite_reverse` | `none`      | Previous favorite model              |
+| `mcp.list`                     | `none`      | List MCP servers                     |
+| `provider.connect`             | `none`      | Connect integration                  |
+| `agent.list`                   | `<leader>a` | List agents                          |
+| `agent.cycle`                  | `shift+tab` | Next agent                           |
+| `agent.cycle.reverse`          | `none`      | Previous agent                       |
+| `variant.cycle`                | `ctrl+t`    | Cycle model variants                 |
+| `variant.list`                 | `none`      | List model variants                  |
+
+## Session Navigation
+
+| ID                              | Default                | Description                       |
+| ------------------------------- | ---------------------- | --------------------------------- |
+| `session.page.up`               | `pageup,ctrl+alt+b`    | Scroll messages up by one page    |
+| `session.page.down`             | `pagedown,ctrl+alt+f`  | Scroll messages down by one page  |
+| `session.line.up`               | `ctrl+alt+y`           | Scroll messages up by one line    |
+| `session.line.down`             | `ctrl+alt+e`           | Scroll messages down by one line  |
+| `session.half.page.up`          | `ctrl+alt+u`           | Scroll messages up by half page   |
+| `session.half.page.down`        | `ctrl+alt+d`           | Scroll messages down by half page |
+| `session.first`                 | `ctrl+g,home,alt+home` | Navigate to first message         |
+| `session.last`                  | `ctrl+alt+g,end`       | Navigate to last message          |
+| `session.message.next`          | `none`                 | Navigate to next message          |
+| `session.message.previous`      | `none`                 | Navigate to previous message      |
+| `session.message.user.next`     | `none`                 | Navigate to next user message     |
+| `session.message.user.previous` | `none`                 | Navigate to previous user message |
+| `session.messages_last_user`    | `alt+end`              | Navigate to last user message     |
+| `messages.copy`                 | `<leader>y`            | Copy message                      |
+| `session.undo`                  | `<leader>u`            | Undo message                      |
+| `session.redo`                  | `<leader>r`            | Redo message                      |
+| `session.toggle.thinking`       | `none`                 | Toggle thinking blocks visibility |
+
+## Prompt Commands
+
+| ID                            | Default      | Description            |
+| ----------------------------- | ------------ | ---------------------- |
+| `prompt.submit`               | `none`       | Submit prompt          |
+| `prompt.queue`                | `alt+return` | Queue prompt           |
+| `prompt.editor_context.clear` | `none`       | Clear editor context   |
+| `prompt.images.view`          | `<leader>i`  | View image attachments |
+| `prompt.skills`               | `none`       | Open skill selector    |
+| `prompt.stash`                | `none`       | Stash prompt           |
+| `prompt.stash.pop`            | `none`       | Pop stashed prompt     |
+| `prompt.stash.list`           | `none`       | List stashed prompts   |
+
+## Input Editing
+
+| ID                              | Default                                                                       | Description                             |
+| ------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------- |
+| `prompt.clear`                  | `ctrl+c`                                                                      | Clear input field                       |
+| `prompt.paste`                  | `{"key":"ctrl+v","preventDefault":false}` (`ctrl+v`; `preventDefault: false`) | Paste from clipboard                    |
+| `input.submit`                  | `return`                                                                      | Submit input                            |
+| `input.newline`                 | `shift+return,ctrl+return,ctrl+j`                                             | Insert newline in input                 |
+| `input.move.left`               | `left,ctrl+b`                                                                 | Move cursor left in input               |
+| `input.move.right`              | `right,ctrl+f`                                                                | Move cursor right in input              |
+| `input.move.up`                 | `up`                                                                          | Move cursor up in input                 |
+| `input.move.down`               | `down`                                                                        | Move cursor down in input               |
+| `input.select.left`             | `shift+left`                                                                  | Select left in input                    |
+| `input.select.right`            | `shift+right`                                                                 | Select right in input                   |
+| `input.select.up`               | `shift+up`                                                                    | Select up in input                      |
+| `input.select.down`             | `shift+down`                                                                  | Select down in input                    |
+| `input.line.home`               | `ctrl+a`                                                                      | Move to start of line in input          |
+| `input.line.end`                | `ctrl+e`                                                                      | Move to end of line in input            |
+| `input.select.line.home`        | `ctrl+shift+a`                                                                | Select to start of line in input        |
+| `input.select.line.end`         | `ctrl+shift+e`                                                                | Select to end of line in input          |
+| `input.visual.line.home`        | `alt+a`                                                                       | Move to start of visual line in input   |
+| `input.visual.line.end`         | `alt+e`                                                                       | Move to end of visual line in input     |
+| `input.select.visual.line.home` | `alt+shift+a`                                                                 | Select to start of visual line in input |
+| `input.select.visual.line.end`  | `alt+shift+e`                                                                 | Select to end of visual line in input   |
+| `input.buffer.home`             | `none`                                                                        | Move to start of buffer in input        |
+| `input.buffer.end`              | `none`                                                                        | Move to end of buffer in input          |
+| `input.select.buffer.home`      | `shift+home`                                                                  | Select to start of buffer in input      |
+| `input.select.buffer.end`       | `shift+end`                                                                   | Select to end of buffer in input        |
+| `input.delete.line`             | `ctrl+shift+d`                                                                | Delete line in input                    |
+| `input.delete.to.line.end`      | `ctrl+k`                                                                      | Delete to end of line in input          |
+| `input.delete.to.line.start`    | `ctrl+u`                                                                      | Delete to start of line in input        |
+| `input.backspace`               | `backspace,shift+backspace`                                                   | Backspace in input                      |
+| `input.delete`                  | `ctrl+d,delete,shift+delete`                                                  | Delete character in input               |
+| `input.undo`                    | `ctrl+-,super+z`                                                              | Undo in input                           |
+| `input.redo`                    | `ctrl+.,super+shift+z`                                                        | Redo in input                           |
+| `input.word.forward`            | `alt+f,alt+right,ctrl+right`                                                  | Move word forward in input              |
+| `input.word.backward`           | `alt+b,alt+left,ctrl+left`                                                    | Move word backward in input             |
+| `input.select.word.forward`     | `alt+shift+f,alt+shift+right`                                                 | Select word forward in input            |
+| `input.select.word.backward`    | `alt+shift+b,alt+shift+left`                                                  | Select word backward in input           |
+| `input.delete.word.forward`     | `alt+d,alt+delete,ctrl+delete`                                                | Delete word forward in input            |
+| `input.delete.word.backward`    | `ctrl+w,ctrl+backspace,alt+backspace`                                         | Delete word backward in input           |
+| `input.select.all`              | `super+a`                                                                     | Select all in input                     |
+| `prompt.history.previous`       | `up`                                                                          | Previous history item                   |
+| `prompt.history.next`           | `down`                                                                        | Next history item                       |
+
+## Composer
+
+| ID                            | Default  | Description          |
+| ----------------------------- | -------- | -------------------- |
+| `composer.subagent.up`        | `up`     | Previous subagent    |
+| `composer.subagent.down`      | `down`   | Next subagent        |
+| `composer.subagent.select`    | `return` | Navigate to subagent |
+| `composer.subagent.interrupt` | `ctrl+d` | Interrupt subagent   |
+| `composer.shell.up`           | `up`     | Previous shell       |
+| `composer.shell.down`         | `down`   | Next shell           |
+| `composer.shell.kill`         | `ctrl+d` | Kill shell command   |
+
+## Dialogs And Autocomplete
+
+| ID                             | Default       | Description                         |
+| ------------------------------ | ------------- | ----------------------------------- |
+| `dialog.select.prev`           | `up,ctrl+p`   | Move to previous dialog item        |
+| `dialog.select.next`           | `down,ctrl+n` | Move to next dialog item            |
+| `dialog.select.page_up`        | `pageup`      | Move up one page in dialog          |
+| `dialog.select.page_down`      | `pagedown`    | Move down one page in dialog        |
+| `dialog.select.home`           | `home`        | Move to first dialog item           |
+| `dialog.select.end`            | `end`         | Move to last dialog item            |
+| `dialog.select.submit`         | `return`      | Submit selected dialog item         |
+| `dialog.prompt.submit`         | `return`      | Submit dialog prompt                |
+| `dialog.worktree.generate`     | `tab`         | Generate worktree name              |
+| `dialog.move_session.new`      | `ctrl+m`      | New worktree                        |
+| `dialog.move_session.delete`   | `ctrl+d`      | Delete worktree                     |
+| `dialog.move_session.refresh`  | `ctrl+r`      | Refresh worktrees                   |
+| `prompt.autocomplete.prev`     | `up,ctrl+p`   | Move to previous autocomplete item  |
+| `prompt.autocomplete.next`     | `down,ctrl+n` | Move to next autocomplete item      |
+| `prompt.autocomplete.hide`     | `escape`      | Hide autocomplete                   |
+| `prompt.autocomplete.select`   | `return`      | Select autocomplete item            |
+| `prompt.autocomplete.complete` | `tab`         | Complete autocomplete item          |
+| `permission.prompt.fullscreen` | `ctrl+f`      | Toggle permission prompt fullscreen |
+| `plugins.toggle`               | `space`       | Toggle plugin                       |
+| `dialog.mcp.toggle`            | `space`       | Toggle MCP server                   |
+| `dialog.plugins.install`       | `shift+i`     | Install plugin from plugin dialog   |
+
+## Terminal And Plugins
+
+| ID                      | Default  | Description                |
+| ----------------------- | -------- | -------------------------- |
+| `terminal.suspend`      | `ctrl+z` | Suspend terminal           |
+| `terminal.title.toggle` | `none`   | Toggle terminal title      |
+| `plugins.list`          | `none`   | Open plugin manager dialog |
+| `plugins.install`       | `none`   | Install plugin             |
+
+## Which-Key
+
+| ID                         | Default                     | Description                      |
+| -------------------------- | --------------------------- | -------------------------------- |
+| `which-key.toggle`         | `ctrl+alt+k`                | Toggle which-key panel           |
+| `which-key.layout.toggle`  | `ctrl+alt+shift+k`          | Switch which-key layout          |
+| `which-key.pending.toggle` | `ctrl+alt+shift+p`          | Toggle which-key pending preview |
+| `which-key.group.previous` | `ctrl+alt+left,ctrl+alt+[`  | Previous which-key group         |
+| `which-key.group.next`     | `ctrl+alt+right,ctrl+alt+]` | Next which-key group             |
+| `which-key.scroll.up`      | `ctrl+alt+up,ctrl+alt+p`    | Scroll which-key up              |
+| `which-key.scroll.down`    | `ctrl+alt+down,ctrl+alt+n`  | Scroll which-key down            |
+| `which-key.page.up`        | `ctrl+alt+pageup`           | Page which-key up                |
+| `which-key.page.down`      | `ctrl+alt+pagedown`         | Page which-key down              |
+| `which-key.home`           | `ctrl+alt+home`             | Jump to first which-key binding  |
+| `which-key.end`            | `ctrl+alt+end`              | Jump to last which-key binding   |

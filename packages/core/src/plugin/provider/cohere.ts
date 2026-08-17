@@ -1,16 +1,10 @@
-import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { createProviderPlugin } from "./factory.js"
 
-export const CoherePlugin = define({
+export const CoherePlugin = createProviderPlugin({
   id: "opencode.provider.cohere",
-  effect: Effect.fn(function* (ctx) {
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/cohere") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/cohere"))
-        evt.sdk = mod.createCohere(evt.options)
-      }),
-    )
-  }),
+  package: "@ai-sdk/cohere",
+  load: async (options) => {
+    const { createCohere } = await import("@ai-sdk/cohere")
+    return createCohere(options)
+  },
 })

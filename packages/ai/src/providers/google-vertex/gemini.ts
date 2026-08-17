@@ -1,2 +1,2 @@
-export { model } from "../google-vertex"
-export type { Settings } from "../google-vertex"
+export { model } from "../google-vertex.js"
+export type { Settings } from "../google-vertex.js"

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { onCleanup } from "solid-js"
+import { For, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextReveal } from "./text-reveal"
 
@@ -181,11 +181,13 @@ export const Playground = {
         </div>
 
         <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap" }}>
-          {TEXTS.map((t, i) => (
-            <button onClick={() => setState("index", i)} style={btn(index() === i)}>
-              {t ?? "(none)"}
-            </button>
-          ))}
+          <For each={TEXTS}>
+            {(t, i) => (
+              <button onClick={() => setState("index", i())} style={btn(index() === i())}>
+                {t ?? "(none)"}
+              </button>
+            )}
+          </For>
         </div>
 
         <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>

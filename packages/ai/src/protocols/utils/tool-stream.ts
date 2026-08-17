@@ -1,6 +1,6 @@
 import { Effect } from "effect"
-import { LLMError, LLMEvent, type ProviderMetadata, type ToolCall } from "../../schema"
-import { eventError, parseToolInput, type ToolAccumulator } from "../shared"
+import { AIError, LLMEvent, type ProviderMetadata, type ToolCall, type ToolInputError } from "../../schema/index.js"
+import { eventError, parseToolInput, type ToolAccumulator } from "../shared.js"
 
 type StreamKey = string | number
 
@@ -53,6 +53,7 @@ const inputStart = (tool: PendingTool) =>
   LLMEvent.toolInputStart({
     id: tool.id,
     name: tool.name,
+    providerExecuted: tool.providerExecuted ? true : undefined,
     providerMetadata: tool.providerMetadata,
   })
 
@@ -63,19 +64,36 @@ const inputDelta = (tool: PendingTool, text: string) =>
     text,
   })
 
-const toolCall = (route: string, tool: PendingTool, inputOverride?: string) =>
-  parseToolInput(route, tool.name, inputOverride ?? tool.input).pipe(
-    Effect.map(
-      (input): ToolCall =>
-        LLMEvent.toolCall({
-          id: tool.id,
-          name: tool.name,
-          input,
-          providerExecuted: tool.providerExecuted ? true : undefined,
-          providerMetadata: tool.providerMetadata,
-        }),
+const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
+  const raw = inputOverride ?? tool.input
+  return parseToolInput(route, tool.name, raw).pipe(
+    Effect.map((input): ToolCall | ToolInputError =>
+      LLMEvent.toolCall({
+        id: tool.id,
+        name: tool.name,
+        input,
+        providerExecuted: tool.providerExecuted ? true : undefined,
+        providerMetadata: tool.providerMetadata,
+      }),
+    ),
+    Effect.catch((error) =>
+      tool.providerExecuted
+        ? Effect.fail(error)
+        : Effect.succeed(
+            LLMEvent.toolInputError({
+              id: tool.id,
+              name: tool.name,
+              raw,
+            }),
+          ),
     ),
   )
+}
+
+const finishEvents = (tool: PendingTool, event: ToolCall | ToolInputError): ReadonlyArray<LLMEvent> =>
+  event.type === "tool-input-error"
+    ? [event]
+    : [LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata }), event]
 
 /** Store the updated tool and produce the optional public delta event. */
 const appendTool = <K extends StreamKey>(
@@ -94,8 +112,8 @@ const appendTool = <K extends StreamKey>(
   }
 }
 
-export const isError = <K extends StreamKey>(result: AppendOutcome<K> | LLMError): result is LLMError =>
-  result instanceof LLMError
+export const isError = <K extends StreamKey>(result: AppendOutcome<K> | AIError): result is AIError =>
+  result instanceof AIError
 
 /**
  * Register a tool call whose start event arrived before any argument deltas.
@@ -120,10 +138,10 @@ export const appendOrStart = <K extends StreamKey>(
   key: K,
   delta: { readonly id?: string; readonly name?: string; readonly text: string },
   missingToolMessage: string,
-): AppendOutcome<K> | LLMError => {
+): AppendOutcome<K> | AIError => {
   const current = tools[key]
-  const id = delta.id ?? current?.id
-  const name = delta.name ?? current?.name
+  const id = current?.id ?? delta.id
+  const name = current?.name ?? delta.name
   if (!id || !name) return eventError(route, missingToolMessage)
 
   const tool = {
@@ -149,7 +167,7 @@ export const appendExisting = <K extends StreamKey>(
   key: K,
   text: string,
   missingToolMessage: string,
-): AppendOutcome<K> | LLMError => {
+): AppendOutcome<K> | AIError => {
   const current = tools[key]
   if (!current) return eventError(route, missingToolMessage)
   if (text.length === 0) return { tools, tool: current, events: [] }
@@ -158,8 +176,9 @@ export const appendExisting = <K extends StreamKey>(
 
 /**
  * Finalize one pending tool call: parse the accumulated raw JSON, remove it
- * from state, and return the optional public `tool-call` event. Missing keys are
- * a no-op because some providers emit stop events for non-tool content blocks.
+ * from state, and return either a call or a non-executable local input error.
+ * Missing keys are a no-op because some providers emit stop events for
+ * non-tool content blocks.
  */
 export const finish = <K extends StreamKey>(route: string, tools: State<K>, key: K) =>
   Effect.gen(function* () {
@@ -167,10 +186,7 @@ export const finish = <K extends StreamKey>(route: string, tools: State<K>, key:
     if (!tool) return { tools }
     return {
       tools: withoutTool(tools, key),
-      events: [
-        LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata }),
-        yield* toolCall(route, tool),
-      ],
+      events: finishEvents(tool, yield* toolCall(route, tool)),
     }
   })
 
@@ -185,17 +201,14 @@ export const finishWithInput = <K extends StreamKey>(route: string, tools: State
     if (!tool) return { tools }
     return {
       tools: withoutTool(tools, key),
-      events: [
-        LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata }),
-        yield* toolCall(route, tool, input),
-      ],
+      events: finishEvents(tool, yield* toolCall(route, tool, input)),
     }
   })
 
 /**
  * Finalize every pending tool call at once. OpenAI Chat has this shape: it does
- * not emit per-tool stop events, so all accumulated calls finish when the choice
- * receives a terminal `finish_reason`.
+ * not emit per-tool stop events, so all accumulated calls finish independently
+ * when the choice receives a terminal `finish_reason`.
  */
 export const finishAll = <K extends StreamKey>(route: string, tools: State<K>) =>
   Effect.gen(function* () {
@@ -205,14 +218,9 @@ export const finishAll = <K extends StreamKey>(route: string, tools: State<K>) =
     return {
       tools: empty<K>(),
       events: yield* Effect.forEach(pending, (tool) =>
-        toolCall(route, tool).pipe(
-          Effect.map((call) => [
-            LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata }),
-            call,
-          ]),
-        ),
+        toolCall(route, tool).pipe(Effect.map((event) => finishEvents(tool, event))),
       ).pipe(Effect.map((events) => events.flat())),
     }
   })
 
-export * as ToolStream from "./tool-stream"
+export * as ToolStream from "./tool-stream.js"

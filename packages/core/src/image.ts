@@ -1,9 +1,9 @@
-export * as Image from "./image"
+export * as Image from "./image.js"
 
-import { makeLocationNode } from "./effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Config } from "./config"
-import { FileSystem } from "./filesystem"
+import { Config } from "./config.js"
+import { FileSystem } from "./filesystem.js"
 
 export class ResizerUnavailableError extends Schema.TaggedErrorClass<ResizerUnavailableError>()(
   "Image.ResizerUnavailableError",
@@ -50,7 +50,7 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const loadAdapter = yield* Effect.cached(
       Effect.tryPromise({
-        try: () => import("./image/photon"),
+        try: () => import("./image/photon.js"),
         catch: () => new ResizerUnavailableError(),
       }).pipe(Effect.flatMap((adapter) => adapter.make)),
     )
@@ -61,7 +61,7 @@ const layer = Layer.effect(
       const image = Object.assign(
         {},
         ...(yield* config.entries()).flatMap((entry) =>
-          entry.type === "document" && entry.info.attachments?.image ? [entry.info.attachments.image] : [],
+          entry.type === "document" && entry.info.media?.image ? [entry.info.media.image] : [],
         ),
       )
       const normalize = yield* loadAdapter

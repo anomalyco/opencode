@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { define } from "@opencode-ai/plugin/effect/plugin"
 
 export const OpenAICompatiblePlugin = define({
   id: "opencode.provider.openai-compatible",

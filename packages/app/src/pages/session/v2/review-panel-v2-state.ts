@@ -6,9 +6,10 @@ import {
 } from "@opencode-ai/session-ui/v2/session-review-v2"
 import { createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
+import type { Platform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
 
-export function createReviewPanelV2State() {
+export function createReviewPanelV2State(platform?: Platform) {
   const [store, setStore, , ready] = persisted(
     Persist.global("review-panel-v2"),
     createStore({
@@ -16,6 +17,7 @@ export function createReviewPanelV2State() {
       sidebarWidth: SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT,
       expandMode: "collapse" as SessionReviewExpandMode,
     }),
+    platform,
   )
   // The filter is transient by design: a persisted filter would silently hide
   // files after a reload.

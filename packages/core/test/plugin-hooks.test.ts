@@ -42,4 +42,25 @@ describe("PluginHooks", () => {
       expect(event.messages).toEqual([Message.user("changed")])
     }),
   )
+
+  it.effect("mutates shell creation input", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("shell", "create.before", (event) =>
+        Effect.sync(() => {
+          event.command = "echo changed"
+        }),
+      )
+      const event = {
+        command: "echo original",
+        cwd: "/tmp",
+        timeout: 0,
+        shell: "/bin/sh",
+        env: {},
+      }
+
+      expect(yield* hooks.trigger("shell", "create.before", event)).toBe(event)
+      expect(event.command).toBe("echo changed")
+    }),
+  )
 })

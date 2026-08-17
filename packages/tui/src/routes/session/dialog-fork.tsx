@@ -1,5 +1,4 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js"
-import { unwrap } from "solid-js/store"
 import { useData } from "../../context/data"
 import { useRoute } from "../../context/route"
 import { useClient } from "../../context/client"
@@ -9,6 +8,7 @@ import { useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { errorMessage } from "../../util/error"
 import { Locale } from "../../util/locale"
+import { projectedPromptInput } from "../../prompt/codec"
 
 export function DialogFork(props: { sessionID: string; messageID?: string; onMove?: (messageID?: string) => void }) {
   const data = useData()
@@ -16,33 +16,32 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
   const client = useClient()
   const route = useRoute()
   const toast = useToast()
-  const [pending, setPending] = createSignal(false)
+  const [pending, setPending] = createSignal(!!props.messageID)
 
   const fork = async (messageID?: string) => {
     setPending(true)
-    const result = await client.api.session.fork({ sessionID: props.sessionID, messageID }).catch((error) => {
-      toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
-      return undefined
-    })
+    const result = await client.api.session
+      .fork({
+        sessionID: props.sessionID,
+        boundary: messageID ? { type: "before", messageID } : { type: "through" },
+      })
+      .catch((error) => {
+        toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
+        return undefined
+      })
     if (!result) return dialog.clear()
     const message = messageID ? data.session.message.get(props.sessionID, messageID) : undefined
+    const prompt = message?.type === "user" ? projectedPromptInput(message) : undefined
     route.navigate({
       sessionID: result.id,
       type: "session",
-      prompt:
-        message?.type === "user"
-          ? {
-              text: message.text,
-              files: message.files?.map((file) => ({
-                uri: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
-                name: file.name,
-                description: file.description,
-                mention: file.mention,
-              })),
-              agents: structuredClone(unwrap(message.agents ?? [])),
-              pasted: [],
-            }
-          : undefined,
+      prompt: prompt
+        ? {
+            ...prompt,
+            agents: prompt.agents ?? [],
+            pasted: [],
+          }
+        : undefined,
     })
     dialog.clear()
     toast.show({ message: "Forked session", variant: "success", duration: 4000 })
@@ -80,11 +79,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
         </box>
       }
     >
-      <DialogSelect
-        onMove={(option) => props.onMove?.(option.value)}
-        title="Fork session"
-        options={options()}
-      />
+      <DialogSelect onMove={(option) => props.onMove?.(option.value)} title="Fork session" options={options()} />
     </Show>
   )
 }

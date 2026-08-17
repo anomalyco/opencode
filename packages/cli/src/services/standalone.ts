@@ -1,6 +1,6 @@
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Deferred, Effect, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { randomBytes } from "node:crypto"
@@ -13,11 +13,13 @@ type Options = {
   readonly command?: ReadonlyArray<string>
 }
 
+const startupDirectory = process.cwd()
+
 function command(password: string, options: Options) {
   const [executable, ...args] = options.command ?? [...selfCommand(), "serve"]
   if (!executable) throw new Error("Failed to resolve standalone server command")
   return ChildProcess.make(executable, [...args, "--stdio", "--port", "0"], {
-    cwd: process.cwd(),
+    cwd: startupDirectory,
     // Explicit entry wins over anything inherited, so a user-exported
     // OPENCODE_PASSWORD cannot shadow the child's lease credential.
     env: { OPENCODE_PASSWORD: password },
@@ -53,7 +55,7 @@ const makeEndpoint = Effect.fn("cli.standalone.endpoint")(
       pid: proc.pid,
     } satisfies Endpoint & { readonly pid: number }
   },
-  Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)),
+  Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)),
 )
 
 export function start(options: Options = {}) {

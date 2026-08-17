@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../src"
-import { OpenAIChat } from "../src/protocols"
-import { ToolSchemaProjection } from "../src/protocols/utils/tool-schema"
-import { Auth, LLMClient } from "../src/route"
-import { it } from "./lib/effect"
+import { LLM } from "../src/index.js"
+import { OpenAIChat } from "../src/protocols.js"
+import { ToolSchemaProjection } from "../src/protocols/utils/tool-schema.js"
+import { Auth } from "../src/route.js"
+import { compileRequest } from "../src/route/client.js"
+import { it } from "./lib/effect.js"
 
 describe("tool schema projections", () => {
   test("moonshot strips $ref siblings and converts tuple arrays to a schema object", () => {
@@ -79,7 +80,7 @@ describe("tool schema projections", () => {
       const model = OpenAIChat.route
         .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
         .model({ id: "kimi-k2", compatibility: { toolSchema: "moonshot" } })
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           prompt: "Use the tool.",

@@ -1,4 +1,5 @@
-import type { FilePart, Project, UserMessage, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { FilePart, Project, UserMessage } from "@/types"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
@@ -6,6 +7,7 @@ import {
   batch,
   ErrorBoundary,
   onCleanup,
+  Suspense,
   Show,
   Match,
   Switch,
@@ -36,7 +38,8 @@ import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
-import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
+import { checksum } from "@opencode-ai/core/util/encode"
+import { isWorkspaceDirectory } from "@/utils/workspace"
 import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { ErrorPage } from "@/pages/error"
@@ -52,12 +55,13 @@ import { PromptProvider, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
-import { ServerConnection, serverName, useServer } from "@/context/server"
+import { ServerConnection, serverName, useServers } from "@/context/servers"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
-import { TerminalProvider, useTerminal } from "@/context/terminal"
+import { TerminalProvider } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
+import { PromptInputV2Composer, usePromptInputV2Controller } from "@/components/prompt-input-v2"
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { promptLength } from "@/components/prompt-input/history"
@@ -68,11 +72,11 @@ import {
   createSessionComposerRegionController,
   SessionComposerRegion,
 } from "@/pages/session/composer"
-import { createOpenReviewFile, createSessionTabs, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
+import { createOpenReviewFile, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
-import { useSessionLayout } from "@/pages/session/session-layout"
+import { createSessionController } from "@/pages/session/session-controller"
 import { restorePromptModel, syncPromptModel, syncSessionModel } from "@/pages/session/session-model-helpers"
 import {
   clampSessionPanelWidth,
@@ -99,7 +103,6 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
-import { createSessionOwnership } from "./session/session-ownership"
 import { createSessionLineage } from "./session/session-lineage"
 
 type FollowupItem = FollowupDraft & { id: string }
@@ -142,14 +145,6 @@ async function runPromptRollbackMutation<T, R>(input: {
     })
 }
 
-export function SessionPage() {
-  return (
-    <SessionProviders>
-      <Page />
-    </SessionProviders>
-  )
-}
-
 // Rendered under app.tsx's TargetSessionRoute, which owns the per-server keyed
 // remount around the server-scoped providers. Nothing here may key on the
 // session ID: session tabs on the same server share this route instance, and
@@ -157,16 +152,19 @@ export function SessionPage() {
 export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
   const serverSync = useServerSync()
-  const directory = createMemo(() => serverSync().session.lineage.peek(params.id)?.session.directory)
+  const directory = createMemo(() => serverSync.session.lineage.peek(params.id)?.session.location.directory)
   return (
     // Settings must keep the target-server SDK, sync, and models context and remain registered
     // when session content falls back to the route error boundary.
-    <TargetServerScopedProviders directory={directory} sessionID={() => params.id}>
-      <TargetSessionSettingsCommand />
-      <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
-        <ResolvedTargetSessionRoute />
-      </SessionRouteErrorBoundary>
-    </TargetServerScopedProviders>
+    <>
+      <MarkSessionNotificationsViewed sessionID={() => params.id} />
+      <ModelsProvider directory={directory}>
+        <TargetSessionSettingsCommand />
+        <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)} padded>
+          <ResolvedTargetSessionRoute />
+        </SessionRouteErrorBoundary>
+      </ModelsProvider>
+    </>
   )
 }
 
@@ -178,20 +176,15 @@ function TargetSessionSettingsCommand() {
 export function SessionRouteErrorBoundary(
   props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key; padded?: boolean }>,
 ) {
-  const settings = useSettings()
   return (
     <ErrorBoundary
-      fallback={(error) =>
-        settings.general.newLayoutDesigns() ? (
-          <SessionRouteFrame padded={props.padded}>
-            <SessionPanelFrame newLayout raised={!!props.sessionID}>
-              <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
-            </SessionPanelFrame>
-          </SessionRouteFrame>
-        ) : (
-          <ErrorPage error={error} />
-        )
-      }
+      fallback={(error) => (
+        <SessionRouteFrame padded={props.padded}>
+          <SessionPanelFrame newLayout raised={!!props.sessionID}>
+            <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
+          </SessionPanelFrame>
+        </SessionRouteFrame>
+      )}
     >
       {props.children}
     </ErrorBoundary>
@@ -200,16 +193,17 @@ export function SessionRouteErrorBoundary(
 
 function SessionErrorFallback(props: { error: unknown; sessionID?: string; serverKey?: ServerConnection.Key }) {
   const language = useLanguage()
-  const server = useServer()
+  const server = useServers()
   const tabs = useTabs()
+
   const displayServer = createMemo(() => {
-    const key = props.serverKey ?? server.key
+    const key = props.serverKey
     const conn = server.list.find((item) => ServerConnection.key(item) === key)
     return conn ? serverName(conn) : key
   })
   const closeTab = () => {
-    if (!props.sessionID) return
-    tabs.removeSessionTab({ server: props.serverKey ?? server.key, sessionId: props.sessionID })
+    if (!props.sessionID || !props.serverKey) return
+    tabs.removeSessionTab({ server: props.serverKey, sessionId: props.sessionID })
   }
   if (isCurrentSessionNotFoundError(props.error, props.sessionID)) {
     return (
@@ -248,10 +242,9 @@ function ResolvedTargetSessionRoute() {
   const serverKey = createMemo(() => requireServerKey(params.serverKey))
   const current = createSessionLineage(
     () => params.id,
-    () => sync().session.lineage,
+    () => sync.session.lineage,
   )
-  const directory = createMemo(() => current()?.session.directory)
-  const targetDirectory = () => directory()!
+  const directory = createMemo(() => current()?.session.location.directory)
 
   createEffect(() => {
     const session = current()
@@ -268,11 +261,13 @@ function ResolvedTargetSessionRoute() {
     // the terminal. Same-workspace tab switches keep it open because warm
     // targets resolve synchronously from the sync cache.
     <Show when={directory()}>
-      <SDKProvider directory={targetDirectory}>
-        <DirectoryDataProvider directory={targetDirectory} server={serverKey}>
-          <TargetSessionPage />
-        </DirectoryDataProvider>
-      </SDKProvider>
+      {(dir) => (
+        <SDKProvider directory={dir()}>
+          <DirectoryDataProvider directory={dir()} server={serverKey()}>
+            <TargetSessionPage />
+          </DirectoryDataProvider>
+        </SDKProvider>
+      )}
     </Show>
   )
 }
@@ -284,20 +279,17 @@ function TargetSessionPage() {
   const sdk = useSDK()
   const serverSDK = useServerSDK()
   return (
-    <Show when={`${serverSDK().scope}\0${sdk().directory}`} keyed>
-      <SessionPage />
+    <Show when={`${serverSDK.scope}\0${sdk().directory}`} keyed>
+      <TerminalProvider>
+        <FileProvider>
+          <PromptProvider>
+            <CommentsProvider>
+              <Page />
+            </CommentsProvider>
+          </PromptProvider>
+        </FileProvider>
+      </TerminalProvider>
     </Show>
-  )
-}
-
-function TargetServerScopedProviders(
-  props: ParentProps<{ directory?: () => string | undefined; sessionID?: () => string | undefined }>,
-) {
-  return (
-    <>
-      <MarkSessionNotificationsViewed sessionID={props.sessionID} />
-      <ModelsProvider directory={props.directory}>{props.children}</ModelsProvider>
-    </>
   )
 }
 
@@ -310,18 +302,6 @@ function MarkSessionNotificationsViewed(props: { sessionID?: () => string | unde
     notification.session.markViewed(sessionID)
   })
   return null
-}
-
-function SessionProviders(props: ParentProps) {
-  return (
-    <TerminalProvider>
-      <FileProvider>
-        <PromptProvider>
-          <CommentsProvider>{props.children}</CommentsProvider>
-        </PromptProvider>
-      </FileProvider>
-    </TerminalProvider>
-  )
 }
 
 function SessionRouteFrame(props: ParentProps<{ padded?: boolean }>) {
@@ -364,20 +344,24 @@ export default function Page() {
   const prompt = usePrompt()
   const comments = useComments()
   const command = useCommand()
-  const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
   const navigate = useNavigate()
-  const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
-  const reviewMode = () => view().review.mode() ?? "git"
-  const reviewFile = () => view().review.file()
-  const sessionOwnership = createSessionOwnership(sessionKey)
+  const isDesktop = createMediaQuery("(min-width: 768px)")
   const newSessionDesign = createMemo(() => settings.general.newLayoutDesigns())
+  const canReview = createMemo(() => !!sync().project)
+  const controller = createSessionController({
+    review: isDesktop,
+    hasReview: canReview,
+    fileBrowser: (sessionID) => newSessionDesign() && isDesktop() && !!sessionID,
+  })
+  const reviewMode = () => controller.layout.view().review.mode() ?? "git"
+  const reviewFile = () => controller.layout.view().review.file()
 
   createEffect(() => {
     if (!prompt.ready()) return
     untrack(() => {
-      if (params.id) return
+      if (controller.identity.params.id) return
       const text = searchParams.prompt
       if (!text) return
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
@@ -398,56 +382,21 @@ export default function Page() {
 
   const composer = createSessionComposerController()
   const inputController = createPromptInputController({
-    sessionKey,
-    sessionID: () => params.id,
-    queryOptions: serverSync().queryOptions,
+    sessionKey: controller.identity.sessionKey,
+    sessionID: () => controller.identity.params.id,
+    queryOptions: serverSync.queryOptions,
   })
 
-  const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
-  const sessionPanelKey = createMemo(() => (params.id ? `${serverSDK().scope}\0${params.id}` : undefined))
-
-  createEffect(
-    on(
-      () => params.id,
-      (id, prev) => {
-        if (!id) return
-        if (prev) return
-
-        const pending = layout.handoff.tabs()
-        if (!pending) return
-        if (Date.now() - pending.at > 60_000) {
-          layout.handoff.clearTabs()
-          return
-        }
-        if (pending.scope !== serverSDK().scope) return
-
-        if (pending.id !== id) return
-        layout.handoff.clearTabs()
-        if (pending.dir !== base64Encode(sdk().directory)) return
-
-        const from = workspaceTabs().tabs()
-        if (from.all.length === 0 && !from.active) return
-
-        const current = tabs().tabs()
-        if (current.all.length > 0 || current.active) return
-
-        const all = normalizeTabs(from.all)
-        const active = from.active ? normalizeTab(from.active) : undefined
-        tabs().setAll(all)
-        tabs().setActive(active && all.includes(active) ? active : all[0])
-
-        workspaceTabs().setAll([])
-        workspaceTabs().setActive(undefined)
-      },
-      { defer: true },
-    ),
+  const sessionPanelKey = createMemo(() =>
+    controller.identity.params.id ? `${serverSDK.scope}\0${controller.identity.params.id}` : undefined,
   )
 
-  const isDesktop = createMediaQuery("(min-width: 768px)")
   const size = createSizing()
-  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
-  const desktopV2ReviewOpen = createMemo(() => newSessionDesign() && desktopReviewOpen() && !!params.id)
-  const terminalOpen = createMemo(() => view().terminal.opened())
+  const desktopReviewOpen = createMemo(() => isDesktop() && controller.layout.view().reviewPanel.opened())
+  const desktopV2ReviewOpen = createMemo(
+    () => newSessionDesign() && desktopReviewOpen() && !!controller.identity.params.id,
+  )
+  const terminalOpen = createMemo(() => controller.layout.view().terminal.opened())
   const desktopTerminalOpen = createMemo(() => isDesktop() && terminalOpen())
   const desktopInlineTerminalOnlyOpen = createMemo(
     () => newSessionDesign() && desktopTerminalOpen() && !desktopV2ReviewOpen(),
@@ -508,54 +457,23 @@ export default function Page() {
     }),
   )
 
-  function normalizeTab(tab: string) {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
-  }
-
-  function normalizeTabs(list: string[]) {
-    const seen = new Set<string>()
-    const next: string[] = []
-    for (const item of list) {
-      const value = normalizeTab(item)
-      if (seen.has(value)) continue
-      seen.add(value)
-      next.push(value)
-    }
-    return next
-  }
-
   const openReviewPanel = () => {
-    if (!view().reviewPanel.opened()) view().reviewPanel.open()
+    if (!controller.layout.view().reviewPanel.opened()) controller.layout.view().reviewPanel.open()
   }
 
-  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
-  const isChildSession = createMemo(() => !!info()?.parentID)
-  const diffs = createMemo(() => (params.id ? list(sync().data.session_diff[params.id]) : []))
-  const canReview = createMemo(() => !!sync().project)
-  const reviewTab = createMemo(() => isDesktop())
-  const tabState = createSessionTabs({
-    tabs,
-    pathFromTab: file.pathFromTab,
-    normalizeTab,
-    review: reviewTab,
-    hasReview: canReview,
-  })
-  const activeTab = tabState.activeTab
-  const activeFileTab = tabState.activeFileTab
-  const revertMessageID = createMemo(() => info()?.revert?.messageID)
-  const timeline = createTimelineModel({ sessionID: () => params.id, revertMessageID })
+  const sessionDirectory = createMemo(() => controller.data.info()?.location.directory ?? sdk().directory)
+  const workspaceSession = createMemo(() => isWorkspaceDirectory(sync().project, sessionDirectory()))
+  const timeline = createTimelineModel({ session: controller })
   const historyLoading = timeline.history.loading
   const historyMore = timeline.history.more
   const lastUserMessage = timeline.lastUserMessage
-  const messages = timeline.messages
   const messagesReady = timeline.ready
   const sessionSync = timeline.resource
   const userMessages = timeline.userMessages
   const visibleUserMessages = timeline.visibleUserMessages
 
   createEffect(() => {
-    const tab = activeFileTab()
+    const tab = controller.tabs.activeFileTab()
     if (!tab) return
 
     const path = file.pathFromTab(tab)
@@ -575,7 +493,7 @@ export default function Page() {
 
   let restoredModelSession: string | undefined
   createEffect(() => {
-    const id = params.id
+    const id = controller.identity.params.id
     if (!id || !prompt.ready() || !local.session.ready()) return
     if (restoredModelSession !== id) {
       restoredModelSession = id
@@ -586,7 +504,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => ({ dir: sdk().directory, id: params.id }),
+      () => ({ dir: sdk().directory, id: controller.identity.params.id }),
       (next, prev) => {
         if (!prev) return
         if (next.dir === prev.dir && next.id === prev.id) return
@@ -599,11 +517,12 @@ export default function Page() {
   const [store, setStore] = createStore({
     ...sessionViewState(),
     newSessionWorktree: "main",
+    sessionDetailsOpen: false,
     deferRender: false,
   })
 
   const [followup, setFollowup] = persisted(
-    Persist.serverWorkspace(serverSDK().scope, sdk().directory, "followup", ["followup.v1"]),
+    Persist.serverWorkspace(serverSDK.scope, sdk().directory, "followup", ["followup.v1"]),
     createStore<{
       items: Record<string, FollowupItem[] | undefined>
       failed: Record<string, string | undefined>
@@ -618,10 +537,10 @@ export default function Page() {
   )
 
   createComputed((prev) => {
-    const key = sessionKey()
+    const key = controller.identity.sessionKey()
     if (key !== prev) {
       setStore("deferRender", true)
-      const owner = sessionOwnership.capture()
+      const owner = controller.ownership.capture()
       requestAnimationFrame(() => {
         setTimeout(() => owner.run(() => setStore("deferRender", false)), 0)
       })
@@ -630,6 +549,8 @@ export default function Page() {
   })
 
   let reviewFrame: number | undefined
+  let todoFrame: number | undefined
+  let todoTimer: number | undefined
   let diffFrame: number | undefined
   let diffTimer: number | undefined
 
@@ -665,7 +586,9 @@ export default function Page() {
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
   const wantsReview = createMemo(() =>
     isDesktop()
-      ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
+      ? desktopFileTreeOpen() ||
+        (desktopReviewOpen() &&
+          (controller.tabs.activeTab() === "review" || (newSessionDesign() && !!controller.tabs.activeFileTab())))
       : store.mobileTab === "changes",
   )
   const vcsMode = createMemo<VcsMode | undefined>(() => {
@@ -674,28 +597,63 @@ export default function Page() {
   })
   const vcsKey = createMemo(
     () =>
-      ["session-vcs", sdk().directory, sync().data.vcs?.branch ?? "", sync().data.vcs?.default_branch ?? ""] as const,
+      [
+        serverSDK.scope,
+        "session-vcs",
+        sdk().directory,
+        sync().data.vcs?.branch ?? "",
+        sync().data.vcs?.default_branch ?? "",
+      ] as const,
   )
   const vcsQuery = createQuery(() => {
     const mode = vcsMode()
-    const enabled = wantsReview() && sync().project?.vcs === "git"
+    const enabled = serverSDK.connection.status() === "connected" && wantsReview() && sync().project?.vcs === "git"
 
     return {
       queryKey: [...vcsKey(), mode] as const,
       enabled,
+      refetchOnMount: "always" as const,
+      refetchOnWindowFocus: true,
       queryFn: mode
         ? () =>
             sdk()
-              .client.vcs.diff({ mode })
-              .then((result) => list(result.data))
-              .catch((error) => {
-                console.debug("[session-review] failed to load vcs diff", { mode, error })
-                return []
-              })
+              .api.vcs.diff({ location: { directory: sdk().directory }, mode: mode === "git" ? "working" : mode })
+              .then((result) => result.data)
         : skipToken,
     }
   })
-  const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
+  const sessionDetailsQuery = createQuery(() => ({
+    queryKey: [serverSDK.scope, "session-details", sessionDirectory()] as const,
+    enabled: store.sessionDetailsOpen && serverSDK.connection.status() === "connected" && sync().project?.vcs === "git",
+    queryFn: () =>
+      sdk()
+        .api.vcs.diff({ location: { directory: sessionDirectory() }, mode: "working" })
+        .then((result) => result.data)
+        .catch((error) => {
+          console.debug("[session-review] failed to load session details diff", { error })
+          return []
+        }),
+  }))
+  const sessionDetailsDiffs = () => (sessionDetailsQuery.isFetched ? (sessionDetailsQuery.data ?? []) : undefined)
+  const refreshVcs = debounce(() => {
+    void queryClient.invalidateQueries({ queryKey: vcsKey() })
+    void queryClient.invalidateQueries({ queryKey: [serverSDK.scope, "session-details", sessionDirectory()] })
+  }, 100)
+  onCleanup(
+    sdk().event.listen((event) => {
+      if (event.details.type === "filesystem.changed") refreshVcs()
+    }),
+  )
+  createEffect(
+    on(
+      () => desktopReviewOpen() || mobileChanges(),
+      (open, previous) => {
+        if (!open || previous || !desktopFileTreeOpen() || vcsQuery.isFetching) return
+        refreshVcs()
+      },
+      { defer: true },
+    ),
+  )
   const reviewDiffs = () => {
     if (reviewMode() === "git" || reviewMode() === "branch")
       // avoids suspense
@@ -714,13 +672,13 @@ export default function Page() {
     if (reviewMode() === "git" || reviewMode() === "branch") return !vcsQuery.isPending
     return true
   }
-  const loadReviewDiff = async (file: string, version?: number): Promise<VcsFileDiff | undefined> => {
+  const loadReviewDiff = async (file: string, version?: number): Promise<FileDiffInfo | undefined> => {
     const mode = vcsMode()
     if (!mode) return
     const root = reviewRootDirectory(sync().project?.worktree ?? sdk().directory)
     const directory = reviewDiffDirectory(root, file)
     const source = reviewDiffs().find((diff) => diff.file === file)
-    const valid = (diff: VcsFileDiff | undefined) => {
+    const valid = (diff: FileDiffInfo | undefined) => {
       if (!diff || !source) return
       if (diff.additions !== source.additions || diff.deletions !== source.deletions) return
       if (reviewDiffNeedsLoad(diff)) return
@@ -729,13 +687,17 @@ export default function Page() {
     const request = (scope: string, context?: number) =>
       queryClient
         .fetchQuery({
-          queryKey: [serverSDK().scope, ...vcsKey(), mode, "directory", scope, context, version] as const,
+          queryKey: [serverSDK.scope, ...vcsKey(), mode, "directory", scope, context, version] as const,
           staleTime: Number.POSITIVE_INFINITY,
           retry: 2,
           queryFn: () =>
             sdk()
-              .client.vcs.diff({ mode, directory: scope, context })
-              .then((result) => result.data ?? []),
+              .api.vcs.diff({
+                location: { directory: scope },
+                mode: mode === "git" ? "working" : mode,
+                context,
+              })
+              .then((result) => result.data),
         })
         .then((diffs) => diffs.find((diff) => diff.file === file))
 
@@ -820,11 +782,11 @@ export default function Page() {
   }
 
   function upsert(next: Project) {
-    const list = serverSync().data.project
+    const list = serverSync.data.project
     sync().set("project", next.id)
     const idx = list.findIndex((item) => item.id === next.id)
     if (idx >= 0) {
-      serverSync().set(
+      serverSync.set(
         "project",
         list.map((item, i) => (i === idx ? { ...item, ...next } : item)),
       )
@@ -832,18 +794,15 @@ export default function Page() {
     }
     const at = list.findIndex((item) => item.id > next.id)
     if (at >= 0) {
-      serverSync().set("project", [...list.slice(0, at), next, ...list.slice(at)])
+      serverSync.set("project", [...list.slice(0, at), next, ...list.slice(at)])
       return
     }
-    serverSync().set("project", [...list, next])
+    serverSync.set("project", [...list, next])
   }
 
   const gitMutation = useMutation(() => ({
-    mutationFn: () => sdk().client.project.initGit(),
-    onSuccess: (x) => {
-      if (!x.data) return
-      upsert(x.data)
-    },
+    // TODO: Restore Git initialization when the V2 client exposes this operation.
+    mutationFn: async () => Promise.reject(new Error("Git initialization is unavailable")),
     onError: (err) => {
       showToast({
         variant: "error",
@@ -885,6 +844,41 @@ export default function Page() {
 
   createEffect(
     on(
+      () => {
+        const id = controller.identity.params.id
+        return [
+          sdk().directory,
+          id,
+          id ? (sync().data.session_status[id]?.type ?? "idle") : "idle",
+          id ? composer.blocked() : false,
+        ] as const
+      },
+      ([dir, id, status, blocked]) => {
+        if (todoFrame !== undefined) cancelAnimationFrame(todoFrame)
+        if (todoTimer !== undefined) window.clearTimeout(todoTimer)
+        todoFrame = undefined
+        todoTimer = undefined
+        if (!id) return
+        if (status === "idle" && !blocked) return
+        const cached = untrack(() => sync().data.todo[id] !== undefined)
+
+        todoFrame = requestAnimationFrame(() => {
+          todoFrame = undefined
+          todoTimer = window.setTimeout(() => {
+            todoTimer = undefined
+            if (sdk().directory !== dir || controller.identity.params.id !== id) return
+            untrack(() => {
+              void sync().session.todo(id, cached ? { force: true } : undefined)
+            })
+          }, 0)
+        })
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
       () => visibleUserMessages().at(-1)?.id,
       (lastId, prevLastId) => {
         if (lastId && prevLastId && lastId > prevLastId) {
@@ -897,7 +891,7 @@ export default function Page() {
 
   createEffect(
     on(
-      sessionKey,
+      controller.identity.sessionKey,
       () => {
         setStore(sessionViewState())
         setUi("pendingMessage", undefined)
@@ -905,18 +899,6 @@ export default function Page() {
       { defer: true },
     ),
   )
-
-  const stopVcs = sdk().event.listen((evt) => {
-    if (evt.details.type !== "filesystem.changed") return
-    const props =
-      typeof evt.details.properties === "object" && evt.details.properties
-        ? (evt.details.properties as Record<string, unknown>)
-        : undefined
-    const file = typeof props?.file === "string" ? props.file : undefined
-    if (!file || file.startsWith(".git/")) return
-    refreshVcs()
-  })
-  onCleanup(stopVcs)
 
   createEffect(
     on(
@@ -1030,7 +1012,7 @@ export default function Page() {
     }
 
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
-      if (composer.blocked() || isChildSession()) return
+      if (composer.blocked() || controller.data.isChild()) return
       const input = inputRef
       if (!input) return
       input.focus()
@@ -1047,12 +1029,12 @@ export default function Page() {
     if (list.includes(mode)) return
     const next = list[0]
     if (!next) return
-    view().review.setMode(next)
+    controller.layout.view().review.setMode(next)
   })
 
   createEffect(
     on(
-      () => sync().data.session_status[params.id ?? ""]?.type,
+      () => sync().data.session_status[controller.identity.params.id ?? ""]?.type,
       (next, prev) => {
         if (next !== "idle" || prev === undefined || prev === "idle") return
         refreshVcs()
@@ -1071,7 +1053,7 @@ export default function Page() {
 
   createEffect(
     on(
-      sessionKey,
+      controller.identity.sessionKey,
       () => {
         setTree({
           reviewScroll: undefined,
@@ -1088,17 +1070,20 @@ export default function Page() {
   }
 
   const focusInput = () => {
-    if (isChildSession()) return
+    if (controller.data.isChild()) return
     inputRef?.focus()
   }
 
   useComposerCommands()
   useSessionCommands({
+    session: controller,
+    background: {
+      blocking: () => composer.background.blocking().length > 0,
+      move: composer.background.move,
+    },
     navigateMessageByOffset,
     setActiveMessage,
     focusInput,
-    review: reviewTab,
-    fileBrowser: () => newSessionDesign() && isDesktop() && !!params.id,
   })
   command.register("session-palette", () => [
     {
@@ -1112,8 +1097,8 @@ export default function Page() {
   const openReviewFile = createOpenReviewFile({
     showAllFiles,
     tabForPath: file.tab,
-    openTab: tabs().open,
-    setActive: tabs().setActive,
+    openTab: controller.layout.tabs().open,
+    setActive: controller.layout.tabs().setActive,
     loadFile: file.load,
   })
 
@@ -1133,7 +1118,7 @@ export default function Page() {
         options={changesOptions()}
         current={reviewMode()}
         label={changesLabel}
-        onSelect={(option) => option && view().review.setMode(option)}
+        onSelect={(option) => option && controller.layout.view().review.setMode(option)}
         variant="ghost"
         size="small"
         valueClass="text-14-medium"
@@ -1154,7 +1139,7 @@ export default function Page() {
         label={changesLabel}
         placement="bottom-start"
         gutter={6}
-        onSelect={(option) => option && view().review.setMode(option)}
+        onSelect={(option) => option && controller.layout.view().review.setMode(option)}
       />
     )
   }
@@ -1173,11 +1158,7 @@ export default function Page() {
           {language.t("session.review.noVcs.createGit.description")}
         </div>
       </div>
-      <Button size="large" disabled={gitMutation.isPending} onClick={initGit}>
-        {gitMutation.isPending
-          ? language.t("session.review.noVcs.createGit.actionLoading")
-          : language.t("session.review.noVcs.createGit.action")}
-      </Button>
+      {/* TODO: Restore the init button when the V2 client exposes Git initialization. */}
     </div>
   )
 
@@ -1210,7 +1191,8 @@ export default function Page() {
       return <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
     }
     if (reviewMode() === "turn" && nogit()) {
-      return <SessionReviewEmptyNoGitV2 pending={gitMutation.isPending} onInitGit={initGit} />
+      // TODO: Restore SessionReviewEmptyNoGitV2 when the V2 client exposes Git initialization.
+      return empty(language.t("session.review.noVcs.createGit.description"))
     }
     return <SessionReviewEmptyChangesV2 />
   }
@@ -1226,8 +1208,8 @@ export default function Page() {
       <SessionReviewTab
         title={changesTitle()}
         empty={reviewEmpty(input)}
-        diffs={reviewDiffs}
-        view={view}
+        diffs={reviewDiffs()}
+        view={controller.layout.view()}
         diffStyle={input.diffStyle}
         onDiffStyleChange={input.onDiffStyleChange}
         onScrollRef={(el) => setTree("reviewScroll", el)}
@@ -1260,8 +1242,12 @@ export default function Page() {
     get empty() {
       return reviewEmptyV2()
     },
-    diffs: reviewDiffs,
-    diffsReady: reviewReady,
+    get diffs() {
+      return reviewDiffs()
+    },
+    get diffsReady() {
+      return reviewReady()
+    },
     get diffVersion() {
       return vcsQuery.dataUpdatedAt
     },
@@ -1333,7 +1319,7 @@ export default function Page() {
 
   createEffect(
     on(
-      activeFileTab,
+      controller.tabs.activeFileTab,
       (active) => {
         if (!active) return
         if (fileTreeTab() !== "changes") return
@@ -1372,15 +1358,15 @@ export default function Page() {
     const top = reviewDiffTop(path)
     if (top === undefined) return false
 
-    view().setScroll("review", { x: root.scrollLeft, y: top })
+    controller.layout.view().setScroll("review", { x: root.scrollLeft, y: top })
     root.scrollTo({ top, behavior: "auto" })
     return true
   }
 
   const focusReviewDiff = (path: string) => {
     openReviewPanel()
-    view().review.openPath(path)
-    view().review.setFile(path)
+    controller.layout.view().review.openPath(path)
+    controller.layout.view().review.setFile(path)
     setTree("pendingDiff", path)
   }
 
@@ -1425,44 +1411,6 @@ export default function Page() {
     requestAnimationFrame(() => attempt(0))
   })
 
-  createEffect(() => {
-    const id = params.id
-    if (!id) return
-
-    if (!wantsReview()) return
-    if (sync().data.session_diff[id] !== undefined) return
-    if (sync().status === "loading") return
-
-    void sync().session.diff(id)
-  })
-
-  createEffect(
-    on(
-      () => [sessionKey(), wantsReview()] as const,
-      ([key, wants]) => {
-        if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
-        if (diffTimer !== undefined) window.clearTimeout(diffTimer)
-        diffFrame = undefined
-        diffTimer = undefined
-        if (!wants) return
-
-        const id = params.id
-        if (!id) return
-        if (!untrack(() => sync().data.session_diff[id] !== undefined)) return
-
-        diffFrame = requestAnimationFrame(() => {
-          diffFrame = undefined
-          diffTimer = window.setTimeout(() => {
-            diffTimer = undefined
-            if (sessionKey() !== key) return
-            void sync().session.diff(id, { force: true })
-          }, 0)
-        })
-      },
-      { defer: true },
-    ),
-  )
-
   let treeDir: string | undefined
   createEffect(() => {
     const dir = sdk().directory
@@ -1480,7 +1428,7 @@ export default function Page() {
     on(
       () => sdk().directory,
       () => {
-        const tab = activeFileTab()
+        const tab = controller.tabs.activeFileTab()
         if (!tab) return
         const path = file.pathFromTab(tab)
         if (!path) return
@@ -1494,9 +1442,11 @@ export default function Page() {
     working: () => true,
     overflowAnchor: "none",
   })
+  const shouldAnchorBottom = () =>
+    !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
   createEffect(
     on(
-      () => params.id,
+      () => controller.identity.params.id,
       (id, previous) => {
         if (!id || !previous || id === previous) return
         if (location.hash || store.messageId || ui.pendingMessage) return
@@ -1588,7 +1538,7 @@ export default function Page() {
   const historyRequests = new Set<string>()
   let historyContinuationFrame: number | undefined
   const loadOlder = async () => {
-    const owner = sessionOwnership.capture()
+    const owner = controller.ownership.capture()
     if (historyLoading() || historyRequests.has(owner.key)) return
     historyRequests.add(owner.key)
     const before = timeline.messages().length
@@ -1610,7 +1560,7 @@ export default function Page() {
   }
   const onHistoryScroll = () => {
     if (
-      historyRequests.has(sessionOwnership.key()) ||
+      historyRequests.has(controller.ownership.key()) ||
       historyLoading() ||
       !autoScroll.userScrolled() ||
       !scroller ||
@@ -1630,7 +1580,7 @@ export default function Page() {
     fillFrame = requestAnimationFrame(() => {
       fillFrame = undefined
 
-      if (!params.id || !messagesReady()) return
+      if (!controller.identity.params.id || !messagesReady()) return
       if (autoScroll.userScrolled() || historyLoading()) return
 
       const el = scroller
@@ -1646,7 +1596,7 @@ export default function Page() {
     on(
       () =>
         [
-          params.id,
+          controller.identity.params.id,
           messagesReady(),
           historyMore(),
           historyLoading(),
@@ -1686,31 +1636,38 @@ export default function Page() {
     })
   }
 
-  const merge = (next: NonNullable<ReturnType<typeof info>>, target = sync()) => target.session.remember(next)
-
-  const roll = (sessionID: string, next: NonNullable<ReturnType<typeof info>>["revert"], target = sync()) => {
+  const roll = (
+    sessionID: string,
+    next: NonNullable<ReturnType<typeof controller.data.info>>["revert"],
+    target = sync(),
+  ) => {
     const session = target.session.get(sessionID)
     if (!session) return
     target.session.remember({ ...session, revert: next })
   }
 
   const busy = (sessionID: string) => sync().data.session_working(sessionID)
-
   const queuedFollowups = createMemo(() => {
-    const id = params.id
+    const id = controller.identity.params.id
     if (!id) return emptyFollowups
     return followup.items[id] ?? emptyFollowups
   })
 
   const editingFollowup = createMemo(() => {
-    const id = params.id
+    const id = controller.identity.params.id
     if (!id) return
     return followup.edit[id]
   })
 
+  const workspaceMoveEligible = createMemo(() => {
+    const id = controller.identity.params.id
+    if (!id) return false
+    return (followup.items[id]?.length ?? 0) === 0 && !followup.failed[id] && !followup.paused[id] && !followup.edit[id]
+  })
+
   const followupMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; id: string; manual?: boolean }) => {
-      const owner = sessionOwnership.capture()
+      const owner = controller.ownership.capture()
       const item = (followup.items[input.sessionID] ?? []).find((entry) => entry.id === input.id)
       if (!item) return
 
@@ -1718,9 +1675,10 @@ export default function Page() {
       setFollowup("failed", input.sessionID, undefined)
 
       const ok = await sendFollowupDraft({
-        client: sdk().client,
+        api: sdk().api.session,
         sync: sync(),
-        serverSync: serverSync(),
+        serverSync: serverSync,
+        session: () => sync().session.get(input.sessionID),
         draft: item,
         optimisticBusy: item.sessionDirectory === sdk().directory,
       }).catch((err) => {
@@ -1739,16 +1697,21 @@ export default function Page() {
     followupMutation.isPending && followupMutation.variables?.sessionID === sessionID
 
   const sendingFollowup = createMemo(() => {
-    const id = params.id
+    const id = controller.identity.params.id
     if (!id) return
     if (!followupBusy(id)) return
     return followupMutation.variables?.id
   })
 
   const queueEnabled = createMemo(() => {
-    const id = params.id
+    const id = controller.identity.params.id
     if (!id) return false
-    return settings.general.followup() === "queue" && busy(id) && !composer.blocked() && !isChildSession()
+    return (
+      settings.general.followup() === "queue" &&
+      controller.data.working() &&
+      !composer.blocked() &&
+      !controller.data.isChild()
+    )
   })
 
   const followupText = (item: FollowupDraft) => {
@@ -1789,7 +1752,7 @@ export default function Page() {
   }
 
   const editFollowup = (id: string) => {
-    const sessionID = params.id
+    const sessionID = controller.identity.params.id
     if (!sessionID) return
     if (followupBusy(sessionID)) return
 
@@ -1806,7 +1769,7 @@ export default function Page() {
   }
 
   const clearFollowupEdit = () => {
-    const id = params.id
+    const id = controller.identity.params.id
     if (!id) return
     setFollowup("edit", id, undefined)
   }
@@ -1814,13 +1777,13 @@ export default function Page() {
   const halt = (sessionID: string) =>
     busy(sessionID)
       ? sdk()
-          .client.session.abort({ sessionID })
+          .api.session.interrupt({ sessionID })
           .catch(() => {})
       : Promise.resolve()
 
   const revertMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; messageID: string }) => {
-      const client = sdk().client
+      const api = sdk().api.session
       const target = sync()
       const last = target.session.get(input.sessionID)?.revert
       const value = draft(input.messageID)
@@ -1830,10 +1793,8 @@ export default function Page() {
           roll(input.sessionID, { messageID: input.messageID }, target)
           prompt.set(value)
         },
-        request: () => halt(input.sessionID).then(() => client.session.revert(input)),
-        complete: (result) => {
-          if (result.data) merge(result.data, target)
-        },
+        request: () => halt(input.sessionID).then(() => api.revert.stage(input)),
+        complete: () => undefined,
         rollback: () => roll(input.sessionID, last, target),
         fail,
       })
@@ -1842,12 +1803,14 @@ export default function Page() {
 
   const restoreMutation = useMutation(() => ({
     mutationFn: async (id: string) => {
-      const sessionID = params.id
+      const sessionID = controller.identity.params.id
       if (!sessionID) return
 
-      const client = sdk().client
+      const api = sdk().api.session
       const target = sync()
-      const next = userMessages().find((item) => item.id > id)
+      const index = userMessages().findIndex((item) => item.id === id)
+      if (index < 0) return
+      const next = userMessages()[index + 1]
       const last = target.session.get(sessionID)?.revert
 
       await runPromptRollbackMutation({
@@ -1862,11 +1825,9 @@ export default function Page() {
         },
         request: () =>
           !next
-            ? halt(sessionID).then(() => client.session.unrevert({ sessionID }))
-            : halt(sessionID).then(() => client.session.revert({ sessionID, messageID: next.id })),
-        complete: (result) => {
-          if (result.data) merge(result.data, target)
-        },
+            ? halt(sessionID).then(() => api.revert.clear({ sessionID }))
+            : halt(sessionID).then(() => api.revert.stage({ sessionID, messageID: next.id }).then(() => undefined)),
+        complete: () => undefined,
         rollback: () => roll(sessionID, last, target),
         fail,
       })
@@ -1882,15 +1843,17 @@ export default function Page() {
   }
 
   const restore = (id: string) => {
-    if (!params.id || reverting()) return
+    if (!controller.identity.params.id || reverting()) return
     return restoreMutation.mutateAsync(id)
   }
 
   const rolled = createMemo(() => {
-    const id = revertMessageID()
+    const id = controller.data.revertMessageID()
     if (!id) return []
+    const index = userMessages().findIndex((item) => item.id === id)
+    if (index < 0) return []
     return userMessages()
-      .filter((item) => item.id >= id)
+      .slice(index)
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 
@@ -1920,7 +1883,7 @@ export default function Page() {
   const actions = { revert, openAttachment }
 
   createEffect(() => {
-    const sessionID = params.id
+    const sessionID = controller.identity.params.id
     if (!sessionID) return
 
     const item = queuedFollowups()[0]
@@ -1928,9 +1891,9 @@ export default function Page() {
     if (followupBusy(sessionID)) return
     if (followup.failed[sessionID] === item.id) return
     if (followup.paused[sessionID]) return
-    if (isChildSession()) return
+    if (controller.data.isChild()) return
     if (composer.blocked()) return
-    if (busy(sessionID)) return
+    if (controller.data.working()) return
 
     void sendFollowup(sessionID, item.id)
   })
@@ -1958,8 +1921,8 @@ export default function Page() {
   )
 
   const { clearMessageHash, scrollToMessage } = useSessionHashScroll({
-    sessionKey,
-    sessionID: () => params.id,
+    sessionKey: controller.identity.sessionKey,
+    sessionID: () => controller.identity.params.id,
     messagesReady,
     visibleUserMessages,
     historyMore,
@@ -1985,7 +1948,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.id,
+      () => controller.identity.params.id,
       (id) => {
         if (!id) requestAnimationFrame(() => inputRef?.focus())
       },
@@ -1998,6 +1961,8 @@ export default function Page() {
 
   onCleanup(() => {
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
+    if (todoFrame !== undefined) cancelAnimationFrame(todoFrame)
+    if (todoTimer !== undefined) window.clearTimeout(todoTimer)
     if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
     if (diffTimer !== undefined) window.clearTimeout(diffTimer)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
@@ -2005,78 +1970,6 @@ export default function Page() {
   })
 
   useUsageExceededDialogs()
-
-  const composerRegion = () => {
-    const controller = createSessionComposerRegionController({
-      state: composer,
-      sessionKey,
-      sessionID: () => params.id,
-      prompt,
-      centered,
-      followup: () =>
-        params.id && !isChildSession()
-          ? {
-              items: followupDock(),
-              sending: sendingFollowup(),
-              onSend: (id) => void sendFollowup(params.id!, id, { manual: true }),
-              onEdit: editFollowup,
-            }
-          : undefined,
-      revert: () =>
-        rolled().length > 0
-          ? {
-              items: rolled(),
-              restoring: restoring(),
-              disabled: reverting(),
-              onRestore: restore,
-            }
-          : undefined,
-      onResponseSubmit: resumeScroll,
-      openParent: () => {
-        const id = info()?.parentID
-        if (!id) return
-        navigate(
-          params.serverKey
-            ? sessionHref(requireServerKey(params.serverKey), id)
-            : legacySessionHref(sdk().directory, id),
-        )
-      },
-      setPromptRef: (el) => {
-        inputRef = el
-      },
-      setDockRef: (el) => {
-        promptDock = el
-      },
-    })
-    return (
-      <SessionComposerRegion
-        controller={controller}
-        promptInput={
-          <PromptInput
-            controls={inputController()}
-            ref={(el) => {
-              inputRef = el
-            }}
-            newSessionWorktree={newSessionWorktree()}
-            onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-            onSubmit={() => {
-              comments.clear()
-              resumeScroll()
-            }}
-            edit={editingFollowup()}
-            onEditLoaded={clearFollowupEdit}
-            shouldQueue={queueEnabled}
-            onQueue={queueFollowup}
-            onAbort={() => {
-              const id = params.id
-              if (!id) return
-              setFollowup("paused", id, true)
-            }}
-          />
-        }
-      />
-    )
-  }
 
   const mobileTabs = (compact = false, bottom = false) => (
     <Tabs value={store.mobileTab} class="h-auto">
@@ -2108,7 +2001,7 @@ export default function Page() {
         >
           {hasReview()
             ? language.t("session.review.filesChanged", { count: reviewCount() })
-            : language.t("session.review.change.other")}
+            : language.plural("session.review.change", 0)}
         </Tabs.Trigger>
       </Tabs.List>
     </Tabs>
@@ -2118,19 +2011,23 @@ export default function Page() {
   )
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
-    createEffect(on(sessionKey, reset, { defer: true }))
-    return <SessionErrorFallback error={error} sessionID={params.id} />
+    createEffect(on(controller.identity.sessionKey, reset, { defer: true }))
+    return <SessionErrorFallback error={error} sessionID={controller.identity.params.id} />
   }
 
   const sessionPanelContent = () => (
     <>
       {sessionSync() ?? ""}
-      <Show when={!isDesktop() && !!params.id && settings.general.newLayoutDesigns() && !mobileTabsBottom()}>
+      <Show
+        when={
+          !isDesktop() && !!controller.identity.params.id && settings.general.newLayoutDesigns() && !mobileTabsBottom()
+        }
+      >
         {mobileTabs(true)}
       </Show>
       <div class="flex-1 min-h-0 overflow-hidden">
         <Switch>
-          <Match when={params.id && mobileChanges()}>
+          <Match when={controller.identity.params.id && mobileChanges()}>
             <div class="relative h-full overflow-hidden">
               {reviewContent({
                 diffStyle: "unified",
@@ -2144,10 +2041,11 @@ export default function Page() {
               })}
             </div>
           </Match>
-          <Match when={params.id}>
-            <Show when={messagesReady() ? params.id : undefined} keyed>
+          <Match when={controller.identity.params.id}>
+            <Show when={messagesReady() ? controller.identity.params.id : undefined} keyed>
               {(_id) => (
                 <MessageTimeline
+                  session={controller}
                   actions={actions}
                   scroll={ui.scroll}
                   onResumeScroll={resumeScroll}
@@ -2155,13 +2053,11 @@ export default function Page() {
                   onScheduleScrollState={scheduleScrollState}
                   onAutoScrollHandleScroll={autoScroll.handleScroll}
                   onMarkScrollGesture={markScrollGesture}
-                  hasScrollGesture={hasScrollGesture}
+                  hasScrollGesture={hasScrollGesture()}
                   onUserScroll={markUserScroll}
                   onHistoryScroll={onHistoryScroll}
                   onAutoScrollInteraction={autoScroll.handleInteraction}
-                  shouldAnchorBottom={() =>
-                    !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
-                  }
+                  shouldAnchorBottom={shouldAnchorBottom()}
                   centered={centered()}
                   setContentRef={(el) => {
                     content = el
@@ -2171,6 +2067,10 @@ export default function Page() {
                     if (root) scheduleScrollState(root)
                   }}
                   userMessages={visibleUserMessages()}
+                  diffs={sessionDetailsDiffs}
+                  onReview={openReviewPanel}
+                  workspaceMoveEligible={workspaceMoveEligible()}
+                  onSummaryOpenChange={(open) => setStore("sessionDetailsOpen", open)}
                   setHistoryAnchor={(handlers) => {
                     captureHistoryAnchor = handlers.capture
                     restoreHistoryAnchor = handlers.restore
@@ -2192,8 +2092,127 @@ export default function Page() {
         </Switch>
       </div>
 
-      <Show when={(params.id || !newSessionDesign()) && !mobileChanges()}>{(_) => composerRegion()}</Show>
-      <Show when={!!params.id && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
+      <Show when={(controller.identity.params.id || !newSessionDesign()) && !mobileChanges()}>
+        {(_) => {
+          const region = createSessionComposerRegionController({
+            state: composer,
+            sessionKey: controller.identity.sessionKey,
+            sessionID: () => controller.identity.params.id,
+            prompt,
+            ready: () => !store.deferRender && messagesReady(),
+            centered,
+            todo: {
+              collapsed: () => controller.layout.view().todoCollapsed.get(),
+              onToggle: () => controller.layout.view().todoCollapsed.set(!controller.layout.view().todoCollapsed.get()),
+            },
+            followup: () =>
+              controller.identity.params.id && !controller.data.isChild()
+                ? {
+                    items: followupDock(),
+                    sending: sendingFollowup(),
+                    onSend: (id) => void sendFollowup(controller.identity.params.id!, id, { manual: true }),
+                    onEdit: editFollowup,
+                  }
+                : undefined,
+            revert: () =>
+              rolled().length > 0
+                ? {
+                    items: rolled(),
+                    restoring: restoring(),
+                    disabled: reverting(),
+                    onRestore: restore,
+                  }
+                : undefined,
+            onResponseSubmit: resumeScroll,
+            openParent: () => {
+              const id = controller.data.parentID()
+              if (!id) return
+              navigate(
+                controller.identity.params.serverKey
+                  ? sessionHref(requireServerKey(controller.identity.params.serverKey), id)
+                  : legacySessionHref(sdk().directory, id),
+              )
+            },
+            setPromptRef: (el) => {
+              inputRef = el
+            },
+            setDockRef: (el) => {
+              promptDock = el
+            },
+          })
+          return (
+            <SessionComposerRegion
+              controller={region}
+              promptInput={
+                <Show
+                  when={newSessionDesign()}
+                  fallback={
+                    <PromptInput
+                      controls={inputController()}
+                      ref={(el) => {
+                        inputRef = el
+                      }}
+                      newSessionWorktree={newSessionWorktree()}
+                      onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+                      onSubmit={() => {
+                        comments.clear()
+                        resumeScroll()
+                      }}
+                      edit={editingFollowup()}
+                      onEditLoaded={clearFollowupEdit}
+                      shouldQueue={queueEnabled}
+                      onQueue={queueFollowup}
+                      onAbort={() => {
+                        const id = controller.identity.params.id
+                        if (!id) return
+                        setFollowup("paused", id, true)
+                      }}
+                    />
+                  }
+                >
+                  {(_) => {
+                    const promptInputController = usePromptInputV2Controller({
+                      get controls() {
+                        return inputController()
+                      },
+                      ref: (el) => {
+                        inputRef = el
+                      },
+                      get newSessionWorktree() {
+                        return newSessionWorktree()
+                      },
+                      onNewSessionWorktreeReset: () => setStore("newSessionWorktree", "main"),
+                      onSubmit: () => {
+                        comments.clear()
+                        resumeScroll()
+                      },
+                      get edit() {
+                        return editingFollowup()
+                      },
+                      onEditLoaded: clearFollowupEdit,
+                      shouldQueue: queueEnabled,
+                      onQueue: queueFollowup,
+                      onAbort: () => {
+                        const id = controller.identity.params.id
+                        if (!id) return
+                        setFollowup("paused", id, true)
+                      },
+                    })
+                    return (
+                      <PromptInputV2Composer
+                        controller={promptInputController}
+                        borderUnderlay
+                        accentSubmit={workspaceSession()}
+                      />
+                    )
+                  }}
+                </Show>
+              }
+            />
+          )
+        }}
+      </Show>
+      <Show when={!!controller.identity.params.id && mobileTabsBottom()}>{mobileTabs(true, true)}</Show>
     </>
   )
 
@@ -2207,7 +2226,9 @@ export default function Page() {
           "gap-2 p-2": settings.general.newLayoutDesigns(),
         }}
       >
-        <Show when={!isDesktop() && !!params.id && !settings.general.newLayoutDesigns()}>{mobileTabs()}</Show>
+        <Show when={!isDesktop() && !!controller.identity.params.id && !settings.general.newLayoutDesigns()}>
+          {mobileTabs()}
+        </Show>
 
         <div
           classList={{
@@ -2219,25 +2240,28 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          {settings.general.newLayoutDesigns() ? (
+          <Show
+            when={settings.general.newLayoutDesigns()}
+            fallback={
+              <SessionPanelFrame newLayout={false} raised={!!controller.identity.params.id}>
+                {sessionPanelContent()}
+              </SessionPanelFrame>
+            }
+          >
             <Show when={sessionPanelKey()} keyed>
               {(_) => (
-                <SessionPanelFrame newLayout raised={!!params.id}>
+                <SessionPanelFrame newLayout raised={!!controller.identity.params.id}>
                   <ErrorBoundary fallback={sessionErrorFallback}>{sessionPanelContent()}</ErrorBoundary>
                 </SessionPanelFrame>
               )}
             </Show>
-          ) : (
-            <SessionPanelFrame newLayout={false} raised={!!params.id}>
-              {sessionPanelContent()}
-            </SessionPanelFrame>
-          )}
+          </Show>
 
           <Show when={desktopSessionResizeOpen()}>
             <div onPointerDown={() => size.start()}>
               <ResizeHandle
                 classList={{
-                  "-right-1": settings.general.newLayoutDesigns(),
+                  "-end-1": settings.general.newLayoutDesigns(),
                 }}
                 direction="horizontal"
                 size={sessionPanelResizedWidth()}
@@ -2253,49 +2277,53 @@ export default function Page() {
         </div>
 
         <Show when={!newSessionDesign() && desktopSidePanelOpen()}>
-          <SessionSidePanel
-            canReview={canReview}
-            diffs={reviewDiffs}
-            diffsReady={reviewReady}
-            empty={reviewEmptyText}
-            hasReview={hasReview}
-            reviewHasFocusableContent={hasReview}
-            reviewCount={reviewCount}
-            reviewPanel={reviewPanel}
-            activeDiff={activeReviewFile()}
-            focusReviewDiff={focusReviewDiff}
-            reviewSnap={ui.reviewSnap}
-            size={size}
-          />
+          <Suspense>
+            <SessionSidePanel
+              canReview={canReview()}
+              diffs={reviewDiffs()}
+              diffsReady={reviewReady()}
+              empty={reviewEmptyText()}
+              hasReview={hasReview()}
+              reviewHasFocusableContent={hasReview()}
+              reviewCount={reviewCount()}
+              reviewPanel={reviewPanel}
+              activeDiff={activeReviewFile()}
+              focusReviewDiff={focusReviewDiff}
+              reviewSnap={ui.reviewSnap}
+              size={size}
+            />
+          </Suspense>
         </Show>
         <Show when={newSessionDesign()}>
           <Show when={isDesktop() ? desktopV2PanelLayout().visible : terminalOpen()}>
             <div class="min-w-0 h-full flex flex-1 flex-col">
               <Show when={isDesktop() && (desktopV2ReviewOpen() || desktopFileTreeOpen())}>
                 <div class="min-h-0 flex-1">
-                  <SessionSidePanel
-                    canReview={canReview}
-                    diffs={reviewDiffs}
-                    diffsReady={reviewReady}
-                    empty={reviewEmptyText}
-                    hasReview={hasReview}
-                    reviewHasFocusableContent={() => hasReview() || reviewV2State.sidebarOpened()}
-                    reviewCount={reviewCount}
-                    reviewPanel={reviewPanelV2}
-                    reviewSidebarToggle={(disabled) => (
-                      <SessionReviewV2SidebarToggle
-                        opened={reviewV2State.sidebarOpened()}
-                        disabled={disabled}
-                        onToggle={reviewV2State.toggleSidebar}
-                      />
-                    )}
-                    fileBrowserState={reviewV2State}
-                    activeDiff={activeReviewFile()}
-                    focusReviewDiff={focusReviewDiff}
-                    reviewSnap={ui.reviewSnap}
-                    size={size}
-                    stacked={desktopV2PanelLayout().stacked}
-                  />
+                  <Suspense>
+                    <SessionSidePanel
+                      canReview={canReview()}
+                      diffs={reviewDiffs()}
+                      diffsReady={reviewReady()}
+                      empty={reviewEmptyText()}
+                      hasReview={hasReview()}
+                      reviewHasFocusableContent={hasReview() || reviewV2State.sidebarOpened()}
+                      reviewCount={reviewCount()}
+                      reviewPanel={reviewPanelV2}
+                      reviewSidebarToggle={(disabled) => (
+                        <SessionReviewV2SidebarToggle
+                          opened={reviewV2State.sidebarOpened()}
+                          disabled={disabled}
+                          onToggle={reviewV2State.toggleSidebar}
+                        />
+                      )}
+                      fileBrowserState={reviewV2State}
+                      activeDiff={activeReviewFile()}
+                      focusReviewDiff={focusReviewDiff}
+                      reviewSnap={ui.reviewSnap}
+                      size={size}
+                      stacked={desktopV2PanelLayout().stacked}
+                    />
+                  </Suspense>
                 </div>
               </Show>
               <Show when={desktopV2PanelLayout().stacked}>
@@ -2311,7 +2339,7 @@ export default function Page() {
                       size.touch()
                       layout.terminal.resize(height)
                     }}
-                    onCollapse={() => view().terminal.close()}
+                    onCollapse={() => controller.layout.view().terminal.close()}
                   />
                 </div>
               </Show>

@@ -1,3 +1,19 @@
+/*
+ * Portions adapted from Test262 at revision 250f204f23a9249ff204be2baec29600faae7b75:
+ * - test/built-ins/Date/value-to-primitive-result-non-string-prim.js
+ * - test/built-ins/Date/value-to-primitive-result-string.js
+ * - test/built-ins/Date/prototype/toUTCString/format.js
+ * - test/built-ins/Date/prototype/toUTCString/invalid-date.js
+ * - test/built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T8.js
+ *
+ * CodeMode does not support Symbol.toPrimitive, so the Date-constructor cases exercise the same primitive-result
+ * handling through supported own valueOf and toString functions.
+ *
+ * Copyright (C) 2016 the V8 project authors. All rights reserved.
+ * Copyright (C) 2017 the V8 project authors. All rights reserved.
+ * Copyright 2009 the Sputnik authors. All rights reserved.
+ * Test262 portions are governed by the BSD license in LICENSE.test262.
+ */
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
@@ -55,6 +71,52 @@ describe("Date", () => {
     expect(await value(`return Date.parse("2024-01-02T03:04:05.000Z")`)).toBe(1704164645000)
   })
 
+  test("one-argument construction coerces supported values like JavaScript", async () => {
+    expect(
+      await value(`return [new Date(true).getTime(), new Date(false).getTime(), new Date(null).getTime()]`),
+    ).toEqual([1, 0, 0])
+    expect(await value(`return Number.isNaN(new Date(undefined).getTime())`)).toBe(true)
+    expect(await value(`return Number.isNaN(new Date([]).getTime())`)).toBe(true)
+    expect(await value(`return new Date(["1970-01-01T00:00:00.000Z"]).getTime()`)).toBe(0)
+    expect(await value(`return Number.isNaN(new Date({}).getTime())`)).toBe(true)
+  })
+
+  test("one-argument construction uses valueOf then toString for objects", async () => {
+    expect(
+      await value(`
+        const calls = []
+        const number = { valueOf: () => 8 }
+        const text = {
+          valueOf: () => { calls.push("valueOf"); return {} },
+          toString: () => { calls.push("toString"); return "2016-06-05T18:40:00.000Z" },
+        }
+        return [new Date(number).getTime(), new Date(text).getTime(), calls]
+      `),
+    ).toEqual([8, 1465152000000, ["valueOf", "toString"]])
+
+    expect(
+      await value(`
+        const values = [
+          { valueOf: () => undefined },
+          { valueOf: () => true },
+          { valueOf: () => false },
+          { valueOf: () => null },
+        ]
+        return values.map((item) => new Date(item).getTime())
+      `),
+    ).toEqual([null, 1, 0, 0])
+
+    expect(
+      await value(`
+        try {
+          new Date({ valueOf: () => ({}), toString: () => ({}) })
+        } catch (error) {
+          return error.name
+        }
+      `),
+    ).toBe("TypeError")
+  })
+
   test("date arithmetic and comparison use the time value", async () => {
     expect(await value(`const a = new Date(1000); const b = new Date(3000); return b - a`)).toBe(2000)
     expect(await value(`const a = new Date(1000); const b = new Date(3000); return a < b`)).toBe(true)
@@ -74,9 +136,9 @@ describe("Date", () => {
     expect(await value(`return new Date("garbage").toJSON()`)).toBeNull()
   })
 
-  test("toISOString on an invalid date is a catchable error", async () => {
-    expect(await value(`try { new Date("garbage").toISOString(); return "no" } catch { return "caught" }`)).toBe(
-      "caught",
+  test("toISOString on an invalid date throws RangeError", async () => {
+    expect(await value(`try { new Date("garbage").toISOString() } catch (error) { return error.name }`)).toBe(
+      "RangeError",
     )
   })
 
@@ -118,6 +180,25 @@ describe("Date", () => {
     expect(await value(`return typeof new Date(0)`)).toBe("object")
     expect(await value(`return new Date(0).nope === undefined`)).toBe(true)
   })
+
+  test("toUTCString and toGMTString use the native UTC format", async () => {
+    expect(
+      await value(`
+        const date = new Date(0)
+        return [
+          date.toUTCString(),
+          date.toGMTString(),
+          new Date(NaN).toUTCString(),
+          new Date("0020-01-01T00:00:00Z").toUTCString(),
+        ]
+      `),
+    ).toEqual([
+      "Thu, 01 Jan 1970 00:00:00 GMT",
+      "Thu, 01 Jan 1970 00:00:00 GMT",
+      "Invalid Date",
+      "Wed, 01 Jan 0020 00:00:00 GMT",
+    ])
+  })
 })
 
 describe("RegExp", () => {
@@ -152,6 +233,51 @@ describe("RegExp", () => {
       return [first[0], second[0]]
     `),
     ).toEqual(["1", "22"])
+  })
+
+  test("lastIndex is writable and exec coerces its stored value", async () => {
+    expect(
+      await value(`
+        const pattern = /(?:ab|cd)\\d?/g
+        pattern.lastIndex = "12"
+        const stored = [pattern.lastIndex, typeof pattern.lastIndex]
+        const match = pattern.exec("aacd2233ab12nm444ab42")
+        pattern.lastIndex = 0
+        return [stored, match[0], match.index, pattern.lastIndex, delete pattern.lastIndex]
+      `),
+    ).toEqual([["12", "string"], "ab4", 17, 0, false])
+  })
+
+  test("exec coerces CodeMode data objects assigned to lastIndex", async () => {
+    expect(
+      await value(`
+        const pattern = /a/g
+        pattern.lastIndex = {}
+        const stored = pattern.lastIndex
+        const match = pattern.exec("ba")
+        pattern.lastIndex = 10
+        const missed = pattern.exec("a")
+        return [stored, match.index, pattern.lastIndex, missed]
+      `),
+    ).toEqual([{}, 1, 0, null])
+  })
+
+  test("non-global exec and test coerce and preserve lastIndex", async () => {
+    expect(
+      await value(`
+        const execPattern = /a/
+        const execIndex = {}
+        execPattern.lastIndex = execIndex
+        const match = execPattern.exec("ba")
+
+        const testPattern = /a/
+        const testIndex = {}
+        testPattern.lastIndex = testIndex
+        const matched = testPattern.test("ba")
+
+        return [match.index, execPattern.lastIndex === execIndex, matched, testPattern.lastIndex === testIndex]
+      `),
+    ).toEqual([1, true, true, true])
   })
 
   test("an unmatched string pattern returns null", async () => {
@@ -198,12 +324,12 @@ describe("RegExp", () => {
     ).toBe("7null[object Object]")
   })
 
-  test("function replacers can await effectful tool calls", async () => {
+  test("promise-returning string replacers are coerced synchronously", async () => {
     const decorate = Tool.make({
       description: "Decorate a string",
       input: Schema.String,
       output: Schema.String,
-      run: (input) => Effect.succeed(`[${input}]`),
+      execute: (input) => Effect.succeed(`[${input}]`),
     })
     const result = await Effect.runPromise(
       CodeMode.execute({
@@ -211,7 +337,7 @@ describe("RegExp", () => {
         code: `return "a1b22".replace(/\\d+/g, async (match) => await tools.host.decorate(match))`,
       }),
     )
-    expect(result.ok && result.value).toBe("a[1]b[22]")
+    expect(result.ok && result.value).toBe("a[object Promise]b[object Promise]")
 
     const missingAwait = await Effect.runPromise(
       CodeMode.execute({
@@ -219,8 +345,7 @@ describe("RegExp", () => {
         code: `return "a1".replace(/\\d/, (match) => tools.host.decorate(match))`,
       }),
     )
-    expect(!missingAwait.ok && missingAwait.error.kind).toBe("InvalidDataValue")
-    expect(!missingAwait.ok && missingAwait.error.message).toContain("un-awaited Promise")
+    expect(missingAwait.ok && missingAwait.value).toBe("a[object Promise]")
   })
 
   test("replaceAll without the g flag is a catchable error", async () => {
@@ -903,7 +1028,7 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
     const capture = Tool.make({
       description: "Capture the exact input the host receives",
       input: { type: "object" },
-      run: (input) =>
+      execute: (input) =>
         Effect.sync(() => {
           observed.push(input)
           return "ok"

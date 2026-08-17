@@ -1,13 +1,13 @@
-export * as FileSystem from "./filesystem"
+export * as FileSystem from "./filesystem.js"
 
-import { makeLocationNode } from "./effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
-import { FSUtil } from "./fs-util"
-import { Location } from "./location"
-import { PositiveInt, RelativePath } from "./schema"
-import { FileSystemSearch } from "./filesystem/search"
-import { Entry, FileSystem, FindInput, Match } from "@opencode-ai/schema/filesystem"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Location } from "./location.js"
+import { PositiveInt, RelativePath } from "./schema.js"
+import { FileSystemSearch } from "./filesystem/search.js"
+import { Entry, FileSystem, FindInput } from "@opencode-ai/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
 
 export const ReadInput = Schema.Struct({
@@ -32,18 +32,19 @@ export type ListInput = typeof ListInput.Type
 export { FindInput }
 
 export const DEFAULT_SEARCH_LIMIT = 100
+export const DEFAULT_SEARCH_TIMEOUT_MS = 30_000
 
 export class GlobInput extends Schema.Class<GlobInput>("FileSystem.GlobInput")({
   pattern: Schema.String,
-  path: RelativePath.pipe(Schema.optional),
-  limit: PositiveInt.pipe(Schema.optional),
+  path: Schema.optionalKey(RelativePath),
+  limit: Schema.optionalKey(PositiveInt),
 }) {}
 
 export class GrepInput extends Schema.Class<GrepInput>("FileSystem.GrepInput")({
   pattern: Schema.String,
-  path: RelativePath.pipe(Schema.optional),
-  include: Schema.String.pipe(Schema.optional),
-  limit: PositiveInt.pipe(Schema.optional),
+  path: Schema.optionalKey(RelativePath),
+  include: Schema.optionalKey(Schema.String),
+  limit: Schema.optionalKey(PositiveInt),
 }) {}
 
 export const Event = FileSystem.Event
@@ -52,11 +53,9 @@ export interface Interface {
   readonly read: (input: ReadInput) => Effect.Effect<{ readonly content: Uint8Array; readonly mime: string }>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
-  readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[]>
-  readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem") {}
 
 const baseLayer = Layer.effect(
   Service,
@@ -75,8 +74,6 @@ const baseLayer = Layer.effect(
     })
     return Service.of({
       find: search.find,
-      glob: search.glob,
-      grep: search.grep,
       read: Effect.fn("FileSystem.read")(function* (input) {
         const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(Effect.orDie)

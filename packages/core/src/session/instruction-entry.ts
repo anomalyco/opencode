@@ -1,13 +1,13 @@
-export * as InstructionEntry from "./instruction-entry"
+export * as InstructionEntry from "./instruction-entry.js"
 
 import { and, asc, eq, isNotNull, isNull, ne, or } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
-import { Database } from "../database/database"
-import { makeLocationNode } from "../effect/app-node"
-import { Instructions } from "../instructions/index"
-import { SessionSchema } from "./schema"
-import { InstructionEntryTable } from "./sql"
+import { Database } from "../database/database.js"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { Instructions } from "../instructions/index.js"
+import { SessionSchema } from "./schema.js"
+import { InstructionEntryTable } from "./sql.js"
 
 export const Key = InstructionEntry.Key
 export type Key = typeof Key.Type
@@ -25,10 +25,10 @@ export interface Interface {
   }) => Effect.Effect<void, InstructionEntry.ValueTooLargeError>
   readonly remove: (input: { readonly sessionID: SessionSchema.ID; readonly key: Key }) => Effect.Effect<void>
   /** Produces one Instructions source per stored entry, keyed `api/<key>`. */
-  readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<Instructions.Instructions>
+  readonly load: (sessionID: SessionSchema.ID) => Effect.Effect<Instructions.List>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/InstructionEntry") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/InstructionEntry") {}
 
 const renderValue = (value: Schema.Json) => (typeof value === "string" ? value : JSON.stringify(value, null, 2))
 

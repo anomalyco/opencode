@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { CopilotModels } from "@opencode-ai/core/github-copilot/models"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 
 test("defensively syncs advertised Copilot models", async () => {
   const server = Bun.serve({
@@ -27,8 +27,32 @@ test("defensively syncs advertised Copilot models", async () => {
                 max_context_window_tokens: 200000,
                 max_output_tokens: 16384,
                 max_prompt_tokens: 180000,
+                vision: {
+                  max_prompt_image_size: 10000000,
+                  max_prompt_images: 10,
+                  supported_media_types: ["image/png", "application/pdf"],
+                },
               },
-              supports: { tool_calls: true, reasoning_effort: ["low", "high"] },
+              supports: { tool_calls: true, vision: true, reasoning_effort: ["low", "high"] },
+            },
+          },
+          {
+            model_picker_enabled: true,
+            id: "vision-only",
+            name: "Vision only",
+            version: "vision-only-2026-06-01",
+            capabilities: {
+              family: "vision",
+              limits: {
+                max_output_tokens: 16384,
+                max_prompt_tokens: 180000,
+                vision: {
+                  max_prompt_image_size: 10000000,
+                  max_prompt_images: 10,
+                  supported_media_types: ["image/png"],
+                },
+              },
+              supports: { tool_calls: true, vision: true },
             },
           },
           {
@@ -48,28 +72,30 @@ test("defensively syncs advertised Copilot models", async () => {
   })
 
   try {
-    const existing = ModelV2.Info.make({
-      ...ModelV2.Info.empty(ProviderV2.ID.githubCopilot, ModelV2.ID.make("gpt-5")),
-      modelID: ModelV2.ID.make("gpt-5"),
+    const existing = Model.Info.make({
+      ...Model.Info.default(Provider.ID.githubCopilot, Model.ID.make("gpt-5")),
+      modelID: Model.ID.make("gpt-5"),
       name: "GPT-5 local",
     })
-    const stale = ModelV2.Info.make({
-      ...ModelV2.Info.empty(ProviderV2.ID.githubCopilot, ModelV2.ID.make("stale")),
-      modelID: ModelV2.ID.make("stale"),
+    const stale = Model.Info.make({
+      ...Model.Info.default(Provider.ID.githubCopilot, Model.ID.make("stale")),
+      modelID: Model.ID.make("stale"),
     })
     const models = await CopilotModels.get(server.url.origin, {}, [existing, stale])
-    const model = models.get(ModelV2.ID.make("gpt-5"))
+    const model = models.get(Model.ID.make("gpt-5"))
 
     expect(model?.name).toBe("GPT-5 local")
     expect(model?.settings).toMatchObject({ baseURL: server.url.origin, endpoint: "responses" })
     expect(model?.cost[0]).toMatchObject({ input: 0, output: 0, cache: { read: 0, write: 0 } })
     expect(model?.variants.map((variant) => variant.id)).toEqual([
-      ModelV2.VariantID.make("low"),
-      ModelV2.VariantID.make("high"),
+      Model.VariantID.make("low"),
+      Model.VariantID.make("high"),
     ])
-    expect(models.get(ModelV2.ID.make("utility"))?.enabled).toBe(false)
-    expect(models.has(ModelV2.ID.make("stale"))).toBe(false)
-    expect(models.has(ModelV2.ID.make("incomplete"))).toBe(false)
+    expect(model?.capabilities.input).toEqual(["text", "image", "pdf"])
+    expect(models.get(Model.ID.make("vision-only"))?.capabilities.input).toEqual(["text", "image"])
+    expect(models.get(Model.ID.make("utility"))?.enabled).toBe(false)
+    expect(models.has(Model.ID.make("stale"))).toBe(false)
+    expect(models.has(Model.ID.make("incomplete"))).toBe(false)
   } finally {
     await server.stop(true)
   }

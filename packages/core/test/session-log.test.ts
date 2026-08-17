@@ -1,65 +1,55 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Effect, Fiber, Schema, Stream } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Bus } from "@opencode-ai/core/bus"
+import { Event } from "@opencode-ai/schema/event"
 import { Location } from "@opencode-ai/core/location"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
+import { globalProjectLayer } from "./lib/project"
 
-const projects = Layer.succeed(
-  ProjectV2.Service,
-  ProjectV2.Service.of({
-    list: () => Effect.succeed([]),
-    resolve: (directory) => Effect.succeed({ id: ProjectV2.ID.global, directory }),
-    directories: () => Effect.succeed([]),
-    commit: () => Effect.void,
-  }),
-)
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionV2.node]),
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      [ProjectV2.node, projects],
+      [Bus.node, Bus.configured({ persist: true })],
+      [Project.node, globalProjectLayer],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),
 )
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 
-describe("SessionV2.log", () => {
+describe("Session.log", () => {
   it.effect("replays public session events and marks synced at the aggregate watermark", () =>
     Effect.gen(function* () {
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
+      const session = yield* Session.Service
       const created = yield* session.create({ location })
       yield* session.rename({ sessionID: created.id, title: "session.renamed" })
 
       const items = Array.from(yield* Stream.runCollect(session.log({ sessionID: created.id })))
-      const watermark = (yield* events.sequences([created.id])).get(created.id)
 
-      // Session creation commits a non-public durable event, so the marker's
-      // seq covers more of the aggregate than the public events emitted.
-      expect(items.map((item) => item.type)).toEqual(["session.renamed", "log.synced"])
-      expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: watermark })
+      expect(items.map((item) => item.type)).toEqual(["session.created", "session.renamed", "log.synced"])
+      expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: Event.Seq.make(1) })
     }),
   )
 
   it.effect("continues with live public events when following", () =>
     Effect.gen(function* () {
-      const session = yield* SessionV2.Service
+      const session = yield* Session.Service
       const created = yield* session.create({ location })
       const fiber = yield* session
-        .log({ sessionID: created.id, follow: true })
+        .log({ sessionID: created.id, after: Event.Seq.make(0), follow: true })
         .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
@@ -72,52 +62,52 @@ describe("SessionV2.log", () => {
 
   it.effect("fails with NotFound for an unknown session", () =>
     Effect.gen(function* () {
-      const session = yield* SessionV2.Service
-      const error = yield* Effect.flip(Stream.runCollect(session.log({ sessionID: SessionV2.ID.create() })))
+      const session = yield* Session.Service
+      const error = yield* Effect.flip(Stream.runCollect(session.log({ sessionID: Session.ID.create() })))
       expect(error._tag).toBe("Session.NotFoundError")
     }),
   )
 
   it.effect("reads across undecodable gaps in aggregate order and marks the true log position", () =>
     Effect.gen(function* () {
-      const GapEvent = EventV2.durable({
+      const GapEvent = Bus.durable({
         type: "test.session.log.gap",
         durable: { aggregate: "sessionID", version: 1 },
-        schema: { sessionID: SessionV2.ID, value: Schema.String },
+        schema: { sessionID: Session.ID, value: Schema.String },
       })
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
       const created = yield* session.create({ location })
-      yield* session.switchAgent({ sessionID: created.id, agent: AgentV2.ID.make("one") })
+      yield* session.switchAgent({ sessionID: created.id, agent: Agent.ID.make("one") })
       // Not in the durable manifest, so reads must skip it without failing.
-      yield* events.publish(GapEvent, { sessionID: created.id, value: "filtered" })
-      yield* session.switchAgent({ sessionID: created.id, agent: AgentV2.ID.make("two") })
-      yield* session.switchAgent({ sessionID: created.id, agent: AgentV2.ID.make("three") })
+      yield* bus.publish(GapEvent, { sessionID: created.id, value: "filtered" })
+      yield* session.switchAgent({ sessionID: created.id, agent: Agent.ID.make("two") })
+      yield* session.switchAgent({ sessionID: created.id, agent: Agent.ID.make("three") })
 
       const items = Array.from(yield* Stream.runCollect(session.log({ sessionID: created.id, after: 1 })))
 
       expect(
-        items.map((item): number | string | undefined => (EventV2.isSynced(item) ? item.type : item.durable?.seq)),
+        items.map((item): number | string | undefined => (Bus.isSynced(item) ? item.type : item.durable?.seq)),
       ).toEqual([3, 4, "log.synced"])
-      expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: EventV2.Seq.make(4) })
+      expect(items.at(-1)).toEqual({ type: "log.synced", aggregateID: created.id, seq: Event.Seq.make(4) })
     }),
   )
 
   it.effect("completes with a bare synced marker for a migrated Session with no event sequence", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
-      const session = yield* SessionV2.Service
-      const sessionID = SessionV2.ID.make("ses_empty_log")
+      const session = yield* Session.Service
+      const sessionID = Session.ID.make("ses_empty_log")
       yield* db
         .insert(ProjectTable)
-        .values({ id: ProjectV2.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
         .onConflictDoNothing()
         .run()
       yield* db
         .insert(SessionTable)
         .values({
           id: sessionID,
-          project_id: ProjectV2.ID.global,
+          project_id: Project.ID.global,
           slug: "empty-log",
           directory: "/project",
           title: "Empty log",

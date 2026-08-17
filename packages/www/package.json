@@ -1,41 +1,31 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/www",
-  "version": "1.17.18",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev --host 0.0.0.0 --port 3000",
-    "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0",
-    "pretypecheck": "fumadocs-mdx",
-    "typecheck": "tsgo --noEmit"
+    "dev": "bun run generate && blume dev --host --port 3000",
+    "build": "bun run generate && blume build && bun script/prepare-cloudflare.ts",
+    "deploy": "wrangler deploy --config dist/server/wrangler.json",
+    "generate": "bun script/generate-theme-tokens.ts && bun script/generate-openapi.ts",
+    "check:generated": "bun script/generate-theme-tokens.ts --check && bun script/generate-openapi.ts --check",
+    "typecheck": "blume check",
+    "validate": "blume validate",
+    "doctor": "blume doctor"
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "1.44.0",
-    "@tailwindcss/vite": "4.3.2",
-    "@tanstack/react-router": "1.170.17",
-    "@tanstack/react-start": "1.168.27",
-    "@tanstack/router-plugin": "1.168.19",
-    "fumadocs-core": "16.11.1",
-    "fumadocs-mdx": "15.1.0",
-    "fumadocs-ui": "16.11.1",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
-    "tailwindcss": "4.3.2",
-    "vite": "8.1.4"
+    "blume": "1.5.1"
   },
   "devDependencies": {
-    "@types/mdx": "2.0.14",
-    "@types/node": "catalog:",
-    "@types/react": "19.2.17",
-    "@types/react-dom": "19.2.3",
-    "@typescript/native-preview": "catalog:",
-    "@vitejs/plugin-react": "6.0.3",
-    "typescript": "catalog:",
+    "@astrojs/cloudflare": "14.1.4",
+    "@opencode-ai/theme": "workspace:*",
+    "@types/bun": "catalog:",
+    "astro": "7.1.3",
+    "effect": "catalog:",
+    "prettier": "3.6.2",
     "wrangler": "4.110.0"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   }
 }

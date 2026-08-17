@@ -1,8 +1,8 @@
-import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { PartGroup } from "@opencode-ai/session-ui/message-part"
 import { Data, Equal } from "effect"
 
-export type SummaryDiff = SnapshotFileDiff & { file: string }
+export type SummaryDiff = FileDiffInfo
 
 export namespace TimelineRow {
   export class TurnGap extends Data.TaggedClass("TurnGap")<{
@@ -14,6 +14,10 @@ export namespace TimelineRow {
   export class UserMessage extends Data.TaggedClass("UserMessage")<{
     userMessageID: string
     anchor: boolean
+  }> {}
+  export class Notice extends Data.TaggedClass("Notice")<{
+    userMessageID: string
+    messageID: string
   }> {}
   export class TurnDivider extends Data.TaggedClass("TurnDivider")<{
     userMessageID: string
@@ -44,6 +48,7 @@ export namespace TimelineRow {
     | TurnGap
     | CommentStrip
     | UserMessage
+    | Notice
     | TurnDivider
     | AssistantPart
     | Thinking
@@ -59,6 +64,8 @@ export namespace TimelineRow {
         return `comment-strip:${row.userMessageID}`
       case "UserMessage":
         return `user-message:${row.userMessageID}`
+      case "Notice":
+        return `notice:${row.messageID}`
       case "TurnDivider":
         return `turn-divider:${row.userMessageID}:${row.label}`
       case "AssistantPart":

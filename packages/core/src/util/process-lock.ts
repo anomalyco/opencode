@@ -3,7 +3,7 @@ import { closeSync, mkdirSync, openSync } from "node:fs"
 import { connect, createServer, type Server, type Socket } from "node:net"
 import path from "node:path"
 import { Effect, Schema } from "effect"
-import { Hash } from "./hash"
+import { Hash } from "@opencode-ai/util/hash"
 
 export namespace ProcessLock {
   export class HeldError extends Schema.TaggedErrorClass<HeldError>()("ProcessLockHeldError", {

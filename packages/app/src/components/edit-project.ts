@@ -1,13 +1,15 @@
 import { getFilename } from "@opencode-ai/core/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
+import { normalizeProjectInfo } from "@/context/global-sync/utils"
 import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobal } from "@/context/global"
 import { type LocalProject } from "@/context/layout"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 
 export function createEditProjectModel(props: { project: LocalProject; server: ServerConnection.Any }) {
+  const supported = !props.project.id || props.project.id === "global"
   const dialog = useDialog()
   const global = useGlobal()
   const serverCtx = createMemo(() => global.ensureServerCtx(props.server))
@@ -70,16 +72,9 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
       const start = store.startup.trim()
 
       if (props.project.id && props.project.id !== "global") {
-        await serverCtx().sdk.client.project.update({
-          projectID: props.project.id,
-          directory: props.project.worktree,
-          name,
-          icon: { color: store.color || "", override: store.iconOverride || "" },
-          commands: { start },
-        })
-        serverCtx().sync.project.icon(props.project.worktree, store.iconOverride || undefined)
-        dialog.close()
-        return
+        // TODO: Restore project edits when the V2 client exposes a project update API.
+        // await serverCtx().sdk.api.project.update({ projectID: props.project.id, name, icon, commands })
+        throw new Error(`Project ${props.project.id} cannot be updated`)
       }
 
       serverCtx().sync.project.meta(props.project.worktree, {
@@ -93,7 +88,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
 
   function submit(event: SubmitEvent) {
     event.preventDefault()
-    if (save.isPending) return
+    if (!supported || save.isPending) return
     save.mutate()
   }
 
@@ -103,6 +98,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
     folderName,
     defaultName,
     save,
+    supported,
     submit,
     drop,
     dragOver,

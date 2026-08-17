@@ -4,6 +4,7 @@
 - Do not add a speculative generic permission or approval policy. A host omits tools it does not expose and enforces domain authorization inside each provided tool.
 - Keep Code Mode unaware of host session, channel, and conversation models. The hosting application supplies trusted execution scope around it.
 - Tool schemas are the model-facing Interface. Keep arguments minimal and natural to the operation; never add unrelated IDs as ambient capability tokens.
+- State model-visible diagnostics, logs, tool descriptions, and instructions directly. The execution context is already clear; do not repeat `Code Mode` or `CodeMode` unless the distinction is necessary.
 - When interpreter behavior or support changes, update `interpreter-support.md` and direct tests in the same PR.
 
 ## OpenAPI

@@ -9,13 +9,13 @@ Use it for provider integrations, retries, polling, multi-step flows, and any te
 ## Install
 
 ```sh
-bun add effect@4.0.0-beta.83
-bun add -d @opencode-ai/http-recorder @effect/vitest@4.0.0-beta.83 vitest@^4
+bun add effect@4.0.0-beta.101
+bun add -d @opencode-ai/http-recorder @effect/vitest@4.0.0-beta.101 vitest@^4
 ```
 
 The package supports Node.js 22+ and Bun. It is not intended for browsers, workers, or Deno.
 
-Effect `4.0.0-beta.83` currently contains unresolved symbols in its published declarations. Until those upstream declarations are fixed, TypeScript consumers need:
+Effect `4.0.0-beta.101` currently contains unresolved symbols in its published declarations. Until those upstream declarations are fixed, TypeScript consumers need:
 
 ```json
 {

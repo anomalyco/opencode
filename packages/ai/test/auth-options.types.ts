@@ -1,36 +1,34 @@
 import { Config } from "effect"
-import type { Auth } from "../src/route/auth"
-import type { ModelFactory } from "../src/route/auth-options"
-import { Auth as RuntimeAuth } from "../src/route/auth"
-import * as OpenAIChat from "../src/protocols/openai-chat"
-import * as AmazonBedrock from "../src/providers/amazon-bedrock"
-import * as Anthropic from "../src/providers/anthropic"
-import * as AnthropicCompatible from "../src/providers/anthropic-compatible"
-import * as Azure from "../src/providers/azure"
-import * as Cloudflare from "../src/providers/cloudflare"
-import * as GitHubCopilot from "../src/providers/github-copilot"
-import * as Google from "../src/providers/google"
-import * as GoogleVertex from "../src/providers/google-vertex"
-import * as GoogleVertexChat from "../src/providers/google-vertex-chat"
-import * as GoogleVertexMessages from "../src/providers/google-vertex-messages"
-import * as GoogleVertexResponses from "../src/providers/google-vertex-responses"
-import * as OpenAI from "../src/providers/openai"
-import * as OpenAICompatible from "../src/providers/openai-compatible"
-import * as OpenRouter from "../src/providers/openrouter"
-import * as XAI from "../src/providers/xai"
+import { Auth } from "../src/route.js"
+import type { LanguageModelFactory } from "../src/route/auth-options.js"
+import * as OpenAIChat from "../src/protocols/openai-chat.js"
+import * as AmazonBedrock from "../src/providers/amazon-bedrock.js"
+import * as Anthropic from "../src/providers/anthropic.js"
+import * as AnthropicCompatible from "../src/providers/anthropic-compatible.js"
+import * as Azure from "../src/providers/azure.js"
+import * as Cloudflare from "../src/providers/cloudflare.js"
+import * as Google from "../src/providers/google.js"
+import * as GoogleVertex from "../src/providers/google-vertex.js"
+import * as GoogleVertexChat from "../src/providers/google-vertex-chat.js"
+import * as GoogleVertexMessages from "../src/providers/google-vertex-messages.js"
+import * as GoogleVertexResponses from "../src/providers/google-vertex-responses.js"
+import * as OpenAI from "../src/providers/openai.js"
+import * as OpenAICompatible from "../src/providers/openai-compatible.js"
+import * as OpenRouter from "../src/providers/openrouter.js"
+import * as XAI from "../src/providers/xai.js"
 
 type BaseOptions = {
   readonly baseURL?: string
   readonly headers?: Record<string, string>
 }
 
-type Model = {
+type LanguageModel = {
   readonly id: string
 }
 
-declare const auth: Auth
-declare const optionalAuthModel: ModelFactory<BaseOptions, "optional", Model>
-declare const requiredAuthModel: ModelFactory<BaseOptions, "required", Model>
+declare const auth: Auth.Definition
+declare const optionalAuthModel: LanguageModelFactory<BaseOptions, "optional", LanguageModel>
+declare const requiredAuthModel: LanguageModelFactory<BaseOptions, "required", LanguageModel>
 const configApiKey = Config.redacted("OPENAI_API_KEY")
 
 OpenAIChat.route.model({ id: "gpt-4.1-mini" })
@@ -76,9 +74,9 @@ OpenAI.responses("gpt-4.1-mini")
 OpenAI.configure({}).responses("gpt-4.1-mini")
 OpenAI.configure({ apiKey: "sk-test" }).responses("gpt-4.1-mini")
 OpenAI.configure({ apiKey: configApiKey }).responses("gpt-4.1-mini")
-OpenAI.configure({ auth: RuntimeAuth.bearer("oauth-token") }).responses("gpt-4.1-mini")
+OpenAI.configure({ auth: Auth.bearer("oauth-token") }).responses("gpt-4.1-mini")
 OpenAI.configure({
-  auth: RuntimeAuth.headers({ authorization: "Bearer gateway" }),
+  auth: Auth.headers({ authorization: "Bearer gateway" }),
   baseURL: "https://gateway.example.com/v1",
 }).responses("gpt-4.1-mini")
 OpenAI.configure({
@@ -102,51 +100,62 @@ OpenAI.configure({ generation: { maxTokens: "many" } })
 OpenAI.configure({ providerOptions: { openai: { store: "false" } } })
 
 // @ts-expect-error auth is an override, so OpenAI rejects apiKey with auth.
-OpenAI.configure({ apiKey: "sk-test", auth: RuntimeAuth.bearer("oauth-token") })
+OpenAI.configure({ apiKey: "sk-test", auth: Auth.bearer("oauth-token") })
 
 OpenAI.chat("gpt-4.1-mini")
 OpenAI.configure({ apiKey: "sk-test" }).chat("gpt-4.1-mini")
 OpenAI.configure({ apiKey: configApiKey }).chat("gpt-4.1-mini")
-OpenAI.configure({ auth: RuntimeAuth.bearer("oauth-token") }).chat("gpt-4.1-mini")
+OpenAI.configure({ auth: Auth.bearer("oauth-token") }).chat("gpt-4.1-mini")
 
 // @ts-expect-error OpenAI chat selectors only accept model ids.
 OpenAI.configure({ apiKey: "sk-test" }).chat("gpt-4.1-mini", {})
 
 // @ts-expect-error auth is an override, so OpenAI Chat rejects apiKey with auth.
-OpenAI.configure({ apiKey: "sk-test", auth: RuntimeAuth.bearer("oauth-token") })
+OpenAI.configure({ apiKey: "sk-test", auth: Auth.bearer("oauth-token") })
 
 // @ts-expect-error Azure requires at least one of `resourceName` or `baseURL`.
 Azure.configure()
 Azure.configure({ apiKey: "azure-key", resourceName: "resource" }).responses("deployment")
 Azure.configure({ apiKey: configApiKey, resourceName: "resource" }).responses("deployment")
-Azure.configure({ auth: RuntimeAuth.header("api-key", "azure-key"), resourceName: "resource" }).responses("deployment")
+Azure.configure({ auth: Auth.header("api-key", "azure-key"), resourceName: "resource" }).responses("deployment")
 
 // @ts-expect-error Azure model selectors only accept deployment ids.
 Azure.configure({ apiKey: "azure-key", resourceName: "resource" }).responses("deployment", {})
 
 // @ts-expect-error auth is an override, so Azure rejects apiKey with auth.
-Azure.configure({ resourceName: "resource", apiKey: "azure-key", auth: RuntimeAuth.header("api-key", "override") })
+Azure.configure({ resourceName: "resource", apiKey: "azure-key", auth: Auth.header("api-key", "override") })
 
 Azure.configure({ apiKey: "azure-key", resourceName: "resource" }).chat("deployment")
 Azure.configure({ apiKey: configApiKey, resourceName: "resource" }).chat("deployment")
-Azure.configure({ auth: RuntimeAuth.header("api-key", "azure-key"), resourceName: "resource" }).chat("deployment")
+Azure.configure({ auth: Auth.header("api-key", "azure-key"), resourceName: "resource" }).chat("deployment")
 
 // @ts-expect-error Azure chat model selectors only accept deployment ids.
 Azure.configure({ apiKey: "azure-key", resourceName: "resource" }).chat("deployment", {})
 
 // @ts-expect-error auth is an override, so Azure Chat rejects apiKey with auth.
-Azure.configure({ resourceName: "resource", apiKey: "azure-key", auth: RuntimeAuth.header("api-key", "override") })
+Azure.configure({ resourceName: "resource", apiKey: "azure-key", auth: Auth.header("api-key", "override") })
 
 Anthropic.configure({ apiKey: "anthropic-key" }).model("claude-haiku")
+Anthropic.configure({
+  apiKey: "anthropic-key",
+  providerOptions: {
+    anthropic: { thinking: { type: "enabled", budgetTokens: 1_024 }, effort: "high" },
+  },
+}).model("claude-haiku")
 // @ts-expect-error Anthropic model selectors only accept model ids.
 Anthropic.configure({ apiKey: "anthropic-key" }).model("claude-haiku", {})
 // @ts-expect-error Anthropic package settings accept only one auth source.
 Anthropic.model("claude-sonnet-4-6", { apiKey: "anthropic-key", authToken: "anthropic-token" })
+// @ts-expect-error Enabled Anthropic thinking requires a token budget.
+Anthropic.configure({ providerOptions: { anthropic: { thinking: { type: "enabled" } } } })
+// @ts-expect-error Anthropic thinking budgets must be numbers.
+Anthropic.configure({ providerOptions: { anthropic: { thinking: { type: "enabled", budgetTokens: "large" } } } })
 
 AnthropicCompatible.configure({
   apiKey: "messages-key",
   baseURL: "https://messages.example.com/v1",
   provider: "example",
+  providerOptions: { anthropic: { thinking: { type: "disabled" } } },
 }).model("compatible-model")
 // @ts-expect-error Anthropic-compatible providers require a base URL.
 AnthropicCompatible.configure({ apiKey: "messages-key" })
@@ -160,12 +169,21 @@ AnthropicCompatible.model("compatible-model", {
 })
 
 Google.configure({ apiKey: "google-key" }).model("gemini-2.5-flash")
+Google.configure({
+  apiKey: "google-key",
+  providerOptions: { gemini: { thinkingConfig: { thinkingBudget: 0, includeThoughts: false } } },
+}).model("gemini-2.5-flash")
 // @ts-expect-error Google model selectors only accept model ids.
 Google.configure({ apiKey: "google-key" }).model("gemini-2.5-flash", {})
+// @ts-expect-error Gemini thinking budgets must be numbers.
+Google.configure({ providerOptions: { gemini: { thinkingConfig: { thinkingBudget: "large" } } } })
 
-GoogleVertex.configure({ apiKey: "vertex-key" }).model("gemini-3.5-flash")
+GoogleVertex.configure({
+  apiKey: "vertex-key",
+  providerOptions: { gemini: { thinkingConfig: { thinkingBudget: 1_024 } } },
+}).model("gemini-3.5-flash")
 GoogleVertex.configure({ accessToken: "vertex-token", project: "project" }).model("gemini-3.5-flash")
-GoogleVertex.configure({ auth: RuntimeAuth.bearer("vertex-token"), project: "project" }).model("gemini-3.5-flash")
+GoogleVertex.configure({ auth: Auth.bearer("vertex-token"), project: "project" }).model("gemini-3.5-flash")
 // @ts-expect-error Vertex Gemini model selectors only accept model ids.
 GoogleVertex.configure({ apiKey: "vertex-key" }).model("gemini-3.5-flash", {})
 // @ts-expect-error Vertex Gemini config accepts only one auth source.
@@ -174,7 +192,7 @@ GoogleVertex.configure({ accessToken: "vertex-token", apiKey: "vertex-key", proj
 GoogleVertex.model("gemini-3.5-flash", { accessToken: "vertex-token", apiKey: "vertex-key", project: "project" })
 
 GoogleVertexChat.configure({ accessToken: "vertex-token", project: "project" }).model("deepseek-ai/deepseek-v3.2-maas")
-GoogleVertexChat.configure({ auth: RuntimeAuth.bearer("vertex-token"), project: "project" }).model(
+GoogleVertexChat.configure({ auth: Auth.bearer("vertex-token"), project: "project" }).model(
   "deepseek-ai/deepseek-v3.2-maas",
 )
 // @ts-expect-error Vertex Chat package settings do not accept API keys.
@@ -187,12 +205,12 @@ GoogleVertexChat.configure({ accessToken: "vertex-token", project: "project" }).
 GoogleVertexChat.configure({
   accessToken: "vertex-token",
   // @ts-expect-error Vertex Chat config accepts only one auth source.
-  auth: RuntimeAuth.bearer("vertex-token"),
+  auth: Auth.bearer("vertex-token"),
   project: "project",
 })
 
 GoogleVertexResponses.configure({ accessToken: "vertex-token", project: "project" }).model("xai/grok-4.20-reasoning")
-GoogleVertexResponses.configure({ auth: RuntimeAuth.bearer("vertex-token"), project: "project" }).model(
+GoogleVertexResponses.configure({ auth: Auth.bearer("vertex-token"), project: "project" }).model(
   "xai/grok-4.20-reasoning",
 )
 // @ts-expect-error Vertex Responses package settings do not accept API keys.
@@ -205,16 +223,18 @@ GoogleVertexResponses.configure({ accessToken: "vertex-token", project: "project
 GoogleVertexResponses.configure({
   accessToken: "vertex-token",
   // @ts-expect-error Vertex Responses config accepts only one auth source.
-  auth: RuntimeAuth.bearer("vertex-token"),
+  auth: Auth.bearer("vertex-token"),
   project: "project",
 })
 
-GoogleVertexMessages.configure({ accessToken: "vertex-token", project: "project" }).model("claude-sonnet-4-6")
+GoogleVertexMessages.configure({
+  accessToken: "vertex-token",
+  project: "project",
+  providerOptions: { anthropic: { thinking: { type: "adaptive", display: "omitted" }, effort: "low" } },
+}).model("claude-sonnet-4-6")
 // @ts-expect-error Vertex Messages package settings do not accept API keys.
 GoogleVertexMessages.model("claude-sonnet-4-6", { apiKey: "vertex-key", project: "project" })
-GoogleVertexMessages.configure({ auth: RuntimeAuth.bearer("vertex-token"), project: "project" }).model(
-  "claude-sonnet-4-6",
-)
+GoogleVertexMessages.configure({ auth: Auth.bearer("vertex-token"), project: "project" }).model("claude-sonnet-4-6")
 GoogleVertexMessages.configure({ accessToken: "vertex-token", project: "project" }).model(
   "claude-sonnet-4-6",
   // @ts-expect-error Vertex Messages model selectors only accept model ids.
@@ -223,7 +243,7 @@ GoogleVertexMessages.configure({ accessToken: "vertex-token", project: "project"
 GoogleVertexMessages.configure({
   accessToken: "vertex-token",
   // @ts-expect-error Vertex Messages config accepts only one auth source.
-  auth: RuntimeAuth.bearer("vertex-token"),
+  auth: Auth.bearer("vertex-token"),
   project: "project",
 })
 
@@ -249,7 +269,3 @@ OpenAICompatible.deepseek.configure({ apiKey: "deepseek-key" }).model("deepseek-
 Cloudflare.CloudflareWorkersAI.configure({ accountId: "account", apiKey: "cf-key" }).model("@cf/meta/llama")
 // @ts-expect-error Cloudflare Workers AI model selectors only accept model ids.
 Cloudflare.CloudflareWorkersAI.configure({ accountId: "account", apiKey: "cf-key" }).model("@cf/meta/llama", {})
-
-GitHubCopilot.configure({ baseURL: "https://copilot.test", apiKey: "copilot-key" }).model("gpt-4.1")
-// @ts-expect-error GitHub Copilot model selectors only accept model ids.
-GitHubCopilot.configure({ baseURL: "https://copilot.test", apiKey: "copilot-key" }).model("gpt-4.1", {})

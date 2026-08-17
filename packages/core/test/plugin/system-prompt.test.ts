@@ -1,31 +1,33 @@
 import { describe, expect, test } from "bun:test"
 import { SystemPart } from "@opencode-ai/ai"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { PluginV2 } from "@opencode-ai/core/plugin"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
-import { SessionV2 } from "@opencode-ai/core/session"
-import type { SessionHooks } from "@opencode-ai/plugin/v2/effect/session"
+import { Session } from "@opencode-ai/core/session"
+import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
+import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "@opencode-ai/schema/provider"
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 import PROMPT_META from "../../src/plugin/system-prompt/meta.txt"
-import PROMPT_DEFAULT from "../../src/session/runner/prompt/base.txt"
 
 const it = testEffect(PluginTestLayer)
-const fallback = PROMPT_DEFAULT
+const fallback = SessionSystemPrompt.make([])
 const makeHost = Effect.gen(function* () {
-  const plugins = yield* PluginV2.Service
+  const agents = yield* Agent.Service
+  const plugins = yield* Plugin.Service
+  yield* agents.transform((draft) => draft.update(Agent.ID.make("build"), () => {}))
   return yield* PluginHost.make(plugins)
 })
 
 const context = (id: string, system = fallback): SessionHooks["context"] => ({
-  sessionID: SessionV2.ID.make("ses_system_prompt"),
-  agent: AgentV2.ID.make("build"),
+  sessionID: Session.ID.make("ses_system_prompt"),
+  agent: Agent.ID.make("build"),
   model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make(id) }),
   system: [SystemPart.make(system)],
   messages: [],
@@ -33,17 +35,15 @@ const context = (id: string, system = fallback): SessionHooks["context"] => ({
 })
 
 describe("SystemPromptPlugin", () => {
-  test("uses V2 vocabulary in the Meta prompt", () => {
-    expect(PROMPT_META).toContain("webfetch tool")
-    expect(PROMPT_META).toContain("subagent tool")
-    expect(PROMPT_META).toContain("shell tool")
-    expect(PROMPT_META).toContain("read for reading files")
-    expect(PROMPT_META).toContain("edit for editing")
-    expect(PROMPT_META).toContain("write for creating files")
-    expect(PROMPT_META).toContain("https://v2.opencode.ai/llms.txt")
-    expect(PROMPT_META).not.toMatch(
-      /TodoWrite|Task tool|WebFetch|\bBash\b|Read for reading files|Edit for editing|Write for creating files|https:\/\/opencode\.ai\/docs/,
-    )
+  test("uses current vocabulary in the Meta prompt", () => {
+    expect(PROMPT_META).toContain("`webfetch` tool")
+    expect(PROMPT_META).toContain("`subagent` tool")
+    expect(PROMPT_META).toContain("Reserve `shell`")
+    expect(PROMPT_META).toContain("`read` for reading files")
+    expect(PROMPT_META).toContain("`edit` for editing")
+    expect(PROMPT_META).toContain("`write` for creating files")
+    expect(PROMPT_META).toContain("https://opencode.ai/v2/docs/")
+    expect(PROMPT_META).not.toMatch(/TodoWrite|Task tool|WebFetch|\bBash\b|https:\/\/opencode\.ai\/docs/)
   })
 
   test("uses granular IDs with a common prefix", () => {
@@ -73,8 +73,8 @@ describe("SystemPromptPlugin", () => {
         ["claude-sonnet-4", "# Professional objectivity"],
         ["kimi-k2", "# Prompt and Tool Use"],
         ["trinity", "what command should I run to list files"],
-        ["meta/muse-spark-1.1", "OpenCode powered by Meta Muse Spark"],
-        ["llama-3.3", "You are opencode, an interactive CLI tool"],
+        ["meta/muse-spark-1.1", "powered by Muse Spark"],
+        ["llama-3.3", fallback],
       ] as const
 
       yield* Effect.forEach(
@@ -90,12 +90,42 @@ describe("SystemPromptPlugin", () => {
     }),
   )
 
+  it.effect("selects the Meta prompt for Muse family model IDs", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      const pluginHost = yield* makeHost
+      yield* SystemPromptPlugin.MetaPlugin.effect(pluginHost)
+
+      yield* Effect.forEach(
+        [
+          ["meta/muse-spark-preview", "Muse Spark"],
+          ["muse-spark-1.2", "Muse Spark"],
+          ["meta/muse-glimmer-30b", "Muse Glimmer"],
+          ["muse-glimmer-30b", "Muse Glimmer"],
+        ] as const,
+        ([id, name]) => {
+          const event = context(id)
+          return hooks.trigger("session", "context", event).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                expect(event.system[0]?.text).toContain(`powered by ${name},`)
+                expect(event.system[0]?.text).toContain(`using Meta ${name}.`)
+                expect(event.system[0]?.text).not.toContain("{{MODEL_NAME}}")
+              }),
+            ),
+          )
+        },
+        { discard: true },
+      )
+    }),
+  )
+
   it.effect("preserves an explicit agent system prompt", () =>
     Effect.gen(function* () {
-      const agents = yield* AgentV2.Service
+      const agents = yield* Agent.Service
       const hooks = yield* PluginHooks.Service
       yield* agents.transform((draft) =>
-        draft.update(AgentV2.ID.make("build"), (agent) => {
+        draft.update(Agent.ID.make("build"), (agent) => {
           agent.system = "Custom agent prompt"
         }),
       )
@@ -108,6 +138,21 @@ describe("SystemPromptPlugin", () => {
       yield* hooks.trigger("session", "context", event)
 
       expect(event.system.map((part) => part.text)).toEqual(["Custom agent prompt"])
+    }),
+  )
+
+  it.effect("skips the hook when agent lookup fails", () =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      const hooks = yield* PluginHooks.Service
+      const pluginHost = yield* makeHost
+      yield* SystemPromptPlugin.OpenAIPlugin.effect(pluginHost)
+      yield* agents.transform((draft) => draft.remove(Agent.ID.make("build")))
+      const event = context("gpt-5")
+
+      yield* hooks.trigger("session", "context", event)
+
+      expect(event.system[0]?.text).toBe(fallback)
     }),
   )
 

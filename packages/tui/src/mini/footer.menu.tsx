@@ -1,0 +1,305 @@
+/** @jsxImportSource @opentui/solid */
+import { TextAttributes, type ColorInput } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
+import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
+import { transparent, type RunFooterTheme } from "./theme"
+import { Locale } from "../util/locale"
+import { stringWidth } from "../util/string-width"
+import { moveSelection, moveSelectionOffset, reconcileSelection, revealSelectionOffset } from "../ui/select-controller"
+import { monoTruncate } from "./mono"
+
+export const FOOTER_MENU_ROWS = 8
+
+export type RunFooterMenuItem = {
+  display: string
+  description?: string
+  category?: string
+  footer?: string
+}
+
+type RunFooterMenuRow =
+  | { type: "header"; label: string }
+  | { type: "item"; item: RunFooterMenuItem; index: number }
+  | { type: "spacer" }
+
+export function createFooterMenuState(input: { count: Accessor<number>; limit?: number }) {
+  const [selected, setSelected] = createSignal(0)
+  const [offset, setOffset] = createSignal(0)
+  const limit = () => input.limit ?? FOOTER_MENU_ROWS
+  const rows = createMemo(() => Math.max(1, Math.min(limit(), input.count())))
+
+  const reveal = (index: number) => {
+    const count = input.count()
+    const next = reconcileSelection(index, count)
+    setSelected(next)
+    setOffset((value) => revealSelectionOffset(value, { count, limit: limit(), selected: next }))
+  }
+
+  const reset = () => {
+    setSelected(0)
+    setOffset(0)
+  }
+
+  createEffect(() => {
+    const count = input.count()
+    const next = reconcileSelection(selected(), count)
+    setSelected(next)
+    setOffset((value) => revealSelectionOffset(value, { count, limit: limit(), selected: next }))
+  })
+
+  const move = (dir: -1 | 1) => {
+    const count = input.count()
+    const next = moveSelection(selected(), { count, delta: dir, policy: "clamp" })
+    setSelected(next)
+    setOffset((value) => moveSelectionOffset(value, { count, limit: limit(), selected: next, direction: dir }))
+  }
+
+  return {
+    selected,
+    offset,
+    rows,
+    reveal,
+    reset,
+    move,
+  }
+}
+
+export function RunFooterMenu(props: {
+  theme: Accessor<RunFooterTheme>
+  items: Accessor<RunFooterMenuItem[]>
+  selected: Accessor<number>
+  offset: Accessor<number>
+  rows: Accessor<number>
+  limit?: number
+  empty?: string
+  border?: boolean
+  paddingLeft?: number
+  paddingRight?: number
+  grouped?: boolean
+  background?: boolean
+  headerColor?: ColorInput
+  mono?: boolean
+}) {
+  const term = useTerminalDimensions()
+  const limit = () => props.limit ?? FOOTER_MENU_ROWS
+  const border = () => props.border ?? true
+  const [groupOffset, setGroupOffset] = createSignal(0)
+  let previous = -1
+  const groupedRows = createMemo<RunFooterMenuRow[]>(() => {
+    const all: RunFooterMenuRow[] = []
+    let category = ""
+    props.items().forEach((item, index) => {
+      if (item.category && item.category !== category) {
+        if (all.length > 0) {
+          all.push({ type: "spacer" })
+        }
+
+        category = item.category
+        all.push({ type: "header", label: item.category })
+      }
+
+      all.push({ type: "item", item, index })
+    })
+    return all
+  })
+
+  createEffect(() => {
+    if (!props.grouped) {
+      return
+    }
+
+    const all = groupedRows()
+    const selected = all.findIndex((item) => item.type === "item" && item.index === props.selected())
+    if (all.length === 0 || selected === -1) {
+      setGroupOffset(0)
+      previous = props.selected()
+      return
+    }
+
+    const dir = props.selected() === previous + 1 ? 1 : props.selected() === previous - 1 ? -1 : undefined
+    setGroupOffset((value) =>
+      dir
+        ? moveSelectionOffset(value, { count: all.length, limit: limit(), selected, direction: dir })
+        : revealSelectionOffset(value, { count: all.length, limit: limit(), selected }),
+    )
+    previous = props.selected()
+  })
+
+  const rows = createMemo<RunFooterMenuRow[]>(() => {
+    if (!props.grouped) {
+      return props
+        .items()
+        .slice(props.offset(), props.offset() + limit())
+        .map((item, index) => ({
+          type: "item",
+          item,
+          index: index + props.offset(),
+        }))
+    }
+
+    const all = groupedRows()
+    const start = Math.max(0, Math.min(groupOffset(), all.length - limit()))
+    return all.slice(start, start + limit())
+  })
+  const descriptionColumn = createMemo(() => {
+    const width = Math.max(
+      0,
+      ...props
+        .items()
+        .filter((item) => item.description)
+        .map((item) => stringWidth(item.display)),
+    )
+    return width === 0 ? 0 : width + 2
+  })
+  const descriptionPad = (item: RunFooterMenuItem) => {
+    if (!item.description) {
+      return ""
+    }
+
+    return " ".repeat(Math.max(1, descriptionColumn() - stringWidth(item.display)))
+  }
+  const descriptionText = (item: RunFooterMenuItem) => {
+    if (!item.description) {
+      return
+    }
+
+    const footerWidth = item.footer ? stringWidth(item.footer) + 1 : 0
+    const available =
+      term().width -
+      (border() ? 1 : 0) -
+      (props.paddingLeft ?? 1) -
+      (props.paddingRight ?? 0) -
+      descriptionColumn() -
+      footerWidth -
+      4
+    const width = Math.max(12, available)
+    return props.mono ? monoTruncate(item.description, width, true) : Locale.truncate(item.description, width)
+  }
+  return (
+    <box
+      width="100%"
+      height={props.rows()}
+      backgroundColor={props.background ? props.theme().shade : transparent}
+      flexDirection="column"
+    >
+      {rows().length === 0 ? (
+        <box
+          paddingRight={0}
+          flexDirection="row"
+          backgroundColor={props.background ? props.theme().shade : transparent}
+        >
+          {border() ? (
+            <text fg={props.theme().border} wrapMode="none">
+              {props.mono ? "|" : "┃"}
+            </text>
+          ) : undefined}
+          <box
+            flexGrow={1}
+            flexShrink={1}
+            paddingLeft={props.paddingLeft ?? 1}
+            paddingRight={props.paddingRight ?? 0}
+            backgroundColor={props.background ? props.theme().shade : transparent}
+          >
+            <text fg={props.theme().muted} wrapMode="none" truncate>
+              {props.empty ?? "No matching items"}
+            </text>
+          </box>
+        </box>
+      ) : (
+        rows().map((row) => {
+          if (row.type === "spacer") {
+            return <box height={1} flexShrink={0} />
+          }
+
+          if (row.type === "header") {
+            return (
+              <box paddingLeft={props.paddingLeft ?? 1} paddingRight={props.paddingRight ?? 1}>
+                <text
+                  fg={props.headerColor ?? props.theme().highlight}
+                  attributes={TextAttributes.BOLD}
+                  wrapMode="none"
+                  truncate
+                >
+                  {row.label}
+                </text>
+              </box>
+            )
+          }
+
+          const active = () => row.index === props.selected()
+          const attributes = () =>
+            active() ? TextAttributes.BOLD | (props.mono ? TextAttributes.INVERSE : 0) : undefined
+          const background = () =>
+            active()
+              ? props.background
+                ? props.theme().selected
+                : props.theme().shade
+              : props.background
+                ? props.theme().shade
+                : transparent
+          return (
+            <box paddingRight={0} flexDirection="row" backgroundColor={background()}>
+              {border() ? (
+                <text fg={props.theme().highlight} bg={background()} wrapMode="none">
+                  {active() ? (props.mono ? ">" : "▌") : " "}
+                </text>
+              ) : undefined}
+              <box
+                flexGrow={1}
+                flexShrink={1}
+                paddingLeft={props.paddingLeft ?? 1}
+                paddingRight={props.paddingRight ?? 0}
+                backgroundColor={background()}
+              >
+                <box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
+                  <box flexDirection="row" gap={0} flexGrow={1} flexShrink={1}>
+                    <text
+                      fg={active() ? props.theme().selectedText : props.theme().text}
+                      attributes={attributes()}
+                      wrapMode="none"
+                      truncate
+                      flexShrink={0}
+                    >
+                      {row.item.display}
+                    </text>
+                    {row.item.description ? (
+                      <>
+                        <text
+                          fg={active() ? props.theme().selectedText : props.theme().muted}
+                          wrapMode="none"
+                          flexShrink={0}
+                        >
+                          {descriptionPad(row.item)}
+                        </text>
+                        <text
+                          fg={active() ? props.theme().selectedText : props.theme().muted}
+                          wrapMode="none"
+                          truncate
+                          flexGrow={1}
+                          flexShrink={1}
+                        >
+                          {descriptionText(row.item)}
+                        </text>
+                      </>
+                    ) : undefined}
+                  </box>
+                  {row.item.footer ? (
+                    <text
+                      fg={active() ? props.theme().selectedText : props.theme().muted}
+                      attributes={attributes()}
+                      wrapMode="none"
+                      truncate
+                      flexShrink={0}
+                    >
+                      {row.item.footer}
+                    </text>
+                  ) : undefined}
+                </box>
+              </box>
+            </box>
+          )
+        })
+      )}
+    </box>
+  )
+}

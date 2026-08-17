@@ -21,7 +21,7 @@ const words = [
   "vector",
 ]
 
-const serverKey = "http://127.0.0.1:4096"
+const serverKey = `http://127.0.0.1:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 const sourceID = "ses_smoke_source"
 const targetID = "ses_smoke_target"
 const directory = "C:/OpenCode/SmokeProject"
@@ -120,7 +120,7 @@ function toolPart(
   outputLength = 160,
 ): MessagePart {
   const metadata =
-    tool === "patch"
+    tool === "apply_patch"
       ? { files: [patchFile(index, "update"), patchFile(index + 1, index % 2 === 0 ? "add" : "delete")] }
       : tool === "edit" || tool === "write"
         ? {
@@ -134,7 +134,7 @@ function toolPart(
   return {
     id: id(`prt_tool_${tool}_${partIndex}`, index),
     type: "tool",
-    callID: id("call", index * 10 + partIndex),
+    callID: id("call", index * 100 + partIndex),
     tool,
     state: {
       status: "completed",
@@ -199,7 +199,7 @@ function turn(index: number): Message[] {
       ? [toolPart(index, 7, "write", { filePath: `src/generated/write-${index}.ts`, content: code(index, 28) }, 560)]
       : []),
     ...(index % 8 === 0
-      ? [toolPart(index, 8, "patch", { files: [`src/generated/patch-${index}.ts`] }, 620)]
+      ? [toolPart(index, 8, "apply_patch", { files: [`src/generated/patch-${index}.ts`] }, 620)]
       : []),
     ...(index % 7 === 0 ? [toolPart(index, 4, "bash", { command: "bun typecheck" }, 620)] : []),
     ...(index % 10 === 0 ? [toolPart(index, 9, "webfetch", { url: "https://example.com/docs/sample" }, 120)] : []),
@@ -222,20 +222,29 @@ function turn(index: number): Message[] {
   return [user, assistantMessage(targetID, index, user.info.id, parts)]
 }
 
-const targetMessages = Array.from({ length: 72 }, (_, index) => turn(index)).flat()
+const targetMessages = Array.from({ length: 101 }, (_, index) => turn(index)).flat()
 const sourceMessages = Array.from({ length: 12 }, (_, index) => [
   userMessage(sourceID, index + 1000, 120),
   assistantMessage(sourceID, index + 1000, id("msg_user", index + 1000), [textPart(index + 1000, 0, 240)]),
 ]).flat()
+const messages: Record<string, Message[]> = { [sourceID]: sourceMessages, [targetID]: targetMessages }
 
 function renderable(part: MessagePart) {
-  if (part.type === "text") return !!part.text.trim()
-  if (part.type === "reasoning") return !!part.text.trim()
+  if (part.type === "tool" && part.tool === "todowrite") return false
+  if (part.type === "text") return !!part.text?.trim()
+  if (part.type === "reasoning") return !!part.text?.trim()
   return part.type !== "step-start" && part.type !== "step-finish" && part.type !== "patch"
 }
 
-function orderedParts(message: Message) {
-  return message.parts.slice().sort((a, b) => a.id.localeCompare(b.id))
+function currentPartIDs(message: Message) {
+  const ordinals = { text: 0, reasoning: 0 }
+  return message.parts.flatMap((part) => {
+    if (!renderable(part)) return []
+    if (part.type === "text") return [`${message.info.id}:text:${ordinals.text++}`]
+    if (part.type === "reasoning") return [`${message.info.id}:reasoning:${ordinals.reasoning++}`]
+    if (part.type === "tool") return [typeof part.callID === "string" ? part.callID : part.id]
+    return []
+  })
 }
 
 export const fixture = {
@@ -282,24 +291,21 @@ export const fixture = {
   ],
   sourceID,
   targetID,
-  messages: { [sourceID]: sourceMessages, [targetID]: targetMessages },
+  messages,
   expected: {
     sourceTitle: "Uncommitted changes inquiry",
     targetTitle: "Example Game: sample jump movement & sample physics analysis",
     targetMessageIDs: targetMessages
       .filter((message) => message.info.role === "user")
       .map((message) => message.info.id),
-    targetPartIDs: targetMessages.flatMap((message) =>
-      orderedParts(message)
-        .filter(renderable)
-        .map((part) => part.id),
-    ),
-    expandedShellPartID: targetMessages.flatMap((message) => message.parts).find((part) => part.tool === "bash")!.id,
+    targetPartIDs: targetMessages.flatMap(currentPartIDs),
+    expandedShellPartID: targetMessages.flatMap((message) => message.parts).find((part) => part.tool === "bash")!
+      .callID,
   },
 }
 
 export function pageMessages(sessionID: string, limit: number, before?: string) {
-  const messages = fixture.messages[sessionID as keyof typeof fixture.messages] ?? []
+  const messages = fixture.messages[sessionID] ?? []
   const end = before
     ? Math.max(
         0,
@@ -309,6 +315,6 @@ export function pageMessages(sessionID: string, limit: number, before?: string) 
   const start = Math.max(0, end - limit)
   return {
     items: messages.slice(start, end),
-    cursor: start > 0 ? messages[start]!.info.id : undefined,
+    cursor: start > 0 ? messages[start].info.id : undefined,
   }
 }

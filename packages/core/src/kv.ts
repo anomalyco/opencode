@@ -1,10 +1,10 @@
-export * as KV from "./kv"
+export * as KV from "./kv.js"
 
 import { eq } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Database } from "./database/database"
-import { makeGlobalNode } from "./effect/app-node"
-import { KVTable } from "./kv/sql"
+import { Database } from "./database/database.js"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { KVTable } from "./kv/sql.js"
 
 export type Value = Schema.Json
 
@@ -14,7 +14,7 @@ export interface Interface {
   readonly remove: (key: string) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/KV") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/KV") {}
 
 const layer = Layer.effect(
   Service,

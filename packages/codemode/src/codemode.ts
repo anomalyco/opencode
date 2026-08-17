@@ -5,6 +5,8 @@ import type { Tools } from "./tools.js"
 
 /** A tool call admitted during an execution. */
 export type { ToolCall, ToolCallEnded, ToolCallHooks, ToolCallStarted, ToolDescription } from "./tool-runtime.js"
+/** Signature-construction helpers for host-owned catalog instructions. */
+export { searchSignature, toolExpression } from "./tool-runtime.js"
 
 /** Resource budgets enforced independently during each CodeMode program execution. */
 export type ExecutionLimits = {
@@ -20,12 +22,6 @@ export type ExecutionLimits = {
    * truncation notices and host formatting are additional.
    */
   readonly maxOutputBytes?: number
-}
-
-/** Controls how much of the tool catalog is inlined in agent instructions. */
-export type DiscoveryOptions = {
-  /** Approximate token budget (chars/4, default 2000) for full catalog entries. */
-  readonly catalogBudget?: number
 }
 
 export type ResolvedExecutionLimits = {
@@ -44,7 +40,7 @@ export type ExecuteOptions<Provided extends Record<string, unknown> = {}> = {
   limits?: ExecutionLimits
   /** Observes decoded tool input immediately before tool execution. */
   onToolCallStart?: (call: ToolRuntime.ToolCallStarted) => Effect.Effect<void, never, Services<Provided>>
-  /** Observes each admitted tool call as it settles, with outcome and duration. */
+  /** Observes each admitted tool call as it succeeds, fails, or is interrupted. */
   onToolCallEnd?: (call: ToolRuntime.ToolCallEnded) => Effect.Effect<void, never, Services<Provided>>
 }
 
@@ -52,10 +48,7 @@ export type ExecuteOptions<Provided extends Record<string, unknown> = {}> = {
 export type DataValue = Schema.Json
 
 /** Configuration shared by `CodeMode.make` and `CodeMode.execute`. */
-export type Options<Provided extends Record<string, unknown> = {}> = Omit<ExecuteOptions<Provided>, "code"> & {
-  /** Progressive-disclosure configuration for the agent-facing tool catalog. */
-  readonly discovery?: DiscoveryOptions
-}
+export type Options<Provided extends Record<string, unknown> = {}> = Omit<ExecuteOptions<Provided>, "code">
 
 /** Schema for a host tool input containing CodeMode source. */
 export const Input = Schema.Struct({ code: Schema.String })
@@ -116,7 +109,6 @@ export type Result = typeof Result.Type
 /** Reusable confined runtime over explicit tools. */
 export type Runtime<R = never> = {
   readonly catalog: () => ReadonlyArray<ToolDescription>
-  readonly instructions: () => string
   readonly execute: (code: string) => Effect.Effect<Result, never, R>
 }
 
@@ -147,11 +139,10 @@ export const make = <const Provided extends Record<string, unknown> = {}>(
 ): Runtime<Services<Provided>> => {
   const tools = (options.tools ?? {}) as Tools<Services<Provided>>
   const limits = resolveExecutionLimits(options.limits)
-  const prepared = ToolRuntime.prepare(tools, options.discovery?.catalogBudget)
+  const prepared = ToolRuntime.prepare(tools)
 
   return {
     catalog: () => prepared.catalog,
-    instructions: () => prepared.instructions,
     execute: (code) => executeWithLimits<Provided>({ ...options, code }, limits, prepared.searchIndex),
   }
 }

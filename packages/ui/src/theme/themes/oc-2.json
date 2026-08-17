@@ -41,7 +41,8 @@
       "syntax-type": "var(--v2-purple-800)",
       "syntax-constant": "#007b80",
       "syntax-critical": "var(--v2-red-800)",
-      "syntax-diff-delete": "#ff8c00",
+      "syntax-diff-add": "var(--v2-state-fg-success)",
+      "syntax-diff-delete": "var(--v2-state-fg-danger)",
       "syntax-diff-unknown": "#a753ae",
       "surface-critical-base": "#FFF2F0"
     },
@@ -275,7 +276,8 @@
       "syntax-type": "var(--v2-purple-400)",
       "syntax-constant": "#93e9f6",
       "syntax-critical": "var(--v2-red-400)",
-      "syntax-diff-delete": "#fab283",
+      "syntax-diff-add": "var(--v2-state-fg-success)",
+      "syntax-diff-delete": "var(--v2-state-fg-danger)",
       "syntax-diff-unknown": "#edb2f1",
       "surface-critical-base": "#1F0603"
     },

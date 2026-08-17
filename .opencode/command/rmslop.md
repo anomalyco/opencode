@@ -2,7 +2,7 @@
 description: Remove AI code slop
 ---
 
-Check the diff against dev, and remove all AI generated slop introduced in this branch.
+Check the diff against `origin/v2`, and remove all AI generated slop introduced in this branch.
 
 This includes:
 

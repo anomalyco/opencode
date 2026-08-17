@@ -1,21 +1,20 @@
 import { describe, expect } from "bun:test"
-import { LLMClient, LLMEvent, Model, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Config } from "@opencode-ai/core/config"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Bus } from "@opencode-ai/core/bus"
 import { Job } from "@opencode-ai/core/job"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationServices } from "@opencode-ai/core/location-services"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionPending } from "@opencode-ai/core/session/pending"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -23,25 +22,16 @@ import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { DateTime, Effect, Layer, LayerMap, Stream } from "effect"
 import { testEffect } from "./lib/effect"
+import { globalProjectLayer } from "./lib/project"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
-const model = Model.make({
+const model = LanguageModel.make({
   id: "summary-model",
   provider: "test",
   route: OpenAIChat.route.with({ limits: { context: 10_000, output: 1_000 } }),
 })
-const projects = Layer.succeed(
-  ProjectV2.Service,
-  ProjectV2.Service.of({
-    list: () => Effect.succeed([]),
-    resolve: (directory) => Effect.succeed({ id: ProjectV2.ID.global, directory }),
-    directories: () => Effect.succeed([]),
-    commit: () => Effect.void,
-  }),
-)
 let requests: LLMRequest[] = []
 const client = Layer.mock(LLMClient.Service)({
-  prepare: () => Effect.die("unused"),
   stream: (request: LLMRequest) => {
     requests.push(request)
     return Stream.make(LLMEvent.textDelta({ id: "summary", text: "manual session summary" }))
@@ -49,12 +39,20 @@ const client = Layer.mock(LLMClient.Service)({
   generate: () => Effect.die("unused"),
 })
 const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
-const models = SessionRunnerModel.layerWith(() => Effect.succeed(SessionRunnerModel.resolved(model)))
+const models = Layer.mock(SessionRunnerModel.Service)({
+  resolve: () =>
+    Effect.succeed(
+      SessionRunnerModel.resolved(model, {
+        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        cost: [],
+      }),
+    ),
+})
 const locations = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(
     () =>
-      // The test only needs the compaction location service used by SessionV2.compact.
+      // The test only needs the compaction location service used by Session.compact.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
       SessionCompaction.layer.pipe(
         Layer.provide(client),
@@ -65,36 +63,36 @@ const locations = Layer.effect(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionV2.node]),
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
       [LocationServiceMap.node, locations],
-      [ProjectV2.node, projects],
+      [Project.node, globalProjectLayer],
       [SessionExecution.node, SessionExecution.noopLayer],
     ],
   ),
 )
 
-describe("SessionV2.compact", () => {
-  it.effect("durably admits and coalesces manual compaction", () =>
+describe("Session.compact", () => {
+  it.effect("durably stacks manual compaction", () =>
     Effect.gen(function* () {
       requests = []
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
       const created = yield* session.create({ location })
 
       const messageID = SessionMessage.ID.create()
-      yield* events.publish(SessionEvent.InputAdmitted, {
+      yield* bus.publish(SessionEvent.InboxEnqueued, {
         sessionID: created.id,
-        inputID: messageID,
-        input: {
+        inboxID: messageID,
+        item: {
           type: "user",
-          data: { text: "Please compact this session history." },
+          payload: { text: "Please compact this session history." },
           delivery: "steer",
         },
       })
-      yield* events.publish(SessionEvent.InputPromoted, {
+      yield* bus.publish(SessionEvent.InboxDelivered, {
         sessionID: created.id,
-        inputID: messageID,
+        inboxID: messageID,
       })
 
       expect(yield* session.compact({ id: messageID, sessionID: created.id }).pipe(Effect.flip)).toMatchObject({
@@ -104,12 +102,17 @@ describe("SessionV2.compact", () => {
       const first = yield* session.compact({ sessionID: created.id })
       const second = yield* session.compact({ sessionID: created.id })
 
-      expect(second.id).toBe(first.id)
+      expect(second.id).not.toBe(first.id)
       expect(requests).toHaveLength(0)
-      expect(yield* SessionPending.compaction((yield* Database.Service).db, created.id)).toMatchObject({
-        id: first.id,
-      })
+      expect(yield* session.inbox(created.id)).toEqual([
+        expect.objectContaining({ id: first.id, type: "compaction", delivery: "queue" }),
+        expect.objectContaining({ id: second.id, type: "compaction", delivery: "queue" }),
+      ])
       expect((yield* session.context(created.id)).find((message) => message.id === first.id)).toBeUndefined()
+
+      const steered = yield* session.create({ location })
+      const steer = yield* session.compact({ sessionID: steered.id, delivery: "steer" })
+      expect(steer).toMatchObject({ type: "compaction", delivery: "steer" })
     }),
   )
 })

@@ -946,7 +946,7 @@ describe("Test262 expected Promise conformance", () => {
     ).toBe("TypeError")
   })
 
-  test.failing("Promise.resolve recursively assimilates callable thenables", async () => {
+  test("Promise.resolve recursively assimilates callable thenables", async () => {
     // Source: test/built-ins/Promise/resolve/resolve-thenable.js
     expect(
       await value(`
@@ -958,7 +958,7 @@ describe("Test262 expected Promise conformance", () => {
     ).toBe(true)
   })
 
-  test.failing("Promise combinators assimilate callable thenable inputs", async () => {
+  test("Promise combinators assimilate callable thenable inputs", async () => {
     // Sources:
     // test/built-ins/Promise/all/reject-immed.js
     // test/built-ins/Promise/all/reject-ignored-immed.js
@@ -988,7 +988,7 @@ describe("Test262 expected Promise conformance", () => {
     ])
   })
 
-  test.failing("await assimilates callable thenables", async () => {
+  test("await assimilates callable thenables", async () => {
     // Source: test/language/expressions/await/await-awaits-thenables.js
     expect(
       await value(`
@@ -998,7 +998,7 @@ describe("Test262 expected Promise conformance", () => {
     ).toBe(42)
   })
 
-  test.failing("await rejects when a callable thenable throws", async () => {
+  test("await rejects when a callable thenable throws", async () => {
     // Source: test/language/expressions/await/await-awaits-thenables-that-throw.js
     expect(
       await value(`
@@ -1012,6 +1012,94 @@ describe("Test262 expected Promise conformance", () => {
         }
       `),
     ).toBe(true)
+  })
+
+  test("thenable resolution is deferred and settles only once", async () => {
+    // Sources:
+    // test/built-ins/Promise/resolve/S25.Promise_resolve_foreign_thenable_2.js
+    // test/built-ins/Promise/exception-after-resolve-in-thenable-job.js
+    expect(
+      await value(`
+        const sequence = []
+        const thenable = {
+          then: (resolve, reject) => {
+            sequence.push("then")
+            resolve(1)
+            reject(2)
+            throw 3
+          }
+        }
+        const promise = Promise.resolve(thenable)
+        sequence.push("after resolve")
+        const result = await promise
+        sequence.push("after await")
+        return [result, sequence]
+      `),
+    ).toEqual([1, ["after resolve", "then", "after await"]])
+  })
+
+  test("the first thenable rejection wins over later resolution and throws", async () => {
+    // Source: test/built-ins/Promise/exception-after-resolve-in-thenable-job.js
+    expect(
+      await value(`
+        const thenable = {
+          then: (resolve, reject) => {
+            reject("first")
+            resolve("second")
+            throw "third"
+          }
+        }
+        try {
+          await thenable
+          return "fulfilled"
+        } catch (reason) {
+          return reason
+        }
+      `),
+    ).toBe("first")
+  })
+
+  test("constructors, reactions, finally, and async returns assimilate thenables", async () => {
+    // Sources:
+    // test/built-ins/Promise/resolve-thenable-immed.js
+    // test/built-ins/Promise/prototype/then/resolve-settled-fulfilled-thenable.js
+    // test/built-ins/Promise/prototype/finally/resolved-observable-then-calls.js
+    const thenable = (value: string) => `({ then: (resolve) => resolve(${JSON.stringify(value)}) })`
+    expect(
+      await value(`
+        const fromAsync = async () => ${thenable("async")}
+        const cleanup = []
+        return await Promise.all([
+          new Promise((resolve) => resolve(${thenable("constructor")})),
+          Promise.resolve().then(() => ${thenable("reaction")}),
+          Promise.resolve("kept").finally(() => {
+            cleanup.push("ran")
+            return ${thenable("ignored")}
+          }),
+          fromAsync(),
+        ]).then((values) => [values, cleanup])
+      `),
+    ).toEqual([["constructor", "reaction", "kept", "async"], ["ran"]])
+  })
+
+  test("finally settles after its cleanup thenable reactions", async () => {
+    // Source: test/built-ins/Promise/prototype/finally/resolved-observable-then-calls-PromiseResolve.js
+    expect(
+      await value(`
+        const sequence = []
+        const cleanup = { then: (resolve) => { sequence.push("then"); resolve() } }
+        const result = Promise.resolve("kept").finally(() => cleanup)
+        result.then(() => sequence.push("finally"))
+        Promise.resolve()
+          .then(() => sequence.push("tick1"))
+          .then(() => sequence.push("tick2"))
+          .then(() => sequence.push("tick3"))
+          .then(() => sequence.push("tick4"))
+        await result
+        sequence.push("await")
+        return sequence
+      `),
+    ).toEqual(["tick1", "then", "tick2", "tick3", "tick4", "finally", "await"])
   })
 })
 

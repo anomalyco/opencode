@@ -1,6 +1,9 @@
 import { mkdtemp, realpath, rm } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
+import type { ThemeSource } from "../../src/context/theme"
+
+export const emptyThemeSource: ThemeSource = { discover: () => Promise.resolve({}) }
 
 export async function tmpdir() {
   const directory = await realpath(await mkdtemp(path.join(os.tmpdir(), "opencode-tui-test-")))

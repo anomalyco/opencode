@@ -1,13 +1,14 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM } from "../../src"
-import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers"
-import { LLMClient } from "../../src/route"
-import { it } from "../lib/effect"
-import { dynamicResponse } from "../lib/http"
-import { deltaChunk, finishChunk } from "../lib/openai-chunks"
-import { sseEvents } from "../lib/sse"
+import { LLM } from "../../src/index.js"
+import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers.js"
+import { LLMClient } from "../../src/route.js"
+import { compileRequest } from "../../src/route/client.js"
+import { it } from "../lib/effect.js"
+import { dynamicResponse } from "../lib/http.js"
+import { deltaChunk, finishChunk } from "../lib/openai-chunks.js"
+import { sseEvents } from "../lib/sse.js"
 
 describe("Google Vertex providers", () => {
   it.effect("sends Gemini requests to the global Vertex endpoint", () =>
@@ -55,13 +56,14 @@ describe("Google Vertex providers", () => {
 
   it.effect("projects Anthropic Messages onto the Vertex raw-predict API", () =>
     Effect.gen(function* () {
+      const model = GoogleVertexMessages.configure({
+        accessToken: "vertex-token",
+        location: "eu",
+        project: "vertex-project",
+      }).model("claude-sonnet-4-6")
       const response = yield* LLMClient.generate(
         LLM.request({
-          model: GoogleVertexMessages.configure({
-            accessToken: "vertex-token",
-            location: "eu",
-            project: "vertex-project",
-          }).model("claude-sonnet-4-6"),
+          model,
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -96,6 +98,7 @@ describe("Google Vertex providers", () => {
         ),
       )
 
+      expect(model.provider).toBe("google-vertex")
       expect(response.text).toBe("Hello.")
     }),
   )
@@ -177,23 +180,6 @@ describe("Google Vertex providers", () => {
       )
 
       expect(response.text).toBe("Hello.")
-    }),
-  )
-
-  it.effect("protects the Vertex Messages API version from body overlays", () =>
-    Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
-        LLM.request({
-          model: GoogleVertexMessages.configure({
-            accessToken: "vertex-token",
-            http: { body: { anthropic_version: "wrong" } },
-            project: "vertex-project",
-          }).model("claude-sonnet-4-6"),
-          prompt: "Say hello.",
-        }),
-      ).pipe(Effect.flip)
-
-      expect(error.message).toContain("http.body cannot overlay protocol-owned field(s): anthropic_version")
     }),
   )
 

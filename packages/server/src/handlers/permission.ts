@@ -1,5 +1,5 @@
 import { Location } from "@opencode-ai/core/location"
-import { PermissionV2 } from "@opencode-ai/core/permission"
+import { Permission } from "@opencode-ai/core/permission"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
@@ -7,7 +7,7 @@ import { Api } from "../api"
 import { PermissionNotFoundError, SessionNotFoundError } from "@opencode-ai/protocol/errors"
 import { response } from "../location"
 
-function missingRequest(id: PermissionV2.ID) {
+function missingRequest(id: Permission.ID) {
   return new PermissionNotFoundError({ requestID: id, message: `Permission request not found: ${id}` })
 }
 
@@ -17,14 +17,14 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
       .handle(
         "permission.request.list",
         Effect.fn(function* () {
-          const permission = yield* PermissionV2.Service
+          const permission = yield* Permission.Service
           return yield* response(permission.list())
         }),
       )
       .handle(
         "session.permission.create",
         Effect.fn(function* (ctx) {
-          const permission = yield* PermissionV2.Service
+          const permission = yield* Permission.Service
           return {
             data: yield* permission
               .ask({
@@ -53,14 +53,14 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
       .handle(
         "session.permission.list",
         Effect.fn(function* (ctx) {
-          const permission = yield* PermissionV2.Service
+          const permission = yield* Permission.Service
           return { data: yield* permission.forSession(ctx.params.sessionID) }
         }),
       )
       .handle(
         "session.permission.get",
         Effect.fn(function* (ctx) {
-          const permission = yield* PermissionV2.Service
+          const permission = yield* Permission.Service
           const request = yield* permission.get(ctx.params.requestID)
           if (!request || request.sessionID !== ctx.params.sessionID) return yield* missingRequest(ctx.params.requestID)
           return { data: request }
@@ -69,12 +69,12 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
       .handle(
         "session.permission.reply",
         Effect.fn(function* (ctx) {
-          const permission = yield* PermissionV2.Service
+          const permission = yield* Permission.Service
           const request = yield* permission.get(ctx.params.requestID)
           if (!request || request.sessionID !== ctx.params.sessionID) return yield* missingRequest(ctx.params.requestID)
           yield* permission
             .reply({ requestID: ctx.params.requestID, reply: ctx.payload.reply, message: ctx.payload.message })
-            .pipe(Effect.catchTag("PermissionV2.NotFoundError", () => missingRequest(ctx.params.requestID)))
+            .pipe(Effect.catchTag("Permission.NotFoundError", () => missingRequest(ctx.params.requestID)))
           return HttpApiSchema.NoContent.make()
         }),
       )

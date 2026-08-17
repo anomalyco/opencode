@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js"
+import { createSignal, Index, Show } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -83,61 +83,71 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
           {/* Bottom section - buttons and indicators (fixed position) */}
           <div class="flex flex-col gap-12">
             <div class="flex flex-col items-start gap-3">
-              {isLast() ? (
+              <Show
+                when={isLast()}
+                fallback={
+                  <Button variant="secondary" size="large" onClick={handleNext}>
+                    {language.t("dialog.releaseNotes.action.next")}
+                  </Button>
+                }
+              >
                 <Button variant="primary" size="large" onClick={handleClose}>
                   {language.t("dialog.releaseNotes.action.getStarted")}
                 </Button>
-              ) : (
-                <Button variant="secondary" size="large" onClick={handleNext}>
-                  {language.t("dialog.releaseNotes.action.next")}
-                </Button>
-              )}
+              </Show>
 
               <Button variant="ghost" size="small" onClick={handleDisable}>
                 {language.t("dialog.releaseNotes.action.hideFuture")}
               </Button>
             </div>
 
-            {paged() && (
+            <Show when={paged()}>
               <div class="flex items-center gap-1.5 -my-2.5">
-                {props.highlights.map((_, i) => (
-                  <button
-                    type="button"
-                    class="h-6 flex items-center cursor-pointer bg-transparent border-none p-0 transition-all duration-200"
-                    classList={{
-                      "w-8": i === index(),
-                      "w-3": i !== index(),
-                    }}
-                    onClick={() => setIndex(i)}
-                  >
-                    <div
-                      class="w-full h-0.5 rounded-[1px] transition-colors duration-200"
+                <Index each={props.highlights}>
+                  {(_, i) => (
+                    <button
+                      type="button"
+                      class="h-6 flex items-center cursor-pointer bg-transparent border-none p-0 transition-all duration-200"
                       classList={{
-                        "bg-icon-strong-base": i === index(),
-                        "bg-icon-weak-base": i !== index(),
+                        "w-8": i === index(),
+                        "w-3": i !== index(),
                       }}
-                    />
-                  </button>
-                ))}
+                      onClick={() => setIndex(i)}
+                    >
+                      <div
+                        class="w-full h-0.5 rounded-[1px] transition-colors duration-200"
+                        classList={{
+                          "bg-icon-strong-base": i === index(),
+                          "bg-icon-weak-base": i !== index(),
+                        }}
+                      />
+                    </button>
+                  )}
+                </Index>
               </div>
-            )}
+            </Show>
           </div>
         </div>
 
         {/* Right side - Media content (edge to edge) */}
-        {feature()?.media && (
-          <div class="flex-1 min-w-0 bg-surface-base overflow-hidden rounded-r-xl">
-            {feature()!.media!.type === "image" ? (
-              <img
-                src={feature()!.media!.src}
-                alt={feature()!.media!.alt ?? feature()?.title ?? language.t("dialog.releaseNotes.media.alt")}
-                class="w-full h-full object-cover"
-              />
-            ) : (
-              <video src={feature()!.media!.src} autoplay loop muted playsinline class="w-full h-full object-cover" />
-            )}
-          </div>
-        )}
+        <Show when={feature()?.media}>
+          {(media) => (
+            <div class="flex-1 min-w-0 bg-surface-base overflow-hidden rounded-r-xl">
+              <Show
+                when={media().type === "image"}
+                fallback={
+                  <video src={media().src} autoplay loop muted playsinline class="w-full h-full object-cover" />
+                }
+              >
+                <img
+                  src={media().src}
+                  alt={media().alt ?? feature()?.title ?? language.t("dialog.releaseNotes.media.alt")}
+                  class="w-full h-full object-cover"
+                />
+              </Show>
+            </div>
+          )}
+        </Show>
       </div>
     </Dialog>
   )

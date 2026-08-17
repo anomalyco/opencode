@@ -1,24 +1,20 @@
-import path from "path"
-import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect"
+import { Cause, Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { ModelsDev } from "@opencode-ai/schema/models-dev"
 import { Money } from "@opencode-ai/schema/money"
-import { Global } from "./global"
-import { Flag } from "./flag/flag"
-import { Flock } from "./util/flock"
-import { Hash } from "./util/hash"
-import { FSUtil } from "./fs-util"
-import { InstallationChannel, InstallationVersion } from "./installation/version"
-import { EventV2 } from "./event"
-import { makeGlobalNode } from "./effect/app-node"
-import { httpClient } from "./effect/app-node-platform"
-import { ModelV2 } from "./model"
-import { ProviderV2 } from "./provider"
+import { App } from "./app.js"
+import { Hash } from "@opencode-ai/util/hash"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Bus } from "./bus.js"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
+import { Model } from "./model.js"
+import { Provider } from "./provider.js"
+import { KV } from "./kv.js"
+import snapshotText from "./models-dev/snapshot.txt" with { type: "text" }
 
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
 export type CatalogModelStatus = typeof CatalogModelStatus.Type
-
-const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
 
 type Cost = {
   readonly input: Money.USDPerMillionTokens
@@ -46,7 +42,7 @@ type SourceModel = {
   readonly reasoning_options?: readonly ReasoningOption[]
   readonly temperature?: boolean
   readonly tool_call: boolean
-  readonly interleaved?: true | { readonly field: "reasoning" | "reasoning_content" | "reasoning_details" }
+  readonly interleaved?: boolean | string | { readonly field: string }
   readonly cost?: Cost
   readonly limit: { readonly context: number; readonly input?: number; readonly output: number }
   readonly modalities?: { readonly input: readonly Modality[]; readonly output: readonly Modality[] }
@@ -57,7 +53,7 @@ type SourceModel = {
         {
           readonly cost?: Cost
           readonly provider?: {
-            readonly body?: ProviderV2.Settings
+            readonly body?: Provider.Settings
             readonly headers?: Readonly<Record<string, string>>
           }
         }
@@ -78,29 +74,30 @@ type SourceProvider = {
 }
 
 export type Snapshot = {
-  readonly info: ProviderV2.Info
-  readonly models: readonly ModelV2.Info[]
+  readonly info: Provider.Info
+  readonly models: readonly Model.Info[]
   readonly environment: readonly string[]
 }
 
 function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
   const providers: Snapshot[] = []
   for (const item of Object.values(input)) {
-    const providerID = ProviderV2.ID.make(item.id)
+    const providerID = Provider.ID.make(item.id)
     const info = {
       id: providerID,
       name: item.name,
-      package: ProviderV2.aisdk(item.npm),
+      activation: "auto",
+      package: Provider.aisdk(item.npm),
       ...(item.api ? { settings: { baseURL: item.api } } : {}),
-    } satisfies ProviderV2.Info
-    const models: ModelV2.Info[] = []
+    } satisfies Provider.Info
+    const models: Model.Info[] = []
     for (const model of Object.values(item.models)) {
       const baseCost = cost(model.cost)
       const variants = reasoningVariants(item, model)
-      const id = ModelV2.ID.make(model.id)
+      const id = Model.ID.make(model.id)
       models.push(modelInfo(providerID, id, model, { cost: baseCost, variants }))
       for (const [mode, options] of Object.entries(model.experimental?.modes ?? {})) {
-        const modeID = ModelV2.ID.make(`${model.id}-${mode}`)
+        const modeID = Model.ID.make(`${model.id}-${mode}`)
         models.push(
           modelInfo(providerID, modeID, model, {
             name: modeName(model, mode),
@@ -121,7 +118,7 @@ function released(date: string) {
   return Number.isFinite(time) ? time : 0
 }
 
-function cost(input: SourceModel["cost"]): ModelV2.Info["cost"] {
+function cost(input: SourceModel["cost"]): Model.Info["cost"] {
   const base = {
     input: input?.input ?? Money.USDPerMillionTokens.zero,
     output: input?.output ?? Money.USDPerMillionTokens.zero,
@@ -157,13 +154,13 @@ function cost(input: SourceModel["cost"]): ModelV2.Info["cost"] {
   ]
 }
 
-function mergeCost(base: ModelV2.Info["cost"], override: SourceModel["cost"] | undefined) {
+function mergeCost(base: Model.Info["cost"], override: SourceModel["cost"] | undefined) {
   if (!override) return base
   const next = cost(override)
   const [baseDefault, ...baseTiers] = base
   const [nextDefault, ...nextTiers] = next
-  const tierKey = (item: ModelV2.Info["cost"][number]) => `${item.tier?.type ?? "base"}:${item.tier?.size ?? 0}`
-  const merge = (left: ModelV2.Info["cost"][number], right: ModelV2.Info["cost"][number]) => ({
+  const tierKey = (item: Model.Info["cost"][number]) => `${item.tier?.type ?? "base"}:${item.tier?.size ?? 0}`
+  const merge = (left: Model.Info["cost"][number], right: Model.Info["cost"][number]) => ({
     ...left,
     ...right,
     tier: right.tier ?? left.tier,
@@ -190,7 +187,7 @@ function mergeCost(base: ModelV2.Info["cost"], override: SourceModel["cost"] | u
 const OPENAI_INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"]
 const OUTPUT_TOKEN_MAX = 32_000
 
-function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNullable<ModelV2.Info["variants"]> {
+function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNullable<Model.Info["variants"]> {
   const npm = model.provider?.npm ?? provider.npm
   const options = model.reasoning_options
   if (!options?.length) return []
@@ -206,7 +203,7 @@ function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNul
         if (id === undefined) return []
         if (id === "none" && off.length > 0) return []
         const settings = settingsForEffort(npm, model.id, id)
-        return settings ? [{ id: ModelV2.VariantID.make(id), settings }] : []
+        return settings ? [{ id: Model.VariantID.make(id), settings }] : []
       }),
     ]
     return [...new Map(variants.map((variant) => [variant.id, variant])).values()]
@@ -221,7 +218,7 @@ function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNul
   return []
 }
 
-function settingsForEffort(npm: string, modelID: string, effort: string): ProviderV2.Settings | undefined {
+function settingsForEffort(npm: string, modelID: string, effort: string): Provider.Settings | undefined {
   if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { effort } }
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
     if (anthropicManualThinking(modelID)) return { effort }
@@ -290,7 +287,7 @@ function budgetVariants(
   npm: string,
   model: SourceModel,
   option: Extract<NonNullable<SourceModel["reasoning_options"]>[number], { type: "budget_tokens" }>,
-): NonNullable<ModelV2.Info["variants"]> {
+): NonNullable<Model.Info["variants"]> {
   const maximum = Math.min(option.max ?? OUTPUT_TOKEN_MAX - 1, model.limit.output - 1, OUTPUT_TOKEN_MAX - 1)
   if (maximum <= 0) return []
   const high = Math.min(Math.max(option.min ?? 0, Math.floor((maximum + 1) / 2)), maximum)
@@ -299,35 +296,35 @@ function budgetVariants(
     { id: "max", budget: maximum },
   ].flatMap((item) => {
     const settings = settingsForBudget(npm, model.id, item.budget)
-    return settings ? [{ id: ModelV2.VariantID.make(item.id), settings }] : []
+    return settings ? [{ id: Model.VariantID.make(item.id), settings }] : []
   })
 }
 
-function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info["variants"]> {
+function toggleVariants(npm: string, modelID: string): NonNullable<Model.Info["variants"]> {
   if (npm === "@ai-sdk/gateway") {
     const upstream = gatewayPackage(modelID)
     if (upstream) return toggleVariants(upstream, modelID)
     return [
       {
-        id: ModelV2.VariantID.make("none"),
+        id: Model.VariantID.make("none"),
         settings: { reasoning: { enabled: false } },
       },
       {
-        id: ModelV2.VariantID.make("thinking"),
+        id: Model.VariantID.make("thinking"),
         settings: { reasoning: { enabled: true } },
       },
     ]
   }
   if (npm === "@openrouter/ai-sdk-provider")
     return [
-      { id: ModelV2.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
-      { id: ModelV2.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
+      { id: Model.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
+      { id: Model.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
     ]
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
     return [
-      { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
+      { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
       {
-        id: ModelV2.VariantID.make("thinking"),
+        id: Model.VariantID.make("thinking"),
         settings: {
           thinking: { type: "adaptive", display: "summarized" },
         },
@@ -336,11 +333,11 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
   if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex")
     return [
       {
-        id: ModelV2.VariantID.make("none"),
+        id: Model.VariantID.make("none"),
         settings: { thinkingConfig: { includeThoughts: false, thinkingBudget: 0 } },
       },
       {
-        id: ModelV2.VariantID.make("thinking"),
+        id: Model.VariantID.make("thinking"),
         settings: { thinkingConfig: { includeThoughts: true, thinkingBudget: -1 } },
       },
     ]
@@ -348,7 +345,7 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
     const anthropic = modelID.includes("anthropic")
     return [
       {
-        id: ModelV2.VariantID.make("none"),
+        id: Model.VariantID.make("none"),
         settings: {
           additionalModelRequestFields: anthropic
             ? { thinking: { type: "disabled" } }
@@ -356,7 +353,7 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
         },
       },
       {
-        id: ModelV2.VariantID.make("thinking"),
+        id: Model.VariantID.make("thinking"),
         settings: {
           additionalModelRequestFields: anthropic
             ? { thinking: { type: "adaptive", display: "summarized" } }
@@ -367,58 +364,58 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
   }
   if (npm === "@ai-sdk/alibaba")
     return [
-      { id: ModelV2.VariantID.make("none"), settings: { enableThinking: false } },
-      { id: ModelV2.VariantID.make("thinking"), settings: { enableThinking: true } },
+      { id: Model.VariantID.make("none"), settings: { enableThinking: false } },
+      { id: Model.VariantID.make("thinking"), settings: { enableThinking: true } },
     ]
   if (npm === "@ai-sdk/cohere")
     return [
-      { id: ModelV2.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
-      { id: ModelV2.VariantID.make("thinking"), settings: { thinking: { type: "enabled" } } },
+      { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
+      { id: Model.VariantID.make("thinking"), settings: { thinking: { type: "enabled" } } },
     ]
   if (npm === "@jerome-benoit/sap-ai-provider-v2") {
     if (modelID.includes("gemini"))
       return [
         {
-          id: ModelV2.VariantID.make("none"),
+          id: Model.VariantID.make("none"),
           settings: { modelParams: { thinkingConfig: { includeThoughts: false, thinkingBudget: 0 } } },
         },
         {
-          id: ModelV2.VariantID.make("thinking"),
+          id: Model.VariantID.make("thinking"),
           settings: { modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: -1 } } },
         },
       ]
     if (modelID.includes("cohere"))
       return [
         {
-          id: ModelV2.VariantID.make("none"),
+          id: Model.VariantID.make("none"),
           settings: { modelParams: { thinking: { type: "disabled" } } },
         },
         {
-          id: ModelV2.VariantID.make("thinking"),
+          id: Model.VariantID.make("thinking"),
           settings: { modelParams: { thinking: { type: "enabled" } } },
         },
       ]
     if (modelID.includes("amazon--nova"))
       return [
         {
-          id: ModelV2.VariantID.make("none"),
+          id: Model.VariantID.make("none"),
           settings: { modelParams: { additionalModelRequestFields: { thinking: { type: "disabled" } } } },
         },
         {
-          id: ModelV2.VariantID.make("thinking"),
+          id: Model.VariantID.make("thinking"),
           settings: { modelParams: { additionalModelRequestFields: { thinking: { type: "enabled" } } } },
         },
       ]
     if (modelID.includes("anthropic"))
       return [
         {
-          id: ModelV2.VariantID.make("none"),
+          id: Model.VariantID.make("none"),
           settings: {
             modelParams: { additionalModelRequestFields: { thinking: { type: "disabled" } } },
           },
         },
         {
-          id: ModelV2.VariantID.make("thinking"),
+          id: Model.VariantID.make("thinking"),
           settings: {
             modelParams: {
               additionalModelRequestFields: {
@@ -432,7 +429,7 @@ function toggleVariants(npm: string, modelID: string): NonNullable<ModelV2.Info[
   return []
 }
 
-function settingsForBudget(npm: string, modelID: string, budget: number): ProviderV2.Settings | undefined {
+function settingsForBudget(npm: string, modelID: string, budget: number): Provider.Settings | undefined {
   if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { max_tokens: budget } }
   if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
     return { thinking: { type: "enabled", budgetTokens: budget } }
@@ -483,23 +480,24 @@ function modeName(model: SourceModel, mode: string) {
 }
 
 function modelInfo(
-  providerID: ProviderV2.ID,
-  id: ModelV2.ID,
+  providerID: Provider.ID,
+  id: Model.ID,
   model: SourceModel,
   input: {
     readonly name?: string
-    readonly cost?: ModelV2.Info["cost"]
+    readonly cost?: Model.Info["cost"]
     readonly request?: NonNullable<NonNullable<SourceModel["experimental"]>["modes"]>[string]["provider"]
-    readonly variants?: NonNullable<ModelV2.Info["variants"]>
+    readonly variants?: NonNullable<Model.Info["variants"]>
   } = {},
-): ModelV2.Info {
+): Model.Info {
   return {
     id,
-    modelID: ModelV2.ID.make(model.id),
+    modelID: Model.ID.make(model.id),
     providerID,
     name: input.name ?? model.name,
-    family: model.family ? ModelV2.Family.make(model.family) : undefined,
-    package: model.provider?.npm ? ProviderV2.aisdk(model.provider.npm) : undefined,
+    compatibility: Model.compatibility(model.interleaved),
+    family: model.family ? Model.Family.make(model.family) : undefined,
+    package: model.provider?.npm ? Provider.aisdk(model.provider.npm) : undefined,
     settings: model.provider?.api ? { baseURL: model.provider.api } : undefined,
     capabilities: {
       tools: model.tool_call,
@@ -521,136 +519,188 @@ function modelInfo(
   }
 }
 
-export const Event = ModelsDev.Event
-
-declare const OPENCODE_MODELS_DEV: Record<string, SourceProvider> | undefined
+export { Event } from "@opencode-ai/schema/models-dev"
 
 export interface Interface {
   readonly get: () => Effect.Effect<readonly Snapshot[]>
   readonly refresh: (force?: boolean) => Effect.Effect<void>
 }
 
+export const Options = Schema.Struct({
+  url: Schema.optional(Schema.String),
+  file: Schema.optional(Schema.String),
+  fetch: Schema.optional(Schema.Boolean),
+  snapshot: Schema.optional(Schema.Boolean),
+})
+export type Options = typeof Options.Type
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
-const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
-    const events = yield* EventV2.Service
-    const http = HttpClient.filterStatusOk(
-      (yield* HttpClient.HttpClient).pipe(
-        HttpClient.retryTransient({
-          retryOn: "errors-and-responses",
-          times: 2,
-          schedule: Schedule.exponential(200).pipe(Schedule.jittered),
+const CatalogJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
+const decodeCatalog = (text: string) =>
+  Schema.decodeUnknownEffect(CatalogJson)(text).pipe(Effect.map((catalog) => catalog as Record<string, SourceProvider>))
+const Cache = Schema.Struct({
+  updatedAt: Schema.Number,
+  body: CatalogJson,
+})
+const defaultSource = "https://models.opencode.ai"
+
+// Bundled snapshot of https://models.opencode.ai/api.json, committed at
+// packages/core/src/models-dev/snapshot.txt and refreshed via
+// `bun run script/update-models-snapshot.ts`. Decoded and normalized once per
+// isolate: the snapshot is a multi-MB module-level constant and one isolate can
+// host many runtimes (Cloudflare colocates Durable Object instances), so
+// per-runtime decoding would multiply the cost.
+let bundledCache: readonly Snapshot[] | undefined
+const bundledSnapshot = Effect.suspend(() =>
+  bundledCache
+    ? Effect.succeed(bundledCache)
+    : decodeCatalog(snapshotText).pipe(
+        Effect.map((catalog) => {
+          bundledCache = normalize(catalog)
+          return bundledCache
         }),
       ),
-    )
+)
 
-    const source = Flag.OPENCODE_MODELS_URL || "https://models.dev"
-    const filepath = path.join(
-      Global.Path.cache,
-      source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
-    )
-    const ttl = Duration.minutes(5)
-    const lockKey = `models-dev:${filepath}`
+function cacheKey(source: string) {
+  if (source === defaultSource) return "models-dev:catalog"
+  return `models-dev:catalog:${Hash.fast(source)}`
+}
 
-    const fresh = Effect.fnUntraced(function* () {
-      const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
-      if (!stat) return false
-      const mtime = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
-      return Date.now() - mtime < Duration.toMillis(ttl)
-    })
-
-    const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
-      return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
-        HttpClientRequest.setHeader("User-Agent", USER_AGENT),
-        http.execute,
-        Effect.flatMap((res) => res.text),
-        Effect.timeout("10 seconds"),
-      )
-    })
-
-    const loadFromDisk = fs.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).pipe(
-      Effect.map((input) => input as Record<string, SourceProvider>),
-      Effect.catch((error) => {
-        if (
-          Flag.OPENCODE_MODELS_PATH === undefined &&
-          error._tag === "FileSystemError" &&
-          error.method === "readJson"
-        ) {
-          return fs.remove(filepath, { force: true }).pipe(Effect.ignore, Effect.as(undefined))
-        }
-        return Effect.succeed(undefined)
-      }),
-    )
-
-    const loadSnapshot = Effect.sync(() =>
-      typeof OPENCODE_MODELS_DEV === "undefined" ? undefined : OPENCODE_MODELS_DEV,
-    )
-
-    const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
-      const text = yield* fetchApi()
-      const tempfile = `${filepath}.${process.pid}.${Date.now()}.tmp`
-      yield* fs.writeWithDirs(tempfile, text).pipe(
-        Effect.andThen(fs.rename(tempfile, filepath)),
-        Effect.catch((error) =>
-          Effect.gen(function* () {
-            yield* fs.remove(tempfile, { force: true }).pipe(Effect.ignore)
-            return yield* Effect.fail(error)
+export const layer = (options?: Options) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const bus = yield* Bus.Service
+      const app = yield* App.Metadata
+      const kv = yield* KV.Service
+      const http = HttpClient.filterStatusOk(
+        (yield* HttpClient.HttpClient).pipe(
+          HttpClient.retryTransient({
+            retryOn: "errors-and-responses",
+            times: 2,
+            schedule: Schedule.exponential(200).pipe(Schedule.jittered),
           }),
         ),
       )
-      return text
-    })
 
-    const populate = Effect.gen(function* () {
-      const fromDisk = yield* loadFromDisk
-      if (fromDisk) return normalize(fromDisk)
-      const bundled = yield* loadSnapshot
-      if (bundled) return normalize(bundled)
-      if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return []
-      // Flock is cross-process: concurrent opencode CLIs can race on this cache file.
-      const text = yield* Effect.scoped(
-        Effect.gen(function* () {
-          yield* Flock.effect(lockKey)
-          return yield* fetchAndWrite()
-        }),
-      )
-      return normalize(JSON.parse(text) as Record<string, SourceProvider>)
-    }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
+      const source = options?.url || defaultSource
+      const fetch = options?.fetch ?? true
+      const userAgent = App.useragent(app)
+      const key = cacheKey(source)
+      const ttl = Duration.minutes(5)
+      const lock = Semaphore.makeUnsafe(1)
 
-    const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
+      const loadFromCache = Effect.fnUntraced(function* () {
+        const value = yield* kv.get(key)
+        const cached = Schema.decodeUnknownOption(Cache)(value)
+        if (Option.isSome(cached))
+          return {
+            catalog: cached.value.body as Record<string, SourceProvider>,
+            updatedAt: cached.value.updatedAt,
+          }
+        if (value !== undefined) yield* kv.remove(key)
+      })
 
-    const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
+      const fresh = Effect.fnUntraced(function* () {
+        const cached = yield* loadFromCache()
+        if (!cached) return false
+        return Date.now() - cached.updatedAt < Duration.toMillis(ttl)
+      })
 
-    const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
-      if (!force && (yield* fresh())) return
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          yield* Flock.effect(lockKey)
-          // Re-check under the lock: another process may have refreshed between
-          // our outer check and lock acquisition.
-          if (!force && (yield* fresh())) return
-          yield* fetchAndWrite()
-          yield* invalidate
-          yield* events.publish(Event.Refreshed, {})
-        }),
-      ).pipe(
-        Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
-        Effect.ignore,
-      )
-    })
+      const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
+        return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
+          HttpClientRequest.setHeader("User-Agent", userAgent),
+          http.execute,
+          Effect.flatMap((res) => res.text),
+          Effect.timeout("10 seconds"),
+        )
+      })
 
-    if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
-      // Schedule.spaced runs the effect once, then waits between completions.
-      yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.spaced("60 minutes")), Effect.ignore))
-    }
+      const loadFromFile = options?.file
+        ? fs.readJson(options.file).pipe(
+            Effect.map((input) => input as Record<string, SourceProvider>),
+            Effect.catch(() => Effect.succeed(undefined)),
+          )
+        : Effect.succeed(undefined)
 
-    return Service.of({ get, refresh })
-  }),
-)
+      // The bundled snapshot is the boot-time floor for the catalog; the
+      // periodic fetch below still refreshes on top.
+      const loadSnapshot = options?.snapshot === false ? Effect.succeed(undefined) : bundledSnapshot
 
-export const node = makeGlobalNode({ service: Service, layer: layer, deps: [FSUtil.node, EventV2.node, httpClient] })
+      const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
+        const text = yield* fetchApi()
+        const catalog = yield* decodeCatalog(text)
+        // Best-effort: a cache-write failure must never kill catalog
+        // population. The payload has outgrown some KV backends' per-value
+        // limits (Durable Object SQLite caps values at 2 MB and api.json
+        // passed it in Aug 2026); a boot without a cache hit just refetches.
+        yield* kv.set(key, { updatedAt: Date.now(), body: text }).pipe(
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterruptsOnly(cause),
+            (cause) => Effect.logWarning("Failed to cache models.dev catalog", { cause }),
+          ),
+        )
+        return catalog
+      })
 
-export * as ModelsDev from "./models-dev"
+      const populate = Effect.gen(function* () {
+        const fromFile = yield* loadFromFile
+        if (fromFile) return normalize(fromFile)
+        const cached = options?.file ? undefined : yield* loadFromCache()
+        if (cached) return normalize(cached.catalog)
+        const bundled = yield* loadSnapshot
+        if (bundled) return bundled
+        if (!fetch) return []
+        const catalog = yield* lock.withPermit(
+          Effect.gen(function* () {
+            const stored = options?.file ? undefined : yield* loadFromCache()
+            if (stored) return stored.catalog
+            return yield* fetchAndWrite()
+          }),
+        )
+        return normalize(catalog)
+      }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
+
+      const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
+
+      const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
+
+      const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
+        yield* lock
+          .withPermit(
+            Effect.gen(function* () {
+              if (!force && (yield* fresh())) return
+              yield* fetchAndWrite()
+              yield* invalidate
+              yield* bus.publish(ModelsDev.Event.Refreshed, {})
+            }),
+          )
+          .pipe(
+            Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
+            Effect.ignore,
+          )
+      })
+
+      if (fetch && !process.argv.includes("--get-yargs-completions")) {
+        // Schedule.spaced runs the effect once, then waits between completions.
+        yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.spaced(ttl)), Effect.ignore))
+      }
+
+      return Service.of({ get, refresh })
+    }),
+  )
+
+export function configured(options?: Options) {
+  return makeGlobalNode({
+    service: Service,
+    layer: layer(options),
+    deps: [FSUtil.node, Bus.node, App.node, KV.node, httpClient],
+  })
+}
+
+export const node = configured()
+
+export * as ModelsDev from "./models-dev.js"

@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import { currentSession } from "../utils/mock-server"
+import { installSseTransport } from "../utils/sse-transport"
 
 const serverA = "http://127.0.0.1:4096"
 const serverB = "http://127.0.0.1:4097"
@@ -33,7 +35,7 @@ test("closing the active server's last tab opens the remaining server tab", asyn
   await tabA.locator('[data-slot="tab-close"] button').click()
 
   await expect(page).toHaveURL(new RegExp(`${hrefB.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`))
-  await expect.poll(() => requests.some((url) => url.startsWith(`${serverB}/session/${sessionB.id}`))).toBe(true)
+  await expect.poll(() => requests.some((url) => url.startsWith(`${serverB}/api/session/${sessionB.id}`))).toBe(true)
   await expect(page.getByText(sessionB.title).first()).toBeVisible()
   const sessionBRequests = requests.filter((url) => url.includes(`/session/${sessionB.id}`))
   expect(sessionBRequests.every((url) => url.startsWith(serverB))).toBe(true)
@@ -77,6 +79,8 @@ function session(id: string, directory: string, title: string) {
 }
 
 async function mockServers(page: Page, requests: string[]) {
+  await installSseTransport(page, { server: serverA })
+  await installSseTransport(page, { server: serverB })
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
     if (url.origin !== serverA && url.origin !== serverB) return route.fallback()
@@ -84,17 +88,15 @@ async function mockServers(page: Page, requests: string[]) {
     const current = url.origin === serverA ? sessionA : sessionB
     const directory = url.searchParams.get("directory")
     if (directory && directory !== current.directory) return json(route, { name: "InvalidDirectory" }, 500)
-    if (url.pathname === "/global/event" || url.pathname === "/event") return sse(route)
-    if (url.pathname === "/global/health") return json(route, { healthy: true })
-    if (url.pathname === "/session") return json(route, [current])
-    if (url.pathname === `/session/${current.id}`) return json(route, current)
+    if (url.pathname === "/api/health") return json(route, { pid: 1 })
+    if (url.pathname === "/api/session") return json(route, { data: [currentSession(current)], cursor: {} })
+    if (url.pathname === "/api/session/active") return json(route, { data: {} })
+    if (url.pathname === `/api/session/${current.id}`) return json(route, { data: currentSession(current) })
+    if (url.pathname === `/api/session/${current.id}/message`) return json(route, { data: [], cursor: {} })
     if (/^\/session\/[^/]+$/.test(url.pathname)) return json(route, { name: "NotFoundError" }, 404)
-    if (url.pathname === `/session/${current.id}/message`) return json(route, [])
-    if (/^\/session\/[^/]+\/(children|diff)$/.test(url.pathname)) return json(route, [])
+    if (/^\/session\/[^/]+\/(children|todo|diff)$/.test(url.pathname)) return json(route, [])
     if (["/skill", "/command", "/lsp", "/formatter", "/permission", "/question", "/vcs/diff"].includes(url.pathname))
       return json(route, [])
-    if (["/global/config", "/config", "/provider/auth", "/mcp", "/session/status"].includes(url.pathname))
-      return json(route, {})
     if (url.pathname === "/provider")
       return json(route, { all: [], connected: [], default: { providerID: "", modelID: "" } })
     if (url.pathname === "/agent") return json(route, [{ name: "build", mode: "primary" }])
@@ -116,7 +118,20 @@ async function mockServers(page: Page, requests: string[]) {
         directory: current.directory,
         home: current.directory,
       })
+    if (url.pathname === "/api/path")
+      return json(route, {
+        state: current.directory,
+        config: current.directory,
+        worktree: current.directory,
+        directory: current.directory,
+        home: current.directory,
+      })
     if (url.pathname === "/vcs") return json(route, { branch: "main", default_branch: "main" })
+    if (url.pathname === "/api/vcs")
+      return json(route, {
+        location: { directory: current.directory },
+        data: { branch: "main", defaultBranch: "main" },
+      })
     return json(route, {})
   })
 }
@@ -128,8 +143,4 @@ function json(route: Route, body: unknown, status = 200) {
     headers: { "access-control-allow-origin": "*" },
     body: JSON.stringify(body),
   })
-}
-
-function sse(route: Route) {
-  return route.fulfill({ status: 200, contentType: "text/event-stream", body: ": ok\n\n" })
 }

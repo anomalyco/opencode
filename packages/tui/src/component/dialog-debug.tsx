@@ -1,6 +1,5 @@
 import { TextAttributes } from "@opentui/core"
 import { createMemo, createSignal, For } from "solid-js"
-import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
@@ -9,14 +8,16 @@ import { useLocal } from "../context/local"
 import { useClipboard } from "../context/clipboard"
 import { useToast } from "../ui/toast"
 import { describeOS, describeTerminal } from "../util/system"
+import { useTuiApp } from "../context/runtime"
 
 export function DialogDebug() {
-  const { themeV2 } = useTheme()
+  const theme = useTheme()
   const dialog = useDialog()
   const route = useRoute()
   const local = useLocal()
   const clipboard = useClipboard()
   const toast = useToast()
+  const app = useTuiApp()
   const [copied, setCopied] = createSignal(false)
 
   dialog.setSize("large")
@@ -24,7 +25,7 @@ export function DialogDebug() {
   const entries = createMemo(() => {
     const model = local.model.current()
     return [
-      { label: "Version", value: `${InstallationVersion} (${InstallationChannel})` },
+      { label: "Version", value: `${app.version} (${app.channel})` },
       { label: "Date", value: new Date().toISOString() },
       { label: "OS", value: describeOS() },
       { label: "Terminal", value: describeTerminal() },
@@ -38,7 +39,7 @@ export function DialogDebug() {
       .map((entry) => `${entry.label}: ${entry.value}`)
       .join("\n")
     void clipboard
-      .write?.(text)
+      .write(text)
       .then(() => {
         setCopied(true)
         toast.show({ message: "Debug info copied to clipboard", variant: "info" })
@@ -54,10 +55,10 @@ export function DialogDebug() {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={themeV2.text()} attributes={TextAttributes.BOLD}>
+        <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
           Debug
         </text>
-        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
@@ -67,10 +68,10 @@ export function DialogDebug() {
         <For each={entries()}>
           {(entry) => (
             <box flexDirection="row" gap={1}>
-              <text flexShrink={0} fg={themeV2.text.subdued()}>
+              <text flexShrink={0} fg={theme.text.subdued}>
                 {entry.label.padEnd(10)}
               </text>
-              <text fg={themeV2.text()} wrapMode="word">
+              <text fg={theme.text.default} wrapMode="word">
                 {entry.value}
               </text>
             </box>
@@ -78,12 +79,12 @@ export function DialogDebug() {
         </For>
       </box>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={themeV2.text.subdued()}>Share this when reporting an issue.</text>
+        <text fg={theme.text.subdued}>Share this when reporting an issue.</text>
         <text onMouseUp={copy}>
-          <span style={{ fg: copied() ? themeV2.text.feedback.success() : themeV2.text() }}>
+          <span style={{ fg: copied() ? theme.text.feedback.success.default : theme.text.default }}>
             <b>{copied() ? "✓ copied" : "copy"}</b>{" "}
           </span>
-          <span style={{ fg: themeV2.text.subdued() }}>enter</span>
+          <span style={{ fg: theme.text.subdued }}>enter</span>
         </text>
       </box>
     </box>

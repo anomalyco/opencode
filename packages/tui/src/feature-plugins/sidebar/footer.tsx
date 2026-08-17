@@ -1,24 +1,52 @@
-import { Plugin } from "@opencode-ai/plugin/v2/tui"
+import { Plugin } from "@opencode-ai/plugin/tui"
 import { createMemo, Show } from "solid-js"
-import { useTuiPaths } from "../../context/runtime"
-import { useTheme } from "../../context/theme"
-import { abbreviateHome } from "../../runtime"
 import { FilePath } from "../../ui/file-path"
+import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
+import { usePromptMove } from "../../component/prompt/move"
 
-function View(props: { context: Plugin.Context }) {
-  const { themeV2 } = useTheme()
-  const paths = useTuiPaths()
-  const directory = createMemo(() =>
-    props.context.location ? abbreviateHome(props.context.location.directory, paths.home) : undefined,
-  )
+function View(props: { context: Plugin.Context; sessionID: string }) {
+  const move = usePromptMove({
+    projectID: () => props.context.data.session.get(props.sessionID)?.projectID,
+    sessionID: () => props.sessionID,
+  })
+  const actions = useWorkingDirectoryActions({
+    directory: () => props.context.location?.directory,
+    onMove: () => void move.open(),
+  })
+  const directory = createMemo(() => {
+    if (!props.context.location) return undefined
+    const value = props.context.ui.format.path(props.context.location.directory)
+    const branch = props.context.data.location.vcs.info(props.context.location)?.branch.current
+    return branch ? `${value}:${branch}` : value
+  })
   return (
-    <Show when={directory()}>{(value) => <FilePath value={value()} maxWidth={38} fg={themeV2.text.subdued()} />}</Show>
+    <Show when={directory()}>
+      {(value) => (
+        <box
+          id="sidebar.footer.location"
+          onMouseOver={actions.onMouseOver}
+          onMouseOut={actions.onMouseOut}
+          onMouseUp={actions.onMouseUp}
+        >
+          <FilePath
+            value={value()}
+            maxWidth={38}
+            fg={actions.hovered() ? props.context.theme.text.default : props.context.theme.text.subdued}
+          />
+        </box>
+      )}
+    </Show>
   )
 }
 
 export default Plugin.define({
   id: "opencode.sidebar-footer",
   setup(context) {
-    context.ui.slot("sidebar.footer", () => <View context={context} />)
+    // Append keeps the path open to additive plugin claims; an external
+    // replace still takes the boundary over.
+    context.ui.slot({
+      append: "sidebar.footer",
+      render: (props) => <View context={context} sessionID={props.sessionID} />,
+    })
   },
 })

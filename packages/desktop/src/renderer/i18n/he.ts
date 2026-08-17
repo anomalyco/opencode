@@ -1,0 +1,20 @@
+export const dict = {
+  "desktop.menu.checkForUpdates": "בדוק אם יש עדכונים...",
+  "desktop.menu.reloadWebview": "טען מחדש את תצוגת האינטרנט",
+  "desktop.menu.restart": "הפעל מחדש",
+  "desktop.dialog.chooseFolder": "בחירת תיקייה",
+  "desktop.dialog.chooseFile": "בחירת קובץ",
+  "desktop.dialog.saveFile": "שמירת קובץ",
+  "desktop.updater.checkFailed.title": "בדיקת העדכונים נכשלה",
+  "desktop.updater.checkFailed.message": "לא ניתן לבדוק אם קיימים עדכונים",
+  "desktop.updater.none.title": "אין עדכון זמין",
+  "desktop.updater.none.message": "כבר מותקנת הגרסה העדכנית ביותר של OpenCode",
+  "desktop.updater.downloadFailed.title": "העדכון נכשל",
+  "desktop.updater.downloadFailed.message": "הורדת העדכון נכשלה",
+  "desktop.updater.downloaded.title": "העדכון הורד",
+  "desktop.updater.downloaded.prompt": "גרסה {{version}} של OpenCode הורדה. להתקין אותה ולהפעיל מחדש את היישום?",
+  "desktop.updater.installFailed.title": "העדכון נכשל",
+  "desktop.updater.installFailed.message": "התקנת העדכון נכשלה",
+  "desktop.error.dev.rootNotFound":
+    "רכיב השורש לא נמצא. האם שכחת להוסיף אותו ל-index.html, או שיש טעות בשם מאפיין ה-id?",
+}

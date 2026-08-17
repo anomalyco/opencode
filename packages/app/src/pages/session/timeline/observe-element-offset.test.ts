@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { type Virtualizer } from "@tanstack/solid-virtual"
+import { Node, Window } from "happy-dom"
 import { mutationNodesContainElement, observeElementOffsetReconnectAware } from "./observe-element-offset"
 
 test("matches only the scroll element or an ancestor containing it", () => {
@@ -16,14 +17,16 @@ test("matches only the scroll element or an ancestor containing it", () => {
 })
 
 test("reports a divergent native offset once and ignores equal offsets and unrelated mutations", async () => {
-  const route = document.createElement("section")
-  const viewport = document.createElement("div")
-  const unrelated = document.createElement("div")
+  const targetWindow = new Window()
+  const mutations = controlledMutations(targetWindow)
+  const route = targetWindow.document.createElement("section")
+  const viewport = targetWindow.document.createElement("div")
+  const unrelated = targetWindow.document.createElement("div")
   route.append(viewport)
-  document.body.append(route)
+  targetWindow.document.body.append(route)
   const instance = {
     scrollElement: viewport,
-    targetWindow: window,
+    targetWindow,
     scrollOffset: 79_400,
     options: {
       horizontal: false,
@@ -38,25 +41,24 @@ test("reports a divergent native offset once and ignores equal offsets and unrel
     instance.scrollOffset = offset
   })
 
-  document.body.append(unrelated)
-  unrelated.remove()
-  await frames(2)
-  expect(calls).toEqual([])
+  try {
+    mutations.append(targetWindow.document.body, unrelated)
+    mutations.remove(unrelated)
+    expect(calls).toEqual([])
 
-  route.remove()
-  document.body.append(route)
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  await frames(3)
-  expect(calls).toEqual([[0, false]])
+    mutations.remove(route)
+    mutations.append(targetWindow.document.body, route)
+    await frames(2, targetWindow)
+    expect(calls).toEqual([[0, false]])
 
-  route.remove()
-  document.body.append(route)
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  await frames(3)
-  expect(calls).toEqual([[0, false]])
-
-  cleanup?.()
-  route.remove()
+    mutations.remove(route)
+    mutations.append(targetWindow.document.body, route)
+    await frames(2, targetWindow)
+    expect(calls).toEqual([[0, false]])
+  } finally {
+    cleanup?.()
+    await targetWindow.happyDOM.close()
+  }
 })
 
 test("keeps checking until stale reset-delay callbacks can no longer win", async () => {
@@ -192,8 +194,44 @@ test("cleanup cancels reconnect checks and delegated offset observation", async 
   route.remove()
 })
 
-async function frames(count: number) {
+type FrameWindow = {
+  requestAnimationFrame(callback: () => void): unknown
+  performance: { now(): number }
+}
+
+async function frames(count: number, targetWindow: FrameWindow = window) {
   for (let index = 0; index < count; index++) {
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    await new Promise<void>((resolve) => targetWindow.requestAnimationFrame(() => resolve()))
+  }
+}
+
+function controlledMutations(targetWindow: Window) {
+  let emit: (record: MutationRecord) => void = () => {
+    throw new Error("Mutation observer is not active")
+  }
+  class ControlledMutationObserver {
+    constructor(callback: MutationCallback) {
+      emit = (record) => callback([record], this as unknown as MutationObserver)
+    }
+    observe() {}
+    disconnect() {}
+    takeRecords() {
+      return []
+    }
+  }
+  Object.defineProperty(targetWindow, "MutationObserver", { value: ControlledMutationObserver })
+  const record = (target: Node, addedNodes: Node[], removedNodes: Node[]) =>
+    ({ type: "childList", target, addedNodes, removedNodes }) as unknown as MutationRecord
+  return {
+    append(parent: Node, node: Node) {
+      parent.appendChild(node)
+      emit(record(parent, [node], []))
+    },
+    remove(node: Node) {
+      const parent = node.parentNode
+      if (!parent) throw new Error("Mutation target has no parent")
+      parent.removeChild(node)
+      emit(record(parent, [], [node]))
+    },
   }
 }

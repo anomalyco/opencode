@@ -36,10 +36,6 @@ export const lineCommentStyles = `
   border: none;
 }
 
-[data-component="line-comment"][data-variant="add"] [data-slot="line-comment-button"] {
-  background: var(--syntax-diff-add);
-}
-
 [data-component="line-comment"] [data-component="icon"] {
   color: var(--white);
 }

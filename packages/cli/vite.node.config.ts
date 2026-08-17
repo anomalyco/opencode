@@ -3,16 +3,35 @@ import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { defineConfig, type Plugin, type UserConfig } from "vite"
 import solid from "vite-plugin-solid"
-import { nodeExecArgv, nodeTarget, type NodeTarget, photonWasmAsset } from "./src/node/target"
+import { nodeExecArgv, nodeTarget, type NodeTarget, photonWasmAsset, shellParserWasmAssets } from "./src/node/target"
+import { verifySimulationGraph } from "./script/verify-artifact"
 
 const dir = import.meta.dirname
 
 function rawTextPlugin(): Plugin {
   return {
     name: "opencode:raw-text",
+    // "pre" is load-bearing for .txt: Vite's built-in asset plugin claims
+    // known asset types (.txt among them) ahead of normal-priority plugins,
+    // replacing the import with an asset URL string instead of the content.
+    // .md only ever worked without it because .md is not a known asset type.
+    enforce: "pre",
     async load(id) {
-      if (!id.endsWith(".md")) return
+      if (!id.endsWith(".md") && !id.endsWith(".txt")) return
       return `export default ${JSON.stringify(await readFile(id, "utf8"))}`
+    },
+  }
+}
+
+function appAssetsPlugin(archive: string): Plugin {
+  return {
+    name: "opencode:app-assets",
+    resolveId(id) {
+      if (id === "virtual:opencode-app-assets") return "\0virtual:opencode-app-assets"
+    },
+    load(id) {
+      if (id !== "\0virtual:opencode-app-assets") return
+      return `export default ${JSON.stringify(archive)}`
     },
   }
 }
@@ -26,6 +45,53 @@ function runtimeRequirePlugin(): Plugin {
       const transformed = code.replace("    var domino = require('@mixmark-io/domino');", "")
       if (transformed === code) this.error("Failed to rewrite Turndown's Domino require")
       return `import domino from "@mixmark-io/domino"\n${transformed}`
+    },
+  }
+}
+
+function simulationGraphPlugin(): Plugin {
+  return {
+    name: "opencode:simulation-graph",
+    generateBundle() {
+      verifySimulationGraph(this.getModuleIds())
+    },
+  }
+}
+
+function fffNodePlugin(): Plugin {
+  return {
+    name: "opencode:fff-node",
+    enforce: "pre",
+    transform(code, id) {
+      const normalized = id.replaceAll("\\", "/")
+      if (normalized.endsWith("/ffi-rs/index.js")) {
+        const start = code.indexOf("if (!nativeBinding) {")
+        if (start === -1) this.error("Failed to rewrite ffi-rs native binding loader")
+        return `const unavailable = () => { throw new Error("ffi-rs native binding unavailable") }
+const nativeBinding = globalThis.__OPENCODE_FFF_FFI ?? {
+  DataType: new Proxy({}, { get: (target, key) => target[key] ?? key }),
+  PointerType: {},
+  FFITypeTag: {},
+  open: unavailable,
+  close: unavailable,
+  load: unavailable,
+  isNullPointer: unavailable,
+  createPointer: unavailable,
+  restorePointer: unavailable,
+  unwrapPointer: unavailable,
+  wrapPointer: unavailable,
+  freePointer: unavailable,
+}
+const loadError = undefined
+${code.slice(start)}`
+      }
+      if (!normalized.endsWith("/fff-node/dist/src/binary.js")) return
+      const transformed = code.replace(
+        "export function findBinary() {",
+        "export function findBinary() { if (process.env.FFF_BINARY_PATH) return process.env.FFF_BINARY_PATH;",
+      )
+      if (transformed === code) this.error("Failed to rewrite FFF binary loader")
+      return transformed
     },
   }
 }
@@ -75,18 +141,11 @@ export const define = sdk.Plugin.define`
   const effectPluginModule = promisePluginModule
     .replace("opencode.plugin.v2.promise", "opencode.plugin.v2.effect")
     .replace("Promise plugin", "Effect plugin")
+  const promiseToolModule = `export {}`
   const effectToolModule = `const sdk = globalThis[Symbol.for("opencode.plugin.v2.effect")]
 if (!sdk) throw new Error("OpenCode Effect plugin SDK is unavailable")
-export const Tool = sdk.Tool
-export const Failure = sdk.Tool.Failure
-export const RegistrationError = sdk.Tool.RegistrationError
-export const make = sdk.Tool.make
-export const validateName = sdk.Tool.validateName
-export const registrationEntries = sdk.Tool.registrationEntries
-export const withPermission = sdk.Tool.withPermission
-export const permission = sdk.Tool.permission
-export const definition = sdk.Tool.definition
-export const settle = sdk.Tool.settle`
+export const Error = sdk.Tool.Error
+`
   return `#!/usr/bin/env -S node ${nodeExecArgv.join(" ")}
 import __cjs_mod__ from "node:module"
 import { chmodSync as __ocChmod, existsSync as __ocExists, lstatSync as __ocLstat, mkdirSync as __ocMkdir, renameSync as __ocRename, rmSync as __ocRm, writeFileSync as __ocWrite } from "node:fs"
@@ -98,15 +157,17 @@ const __filename = import.meta.filename
 const __dirname = import.meta.dirname
 const require = __cjs_mod__.createRequire(import.meta.url)
 const __ocPluginModules = ${JSON.stringify({
-    "@opencode-ai/plugin/v2": "opencode:plugin-v2",
-    "@opencode-ai/plugin/v2/plugin": "opencode:plugin-v2-plugin",
-    "@opencode-ai/plugin/v2/effect": "opencode:plugin-v2-effect",
-    "@opencode-ai/plugin/v2/effect/plugin": "opencode:plugin-v2-effect-plugin",
-    "@opencode-ai/plugin/v2/effect/tool": "opencode:plugin-v2-effect-tool",
+    "@opencode-ai/plugin": "opencode:plugin-v2",
+    "@opencode-ai/plugin/promise/plugin": "opencode:plugin-promise-plugin",
+    "@opencode-ai/plugin/promise/tool": "opencode:plugin-promise-tool",
+    "@opencode-ai/plugin/effect": "opencode:plugin-v2-effect",
+    "@opencode-ai/plugin/effect/plugin": "opencode:plugin-v2-effect-plugin",
+    "@opencode-ai/plugin/effect/tool": "opencode:plugin-v2-effect-tool",
   })}
 const __ocPluginSources = ${JSON.stringify({
     "opencode:plugin-v2": promiseModule,
-    "opencode:plugin-v2-plugin": promisePluginModule,
+    "opencode:plugin-promise-plugin": promisePluginModule,
+    "opencode:plugin-promise-tool": promiseToolModule,
     "opencode:plugin-v2-effect": effectModule,
     "opencode:plugin-v2-effect-plugin": effectPluginModule,
     "opencode:plugin-v2-effect-tool": effectToolModule,
@@ -161,6 +222,14 @@ process.env.OTUI_ASSET_ROOT = __ocAssetRoot
 process.env.OPENCODE_NODE_PTY_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.nodePtyEntryAsset)})
 process.env.OPENCODE_PARCEL_WATCHER_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.parcelWatcherAsset)})
 process.env.OPENCODE_PHOTON_WASM_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(photonWasmAsset)})
+process.env.OPENCODE_TREE_SITTER_WASM_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(shellParserWasmAssets.runtime)})
+process.env.OPENCODE_TREE_SITTER_BASH_WASM_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(shellParserWasmAssets.bash)})
+process.env.OPENCODE_TREE_SITTER_POWERSHELL_WASM_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(shellParserWasmAssets.powershell)})
+process.env.FFF_BINARY_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffAsset)})
+process.env.OPENCODE_FFF_FFI_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffFfiAsset)})
+try {
+  globalThis.__OPENCODE_FFF_FFI = require(process.env.OPENCODE_FFF_FFI_PATH)
+} catch {}
 globalThis.__OPENCODE_PHOTON_WASM_PATH = process.env.OPENCODE_PHOTON_WASM_PATH
 if (process.platform === "linux") process.env.OPENTUI_LIBC = "glibc"`
 }
@@ -168,17 +237,20 @@ if (process.platform === "linux") process.env.OPENTUI_LIBC = "glibc"`
 export type NodeBuildInput = {
   readonly version: string
   readonly channel: string
-  readonly models: string
   readonly assetHash: string
   readonly target: NodeTarget
+  readonly appArchive: string
 }
 
 export function mainConfig(input: NodeBuildInput): UserConfig {
   return defineConfig({
     root: dir,
     plugins: [
+      appAssetsPlugin(input.appArchive),
       rawTextPlugin(),
       runtimeRequirePlugin(),
+      fffNodePlugin(),
+      simulationGraphPlugin(),
       solid({
         solid: {
           generate: "universal",
@@ -191,10 +263,10 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
     define: {
       OPENCODE_VERSION: JSON.stringify(input.version),
       OPENCODE_CLI_NAME: JSON.stringify("opencode2-node"),
-      OPENCODE_MODELS_DEV: input.models,
       OPENCODE_CHANNEL: JSON.stringify(input.channel),
       OPENCODE_LIBC: input.target.platform === "linux" ? JSON.stringify("glibc") : "undefined",
       FFF_LIBC: input.target.platform === "linux" ? JSON.stringify("gnu") : "undefined",
+      "process.env.WS_NO_BUFFER_UTIL": JSON.stringify("1"),
     },
     ssr: { noExternal: true },
     build: {
@@ -204,7 +276,6 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
       emptyOutDir: false,
       minify: true,
       rollupOptions: {
-        external: [/^@opencode-ai\/simulation(?:\/|$)/],
         output: output("opencode.mjs", nodePrelude(input)),
       },
     },
@@ -214,7 +285,7 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
 export default mainConfig({
   version: process.env.OPENCODE_VERSION ?? "local",
   channel: process.env.OPENCODE_CHANNEL ?? "local",
-  models: "undefined",
   assetHash: "local",
   target: nodeTarget(process.platform, process.arch),
+  appArchive: "",
 })

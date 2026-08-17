@@ -1,5 +1,6 @@
-import { Argument, Flag } from "effect/unstable/cli"
+import { Argument, Command, Flag } from "effect/unstable/cli"
 import { Spec } from "../framework/spec"
+import { GlobalFlags } from "./global-flags"
 
 declare const OPENCODE_CLI_NAME: string | undefined
 
@@ -14,10 +15,23 @@ const ServerParams = {
   ),
 }
 
-export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "opencode", {
+const PermissionParams = {
+  auto: Flag.boolean("auto").pipe(
+    Flag.withDescription("Auto-approve permissions that are not explicitly denied"),
+    Flag.withDefault(false),
+  ),
+  yolo: Flag.boolean("yolo").pipe(Flag.withDefault(false), Flag.withHidden),
+  dangerouslySkipPermissions: Flag.boolean("dangerously-skip-permissions").pipe(
+    Flag.withDefault(false),
+    Flag.withHidden,
+  ),
+}
+
+const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "opencode", {
   description: "OpenCode 2.0 preview command line interface",
   params: {
     ...ServerParams,
+    ...PermissionParams,
     directory: Argument.string("directory").pipe(
       Argument.withDescription("Directory to start OpenCode in"),
       Argument.optional,
@@ -32,8 +46,10 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
       Flag.withDescription("Session ID to continue"),
       Flag.optional,
     ),
+    prompt: Flag.string("prompt").pipe(Flag.withDescription("Prompt to use"), Flag.optional),
   },
   commands: [
+    Spec.make("acp", { description: "Start an Agent Client Protocol server" }),
     Spec.make("api", {
       description: "Make a request to the running server",
       params: {
@@ -53,7 +69,10 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
     }),
     Spec.make("debug", {
       description: "Debugging and troubleshooting tools",
-      commands: [Spec.make("agents", { description: "List all agents" })],
+      commands: [
+        Spec.make("agents", { description: "List all agents" }),
+        Spec.make("config", { description: "List configuration sources" }),
+      ],
     }),
     Spec.make("console", {
       description: "Manage OpenCode Console access",
@@ -69,10 +88,10 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
     Spec.make("auth", {
       description: "Manage authentication",
       commands: [
-        Spec.make("connect", {
-          description: "Connect to a wellknown authentication provider",
+        Spec.make("login", {
+          description: "Log in to a well-known authentication provider",
           params: {
-            url: Argument.string("url").pipe(Argument.withDescription("Wellknown provider URL")),
+            url: Argument.string("url").pipe(Argument.withDescription("Well-known provider URL")),
           },
         }),
       ],
@@ -118,7 +137,36 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
       description: "Manage plugins",
       commands: [Spec.make("list", { description: "List active plugins" })],
     }),
-    Spec.make("migrate", { description: "Migrate v1 data to v2" }),
+    Spec.make("models", {
+      description: "List all available models",
+      params: ServerParams,
+    }),
+    Spec.make("export", {
+      description: "Export session data as JSON",
+      params: {
+        ...ServerParams,
+        session: Flag.string("session").pipe(
+          Flag.withAlias("s"),
+          Flag.withDescription("Session ID to export to stdout"),
+          Flag.optional,
+        ),
+        sanitize: Flag.boolean("sanitize").pipe(
+          Flag.withDescription("Redact sensitive transcript and file data"),
+          Flag.withDefault(false),
+        ),
+      },
+    }),
+    Spec.make("import", {
+      description: "Import session data from a JSON file or URL",
+      params: {
+        ...ServerParams,
+        file: Argument.string("file").pipe(Argument.withDescription("JSON file or URL to import")),
+        directory: Flag.string("directory").pipe(
+          Flag.withDescription("Directory in which to import the session"),
+          Flag.optional,
+        ),
+      },
+    }),
     Spec.make("mini", {
       description: "Start the minimal interactive interface",
       params: {
@@ -138,11 +186,11 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
           Flag.withDefault(false),
         ),
         replay: Flag.boolean("replay").pipe(
-          Flag.withDescription("Replay session history on resume and after resize"),
-          Flag.withDefault(true),
+          Flag.withDescription("Restore session history on resume and resize (disable with --no-replay)"),
+          Flag.optional,
         ),
         replayLimit: Flag.integer("replay-limit").pipe(
-          Flag.withDescription("Cap visible replay to the newest N messages"),
+          Flag.withDescription("Limit replay to the newest N messages (default: 200)"),
           Flag.optional,
         ),
         model: Flag.string("model").pipe(
@@ -194,11 +242,7 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
         ),
         title: Flag.string("title").pipe(Flag.withDescription("Session title"), Flag.optional),
         thinking: Flag.boolean("thinking").pipe(Flag.withDescription("Show thinking blocks"), Flag.withDefault(false)),
-        auto: Flag.boolean("auto").pipe(
-          Flag.withDescription("Auto-approve permissions that are not explicitly denied"),
-          Flag.withDefault(false),
-        ),
-        yolo: Flag.boolean("yolo").pipe(Flag.withDefault(false), Flag.withHidden),
+        ...PermissionParams,
       },
     }),
     Spec.make("service", {
@@ -224,7 +268,7 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
     }),
     Spec.make("pair", { description: "Show server pairing information" }),
     Spec.make("serve", {
-      description: "Start the v2 API server",
+      description: "Start the v2 API and web server",
       params: {
         hostname: Flag.string("hostname").pipe(Flag.optional),
         port: Flag.integer("port").pipe(Flag.optional),
@@ -234,3 +278,5 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
     }),
   ],
 })
+
+export const Commands = { ...Root, spec: Root.spec.pipe(Command.withGlobalFlags(GlobalFlags.all)) }

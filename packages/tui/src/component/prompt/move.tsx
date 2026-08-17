@@ -8,10 +8,6 @@ import { useToast } from "../../ui/toast"
 import { DialogMoveSession, type MoveSessionSelection } from "../dialog-move-session"
 import { useData } from "../../context/data"
 
-function moveReminderText(directory: string) {
-  return `<system-reminder>The user has changed the current working directory to "${directory}". This is still the same project but at a possibly new location; take this into account when working with any files from now on.</system-reminder>`
-}
-
 export function usePromptMove(input: { projectID: () => string | undefined; sessionID: () => string | undefined }) {
   const dialog = useDialog()
   const client = useClient()
@@ -27,17 +23,16 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     const projectID = await resolveProjectID()
     if (!projectID) return
     setCreating(true)
-    setProgress("Creating copy")
+    setProgress("Creating worktree")
     try {
-      const result = await client.api.projectCopy.create({
+      const result = await client.api.worktree.create({
         projectID,
-        location: { directory: data.location.info()?.directory || paths.cwd },
-        strategy: "git_worktree",
+        strategy: "git",
         directory: path.join(paths.worktree, projectID.slice(0, 6)),
         name,
       })
       const directory = result.directory
-      if (!directory) throw new Error("No project copy directory returned")
+      if (!directory) throw new Error("No worktree directory returned")
 
       // Call a location-based route to initialize it before moving on.
       await client.api.location.get({ location: { directory } })
@@ -103,9 +98,6 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     setProgress("Moving session")
     try {
       await client.api.session.move({ sessionID, directory })
-      await client.api.session
-        .synthetic({ sessionID, text: moveReminderText(directory), resume: false })
-        .catch(() => undefined)
       dialog.clear()
     } catch (error) {
       toast.error(error)
@@ -158,6 +150,10 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     setCreating(false)
   }
 
+  function setDirectory(directory: string, subdirectory: boolean) {
+    setDestination({ type: "directory", directory, subdirectory })
+  }
+
   createEffect(() => {
     if (!creating()) {
       setCreatingDots(3)
@@ -176,6 +172,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     pending,
     pendingNew,
     progress,
+    setDirectory,
     startSubmit,
   }
 }

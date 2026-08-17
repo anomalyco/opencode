@@ -1,9 +1,10 @@
+import { Effect } from "effect"
 import type { Diagnostic } from "../codemode.js"
 import { ToolError } from "../tool-error.js"
 import { copyOut, ToolRuntimeError, type SafeObject } from "../tool-runtime.js"
 import { type AstNode, formatLocation, InterpreterRuntimeError, ProgramThrow, sourceLocation } from "./model.js"
 import { containsRuntimeReference } from "./references.js"
-import { spreadItems } from "../stdlib/collections.js"
+import { type SyncIteratorRunner } from "./iterator.js"
 import { coerceToString, createAggregateErrorValue, createErrorValue, errorConstructors } from "../stdlib/value.js"
 
 export const normalizeError = (error: unknown): Diagnostic => {
@@ -44,7 +45,7 @@ export const normalizeError = (error: unknown): Diagnostic => {
       message = (value as { message: string }).message
     } else {
       try {
-        message = JSON.stringify(copyOut(value)) ?? String(value)
+        message = JSON.stringify(copyOut(value, "json")) ?? String(value)
       } catch {
         message = String(value)
       }
@@ -79,15 +80,27 @@ export const caughtErrorValue = (thrown: unknown): unknown => {
   return createErrorValue(name, normalizeError(thrown).message)
 }
 
-export const constructErrorValue = (name: string, args: Array<unknown>, node: AstNode): SafeObject => {
-  if (name !== "AggregateError") return createErrorValue(name, args[0] === undefined ? "" : coerceToString(args[0]))
-  const errors = spreadItems(args[0])
-  if (errors === undefined) {
-    throw new InterpreterRuntimeError(
-      "new AggregateError(...) expects an array of errors (e.g. new AggregateError(errors, message?)).",
-      node,
-    ).as("TypeError")
-  }
-  // Error values must not alias caller-owned arrays.
-  return createAggregateErrorValue([...errors], args[1] === undefined ? "" : coerceToString(args[1]))
-}
+export const constructErrorValue = (name: string, args: Array<unknown>): SafeObject =>
+  createErrorValue(name, args[0] === undefined ? "" : coerceToString(args[0]))
+
+export const constructAggregateErrorValue = <R>(
+  runner: SyncIteratorRunner<R>,
+  args: Array<unknown>,
+  node: AstNode,
+): Effect.Effect<SafeObject, unknown, R> =>
+  Effect.gen(function* () {
+    const cursor = yield* runner.syncIterator(args[0], node)
+    if (cursor === undefined) {
+      throw new InterpreterRuntimeError("new AggregateError(...) expects a synchronous iterable of errors.", node).as(
+        "TypeError",
+      )
+    }
+    const errors: Array<unknown> = []
+    while (true) {
+      const step = yield* cursor.next
+      if (step.done) {
+        return createAggregateErrorValue(errors, args[1] === undefined ? "" : coerceToString(args[1]))
+      }
+      errors.push(step.value)
+    }
+  })

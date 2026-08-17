@@ -1,20 +1,29 @@
-import type { RouteDefaultsInput } from "../route/client"
-import { Auth } from "../route/auth"
-import type { ProviderAuthOption } from "../route/auth-options"
-import type { ProviderPackage } from "../provider-package"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
-import * as Gemini from "../protocols/gemini"
+import type { RouteDefaultsInput } from "../route/client.js"
+import { Auth } from "../route/auth.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
+import type { ProviderPackage } from "../provider-package.js"
+import { HttpOptions, ProviderID, mergeHttpOptions, type ModelID } from "../schema/index.js"
+import { Gemini } from "../protocols/gemini.js"
+import { GoogleImages } from "../protocols/google-images.js"
+
+export type { GoogleImageOptions } from "../protocols/google-images.js"
+export type GeminiOptionsInput = Gemini.OptionsInput
+export type GeminiProviderOptionsInput = Gemini.ProviderOptionsInput
 
 export const id = ProviderID.make("google")
 
 export const routes = [Gemini.route]
 
-export type Config = RouteDefaultsInput & ProviderAuthOption<"optional"> & { readonly baseURL?: string }
+export type Config = RouteDefaultsInput &
+  ProviderAuthOption<"optional"> & {
+    readonly baseURL?: string
+    readonly providerOptions?: Gemini.ProviderOptionsInput
+  }
 
 export interface Settings extends ProviderPackage.Settings {
   readonly apiKey?: string
   readonly baseURL?: string
-  readonly providerOptions?: ProviderOptions
+  readonly providerOptions?: Gemini.ProviderOptionsInput
 }
 
 const auth = (options: ProviderAuthOption<"optional">) => {
@@ -31,15 +40,24 @@ const configuredRoute = (input: Config) => {
 
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
+  const image = (modelID: string | ModelID) =>
+    GoogleImages.model({
+      id: modelID,
+      auth: auth(input),
+      baseURL: input.baseURL,
+      headers: input.headers,
+      http: mergeHttpOptions(input.http === undefined ? undefined : HttpOptions.make(input.http)),
+    })
   return {
     id,
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID }),
+    image,
     configure,
   }
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Definition<Settings, Gemini.ProviderOptionsInput>["model"] = (modelID, settings) =>
   configure({
     apiKey: settings.apiKey,
     baseURL: settings.baseURL,
@@ -48,3 +66,5 @@ export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, se
     limits: settings.limits,
     providerOptions: settings.providerOptions,
   }).model(modelID)
+
+export const image = provider.image

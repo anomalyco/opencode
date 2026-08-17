@@ -8,18 +8,25 @@ import { Model } from "../src/model.js"
 import { Project } from "../src/project.js"
 import { Provider } from "../src/provider.js"
 import { Pty } from "../src/pty.js"
-import { Question } from "../src/question.js"
 import { Session } from "../src/session.js"
 import { SessionMessage } from "../src/session-message.js"
-import { SessionPending } from "../src/session-pending.js"
+import { SessionInbox } from "../src/session-inbox.js"
 import { FileDiff } from "../src/file-diff.js"
 import { Money } from "../src/money.js"
 import { Skill } from "../src/skill.js"
 import { Shell } from "../src/shell.js"
+import { Vcs } from "../src/vcs.js"
+import { Worktree } from "../src/worktree.js"
 import { PersistedRevert } from "../src/session-revert.js"
-import { optional } from "../src/schema.js"
+import { AbsolutePath, optional } from "../src/schema.js"
 
 describe("contract hygiene", () => {
+  test("restricts agent colors to six-digit hex values", () => {
+    const decode = Schema.decodeUnknownSync(Agent.Color)
+    expect(decode("#ff6b6b")).toBe("#ff6b6b")
+    expect(() => decode("warning")).toThrow()
+  })
+
   test("keeps absolute costs distinct from model rates", () => {
     const usd = Money.USD.make(1)
     const rate = Money.USDPerMillionTokens.make(1)
@@ -40,12 +47,47 @@ describe("contract hygiene", () => {
     expect(Schema.encodeSync(Value)({ value: 1 })).toEqual({ value: "1" })
     expect(Schema.encodeSync(Value)({ value: undefined })).toEqual({})
     expect(
-      Schema.encodeSync(SessionPending.SyntheticData)({
+      Schema.encodeSync(SessionInbox.SyntheticPayload)({
         text: "completed",
         description: undefined,
         metadata: undefined,
       }),
     ).toEqual({ text: "completed" })
+
+    expect(
+      Schema.encodeSync(Session.Info)({
+        id: Session.ID.make("ses_untitled"),
+        projectID: Project.ID.make("global"),
+        cost: Money.USD.zero,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+        title: undefined,
+        location: { directory: AbsolutePath.make("/project") },
+      }),
+    ).not.toHaveProperty("title")
+  })
+
+  test("session inbox items omit the internal enqueue sequence", () => {
+    expect(
+      Schema.encodeSync(SessionInbox.Info)(
+        Schema.decodeUnknownSync(SessionInbox.Info)({
+          admittedSeq: 3,
+          id: "msg_pending",
+          sessionID: "ses_pending",
+          timeCreated: 1,
+          type: "user",
+          payload: { text: "hello" },
+          delivery: "steer",
+        }),
+      ),
+    ).toEqual({
+      id: "msg_pending",
+      sessionID: "ses_pending",
+      timeCreated: 1,
+      type: "user",
+      payload: { text: "hello" },
+      delivery: "steer",
+    })
   })
 
   test("forms require at least one field", () => {
@@ -77,20 +119,26 @@ describe("contract hygiene", () => {
 
   test("model defaults and provider overlays preserve public invariants", () => {
     const id = Model.ID.make("model")
-    expect(Model.Info.empty(Provider.ID.make("provider"), id)).toMatchObject({ modelID: id, variants: [] })
-    expect(() =>
+    expect(Model.Info.default(Provider.ID.make("provider"), id)).toMatchObject({ modelID: id, variants: [] })
+    expect(Provider.Info.empty(Provider.ID.make("provider")).activation).toBe("auto")
+    expect(
       Schema.decodeUnknownSync(Provider.Info)({
         id: "provider",
         name: "Provider",
+        activation: "auto",
         package: "native",
-        settings: { invalid: 1n },
-      }),
-    ).toThrow()
+        settings: { arbitrary: 1n },
+      }).settings,
+    ).toEqual({ arbitrary: 1n })
   })
 
   test("current ID constructors expose create", () => {
-    expect(Question.ID.create()).toStartWith("que_")
+    expect(Form.ID.create()).toStartWith("frm_")
     expect(Pty.ID.create()).toStartWith("pty_")
+  })
+
+  test("VCS info omits unavailable branch names", () => {
+    expect(Schema.encodeSync(Vcs.Info)({ branch: { current: undefined, default: undefined } })).toEqual({ branch: {} })
   })
 
   test("reusable public identifiers are stable and unique", () => {
@@ -111,9 +159,9 @@ describe("contract hygiene", () => {
       Model.Cost,
       Model.Variant,
       Project.Current,
-      Project.Directory,
-      Project.DirectoriesInput,
-      Project.Directories,
+      Worktree.Directory,
+      Worktree.ListInput,
+      Worktree.List,
       Project.Icon,
       Project.Commands,
       Project.Time,
@@ -121,25 +169,56 @@ describe("contract hygiene", () => {
       Pty.Info,
       Session.ListAnchor,
       Session.Revert,
-      SessionPending.UserData,
-      SessionPending.SyntheticData,
-      SessionPending.User,
-      SessionPending.Synthetic,
+      SessionInbox.Delivery,
+      SessionInbox.UserPayload,
+      SessionInbox.SyntheticPayload,
+      SessionInbox.CompactionPayload,
+      SessionInbox.MovePayload,
+      SessionInbox.Item,
+      SessionInbox.User,
+      SessionInbox.Synthetic,
+      SessionInbox.Compaction,
+      SessionInbox.Move,
+      SessionInbox.Info,
+      Vcs.Branch,
+      Vcs.Info,
     ].map((schema) => schema.ast.annotations?.identifier)
 
     expect(identifiers.every((identifier) => typeof identifier === "string")).toBe(true)
     expect(new Set(identifiers).size).toBe(identifiers.length)
   })
 
-  test("current source avoids Any and mutable contract wrappers", async () => {
+  test("all session inbox item types accept both delivery modes", () => {
+    const decode = Schema.decodeUnknownSync(SessionInbox.Info)
+    const base = { id: "msg_inbox", sessionID: "ses_inbox", timeCreated: 1 }
+    const move = {
+      location: { directory: "/project" },
+      projectID: "global",
+    }
+    for (const delivery of ["steer", "queue"] as const) {
+      expect(decode({ ...base, type: "user", payload: { text: "hello" }, delivery }).delivery).toBe(delivery)
+      expect(decode({ ...base, type: "synthetic", payload: { text: "context" }, delivery }).delivery).toBe(delivery)
+      expect(decode({ ...base, type: "compaction", payload: {}, delivery }).delivery).toBe(delivery)
+      expect(decode({ ...base, type: "move", payload: move, delivery }).delivery).toBe(delivery)
+    }
+  })
+
+  test("current source limits Any to provider options and avoids mutable contract wrappers", async () => {
     const files = [...new Bun.Glob("*.ts").scanSync(new URL("../src", import.meta.url).pathname)].filter(
       (file) => !file.endsWith("-v1.ts"),
     )
-    const source = await Promise.all(
-      files.map((file) => Bun.file(new URL(`../src/${file}`, import.meta.url)).text()),
-    ).then((values) => values.join("\n"))
+    const sources = await Promise.all(
+      files.map(async (file) => ({ file, source: await Bun.file(new URL(`../src/${file}`, import.meta.url)).text() })),
+    )
+    const source = sources.map((item) => item.source).join("\n")
 
-    expect(source).not.toContain("Schema.Any")
+    expect(
+      sources
+        .filter((item) => item.file !== "provider.ts")
+        .map((item) => item.source)
+        .join("\n"),
+    ).not.toContain("Schema.Any")
+    expect(sources.find((item) => item.file === "provider.ts")?.source.match(/Schema\.Any/g)).toHaveLength(4)
     expect(source).not.toContain("Schema.mutable")
   })
 
@@ -166,7 +245,7 @@ describe("contract hygiene", () => {
 
   test("reviewed session contracts use their canonical current shapes", () => {
     expect(SessionMessage.Info.ast.annotations?.identifier).toBe("Session.Message.Info")
-    expect(SessionPending.Info.ast.annotations?.identifier).toBe("SessionPending.Info")
+    expect(SessionInbox.Info.ast.annotations?.identifier).toBe("Session.Inbox.Info")
     expect(Money.USD).not.toBe(Money.USDPerMillionTokens)
     expect(
       FileDiff.Info.make({ file: "src/index.ts", patch: "@@", additions: 1, deletions: 0, status: "modified" }),

@@ -1,6 +1,6 @@
 import { Schema } from "effect"
-import type { CacheHint } from "../../schema"
-import { newBreakpoints, ttlBucket, type Breakpoints } from "./cache"
+import type { CacheHint } from "../../schema/index.js"
+import { newBreakpoints, ttlBucket, type Breakpoints } from "./cache.js"
 
 // Bedrock cache markers are positional: emit a `cachePoint` block immediately
 // after the content the caller wants treated as a cacheable prefix. Bedrock
@@ -18,7 +18,7 @@ export type CachePointBlock = Schema.Schema.Type<typeof CachePointBlock>
 // budget is respected across `system`, `messages`, and `tools`.
 export const BEDROCK_BREAKPOINT_CAP = 4
 
-export type { Breakpoints } from "./cache"
+export type { Breakpoints } from "./cache.js"
 export const breakpoints = () => newBreakpoints(BEDROCK_BREAKPOINT_CAP)
 
 const DEFAULT_5M: CachePointBlock = { cachePoint: { type: "default" } }
@@ -34,4 +34,4 @@ export const block = (breakpoints: Breakpoints, cache: CacheHint | undefined): C
   return ttlBucket(cache.ttlSeconds) === "1h" ? DEFAULT_1H : DEFAULT_5M
 }
 
-export * as BedrockCache from "./bedrock-cache"
+export * as BedrockCache from "./bedrock-cache.js"

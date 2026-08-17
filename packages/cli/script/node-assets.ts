@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto"
-import { copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises"
-import { createRequire } from "node:module"
+import { copyFile, mkdir, readFile, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { getNodeAssets } from "@opentui/core/node-assets"
-import { attentionSoundAssets, type NodeTarget, photonWasmAsset } from "../src/node/target"
+import { attentionSoundAssets, type NodeTarget, photonWasmAsset, shellParserWasmAssets } from "../src/node/target"
+import { collectFiles } from "./files"
 
 const dir = path.resolve(import.meta.dirname, "..")
 
@@ -17,17 +17,6 @@ export type NodeAsset = {
   readonly source: string
 }
 
-async function files(root: string, current = root): Promise<string[]> {
-  return (
-    await Promise.all(
-      (await readdir(current, { withFileTypes: true })).map((entry) => {
-        const target = path.join(current, entry.name)
-        return entry.isDirectory() ? files(root, target) : [path.relative(root, target)]
-      }),
-    )
-  ).flat()
-}
-
 export async function collectNodeAssets(target: NodeTarget) {
   const ptyEntry = fileURLToPath(import.meta.resolve(target.nodePtyPackage))
   const ptyRoot = path.resolve(path.dirname(ptyEntry), "..")
@@ -38,23 +27,30 @@ export async function collectNodeAssets(target: NodeTarget) {
       ...(target.platform === "linux" ? { libc: "glibc" as const } : {}),
     }),
     { key: target.parcelWatcherAsset, source: fileURLToPath(import.meta.resolve(target.parcelWatcherPackage)) },
+    { key: target.fffAsset, source: fileURLToPath(import.meta.resolve(target.fffPackage)) },
+    { key: target.fffFfiAsset, source: fileURLToPath(import.meta.resolve(target.fffFfiPackage)) },
     {
       key: photonWasmAsset,
-      source: createRequire(path.resolve(dir, "../core/package.json")).resolve(photonWasmAsset),
+      source: fileURLToPath(import.meta.resolve(photonWasmAsset)),
     },
+    ...Object.values(shellParserWasmAssets).map((key) => ({
+      key,
+      source: fileURLToPath(import.meta.resolve(key)),
+    })),
     ...attentionSoundAssets.map((key) => ({
       key,
       source: path.resolve(dir, "../ui/src/assets/audio", path.basename(key)),
     })),
-    ...(await files(ptyRoot))
+    ...(await collectFiles(ptyRoot))
       .filter((relative) => !relative.endsWith(".map") && !relative.endsWith(".pdb"))
       .map((relative) => ({
         key: `${target.nodePtyPackage}/${relative}`,
         source: path.join(ptyRoot, relative),
       })),
   ]
-  await Promise.all(assets.map((asset) => stat(asset.source)))
-  return assets
+  const unique = [...new Map(assets.map((asset) => [asset.key, asset])).values()]
+  await Promise.all(unique.map((asset) => stat(asset.source)))
+  return unique
 }
 
 export async function hashNodeAssets(assets: readonly NodeAsset[]) {
@@ -79,5 +75,7 @@ export async function copyNodeAssets(assets: readonly NodeAsset[]) {
 
 export async function seaAssetMap() {
   const root = path.join(dir, "dist-node", "assets")
-  return Object.fromEntries((await files(root)).map((key) => [key.replaceAll(path.sep, "/"), path.join(root, key)]))
+  return Object.fromEntries(
+    (await collectFiles(root)).map((key) => [key.replaceAll(path.sep, "/"), path.join(root, key)]),
+  )
 }

@@ -5,34 +5,33 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { Job } from "@opencode-ai/core/job"
-import { PermissionV2 } from "@opencode-ai/core/permission"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Permission } from "@opencode-ai/core/permission"
+import { Agent } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionTitle } from "@opencode-ai/core/session/title"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
-import { SessionRunner } from "@opencode-ai/core/session/runner"
+import { SessionRunner } from "@opencode-ai/core/session/runner/index"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
-import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import { Tool } from "@opencode-ai/core/tool"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Location } from "@opencode-ai/core/location"
 import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
 import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
-import { Instructions } from "@opencode-ai/core/instructions"
+import { Instructions } from "@opencode-ai/core/instructions/index"
 import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
 import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
@@ -41,9 +40,11 @@ import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import path from "node:path"
 import { testEffect } from "./lib/effect"
+import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
 
 const cassetteName = "session-runner/openai-chat-streams-text"
@@ -55,17 +56,7 @@ if (process.env.RECORD === "true") {
 const cassette = HttpRecorder.layerFetch(cassetteName, { directory: cassetteDirectory })
 const executor = RequestExecutor.layer.pipe(Layer.provide(cassette))
 const client = LLMClient.layer.pipe(Layer.provide(executor))
-const permission = Layer.succeed(
-  PermissionV2.Service,
-  PermissionV2.Service.of({
-    assert: () => Effect.die("unused"),
-    ask: () => Effect.die("unused"),
-    reply: () => Effect.die("unused"),
-    get: () => Effect.die("unused"),
-    forSession: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-  }),
-)
+const permission = permissionLayer()
 const model = OpenAIChat.route
   .with({
     endpoint: { baseURL: "https://api.openai.com/v1" },
@@ -73,15 +64,26 @@ const model = OpenAIChat.route
     generation: { maxTokens: 20, temperature: 0 },
   })
   .model({ id: "gpt-4o-mini" })
-const models = SessionRunnerModel.layerWith(() => Effect.succeed(SessionRunnerModel.resolved(model)))
+const models = Layer.mock(SessionRunnerModel.Service)({
+  resolve: () =>
+    Effect.succeed(
+      SessionRunnerModel.resolved(model, {
+        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        cost: [],
+      }),
+    ),
+})
 const systemContext = Layer.mock(InstructionBuiltIns.Service, { load: () => Effect.succeed(Instructions.empty) })
-const instructionContext = Layer.mock(InstructionDiscovery.Service, { load: () => Effect.succeed(Instructions.empty) })
+const instructionContext = Layer.mock(InstructionDiscovery.Service, {
+  project: true,
+  load: () => Effect.succeed(Instructions.empty),
+})
 const skillInstructions = Layer.mock(SkillInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const referenceInstructions = Layer.mock(ReferenceInstructions.Service, {
   load: () => Effect.succeed(Instructions.empty),
 })
 const mcpInstructions = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
-const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
+const config = Config.testLayer()
 const pluginSupervisor = Layer.succeed(PluginSupervisor.Service, PluginSupervisor.Service.of({ flush: Effect.void }))
 const promptCatalog = Layer.mock(Catalog.Service, {
   provider: {
@@ -97,48 +99,50 @@ const promptCatalog = Layer.mock(Catalog.Service, {
     small: () => Effect.succeed(undefined),
   },
 })
-const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
-  [Snapshot.node, Snapshot.noopLayer],
-  [LayerNodePlatform.llmClient, client],
-  [SessionRunnerModel.node, models],
-  [InstructionBuiltIns.node, systemContext],
-  [InstructionDiscovery.node, instructionContext],
-  [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
-  [SkillInstructions.node, skillInstructions],
-  [ReferenceInstructions.node, referenceInstructions],
-  [McpInstructions.node, mcpInstructions],
-  [Config.node, config],
-  [PermissionV2.node, permission],
-  [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
-  [PluginSupervisor.node, pluginSupervisor],
-])
-const execution = Layer.effect(
-  SessionExecution.Service,
-  Effect.gen(function* () {
-    const sessionRunner = yield* SessionRunner.Service
-    const coordinator = yield* SessionRunCoordinator.make<SessionV2.ID, SessionRunner.RunError>({
-      drain: (sessionID, force) => sessionRunner.drain({ sessionID, force }),
-    })
-    return SessionExecution.Service.of({
-      active: coordinator.active,
-      resume: coordinator.run,
-      wake: coordinator.wake,
-      interrupt: coordinator.interrupt,
-      awaitIdle: coordinator.awaitIdle,
-    })
-  }),
-).pipe(Layer.provide(runnerLayer))
-const it = testEffect(
+const runnerLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
+  AppNodeBuilder.build(SessionRunnerLLM.node, [
+    [Snapshot.node, Snapshot.noopLayer],
+    [LayerNodePlatform.llmClient, llmClient],
+    [SessionRunnerModel.node, models],
+    [InstructionBuiltIns.node, systemContext],
+    [InstructionDiscovery.node, instructionContext],
+    [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
+    [SkillInstructions.node, skillInstructions],
+    [ReferenceInstructions.node, referenceInstructions],
+    [McpInstructions.node, mcpInstructions],
+    [Config.node, config],
+    [Permission.node, permission],
+    [PluginSupervisor.node, pluginSupervisor],
+  ])
+const execution = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
+  Layer.effect(
+    SessionExecution.Service,
+    Effect.gen(function* () {
+      const sessionRunner = yield* SessionRunner.Service
+      const coordinator = yield* SessionRunCoordinator.make<Session.ID, SessionRunner.RunError>({
+        drain: (sessionID, force) => sessionRunner.drain({ sessionID, force }).pipe(Effect.asVoid),
+      })
+      return SessionExecution.Service.of({
+        active: coordinator.active,
+        resume: coordinator.run,
+        wake: coordinator.wake,
+        wakeActive: coordinator.wakeActive,
+        interrupt: (sessionID) => coordinator.interrupt(sessionID),
+        awaitIdle: coordinator.awaitIdle,
+      })
+    }),
+  ).pipe(Layer.provide(runnerLayer(llmClient)))
+const testLayer = (llmClient: Layer.Layer<typeof LLMClient.Service>) =>
   AppNodeBuilder.build(
     LayerNode.group([
       Database.node,
-      EventV2.node,
+      Bus.node,
       SessionProjector.node,
       SessionStore.node,
-      AgentV2.node,
+      Agent.node,
       Catalog.node,
       PluginHooks.node,
-      ToolRegistry.node,
+      Tool.node,
       SessionRunnerModel.node,
       InstructionBuiltIns.node,
       InstructionDiscovery.node,
@@ -147,13 +151,13 @@ const it = testEffect(
       Config.node,
       Snapshot.node,
       SessionRunnerLLM.node,
-      SessionV2.node,
+      Session.node,
     ]),
     [
-      [LayerNodePlatform.llmClient, client],
-      [PermissionV2.node, permission],
+      [Bus.node, Bus.configured({ persist: true })],
+      [LayerNodePlatform.llmClient, llmClient],
+      [Permission.node, permission],
       [Catalog.node, promptCatalog],
-      [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
       [SessionRunnerModel.node, models],
       [InstructionBuiltIns.node, systemContext],
       [InstructionDiscovery.node, instructionContext],
@@ -163,21 +167,22 @@ const it = testEffect(
       [Config.node, config],
       [Snapshot.node, Snapshot.noopLayer],
       [PluginSupervisor.node, pluginSupervisor],
-      [SessionExecution.node, execution],
+      [SessionExecution.node, execution(llmClient)],
     ],
-  ),
-)
-const sessionID = SessionV2.ID.make("ses_runner_recorded")
+  )
+const it = testEffect(testLayer(client))
+const sessionID = Session.ID.make("ses_runner_recorded")
 
 describe("SessionRunnerLLM recorded", () => {
-  it.effect("executes one recorded V2 prompt through the recorded HTTP transport", () =>
+  it.effect("executes one recorded prompt through the recorded HTTP transport", () =>
     Effect.gen(function* () {
-      const agents = yield* AgentV2.Service
+      const agents = yield* Agent.Service
       const catalog = yield* Catalog.Service
       const hooks = yield* PluginHooks.Service
       yield* agents.transform((draft) =>
-        draft.update(AgentV2.ID.make("build"), (agent) => {
+        draft.update(Agent.ID.make("build"), (agent) => {
           agent.mode = "primary"
+          agent.permissions.push({ action: "execute", resource: "*", effect: "deny" })
         }),
       )
       const pluginHost = host({
@@ -206,7 +211,7 @@ describe("SessionRunnerLLM recorded", () => {
         .onConflictDoNothing()
         .run()
         .pipe(Effect.orDie)
-      const session = yield* SessionV2.Service
+      const session = yield* Session.Service
       const prompt = yield* session.prompt({
         sessionID,
         text: "Say hello in one short sentence.",
@@ -230,14 +235,117 @@ describe("SessionRunnerLLM recorded", () => {
           .orderBy(EventTable.seq)
           .all()).map((event) => event.type),
       ).toEqual([
-        "session.input.admitted.1",
+        "session.inbox.enqueued.1",
         "session.instructions.updated.2",
-        "session.input.promoted.1",
+        "session.inbox.delivered.1",
         "session.step.started.1",
         "session.text.started.1",
         "session.text.ended.1",
         "session.step.ended.1",
       ])
+    }),
+  )
+})
+
+describe("SessionModelRequest HTTP bridge", () => {
+  const bodies: Uint8Array[] = []
+  const methods: string[] = []
+  const headers: Array<string | undefined> = []
+  const response = [
+    'data: {"id":"chatcmpl_test","object":"chat.completion.chunk","created":0,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{"role":"assistant","content":"Hello!"},"finish_reason":null}]}',
+    'data: {"id":"chatcmpl_test","object":"chat.completion.chunk","created":0,"model":"gpt-4o-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+    "data: [DONE]",
+    "",
+  ].join("\n\n")
+  const transport = Layer.succeed(
+    HttpClient.HttpClient,
+    HttpClient.make((request) =>
+      Effect.sync(() => {
+        if (request.body._tag !== "Uint8Array") throw new Error(`Unexpected request body: ${request.body._tag}`)
+        methods.push(request.method)
+        bodies.push(request.body.body.slice())
+        headers.push(request.headers["x-hook"])
+        return HttpClientResponse.fromWeb(
+          request,
+          new Response(response, { headers: { "content-type": "text/event-stream" } }),
+        )
+      }),
+    ),
+  )
+  const httpIt = testEffect(
+    testLayer(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer.pipe(Layer.provide(transport))))),
+  )
+
+  httpIt.effect("runs Effect HTTP request and response hooks around one provider request", () =>
+    Effect.gen(function* () {
+      bodies.length = 0
+      methods.length = 0
+      headers.length = 0
+      const seen: string[] = []
+      const agents = yield* Agent.Service
+      const catalog = yield* Catalog.Service
+      const hooks = yield* PluginHooks.Service
+      yield* agents.transform((draft) =>
+        draft.update(Agent.ID.make("build"), (agent) => {
+          agent.mode = "primary"
+          agent.permissions.push({ action: "execute", resource: "*", effect: "deny" })
+        }),
+      )
+      const pluginHost = host({
+        agent: agentHost(agents),
+        catalog: catalogHost(catalog),
+        session: { hook: (name, callback) => hooks.register("session", name, callback) },
+      })
+      yield* pluginHost.session.hook("http.request", (event) =>
+        Effect.sync(() => {
+          seen.push("request")
+          event.request.headers.set("x-hook", "effect")
+        }),
+      )
+      yield* pluginHost.session.hook("http.response", (event) =>
+        Effect.gen(function* () {
+          seen.push(`response:${event.response.status}:${event.request.headers.get("x-hook")}`)
+          event.response = new Response(
+            (yield* Effect.promise(() => event.response.text())).replace("Hello!", "Hooked!"),
+            event.response,
+          )
+        }),
+      )
+      yield* Effect.forEach(SystemPromptPlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      const retrySessionID = Session.ID.make("ses_model_request_http_retry")
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: retrySessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const session = yield* Session.Service
+      yield* session.prompt({ sessionID: retrySessionID, text: "Say hello.", resume: false })
+
+      yield* session.resume(retrySessionID)
+
+      expect(methods).toEqual(["POST"])
+      expect(headers).toEqual(["effect"])
+      expect(seen).toEqual(["request", "response:200:effect"])
+      expect(bodies).toHaveLength(1)
+      expect(bodies[0]?.byteLength).toBeGreaterThan(0)
+      expect((yield* session.context(retrySessionID))[1]).toMatchObject({
+        type: "assistant",
+        content: [{ type: "text", text: "Hooked!" }],
+      })
     }),
   )
 })

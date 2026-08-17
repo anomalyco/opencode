@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { legacySessionHref, legacySessionServer, requireServerKey, rootSession, sessionHref } from "./session-route"
 
 describe("session routes", () => {

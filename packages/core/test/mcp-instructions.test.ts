@@ -1,18 +1,18 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { MCP } from "@opencode-ai/core/mcp/index"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
-import { PermissionV2 } from "@opencode-ai/core/permission"
+import { Permission } from "@opencode-ai/core/permission"
 import { McpTool } from "@opencode-ai/core/tool/mcp"
 import { it } from "./lib/effect"
 import { readInitial, readUpdate } from "./lib/instructions"
 
-const build = AgentV2.ID.make("build")
+const build = Agent.ID.make("build")
 
-const selection = (permissions: PermissionV2.Ruleset = []) => {
-  const info = AgentV2.Info.make({ ...AgentV2.Info.empty(build), permissions })
+const selection = (permissions: Permission.Ruleset = []) => {
+  const info = Agent.Info.make({ ...Agent.Info.default(build), permissions })
   return { id: info.id, info }
 }
 
@@ -92,6 +92,60 @@ describe("McpInstructions", () => {
       ),
     ),
   )
+
+  it.effect("keeps MCP instructions when Code Mode is disabled and execute is denied", () =>
+    Effect.gen(function* () {
+      const service = yield* McpInstructions.Service
+      const generation = yield* service
+        .load(selection([{ action: "execute", resource: "*", effect: "deny" }]))
+        .pipe(Effect.flatMap(readInitial))
+
+      expect(generation.text).toBe(
+        [
+          "<mcp_instructions>",
+          '  <server name="alpha">',
+          "    Alpha instructions",
+          "  </server>",
+          "</mcp_instructions>",
+        ].join("\n"),
+      )
+    }).pipe(
+      Effect.provide(
+        layer(
+          () => [instructions("alpha", "Alpha instructions")],
+          () => [new MCP.Tool({ server: MCP.ServerName.make("alpha"), name: "search", codemode: false })],
+        ),
+      ),
+    ),
+  )
+
+  it.effect("restates guidance when Code Mode is disabled for a server", () => {
+    let tools = [tool("alpha")]
+    return Effect.gen(function* () {
+      const service = yield* McpInstructions.Service
+      const initialized = yield* service.load(selection()).pipe(Effect.flatMap(readInitial))
+
+      tools = [new MCP.Tool({ server: MCP.ServerName.make("alpha"), name: "search", codemode: false })]
+      const changed = yield* readUpdate(yield* service.load(selection()), initialized)
+      expect(changed.text).toBe(
+        [
+          "The available MCP server instructions have changed. This list supersedes the previous one.",
+          "<mcp_instructions>",
+          '  <server name="alpha">',
+          "    Alpha instructions",
+          "  </server>",
+          "</mcp_instructions>",
+        ].join("\n"),
+      )
+    }).pipe(
+      Effect.provide(
+        layer(
+          () => [instructions("alpha", "Alpha instructions")],
+          () => tools,
+        ),
+      ),
+    )
+  })
 
   it.effect("renders additions, changes, and removal", () => {
     let catalog = [instructions("alpha", "Alpha instructions")]

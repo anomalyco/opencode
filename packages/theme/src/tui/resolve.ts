@@ -1,0 +1,259 @@
+import { RGBA } from "@opentui/core"
+import { Schema } from "effect"
+import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults.js"
+import { expandTheme, expandTokens, mergeTheme } from "./expand.js"
+import { fallback } from "./fallback.js"
+import {
+  ActionState,
+  ActionVariant,
+  BaseHue,
+  FeedbackKind,
+  HueAlias,
+  HueStep,
+  ThemeDefinition,
+  ThemeDocument,
+} from "./schema.js"
+import type {
+  ActionStateKey,
+  ContextName,
+  HueDefinition,
+  HueScale,
+  ResolvedActionState,
+  ResolvedTheme,
+  ResolvedThemeTokens,
+  StatefulColorDefinition,
+  ThemeTokensDefinition,
+} from "./index.js"
+import { selectTheme, selectThemeMode } from "./select.js"
+
+const decodeThemeDefinitionSchema = Schema.decodeUnknownSync(ThemeDefinition)
+
+function decodeThemeDefinition(input: unknown) {
+  try {
+    return decodeThemeDefinitionSchema(input)
+  } catch (error) {
+    throw themeDecodeError(error, "theme")
+  }
+}
+
+export function themeDecodeError(error: unknown, name: string) {
+  const message = Schema.isSchemaError(error) ? error.message : String(error)
+  const value = /got ("[^"]*"|\S+)/.exec(message)?.[1] ?? "value"
+  return new Error(`Invalid theme: ${name} ${value} is an invalid value`, { cause: error })
+}
+
+export function resolveThemeDocument(document: ThemeDocument, mode?: "light" | "dark") {
+  const selected = selectThemeMode(document, mode)
+  const definition = selected.expanded ? selected.theme : expandTheme(selected.theme)
+  const defaults = expandTheme(selectTheme(DEFAULT_THEME, selected.mode))
+  const core = expandTokens(fallback())
+  const merged = document.standalone ? mergeTheme(core, definition) : mergeTheme(core, defaults, definition)
+  if (!merged["hue"]) throw new Error("Standalone themes must provide hues")
+  return resolveExpandedTheme({
+    ...merged,
+    categorical: merged["categorical"] ?? DEFAULT_CATEGORICAL,
+  } as ThemeDefinition)
+}
+
+export function resolveTheme(definition: ThemeDefinition): ResolvedTheme {
+  return resolveExpandedTheme(expandTheme(decodeThemeDefinition(definition)))
+}
+
+function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
+  const hue = resolveHue(definition.hue)
+  const categorical = (definition.categorical ?? DEFAULT_CATEGORICAL).map((name) => hue[name])
+  const hueSteps = compileHueSteps(hue)
+  const base = tokens(definition)
+  const resolved = resolveView(base, hue, categorical, hueSteps)
+  const context = (name: ContextName) => {
+    const override = definition[`@context:${name}`]
+    if (!override) return resolved
+    return resolveView(contextualize(base, override), hue, categorical, hueSteps)
+  }
+  const contextual = {
+    elevated: context("elevated"),
+    overlay: context("overlay"),
+  }
+
+  return { ...resolved, contextual } as ResolvedTheme
+}
+
+function tokens(definition: ThemeDefinition): ThemeTokensDefinition {
+  return {
+    text: definition.text,
+    background: definition.background,
+    border: definition.border,
+    scrollbar: definition.scrollbar,
+    diff: definition.diff,
+    syntax: definition.syntax,
+    markdown: definition.markdown,
+  }
+}
+
+function contextualize(base: ThemeTokensDefinition, override: ThemeTokensDefinition) {
+  const result = mergeTheme(base, override)
+  const baseText = base.text?.action
+  const contextText = override.text?.action
+  const baseBackground = base.background?.action
+  const contextBackground = override.background?.action
+  const text = result["text"] as NonNullable<ThemeTokensDefinition["text"]>
+  const background = result["background"] as NonNullable<ThemeTokensDefinition["background"]>
+  return {
+    ...result,
+    text: { ...text, action: contextualActions(baseText, contextText) },
+    background: { ...background, action: contextualActions(baseBackground, contextBackground) },
+  } as ThemeTokensDefinition
+}
+
+function contextualActions(
+  base: Partial<Record<ActionVariant, StatefulColorDefinition>> | undefined,
+  context: Partial<Record<ActionVariant, StatefulColorDefinition>> | undefined,
+) {
+  return Object.fromEntries(
+    ActionVariant.literals.map((variant) => {
+      const baseVariant = base?.[variant]
+      const contextVariant = context?.[variant]
+      return [
+        variant,
+        Object.fromEntries(
+          (["default", ...ActionState.literals] as readonly ResolvedActionState[]).map((state) => {
+            const key = state === "default" ? undefined : (`$${state}` as ActionStateKey)
+            return [
+              key ?? "default",
+              (key ? contextVariant?.[key] : undefined) ??
+                contextVariant?.default ??
+                (key ? baseVariant?.[key] : undefined) ??
+                baseVariant?.default,
+            ]
+          }),
+        ),
+      ]
+    }),
+  )
+}
+
+function resolveView(
+  definition: ThemeTokensDefinition,
+  hue: ResolvedThemeTokens["hue"],
+  categorical: ResolvedThemeTokens["categorical"],
+  hueSteps: Pick<ResolvedThemeTokens, "source" | "increase" | "decrease">,
+): ResolvedThemeTokens {
+  const source: Record<string, unknown> = { hue, ...definition }
+  return { ...(createResolver(source)(source, "theme") as ResolvedThemeTokens), hue, categorical, ...hueSteps }
+}
+
+function compileHueSteps(
+  hue: ResolvedThemeTokens["hue"],
+): Pick<ResolvedThemeTokens, "source" | "increase" | "decrease"> {
+  const index = new WeakMap<RGBA, { hue: keyof typeof hue; step: HueStep; position: number }>()
+  for (const [name, scale] of Object.entries(hue) as [keyof typeof hue, HueScale][]) {
+    HueStep.literals.forEach((step, position) => index.set(scale[step], { hue: name, step, position }))
+  }
+  const shift = (color: RGBA, amount: number) => {
+    const match = index.get(color)
+    if (!match) return color
+    const offset = Number.isFinite(amount) ? Math.trunc(amount) : 0
+    const position = Math.max(0, Math.min(HueStep.literals.length - 1, match.position + offset))
+    return hue[match.hue][HueStep.literals[position]]
+  }
+  return {
+    source: (color) => {
+      const match = index.get(color)
+      return match ? { hue: match.hue, step: match.step } : undefined
+    },
+    increase: (color, amount = 1) => shift(color, amount),
+    decrease: (color, amount = 1) => shift(color, -amount),
+  }
+}
+
+function resolveHue(definition: HueDefinition) {
+  const source = definition as Record<string, unknown>
+  const cache = new Map<string, HueScale>()
+  const expected = new Set<string>([...BaseHue.literals, ...HueAlias.literals])
+  for (const name of Object.keys(source)) {
+    if (!expected.has(name)) throw new Error(`Unknown hue "${name}"`)
+  }
+
+  function resolve(name: string, stack: string[]): HueScale {
+    const hit = cache.get(name)
+    if (hit) return hit
+    if (stack.includes(name)) throw new Error(`Circular hue reference: ${[...stack, name].join(" -> ")}`)
+    const value = source[name]
+    if (typeof value === "string") {
+      const match = /^\$hue\.([^.]+)$/.exec(value)
+      if (!match?.[1]) throw new Error(`Hue alias "${value}" must reference a hue scale`)
+      const target = resolve(match[1], [...stack, name])
+      const result = Object.fromEntries(HueStep.literals.map((step) => [step, RGBA.clone(target[step])])) as HueScale
+      cache.set(name, result)
+      return result
+    }
+    if (!isRecord(value)) throw new Error(`Hue "${name}" was not found`)
+    const result = Object.fromEntries(
+      HueStep.literals.map((step) => {
+        const color = value[step]
+        if (typeof color !== "string" || !isHex(color)) throw new Error(`Invalid hue color at "hue.${name}.${step}"`)
+        return [step, RGBA.fromHex(color)]
+      }),
+    ) as HueScale
+    for (const step of Object.keys(value)) {
+      if (!HueStep.literals.includes(Number(step) as HueStep))
+        throw new Error(`Unknown hue step at "hue.${name}.${step}"`)
+    }
+    cache.set(name, result)
+    return result
+  }
+
+  return Object.fromEntries(
+    [...BaseHue.literals, ...HueAlias.literals].map((name) => [name, resolve(name, [])]),
+  ) as ResolvedThemeTokens["hue"]
+}
+
+function createResolver(source: Record<string, unknown>) {
+  const cache = new Map<string, RGBA>()
+
+  function resolve(value: unknown, path: string, stack: string[] = []): unknown {
+    if (value instanceof RGBA) return value
+    if (typeof value === "string") return resolveColor(value, path, stack)
+    if (typeof value === "number") return value
+    if (!isRecord(value)) throw new Error(`Invalid theme value at "${path}"`)
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [resolvedKey(key), resolve(item, `${path}.${key}`, stack)]),
+    )
+  }
+
+  function resolveColor(value: string, path: string, stack: string[]) {
+    if (value === "transparent") return RGBA.fromInts(0, 0, 0, 0)
+    if (isHex(value)) return RGBA.fromHex(value)
+    if (!value.startsWith("$")) throw new Error(`Invalid color "${value}" at "${path}"`)
+    const target = value.slice(1)
+    const hit = cache.get(target)
+    if (hit) return hit
+    if (stack.includes(target)) throw new Error(`Circular theme reference: ${[...stack, target].join(" -> ")}`)
+    const result = resolve(read(source, target), target, [...stack, target])
+    if (!(result instanceof RGBA)) throw new Error(`Theme reference "${value}" at "${path}" is not a color`)
+    cache.set(target, result)
+    return result
+  }
+
+  return (value: unknown, path: string) => resolve(value, path)
+}
+
+function resolvedKey(key: string) {
+  if (!key.startsWith("$")) return key
+  const state = key.slice(1)
+  return (ActionState.literals as readonly string[]).includes(state) ? state : key
+}
+
+function read(source: Record<string, unknown>, path: string) {
+  const result = path.split(".").reduce<unknown>((value, key) => (isRecord(value) ? value[key] : undefined), source)
+  if (result === undefined) throw new Error(`Theme reference "$${path}" was not found`)
+  return result
+}
+
+function isHex(value: string) {
+  return /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && !(value instanceof RGBA)
+}

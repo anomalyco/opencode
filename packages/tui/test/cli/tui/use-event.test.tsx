@@ -51,10 +51,7 @@ function update(version: string): OpenCodeEvent {
   }
 }
 
-async function mount(
-  reconnect?: (signal: AbortSignal) => Promise<{ api: OpenCodeClient }>,
-  log?: LogSink,
-) {
+async function mount(reconnect?: (signal: AbortSignal) => Promise<{ api: OpenCodeClient }>, log?: LogSink) {
   const events = createEventStream()
   const calls = createFetch(undefined, events)
   const seen: OpenCodeEvent[] = []

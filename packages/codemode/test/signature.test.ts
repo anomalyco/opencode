@@ -18,7 +18,8 @@ const listIssues = Tool.make({
     },
     required: ["owner"],
   },
-  run: () => Effect.succeed("[]"),
+  output: {},
+  execute: () => Effect.succeed("[]"),
 })
 
 // An Effect Schema tool whose field annotations must flow through the emitted JSON Schema.
@@ -31,7 +32,7 @@ const lookupOrder = Tool.make({
   output: Schema.Struct({
     status: Schema.String.annotate({ description: "Current order status" }),
   }),
-  run: () => Effect.succeed({ status: "open" }),
+  execute: () => Effect.succeed({ status: "open" }),
 })
 
 describe("pretty signature rendering", () => {
@@ -261,7 +262,7 @@ describe("non-identifier property names render as quoted keys", () => {
         properties: { "content-type": { type: "string" } },
         required: ["content-type"],
       } as const,
-      run: () => Effect.succeed({ "content-type": "text/plain" }),
+      execute: () => Effect.succeed({ "content-type": "text/plain" }),
     })
     expect(inputTypeScript(tool)).toContain('"foo-bar"?: string')
     expect(outputTypeScript(tool)).toBe('{ "content-type": string }')
@@ -272,7 +273,7 @@ describe("non-identifier property names render as quoted keys", () => {
     const tool = Tool.make({
       description: "Schema tool with awkward field names",
       input: Schema.Struct({ "foo-bar": Schema.String, plain: Schema.optionalKey(Schema.Number) }),
-      run: () => Effect.succeed(null),
+      execute: () => Effect.succeed(null),
     })
     expect(inputTypeScript(tool)).toBe('{ "foo-bar": string; plain?: number }')
     expect(inputTypeScript(tool, true)).toBe(["{", '  "foo-bar": string,', "  plain?: number,", "}"].join("\n"))
@@ -306,7 +307,7 @@ describe("union schemas render every alternative", () => {
         },
       } as const,
       output: { anyOf: [{ type: "number" }, { type: "boolean" }] } as const,
-      run: () => Effect.succeed(1),
+      execute: () => Effect.succeed(1),
     })
     expect(inputTypeScript(tool)).toBe("{ value?: string | number }")
     expect(outputTypeScript(tool)).toBe("number | boolean")
@@ -394,15 +395,15 @@ describe("JSDoc signatures in catalogs and search results", () => {
     }
   })
 
-  test("the inline catalog uses the same JSDoc signatures", async () => {
-    const instructions = runtime.instructions()
+  test("the catalog uses the same JSDoc signatures as search", async () => {
+    const catalog = runtime.catalog()
     const github = (await search("list issues repository")).items.find(
       ({ path }) => path === "tools.github.list_issues",
     )!
     const orders = (await search("look up order")).items.find(({ path }) => path === "tools.orders.lookup")!
-    expect(instructions).toContain(`  - ${github.signature} // List issues in a repository`)
-    expect(instructions).toContain(`  - ${orders.signature} // Look up an order`)
-    expect(instructions).toContain("/** Repository owner */")
+    expect(catalog.map(({ signature }) => signature)).toContain(github.signature)
+    expect(catalog.map(({ signature }) => signature)).toContain(orders.signature)
+    expect(github.signature).toContain("/** Repository owner */")
   })
 })
 
@@ -417,20 +418,15 @@ describe("non-identifier tool paths", () => {
       },
       required: ["query", "libraryName"],
     } as const,
-    run: () => Effect.succeed("/reactjs/react.dev"),
+    output: {},
+    execute: () => Effect.succeed("/reactjs/react.dev"),
   })
   const runtime = CodeMode.make({ tools: { context7: { "resolve-library-id": resolveLibrary } } })
 
-  test("inline catalog uses bracket notation for dashed tool names", () => {
-    const instructions = runtime.instructions()
-
-    expect(instructions).toContain(
+  test("catalog signatures use bracket notation for dashed tool names", () => {
+    expect(runtime.catalog()[0]?.signature).toBe(
       'tools.context7["resolve-library-id"](input: {\n  query: string,\n  libraryName: string,\n}): Promise<unknown>',
     )
-    expect(instructions).toContain("Do not infer or normalize tool names")
-    expect(instructions).toContain("bracket notation and quotes are part of the path")
-    expect(instructions).not.toContain("tools.context7.resolve-library-id")
-    expect(instructions).not.toContain("tools.context7.resolve_library_id")
   })
 
   test("search results return callable bracket-notation paths and signatures", async () => {

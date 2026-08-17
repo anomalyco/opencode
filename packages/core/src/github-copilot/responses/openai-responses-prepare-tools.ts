@@ -1,10 +1,10 @@
 import { type LanguageModelV3CallOptions, type SharedV3Warning, UnsupportedFunctionalityError } from "@ai-sdk/provider"
-import { codeInterpreterArgsSchema } from "./tool/code-interpreter"
-import { fileSearchArgsSchema } from "./tool/file-search"
-import { webSearchArgsSchema } from "./tool/web-search"
-import { webSearchPreviewArgsSchema } from "./tool/web-search-preview"
-import { imageGenerationArgsSchema } from "./tool/image-generation"
-import type { OpenAIResponsesTool } from "./openai-responses-api-types"
+import { codeInterpreterArgsSchema } from "./tool/code-interpreter.js"
+import { fileSearchArgsSchema } from "./tool/file-search.js"
+import { webSearchArgsSchema } from "./tool/web-search.js"
+import { webSearchPreviewArgsSchema } from "./tool/web-search-preview.js"
+import { imageGenerationArgsSchema } from "./tool/image-generation.js"
+import type { OpenAIResponsesTool } from "./openai-responses-api-types.js"
 
 export function prepareResponsesTools({
   tools,

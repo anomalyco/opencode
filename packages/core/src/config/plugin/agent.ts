@@ -1,28 +1,32 @@
-export * as ConfigAgentPlugin from "./agent"
+export * as ConfigAgentPlugin from "./agent.js"
 
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Document, Info, type Entry } from "@opencode-ai/schema/config"
+import { ConfigAgent } from "@opencode-ai/schema/config/agent"
 import path from "path"
 import { Effect, Option, Schema, Stream } from "effect"
-import { AgentV2 } from "../../agent"
-import { Config } from "../../config"
-import { ConfigAgent } from "../agent"
-import { ConfigMarkdown } from "../markdown"
-import { FSUtil } from "../../fs-util"
-import { ConfigAgentV1 } from "../../v1/config/agent"
-import { ConfigMigrateV1 } from "../../v1/config/migrate"
-import { Global } from "../../global"
-import { PermissionV2 } from "../../permission"
-import type { LocationMutation } from "../../location-mutation"
-import type { ReadTool } from "../../tool/read"
-import type { EditTool } from "../../tool/edit"
+import { Agent } from "../../agent.js"
+import { Config } from "../../config.js"
+import { ConfigMarkdown } from "../markdown.js"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { ConfigAgentV1 } from "../../v1/config/agent.js"
+import { ConfigMigrateV1 } from "../../v1/config/migrate.js"
+import { Global } from "@opencode-ai/util/global"
+import { Permission } from "../../permission.js"
+import type { LocationMutation } from "../../location-mutation.js"
+import type { ReadTool } from "../../tool/plugin/read.js"
+import type { EditTool } from "../../tool/plugin/edit.js"
+import { AbsolutePath } from "../../schema.js"
 
 const legacySources = [
   { pattern: "{agent,agents}/**/*.md", primary: false },
   { pattern: "{mode,modes}/*.md", primary: true },
 ] as const
+// Keep in sync with the legacySources patterns and the name-strip regex in decode.
+const sourceDirectories = ["agent", "agents", "mode", "modes"] as const
 const decodeAgent = Schema.decodeUnknownOption(ConfigAgent.Info)
 const decodeLegacyAgent = Schema.decodeUnknownOption(ConfigAgentV1.Info)
-const decodeConfig = Schema.decodeUnknownOption(Config.Info)
+const decodeConfig = Schema.decodeUnknownOption(Info)
 type PathAction =
   | LocationMutation.ExternalDirectoryAuthorization["action"]
   | typeof ReadTool.name
@@ -56,32 +60,49 @@ export const Plugin = define({
           const files = yield* discover(fs, entry.path)
           return yield* Effect.forEach(files, (file) =>
             fs.readFileStringSafe(file.filepath).pipe(
-              Effect.map((content) => content && decode(file, content)),
+              Effect.map((content) => (content ? decode(file, content) : undefined)),
               Effect.catch(() => Effect.succeed(undefined)),
             ),
           ).pipe(
-            Effect.map((documents) =>
-              documents.filter((document): document is Config.Document => document !== undefined),
-            ),
+            Effect.map((documents) => documents.filter((document): document is Document => document !== undefined)),
           )
         })
       }).pipe(Effect.map((documents) => documents.flat()))
     })
-    const loaded = { documents: yield* load() }
+    const loaded = { documents: [] as Document[] }
+    const reload = load().pipe(
+      Effect.tap((documents) => Effect.sync(() => (loaded.documents = documents))),
+      Effect.andThen(ctx.agent.reload()),
+    )
+    // One merged trigger stream serializes reloads and shares one debounce
+    // window; subscribing before the initial scan means updates racing the
+    // scan still trigger a rebuild.
+    const sourceChanges = config
+      .changes()
+      .pipe(
+        Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isAgentSource(entries, update.path))),
+      )
+    const configUpdates = ctx.event.subscribe().pipe(Stream.filter((event) => event.type === "config.updated"))
+    yield* Stream.merge(sourceChanges, configUpdates).pipe(
+      Stream.debounce("100 millis"),
+      Stream.runForEach(() => reload),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    loaded.documents = yield* load()
     yield* ctx.agent.transform((draft) => {
       const permissions = expandPermissions(
         loaded.documents.flatMap((document) => document.info.permissions ?? []),
         global.home,
       )
       const configuredDefault = Config.latest(loaded.documents, "default_agent")
-      if (configuredDefault !== undefined) draft.default(AgentV2.ID.make(configuredDefault))
+      if (configuredDefault !== undefined) draft.default(Agent.ID.make(configuredDefault))
       for (const current of draft.list()) {
         draft.update(current.id, (agent) => agent.permissions.push(...permissions))
       }
 
       for (const document of loaded.documents) {
         for (const [id, item] of Object.entries(document.info.agents ?? {})) {
-          const agentID = AgentV2.ID.make(id)
+          const agentID = Agent.ID.make(id)
           if (item.disabled) {
             draft.remove(agentID)
             continue
@@ -113,20 +134,20 @@ export const Plugin = define({
         }
       }
     })
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
-      Stream.runForEach(() =>
-        load().pipe(
-          Effect.tap((documents) => Effect.sync(() => (loaded.documents = documents))),
-          Effect.andThen(ctx.agent.reload()),
-        ),
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
   }),
 })
 
-function expandPermissions(rules: PermissionV2.Ruleset, home: string): PermissionV2.Ruleset {
+// Matches anything at or under <root>/{agent,agents,mode,modes}. No file-suffix
+// check: directory-level events such as renames carry no per-file paths.
+function isAgentSource(entries: Entry[], file: string) {
+  return entries.some(
+    (entry) =>
+      entry.type === "directory" &&
+      sourceDirectories.some((name) => FSUtil.contains(path.join(entry.path, name), file)),
+  )
+}
+
+function expandPermissions(rules: Permission.Ruleset, home: string): Permission.Ruleset {
   // Expand only resources tools resolve as filesystem paths. Bash resources are raw shell text:
   // rewriting `$HOME/private/**` would miss `$HOME/private/key`, and safe expansion needs shell-aware parsing.
   return rules.map((rule) =>
@@ -139,11 +160,14 @@ function isPathAction(action: string): action is PathAction {
 }
 
 function expandHome(resource: string, home: string) {
-  if (resource.startsWith("~/")) return home + resource.slice(1)
   if (resource === "~") return home
   if (resource === "$HOME") return home
-  if (resource.startsWith("$HOME/")) return home + resource.slice(5)
-  if (resource.startsWith("$HOME\\")) return home + resource.slice(5)
+  const relative = resource.startsWith("~/")
+    ? resource.slice(2)
+    : resource.startsWith("$HOME/") || resource.startsWith("$HOME\\")
+      ? resource.slice(6)
+      : undefined
+  if (relative !== undefined) return (path.posix.isAbsolute(home) ? path.posix : path.win32).join(home, relative)
   return resource
 }
 
@@ -187,5 +211,5 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
     }),
   )
   if (!info) return
-  return new Config.Document({ type: "document", path: file.filepath, info })
+  return new Document({ type: "document", path: AbsolutePath.make(file.filepath), info })
 }

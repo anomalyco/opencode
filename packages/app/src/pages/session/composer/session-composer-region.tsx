@@ -5,6 +5,8 @@ import { SessionPermissionDock } from "@/pages/session/composer/session-permissi
 import { SessionQuestionDock } from "@/pages/session/composer/session-question-dock"
 import { SessionFollowupDock } from "@/pages/session/composer/session-followup-dock"
 import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
+import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
+import { SessionBackgroundDock } from "@/pages/session/composer/session-background-dock"
 import type { SessionComposerRegionController } from "./session-composer-region-controller"
 
 export function SessionComposerRegion(props: {
@@ -14,6 +16,8 @@ export function SessionComposerRegion(props: {
   const language = useLanguage()
   const controller = props.controller
   const settings = useSettings()
+  const background = () =>
+    controller.state.background.blocking().length > 0 || controller.state.background.tasks().length > 0
   const rolled = () => {
     const revert = controller.revert()
     return revert?.items.length ? revert : undefined
@@ -59,6 +63,28 @@ export function SessionComposerRegion(props: {
         </Show>
 
         <Show when={controller.showComposer()}>
+          <Show when={controller.dock()}>
+            <div
+              classList={{
+                "overflow-hidden": true,
+                "pointer-events-none": controller.dockProgress() < 0.98,
+              }}
+              style={{
+                "max-height": `${controller.dockHeight() * controller.dockProgress()}px`,
+              }}
+            >
+              <div ref={controller.setDockBodyRef}>
+                <SessionTodoDock
+                  todos={controller.state.todos()}
+                  collapsed={controller.todo.collapsed()}
+                  onToggle={controller.todo.onToggle}
+                  collapseLabel={language.t("session.todo.collapse")}
+                  expandLabel={language.t("session.todo.expand")}
+                  dockProgress={controller.dockProgress()}
+                />
+              </div>
+            </div>
+          </Show>
           <Show
             when={controller.promptReady()}
             fallback={
@@ -75,7 +101,10 @@ export function SessionComposerRegion(props: {
                     </div>
                   )}
                 </Show>
-                <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
+                <div
+                  class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none"
+                  style={{ "margin-top": `${-36 * controller.dockProgress()}px` }}
+                >
                   {controller.handoffPrompt() || language.t("prompt.loading")}
                 </div>
               </>
@@ -83,7 +112,11 @@ export function SessionComposerRegion(props: {
           >
             <Show when={rolled()} keyed>
               {(revert) => (
-                <div>
+                <div
+                  style={{
+                    "margin-top": `${-36 * controller.dockProgress()}px`,
+                  }}
+                >
                   <SessionRevertDock
                     items={revert.items}
                     restoring={revert.restoring}
@@ -93,12 +126,21 @@ export function SessionComposerRegion(props: {
                 </div>
               )}
             </Show>
+            <Show when={background()}>
+              <div style={{ "margin-top": `${-controller.lift()}px` }}>
+                <SessionBackgroundDock
+                  blocking={controller.state.background.blocking()}
+                  tasks={controller.state.background.tasks()}
+                  onBackground={() => void controller.state.background.move()}
+                />
+              </div>
+            </Show>
             <div
               classList={{
                 "relative z-[70]": true,
               }}
               style={{
-                "margin-top": `${-controller.lift()}px`,
+                "margin-top": `${background() ? -36 : -controller.lift()}px`,
               }}
             >
               <Show when={controller.followup()?.items.length}>

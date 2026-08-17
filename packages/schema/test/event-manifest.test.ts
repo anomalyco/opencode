@@ -19,7 +19,6 @@ import { Plugin } from "../src/plugin.js"
 import { SessionEvent } from "../src/session-event.js"
 import { SessionID } from "../src/session-id.js"
 import { SessionMessage } from "../src/session-message.js"
-import { SessionV1 } from "../src/session-v1.js"
 import { WorkspaceEvent } from "../src/workspace-event.js"
 
 describe("public event manifest", () => {
@@ -32,18 +31,6 @@ describe("public event manifest", () => {
     expect(EventManifest.Definitions.filter((definition) => definition.type === "agent.updated")).toEqual([
       Agent.Event.Updated,
     ])
-    expect(SessionV1.Event.Definitions).toEqual([
-      SessionV1.Event.Created,
-      SessionV1.Event.Updated,
-      SessionV1.Event.Deleted,
-      SessionV1.Event.MessageUpdated,
-      SessionV1.Event.MessageRemoved,
-      SessionV1.Event.PartUpdated,
-      SessionV1.Event.PartRemoved,
-      SessionV1.Event.PartDelta,
-      SessionV1.Event.Diff,
-      SessionV1.Event.Error,
-    ])
     expect(Array.from(EventManifest.Latest.keys())).toEqual(
       Array.from(new Set(EventManifest.Definitions.map((definition) => definition.type))),
     )
@@ -51,8 +38,12 @@ describe("public event manifest", () => {
     expect(EventManifest.Latest.get("plugin.updated")).toBe(Plugin.Event.Updated)
     expect(EventManifest.Server.get("mcp.status.changed")).toBe(McpEvent.StatusChanged)
     expect(EventManifest.Server.get("mcp.resources.changed")).toBe(McpEvent.ResourcesChanged)
+    expect(EventManifest.Server.get("session.created")).toBe(SessionEvent.Created)
     expect(EventManifest.Server.get("session.deleted")).toBe(SessionEvent.Deleted)
     expect(EventManifest.Server.has("mcp.tools.changed")).toBe(false)
+    expect(EventManifest.Server.has("question.asked")).toBe(false)
+    expect(EventManifest.Server.has("question.replied")).toBe(false)
+    expect(EventManifest.Server.has("question.rejected")).toBe(false)
     expect(Agent.Event.Updated.durable).toBeUndefined()
     expect(EventManifest.Durable.has("agent.updated")).toBe(false)
   })
@@ -79,12 +70,6 @@ describe("public event manifest", () => {
     expect(EventManifest.Latest.has("mcp.browser.open.failed")).toBe(false)
     expect(EventManifest.Latest.has("ide.installed")).toBe(false)
     expect(IdeEvent.Definitions).toEqual([IdeEvent.Installed])
-    const sessionV1TailStart = EventManifest.Definitions.indexOf(SessionV1.Event.PartDelta)
-    expect(EventManifest.Definitions.slice(sessionV1TailStart, sessionV1TailStart + 3)).toEqual([
-      SessionV1.Event.PartDelta,
-      SessionV1.Event.Diff,
-      SessionV1.Event.Error,
-    ])
     expect(EventManifest.Durable.get("session.step.ended.1")).toBe(SessionEvent.Step.Ended)
     expect(EventManifest.Durable.has("session.step.ended.2")).toBe(false)
   })
@@ -93,21 +78,17 @@ describe("public event manifest", () => {
     expect(Array.from(EventManifest.Durable.keys()).toSorted()).toEqual(
       [
         "session.created.1",
-        "session.updated.1",
-        "session.deleted.1",
         "session.deleted.2",
-        "message.updated.1",
-        "message.removed.1",
-        "message.part.updated.1",
-        "message.part.removed.1",
         "session.agent.selected.1",
         "session.model.selected.1",
         "session.moved.1",
         "session.renamed.1",
         "session.usage.recorded.1",
         "session.forked.2",
-        "session.input.promoted.1",
-        "session.input.admitted.1",
+        "session.inbox.delivered.1",
+        "session.inbox.enqueued.1",
+        "session.inbox.cancelled.1",
+        "session.inbox.delivery.changed.1",
         "session.execution.started.1",
         "session.execution.succeeded.1",
         "session.execution.failed.1",
@@ -125,19 +106,18 @@ describe("public event manifest", () => {
         "session.tool.input.started.1",
         "session.tool.input.ended.1",
         "session.tool.called.1",
-        "session.tool.progress.1",
-        "session.tool.success.1",
-        "session.tool.failed.1",
+        "session.tool.success.2",
+        "session.tool.failed.2",
         "session.reasoning.started.1",
         "session.reasoning.ended.1",
         "session.retry.scheduled.1",
-        "session.compaction.admitted.1",
         "session.compaction.started.1",
         "session.compaction.ended.1",
         "session.compaction.failed.1",
         "session.revert.staged.1",
         "session.revert.cleared.1",
         "session.revert.committed.1",
+        "worktree.resolved.1",
       ].toSorted(),
     )
     expect(SessionEvent.DurableDefinitions).toEqual([
@@ -152,6 +132,8 @@ describe("public event manifest", () => {
     expect(EventManifest.Latest.has("session.usage.recorded")).toBe(false)
     expect(SessionEvent.UsageUpdated.durability).toBe("ephemeral")
     expect(SessionEvent.Compaction.Delta.durability).toBe("ephemeral")
+    expect(SessionEvent.Tool.Progress.durability).toBe("ephemeral")
+    expect(EventManifest.Server.get("session.tool.progress")).toBe(SessionEvent.Tool.Progress)
     expect(EventManifest.Durable.has("session.compaction.delta.1")).toBe(false)
     expect(EventManifest.ServerDefinitions).toContain(SessionEvent.UsageUpdated)
     expect(EventManifest.Definitions.every((definition) => definition.durability !== undefined)).toBe(true)
@@ -176,7 +158,7 @@ describe("public event manifest", () => {
     const tool = SessionEvent.Tool.Called.data.make({
       sessionID,
       assistantMessageID,
-      callID: "call_test",
+      id: "call_test",
       input: {},
       executed: true,
       state: { itemId: "item_test" },

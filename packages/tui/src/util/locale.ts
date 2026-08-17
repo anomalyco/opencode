@@ -16,19 +16,6 @@ export function datetime(input: number): string {
   return `${localTime} · ${localDate}`
 }
 
-export function todayTimeOrDateTime(input: number): string {
-  const date = new Date(input)
-  const now = new Date()
-  const isToday =
-    date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
-
-  if (isToday) {
-    return time(input)
-  } else {
-    return datetime(input)
-  }
-}
-
 export function number(num: number): string {
   if (num >= 1000000) {
     return (num / 1000000).toFixed(1) + "M"
@@ -67,20 +54,30 @@ export function truncate(str: string, len: number): string {
 
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
+export function graphemes(str: string) {
+  return Array.from(graphemeSegmenter.segment(str), (item) => item.segment)
+}
+
+export function takeWidth(str: string, width: number) {
+  if (width <= 0) return ""
+  if (stringWidth(str) <= width) return str
+
+  const result: string[] = []
+  let used = 0
+  for (const segment of graphemes(str)) {
+    const next = stringWidth(segment)
+    if (used + next > width) break
+    result.push(segment)
+    used += next
+  }
+  return result.join("")
+}
+
 export function truncateWidth(str: string, width: number): string {
   if (width <= 0) return ""
   if (stringWidth(str) <= width) return str
   if (width === 1) return "…"
-
-  const result: string[] = []
-  let used = 0
-  for (const item of graphemeSegmenter.segment(str)) {
-    const next = stringWidth(item.segment)
-    if (used + next > width - 1) break
-    result.push(item.segment)
-    used += next
-  }
-  return result.join("") + "…"
+  return takeWidth(str, width - 1) + "…"
 }
 
 export function truncateLeft(str: string, len: number): string {
@@ -96,11 +93,6 @@ export function truncateMiddle(str: string, maxLength: number = 35): string {
   const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
 
   return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
-}
-
-export function pluralize(count: number, singular: string, plural: string): string {
-  const template = count === 1 ? singular : plural
-  return template.replace("{}", count.toString())
 }
 
 export * as Locale from "./locale"
