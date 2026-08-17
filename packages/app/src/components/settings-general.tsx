@@ -97,12 +97,13 @@ export const SettingsGeneral: Component = () => {
   const dir = createMemo(() => decode64(params.dir))
   const accepting = createMemo(() => {
     const value = dir()
-    if (!value) return false
+    if (!value) return settings.permissions.autoApprove()
     if (!params.id) return permission.isAutoAcceptingDirectory(value)
     return permission.isAutoAccepting(params.id, value)
   })
 
   const toggleAccept = (checked: boolean) => {
+    settings.permissions.setAutoApprove(checked)
     const value = dir()
     if (!value) return
 

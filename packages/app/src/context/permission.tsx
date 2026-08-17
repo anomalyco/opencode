@@ -91,7 +91,11 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         (dispose) => ({
           key,
           dispose,
-          state: createServerPermissionState({ sdk: ctx.sdk, sync: ctx.sync }),
+          state: createServerPermissionState({
+        sdk: ctx.sdk,
+        sync: ctx.sync,
+        getAutoApproveGlobal: () => settings.permissions.autoApprove(),
+      }),
         }),
         owner ?? undefined,
       )
@@ -140,6 +144,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       const directory = activeDirectory()
       if (!directory) return
       selected().enableConfiguredDirectory(directory)
+      selected().enableAutoApproveDirectory(directory)
     })
 
     const permissionsEnabled = createMemo(() => {
@@ -187,7 +192,11 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
 type PermissionState = ReturnType<typeof createServerPermissionState>
 type PermissionEvent = Parameters<Parameters<ServerSDK["event"]["listen"]>[0]>[0]
 
-function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }) {
+function createServerPermissionState(input: {
+  sdk: ServerSDK
+  sync: ServerSync
+  getAutoApproveGlobal?: () => boolean
+}) {
   const [store, setStore, _, ready] = persisted(
     {
       ...Persist.serverGlobal(input.sdk.scope, "permission", ["permission.v3"]),
@@ -216,6 +225,18 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
     if (meta.disposed || !ready()) return
     const [childStore] = input.sync.child(directory)
     if (childStore.config.permission !== "allow") return
+    const key = directoryAcceptKey(directory)
+    if (store.autoAccept[key] !== undefined) return
+    setStore(
+      produce((draft) => {
+        draft.autoAccept[key] = true
+      }),
+    )
+  }
+
+  function enableAutoApproveDirectory(directory: string) {
+    if (meta.disposed || !ready()) return
+    if (!input.getAutoApproveGlobal?.()) return
     const key = directoryAcceptKey(directory)
     if (store.autoAccept[key] !== undefined) return
     setStore(
@@ -475,6 +496,7 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
     api,
     sync: input.sync,
     enableConfiguredDirectory,
+    enableAutoApproveDirectory,
     permissionsEnabled(directory: string) {
       if (meta.disposed) return false
       const [childStore] = input.sync.child(directory)
