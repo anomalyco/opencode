@@ -87,11 +87,6 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       renderer.off("blur", onBlur)
     })
 
-    createEffect(() => {
-      if (config.experimental?.tab_scroll === true) return
-      scrollAnchors.clear()
-    })
-
     function state() {
       if (config.tabs.scope === "cwd") return store.cwd[paths.cwd] ?? fallback
       return store.global

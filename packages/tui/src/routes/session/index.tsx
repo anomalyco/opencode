@@ -429,7 +429,6 @@ export function Session(props: { verticalTabsWidth: number }) {
     return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height) - 1
   }
   function updateAwayFromBottom() {
-    if (config.experimental?.tab_scroll !== true) return
     if (awayTimer) clearTimeout(awayTimer)
     awayTimer = setTimeout(() => {
       awayTimer = undefined
@@ -440,7 +439,7 @@ export function Session(props: { verticalTabsWidth: number }) {
     })
   }
   function saveScrollAnchor() {
-    if (config.experimental?.tab_scroll !== true || !isAwayFromBottom()) {
+    if (!isAwayFromBottom()) {
       sessionTabs.setScrollAnchor(sessionID, undefined)
       return
     }
@@ -457,7 +456,7 @@ export function Session(props: { verticalTabsWidth: number }) {
     else sessionTabs.setScrollAnchor(sessionID, undefined)
   }
   function restoreScrollPosition() {
-    const anchor = config.experimental?.tab_scroll === true ? sessionTabs.scrollAnchor(sessionID) : undefined
+    const anchor = sessionTabs.scrollAnchor(sessionID)
     const index = anchor ? boundaries().indexOf(anchor.messageID) : -1
     if (!anchor || index === -1) {
       scroll.scrollTo(scroll.scrollHeight)
@@ -1195,7 +1194,7 @@ export function Session(props: { verticalTabsWidth: number }) {
               </scrollbox>
             </box>
             <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
-              <Show when={config.experimental?.tab_scroll === true && awayFromBottom()}>
+              <Show when={awayFromBottom()}>
                 <text
                   fg={latestHovered() ? theme.text.default : theme.text.subdued}
                   onMouseOver={() => setLatestHovered(true)}
