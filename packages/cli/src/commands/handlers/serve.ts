@@ -12,6 +12,7 @@ export default Runtime.handler(
       hostname: Option.getOrUndefined(input.hostname),
       port: Option.getOrUndefined(input.port),
       cors: input.cors.length > 0 ? input.cors : undefined,
+      noAuth: input.noAuth,
     })
   }),
 )
