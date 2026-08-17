@@ -1,5 +1,6 @@
 import { Component, createMemo, Show } from "solid-js"
-import { useSync } from "@/context/sync"
+import { useData } from "@/context/server"
+import { useWorkspaceLocation } from "@/context/location"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
@@ -14,12 +15,13 @@ const statusLabels = {
 } as const
 
 export const DialogSelectMcp: Component = () => {
-  const sync = useSync()
+  const data = useData()
+  const sdk = useWorkspaceLocation()
   const language = useLanguage()
 
   const items = createMemo(() =>
-    Object.entries(sync().data.mcp ?? {})
-      .map(([name, status]) => ({ name, status: status.status }))
+    (data.location.mcp.server.list({ directory: sdk().directory }) ?? [])
+      .map((server) => ({ name: server.name, status: server.status.status }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
 
@@ -47,7 +49,8 @@ export const DialogSelectMcp: Component = () => {
         }}
       >
         {(i) => {
-          const mcpStatus = () => sync().data.mcp[i.name]
+          const mcpStatus = () =>
+            data.location.mcp.server.list({ directory: sdk().directory })?.find((server) => server.name === i.name)?.status
           const status = () => mcpStatus()?.status
           const statusLabel = () => {
             const key = status() ? statusLabels[status() as keyof typeof statusLabels] : undefined

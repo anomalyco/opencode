@@ -39,7 +39,7 @@ export default defineMain({
           { find: /^@\/context\/file$/, replacement: path.resolve(mocks, "app/context/file.ts") },
           { find: /^@\/context\/prompt$/, replacement: path.resolve(mocks, "app/context/prompt.ts") },
           { find: /^@\/context\/layout$/, replacement: path.resolve(mocks, "app/context/layout.ts") },
-          { find: /^@\/context\/sdk$/, replacement: path.resolve(mocks, "app/context/sdk.ts") },
+          { find: /^@\/context\/location$/, replacement: path.resolve(mocks, "app/context/location.ts") },
           { find: /^@\/context\/sync$/, replacement: path.resolve(mocks, "app/context/sync.ts") },
           { find: /^@\/context\/comments$/, replacement: path.resolve(mocks, "app/context/comments.ts") },
           { find: /^@\/context\/command$/, replacement: path.resolve(mocks, "app/context/command.ts") },

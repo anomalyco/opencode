@@ -21,13 +21,3 @@ export function mockProviderAuth(provider: string, methods: ProviderAuthMethod[]
     delete data.provider_auth[provider]
   }
 }
-
-export function useServerSync() {
-  return () => ({
-    data,
-    set(key: "provider_auth", value: typeof data.provider_auth) {
-      data[key] = value
-    },
-    updateConfig: async () => {},
-  })
-}

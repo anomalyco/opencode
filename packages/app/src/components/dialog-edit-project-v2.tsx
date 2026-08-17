@@ -11,7 +11,7 @@ import { For, Show, createSignal, startTransition } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { getProjectAvatarVariant, type LocalProject } from "@/context/layout"
 import { ServerConnection } from "@/context/servers"
-import { SDKProvider } from "@/context/sdk"
+import { LocationProvider } from "@/context/location"
 import { displayName, getProjectAvatarSource } from "@/pages/layout/helpers"
 import { createEditProjectModel } from "./edit-project"
 import { ProjectSettingsExtensions } from "./project-settings-extensions"
@@ -22,9 +22,9 @@ import "./dialog-edit-project-v2.css"
 export function DialogEditProjectV2(props: { project: LocalProject; server: ServerConnection.Any }) {
   return (
     <SettingsServerDataScope server={props.server}>
-      <SDKProvider directory={props.project.worktree}>
+      <LocationProvider directory={props.project.worktree}>
         <ProjectSettingsDialog project={props.project} server={props.server} />
-      </SDKProvider>
+      </LocationProvider>
     </SettingsServerDataScope>
   )
 }

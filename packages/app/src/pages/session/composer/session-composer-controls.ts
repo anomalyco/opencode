@@ -1,5 +1,4 @@
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { createQuery } from "@tanstack/solid-query"
 import { useNavigate, useSearchParams } from "@solidjs/router"
 import { type Accessor, createMemo } from "solid-js"
 import type { PromptInputControls } from "@/components/prompt-input/contracts"
@@ -8,43 +7,40 @@ import { useDirectoryPicker } from "@/components/directory-picker"
 import { useGlobal, useServerCtx } from "@/context/global"
 import { useLayout } from "@/context/layout"
 import { useLocal, type ModelSelection } from "@/context/local"
-import type { QueryOptionsApi } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
 import { serverName, ServerConnection, useServers } from "@/context/servers"
-import { useSDK } from "@/context/sdk"
-import { useSync } from "@/context/sync"
+import { useWorkspaceLocation } from "@/context/location"
 import { useTabs } from "@/context/tabs"
 import { useProviders } from "@/hooks/use-providers"
-import { pathKey } from "@/utils/path-key"
+import { useData } from "@/context/server"
+import { normalizeAgentList } from "@/context/global-sync/utils"
 
 export function createPromptInputController(input: {
   sessionKey: Accessor<string>
   sessionID: Accessor<string | undefined>
-  queryOptions: Pick<QueryOptionsApi, "agents">
   model?: ModelSelection
 }) {
   const layout = useLayout()
   const local = useLocal()
-  const sdk = useSDK()
-  const sync = useSync()
+  const sdk = useWorkspaceLocation()
+  const data = useData()
   const providers = useProviders(() => sdk().directory)
   const view = layout.view(input.sessionKey)
-  const agentsQuery = createQuery(() => input.queryOptions.agents(pathKey(sdk().directory)))
 
   return createMemo<PromptInputControls>(() => {
     return {
       agents: {
-        available: sync().data.agent,
+        available: normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []),
         options: local.agent.list().map((agent) => agent.name),
         current: local.agent.current()?.name ?? "",
-        loading: agentsQuery.isLoading,
+        loading: data.location.agent.list({ directory: sdk().directory }) === undefined,
         visible: local.agent.visible(),
         select: local.agent.set,
       },
       model: {
         selection: input.model ?? local.model,
         paid: providers.paid().length > 0,
-        loading: (local.agent.visible() && agentsQuery.isLoading) || !providers.ready(),
+        loading: (local.agent.visible() && data.location.agent.list({ directory: sdk().directory }) === undefined) || !providers.ready(),
       },
       session: {
         id: input.sessionID(),
@@ -58,7 +54,7 @@ export function createPromptInputController(input: {
 export function createPromptProjectControls(props: { draftId: string }) {
   const server = useServers()
   const serverSDK = useServerSDK()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const tabs = useTabs()
   const global = useGlobal()
   const pickDirectory = useDirectoryPicker()

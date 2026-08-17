@@ -1,6 +1,5 @@
 import type {
   AgentListOutput,
-  ModelDefaultOutput,
   ModelListOutput,
   ProviderListOutput,
 } from "@opencode-ai/client/promise"
@@ -38,7 +37,6 @@ export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Ag
 export function normalizeProviderList(
   providers: ProviderListOutput["data"] | ProviderListResponse,
   models?: ModelListOutput["data"],
-  defaultModel?: ModelDefaultOutput["data"],
 ): NormalizedProviderListResponse {
   if (!Array.isArray(providers)) {
     return providers
@@ -113,10 +111,7 @@ export function normalizeProviderList(
     connected: providers.map((provider) => provider.id),
     default: Object.fromEntries(
       providers.flatMap((provider) => {
-        const model =
-          defaultModel?.providerID === provider.id
-            ? defaultModel
-            : models?.find((item) => item.providerID === provider.id && item.status !== "deprecated")
+        const model = models?.find((item) => item.providerID === provider.id && item.status !== "deprecated")
         return model ? [[provider.id, model.id]] : []
       }),
     ),

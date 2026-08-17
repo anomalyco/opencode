@@ -5,8 +5,7 @@ import { showToast } from "@/utils/toast"
 import { useParams } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { getFilename } from "@opencode-ai/core/util/path"
-import { useSDK } from "./sdk"
-import { useSync } from "./sync"
+import { useWorkspaceLocation } from "./location"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { createPathHelpers } from "./file/path"
@@ -56,8 +55,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
   name: "File",
   gate: false,
   init: () => {
-    const sdk = useSDK()
-    useSync()
+    const sdk = useWorkspaceLocation()
     const params = useParams()
     const serverSDK = useServerSDK()
     const language = useLanguage()
@@ -80,8 +78,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       scope,
       normalizeDir: path.normalizeDir,
       list: (dir) =>
-        sdk()
-          .api.file.list({ path: dir, location: { directory: scope() } })
+        serverSDK.api.file
+          .list({ path: dir, location: { directory: scope() } })
           .then((x) =>
             x.data.map((entry) => ({
               ...entry,
@@ -187,8 +185,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       setLoading(file)
 
-      const promise = sdk()
-        .api.file.read({ path: file, location: { directory } })
+      const promise = serverSDK.api.file
+        .read({ path: file, location: { directory } })
         .then((data) => {
           if (scope() !== directory) return
           const content = { type: "text" as const, content: new TextDecoder().decode(data) }

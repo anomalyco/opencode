@@ -45,9 +45,8 @@ import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useLanguage } from "@/context/language"
-import { useServerSync } from "@/context/server-sync"
-import { useSDK } from "@/context/sdk"
-import { useSync } from "@/context/sync"
+import { useData } from "@/context/server"
+import { useWorkspaceLocation } from "@/context/location"
 import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
@@ -408,9 +407,8 @@ function MessageTimelineView(
 ) {
   let touchGesture: number | undefined
   const language = useLanguage()
-  const serverSync = useServerSync()
-  const sdk = useSDK()
-  const sync = useSync()
+  const data = useData()
+  const sdk = useWorkspaceLocation()
   const shouldAnchorBottom = createMemo(() => props.shouldAnchorBottom)
   const hasScrollGesture = createMemo(() => props.hasScrollGesture)
   const ownerSessionKey = props.data.sessionKey()
@@ -431,7 +429,20 @@ function MessageTimelineView(
   const getMsgPart = props.data.part
   const projection = props.data.projection
   const sessionDirectory = createMemo(() => props.session.data.info()?.location.directory ?? sdk().directory)
-  const workspaceSession = createMemo(() => isWorkspaceDirectory(sync().project, sessionDirectory()))
+  const project = createMemo(() => {
+    const projectID = props.session.data.info()?.projectID
+    const value = projectID
+      ? data.project.get(projectID)
+      : data.project.list().find((item) => containsDirectory(item.canonical, sessionDirectory()))
+    if (!value) return
+    return { ...value, worktree: value.canonical, worktrees: [] }
+  })
+  const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
+  createEffect(() => {
+    const directory = project()?.worktree
+    if (!directory) return
+    void data.location.vcs.sync({ directory }).catch(() => undefined)
+  })
   const [workspaceSuggestionDismissed, setWorkspaceSuggestionDismissed] = createSignal(false)
   const [summaryOpen, setSummaryOpen] = createSignal(false)
   const setSummary = (open: boolean) => {
@@ -1074,7 +1085,7 @@ function MessageTimelineView(
           diffSummaryRow().userMessageID === props.userMessages.at(-1)?.id &&
           !workspaceSession() &&
           props.workspaceMoveEligible &&
-          sync().project?.vcs === "git" &&
+          project()?.vcs === "git" &&
           sessionStatus().type === "idle"
         return (
           <TimelineRowFrame row={diffSummaryRow()}>
@@ -1082,7 +1093,7 @@ function MessageTimelineView(
               <TimelineDiffSummaryRow
                 diffs={diffSummaryRow().diffs}
                 action={
-                  <Show when={canMove() && sync().project}>
+                  <Show when={canMove() && project()}>
                     {(project) => (
                       <WorkspaceMoveAction
                         variant="inline"
@@ -1331,7 +1342,7 @@ function MessageTimelineView(
                 {(id) => (
                   <div class="shrink-0 flex items-center gap-2">
                     <SessionContextUsage placement="bottom" />
-                    <Show when={!parentID() && sync().project}>
+                    <Show when={!parentID() && project()}>
                       {(project) => (
                         <KobaltePopover
                           open={summaryOpen()}
@@ -1354,8 +1365,8 @@ function MessageTimelineView(
                                 project={project()}
                                 directory={sessionDirectory()}
                                 local={!workspaceSession()}
-                                branch={sync().data.vcs?.branch}
-                                baseBranch={serverSync.child(project().worktree)[0].vcs?.branch}
+                                branch={data.location.vcs.info({ directory: sdk().directory })?.branch.current}
+                                baseBranch={data.location.vcs.info({ directory: project().worktree })?.branch.current}
                                 diffs={sessionDiffs()}
                                 sessionID={id}
                                 moveEligible={props.workspaceMoveEligible}

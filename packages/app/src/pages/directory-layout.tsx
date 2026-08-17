@@ -2,16 +2,17 @@ import { DataProvider } from "@opencode-ai/session-ui/context"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { createEffect, createMemo, createResource, onCleanup, type ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, type ParentProps, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
-import { SDKProvider } from "@/context/sdk"
-import { useSync } from "@/context/sync"
+import { LocationProvider } from "@/context/location"
 import { decode64 } from "@/utils/base64"
 import { Schema } from "effect"
 import type { ServerConnection } from "@/context/servers"
 import { sessionHref } from "@/utils/session-route"
-import { useServerSync } from "@/context/server-sync"
+import { useData } from "@/context/server"
+import { useServerSDK } from "@/context/server-sdk"
+import { normalizeSessionMessages } from "@/utils/session-message"
 
 export function DirectoryDataProvider(
   props: ParentProps<{
@@ -23,8 +24,8 @@ export function DirectoryDataProvider(
   const location = useLocation()
   const navigate = useNavigate()
   const params = useParams()
-  const sync = useSync()
-  const serverSync = useServerSync()
+  const data = useData()
+  const serverSDK = useServerSDK()
   const language = useLanguage()
   const directory = () => props.directory
   const slug = createMemo(() => base64Encode(directory()))
@@ -33,37 +34,53 @@ export function DirectoryDataProvider(
     return `/${slug()}/session/${sessionID}`
   }
   const navigateToSession = async (sessionID: string) => {
-    const session = serverSync.session
-    await Promise.allSettled([session.lineage.resolve(sessionID), session.sync(sessionID)])
+    await data.session.lineage.resolve(sessionID).catch(() => undefined)
     navigate(href(sessionID))
   }
+  const legacyData = createMemo(() => {
+    const sessionID = params.id
+    const transcript = sessionID ? normalizeSessionMessages(sessionID, data.session.message.list(sessionID)) : undefined
+    return {
+      session: data.session.list(),
+      session_status: sessionID
+        ? {
+            [sessionID]: data.session.status(sessionID) === "running" ? ({ type: "busy" } as const) : ({ type: "idle" } as const),
+          }
+        : {},
+      session_diff: {},
+      message: sessionID && transcript ? { [sessionID]: transcript.messages } : {},
+      part: transcript ? Object.fromEntries(transcript.parts) : {},
+    }
+  })
 
   createEffect(() => {
     // A draft lives at /new-session?draftId=… and has no directory segment to normalize.
     if (props.draftID || props.server) return
-    const next = sync().data.path.directory
+    const next = data.location.info({ directory: directory() })?.directory
     if (!next || next === directory()) return
     const path = location.pathname.slice(slug().length + 1)
     navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
   })
 
-  createResource(
-    () => params.id,
-    (id) => serverSync.session.hydrate(id).catch(() => {}),
-  )
-
   createEffect(() => {
+    if (serverSDK.connection.status() !== "connected") return
+    void data.project.sync().catch(() => undefined)
     const sessionID = params.id
     if (!sessionID) return
-    serverSync.session.pin(sessionID)
-    onCleanup(() => serverSync.session.unpin(sessionID))
+    void Promise.allSettled([
+      data.session.sync(sessionID, { children: true }),
+      data.session.pending.sync(sessionID),
+      data.session.message.sync(sessionID),
+      data.session.permission.sync(sessionID),
+      data.session.form.sync(sessionID),
+    ])
   })
 
   return (
     <Show when={directory()} keyed>
       {(directory) => (
         <DataProvider
-          data={sync().data}
+          data={legacyData()}
           directory={directory}
           sessionID={params.id}
           onNavigateToSession={navigateToSession}
@@ -116,9 +133,9 @@ export default function Layout(props: ParentProps) {
   return (
     <Show when={resolved()} keyed>
       {(resolved) => (
-        <SDKProvider directory={resolved}>
+        <LocationProvider directory={resolved}>
           <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
-        </SDKProvider>
+        </LocationProvider>
       )}
     </Show>
   )
