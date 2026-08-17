@@ -341,15 +341,19 @@ function CommandView(props: { title: string; output: string; message: string }) 
           esc close
         </text>
       </box>
-      <box
-        backgroundColor={overlayTheme.background.default}
-        paddingLeft={2}
-        paddingRight={2}
-        paddingTop={1}
-        paddingBottom={1}
-      >
-        <text fg={overlayTheme.text.default}>{props.output.trim()}</text>
-      </box>
+      <Show when={props.output.trim()}>
+        {(output) => (
+          <box
+            backgroundColor={overlayTheme.background.default}
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            paddingBottom={1}
+          >
+            <text fg={overlayTheme.text.default}>{output()}</text>
+          </box>
+        )}
+      </Show>
       <box paddingLeft={2} paddingRight={2}>
         <text fg={theme.text.subdued}>{props.message}</text>
       </box>
