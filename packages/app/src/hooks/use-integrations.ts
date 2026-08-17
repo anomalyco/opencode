@@ -9,7 +9,11 @@ export function useIntegrations(directory: Accessor<string | undefined>) {
   createEffect(() => {
     if (serverSDK.connection.status() !== "connected") return
     const value = directory()
-    void data.location.integration.sync(value ? { directory: value } : undefined).catch(() => undefined)
+    void (async () => {
+      const ref = value ? { directory: value } : undefined
+      if (!ref) await data.location.syncInfo()
+      await data.location.integration.sync(ref ?? data.location.default())
+    })().catch(() => undefined)
   })
 
   return {

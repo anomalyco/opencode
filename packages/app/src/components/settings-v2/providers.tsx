@@ -59,7 +59,7 @@ export const SettingsProvidersV2: Component<{
         Object.values(provider.models).some((model) => {
           if (typeof model !== "object" || model === null || !("cost" in model)) return false
           const cost = model.cost
-          return typeof cost === "object" && cost !== null && "input" in cost
+          return typeof cost === "object" && cost !== null && "input" in cost && cost.input > 0
         }),
     )
   })

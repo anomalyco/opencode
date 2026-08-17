@@ -29,7 +29,11 @@ export function useProviders(directory: Accessor<string | undefined>) {
   createEffect(() => {
     if (sdk.connection.status() !== "connected") return
     const ref = location()
-    void Promise.all([data.location.provider.sync(ref), data.location.model.sync(ref)]).catch(() => undefined)
+    void (async () => {
+      if (!ref) await data.location.syncInfo()
+      const resolved = ref ?? data.location.default()
+      await Promise.all([data.location.provider.sync(resolved), data.location.model.sync(resolved)])
+    })().catch(() => undefined)
   })
   const integrations = useIntegrations(directory)
 
