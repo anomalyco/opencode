@@ -168,6 +168,12 @@ Audience filtering applies when opencode assembles instruction files into the sy
 The V2 session core assembles its system context through a separate path that does not yet apply audience filtering. Sessions served by it include every instruction file regardless of `opencode.audience`, with frontmatter left in place, and a malformed directive is not fatal there.
 :::
 
+:::caution
+`role` is derived from whether the session has a parent, so it describes how a session was created rather than what it is being used for. A client that creates parentless sessions to run subagent-class work, such as an external supervisor driving workers over the HTTP API, produces sessions that are `main` by construction and those sessions receive `role: main` files. Scope by `agent` instead when the distinction you need is the kind of work rather than the shape of the session tree.
+
+This is a per-session property, not a per-installation one: a single opencode process commonly serves both shapes at once, since task-tool subagents carry a parent while externally created sessions may not. A setting that disabled the `role` axis for an installation would break the sessions where it currently works.
+:::
+
 :::tip
 Claude Code and Codex do not interpret `opencode.audience` when they read the same `AGENTS.md`. Keep shared doctrine in a file those tools still load, or configure an equivalent include for each tool.
 :::
