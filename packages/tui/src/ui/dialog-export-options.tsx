@@ -205,10 +205,12 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
         <box
           paddingLeft={4}
           paddingRight={4}
-          backgroundColor={overlayTheme.background.default}
+          backgroundColor={
+            store.active === "copy" ? theme.background.action.primary.focused : overlayTheme.background.default
+          }
           onMouseUp={() => confirm("copy")}
         >
-          <text fg={overlayTheme.text.default}>Copy</text>
+          <text fg={store.active === "copy" ? theme.text.action.primary.focused : overlayTheme.text.default}>Copy</text>
         </box>
         <box
           paddingLeft={4}
