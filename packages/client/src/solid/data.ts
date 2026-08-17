@@ -814,6 +814,13 @@ export function createData(config: CreateDataInput) {
           const currentAssistant = message.activeAssistant(draft)
           if (currentAssistant) currentAssistant.retry = undefined
         })
+        if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
+        result.session.invalidate(event.data.sessionID)
+        void result.session.sync(event.data.sessionID)
+        return
+      case "session.viewed":
+        result.session.invalidate(event.data.sessionID)
+        void result.session.sync(event.data.sessionID)
         return
       case "session.revert.staged":
         if (store.session.info[event.data.sessionID])

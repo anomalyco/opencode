@@ -4127,6 +4127,65 @@
         "summary": "Get session message"
       }
     },
+    "/api/session/{sessionID}/view": {
+      "post": {
+        "tags": ["session"],
+        "operationId": "v2.session.view",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "pattern": "^ses"
+                }
+              ]
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Mark the latest recorded idle transition as viewed.",
+        "summary": "View session"
+      }
+    },
     "/api/session/{sessionID}/message": {
       "get": {
         "tags": ["session"],
@@ -12135,6 +12194,12 @@
               "updated": {
                 "type": "number"
               },
+              "idle": {
+                "type": "number"
+              },
+              "viewed": {
+                "type": "number"
+              },
               "archived": {
                 "type": "number"
               }
@@ -14270,6 +14335,71 @@
               }
             },
             "required": ["sessionID", "title"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
+      "session.viewed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^evt_"
+              }
+            ]
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.viewed"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer",
+                "allOf": [
+                  {
+                    "minimum": 0
+                  }
+                ]
+              },
+              "version": {
+                "type": "number",
+                "enum": [1]
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "allOf": [
+                  {
+                    "pattern": "^ses"
+                  }
+                ]
+              }
+            },
+            "required": ["sessionID"],
             "additionalProperties": false
           }
         },
@@ -17295,6 +17425,9 @@
           },
           {
             "$ref": "#/components/schemas/session.renamed"
+          },
+          {
+            "$ref": "#/components/schemas/session.viewed"
           },
           {
             "$ref": "#/components/schemas/session.deleted"
@@ -22663,6 +22796,9 @@
           },
           {
             "$ref": "#/components/schemas/session.renamed"
+          },
+          {
+            "$ref": "#/components/schemas/session.viewed"
           },
           {
             "$ref": "#/components/schemas/session.usage.updated"

@@ -86,6 +86,8 @@ import type {
   Endpoint5_33Output,
   Endpoint5_34Input,
   Endpoint5_34Output,
+  Endpoint5_35Input,
+  Endpoint5_35Output,
   Endpoint6_0Input,
   Endpoint6_0Output,
   Endpoint7_0Input,
@@ -610,6 +612,11 @@ const Endpoint5_34 = (raw: RawClient["server.session"]) => (input: Endpoint5_34I
     ),
   )
 
+const Endpoint5_35 = (raw: RawClient["server.session"]) => (input: Endpoint5_35Input) =>
+  preserveEffect<Endpoint5_35Output>()(
+    raw["session.view"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const adaptGroup5 = (raw: RawClient["server.session"]) => ({
   list: Endpoint5_0(raw),
   create: Endpoint5_1(raw),
@@ -639,6 +646,7 @@ const adaptGroup5 = (raw: RawClient["server.session"]) => ({
   interrupt: Endpoint5_32(raw),
   background: Endpoint5_33(raw),
   message: Endpoint5_34(raw),
+  view: Endpoint5_35(raw),
 })
 
 const Endpoint6_0 = (raw: RawClient["server.message"]) => (input: Endpoint6_0Input) =>

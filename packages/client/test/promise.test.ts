@@ -539,6 +539,7 @@ test("session methods use the public HTTP contract", async () => {
   const page = await client.session.list({ limit: 10, order: "desc", parentID: null })
   const active = await client.session.active()
   const created = await client.session.create({ location: { directory: "/tmp/project" } })
+  await client.session.view({ sessionID: "ses_test" })
   await client.session.switchAgent({ sessionID: "ses_test", agent: "build" })
   await client.session.switchModel({
     sessionID: "ses_test",
@@ -565,6 +566,7 @@ test("session methods use the public HTTP contract", async () => {
   const message = await client.session.message({ sessionID: "ses_test", messageID: "msg_model" })
 
   expect(page.cursor.next).toBe("next")
+  expect(page.data[0].time).toMatchObject({ idle: 1_717_171_717_002, viewed: 1_717_171_717_001 })
   expect(active).toEqual({ ses_test: { type: "running" } })
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
@@ -577,6 +579,7 @@ test("session methods use the public HTTP contract", async () => {
     ["GET", "http://localhost:3000/api/session?limit=10&order=desc&parentID=null"],
     ["GET", "http://localhost:3000/api/session/active"],
     ["POST", "http://localhost:3000/api/session"],
+    ["POST", "http://localhost:3000/api/session/ses_test/view"],
     ["POST", "http://localhost:3000/api/session/ses_test/agent"],
     ["POST", "http://localhost:3000/api/session/ses_test/model"],
     ["POST", "http://localhost:3000/api/session/ses_test/prompt"],
@@ -651,6 +654,8 @@ const session = {
     time: {
       created: 1_717_171_717_000,
       updated: 1_717_171_717_000,
+      idle: 1_717_171_717_002,
+      viewed: 1_717_171_717_001,
     },
     title: "Test",
     location: { directory: "/tmp/project" },
