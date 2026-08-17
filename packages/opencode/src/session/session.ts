@@ -401,13 +401,15 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
         ? new Decimal(totalNanoAiu).div(100_000_000_000).toNumber()
         : safe(
             new Decimal(0)
-              .add(new Decimal(num(tokens.input)).mul(num(costInfo?.input)).div(1_000_000))
-              .add(new Decimal(num(tokens.output)).mul(num(costInfo?.output)).div(1_000_000))
-              .add(new Decimal(num(tokens.cache.read)).mul(num(costInfo?.cache?.read)).div(1_000_000))
-              .add(new Decimal(num(tokens.cache.write)).mul(num(costInfo?.cache?.write)).div(1_000_000))
+              // only the cost operands need the guard: every `tokens.*` value already went
+              // through `safe()` above, so it cannot be non-numeric here
+              .add(new Decimal(tokens.input).mul(num(costInfo?.input)).div(1_000_000))
+              .add(new Decimal(tokens.output).mul(num(costInfo?.output)).div(1_000_000))
+              .add(new Decimal(tokens.cache.read).mul(num(costInfo?.cache?.read)).div(1_000_000))
+              .add(new Decimal(tokens.cache.write).mul(num(costInfo?.cache?.write)).div(1_000_000))
               // TODO: update models.dev to have better pricing model, for now:
               // charge reasoning tokens at the same rate as output tokens
-              .add(new Decimal(num(tokens.reasoning)).mul(num(costInfo?.output)).div(1_000_000))
+              .add(new Decimal(tokens.reasoning).mul(num(costInfo?.output)).div(1_000_000))
               .toNumber(),
           ),
     tokens,
