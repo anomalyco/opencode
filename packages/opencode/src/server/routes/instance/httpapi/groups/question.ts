@@ -1,5 +1,6 @@
 import { Question } from "@/question"
 import { QuestionID } from "@/question/schema"
+import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { QuestionNotFoundError } from "../errors"
@@ -15,6 +16,11 @@ const ReplyPayload = Schema.Struct({
   }),
 })
 
+const AskPayload = Schema.Struct({
+  sessionID: SessionID,
+  questions: Schema.Array(Question.Info).annotate({ description: "Questions to ask" }),
+})
+
 export const QuestionApi = HttpApi.make("question")
   .add(
     HttpApiGroup.make("question")
@@ -27,6 +33,19 @@ export const QuestionApi = HttpApi.make("question")
             identifier: "question.list",
             summary: "List pending questions",
             description: "Get all pending question requests across all sessions.",
+          }),
+        ),
+        HttpApiEndpoint.post("ask", `${root}/ask`, {
+          query: WorkspaceRoutingQuery,
+          payload: AskPayload,
+          success: described(Schema.Array(Question.Answer), "User answers in order of questions"),
+          error: [HttpApiError.BadRequest],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "question.ask",
+            summary: "Ask question request",
+            description:
+              "Create a pending question, publish question.asked for the TUI wizard, and block until the user replies or rejects.",
           }),
         ),
         HttpApiEndpoint.post("reply", `${root}/:requestID/reply`, {

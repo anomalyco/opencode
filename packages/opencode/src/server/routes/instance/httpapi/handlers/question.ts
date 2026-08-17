@@ -1,7 +1,8 @@
 import { Question } from "@/question"
 import { QuestionID } from "@/question/schema"
+import { SessionID } from "@/session/schema"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { QuestionNotFoundError } from "../errors"
 
@@ -11,6 +12,20 @@ export const questionHandlers = HttpApiBuilder.group(InstanceHttpApi, "question"
 
     const list = Effect.fn("QuestionHttpApi.list")(function* () {
       return yield* svc.list()
+    })
+
+    const ask = Effect.fn("QuestionHttpApi.ask")(function* (ctx: {
+      payload: {
+        sessionID: SessionID
+        questions: ReadonlyArray<Question.Info>
+      }
+    }) {
+      return yield* svc
+        .ask({
+          sessionID: ctx.payload.sessionID,
+          questions: ctx.payload.questions,
+        })
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
     })
 
     const reply = Effect.fn("QuestionHttpApi.reply")(function* (ctx: {
@@ -49,6 +64,6 @@ export const questionHandlers = HttpApiBuilder.group(InstanceHttpApi, "question"
       return true
     })
 
-    return handlers.handle("list", list).handle("reply", reply).handle("reject", reject)
+    return handlers.handle("list", list).handle("ask", ask).handle("reply", reply).handle("reject", reject)
   }),
 )
