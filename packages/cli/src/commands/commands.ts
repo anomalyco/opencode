@@ -86,10 +86,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       ],
     }),
     Spec.make("auth", {
-      description: "Manage authentication",
+      description: "manage AI providers and credentials",
       commands: [
         Spec.make("list", {
-          description: "List authenticated integrations",
+          description: "list providers and credentials",
           params: {
             ...ServerParams,
             format: Flag.choice("format", ["default", "json"]).pipe(
@@ -99,7 +99,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           },
         }),
         Spec.make("login", {
-          description: "Log in to an integration",
+          description: "log in to a provider",
           params: {
             ...ServerParams,
             target: Argument.string("target").pipe(
@@ -110,7 +110,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           },
         }),
         Spec.make("logout", {
-          description: "Remove stored credentials for an integration",
+          description: "log out from a configured provider",
           params: {
             ...ServerParams,
             target: Argument.string("target").pipe(
