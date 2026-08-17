@@ -24,7 +24,9 @@
   inset-inline-end: 0;
   top: 0;
   width: 12px;
-  transition: opacity 200ms ease;
+  transition:
+    opacity 200ms ease,
+    width 150ms ease;
   cursor: default;
   user-select: none;
   pointer-events: auto;
@@ -42,11 +44,24 @@
   border-radius: 9999px;
   background-color: var(--border-weak-base);
   backdrop-filter: blur(4px);
-  transition: background-color 150ms ease;
+  transition:
+    width 150ms ease,
+    background-color 150ms ease;
+}
+
+/* Hover-expanding overlay: widen the hit strip and visual bar so the thumb is
+   easier to acquire and drag. The thumb stays absolutely positioned, so the
+   expansion overlays content without shifting layout. data-dragging keeps the
+   expanded state stable for the whole drag even when the pointer leaves the
+   strip; collapsing is handled by :hover ending after the drag finishes. */
+.scroll-view__thumb:hover,
+.scroll-view__thumb[data-dragging="true"] {
+  width: 16px;
 }
 
 .scroll-view__thumb:hover::after,
 .scroll-view__thumb[data-dragging="true"]::after {
+  width: 8px;
   background-color: var(--border-strong-base);
 }
 

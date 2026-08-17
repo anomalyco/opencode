@@ -194,6 +194,7 @@
 [data-component="session-review-v2-sidebar-root"]
   [data-slot="session-review-v2-sidebar-tree"]
   .scroll-view__thumb[data-dragging="true"]::after {
+  width: 10px;
   background-color: var(--v2-border-border-strong, var(--border-strong-base));
 }
 
