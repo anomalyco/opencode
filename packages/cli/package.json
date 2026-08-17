@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "1.2.1",
+    "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "catalog:",
     "@opencode-ai/client": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
