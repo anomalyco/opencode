@@ -9,6 +9,7 @@ import { parseSessionTargetModel, resolveSessionTarget } from "../session-target
 import { toolInlineInfo } from "@opencode-ai/tui/mini/tool"
 import { runNonInteractivePrompt } from "./noninteractive"
 import { UI } from "./ui"
+import { Env } from "../env"
 
 export type RunCommandInput = {
   server: ServerConnection.Resolved
@@ -116,6 +117,8 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     return undefined
   })
   if (!target) return
+  if (input.server.service && target.location.workspaceID === undefined)
+    await client.session.environment({ sessionID: target.session.id, variables: Env.session() })
   const model = target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined
   const variant = target.model?.variant
   if (!target.resume && input.title !== undefined) {

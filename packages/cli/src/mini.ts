@@ -5,6 +5,7 @@ import { setTimeout } from "node:timers/promises"
 import { readStdin } from "./util/io"
 import { createMiniHost, INTERACTIVE_INPUT_ERROR, usingInteractiveStdin } from "./mini-host"
 import { parseSessionTargetModel, resolveSessionTarget, type SessionTargetPreparation } from "./session-target"
+import { Env } from "./env"
 
 export type MiniCommandInput = {
   server: {
@@ -38,6 +39,16 @@ export async function runMini(input: MiniCommandInput) {
       const directory = localDirectory()
       const connection = createMiniConnection(input.server)
       const sdk = connection.sdk
+      const environment = input.server.reconnect ? Env.session() : undefined
+      const attachEnvironment = async (
+        client: OpenCodeClient,
+        sessionID: string,
+        workspaceID: string | undefined,
+        signal?: AbortSignal,
+      ) => {
+        if (environment === undefined || workspaceID !== undefined) return
+        await client.session.environment({ sessionID, variables: environment }, ...(signal ? [{ signal }] : []))
+      }
       const requested = parseModel(input.model)
       const model = requested ? { providerID: requested.providerID, modelID: requested.id } : undefined
       const prepare = prepareTarget(input.agent)
@@ -64,6 +75,7 @@ export async function runMini(input: MiniCommandInput) {
             }),
         })
         const target = resolved.value
+        await attachEnvironment(resolved.sdk, target.session.id, target.location.workspaceID, signal)
         return {
           sdk: resolved.sdk,
           sessionID: target.session.id,
@@ -94,15 +106,18 @@ export async function runMini(input: MiniCommandInput) {
             : undefined,
           prepare,
           signal,
-        }).then((target) => ({
-          sessionID: target.session.id,
-          sessionTitle: target.session.title,
-          location: target.location,
-          model: target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined,
-          variant: target.model?.variant,
-          agent: target.agent,
-          resume: false,
-        }))
+        }).then(async (target) => {
+          await attachEnvironment(client, target.session.id, target.location.workspaceID, signal)
+          return {
+            sessionID: target.session.id,
+            sessionTitle: target.session.title,
+            location: target.location,
+            model: target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined,
+            variant: target.model?.variant,
+            agent: target.agent,
+            resume: false,
+          }
+        })
       const frontend = await frontendTask
       return frontend.runMiniFrontend({
         host: createMiniHost({ terminal, directory, paths: input.paths }),
