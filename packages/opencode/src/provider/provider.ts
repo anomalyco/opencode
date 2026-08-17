@@ -1723,17 +1723,6 @@ const layer = Layer.effect(
           if (baseURL) options.baseURL = baseURL
         }
 
-        if (
-          model.providerID === "google-vertex" &&
-          model.api.npm === "@ai-sdk/google-vertex" &&
-          !options.baseURL &&
-          !options.apiKey &&
-          typeof options.project === "string" &&
-          (options.location === "eu" || options.location === "us")
-        ) {
-          options.baseURL = `https://${googleVertexEndpoint(options.location)}/v1beta1/projects/${options.project}/locations/${options.location}/publishers/google`
-        }
-
         if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
           delete options.fetch
         }
