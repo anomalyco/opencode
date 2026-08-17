@@ -45,7 +45,7 @@ import { ErrorPage } from "@/pages/error"
 import { CommentsProvider, useComments } from "@/context/comments"
 import { useCommand } from "@/context/command"
 import { SessionUIProvider } from "@/pages/directory-layout"
-import { useData } from "@/context/server"
+import { useData, useServer } from "@/context/server"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
@@ -207,9 +207,9 @@ function SessionErrorFallback(props: { error: unknown; sessionID?: string; serve
 }
 
 function ResolvedTargetSessionRoute() {
-  const params = useParams<{ serverKey: string; id: string }>()
+  const params = useParams<{ id: string }>()
+  const server = useServer()
   const data = useData()
-  const serverKey = createMemo(() => requireServerKey(params.serverKey))
   const current = createSessionResolution(
     () => params.id,
     () => data.session,
@@ -225,7 +225,7 @@ function ResolvedTargetSessionRoute() {
     <Show when={directory()}>
       {(dir) => (
         <LocationProvider directory={dir()}>
-          <SessionUIProvider directory={dir()} server={serverKey()}>
+          <SessionUIProvider directory={dir()} server={server.key}>
             <TargetSessionPage />
           </SessionUIProvider>
         </LocationProvider>
