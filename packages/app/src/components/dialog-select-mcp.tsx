@@ -43,7 +43,7 @@ export const DialogSelectMcp: Component = () => {
         filterKeys={["name", "status"]}
         sortBy={(a, b) => a.name.localeCompare(b.name)}
         onSelect={(x) => {
-          if (!x || toggle.isPending) return
+          if (!x || x.status === "pending" || toggle.isPending) return
           toggle.mutate(x.name)
         }}
       >
@@ -76,7 +76,7 @@ export const DialogSelectMcp: Component = () => {
               <div onClick={(e) => e.stopPropagation()}>
                 <Switch
                   checked={enabled()}
-                  disabled={toggle.isPending && toggle.variables === i.name}
+                  disabled={status() === "pending" || (toggle.isPending && toggle.variables === i.name)}
                   onChange={() => {
                     if (toggle.isPending) return
                     toggle.mutate(i.name)

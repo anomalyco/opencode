@@ -42,7 +42,8 @@ test("shows a pending question dock", async ({ page }) => {
   const rejectRequests: string[] = []
   page.on("request", (request) => {
     if (request.method() !== "POST") return
-    if (new URL(request.url()).pathname === "/question/question-request/reject") rejectRequests.push(request.url())
+    if (new URL(request.url()).pathname === `/api/session/${sessionID}/question/question-request/reject`)
+      rejectRequests.push(request.url())
   })
 
   await question.locator('[data-component="icon-button"][data-icon="chevron-down"]').click()
@@ -64,7 +65,9 @@ test("shows a pending question dock", async ({ page }) => {
 
   await question.getByRole("radio", { name: /Minimal/ }).click()
   const reply = page.waitForRequest(
-    (request) => request.method() === "POST" && new URL(request.url()).pathname === "/question/question-request/reply",
+    (request) =>
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === `/api/session/${sessionID}/question/question-request/reply`,
   )
   await question.getByRole("button", { name: "Submit" }).click()
   expect((await reply).postDataJSON()).toEqual({ answers: [["Minimal"]] })
@@ -97,8 +100,8 @@ test("shows a pending permission dock", async ({ page }) => {
   const reply = page.waitForRequest((request) => request.method() === "POST")
   await permission.getByRole("button", { name: "Allow once" }).click()
   const request = await reply
-  expect(new URL(request.url()).pathname).toBe(`/session/${sessionID}/permissions/permission-request`)
-  expect(request.postDataJSON()).toEqual({ response: "once" })
+  expect(new URL(request.url()).pathname).toBe(`/api/session/${sessionID}/permission/permission-request/reply`)
+  expect(request.postDataJSON()).toEqual({ reply: "once" })
 })
 
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {
@@ -170,6 +173,7 @@ async function mockServer(
   },
 ) {
   await mockOpenCodeServer(page, {
+    protocol: "v2",
     directory,
     project: {
       id: projectID,

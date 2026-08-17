@@ -27,6 +27,7 @@ test("animates todo lifecycle without replaying it across session tabs", async (
   test.setTimeout(90_000)
   const events: EventPayload[] = []
   const todos: Record<string, typeof activeTodos> = { [sourceID]: [], [otherID]: [] }
+  const sessionStatus: Record<string, { type: "busy" | "idle" }> = {}
 
   await mockOpenCodeServer(page, {
     directory,
@@ -56,9 +57,11 @@ test("animates todo lifecycle without replaying it across session tabs", async (
       default: { providerID: "opencode", modelID: "claude-opus-4-6" },
     },
     sessions: [session(sourceID, sourceTitle, 1700000000000), session(otherID, otherTitle, 1700000001000)],
+    sessionStatus: { [sourceID]: { type: "busy" } },
     pageMessages: () => ({ items: [] }),
     events: () => events.splice(0, 1),
     eventRetry: 16,
+    sessionStatus: () => sessionStatus,
     todos: (sessionID) => todos[sessionID] ?? [],
   })
   await configurePage(page)
@@ -68,6 +71,7 @@ test("animates todo lifecycle without replaying it across session tabs", async (
   const dock = page.locator('[data-component="session-todo-dock"]')
   await expect(dock).toHaveCount(0)
 
+  sessionStatus[sourceID] = { type: "busy" }
   events.push(statusEvent(sourceID, "busy"))
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible()
 

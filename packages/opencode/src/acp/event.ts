@@ -40,7 +40,10 @@ export class Subscription {
   private readonly abort = new AbortController()
   private readonly shellSnapshots = new Map<string, string>()
   private readonly toolStarts = new Set<string>()
+  private readonly connectionWaiters = new Set<() => void>()
+  private readonly idleWaiters = new Map<string, Set<ReturnType<typeof signal>>>()
   private readonly permission: ACPPermission.Handler
+  private connected = false
   private started = false
 
   constructor(
@@ -63,10 +66,35 @@ export class Subscription {
 
   stop() {
     this.abort.abort()
+    this.disconnected()
+    for (const resolve of this.connectionWaiters) resolve()
+    this.connectionWaiters.clear()
+  }
+
+  async runUntilIdle<A>(sessionId: string, request: () => Promise<A>) {
+    await this.waitUntilConnected()
+    const waiter = signal()
+    const waiters = this.idleWaiters.get(sessionId) ?? new Set()
+    waiters.add(waiter)
+    this.idleWaiters.set(sessionId, waiters)
+
+    try {
+      // Idle is queued after the turn's events, and this subscription awaits each update in order.
+      void waiter.promise.catch(() => {})
+      const response = await request()
+      await waiter.promise
+      return response
+    } finally {
+      waiters.delete(waiter)
+      if (waiters.size === 0) this.idleWaiters.delete(sessionId)
+    }
   }
 
   async handle(event: Event) {
     switch (event.type) {
+      case "session.status":
+        if (event.properties.status.type === "idle") this.idle(event.properties.sessionID)
+        return
       case "permission.asked":
         this.permission.handle(event)
         return
@@ -115,17 +143,49 @@ export class Subscription {
 
   private async run() {
     while (!this.abort.signal.aborted) {
-      const events = (await this.input.sdk.global.event({
-        signal: this.abort.signal,
-      })) as GlobalEventStream
-
-      for await (const event of events.stream) {
-        if (this.abort.signal.aborted) return
-        if (!event.payload) continue
-        await this.handle(event.payload).catch(() => {})
-      }
+      await this.consume().catch(() => {})
+      this.disconnected()
       if (!this.abort.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 1000))
     }
+  }
+
+  private async consume() {
+    const events = (await this.input.sdk.global.event({
+      signal: this.abort.signal,
+    })) as GlobalEventStream
+    this.connected = true
+    for (const resolve of this.connectionWaiters) resolve()
+    this.connectionWaiters.clear()
+
+    for await (const event of events.stream) {
+      if (this.abort.signal.aborted) return
+      if (!event.payload) continue
+      await this.handle(event.payload).catch(() => {})
+    }
+  }
+
+  private async waitUntilConnected() {
+    while (!this.connected) {
+      if (this.abort.signal.aborted) throw new Error("ACP event subscription stopped")
+      await new Promise<void>((resolve) => this.connectionWaiters.add(resolve))
+    }
+  }
+
+  private disconnected() {
+    if (!this.connected) return
+    this.connected = false
+    const error = new Error("ACP event stream disconnected")
+    for (const waiters of this.idleWaiters.values()) {
+      for (const waiter of waiters) waiter.reject(error)
+    }
+    this.idleWaiters.clear()
+  }
+
+  private idle(sessionId: string) {
+    const waiters = this.idleWaiters.get(sessionId)
+    if (!waiters) return
+    this.idleWaiters.delete(sessionId)
+    for (const waiter of waiters) waiter.resolve()
   }
 
   private async handlePartUpdated(event: EventMessagePartUpdated) {
@@ -336,6 +396,25 @@ export class Subscription {
   private clearTool(toolCallId: string) {
     this.toolStarts.delete(toolCallId)
     this.shellSnapshots.delete(toolCallId)
+  }
+}
+
+function signal() {
+  const state: {
+    resolve: () => void
+    reject: (reason?: unknown) => void
+  } = {
+    resolve: () => {},
+    reject: () => {},
+  }
+  const promise = new Promise<void>((resolve, reject) => {
+    state.resolve = resolve
+    state.reject = reject
+  })
+  return {
+    promise,
+    resolve: () => state.resolve(),
+    reject: (reason?: unknown) => state.reject(reason),
   }
 }
 
