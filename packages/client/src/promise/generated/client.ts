@@ -58,6 +58,8 @@ import type {
   SessionInstructionsEntryPutOutput,
   SessionInstructionsEntryRemoveInput,
   SessionInstructionsEntryRemoveOutput,
+  SessionGenerateInput,
+  SessionGenerateOutput,
   SessionLogInput,
   SessionLogOutput,
   SessionInterruptInput,
@@ -743,6 +745,18 @@ export function make(options: ClientOptions) {
             ),
         },
       },
+      generate: (input: SessionGenerateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionGenerateOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/generate`,
+            body: { prompt: input["prompt"] },
+            successStatus: 200,
+            declaredStatuses: [404, 503, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
       log: (input: SessionLogInput, requestOptions?: RequestOptions): AsyncIterable<SessionLogOutput> =>
         sse<SessionLogOutput>(
           {

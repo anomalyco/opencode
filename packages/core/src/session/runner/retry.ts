@@ -44,12 +44,11 @@ const retryAfter = (failure: RetryableFailure) => {
 }
 
 export const schedule = (events: EventV2.Interface, sessionID: SessionSchema.ID) =>
-  Schedule.exponential("2 seconds").pipe(
-    Schedule.take(4),
+  Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(4)]).pipe(
     Schedule.setInputType<RetryableFailure | SessionRunner.RunError>(),
     Schedule.passthrough,
     Schedule.while(({ input }) => input instanceof RetryableFailure),
-    Schedule.modifyDelay((failure, delay) => {
+    Schedule.modifyDelay(({ input: failure, duration: delay }) => {
       const minimum = failure instanceof RetryableFailure ? retryAfter(failure) : undefined
       return Effect.succeed(minimum === undefined ? delay : Duration.max(delay, Duration.millis(minimum)))
     }),

@@ -379,6 +379,7 @@ test("session methods use the public HTTP contract", async () => {
         })
       }
       if (url.includes("/prompt")) return Response.json(admission)
+      if (url.includes("/generate")) return Response.json({ data: { text: "A transient answer" } })
       if (url.includes("/synthetic")) return Response.json(syntheticAdmission)
       if (url.endsWith("/compact")) return Response.json(compactionAdmission)
       if (url.includes("/context")) return Response.json({ data: [] })
@@ -403,6 +404,7 @@ test("session methods use the public HTTP contract", async () => {
     text: "Hello",
     resume: false,
   })
+  const generated = await client.session.generate({ sessionID: "ses_test", prompt: "Summarize this session" })
   const synthetic = await client.session.synthetic({
     sessionID: "ses_test",
     text: "Completed",
@@ -421,6 +423,7 @@ test("session methods use the public HTTP contract", async () => {
   expect(active).toEqual({ ses_test: { type: "running" } })
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
+  expect(generated.text).toBe("A transient answer")
   expect(synthetic).toMatchObject({ type: "synthetic", data: { text: "Completed" }, delivery: "queue" })
   expect(context).toEqual([])
   expect(log).toEqual([modelSwitchedEvent, synced])
@@ -432,6 +435,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/agent"],
     ["POST", "http://localhost:3000/api/session/ses_test/model"],
     ["POST", "http://localhost:3000/api/session/ses_test/prompt"],
+    ["POST", "http://localhost:3000/api/session/ses_test/generate"],
     ["POST", "http://localhost:3000/api/session/ses_test/synthetic"],
     ["POST", "http://localhost:3000/api/session/ses_test/compact"],
     ["POST", "http://localhost:3000/api/session/ses_test/wait"],

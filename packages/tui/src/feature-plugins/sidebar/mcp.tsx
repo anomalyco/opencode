@@ -4,7 +4,7 @@ import { useTheme } from "../../context/theme"
 
 function View(props: { context: Plugin.Context; sessionID: string }) {
   const [open, setOpen] = createSignal(true)
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
   const list = createMemo(() => props.context.data.location.mcp.server.list(session()?.location) ?? [])
   const on = createMemo(() => list().filter((item) => item.status.status === "connected").length)
@@ -19,12 +19,12 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
   )
 
   const dot = (status: string) => {
-    if (status === "connected") return theme.success
-    if (status === "failed") return theme.error
-    if (status === "disabled") return theme.textMuted
-    if (status === "needs_auth") return theme.warning
-    if (status === "needs_client_registration") return theme.error
-    return theme.textMuted
+    if (status === "connected") return themeV2.text.feedback.success()
+    if (status === "failed") return themeV2.text.feedback.error()
+    if (status === "disabled") return themeV2.text.subdued()
+    if (status === "needs_auth") return themeV2.text.feedback.warning()
+    if (status === "needs_client_registration") return themeV2.text.feedback.error()
+    return themeV2.text.subdued()
   }
 
   return (
@@ -32,12 +32,12 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
       <box>
         <box flexDirection="row" gap={1} onMouseDown={() => list().length > 2 && setOpen((x) => !x)}>
           <Show when={list().length > 2}>
-            <text fg={theme.text}>{open() ? "▼" : "▶"}</text>
+            <text fg={themeV2.text()}>{open() ? "▼" : "▶"}</text>
           </Show>
-          <text fg={theme.text}>
+          <text fg={themeV2.text()}>
             <b>MCP</b>
             <Show when={!open()}>
-              <span style={{ fg: theme.textMuted }}>
+              <span style={{ fg: themeV2.text.subdued() }}>
                 {" "}
                 ({on()} active{bad() > 0 ? `, ${bad()} error${bad() > 1 ? "s" : ""}` : ""})
               </span>
@@ -56,9 +56,9 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
                 >
                   •
                 </text>
-                <text fg={theme.text} wrapMode="word">
+                <text fg={themeV2.text()} wrapMode="word">
                   {item.name}{" "}
-                  <span style={{ fg: theme.textMuted }}>
+                  <span style={{ fg: themeV2.text.subdued() }}>
                     <Switch fallback={item.status.status}>
                       <Match when={item.status.status === "connected"}>Connected</Match>
                       <Match when={item.status.status === "failed"}>

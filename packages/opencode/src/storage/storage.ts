@@ -82,7 +82,7 @@ const MIGRATIONS: Migration[] = [
   Effect.fn("Storage.migration.1")(function* (dir: string, fs: FSUtil.Interface, git: Git.Interface) {
     const project = path.resolve(dir, "../project")
     if (!(yield* fs.isDir(project))) return
-    const projectDirs = yield* fs.glob("*", {
+    const projectDirs = yield* fs.scan("*", {
       cwd: project,
       include: "all",
     })
@@ -94,7 +94,7 @@ const MIGRATIONS: Migration[] = [
       let worktree = "/"
 
       if (projectID !== "global") {
-        for (const msgFile of yield* fs.glob("storage/session/message/*/*.json", {
+        for (const msgFile of yield* fs.scan("storage/session/message/*/*.json", {
           cwd: full,
           absolute: true,
         })) {
@@ -136,7 +136,7 @@ const MIGRATIONS: Migration[] = [
         )
 
         yield* Effect.logInfo(`migrating sessions for project ${projectID}`)
-        for (const sessionFile of yield* fs.glob("storage/session/info/*.json", {
+        for (const sessionFile of yield* fs.scan("storage/session/info/*.json", {
           cwd: full,
           absolute: true,
         })) {
@@ -147,7 +147,7 @@ const MIGRATIONS: Migration[] = [
           yield* fs.writeWithDirs(dest, JSON.stringify(session, null, 2))
           if (Option.isNone(info)) continue
           yield* Effect.logInfo(`migrating messages for session ${info.value.id}`)
-          for (const msgFile of yield* fs.glob(`storage/session/message/${info.value.id}/*.json`, {
+          for (const msgFile of yield* fs.scan(`storage/session/message/${info.value.id}/*.json`, {
             cwd: full,
             absolute: true,
           })) {
@@ -162,7 +162,7 @@ const MIGRATIONS: Migration[] = [
             if (Option.isNone(item)) continue
 
             yield* Effect.logInfo(`migrating parts for message ${item.value.id}`)
-            for (const partFile of yield* fs.glob(`storage/session/part/${info.value.id}/${item.value.id}/*.json`, {
+            for (const partFile of yield* fs.scan(`storage/session/part/${info.value.id}/${item.value.id}/*.json`, {
               cwd: full,
               absolute: true,
             })) {
@@ -180,7 +180,7 @@ const MIGRATIONS: Migration[] = [
     }
   }),
   Effect.fn("Storage.migration.2")(function* (dir: string, fs: FSUtil.Interface) {
-    for (const item of yield* fs.glob("session/*/*.json", {
+    for (const item of yield* fs.scan("session/*/*.json", {
       cwd: dir,
       absolute: true,
     })) {
@@ -302,7 +302,7 @@ const layer = Layer.effect(
       const dir = (yield* state).dir
       const cwd = path.join(dir, ...prefix)
       const result = yield* fs
-        .glob("**/*", {
+        .scan("**/*", {
           cwd,
           include: "file",
         })

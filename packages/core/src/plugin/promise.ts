@@ -231,6 +231,8 @@ export function fromPromise(plugin: Plugin) {
                   resume: input.resume ?? undefined,
                 }),
               ),
+            generate: (input) =>
+              run(host.session.generate({ sessionID: Session.ID.make(input.sessionID), prompt: input.prompt })),
             command: (input) =>
               run(
                 host.session.command({

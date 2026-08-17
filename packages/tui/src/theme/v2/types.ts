@@ -4,7 +4,6 @@ import type {
   ActionVariant,
   BaseHue,
   FeedbackKind,
-  FormfieldState,
   HueAlias,
   HueStep,
   MarkdownToken,
@@ -13,14 +12,16 @@ import type {
 } from "./schema"
 
 export type ResolvedActionState = "default" | ActionState
-export type ResolvedFormfieldState = "default" | FormfieldState
+export type ResolvedFormfieldState = ResolvedActionState
 export type HueScale = Readonly<Record<HueStep, RGBA>>
 export type Hue = Readonly<Record<BaseHue | HueAlias, HueScale>>
+export type HueSource = Readonly<{ hue: BaseHue | HueAlias; step: HueStep }>
 export type StatefulColor = Readonly<Record<ResolvedActionState, RGBA>>
-export type FormfieldColor = Readonly<Record<ResolvedFormfieldState, RGBA>>
+export type FormfieldColor = StatefulColor
 
 export type ResolvedThemeView = {
   readonly hue: Hue
+  readonly source: (color: RGBA) => HueSource | undefined
   readonly increase: (color: RGBA, amount?: number) => RGBA
   readonly decrease: (color: RGBA, amount?: number) => RGBA
   readonly text: {

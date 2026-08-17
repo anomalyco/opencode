@@ -9,7 +9,7 @@ const money = new Intl.NumberFormat("en-US", {
 })
 
 function View(props: { context: Plugin.Context; sessionID: string }) {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const msg = createMemo(() => props.context.data.session.message.list(props.sessionID))
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
   const cost = createMemo(() => props.context.data.session.cost(props.sessionID))
@@ -20,20 +20,20 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
 
   return (
     <box>
-      <text fg={theme.text}>
+      <text fg={themeV2.text()}>
         <b>Context</b>
       </text>
-      <Show when={state()} fallback={<text fg={theme.textMuted}>Not measured</text>}>
+      <Show when={state()} fallback={<text fg={themeV2.text.subdued()}>Not measured</text>}>
         {(value) => (
           <>
-            <text fg={theme.textMuted}>{value().tokens.toLocaleString()} tokens</text>
+            <text fg={themeV2.text.subdued()}>{value().tokens.toLocaleString()} tokens</text>
             <Show when={value().percent !== undefined}>
-              <text fg={theme.textMuted}>{value().percent}% used</text>
+              <text fg={themeV2.text.subdued()}>{value().percent}% used</text>
             </Show>
           </>
         )}
       </Show>
-      <text fg={theme.textMuted}>{money.format(cost())} spent</text>
+      <text fg={themeV2.text.subdued()}>{money.format(cost())} spent</text>
     </box>
   )
 }

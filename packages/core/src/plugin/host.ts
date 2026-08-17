@@ -424,6 +424,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         }),
       get: (input) => runtime.session.get(input.sessionID),
       prompt: runtime.session.prompt,
+      generate: (input) => runtime.session.generate(input).pipe(Effect.map((text) => ({ text }))),
       command: runtime.session.command,
       synthetic: runtime.session.synthetic,
       interrupt: (input) => runtime.session.interrupt(input.sessionID),

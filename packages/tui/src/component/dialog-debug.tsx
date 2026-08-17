@@ -11,7 +11,7 @@ import { useToast } from "../ui/toast"
 import { describeOS, describeTerminal } from "../util/system"
 
 export function DialogDebug() {
-  const { theme } = useTheme()
+  const { themeV2 } = useTheme()
   const dialog = useDialog()
   const route = useRoute()
   const local = useLocal()
@@ -54,10 +54,10 @@ export function DialogDebug() {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text} attributes={TextAttributes.BOLD}>
+        <text fg={themeV2.text()} attributes={TextAttributes.BOLD}>
           Debug
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text fg={themeV2.text.subdued()} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
@@ -67,10 +67,10 @@ export function DialogDebug() {
         <For each={entries()}>
           {(entry) => (
             <box flexDirection="row" gap={1}>
-              <text flexShrink={0} fg={theme.textMuted}>
+              <text flexShrink={0} fg={themeV2.text.subdued()}>
                 {entry.label.padEnd(10)}
               </text>
-              <text fg={theme.text} wrapMode="word">
+              <text fg={themeV2.text()} wrapMode="word">
                 {entry.value}
               </text>
             </box>
@@ -78,12 +78,12 @@ export function DialogDebug() {
         </For>
       </box>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme.textMuted}>Share this when reporting an issue.</text>
+        <text fg={themeV2.text.subdued()}>Share this when reporting an issue.</text>
         <text onMouseUp={copy}>
-          <span style={{ fg: copied() ? theme.success : theme.text }}>
+          <span style={{ fg: copied() ? themeV2.text.feedback.success() : themeV2.text() }}>
             <b>{copied() ? "✓ copied" : "copy"}</b>{" "}
           </span>
-          <span style={{ fg: theme.textMuted }}>enter</span>
+          <span style={{ fg: themeV2.text.subdued() }}>enter</span>
         </text>
       </box>
     </box>

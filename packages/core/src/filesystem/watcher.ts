@@ -11,10 +11,12 @@ import { Flag } from "../flag/flag"
 import { lazy } from "../util/lazy"
 import { watch as watchFileSystem } from "node:fs"
 import path from "path"
+import { createRequire } from "node:module"
 
 declare const OPENCODE_LIBC: string | undefined
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
+const require = createRequire(import.meta.url)
 
 export const Event = { Updated: FileSystem.Event.Changed }
 
@@ -22,7 +24,8 @@ const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
   try {
     const libc = typeof OPENCODE_LIBC === "undefined" ? undefined : OPENCODE_LIBC
     const binding = require(
-      `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${libc || "glibc"}` : ""}`,
+      process.env.OPENCODE_PARCEL_WATCHER_PATH ??
+        `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${libc || "glibc"}` : ""}`,
     )
     return createWrapper(binding) as typeof import("@parcel/watcher")
   } catch {

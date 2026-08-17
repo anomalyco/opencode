@@ -59,6 +59,53 @@ const singleOperation = (operation: Record<string, unknown>, method = "get"): Do
   },
 })
 
+const directionalSpec = (openapi: string): Document => ({
+  openapi,
+  paths: {
+    "/users": {
+      post: {
+        operationId: "users.create",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { $ref: "#/components/schemas/User" } } },
+        },
+        responses: {
+          200: {
+            description: "Created",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/User" } } },
+          },
+        },
+      },
+    },
+  },
+  components: {
+    schemas: {
+      ReadOnlyID: { type: "string", readOnly: true },
+      User: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "name", "password", "profile", "generated"],
+        properties: {
+          id: { type: "string", readOnly: true },
+          name: { type: "string" },
+          password: { type: "string", writeOnly: true },
+          profile: {
+            type: "object",
+            additionalProperties: false,
+            required: ["createdAt", "secret", "label"],
+            properties: {
+              createdAt: { type: "string", readOnly: true },
+              secret: { type: "string", writeOnly: true },
+              label: { type: "string" },
+            },
+          },
+          generated: { $ref: "#/components/schemas/ReadOnlyID" },
+        },
+      },
+    },
+  },
+})
+
 describe("OpenAPI.fromSpec", () => {
   test("covers a representative API from generation through execution", async () => {
     const resolutions: Array<string> = []
@@ -354,6 +401,550 @@ describe("OpenAPI.fromSpec", () => {
     expect(tool.output.$defs).toMatchObject({ Local: { type: "string" }, Global: { type: "number" } })
   })
 
+  test("projects read-only and write-only properties by schema direction", () => {
+    for (const version of ["3.0.3", "3.1.0"]) {
+      const tool = toolAt(OpenAPI.fromSpec({ baseUrl, spec: directionalSpec(version) }).tools, "users.create")
+      if (!Tool.isDefinition(tool) || !isRecord(tool.input) || !isRecord(tool.output)) {
+        throw new Error(`users.create was not generated for OpenAPI ${version}`)
+      }
+
+      expect(inputTypeScript(tool)).toBe(
+        "{ name: string; password: string; profile: { secret: string; label: string } }",
+      )
+      expect(outputTypeScript(tool)).toBe(
+        "{ id: string; name: string; profile: { createdAt: string; label: string }; generated: string }",
+      )
+
+      const requestDefinitions = isRecord(tool.input.$defs) ? tool.input.$defs : {}
+      const responseDefinitions = isRecord(tool.output.$defs) ? tool.output.$defs : {}
+      const requestUser = isRecord(requestDefinitions.User) ? requestDefinitions.User : {}
+      const responseUser = isRecord(responseDefinitions.User) ? responseDefinitions.User : {}
+      expect(Object.keys(isRecord(requestUser.properties) ? requestUser.properties : {})).toEqual([
+        "name",
+        "password",
+        "profile",
+      ])
+      expect(requestUser.required).toEqual(["name", "password", "profile"])
+      expect(Object.keys(isRecord(responseUser.properties) ? responseUser.properties : {})).toEqual([
+        "id",
+        "name",
+        "profile",
+        "generated",
+      ])
+      expect(responseUser.required).toEqual(["id", "name", "profile", "generated"])
+    }
+  })
+
+  test("projects directional annotations through local refs and allOf composition", () => {
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: singleOperation(
+          {
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["local", "composed", "name"],
+                    properties: {
+                      local: { $ref: "#/$defs/ReadOnlyValue" },
+                      composed: { allOf: [{ $ref: "#/$defs/ReadOnlyValue" }] },
+                      name: { type: "string" },
+                    },
+                    $defs: {
+                      ReadOnlyValue: { type: "string", readOnly: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "post",
+        ),
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+
+    expect(inputTypeScript(tool)).toBe("{ name: string }")
+  })
+
+  test("honors declarations that are siblings of a $ref", () => {
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: {
+          openapi: "3.1.0",
+          paths: {
+            "/test": {
+              post: {
+                operationId: "test",
+                responses: { 200: { description: "Success" } },
+                requestBody: {
+                  required: true,
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        additionalProperties: false,
+                        required: ["record"],
+                        properties: {
+                          record: {
+                            $ref: "#/components/schemas/Base",
+                            properties: { extra: { type: "string", readOnly: true }, note: { type: "string" } },
+                            required: ["extra", "note", "id"],
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          components: {
+            schemas: {
+              Base: {
+                type: "object",
+                required: ["id", "name"],
+                properties: { id: { type: "string", readOnly: true }, name: { type: "string" } },
+              },
+            },
+          },
+        },
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    const properties = isRecord(tool.input.properties) ? tool.input.properties : {}
+    const record = isRecord(properties.record) ? properties.record : {}
+    const definitions = isRecord(tool.input.$defs) ? tool.input.$defs : {}
+    const base = isRecord(definitions.Base) ? definitions.Base : {}
+
+    expect(Object.keys(isRecord(record.properties) ? record.properties : {})).toEqual(["note"])
+    expect(record.required).toEqual(["note"])
+    expect(Object.keys(isRecord(base.properties) ? base.properties : {})).toEqual(["name"])
+    expect(base.required).toEqual(["name"])
+  })
+
+  test("honors directional declarations on intermediate reference hops", () => {
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: {
+          ...singleOperation(
+            {
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["secret", "name"],
+                      properties: {
+                        // Hidden only by the sibling declaration on the middle hop.
+                        secret: { $ref: "#/components/schemas/Middle" },
+                        name: { type: "string" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "post",
+          ),
+          components: {
+            schemas: {
+              Middle: { $ref: "#/components/schemas/Plain", readOnly: true },
+              Plain: { type: "string" },
+            },
+          },
+        },
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+
+    expect(inputTypeScript(tool)).toBe("{ name: string }")
+  })
+
+  test("projects cyclic component references without hanging", () => {
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: {
+          openapi: "3.1.0",
+          paths: {
+            "/test": {
+              post: {
+                operationId: "test",
+                responses: { 200: { description: "Success" } },
+                requestBody: {
+                  required: true,
+                  content: { "application/json": { schema: { $ref: "#/components/schemas/Node" } } },
+                },
+              },
+            },
+          },
+          components: {
+            schemas: {
+              Node: {
+                type: "object",
+                required: ["id", "name", "child"],
+                properties: {
+                  id: { type: "string", readOnly: true },
+                  name: { type: "string" },
+                  child: { $ref: "#/components/schemas/Node" },
+                },
+              },
+            },
+          },
+        },
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    const definitions = isRecord(tool.input.$defs) ? tool.input.$defs : {}
+    const node = isRecord(definitions.Node) ? definitions.Node : {}
+
+    expect(Object.keys(isRecord(node.properties) ? node.properties : {})).toEqual(["name", "child"])
+    expect(node.required).toEqual(["name", "child"])
+  })
+
+  test("projects diamond-shaped reference graphs in linear time", () => {
+    // Each component references the next twice; without memoized hidden-ness this is 2^30 work.
+    const depth = 30
+    const schemas = Object.fromEntries(
+      Array.from({ length: depth }, (_, index) => [
+        `C${index}`,
+        index === depth - 1
+          ? { type: "object", properties: { id: { type: "string", readOnly: true }, name: { type: "string" } } }
+          : { allOf: [{ $ref: `#/components/schemas/C${index + 1}` }, { $ref: `#/components/schemas/C${index + 1}` }] },
+      ]),
+    )
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: {
+          openapi: "3.1.0",
+          paths: {
+            "/test": {
+              post: {
+                operationId: "test",
+                responses: { 200: { description: "Success" } },
+                requestBody: {
+                  required: true,
+                  content: { "application/json": { schema: { $ref: "#/components/schemas/C0" } } },
+                },
+              },
+            },
+          },
+          components: { schemas },
+        },
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    const definitions = isRecord(tool.input.$defs) ? tool.input.$defs : {}
+    const leaf = isRecord(definitions[`C${depth - 1}`]) ? definitions[`C${depth - 1}`] : {}
+
+    expect(Object.keys(isRecord(leaf.properties) ? leaf.properties : {})).toEqual(["name"])
+  })
+
+  test("resolves hiding through reference cycles regardless of evaluation order", () => {
+    // `Wrap` is hidden only through the cycle member `Loop`; evaluating a property that
+    // enters the cycle at `Loop` first must not freeze a provisional result for `Wrap`.
+    const schemas = {
+      Wrap: { allOf: [{ $ref: "#/components/schemas/Loop" }] },
+      Loop: { allOf: [{ $ref: "#/components/schemas/Wrap" }, { readOnly: true }] },
+    }
+    const body = (properties: Record<string, unknown>) => ({
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: [...Object.keys(properties), "name"],
+            properties: { ...properties, name: { type: "string" } },
+          },
+        },
+      },
+    })
+    for (const properties of [
+      { a: { $ref: "#/components/schemas/Loop" }, b: { $ref: "#/components/schemas/Wrap" } },
+      { a: { $ref: "#/components/schemas/Wrap" }, b: { $ref: "#/components/schemas/Loop" } },
+    ]) {
+      const tool = toolAt(
+        OpenAPI.fromSpec({
+          baseUrl,
+          spec: { ...singleOperation({ requestBody: body(properties) }, "post"), components: { schemas } },
+        }).tools,
+        "test",
+      )
+      if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+
+      expect(inputTypeScript(tool)).toBe("{ name: string }")
+    }
+  })
+
+  test("keeps not, if, and contains subschemas unprojected", () => {
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: singleOperation(
+          {
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["record"],
+                    properties: {
+                      record: {
+                        type: "object",
+                        // Removing `secret` here would turn `not` unsatisfiable and
+                        // flip which branch of `if` applies; both must pass through.
+                        not: { required: ["secret"], properties: { secret: { type: "string", readOnly: true } } },
+                        if: { required: ["kind"], properties: { kind: { type: "string", readOnly: true } } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "post",
+        ),
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    const properties = isRecord(tool.input.properties) ? tool.input.properties : {}
+    const record: Record<string, unknown> = isRecord(properties.record) ? properties.record : {}
+
+    expect(record.not).toEqual({ required: ["secret"], properties: { secret: { type: "string", readOnly: true } } })
+    expect(record.if).toEqual({ required: ["kind"], properties: { kind: { type: "string", readOnly: true } } })
+  })
+
+  test("does not hide properties whose direction is declared only in anyOf or oneOf alternatives", () => {
+    // Deliberate scope bound: alternatives may apply, so a directional declaration on
+    // one alternative does not hide the property; the annotation is preserved as-is.
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: singleOperation(
+          {
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["choice", "pick"],
+                    properties: {
+                      choice: { anyOf: [{ type: "string", readOnly: true }, { type: "number" }] },
+                      pick: { oneOf: [{ type: "string", readOnly: true }, { type: "number" }] },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "post",
+        ),
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    const properties = isRecord(tool.input.properties) ? tool.input.properties : {}
+    const choice: Record<string, unknown> = isRecord(properties.choice) ? properties.choice : {}
+    const pick: Record<string, unknown> = isRecord(properties.pick) ? properties.pick : {}
+
+    expect(Object.keys(properties)).toEqual(["choice", "pick"])
+    expect(choice.anyOf).toEqual([{ type: "string", readOnly: true }, { type: "number" }])
+    expect(pick.oneOf).toEqual([{ type: "string", readOnly: true }, { type: "number" }])
+  })
+
+  test("does not misresolve shadowed local $defs when flattening body fields", () => {
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: singleOperation(
+          {
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["record"],
+                    $defs: { Value: { type: "string" } },
+                    properties: {
+                      record: {
+                        type: "object",
+                        required: ["x"],
+                        properties: { x: { $ref: "#/$defs/Value" } },
+                        // Shadows the body-level Value; must not affect the body-rooted projection.
+                        $defs: { Value: { type: "string", readOnly: true } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "post",
+        ),
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    const properties = isRecord(tool.input.properties) ? tool.input.properties : {}
+    const record = isRecord(properties.record) ? properties.record : {}
+
+    expect(Object.keys(isRecord(record.properties) ? record.properties : {})).toEqual(["x"])
+    expect(record.required).toEqual(["x"])
+  })
+
+  test("projects directional annotations inside parameter schemas", () => {
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: singleOperation({
+          parameters: [
+            {
+              name: "filter",
+              in: "query",
+              required: true,
+              schema: {
+                type: "object",
+                required: ["state", "id"],
+                properties: { state: { type: "string" }, id: { type: "string", readOnly: true } },
+              },
+            },
+          ],
+        }),
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+
+    expect(inputTypeScript(tool)).toBe("{ filter: { state: string } }")
+  })
+
+  test("ignores inherited directional annotations", () => {
+    const inherited: Record<string, unknown> = { type: "string" }
+    Object.setPrototypeOf(inherited, { readOnly: true })
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: singleOperation({
+          parameters: [
+            {
+              name: "filter",
+              in: "query",
+              required: true,
+              schema: {
+                type: "object",
+                // The own annotation on `id` keeps projection active for the document,
+                // so `value` pins that prototype-inherited annotations are not read.
+                properties: { value: inherited, id: { type: "string", readOnly: true } },
+                required: ["value", "id"],
+              },
+            },
+          ],
+        }),
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool)) throw new Error("test was not generated")
+
+    expect(inputTypeScript(tool)).toBe("{ filter: { value: string } }")
+  })
+
+  test("cleans required properties across allOf branches", () => {
+    const tool = toolAt(
+      OpenAPI.fromSpec({
+        baseUrl,
+        spec: singleOperation(
+          {
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["id", "name"],
+                    allOf: [
+                      {
+                        type: "object",
+                        required: ["id", "name"],
+                        properties: { id: { type: "string", readOnly: true }, name: { type: "string" } },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+          "post",
+        ),
+      }).tools,
+      "test",
+    )
+    if (!Tool.isDefinition(tool) || !isRecord(tool.input)) throw new Error("test was not generated")
+    const properties = isRecord(tool.input.properties) ? tool.input.properties : {}
+    const body = isRecord(properties.body) ? properties.body : {}
+    const allOf = Array.isArray(body.allOf) ? body.allOf : []
+    const branch = isRecord(allOf[0]) ? allOf[0] : {}
+
+    expect(body.required).toEqual(["name"])
+    expect(branch.required).toEqual(["name"])
+    expect(Object.keys(isRecord(branch.properties) ? branch.properties : {})).toEqual(["name"])
+  })
+
+  test("keeps directional schemas model-facing while preserving runtime pass-through", async () => {
+    const client = recordingClient(() =>
+      json({
+        id: "server-id",
+        name: "Ada",
+        password: "returned-by-server",
+        profile: { createdAt: "today", secret: "returned-secret", label: "primary" },
+        generated: "generated-id",
+      }),
+    )
+    const tool = toolAt(OpenAPI.fromSpec({ baseUrl, spec: directionalSpec("3.1.0") }).tools, "users.create")
+    if (!Tool.isDefinition(tool)) throw new Error("users.create was not generated")
+
+    const result = await Effect.runPromise(
+      tool
+        .run({
+          id: "ignored-top-level",
+          generated: "ignored-generated",
+          name: "Ada",
+          password: "request-secret",
+          profile: { createdAt: "sent-nested", secret: "nested-secret", label: "primary" },
+        })
+        .pipe(Effect.provide(client.layer)),
+    )
+
+    expect(client.requests[0]?.body).toEqual({
+      name: "Ada",
+      password: "request-secret",
+      profile: { createdAt: "sent-nested", secret: "nested-secret", label: "primary" },
+    })
+    expect(result).toMatchObject({ password: "returned-by-server", profile: { secret: "returned-secret" } })
+  })
+
   test("documents that the opencode fixture is unauthenticated", async () => {
     const spec = await opencodeSpec()
     const components = isRecord(spec.components) ? spec.components : {}
@@ -525,9 +1116,9 @@ describe("OpenAPI.fromSpec", () => {
     expect(client.requests[0]?.url).toBe(
       `${baseUrl}/test?tags=first+value&tags=second%26value&state=open+now&page=2&location%5Bdirectory%5D=%2Ftmp%2Fa+b&location%5Bworkspace%5D=work%261`,
     )
-    await expect(
-      Effect.runPromise(tool.run({ tags: [{}] }).pipe(Effect.provide(client.layer))),
-    ).rejects.toThrow("Parameter 'tags' contains an unsupported nested value.")
+    await expect(Effect.runPromise(tool.run({ tags: [{}] }).pipe(Effect.provide(client.layer)))).rejects.toThrow(
+      "Parameter 'tags' contains an unsupported nested value.",
+    )
     await expect(
       Effect.runPromise(tool.run({ filter: { state: {} } }).pipe(Effect.provide(client.layer))),
     ).rejects.toThrow("Query parameter 'filter' contains an unsupported nested value.")

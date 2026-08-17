@@ -88,6 +88,9 @@ const make = (options: Config) =>
       executeValues(query, params) {
         return runValues(query, params)
       },
+      executeValuesUnprepared(query, params) {
+        return runValues(query, params)
+      },
       executeUnprepared(query, params, transformRows) {
         return this.execute(query, params, transformRows)
       },
