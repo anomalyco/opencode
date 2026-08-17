@@ -108,6 +108,47 @@ describe("Git worktrees", () => {
       expect((yield* git.worktree.list(repo)).some((entry) => entry.directory.endsWith("-git-worktree"))).toBe(false)
     }),
   )
+
+  it.live("reports that force is required under a non-English git locale", () =>
+    Effect.gen(function* () {
+      // git localizes its diagnostics, so classifying them has to survive whatever
+      // locale the user's shell happens to set.
+      const previous = process.env.LC_ALL
+      process.env.LC_ALL = "zh_CN.UTF-8"
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          if (previous === undefined) delete process.env.LC_ALL
+          else process.env.LC_ALL = previous
+        }),
+      )
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(root.path))
+      const directory = AbsolutePath.make(yield* Effect.promise(() => fs.realpath(root.path)))
+      const worktree = AbsolutePath.make(`${root.path}-git-worktree-dirty`)
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => fs.rm(worktree, { recursive: true, force: true })).pipe(Effect.ignore),
+      )
+      const git = yield* Git.Service
+      const repo = yield* git.repo.discover(directory)
+      if (!repo) throw new Error("Repository not found")
+      yield* git.worktree.create({ repository: repo, directory: worktree })
+      yield* Effect.promise(() => fs.writeFile(path.join(worktree, "dirty.txt"), "dirty\n"))
+
+      const error = yield* git.worktree
+        .remove({ repository: repo, directory: worktree, force: false })
+        .pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(Git.WorktreeError)
+      if (!(error instanceof Git.WorktreeError)) throw new Error("Expected a worktree error")
+      expect(error.operation).toBe("remove")
+      expect(error.forceRequired).toBe(true)
+
+      yield* git.worktree.remove({ repository: repo, directory: worktree, force: true })
+    }),
+  )
 })
 
 describe("Git trees", () => {

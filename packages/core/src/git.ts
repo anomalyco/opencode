@@ -860,7 +860,9 @@ const layer = Layer.effect(
       cwd = repository.worktree,
     ) {
       const result = yield* proc
-        .run(ChildProcess.make("git", args, { cwd, extendEnv: true, stdin: "ignore" }))
+        // git localizes diagnostics, and `git worktree` has no machine-readable output,
+        // so pin messages to C to keep the classification below locale-independent.
+        .run(ChildProcess.make("git", args, { cwd, env: { LC_ALL: "C" }, extendEnv: true, stdin: "ignore" }))
         .pipe(
           Effect.mapError(
             (cause) => new WorktreeError({ operation, directory: worktreeDirectory, message: cause.message, cause }),
