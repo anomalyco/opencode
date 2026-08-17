@@ -301,7 +301,7 @@ it.effect("generates from fresh settled Session context without durable mutation
     expect(requests[0]?.model).toBe(model)
     expect(requests[0]?.system[0]?.text).toBe("Hooked system")
     expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
-    expect(requests[0]?.http?.headers).toMatchObject({ "X-Session-Id": sessionID })
+    expect(requests[0]?.http?.headers).toMatchObject({ "X-Session-Id": sessionID, "session-id": sessionID })
     expect(requests[0]?.promptCacheKey).toBe(sessionID)
     const instructionUpdates = requests[0]?.messages.flatMap((message) =>
       message.role === "system"

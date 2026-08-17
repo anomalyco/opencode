@@ -240,6 +240,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(requests[0]?.http?.headers).toEqual({
       "x-session-affinity": sessionID,
       "X-Session-Id": sessionID,
+      "session-id": sessionID,
       "x-parent-session-id": parentID,
       "User-Agent": App.useragent(App.make()),
       "x-opencode-project": Project.ID.global,

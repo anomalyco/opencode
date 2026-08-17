@@ -149,6 +149,7 @@ it.effect("generates a title from the sole user message and renames the session"
     expect(requests[0]?.http?.headers).toEqual({
       "x-session-affinity": sessionID,
       "X-Session-Id": sessionID,
+      "session-id": sessionID,
       "User-Agent": App.useragent(App.make()),
       "x-opencode-project": Project.ID.global,
       "x-opencode-session": sessionID,
