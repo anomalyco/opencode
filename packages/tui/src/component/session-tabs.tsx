@@ -23,7 +23,7 @@ import {
   NEW_SESSION_TAB_TITLE,
   sessionTabComplete,
   sessionTabDetail,
-  sessionTabShortcutLabel,
+  sessionTabNumberLabel,
   seedSessionTabMotion,
   sessionTabOverflowWidth,
   type SessionTab,
@@ -426,7 +426,7 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                 const value = session()
                 return value ? data.project.get(value.projectID) : undefined
               })
-              const numberWidth = () => 2
+              const numberWidth = () => Math.max(2, String(items().length).length)
               const restingTitleWidth = () => Math.max(1, width() - numberWidth() - 2)
               const hoveredTitleWidth = () => Math.max(1, restingTitleWidth() - 1)
               const titleWidth = () => (hovered() === tab.sessionID ? hoveredTitleWidth() : restingTitleWidth())
@@ -657,14 +657,14 @@ function VerticalSessionTabs(props: { controller?: SessionTabsController; animat
                       backgroundColor={pulseBackground()}
                       onLevel={setSweepLevel}
                     />
-                    <box zIndex={1} width="100%" flexDirection="row" paddingLeft={1} paddingRight={1}>
+                    <box zIndex={1} width="100%" flexDirection="row" paddingRight={1}>
                       <text
-                        width={numberWidth()}
+                        width={numberWidth() + 1}
                         fg={numberColor()}
                         selectable={false}
                         attributes={selected() ? TextAttributes.BOLD : undefined}
                       >
-                        {sessionTabShortcutLabel(index())}
+                        {sessionTabNumberLabel(index()).padStart(numberWidth())}
                       </text>
                       <text
                         width={titleWidth()}
@@ -1040,8 +1040,7 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
           const glows = () => !selected() && (status().attention || (!status().busy && status().unread !== undefined))
           const title = () => tab.title ?? "Untitled session"
           const tabNumber = createMemo(() => items().findIndex((item) => item.sessionID === tab.sessionID) + 1)
-          // Shortcut labels stay one cell wide: 1-9, 0 for ten, then a neutral dot.
-          const numberWidth = () => 2
+          const numberWidth = () => Math.max(2, String(items().length).length)
           // Hovering reveals the close mark, so the title's right bound shifts left of it.
           const restingTitleWidth = () => Math.max(1, width() - 1 - numberWidth())
           const hoveredTitleWidth = () => Math.max(1, restingTitleWidth() - 2)
@@ -1141,11 +1140,8 @@ function HorizontalSessionTabs(props: { controller?: SessionTabsController; anim
                 onLevel={setSweepLevel}
               />
               <box zIndex={1} width="100%" flexDirection="row">
-                <text width={1} selectable={false}>
-                  {" "}
-                </text>
-                <text width={numberWidth()} fg={numberColor()} selectable={false} attributes={bold()}>
-                  {tab === NEW_SESSION_TAB ? "+" : sessionTabShortcutLabel(tabNumber() - 1)}
+                <text width={numberWidth() + 1} fg={numberColor()} selectable={false} attributes={bold()}>
+                  {(tab === NEW_SESSION_TAB ? "+" : sessionTabNumberLabel(tabNumber() - 1)).padStart(numberWidth())}
                 </text>
                 <text
                   width={availableTitleWidth()}
