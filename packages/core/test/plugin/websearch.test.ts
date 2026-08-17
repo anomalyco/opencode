@@ -5,6 +5,7 @@ import { WebSearch } from "@opencode-ai/core/websearch"
 import { WebSearchExa } from "@opencode-ai/core/plugin/websearch/exa"
 import { WebSearchFirecrawl } from "@opencode-ai/core/plugin/websearch/firecrawl"
 import { WebSearchParallel } from "@opencode-ai/core/plugin/websearch/parallel"
+import { WebSearchTavily } from "@opencode-ai/core/plugin/websearch/tavily"
 import { host, integrationHost, webSearchHost } from "./host"
 import { requests, resetWebSearchFixture, webSearchIntegrationTest } from "./websearch-fixture"
 
@@ -188,6 +189,73 @@ describe("built-in web search providers", () => {
         },
       })
       expect(JSON.stringify(output)).not.toContain("parallel-secret")
+    }),
+  )
+
+  it.effect("registers Tavily with keyless and keyed Search API access", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          query: "effect typescript",
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              content: "Effect documentation",
+              score: 0.99,
+            },
+          ],
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchTavily.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(yield* integrations.get(Integration.ID.make("tavily"))).toMatchObject({
+        id: "tavily",
+        name: "Tavily",
+        methods: [{ type: "key" }, { type: "env", names: ["TAVILY_API_KEY"] }],
+      })
+      const query = {
+        query: "effect typescript",
+        providerID: WebSearch.ID.make("tavily"),
+      }
+      expect(yield* websearch.query(query)).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("tavily"),
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              content: "Effect documentation",
+              time: {},
+            },
+          ],
+        }),
+      )
+      expect(requests[0]).toMatchObject({
+        url: WebSearchTavily.endpoint,
+        headers: { "x-client-name": "opencode2", "x-tavily-access-mode": "keyless" },
+        body: {
+          query: "effect typescript",
+          search_depth: "basic",
+          chunks_per_source: 3,
+          max_results: 8,
+        },
+      })
+      expect(requests[0]?.headers.authorization).toBeUndefined()
+
+      yield* integrations.connection.key({
+        integrationID: Integration.ID.make("tavily"),
+        key: "tavily-secret",
+      })
+      yield* websearch.query(query)
+      expect(requests[1]).toMatchObject({
+        headers: { authorization: "Bearer tavily-secret", "x-client-name": "opencode2" },
+      })
+      expect(requests[1]?.headers["x-tavily-access-mode"]).toBeUndefined()
     }),
   )
 })

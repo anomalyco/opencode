@@ -3,11 +3,11 @@ export * as SessionModelRequest from "./model-request.js"
 import { LLM, Message, SystemPart, type LLMRequest } from "@opencode-ai/ai"
 import type { StreamOptions } from "@opencode-ai/ai/route"
 import type { Content } from "@opencode-ai/schema/tool"
-import { SessionError } from "@opencode-ai/schema/session-error"
 import { Cause, Config, Context, Effect, Layer, Result } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { App } from "../app.js"
 import { Model } from "../model.js"
+import { Provider } from "../provider.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
@@ -15,10 +15,11 @@ import { Tool } from "../tool.js"
 import { SessionContext } from "./context.js"
 import { SessionModelHeaders } from "./model-headers.js"
 import { SessionModelHttp } from "./model-http.js"
+import { SessionModelTransport } from "./model-transport.js"
 import { SessionPromptCacheKey } from "./prompt-cache-key.js"
 import { PromptCacheDiagnostics } from "./prompt-cache-diagnostics.js"
 import { MAX_STEPS_PROMPT } from "./runner/max-steps.js"
-import PROMPT_DEFAULT from "./runner/prompt/base.txt"
+import { SessionSystemPrompt } from "./system-prompt.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
@@ -46,6 +47,8 @@ const declineDefect = (cause: Cause.Cause<Tool.Error>) => {
 interface Prepared {
   readonly request: LLMRequest
   readonly options: StreamOptions
+  /** False when Session HTTP hooks require the request to remain on HTTP. */
+  readonly webSocketEligible: boolean
   /**
    * One request-scoped execution operation. Unknown, hook-removed, and
    * step-limit-violating calls fail individually through the same seam.
@@ -165,7 +168,12 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const hooks = yield* PluginHooks.Service
+    const transport = yield* SessionModelTransport.Service
     const app = yield* App.Metadata
+    const webSocket = yield* Config.boolean("OPENCODE_EXPERIMENTAL_OPENAI_RESPONSES_WEBSOCKET").pipe(
+      Config.withDefault(false),
+      Effect.orDie,
+    )
     const diagnostics = yield* Config.boolean("OPENCODE_PROMPT_CACHE_DIAGNOSTICS").pipe(
       Config.withDefault(false),
       Effect.orDie,
@@ -182,7 +190,10 @@ export const layer = Layer.effect(
       // The final Step keeps definitions available to protocols with native "none",
       // preserving their prompt cache prefix. Calls are still rejected at execution.
       const tools = input.context.tools
-      const system = [agent.info.system ? agent.info.system : PROMPT_DEFAULT, input.context.initial]
+      const system = [
+        agent.info.system ? agent.info.system : SessionSystemPrompt.make(tools.definitions.map((tool) => tool.name)),
+        input.context.initial,
+      ]
         .filter((part) => part.length > 0)
         .map(SystemPart.make)
       const history = toLLMMessages(input.context.messages, resolved.ref, providerMetadataKey)
@@ -226,12 +237,23 @@ export const layer = Layer.effect(
         tools: Array.from(hooked, ([name, tool]) => ({ ...tool, name })),
         toolChoice: stepLimitReached ? "none" : undefined,
       })
+      const webSocketEligible =
+        !(yield* hooks.has("session", "http.request")) && !(yield* hooks.has("session", "http.response"))
+      const http = webSocketEligible
+        ? undefined
+        : SessionModelHttp.middleware(hooks, {
+            sessionID: session.id,
+            agent: agent.id,
+            model: resolved.ref,
+          })
       const options: StreamOptions = {
-        http: SessionModelHttp.middleware(hooks, {
-          sessionID: session.id,
-          agent: agent.id,
-          model: resolved.ref,
-        }),
+        ...(http ? { http } : {}),
+        ...(webSocket &&
+        webSocketEligible &&
+        resolved.ref.providerID === Provider.ID.openai &&
+        model.route.id === "openai-responses"
+          ? { webSocket: transport.bind(session.id) }
+          : {}),
       }
       if (promptCacheSnapshots) {
         const current = PromptCacheDiagnostics.snapshot(request)
@@ -263,6 +285,7 @@ export const layer = Layer.effect(
       return {
         request,
         options,
+        webSocketEligible,
         executeTool,
         stepLimitReached,
       }
@@ -275,5 +298,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, App.node],
+  deps: [PluginHooks.node, SessionModelTransport.node, App.node],
 })

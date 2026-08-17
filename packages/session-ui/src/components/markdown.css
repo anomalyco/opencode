@@ -306,7 +306,7 @@
   unicode-bidi: plaintext;
 }
 
-body[data-new-layout] [data-component="markdown"] {
+:root body [data-component="markdown"] {
   [data-slot="markdown-copy-button"]::after {
     box-sizing: border-box;
     display: inline-flex;
@@ -326,56 +326,6 @@ body[data-new-layout] [data-component="markdown"] {
     letter-spacing: 0.05px;
     font-variant-numeric: tabular-nums;
     font-variation-settings: "slnt" 0;
-  }
-}
-
-body:not([data-new-layout]) [data-component="markdown"] {
-  color: var(--text-strong);
-
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    font-size: 14px;
-    color: var(--text-strong);
-    font-weight: var(--font-weight-medium);
-  }
-
-  strong,
-  b {
-    color: var(--text-strong);
-  }
-
-  li::marker {
-    color: var(--text-weak);
-  }
-
-  blockquote {
-    border-inline-start: 2px solid var(--border-weak-base);
-    color: var(--text-weak);
-  }
-
-  .shiki {
-    border-color: var(--border-weak-base);
-  }
-
-  :not(pre) > code {
-    color: var(--syntax-string);
-    padding: 0;
-    border-radius: 0;
-    background: none;
-  }
-
-  th,
-  td {
-    border-bottom: 1px solid var(--border-weaker-base);
-  }
-
-  th {
-    color: var(--text-strong);
-    border-bottom-color: var(--border-weak-base);
   }
 }
 

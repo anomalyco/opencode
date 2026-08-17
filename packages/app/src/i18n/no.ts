@@ -1168,22 +1168,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "Den installerte versjonen samsvarer ikke med versjonen av skrivebordsappen.",
   "wsl.onboarding.adding": "Legger til...",
 
-  "help.tabs.toast.ariaLabel": "Vi introduserer faner. Organiser arbeidet og de aktive sesjonene dine med faner",
-  "help.tabs.toast.dismiss": "Avvis informasjon om faner",
-  "help.tabs.title": "Vi introduserer faner",
-  "help.tabs.description": "Organiser arbeidet og de aktive sesjonene dine med faner",
-  "help.tabs.date": "14. juli",
-  "help.tabs.introduction": "OpenCode Desktop er nå bygget rundt faner.",
-  "help.tabs.sessions":
-    "Start en ny sesjon i en fane, eller åpne en eksisterende sesjon fra et av prosjektene dine. Åpne en ny fane når du skal begynne på noe nytt, og lukk den når du er ferdig.",
-  "help.tabs.organize":
-    "Når du har noen få faner åpne, blir det enklere å organisere de aktive sesjonene. Gi fanene navn som er lette å huske, hvis du planlegger å beholde dem.",
-  "help.tabs.home":
-    "Du finner alle sesjonene og prosjektene dine på den nye Hjem-skjermen. Når du velger en sesjon, åpnes den i en fane.",
-  "help.tabs.persistence": "Fanene er fortsatt åpne når du åpner appen på nytt.",
-  "help.tabs.worktrees":
-    "Det nye oppsettet støtter ikke Git Worktrees ennå, men støtte kommer snart. Hvis du foretrekker å fortsette med det forrige oppsettet, kan du bytte mellom oppsettene i Innstillinger. Vær oppmerksom på at det nye oppsettet blir permanent om noen uker.",
-
   "language.uk": "Українська",
 
   "error.page.description.localServerStartup": "Det oppstod en feil under oppstart av den lokale serveren.",
@@ -1253,13 +1237,6 @@ export const dict = {
   "settings.general.row.showCustomAgents.title": "Vis agent",
   "settings.general.row.showCustomAgents.description":
     "Bytt mellom agenter i skrivefeltet. Når velgeren er skjult, brukes Build-agenten som standard.",
-  "settings.general.row.newInterface.title": "Nytt oppsett",
-  "settings.general.row.newInterface.badge": "Ny",
-  "settings.general.row.newInterface.description":
-    "Bruk de nye fanene og startsidens oppsett. I en begrenset periode kan du bytte mellom oppsettene.",
-  "settings.general.row.newInterfaceNotice.title": "Du bruker nå det nye oppsettet",
-  "settings.general.row.newInterfaceNotice.description": "Det forrige oppsettet er ikke lenger tilgjengelig",
-  "settings.general.row.newInterfaceNotice.dismiss": "Avvis",
   "settings.general.row.pinchZoom.title": "Knip for å zoome",
   "settings.general.row.pinchZoom.description": "Tillat knipebevegelser på styreflaten og Ctrl-rulling for å zoome",
   "settings.updates.action.downloading": "Laster ned...",

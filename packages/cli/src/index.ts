@@ -12,6 +12,7 @@ import { Global } from "@opencode-ai/util/global"
 import { AppProcess } from "@opencode-ai/util/process"
 import { Config } from "./config"
 import { Npm } from "@opencode-ai/util/npm"
+import { Heap } from "./heap"
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
@@ -54,13 +55,16 @@ const Handlers = Runtime.handlers(Commands, {
   serve: () => import("./commands/handlers/serve"),
 })
 
-Effect.logInfo("cli starting", {
-  version: OPENCODE_VERSION,
-  channel: OPENCODE_CHANNEL,
-  local: OPENCODE_LOCAL,
-  args: process.argv.slice(2),
+Effect.gen(function* () {
+  yield* Heap.listen
+  yield* Effect.logInfo("cli starting", {
+    version: OPENCODE_VERSION,
+    channel: OPENCODE_CHANNEL,
+    local: OPENCODE_LOCAL,
+    args: process.argv.slice(2),
+  })
+  return yield* Runtime.run(Commands, Handlers, { version: OPENCODE_VERSION })
 }).pipe(
-  Effect.flatMap(() => Runtime.run(Commands, Handlers, { version: OPENCODE_VERSION })),
   Effect.annotateLogs({ role: "cli" }),
   Effect.provide(Config.layer),
   Effect.provide(Updater.layer),

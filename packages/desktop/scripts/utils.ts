@@ -3,7 +3,7 @@ import { chmod, copyFile, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-const CLI_VERSION = "0.0.0-next-16365"
+const CLI_VERSION = "dev"
 
 export type Channel = "dev" | "beta" | "prod"
 
@@ -74,16 +74,26 @@ export async function downloadCliToResources(version = CLI_VERSION, dest = windo
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
   try {
     await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${version}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
-    await copyFile(
+    await copyCliToResources(
       join(directory, "node_modules", cli.package, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"),
       dest,
     )
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
-  await prepareCli(dest)
 
   console.log(`Copied ${cli.package}@${version} to ${dest}`)
+}
+
+export async function copyBuiltCliToResources(root: string, dest = windowsify("resources/opencode-cli")) {
+  const cli = getCurrentCli()
+  const directory = cli.package.replace("@opencode-ai/", "")
+  await copyCliToResources(join(root, directory, "bin", cli.os === "win32" ? "opencode2.exe" : "opencode2"), dest)
+}
+
+async function copyCliToResources(source: string, dest: string) {
+  await copyFile(source, dest)
+  await prepareCli(dest)
 }
 
 async function prepareCli(dest: string) {

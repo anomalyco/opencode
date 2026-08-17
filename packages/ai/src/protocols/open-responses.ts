@@ -26,7 +26,6 @@ import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "open-responses"
 const NAME = "Open Responses"
-const MEDIA_MIMES = new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.PDF_MIMES])
 export const PATH = "/responses"
 
 // =============================================================================
@@ -211,10 +210,42 @@ export type StreamItem = Schema.Schema.Type<typeof StreamItem>
 // event-level `error` envelope, so accept all three shapes here.
 // https://www.openresponses.org/specification
 const OpenResponsesErrorPayload = Schema.Struct({
+  type: optionalNull(Schema.String),
   code: optionalNull(Schema.String),
   message: optionalNull(Schema.String),
   param: optionalNull(Schema.String),
 })
+
+const WebSocketErrorHeader = Schema.Union([Schema.String, Schema.Number, Schema.Boolean])
+export const WebSocketErrorEvent = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.tag("error"),
+    status: Schema.optional(Schema.Number),
+    status_code: Schema.optional(Schema.Number),
+    code: optionalNull(Schema.String),
+    message: Schema.optional(Schema.String),
+    param: optionalNull(Schema.String),
+    error: optionalNull(OpenResponsesErrorPayload),
+    headers: Schema.optional(Schema.Record(Schema.String, WebSocketErrorHeader)),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
+const decodeWebSocketErrorEvent = Schema.decodeUnknownEffect(WebSocketErrorEvent)
+
+export const decodeKnownErrorEvent = (event: Event) =>
+  decodeWebSocketErrorEvent({
+    ...event,
+    status: typeof event.status === "number" ? event.status : undefined,
+    status_code: typeof event.status_code === "number" ? event.status_code : undefined,
+    headers: ProviderShared.isRecord(event.headers)
+      ? Object.fromEntries(
+          Object.entries(event.headers).filter(
+            (entry): entry is [string, string | number | boolean] =>
+              typeof entry[1] === "string" || typeof entry[1] === "number" || typeof entry[1] === "boolean",
+          ),
+        )
+      : undefined,
+  })
 
 export const Event = Schema.StructWithRest(
   Schema.Struct({
@@ -240,6 +271,9 @@ export const Event = Schema.StructWithRest(
     message: Schema.optional(Schema.String),
     param: optionalNull(Schema.String),
     error: optionalNull(OpenResponsesErrorPayload),
+    status: Schema.optional(Schema.Unknown),
+    status_code: Schema.optional(Schema.Unknown),
+    headers: Schema.optional(Schema.Unknown),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
@@ -250,7 +284,7 @@ export interface Extension {
   readonly name: string
   readonly lowerMedia?: (input: {
     readonly part: MediaPart
-    readonly media: ProviderShared.ValidatedMedia
+    readonly media: ProviderShared.NormalizedMedia
     readonly request: LLMRequest
   }) => MediaInput | undefined
   readonly messagePhase?: (value: unknown) => MessagePhase | null | undefined
@@ -345,13 +379,13 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   request: LLMRequest,
   extension: Extension,
 ) {
-  const media = yield* ProviderShared.validateMedia(extension.name, part, MEDIA_MIMES)
+  const media = ProviderShared.normalizeMedia(part)
   const extended = extension.lowerMedia?.({ part, media, request })
   if (extended) return extended
-  if (media.mime === "application/pdf") {
+  if (!media.mime.startsWith("image/")) {
     return {
       type: "input_file" as const,
-      filename: part.filename ?? "document.pdf",
+      filename: part.filename ?? (media.mime === "application/pdf" ? "document.pdf" : "file"),
       file_data: media.dataUrl,
     }
   }
@@ -632,9 +666,9 @@ export type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 const NO_EVENTS: StepResult["1"] = []
 
 // `response.completed` / `response.incomplete` are clean finishes that emit a
-// `finish` event; `response.failed` is a hard failure. All three end the stream,
-// so keep this set aligned with `step` and the protocol's terminal predicate.
-const TERMINAL_TYPES = new Set(["response.completed", "response.incomplete", "response.failed"])
+// `finish` event; `response.failed` and `error` are hard failures. All four end
+// the stream, so keep this set aligned with `step` and the protocol's terminal predicate.
+const TERMINAL_TYPES = new Set(["error", "response.completed", "response.incomplete", "response.failed"])
 export const terminal = (event: Event) => TERMINAL_TYPES.has(event.type)
 
 const onOutputTextDelta = (state: ParserState, event: Event, id: string): StepResult => {
@@ -966,15 +1000,23 @@ const providerErrorMessage = (event: Event, fallback: string): string => {
   return message || code || fallback
 }
 
-const providerError = (state: ParserState, event: Event, fallback: string) => {
+export const providerFailure = (id: string, event: Event, fallback: string) => {
   const code = event.code || event.error?.code || event.response?.error?.code || undefined
   const message = providerErrorMessage(event, fallback)
+  const status =
+    typeof event.status === "number"
+      ? event.status
+      : typeof event.status_code === "number"
+        ? event.status_code
+        : undefined
   return new AIError({
-    module: state.id,
+    module: id,
     method: "stream",
-    reason: classifyProviderFailure({ message, code }),
+    reason: classifyProviderFailure({ message, code, status }),
   })
 }
+
+const providerError = (state: ParserState, event: Event, fallback: string) => providerFailure(state.id, event, fallback)
 
 export const step = (state: ParserState, event: Event) => {
   if (event.type === "response.output_text.delta" || event.type === "response.output_text.done") {
@@ -1015,7 +1057,11 @@ export const step = (state: ParserState, event: Event) => {
   if (event.type === "response.completed" || event.type === "response.incomplete")
     return Effect.succeed(onResponseFinish(state, event))
   if (event.type === "response.failed") return providerError(state, event, `${state.name} response failed`)
-  if (event.type === "error") return providerError(state, event, `${state.name} stream error`)
+  if (event.type === "error")
+    return decodeKnownErrorEvent(event).pipe(
+      Effect.mapError(() => ProviderShared.eventError(state.id, `${state.name} returned a malformed error event`)),
+      Effect.flatMap(() => providerError(state, event, `${state.name} stream error`)),
+    )
   return Effect.succeed<StepResult>([state, NO_EVENTS])
 }
 

@@ -1,4 +1,3 @@
-import { useNavigate } from "@solidjs/router"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
@@ -55,7 +54,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const settings = useSettings()
   const terminal = useTerminal()
   const layout = useLayout()
-  const navigate = useNavigate()
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
     const owner = actions.session.ownership.capture()
     const value = await load()
@@ -327,13 +325,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.new"),
       keybind: "mod+shift+s",
       slash: "new",
-      onSelect: (source) => {
-        if (settings.general.newLayoutDesigns()) {
-          command.trigger("tab.new", source)
-          return
-        }
-        navigate(`/${actions.session.identity.params.dir}/session`)
-      },
+      onSelect: (source) => command.trigger("tab.new", source),
     }),
     sessionCommand({
       id: "session.undo",

@@ -32,8 +32,11 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { SessionEvent } from "@opencode-ai/core/session/event"
+import { SessionContext } from "@opencode-ai/core/session/context"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionModelRequest } from "@opencode-ai/core/session/model-request"
+import { SessionModelTransport } from "@opencode-ai/core/session/model-transport"
 import { Money } from "@opencode-ai/schema/money"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -60,6 +63,7 @@ import {
   SessionTable,
 } from "@opencode-ai/core/session/sql"
 import { InstructionEntry } from "@opencode-ai/core/session/instruction-entry"
+import { InstructionState } from "@opencode-ai/core/session/instruction-state"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { Instructions } from "@opencode-ai/core/instructions/index"
 import { InstructionBuiltIns } from "@opencode-ai/core/instructions/builtins"
@@ -67,16 +71,17 @@ import { InstructionDiscovery } from "@opencode-ai/core/instruction-discovery"
 import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
 import { ReferenceInstructions } from "@opencode-ai/core/reference/instructions"
 import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
+import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
 import { ID } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { Provider } from "@opencode-ai/core/provider"
-import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
+import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { asc, desc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, catalogHost, host } from "./plugin/host"
-import PROMPT_DEFAULT from "../src/session/runner/prompt/base.txt"
 import { CodeModeInstructions } from "@opencode-ai/core/codemode/instructions"
 
 let requests: LLMRequest[] = []
@@ -132,8 +137,17 @@ const testLLM = TestLLM.layer({
     }),
 })
 const client = TestLLM.clientLayer
+const closedTransports: Session.ID[] = []
+const modelTransport = Layer.succeed(
+  SessionModelTransport.Service,
+  SessionModelTransport.Service.of({
+    bind: () => ({ execute: () => Effect.die("Unexpected WebSocket execution") }),
+    close: (sessionID) => Effect.sync(() => closedTransports.push(sessionID)),
+    closeAll: Effect.void,
+  }),
+)
 const model = LanguageModel.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
-const defaultSystem = PROMPT_DEFAULT
+const defaultSystem = SessionSystemPrompt.make([])
 const replacementModel = LanguageModel.make({ id: "replacement", provider: "fake", route: OpenAIChat.route })
 const compactModel = LanguageModel.make({
   id: "compact",
@@ -373,6 +387,7 @@ const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Config.node, config],
   [McpInstructions.node, mcpInstructions],
   [PluginSupervisor.node, pluginSupervisor],
+  [SessionModelTransport.node, modelTransport],
 ])
 const execution = Layer.effect(
   SessionExecution.Service,
@@ -398,7 +413,8 @@ const execution = Layer.effect(
       active: coordinator.active,
       resume: coordinator.run,
       wake: coordinator.wake,
-      interrupt: coordinator.interrupt,
+      wakeActive: coordinator.wakeActive,
+      interrupt: (sessionID) => coordinator.interrupt(sessionID),
       awaitIdle: coordinator.awaitIdle,
     })
   }),
@@ -426,6 +442,8 @@ const it = testEffect(
       ReferenceInstructions.node,
       Config.node,
       Snapshot.node,
+      SessionContext.node,
+      SessionModelRequest.node,
       SessionRunnerLLM.node,
       SessionExecution.node,
       Session.node,
@@ -445,6 +463,7 @@ const it = testEffect(
       [SessionExecution.node, execution],
       [Config.node, config],
       [PluginSupervisor.node, pluginSupervisor],
+      [SessionModelTransport.node, modelTransport],
     ],
   ).pipe(Layer.provideMerge(testLLM)),
 )
@@ -491,6 +510,7 @@ const setup = Effect.gen(function* () {
   requests = (yield* TestLLM.Service).requests
   authorizations.length = 0
   executions.length = 0
+  closedTransports.length = 0
   systemBaseline = "Initial context"
   systemRemoved = false
   systemUnavailable = false
@@ -523,6 +543,20 @@ const providerUnavailable = () =>
       message: "Provider unavailable",
       transport: "http",
       operation: "request",
+    }),
+  })
+
+const continuationRejected = (recovery: "retry-full" | "rotate-and-retry-full") =>
+  new AIError({
+    module: "test",
+    method: "stream",
+    reason: new TransportReason({
+      message: "Continuation rejected",
+      transport: "websocket",
+      operation: "read",
+      phase: "receive",
+      delivery: "rejected",
+      recovery,
     }),
   })
 
@@ -638,7 +672,7 @@ const replaySessionProjection = (id: Session.ID) =>
     yield* Effect.forEach(
       recorded.map((event) => ({
         id: event.id,
-        created: DateTime.makeUnsafe(event.created),
+        created: event.created,
         aggregateID: event.aggregate_id,
         seq: event.seq,
         type: event.type,
@@ -652,7 +686,7 @@ const replaySessionProjection = (id: Session.ID) =>
 type FragmentKind = "text" | "reasoning" | "tool input"
 
 type FragmentFixture = {
-  readonly delta: Event.Definition
+  readonly delta?: Event.Definition
   readonly completeEvents: LLMEvent[]
   readonly partialEvents: LLMEvent[]
   readonly expectedAssistant: unknown
@@ -714,7 +748,6 @@ const fragmentFixture = (kind: FragmentKind, id: string, chunks: readonly string
       ]
       const expectedContent = { type: "tool", id, state: { status: "streaming", input: text } }
       return {
-        delta: SessionEvent.Tool.Input.Delta,
         partialEvents,
         completeEvents: [...partialEvents, LLMEvent.toolInputEnd({ id, name: "echo" })],
         expectedAssistant: { type: "assistant", content: [expectedContent] },
@@ -733,20 +766,37 @@ const verifyEphemeralDeltas = (kind: FragmentKind) =>
     const expectedContext = [{ type: "user", text: prompt }, fixture.expectedAssistant]
     yield* admit(session, prompt)
     const bus = yield* Bus.Service
-    const live = yield* bus.subscribe(fixture.delta).pipe(Stream.take(32), Stream.runCollect, Effect.forkScoped)
+    const live = fixture.delta
+      ? yield* bus.subscribe(fixture.delta).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      : undefined
     yield* Effect.yieldNow
     yield* TestLLM.push(fixture.completeEvents)
 
     yield* session.resume(sessionID)
 
     const { db } = yield* Database.Service
-    const deltas = yield* db
-      .select({ type: EventTable.type })
-      .from(EventTable)
-      .where(eq(EventTable.type, Bus.versionedType(fixture.delta.type, 1)))
-      .all()
-      .pipe(Effect.orDie)
-    expect(Array.from(yield* Fiber.join(live))).toHaveLength(32)
+    const deltas = fixture.delta
+      ? yield* db
+          .select({ type: EventTable.type })
+          .from(EventTable)
+          .where(eq(EventTable.type, Bus.versionedType(fixture.delta.type, 1)))
+          .all()
+          .pipe(Effect.orDie)
+      : []
+    if (live) {
+      const streamed = Array.from(yield* Fiber.join(live))
+      expect(streamed).toHaveLength(1)
+      expect(
+        streamed
+          .map((event) => {
+            if (!event.data || typeof event.data !== "object" || !("delta" in event.data))
+              throw new Error("Expected delta event")
+            if (typeof event.data.delta !== "string") throw new Error("Expected string delta")
+            return event.data.delta
+          })
+          .join(""),
+      ).toBe(chunks.join(""))
+    }
     expect(deltas).toHaveLength(0)
     expect(yield* session.context(sessionID)).toMatchObject(expectedContext)
 
@@ -944,6 +994,48 @@ describe("SessionRunnerLLM", () => {
           ],
         },
       ])
+    }),
+  )
+
+  it.effect("forces HTTP and triggers active request and response hooks once", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const hooks = yield* PluginHooks.Service
+      let requestTriggers = 0
+      let responseTriggers = 0
+      yield* hooks.register("session", "http.request", (event) =>
+        Effect.sync(() => {
+          requestTriggers++
+          event.request.headers.set("x-request-hook", "active")
+        }),
+      )
+      yield* hooks.register("session", "http.response", (event) =>
+        Effect.sync(() => {
+          responseTriggers++
+          event.response.headers.set("x-response-hook", "active")
+        }),
+      )
+      const context = yield* SessionContext.Service
+      const modelRequests = yield* SessionModelRequest.Service
+      const selected = yield* context.select(sessionID)
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      yield* InstructionState.prepare(database.db, bus, selected.instructions, sessionID)
+      const prepared = yield* modelRequests.prepare({
+        context: yield* context.load(selected),
+        step: 1,
+      })
+      const http = prepared.options.http ?? (yield* Effect.die("Expected Session HTTP middleware"))
+
+      const response = yield* http(HttpClientRequest.post("https://provider.test/responses"), (request) => {
+        expect(request.headers["x-request-hook"]).toBe("active")
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("network")))
+      })
+
+      expect(prepared.webSocketEligible).toBe(false)
+      expect(response.headers["x-response-hook"]).toBe("active")
+      expect(requestTriggers).toBe(1)
+      expect(responseTriggers).toBe(1)
     }),
   )
 
@@ -1260,6 +1352,7 @@ describe("SessionRunnerLLM", () => {
       expect((yield* session.get(sessionID)).location.directory).toBe(AbsolutePath.make("/moved"))
       expect(yield* session.inbox(sessionID)).toEqual([])
       expect(requests).toEqual([])
+      expect(closedTransports).toEqual([sessionID])
       expect(
         (yield* db
           .select({ type: EventTable.type })
@@ -1307,6 +1400,44 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("keeps queued input parked across a mid-turn move", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      yield* admit(session, "Echo before moving")
+      yield* TestLLM.push(
+        TestLLM.tool("call-move", "echo", { text: "moving" }),
+        TestLLM.text("Done", "text-after-move"),
+        TestLLM.text("Handled queue", "text-after-queue"),
+      )
+      const tools = yield* blockTools()
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      yield* tools.started
+      yield* session.prompt({ sessionID, text: "Queued for later", delivery: "queue", resume: false })
+      yield* SessionInbox.admit(db, bus, {
+        id: SessionMessage.ID.create(),
+        sessionID,
+        item: {
+          type: "move",
+          payload: {
+            location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+            projectID: Project.ID.global,
+          },
+          delivery: "steer",
+        },
+      })
+
+      yield* tools.release
+      yield* Fiber.join(run)
+
+      // The resumed turn absorbs steers only; queued input waits for the turn to end.
+      expect(requests).toHaveLength(3)
+      expect(userTexts(requests[1])).not.toContain("Queued for later")
+      expect(userTexts(requests[2])).toContain("Queued for later")
+    }),
+  )
+
   it.effect("seeds a fork with the parent's newest instruction values", () =>
     Effect.gen(function* () {
       const session = yield* setup
@@ -1348,7 +1479,7 @@ describe("SessionRunnerLLM", () => {
       yield* Effect.forEach(
         recorded.map((event) => ({
           id: event.id,
-          created: DateTime.makeUnsafe(event.created),
+          created: event.created,
           aggregateID: event.aggregate_id,
           seq: event.seq,
           type: event.type,
@@ -3012,6 +3143,24 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("stops a steer-scoped drain before queued input", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const { db } = yield* Database.Service
+      yield* session.prompt({ sessionID, text: "Queue for later", delivery: "queue", resume: false })
+      yield* session.prompt({ sessionID, text: "Steer now", resume: false })
+      yield* TestLLM.push(TestLLM.stop())
+
+      const runner = yield* SessionRunner.Service
+      yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+
+      expect(requests).toHaveLength(1)
+      expect(userTexts(requests[0])).toEqual(["Steer now"])
+      expect(yield* SessionInbox.has(db, sessionID, "steer")).toBe(false)
+      expect(yield* SessionInbox.has(db, sessionID, "queue")).toBe(true)
+    }),
+  )
+
   it.effect("promotes queued input after steering continuation ends", () =>
     Effect.gen(function* () {
       const session = yield* setup
@@ -4093,6 +4242,36 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("immediately rebuilds once after explicit continuation rejection", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      yield* TestLLM.push(Stream.fail(continuationRejected("retry-full")))
+      yield* TestLLM.push(TestLLM.text("Recovered", "continuation-recovery"))
+
+      yield* runPrompt(session, "Recover continuation")
+
+      expect(requests).toHaveLength(2)
+      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user" },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
+  it.effect("bounds repeated continuation rejection to one immediate recovery", () =>
+    Effect.gen(function* () {
+      const session = yield* setup
+      const failure = continuationRejected("rotate-and-retry-full")
+      yield* TestLLM.push(Stream.fail(failure), Stream.fail(failure))
+
+      expect(yield* runPrompt(session, "Reject continuation twice").pipe(Effect.flip)).toBe(failure)
+
+      expect(requests).toHaveLength(2)
+      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+    }),
+  )
+
   it.effect("retries an incomplete stream before output", () =>
     Effect.gen(function* () {
       const session = yield* setup
@@ -5056,8 +5235,11 @@ describe("SessionRunnerLLM", () => {
   )
 
   for (const kind of fragmentKinds) {
-    it.effect(`broadcasts provider ${kind} deltas without storing projection rewrites`, () =>
-      verifyEphemeralDeltas(kind),
+    it.effect(
+      kind === "tool input"
+        ? "does not broadcast provider tool input deltas"
+        : `batches provider ${kind} deltas without storing projection rewrites`,
+      () => verifyEphemeralDeltas(kind),
     )
 
     it.effect(`durably closes partial ${kind} when the provider stream fails`, () => verifyPartialFlushOnFailure(kind))

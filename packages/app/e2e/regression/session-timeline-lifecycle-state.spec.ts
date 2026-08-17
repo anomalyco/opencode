@@ -82,6 +82,7 @@ test("moves busy through retry and recovery to final idle content", async ({ pag
               file: "src/retry.ts",
               additions: 1,
               deletions: 1,
+              status: "modified",
               patch: "@@ -1 +1 @@\n-export const retry = false\n+export const retry = true",
             },
           ],

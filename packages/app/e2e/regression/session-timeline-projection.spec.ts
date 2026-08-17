@@ -146,10 +146,7 @@ test.describe("session timeline projection", () => {
       parentID: "msg_2000_diff_next_user",
       created: 1700000011000,
     })
-    await setupTimeline(page, {
-      messages: [user, assistantMessage(), nextUser, nextAssistant],
-      settings: { newLayoutDesigns: false },
-    })
+    await setupTimeline(page, { messages: [user, assistantMessage(), nextUser, nextAssistant] })
     const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
     await scroller.evaluate((element) => (element.scrollTop = 0))
 
@@ -159,7 +156,6 @@ test.describe("session timeline projection", () => {
         { exact: true },
       ),
     ).toBeVisible()
-    await expect(page.locator('[data-timeline-row="CommentStrip"]')).toHaveCount(0)
     await expect(page.locator('[data-timeline-row="DiffSummary"]')).toHaveCount(0)
   })
 
@@ -280,6 +276,7 @@ function summaryDiff(index: number) {
     file: `src/diff-${index}.ts`,
     additions: 1,
     deletions: 1,
+    status: "modified" as const,
     patch: `@@ -1 +1 @@\n-export const value = ${index}\n+export const value = ${index + 1}`,
   }
 }

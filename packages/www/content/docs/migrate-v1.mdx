@@ -1,12 +1,9 @@
 ---
 title: "Migrate from V1"
-description: "Move from OpenCode V1 to the OpenCode 2.0 beta."
 ---
 
-<Callout type="note">
-  OpenCode 1 and OpenCode 2 can be installed side by side. V1 runs as `opencode`, while V2 installs and runs separately
-  as `opencode2`.
-</Callout>
+OpenCode 1 and OpenCode 2 can be installed side by side. V1 runs as `opencode`, while V2 installs and runs separately as
+`opencode2`.
 
 ## Breaking changes
 
@@ -14,7 +11,8 @@ V2 has three intentional breaking changes:
 
 - [Plugins](#plugins) use a new plugin API.
 - The [server API and clients](#server-api-and-clients) have new contracts.
-- [TUI configuration](#tui-configuration) moves from layered `tui.json(c)` files to one global `cli.json` file (auto migrated).
+- [Terminal client configuration](/cli/config) moves from layered `tui.json(c)` files to one global `cli.json` file (auto
+  migrated).
 
 Supported V1 functionality outside those areas is intended to remain compatible with V1. Some fields accepted by the V1
 schema never had a V2 equivalent and are intentionally ignored; these are listed under
@@ -25,8 +23,8 @@ should continue to work without changes. If supported behavior described in this
 beta compatibility bug rather than an expected migration requirement.
 
 <Callout type="tip">
-  Run `/report` if supported V1 functionality does not work in V2. The report skill collects diagnostics and helps you
-  file a compatibility issue.
+  If supported V1 functionality does not work in V2, follow the issue-reporting guidance in
+  [Troubleshooting](/troubleshooting) and file a compatibility issue.
 </Callout>
 
 <Callout type="warning">
@@ -35,17 +33,7 @@ beta compatibility bug rather than an expected migration requirement.
 
 ## Install the beta
 
-Install the beta from the `next` distribution tag:
-
-```bash
-npm install -g @opencode-ai/cli@next
-```
-
-Start it in your project with:
-
-```bash
-opencode2
-```
+The V2 terminal client is published on the `beta` distribution tag. See the [terminal startup guide](/cli).
 
 ## Configuration
 
@@ -430,19 +418,17 @@ they are not mistaken for active configuration:
 
 - `logLevel`: use `OPENCODE_LOG_LEVEL` when starting OpenCode.
 - `server`: use the V2 service and explicit server options; the server API is an intentional breaking change.
-- `layout`: remove it; V1 already treated it as deprecated and always used stretch layout.
 - Top-level `subagent_depth`: use `experimental.subagent_depth` instead.
 - `compaction.tail_turns` and `compaction.prune`: V2 uses `compaction.keep.tokens` and checkpoint-based compaction instead.
 - Agent `name` inside V1 JSON configuration.
 - An enabled-only V1 MCP entry without a `type`.
-- V1 experimental fields `disable_paste_summary`, `batch_tool`, `openTelemetry`, `primary_tools`, and
-  `continue_loop_on_deny`.
+- V1 experimental fields `batch_tool`, `openTelemetry`, `primary_tools`, and `continue_loop_on_deny`.
 - V1 provider fields `id`, `whitelist`, and `blacklist`.
 - V1 provider-model fields `release_date`, `attachment`, `reasoning`, `temperature`, `experimental`, a non-`deprecated`
   `status`, and boolean `interleaved`.
 
 Ignoring these fields is intentional and is not a compatibility regression. If V2 does not preserve behavior identified
-as supported elsewhere in this guide, run `/report`.
+as supported elsewhere in this guide, follow the issue-reporting guidance in [Troubleshooting](/troubleshooting).
 
 ### Agent files
 
@@ -507,60 +493,21 @@ Existing `AGENTS.md` files stay in place. V2 discovers the global `~/.config/ope
 files from the current directory up to home. For projects outside home, discovery stops at the project root.
 
 If a V1 setup relied on a `CLAUDE.md` fallback, move that guidance into the applicable `AGENTS.md`. V2 currently only
-discovers `AGENTS.md`; because non-API V1 behavior is intended to remain compatible, also run `/report` with the affected
-project details. See [Instructions](/instructions).
+discovers `AGENTS.md`; because non-API V1 behavior is intended to remain compatible, also file a compatibility issue with
+the affected project details. See [Instructions](/instructions).
 
-## TUI configuration
+## Terminal client configuration
 
-V1 loaded `tui.json(c)` from the global config directory and from project directories discovered while walking up from
-the current directory. V2 instead stores CLI and TUI settings in one global file:
+V2 replaces layered V1 `tui.json(c)` files with one global terminal client configuration file:
 
 ```text
 ~/.config/opencode/cli.json
 ```
 
-The CLI owns this file. The background service does not load it, and V2 does not discover or merge project-local
-`tui.json(c)` or `cli.json` files.
-
-The native V2 format groups related settings. For example:
-
-```jsonc
-// V1: ~/.config/opencode/tui.json
-{
-  "theme": "tokyonight",
-  "scroll_speed": 2,
-  "scroll_acceleration": {
-    "enabled": true
-  }
-}
-
-// V2: ~/.config/opencode/cli.json
-{
-  "theme": {
-    "name": "tokyonight"
-  },
-  "scroll": {
-    "speed": 2,
-    "acceleration": true
-  }
-}
-```
-
-V2 migrates the global TUI configuration automatically. On the first CLI or TUI startup, when `cli.json` does not already
-exist, it:
-
-- Reads `~/.config/opencode/tui.json`.
-- Reads persisted TUI preferences from the legacy `kv.json` state file.
-- Converts supported settings to the native grouped format and writes `~/.config/opencode/cli.json`.
-- Leaves the V1 files unchanged so V1 can continue using them.
-
-Migration runs only while `cli.json` is absent. Once that file exists, V2 treats it as the source of truth and does not
-continually synchronize later changes from `tui.json` or `kv.json`. If you created `cli.json` before starting V2, merge any
-V1 settings you still need into it manually.
-
-Project-local V1 TUI configuration is not migrated because V2 has no project-local CLI configuration. Move settings you
-still want into the global `cli.json`; when multiple projects used different values for the same setting, choose the
-global behavior you want V2 to use.
+The terminal client owns this file; the background service does not load it. When `cli.json` is absent, the first V2
+terminal client startup migrates supported global `tui.json` settings and persisted preferences while leaving V1 files
+unchanged. Project-local client configuration is not migrated because V2 client configuration is global. See
+[CLI config](/cli/config) for current client settings.
 
 ## Plugins
 
@@ -610,6 +557,6 @@ request types, and responses.
 
 ## Verify your setup
 
-Start `opencode2` in a project and verify your model, provider credentials, agents, permissions, MCP servers, and plugins
-before relying on the beta for regular work. Keep your V1 setup until you have confirmed the V2 behavior you need, and do
-not point V1 at configuration that you have converted to the native V2 shape.
+Verify your model, provider credentials, agents, permissions, MCP servers, and plugins in a project before relying on the
+beta for regular work. Keep your V1 setup until you have confirmed the V2 behavior you need, and do not point V1 at
+configuration that you have converted to the native V2 shape.

@@ -8,12 +8,8 @@ export namespace TimelineRow {
   export class TurnGap extends Data.TaggedClass("TurnGap")<{
     userMessageID: string
   }> {}
-  export class CommentStrip extends Data.TaggedClass("CommentStrip")<{
-    userMessageID: string
-  }> {}
   export class UserMessage extends Data.TaggedClass("UserMessage")<{
     userMessageID: string
-    anchor: boolean
   }> {}
   export class Notice extends Data.TaggedClass("Notice")<{
     userMessageID: string
@@ -46,7 +42,6 @@ export namespace TimelineRow {
 
   export type TimelineRow =
     | TurnGap
-    | CommentStrip
     | UserMessage
     | Notice
     | TurnDivider
@@ -60,8 +55,6 @@ export namespace TimelineRow {
     switch (row._tag) {
       case "TurnGap":
         return `turn-gap:${row.userMessageID}`
-      case "CommentStrip":
-        return `comment-strip:${row.userMessageID}`
       case "UserMessage":
         return `user-message:${row.userMessageID}`
       case "Notice":

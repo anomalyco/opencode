@@ -513,21 +513,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "asztali {{version}}",
   "wsl.onboarding.versionMismatch": "A telepített verzió nem egyezik az asztali alkalmazás verziójával.",
   "wsl.onboarding.adding": "Hozzáadás...",
-  "help.tabs.toast.ariaLabel": "Bemutatjuk a Tab-ket. A lapokkal megszervezheti munkáját és aktív munkameneteit",
-  "help.tabs.toast.dismiss": "Tabs információ elvetése",
-  "help.tabs.title": "Bemutatjuk a Tab-ket",
-  "help.tabs.description": "A lapokkal megszervezheti munkáját és aktív munkameneteit",
-  "help.tabs.date": "július 14",
-  "help.tabs.introduction": "A OpenCode Desktop mostantól lapokra épül.",
-  "help.tabs.sessions":
-    "Indítson új munkamenetet egy lapon, vagy nyisson meg egy meglévő munkamenetet bármelyik projektből. Nyisson meg egy új lapot, amikor valami újat kezd, és zárja be, ha végzett.",
-  "help.tabs.organize":
-    "Néhány lap nyitva tartása megkönnyíti az aktív munkamenetek megszervezését. Nevezze át a lapokat valami emlékezetesre, ha azt tervezi, hogy megtartja őket.",
-  "help.tabs.home":
-    "Minden munkamenetét és projektjét megtalálja az új Home képernyőn. Ha kiválaszt egy munkamenetet, az egy lapon nyílik meg.",
-  "help.tabs.persistence": "Amikor újra megnyitja az alkalmazást, a lapok továbbra is nyitva maradnak.",
-  "help.tabs.worktrees":
-    "Az új kialakítás még nem támogatja a Git Worktrees-t, hamarosan megjelenik. Ha tehát szeretné folytatni az előző elrendezést, a Beállításokban válthat az elrendezések között. Ne feledje, hogy az új elrendezés néhány héten belül állandóvá válik.",
   "server.row.noUsername": "nincs felhasználónév",
   "dialog.project.edit.title": "Projekt szerkesztése",
   "dialog.project.edit.name": "Név",
@@ -979,13 +964,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "A Szerkesztőeszköz részei kibontása",
   "settings.general.row.editToolPartsExpanded.description":
     "Az idővonalon alapértelmezés szerint kibontott szerkesztési, írási és javítási eszközrészek megjelenítése",
-  "settings.general.row.newInterface.title": "Új elrendezés",
-  "settings.general.row.newInterface.badge": "Új",
-  "settings.general.row.newInterface.description":
-    "Használja az új lapokat és a kezdőlap elrendezését. Váltás az elrendezések között korlátozott ideig.",
-  "settings.general.row.newInterfaceNotice.title": "Most új elrendezést használ",
-  "settings.general.row.newInterfaceNotice.description": "Az előző elrendezés már nem elérhető",
-  "settings.general.row.newInterfaceNotice.dismiss": "Elvetés",
   "settings.general.row.pinchZoom.title": "Csípje össze a nagyításhoz",
   "settings.general.row.pinchZoom.description":
     "Engedélyezze az érintőpad összecsípését és a Ctrl-görgetést a nagyításhoz",

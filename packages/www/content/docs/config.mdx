@@ -1,11 +1,8 @@
 ---
 title: "Config"
-description: ""
 ---
 
-<Callout type="tip">
-  You shouldn't have to configure OpenCode manually. Ask OpenCode to update its configuration for you.
-</Callout>
+You shouldn't have to configure OpenCode manually. Ask OpenCode to update its configuration for you.
 
 ## Format
 
@@ -105,7 +102,7 @@ Set the shell used by the terminal and shell tools.
 ### Model
 
 Set the default model in `provider/model` format. The root default currently
-does not retain a `#variant`; select variants in the TUI or on an agent or command.
+does not retain a `#variant`; agent and command model references can select one.
 
 ```jsonc
 {
@@ -113,8 +110,7 @@ does not retain a `#variant`; select variants in the TUI or on an agent or comma
 }
 ```
 
-See the [models guide](/models) for model selection
-and local models.
+See the [models guide](/models) for model selection and local models.
 
 ### Default agent
 

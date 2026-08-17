@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto"
-import { copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises"
+import { copyFile, mkdir, readFile, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { getNodeAssets } from "@opentui/core/node-assets"
-import { attentionSoundAssets, type NodeTarget, photonWasmAsset } from "../src/node/target"
+import { attentionSoundAssets, type NodeTarget, photonWasmAsset, shellParserWasmAssets } from "../src/node/target"
+import { collectFiles } from "./files"
 
 const dir = path.resolve(import.meta.dirname, "..")
 
@@ -14,17 +15,6 @@ const dir = path.resolve(import.meta.dirname, "..")
 export type NodeAsset = {
   readonly key: string
   readonly source: string
-}
-
-async function files(root: string, current = root): Promise<string[]> {
-  return (
-    await Promise.all(
-      (await readdir(current, { withFileTypes: true })).map((entry) => {
-        const target = path.join(current, entry.name)
-        return entry.isDirectory() ? files(root, target) : [path.relative(root, target)]
-      }),
-    )
-  ).flat()
 }
 
 export async function collectNodeAssets(target: NodeTarget) {
@@ -43,11 +33,15 @@ export async function collectNodeAssets(target: NodeTarget) {
       key: photonWasmAsset,
       source: fileURLToPath(import.meta.resolve(photonWasmAsset)),
     },
+    ...Object.values(shellParserWasmAssets).map((key) => ({
+      key,
+      source: fileURLToPath(import.meta.resolve(key)),
+    })),
     ...attentionSoundAssets.map((key) => ({
       key,
       source: path.resolve(dir, "../ui/src/assets/audio", path.basename(key)),
     })),
-    ...(await files(ptyRoot))
+    ...(await collectFiles(ptyRoot))
       .filter((relative) => !relative.endsWith(".map") && !relative.endsWith(".pdb"))
       .map((relative) => ({
         key: `${target.nodePtyPackage}/${relative}`,
@@ -81,5 +75,7 @@ export async function copyNodeAssets(assets: readonly NodeAsset[]) {
 
 export async function seaAssetMap() {
   const root = path.join(dir, "dist-node", "assets")
-  return Object.fromEntries((await files(root)).map((key) => [key.replaceAll(path.sep, "/"), path.join(root, key)]))
+  return Object.fromEntries(
+    (await collectFiles(root)).map((key) => [key.replaceAll(path.sep, "/"), path.join(root, key)]),
+  )
 }

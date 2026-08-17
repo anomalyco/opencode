@@ -87,7 +87,7 @@ test("shows a pending permission dock", async ({ page }) => {
         permission: "bash",
         patterns: ["git status", "git diff"],
         metadata: {},
-        always: ["git *"],
+        always: [],
       },
     ],
   })
@@ -232,8 +232,5 @@ async function mockServer(
     questions: requests.questions,
     forms: requests.forms,
     sessionStatus: requests.sessionStatus,
-  })
-  await page.addInitScript(() => {
-    localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
   })
 }

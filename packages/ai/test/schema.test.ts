@@ -11,6 +11,7 @@ import {
   LanguageModel,
   ModelID,
   ProviderID,
+  TransportReason,
   Usage,
 } from "../src/schema/index.js"
 import { ProviderShared } from "../src/protocols/shared.js"
@@ -107,4 +108,26 @@ test("AI errors expose the shared runtime tag", async () => {
   expect(
     await Effect.runPromise(Effect.fail(error).pipe(Effect.catchTag("AI.Error", () => Effect.succeed("caught")))),
   ).toBe("caught")
+})
+
+test("transport errors serialize execution facts", () => {
+  const reason = new TransportReason({
+    message: "connection closed",
+    transport: "websocket",
+    operation: "read",
+    phase: "receive",
+    delivery: "ambiguous",
+    recovery: "fail",
+  })
+
+  expect(Schema.encodeSync(TransportReason)(reason)).toEqual({
+    _tag: "Transport",
+    message: "connection closed",
+    transport: "websocket",
+    operation: "read",
+    phase: "receive",
+    delivery: "ambiguous",
+    recovery: "fail",
+  })
+  expect(Schema.decodeUnknownSync(TransportReason)(Schema.encodeSync(TransportReason)(reason))).toEqual(reason)
 })

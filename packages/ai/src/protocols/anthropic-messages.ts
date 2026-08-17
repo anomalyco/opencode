@@ -30,7 +30,6 @@ import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "anthropic-messages"
-const MEDIA_MIMES = new Set<string>([...ProviderShared.IMAGE_MIMES, ...ProviderShared.PDF_MIMES])
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
 
@@ -400,7 +399,7 @@ const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult
 })
 
 const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: MediaPart) {
-  const media = yield* ProviderShared.validateMedia("Anthropic Messages", part, MEDIA_MIMES)
+  const media = ProviderShared.normalizeMedia(part)
   if (media.mime === "application/pdf")
     return {
       type: "document" as const,
@@ -410,6 +409,8 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (part: Me
         data: media.base64,
       },
     } satisfies AnthropicDocumentBlock
+  if (!media.mime.startsWith("image/"))
+    return yield* invalid(`Anthropic Messages does not support media type ${part.mediaType}`)
   return {
     type: "image" as const,
     source: {

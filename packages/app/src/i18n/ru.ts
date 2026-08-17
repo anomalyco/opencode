@@ -538,22 +538,6 @@ export const dict = {
   "wsl.onboarding.versionMismatch": "Установленная версия не соответствует версии приложения.",
   "wsl.onboarding.adding": "Добавление...",
 
-  "help.tabs.toast.ariaLabel": "Представляем вкладки. Организуйте работу и активные сессии с помощью вкладок",
-  "help.tabs.toast.dismiss": "Закрыть сведения о вкладках",
-  "help.tabs.title": "Представляем вкладки",
-  "help.tabs.description": "Организуйте работу и активные сессии с помощью вкладок",
-  "help.tabs.date": "14 июля",
-  "help.tabs.introduction": "Теперь работа в OpenCode Desktop организована с помощью вкладок.",
-  "help.tabs.sessions":
-    "Начните новую сессию во вкладке или откройте существующую сессию из любого проекта. Открывайте новую вкладку, когда начинаете новую задачу, и закрывайте её по завершении.",
-  "help.tabs.organize":
-    "Несколько открытых вкладок упрощают организацию активных сессий. Если вы планируете оставить вкладки открытыми, присвойте им запоминающиеся названия.",
-  "help.tabs.home":
-    "Все сессии и проекты находятся на новом экране «Главная». При выборе сессии она открывается во вкладке.",
-  "help.tabs.persistence": "После повторного открытия приложения вкладки останутся открытыми.",
-  "help.tabs.worktrees":
-    "Новый дизайн пока не поддерживает Git Worktrees, но эта возможность скоро появится. Если вы предпочитаете прежний макет, переключиться между макетами можно в разделе «Настройки». Учтите, что через несколько недель новый макет станет постоянным.",
-
   "dialog.project.edit.title": "Редактировать проект",
   "dialog.project.edit.name": "Название",
   "dialog.project.edit.icon": "Значок",
@@ -962,13 +946,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Разворачивать элементы инструмента edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Показывать элементы инструментов edit, write и patch в ленте развернутыми по умолчанию",
-  "settings.general.row.newInterface.title": "Новая компоновка",
-  "settings.general.row.newInterface.badge": "Новое",
-  "settings.general.row.newInterface.description":
-    "Используйте новые вкладки и компоновку главной страницы. В течение ограниченного времени можно переключаться между вариантами компоновки.",
-  "settings.general.row.newInterfaceNotice.title": "Теперь вы используете новую компоновку",
-  "settings.general.row.newInterfaceNotice.description": "Прежняя компоновка больше недоступна",
-  "settings.general.row.newInterfaceNotice.dismiss": "Закрыть",
   "settings.general.row.pinchZoom.title": "Масштабирование сведением пальцев",
   "settings.general.row.pinchZoom.description":
     "Разрешить масштабирование сведением пальцев на трекпаде и прокруткой с нажатой клавишей Ctrl",

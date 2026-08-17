@@ -193,7 +193,7 @@ export function createServerPermissionState(input: { sdk: ServerSDK; sync: Serve
   const handlePermission = (e: PermissionEvent) => {
     const event = e.details
     if (event?.type !== "permission.asked") return
-    void respondPending(event.properties, e.name)
+    void respondPending(event.properties, event.current?.location?.directory)
   }
 
   const unsubscribe = input.sdk.eventByDir.listen((event) => {

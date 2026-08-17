@@ -5,7 +5,6 @@ import {
   MouseEvent,
   PasteEvent,
   decodePasteBytes,
-  type ColorInput,
   type KeyEvent,
 } from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
@@ -13,6 +12,7 @@ import path from "path"
 import { useLocal } from "../../context/local"
 import { useTheme, useThemes } from "../../context/theme"
 import { tint } from "../../theme/color"
+import { createAnimatable, tween } from "../../ui/animation"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { useClipboard } from "../../context/clipboard"
@@ -70,6 +70,8 @@ import {
 import { DialogImagePreview } from "../dialog-image-preview"
 import { useDirectoryRecents } from "../../prompt/directory-recents"
 import { directoryRecentValue } from "../../prompt/directory-completion"
+import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
+import { truncateFilePath } from "../../ui/file-path"
 
 export type PromptProps = {
   sessionID?: string
@@ -110,14 +112,37 @@ function fadeColor(color: RGBA, alpha: number) {
 
 export function PromptInterruptStatus(props: {
   armed: boolean
-  text: ColorInput
-  subdued: ColorInput
-  warning: ColorInput
+  animations?: boolean
+  text: RGBA
+  subdued: RGBA
+  warning: RGBA
+  flash?: RGBA
 }) {
+  const ignition = createAnimatable(
+    { level: 0 },
+    { enabled: () => props.animations ?? false, transition: tween({ duration: 0.22 }) },
+  )
+  createEffect(
+    on(
+      () => props.armed,
+      (armed) => {
+        if (!armed || !props.animations) return ignition.jump({ level: 0 })
+        ignition.jump({ level: 0.75 })
+        ignition.animate({ level: 0 })
+      },
+      { defer: true },
+    ),
+  )
+  const armedColor = createMemo(() => {
+    const level = ignition.value().level
+    if (level === 0 || !props.flash) return props.warning
+    return tint(props.warning, props.flash, level)
+  })
+
   return (
-    <text fg={props.armed ? props.warning : props.text} wrapMode="none" truncate flexShrink={1}>
+    <text fg={props.armed ? armedColor() : props.text} wrapMode="none" truncate flexShrink={1}>
       esc{" "}
-      <span style={{ fg: props.armed ? props.warning : props.subdued }}>
+      <span style={{ fg: props.armed ? armedColor() : props.subdued }}>
         {props.armed ? "again to interrupt" : "interrupt"}
       </span>
     </text>
@@ -1516,20 +1541,30 @@ export function Prompt(props: PromptProps) {
     const width = dimensions().width < 44 ? dimensions().width - 5 : Math.min(75, dimensions().width - 4) - 5
     return Locale.takeWidth(value, Math.max(1, width)).trimEnd()
   })
-  const locationLabel = createMemo(() => {
+  const footerLocation = createMemo(() => {
     if (!props.sessionID) {
       // No session yet: show where the next session will be created.
-      const location = currentLocation.ref ?? data.location.default()
-      const directory = abbreviateHome(location.directory, paths.home)
-      const branch = data.location.vcs.info(location)?.branch.current
-      return branch ? `${directory}:${branch}` : directory
+      return currentLocation.ref ?? data.location.default()
     }
     if (status() !== "idle") return
-    const location = data.session.get(props.sessionID)?.location
+    return data.session.get(props.sessionID)?.location
+  })
+  const locationLabel = createMemo(() => {
+    const location = footerLocation()
     if (!location) return
     const directory = abbreviateHome(location.directory, paths.home)
     const branch = data.location.vcs.info(location)?.branch.current
     return branch ? `${directory}:${branch}` : directory
+  })
+  const [locationWidth, setLocationWidth] = createSignal(dimensions().width)
+  const locationLabelDisplay = createMemo(() => {
+    const label = locationLabel()
+    if (!label) return
+    return truncateFilePath(label, locationWidth())
+  })
+  const locationActions = useWorkingDirectoryActions({
+    directory: () => footerLocation()?.directory,
+    onMove: () => void move.open(),
   })
 
   const spinnerDef = createMemo(() => {
@@ -1812,7 +1847,15 @@ export function Prompt(props: PromptProps) {
         <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
           <Slot path="prompt.footer" input={footerInput()}>
             <Slot path="prompt.footer.status" input={footerInput()}>
-              <box flexGrow={1} flexShrink={1} minWidth={0}>
+              <box
+                flexGrow={1}
+                flexShrink={1}
+                minWidth={0}
+                onSizeChange={function (this: BoxRenderable) {
+                  const width = this.width
+                  queueMicrotask(() => setLocationWidth(width))
+                }}
+              >
                 <Switch>
                   <Match when={status() === "running"}>
                     <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
@@ -1823,9 +1866,11 @@ export function Prompt(props: PromptProps) {
                       </box>
                       <PromptInterruptStatus
                         armed={store.interrupt > 0}
+                        animations={animationsEnabled()}
                         text={theme.text.default}
                         subdued={theme.text.subdued}
                         warning={theme.text.feedback.warning.default}
+                        flash={theme.decrease(theme.text.feedback.warning.default, 2)}
                       />
                     </box>
                   </Match>
@@ -1847,9 +1892,19 @@ export function Prompt(props: PromptProps) {
                     </box>
                   </Match>
                   <Match when={true}>
-                    <Show when={!props.hint && locationLabel()} fallback={props.hint ?? <text />}>
+                    <Show when={!props.hint && locationLabelDisplay()} fallback={props.hint ?? <text />}>
                       {(location) => (
-                        <text fg={theme.text.subdued} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
+                        <text
+                          id="prompt.footer.location"
+                          fg={locationActions.hovered() ? theme.text.default : theme.text.subdued}
+                          wrapMode="none"
+                          truncate
+                          flexGrow={1}
+                          flexShrink={1}
+                          onMouseOver={locationActions.onMouseOver}
+                          onMouseOut={locationActions.onMouseOut}
+                          onMouseUp={locationActions.onMouseUp}
+                        >
                           {location()}
                         </text>
                       )}

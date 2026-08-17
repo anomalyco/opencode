@@ -509,21 +509,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "دسکتاپ {{version}}",
   "wsl.onboarding.versionMismatch": "نسخه نصب شده با نسخه برنامه دسکتاپ مطابقت ندارد.",
   "wsl.onboarding.adding": "در حال افزودن...",
-  "help.tabs.toast.ariaLabel": "معرفی Tabs. جلسات کاری و فعال خود را با برگه ها سازماندهی کنید",
-  "help.tabs.toast.dismiss": "نادیده گرفتن اطلاعات Tabs",
-  "help.tabs.title": "معرفی Tabs",
-  "help.tabs.description": "جلسات کاری و فعال خود را با برگه ها سازماندهی کنید",
-  "help.tabs.date": "14 جولای",
-  "help.tabs.introduction": "OpenCode Desktop اکنون در اطراف زبانه ها ساخته شده است.",
-  "help.tabs.sessions":
-    "یک جلسه جدید در یک برگه شروع کنید یا یک جلسه موجود را از هر یک از پروژه های خود باز کنید. وقتی کار جدیدی را شروع می کنید یک برگه جدید باز کنید و وقتی کارتان تمام شد آن را ببندید.",
-  "help.tabs.organize":
-    "باز نگه داشتن چند برگه، سازماندهی جلسات فعال خود را آسان تر می کند. اگر قصد دارید برگه‌ها را به چیزی به یاد ماندنی تغییر دهید.",
-  "help.tabs.home":
-    "همه جلسه‌ها و پروژه‌های خود را در صفحه خانه جدید خواهید دید. با انتخاب هر جلسه، آن جلسه در یک زبانه باز می‌شود.",
-  "help.tabs.persistence": "وقتی برنامه را دوباره باز می‌کنید، برگه‌های شما همچنان باز هستند.",
-  "help.tabs.worktrees":
-    "طراحی جدید هنوز از Git Worktrees پشتیبانی نمی کند، به زودی ارائه می شود. بنابراین اگر ترجیح می‌دهید به استفاده از طرح‌بندی قبلی ادامه دهید، می‌توانید بین طرح‌بندی‌ها در تنظیمات جابجا شوید. فقط به خاطر داشته باشید که طرح جدید تا چند هفته دیگر دائمی می شود.",
   "server.row.noUsername": "بدون نام کاربری",
   "dialog.project.edit.title": "ویرایش پروژه",
   "dialog.project.edit.name": "نام",
@@ -967,13 +952,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "بخش‌های ابزار ویرایش را گسترش دهید",
   "settings.general.row.editToolPartsExpanded.description":
     "بخش‌های ابزار ویرایش، نوشتن و وصله را که به‌طور پیش‌فرض در جدول زمانی گسترش یافته‌اند، نمایش دهید",
-  "settings.general.row.newInterface.title": "چیدمان جدید",
-  "settings.general.row.newInterface.badge": "جدید",
-  "settings.general.row.newInterface.description":
-    "از برگه ها و طرح خانه جدید استفاده کنید. برای مدت زمان محدودی بین طرح‌بندی‌ها جابه‌جا شوید.",
-  "settings.general.row.newInterfaceNotice.title": "اکنون در حال استفاده از طرح بندی جدید هستید",
-  "settings.general.row.newInterfaceNotice.description": "طرح قبلی دیگر در دسترس نیست",
-  "settings.general.row.newInterfaceNotice.dismiss": "رد کردن",
   "settings.general.row.pinchZoom.title": "برای بزرگنمایی، خرج کردن",
   "settings.general.row.pinchZoom.description": "به ژست‌های پیمایشی Ctrl و حرکت‌های پد لمسی اجازه بزرگ‌نمایی بدهید",
   "settings.general.row.wayland.title": "از Wayland بومی استفاده کنید",

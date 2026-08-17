@@ -45,7 +45,6 @@ describe("current session timeline rows", () => {
       (messageID) => normalized.parts.get(messageID) ?? [],
       true,
       "busy",
-      true,
       normalized.messages.filter((message) => message.role === "user"),
     )
 
@@ -81,7 +80,6 @@ describe("current session timeline rows", () => {
       (messageID) => normalized.parts.get(messageID) ?? [],
       true,
       "idle",
-      true,
       normalized.messages.filter((message) => message.role === "user"),
     )
 
@@ -153,7 +151,6 @@ describe("current session timeline rows", () => {
       (messageID) => normalized.parts.get(messageID) ?? [],
       true,
       "idle",
-      true,
       normalized.messages.filter((message) => message.role === "user"),
     )
 
@@ -200,7 +197,6 @@ describe("current session timeline rows", () => {
       (messageID) => normalized.parts.get(messageID) ?? [],
       true,
       "idle",
-      true,
       normalized.messages.filter((message) => message.role === "user"),
     )
 
@@ -233,7 +229,6 @@ describe("current session timeline rows", () => {
       () => [],
       true,
       "busy",
-      true,
       [...normalized.messages.filter((message) => message.role === "user"), optimistic],
     )
 
@@ -276,7 +271,6 @@ describe("current session timeline rows", () => {
       (messageID) => normalized.parts.get(messageID) ?? [],
       true,
       "busy",
-      true,
       normalized.messages.filter((message) => message.role === "user"),
     )
 

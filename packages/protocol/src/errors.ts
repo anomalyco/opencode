@@ -141,15 +141,6 @@ export class PermissionNotFoundError extends Schema.TaggedErrorClass<PermissionN
   { httpApiStatus: 404 },
 ) {}
 
-export class QuestionNotFoundError extends Schema.TaggedErrorClass<QuestionNotFoundError>()(
-  "QuestionNotFoundError",
-  {
-    requestID: Schema.String,
-    message: Schema.String,
-  },
-  { httpApiStatus: 404 },
-) {}
-
 export class FormNotFoundError extends Schema.TaggedErrorClass<FormNotFoundError>()(
   "FormNotFoundError",
   {

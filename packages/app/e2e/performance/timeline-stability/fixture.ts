@@ -151,9 +151,6 @@ export async function setupTimeline(
         },
       }),
     )
-    if (settings.newLayoutDesigns === false) {
-      localStorage.setItem("app-version.v1", JSON.stringify({ version: "1.17.20" }))
-    }
   }, input.settings ?? {})
   if (input.locale) {
     await page.addInitScript((locale) => {

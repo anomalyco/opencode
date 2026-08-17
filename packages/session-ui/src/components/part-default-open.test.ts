@@ -26,6 +26,21 @@ describe("partDefaultOpen", () => {
     ).toBe(false)
   })
 
+  test("collapses v2 patches containing only deleted files when enabled", () => {
+    expect(
+      partDefaultOpen(
+        tool("patch", {
+          files: [
+            { file: "one.ts", status: "deleted" },
+            { file: "two.ts", status: "deleted" },
+          ],
+        }),
+        false,
+        true,
+      ),
+    ).toBe(false)
+  })
+
   test("keeps mixed patches expanded when enabled", () => {
     expect(
       partDefaultOpen(
@@ -41,8 +56,24 @@ describe("partDefaultOpen", () => {
     ).toBe(true)
   })
 
-  test("preserves shell defaults", () => {
+  test("keeps mixed v2 patches expanded when enabled", () => {
+    expect(
+      partDefaultOpen(
+        tool("patch", {
+          files: [
+            { file: "one.ts", status: "deleted" },
+            { file: "two.ts", status: "modified" },
+          ],
+        }),
+        false,
+        true,
+      ),
+    ).toBe(true)
+  })
+
+  test("applies shell defaults to console tools", () => {
     expect(partDefaultOpen(tool("shell", {}), true, false)).toBe(true)
+    expect(partDefaultOpen(tool("execute", {}), true, false)).toBe(true)
   })
 })
 

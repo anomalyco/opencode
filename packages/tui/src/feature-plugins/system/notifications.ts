@@ -24,7 +24,6 @@ export default Plugin.define({
     const errored = new Set<string>()
     const terminal = new Set<string>()
     const forms = new Set<string>()
-    const questions = new Set<string>()
     const permissions = new Set<string>()
 
     const started = (sessionID: string) => {
@@ -50,13 +49,6 @@ export default Plugin.define({
       }),
       context.data.on("form.replied", (event) => forms.delete(event.data.id)),
       context.data.on("form.cancelled", (event) => forms.delete(event.data.id)),
-      context.data.on("question.asked", (event) => {
-        if (questions.has(event.data.id)) return
-        questions.add(event.data.id)
-        notify(context, event.data.sessionID, "Question needs input", "question")
-      }),
-      context.data.on("question.replied", (event) => questions.delete(event.data.requestID)),
-      context.data.on("question.rejected", (event) => questions.delete(event.data.requestID)),
       context.data.on("permission.asked", (event) => {
         if (permissions.has(event.data.id)) return
         permissions.add(event.data.id)

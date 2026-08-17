@@ -240,8 +240,6 @@ async function run(input: {
   })()
   spyOn(sdk.event, "subscribe").mockImplementation(() => stream)
   spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
-  spyOn(sdk.question, "list").mockImplementation(() => ok([]) as never)
-  spyOn(sdk.question, "reject").mockImplementation(() => ok(undefined) as never)
   spyOn(sdk.form, "list").mockImplementation(
     (request) => ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
   )
@@ -435,8 +433,6 @@ describe("runNonInteractivePrompt", () => {
     expect(sdk.form.request.list).toHaveBeenCalledWith({
       location: { directory: "/work tree", workspace: "wrk_1" },
     })
-    expect(sdk.question.list).not.toHaveBeenCalled()
-    expect(sdk.question.reject).not.toHaveBeenCalled()
   })
 
   test("attach mode cancels only session-owned forms", async () => {

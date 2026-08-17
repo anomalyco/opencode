@@ -508,21 +508,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "ផ្ទៃតុ {{version}}",
   "wsl.onboarding.versionMismatch": "កំណែដែលបានដំឡើងមិនត្រូវគ្នានឹងកំណែកម្មវិធីកុំព្យូទ័រលើតុទេ។",
   "wsl.onboarding.adding": "កំពុងបន្ថែម...",
-  "help.tabs.toast.ariaLabel": "ការណែនាំផ្ទាំង។ រៀបចំការងារ និងសម័យសកម្មរបស់អ្នកដោយប្រើផ្ទាំង",
-  "help.tabs.toast.dismiss": "ច្រានចោលព័ត៌មានផ្ទាំង",
-  "help.tabs.title": "ការណែនាំផ្ទាំង",
-  "help.tabs.description": "រៀបចំការងារ និងសម័យសកម្មរបស់អ្នកជាមួយផ្ទាំង",
-  "help.tabs.date": "ថ្ងៃទី 14 ខែកក្កដា",
-  "help.tabs.introduction": "OpenCode Desktop ឥឡូវនេះត្រូវបានបង្កើតឡើងនៅជុំវិញផ្ទាំង។",
-  "help.tabs.sessions":
-    "ចាប់ផ្តើមសម័យថ្មីនៅក្នុងផ្ទាំងមួយ ឬបើកសម័យដែលមានស្រាប់ពីគម្រោងណាមួយរបស់អ្នក។ បើកផ្ទាំងថ្មីនៅពេលអ្នកចាប់ផ្តើមអ្វីថ្មី ហើយបិទវានៅពេលអ្នករួចរាល់។",
-  "help.tabs.organize":
-    "ការបន្តបើកផ្ទាំងមួយចំនួនធ្វើឱ្យវាកាន់តែងាយស្រួលក្នុងការរៀបចំសម័យសកម្មរបស់អ្នក។ ប្តូរឈ្មោះផ្ទាំងទៅជាអ្វីមួយដែលគួរឱ្យចងចាំ ប្រសិនបើអ្នកមានគម្រោងរក្សាពួកវាឱ្យនៅជាប់។",
-  "help.tabs.home":
-    "អ្នកនឹងរកឃើញសម័យ និងគម្រោងរបស់អ្នកទាំងអស់នៅលើអេក្រង់ដើមថ្មី។ ការជ្រើសរើសសម័យបើកវានៅក្នុងផ្ទាំងមួយ។",
-  "help.tabs.persistence": "នៅពេលអ្នកបើកកម្មវិធីឡើងវិញ ផ្ទាំងរបស់អ្នកនៅតែបើក។",
-  "help.tabs.worktrees":
-    "ការរចនាថ្មីមិនទាន់គាំទ្រ Git Worktrees នៅឡើយទេ វានឹងមកដល់ក្នុងពេលឆាប់ៗនេះ។ ដូច្នេះប្រសិនបើអ្នកចង់បន្តប្រើប្លង់ពីមុន អ្នកអាចប្តូររវាងប្លង់នៅក្នុងការកំណត់។ សូមចងចាំថាប្លង់ថ្មីនឹងក្លាយទៅជាអចិន្ត្រៃយ៍ក្នុងរយៈពេលពីរបីសប្តាហ៍។",
   "server.row.noUsername": "គ្មានឈ្មោះអ្នកប្រើប្រាស់",
   "dialog.project.edit.title": "កែសម្រួលគម្រោង",
   "dialog.project.edit.name": "ឈ្មោះ",
@@ -965,12 +950,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "ពង្រីកផ្នែកឧបករណ៍កែសម្រួល",
   "settings.general.row.editToolPartsExpanded.description":
     "បង្ហាញការកែសម្រួល សរសេរ និងផ្នែកឧបករណ៍បំណះដែលបានពង្រីកតាមលំនាំដើមនៅក្នុងបន្ទាត់ពេលវេលា",
-  "settings.general.row.newInterface.title": "ប្លង់ថ្មី។",
-  "settings.general.row.newInterface.badge": "ថ្មី។",
-  "settings.general.row.newInterface.description": "ប្រើផ្ទាំងថ្មី និងប្លង់ផ្ទះ។ ប្តូររវាងប្លង់សម្រាប់រយៈពេលកំណត់។",
-  "settings.general.row.newInterfaceNotice.title": "ឥឡូវនេះ អ្នកកំពុងប្រើប្លង់ថ្មី។",
-  "settings.general.row.newInterfaceNotice.description": "ប្លង់ពីមុនលែងមានទៀតហើយ",
-  "settings.general.row.newInterfaceNotice.dismiss": "ច្រានចោល",
   "settings.general.row.pinchZoom.title": "ខ្ទាស់ដើម្បីពង្រីក",
   "settings.general.row.pinchZoom.description": "អនុញ្ញាត​ឱ្យ​ចុច​បន្ទះ​បន្ទះ​និង​កាយវិការ​បញ្ជា​-​រមូរ​ដើម្បី​ពង្រីក",
   "settings.general.row.wayland.title": "ប្រើ Wayland ដើម",

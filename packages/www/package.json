@@ -14,7 +14,7 @@
     "doctor": "blume doctor"
   },
   "dependencies": {
-    "blume": "1.1.4"
+    "blume": "1.5.1"
   },
   "devDependencies": {
     "@astrojs/cloudflare": "14.1.4",

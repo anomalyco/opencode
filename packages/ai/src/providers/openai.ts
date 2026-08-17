@@ -12,7 +12,7 @@ export type { OpenAIImageOptions } from "../protocols/openai-images.js"
 
 export const id = ProviderID.make("openai")
 
-export const routes = [OpenAIResponses.route, OpenAIResponses.webSocketRoute, OpenAIChat.route]
+export const routes = [OpenAIResponses.route, OpenAIChat.route]
 
 // This provider facade wraps the lower-level Responses and Chat model factories
 // with OpenAI-specific conveniences: typed options, API-key sugar, env fallback,
@@ -63,7 +63,6 @@ export interface Settings extends ProviderPackage.Settings {
   readonly organization?: string
   readonly project?: string
   readonly queryParams?: Readonly<Record<string, string>>
-  readonly transport?: "http" | "websocket"
   readonly providerOptions?: OpenAIProviderOptionsInput
 }
 
@@ -82,15 +81,10 @@ const configuredRoute = <Body, Prepared>(route: Route<Body, Prepared>, input: Co
 
 export const configure = (input: Config = {}) => {
   const responsesRoute = configuredRoute(OpenAIResponses.route, input)
-  const responsesWebSocketRoute = configuredRoute(OpenAIResponses.webSocketRoute, input)
   const chatRoute = configuredRoute(OpenAIChat.route, input)
   const modelDefaults = defaults(input)
   const responses = (id: string | ModelID) =>
     responsesRoute
-      .with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true }))
-      .model<OpenAIProviderOptionsInput>({ id })
-  const responsesWebSocket = (id: string | ModelID) =>
-    responsesWebSocketRoute
       .with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true }))
       .model<OpenAIProviderOptionsInput>({ id })
   const chat = (id: string | ModelID) =>
@@ -111,7 +105,6 @@ export const configure = (input: Config = {}) => {
     id,
     model: responses,
     responses,
-    responsesWebSocket,
     chat,
     image,
     configure,
@@ -138,10 +131,7 @@ const config = (settings: Settings): Config => {
 }
 
 export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) => {
-  const configured = configure(config(settings))
-  if (settings.transport === undefined || settings.transport === "http") return configured.responses(modelID)
-  if (settings.transport === "websocket") return configured.responsesWebSocket(modelID)
-  throw new Error(`Unsupported OpenAI Responses transport: ${String(settings.transport)}`)
+  return configure(config(settings)).responses(modelID)
 }
 
 export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
@@ -149,6 +139,5 @@ export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptio
   settings,
 ) => configure(config(settings)).chat(modelID)
 export const responses = provider.responses
-export const responsesWebSocket = provider.responsesWebSocket
 export const chat = provider.chat
 export const image = provider.image

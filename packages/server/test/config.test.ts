@@ -7,6 +7,7 @@ import { HttpServer } from "effect/unstable/http"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
+import { AbsolutePath } from "@opencode-ai/schema/schema"
 
 it.live("returns ordered config entries for the requested directory", () =>
   Effect.acquireUseRelease(
@@ -57,7 +58,7 @@ it.live("returns ordered config entries for the requested directory", () =>
           { action: "shell", resource: "*", effect: "ask" },
           { action: "shell", resource: "git status", effect: "allow" },
         ])
-        expect(entries.some((entry) => entry.type === "file" && entry.path === config)).toBe(true)
+        expect(document?.path).toBe(AbsolutePath.make(config))
         if (!Array.isArray(body)) throw new Error("Expected a config entry array")
         const raw = body.find((entry) => isRecord(entry) && entry["type"] === "document" && entry["path"] === config)
         if (!isRecord(raw) || !isRecord(raw["info"])) throw new Error("Expected a config document")

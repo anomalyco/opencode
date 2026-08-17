@@ -7,6 +7,7 @@ import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { SystemPromptPlugin } from "@opencode-ai/core/plugin/system-prompt"
 import { Session } from "@opencode-ai/core/session"
+import { SessionSystemPrompt } from "@opencode-ai/core/session/system-prompt"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "@opencode-ai/schema/provider"
@@ -14,10 +15,9 @@ import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 import PROMPT_META from "../../src/plugin/system-prompt/meta.txt"
-import PROMPT_DEFAULT from "../../src/session/runner/prompt/base.txt"
 
 const it = testEffect(PluginTestLayer)
-const fallback = PROMPT_DEFAULT
+const fallback = SessionSystemPrompt.make([])
 const makeHost = Effect.gen(function* () {
   const agents = yield* Agent.Service
   const plugins = yield* Plugin.Service
@@ -74,7 +74,7 @@ describe("SystemPromptPlugin", () => {
         ["kimi-k2", "# Prompt and Tool Use"],
         ["trinity", "what command should I run to list files"],
         ["meta/muse-spark-1.1", "powered by Muse Spark"],
-        ["llama-3.3", "You are opencode, an interactive CLI tool"],
+        ["llama-3.3", fallback],
       ] as const
 
       yield* Effect.forEach(

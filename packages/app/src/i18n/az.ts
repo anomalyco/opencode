@@ -513,21 +513,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "masaüstü {{version}}",
   "wsl.onboarding.versionMismatch": "Quraşdırılmış versiya masaüstü proqram versiyasına uyğun gəlmir.",
   "wsl.onboarding.adding": "Əlavə edilir...",
-  "help.tabs.toast.ariaLabel": "Tablarla tanışlıq. İşinizi və aktiv sessiyalarınızı tablarla təşkil edin",
-  "help.tabs.toast.dismiss": "Tablar haqqında məlumatı bağla",
-  "help.tabs.title": "Tablarla tanışlıq",
-  "help.tabs.description": "İşinizi və aktiv sessiyalarınızı tablarla təşkil edin",
-  "help.tabs.date": "14 iyul",
-  "help.tabs.introduction": "OpenCode Desktop indi tablar əsasında qurulub.",
-  "help.tabs.sessions":
-    "Yeni sessiyanı tabda başladın və ya layihələrinizdən mövcud sessiyanı açın. Yeni işə başlayanda yeni tab açın, işi bitirdikdə isə onu bağlayın.",
-  "help.tabs.organize":
-    "Bir neçə tabı açıq saxlamaq aktiv sessiyalarınızı təşkil etməyi asanlaşdırır. Onları saxlamağı planlaşdırırsınızsa, tablara yadda qalan adlar verin.",
-  "help.tabs.home":
-    "Bütün sessiya və layihələrinizi yeni Ana səhifədə tapa bilərsiniz. Sessiyanı seçdikdə o, tabda açılır.",
-  "help.tabs.persistence": "Tətbiqi yenidən açdıqda tablarınız açıq qalır.",
-  "help.tabs.worktrees":
-    "Yeni dizayn hələ Git Worktrees-i dəstəkləmir, lakin bu imkan tezliklə əlavə olunacaq. Əvvəlki tərtibatdan istifadə etməyə davam etmək istəyirsinizsə, Tənzimləmələrdə tərtibatlar arasında keçid edə bilərsiniz. Nəzərə alın ki, yeni tərtibat bir neçə həftədən sonra daimi olacaq.",
   "server.row.noUsername": "istifadəçi adı yoxdur",
   "dialog.project.edit.title": "Layihəni redaktə et",
   "dialog.project.edit.name": "Ad",
@@ -981,13 +966,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Redaktə alət hissələrini genişlət",
   "settings.general.row.editToolPartsExpanded.description":
     "Zaman xəttində redaktə, yazma və patch alət hissələrini standart olaraq genişlədilmiş göstər",
-  "settings.general.row.newInterface.title": "Yeni tərtibat",
-  "settings.general.row.newInterface.badge": "Yeni",
-  "settings.general.row.newInterface.description":
-    "Yeni tab və ana səhifə tərtibatından istifadə edin. Məhdud müddət ərzində tərtibatlar arasında keçid edin.",
-  "settings.general.row.newInterfaceNotice.title": "İndi yeni tərtibatdan istifadə edirsiniz",
-  "settings.general.row.newInterfaceNotice.description": "Əvvəlki tərtibat artıq mövcud deyil",
-  "settings.general.row.newInterfaceNotice.dismiss": "Rədd et",
   "settings.general.row.pinchZoom.title": "Böyütmək üçün çimdikləyin",
   "settings.general.row.pinchZoom.description":
     "Trekpadda çimdikləmə və Ctrl-sürüşdürmə jestləri ilə miqyaslamağa icazə verin",

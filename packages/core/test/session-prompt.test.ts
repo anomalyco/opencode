@@ -31,6 +31,7 @@ import { testEffect } from "./lib/effect"
 
 const executionCalls: Session.ID[] = []
 const interruptCalls: Session.ID[] = []
+const interruptContinuations: Array<boolean | undefined> = []
 const wakeCalls: Session.ID[] = []
 const activeSessions = new Set<Session.ID>()
 const execution = Layer.succeed(
@@ -41,14 +42,16 @@ const execution = Layer.succeed(
       Effect.sync(() => {
         executionCalls.push(sessionID)
       }),
-    interrupt: (sessionID) =>
+    interrupt: (sessionID, options) =>
       Effect.sync(() => {
         interruptCalls.push(sessionID)
+        interruptContinuations.push(options?.continue)
       }),
     wake: (sessionID) =>
       Effect.sync(() => {
         wakeCalls.push(sessionID)
       }),
+    wakeActive: () => Effect.void,
     awaitIdle: () => Effect.void,
   }),
 )
@@ -177,31 +180,18 @@ describe("Session.prompt", () => {
     }),
   )
 
-  it.effect("continues after interruption when pending work remains", () =>
+  it.effect("forwards interrupt continuation policy", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
-      yield* session.synthetic({ sessionID, text: "Continue after interrupt", resume: false })
       interruptCalls.length = 0
+      interruptContinuations.length = 0
       wakeCalls.length = 0
 
       yield* session.interrupt(sessionID, { continue: true })
 
       expect(interruptCalls).toEqual([sessionID])
-      expect(wakeCalls).toEqual([sessionID])
-    }),
-  )
-
-  it.effect("does not continue after interruption without pending work", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* Session.Service
-      interruptCalls.length = 0
-      wakeCalls.length = 0
-
-      yield* session.interrupt(sessionID, { continue: true })
-
-      expect(interruptCalls).toEqual([sessionID])
+      expect(interruptContinuations).toEqual([true])
       expect(wakeCalls).toEqual([])
     }),
   )
@@ -770,7 +760,7 @@ describe("Session.prompt", () => {
       yield* Effect.forEach(
         recorded.map((event) => ({
           id: event.id,
-          created: DateTime.makeUnsafe(event.created),
+          created: event.created,
           aggregateID: event.aggregate_id,
           seq: event.seq,
           type: event.type,

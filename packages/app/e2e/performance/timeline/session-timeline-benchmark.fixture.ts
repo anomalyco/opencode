@@ -98,7 +98,6 @@ export async function setupTimelineBenchmark(
   options: {
     historyTurns: number
     eventBatch: number
-    newLayoutDesigns?: boolean
     vcsDiff?: unknown[]
     turnDiffs?: unknown[]
   },
@@ -124,22 +123,18 @@ export async function setupTimelineBenchmark(
     events: () => events.splice(0, eventBatch),
     eventRetry: 16,
   })
-  await page.addInitScript(
-    (input) => {
-      localStorage.setItem(
-        "settings.v3",
-        JSON.stringify({
-          general: {
-            newLayoutDesigns: input.newLayoutDesigns,
-            editToolPartsExpanded: true,
-            shellToolPartsExpanded: true,
-            showReasoningSummaries: true,
-          },
-        }),
-      )
-    },
-    { newLayoutDesigns: options.newLayoutDesigns ?? false },
-  )
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "settings.v3",
+      JSON.stringify({
+        general: {
+          editToolPartsExpanded: true,
+          shellToolPartsExpanded: true,
+          showReasoningSummaries: true,
+        },
+      }),
+    )
+  })
   await page.setViewportSize({ width: 1366, height: 768 })
   const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
   const text = page.locator(`[data-timeline-part-id="${textPartID}"]`).first()

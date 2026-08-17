@@ -190,12 +190,6 @@ function codeLanguage(block: HTMLPreElement) {
 }
 
 function applyCodeMetadata(wrapper: HTMLElement, language: string | undefined) {
-  if (!document.body.hasAttribute("data-new-layout")) {
-    delete wrapper.dataset.language
-    delete wrapper.dataset.codeKind
-    return
-  }
-
   if (language) wrapper.dataset.language = language
   else delete wrapper.dataset.language
 
@@ -279,7 +273,6 @@ function decorate(root: HTMLDivElement, labels: CopyLabels) {
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
   }
-  if (!document.body.hasAttribute("data-new-layout")) return
   markInlineCode(root)
   markCodeLinks(root)
 }

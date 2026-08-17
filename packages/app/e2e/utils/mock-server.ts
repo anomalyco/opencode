@@ -278,7 +278,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }
     if (path === "/api/project/current")
       return json(route, { id: (config.project as { id?: string }).id, directory: config.directory })
-    const worktree = path.match(/^\/api\/experimental\/project\/([^/]+)\/worktree$/)?.[1]
+    const worktree = path.match(/^\/api\/worktree\/([^/]+)$/)?.[1]
     if (worktree && route.request().method() === "GET")
       return json(route, [
         { directory: config.directory },
@@ -294,7 +294,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }
     if (worktree && route.request().method() === "DELETE")
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
-    if (/^\/api\/experimental\/project\/[^/]+\/worktree\/refresh$/.test(path))
+    if (/^\/api\/worktree\/[^/]+\/refresh$/.test(path))
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     if (path === "/api/permission/request")
       return json(route, {

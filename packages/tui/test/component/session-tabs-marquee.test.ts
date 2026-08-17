@@ -28,7 +28,7 @@ describe("session tab marquee", () => {
     const scope = createRoot((dispose) => ({ marquee: createMarquee(() => false), dispose }))
 
     scope.marquee.enter("first", "opencode", 6)
-    jest.advanceTimersByTime(1_600)
+    jest.advanceTimersByTime(1_400)
 
     expect(scope.marquee.active()).toBe("first")
     expect(scope.marquee.offset()).toBe(0)

@@ -510,21 +510,6 @@ export const dict: Record<string, string> = {
   "wsl.onboarding.desktopVersion": "डेस्कटप {{version}}",
   "wsl.onboarding.versionMismatch": "स्थापना गरिएको संस्करण डेस्कटप एप संस्करणसँग मेल खाँदैन।",
   "wsl.onboarding.adding": "थप्दै...",
-  "help.tabs.toast.ariaLabel": "ट्याबहरू प्रस्तुत गर्दै। ट्याबहरूसँग आफ्नो काम र सक्रिय सत्रहरू व्यवस्थित गर्नुहोस्",
-  "help.tabs.toast.dismiss": "ट्याब जानकारी खारेज गर्नुहोस्",
-  "help.tabs.title": "ट्याबहरू प्रस्तुत गर्दै",
-  "help.tabs.description": "ट्याबहरूसँग आफ्नो काम र सक्रिय सत्रहरू व्यवस्थित गर्नुहोस्",
-  "help.tabs.date": "जुलाई १४",
-  "help.tabs.introduction": "OpenCode डेस्कटप अब ट्याब वरिपरि बनाइएको छ।",
-  "help.tabs.sessions":
-    "ट्याबमा नयाँ सत्र सुरु गर्नुहोस्, वा तपाईंको कुनै पनि परियोजनाहरूबाट अवस्थित सत्र खोल्नुहोस्। तपाईंले केहि नयाँ सुरु गर्दा एउटा नयाँ ट्याब खोल्नुहोस्, र तपाईंले सकिसकेपछि यसलाई बन्द गर्नुहोस्।",
-  "help.tabs.organize":
-    "केही ट्याबहरू खुला राख्नाले तपाईंको सक्रिय सत्रहरू व्यवस्थित गर्न सजिलो बनाउँछ। यदि तपाइँ तिनीहरूलाई वरिपरि राख्ने योजना बनाउनुहुन्छ भने ट्याबहरूलाई स्मरणीय कुरामा पुन: नामाकरण गर्नुहोस्।",
-  "help.tabs.home":
-    "तपाईंले नयाँ गृह स्क्रिनमा आफ्ना सबै सत्रहरू र परियोजनाहरू फेला पार्नुहुनेछ। सत्र चयन गर्नाले यसलाई ट्याबमा खोल्छ।",
-  "help.tabs.persistence": "जब तपाइँ एप पुन: खोल्नुहुन्छ, तपाइँका ट्याबहरू अझै खुला छन्।",
-  "help.tabs.worktrees":
-    "नयाँ डिजाइनले अझै पनि Git Worktrees लाई समर्थन गर्दैन, यो चाँडै आउँदैछ। त्यसैले यदि तपाइँ अघिल्लो लेआउट प्रयोग गर्न जारी राख्न रुचाउनुहुन्छ भने, तपाइँ सेटिङहरूमा लेआउटहरू बीच स्विच गर्न सक्नुहुन्छ। केवल दिमागमा राख्नुहोस् कि नयाँ लेआउट केही हप्तामा स्थायी हुनेछ।",
   "server.row.noUsername": "प्रयोगकर्ता नाम छैन",
   "dialog.project.edit.title": "परियोजना सम्पादन गर्नुहोस्",
   "dialog.project.edit.name": "नाम",
@@ -969,13 +954,6 @@ export const dict: Record<string, string> = {
   "settings.general.row.editToolPartsExpanded.title": "सम्पादन उपकरण भागहरू विस्तार गर्नुहोस्",
   "settings.general.row.editToolPartsExpanded.description":
     "टाइमलाइनमा पूर्वनिर्धारित रूपमा विस्तार गरिएको सम्पादन, लेख्नुहोस् र प्याच उपकरण भागहरू देखाउनुहोस्",
-  "settings.general.row.newInterface.title": "नयाँ लेआउट",
-  "settings.general.row.newInterface.badge": "नयाँ",
-  "settings.general.row.newInterface.description":
-    "नयाँ ट्याबहरू र गृह लेआउट प्रयोग गर्नुहोस्। सीमित समयको लागि लेआउटहरू बीच स्विच गर्नुहोस्।",
-  "settings.general.row.newInterfaceNotice.title": "तपाईं अहिले नयाँ लेआउट प्रयोग गर्दै हुनुहुन्छ",
-  "settings.general.row.newInterfaceNotice.description": "अघिल्लो लेआउट अब उपलब्ध छैन",
-  "settings.general.row.newInterfaceNotice.dismiss": "खारेज गर्नुहोस्",
   "settings.general.row.pinchZoom.title": "जुम गर्न पिन्च गर्नुहोस्",
   "settings.general.row.pinchZoom.description":
     "ट्र्याकप्याड पिन्च र Ctrl-स्क्रोल इशाराहरूलाई जुम गर्न अनुमति दिनुहोस्",

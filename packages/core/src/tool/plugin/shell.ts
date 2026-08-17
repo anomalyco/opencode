@@ -163,7 +163,11 @@ export const Plugin = {
                     invocation.cwd = target.absolute
                     finalTimeout = invocation.timeout
                     if (!unrestricted) {
-                      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute)
+                      const portable =
+                        Config.latest(yield* config.entries(), "experimental")?.portable_shell_scanner === true
+                      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, {
+                        portable,
+                      })
                       const directories = yield* Effect.forEach(parsed.directories, (directory) =>
                         mutation.resolve({ path: path.resolve(target.absolute, directory), kind: "directory" }),
                       )
@@ -183,21 +187,11 @@ export const Plugin = {
                           agent: context.agent,
                           source,
                         })
-                      if ("directoryUnknown" in parsed && parsed.directoryUnknown)
-                        yield* permission.assert({
-                          action: "external_directory",
-                          resources: ["*"],
-                          opaque: true,
-                          sessionID: context.sessionID,
-                          agent: context.agent,
-                          source,
-                        })
                       if (parsed.commands.length > 0)
                         yield* permission.assert({
                           action: name,
                           resources: parsed.commands.map((command) => command.resource),
-                          save: parsed.commands.flatMap((command) => ("save" in command ? [command.save] : [])),
-                          opaque: parsed.opaque,
+                          save: parsed.commands.map((command) => command.save),
                           sessionID: context.sessionID,
                           agent: context.agent,
                           source,

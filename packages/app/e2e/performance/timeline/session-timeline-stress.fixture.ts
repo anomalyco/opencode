@@ -267,16 +267,17 @@ const childMessages = Array.from({ length: 4 }, (_, index) => [
   userMessage(childID, index + 2000, 120),
   assistantMessage(childID, index + 2000, id("msg_user", index + 2000), [textPart(index + 2000, 0, 240)]),
 ]).flat()
+const messages: Record<string, Message[]> = {
+  [sourceID]: sourceMessages,
+  [targetID]: targetMessages,
+  [childID]: childMessages,
+}
 
 function renderable(part: MessagePart) {
   if (part.type === "tool" && part.tool === "todowrite") return false
-  if (part.type === "text") return !!part.text.trim()
-  if (part.type === "reasoning") return !!part.text.trim()
+  if (part.type === "text") return !!part.text?.trim()
+  if (part.type === "reasoning") return !!part.text?.trim()
   return part.type !== "step-start" && part.type !== "step-finish" && part.type !== "patch"
-}
-
-function orderedParts(message: Message) {
-  return message.parts.slice().sort((a, b) => a.id.localeCompare(b.id))
 }
 
 export const fixture = {
@@ -333,7 +334,7 @@ export const fixture = {
   sourceID,
   targetID,
   childID,
-  messages: { [sourceID]: sourceMessages, [targetID]: targetMessages, [childID]: childMessages },
+  messages,
   expected: {
     sourceTitle: "Uncommitted changes inquiry",
     targetTitle: "Example Game: sample jump movement & sample physics analysis",
@@ -345,16 +346,12 @@ export const fixture = {
       .filter((message) => message.info.role === "user")
       .map((message) => message.info.id),
     childMessageIDs: childMessages.filter((message) => message.info.role === "user").map((message) => message.info.id),
-    targetPartIDs: targetMessages.flatMap((message) =>
-      orderedParts(message)
-        .filter(renderable)
-        .map((part) => part.id),
-    ),
+    targetPartIDs: targetMessages.flatMap((message) => message.parts.filter(renderable).map((part) => part.id)),
   },
 }
 
 export function pageMessages(sessionID: string, limit: number, before?: string) {
-  const messages = fixture.messages[sessionID as keyof typeof fixture.messages] ?? []
+  const messages = fixture.messages[sessionID] ?? []
   const end = before
     ? Math.max(
         0,
@@ -364,6 +361,6 @@ export function pageMessages(sessionID: string, limit: number, before?: string) 
   const start = Math.max(0, end - limit)
   return {
     items: messages.slice(start, end),
-    cursor: start > 0 ? messages[start]!.info.id : undefined,
+    cursor: start > 0 ? messages[start].info.id : undefined,
   }
 }

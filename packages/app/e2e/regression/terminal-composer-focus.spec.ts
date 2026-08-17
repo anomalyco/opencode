@@ -71,9 +71,6 @@ test.beforeEach(async ({ page }) => {
     }),
   )
   await page.routeWebSocket(new RegExp(`/api/pty/${ptyID}/connect`), () => undefined)
-  await page.addInitScript(() => {
-    localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-  })
 })
 
 test("routes typing to the composer unless the open terminal is focused", async ({ page }) => {

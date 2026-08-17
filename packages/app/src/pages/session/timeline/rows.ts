@@ -10,12 +10,8 @@ export { TimelineRow, type SummaryDiff } from "./timeline-row"
 
 export type TimelineRowMap = {
   TurnGap: { userMessageID: string }
-  CommentStrip: {
-    userMessageID: string
-  }
   UserMessage: {
     userMessageID: string
-    anchor: boolean
   }
   Notice: { userMessageID: string; messageID: string }
   TurnDivider: {
@@ -40,7 +36,6 @@ export namespace Timeline {
     getMessageParts: (messageID: string) => Part[],
     showReasoning: boolean,
     status: SessionStatus["type"],
-    inlineComments: boolean,
     projectedUserMessages: UserMessage[],
   ) {
     type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" }>
@@ -116,7 +111,6 @@ export namespace Timeline {
             showReasoning,
             status,
             turn.user.id === activeMessageID,
-            inlineComments,
           ),
         ),
       ],
@@ -134,15 +128,12 @@ export namespace Timeline {
     showReasoning: boolean,
     status: SessionStatus["type"],
     isActive: boolean,
-    // v2 renders comments inside the user message attachments row instead of a strip row
-    inlineComments: boolean,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
 
     const previousUserMessage = index > 0
     const userParts = getMessageParts(userMessage.id)
-    const comments = userParts.flatMap((p) => MessageComment.fromPart(p) ?? [])
     const compaction =
       userParts.some((p) => p.type === "compaction") &&
       !entries.some((entry) => entry.type === "notice" && entry.message.type === "compaction")
@@ -156,19 +147,7 @@ export namespace Timeline {
     )
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: userMessage.id }))
 
-    if (comments.length > 0 && !inlineComments)
-      rows.push(
-        new TimelineRow.CommentStrip({
-          userMessageID: userMessage.id,
-        }),
-      )
-
-    rows.push(
-      new TimelineRow.UserMessage({
-        userMessageID: userMessage.id,
-        anchor: inlineComments || comments.length === 0,
-      }),
-    )
+    rows.push(new TimelineRow.UserMessage({ userMessageID: userMessage.id }))
 
     if (compaction) {
       rows.push(

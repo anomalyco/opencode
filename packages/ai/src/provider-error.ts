@@ -67,6 +67,7 @@ const SERVER_CODES = new Set([
   "overloaded_error",
   "server_error",
   "server_is_overloaded",
+  "slow_down",
   "serviceunavailableexception",
 ])
 const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error", "validationexception"])

@@ -23,6 +23,7 @@ describe("webSearchProviderLabel", () => {
   test("labels known providers", () => {
     expect(webSearchProviderLabel("parallel")).toBe("Parallel Web Search")
     expect(webSearchProviderLabel("exa")).toBe("Exa Web Search")
+    expect(webSearchProviderLabel("tavily")).toBe("Tavily Web Search")
   })
 
   for (const [name, provider] of [

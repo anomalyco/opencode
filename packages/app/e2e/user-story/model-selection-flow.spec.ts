@@ -53,7 +53,6 @@ test("creates a session in a new project and selects its model", async ({ page }
     findFiles: () => ["NewProject"],
   })
   await page.addInitScript(() => {
-    localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
     localStorage.setItem("opencode.global.dat:server", JSON.stringify({ projects: { local: [] } }))
     localStorage.setItem(
       "opencode.global.dat:model",
@@ -72,7 +71,12 @@ test("creates a session in a new project and selects its model", async ({ page }
   const addProject = page.locator('[data-action="home-add-project-row"]')
   await expectAppVisible(addProject)
   await addProject.click()
-  await page.locator("[data-directory-path]").click()
+  const directoryItem = page.getByRole("treeitem", { name: "NewProject" })
+  await expect(directoryItem).toBeVisible()
+  await directoryItem.click()
+  const selectFolder = page.getByRole("button", { name: "Select folder" })
+  await expect(selectFolder).toBeEnabled()
+  await selectFolder.click()
 
   await page.locator('[data-action="home-new-session"]').click()
   await expectAppVisible(page.locator('[data-component="prompt-input-v2"]'))

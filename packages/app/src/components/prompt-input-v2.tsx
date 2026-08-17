@@ -40,7 +40,7 @@ export type PromptInputV2ComposerProps = {
   accentSubmit?: boolean
 }
 
-export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "submission">
+export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class">
 export type PromptInputV2ComposerController = PromptInputV2Interaction & {
   readonly model: PromptInputProps["controls"]["model"]
 }
@@ -197,31 +197,33 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     if (!id) return permission.isAutoAcceptingDirectory(sdk().directory)
     return permission.isAutoAccepting(id, sdk().directory)
   })
-  const submission = createPromptSubmit({
-    prompt,
-    info,
-    imageAttachments: attachments,
-    commentCount,
-    autoAccept: accepting,
-    mode,
-    working,
-    editor: () => editor,
-    queueScroll: () => requestAnimationFrame(() => editor?.scrollIntoView({ block: "nearest" })),
-    promptLength,
-    addToHistory: (value, mode) => controller.addHistory(value, mode),
-    resetHistoryNavigation: () => controller.resetHistory(),
-    setMode: (next) => controller.dispatch({ type: next === "shell" ? "mode.shell" : "mode.normal" }),
-    setPopover: (popover) => {
-      if (!popover) controller.dispatch({ type: "popover.close" })
-    },
-    newSessionWorktree: () => props.newSessionWorktree,
-    onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
-    shouldQueue: props.shouldQueue,
-    onQueue: props.onQueue,
-    onAbort: props.onAbort,
-    onSubmit: props.onSubmit,
-    model: props.controls.model.selection,
-  })
+  const submission =
+    props.submission ??
+    createPromptSubmit({
+      prompt,
+      info,
+      imageAttachments: attachments,
+      commentCount,
+      autoAccept: accepting,
+      mode,
+      working,
+      editor: () => editor,
+      queueScroll: () => requestAnimationFrame(() => editor?.scrollIntoView({ block: "nearest" })),
+      promptLength,
+      addToHistory: (value, mode) => controller.addHistory(value, mode),
+      resetHistoryNavigation: () => controller.resetHistory(),
+      setMode: (next) => controller.dispatch({ type: next === "shell" ? "mode.shell" : "mode.normal" }),
+      setPopover: (popover) => {
+        if (!popover) controller.dispatch({ type: "popover.close" })
+      },
+      newSessionWorktree: () => props.newSessionWorktree,
+      onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
+      shouldQueue: props.shouldQueue,
+      onQueue: props.onQueue,
+      onAbort: props.onAbort,
+      onSubmit: props.onSubmit,
+      model: props.controls.model.selection,
+    })
 
   const referenceDescription = (reference: ReferenceInfo) =>
     reference.source.type === "git" ? reference.source.repository : reference.source.path

@@ -26,9 +26,6 @@ test("clicking an image file in the v2 review pane does not blank the panel", as
 
 async function openReview(page: Page) {
   await page.setViewportSize({ width: 960, height: 900 })
-  await page.addInitScript(() => {
-    localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-  })
   await mockOpenCodeServer(page, {
     directory,
     project: {

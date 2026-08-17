@@ -3,7 +3,6 @@ import {
   createMemo,
   createSignal,
   For,
-  Index,
   on,
   onCleanup,
   onMount,
@@ -15,7 +14,6 @@ import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { createVirtualizer, defaultRangeExtractor, elementScroll, type VirtualItem } from "@tanstack/solid-virtual"
 import { Accordion } from "@opencode-ai/ui/accordion"
-import { Button } from "@opencode-ai/ui/button"
 import { Card } from "@opencode-ai/ui/card"
 import {
   ContextToolGroup,
@@ -26,12 +24,9 @@ import {
   type UserActions,
 } from "@opencode-ai/session-ui/message-part"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
@@ -40,7 +35,6 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
-import { TextField } from "@opencode-ai/ui/text-field"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import type { AssistantMessage, Project, ToolPart, UserMessage } from "@/types"
@@ -936,7 +930,7 @@ function MessageTimelineView(
                 message={message()}
                 showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
                 turnDurationMs={turnDurationMs(row().userMessageID)}
-                useV2Actions={props.data.newLayoutDesigns()}
+                useV2Actions
                 defaultOpen={defaultOpen()}
                 toolOpen={toolOpen[part().id] ?? defaultOpen()}
                 onToolOpenChange={(open) => setToolOpen(part().id, open)}
@@ -952,10 +946,6 @@ function MessageTimelineView(
   }
 
   function TimelineRowFrame(input: { row: FramedTimelineRow; children: JSX.Element }) {
-    const anchor = () => {
-      const row = input.row
-      return row._tag === "CommentStrip" || (row._tag === "UserMessage" && row.anchor)
-    }
     const previousAssistantPart = () => {
       const row = input.row
       return row._tag === "AssistantPart" && row.previousAssistantPart
@@ -963,7 +953,7 @@ function MessageTimelineView(
 
     return (
       <div
-        id={anchor() ? props.anchor(input.row.userMessageID) : undefined}
+        id={input.row._tag === "UserMessage" ? props.anchor(input.row.userMessageID) : undefined}
         data-message-id={input.row.userMessageID}
         data-timeline-row={input.row._tag}
         classList={{
@@ -984,50 +974,6 @@ function MessageTimelineView(
     switch (row()._tag) {
       case "TurnGap":
         return <div data-timeline-row="TurnGap" aria-hidden="true" class="h-6" />
-      case "CommentStrip": {
-        const commentStripRow = row as Accessor<TimelineRowByTag<"CommentStrip">>
-        const comments = createMemo(() =>
-          getMsgParts(commentStripRow().userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? []),
-        )
-        return (
-          <TimelineRowFrame row={commentStripRow()}>
-            <div class={`w-full pb-2 ${turnPadding()}`}>
-              <div class="ms-auto max-w-[82%] overflow-x-auto no-scrollbar">
-                <div class="flex w-max min-w-full justify-end gap-2">
-                  <Index each={comments()}>
-                    {(comment) => (
-                      <div
-                        classList={{
-                          "shrink-0 max-w-[260px] rounded-[6px] border-border-weak-base bg-background-stronger px-2.5 py-2": true,
-                          "border-[0.5px]": props.data.newLayoutDesigns(),
-                          border: !props.data.newLayoutDesigns(),
-                        }}
-                      >
-                        <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
-                          <FileIcon node={{ path: comment().path, type: "file" }} class="size-3.5 shrink-0" />
-                          <span class="truncate">{getFilename(comment().path)}</span>
-                          <Show when={comment().selection}>
-                            {(selection) => (
-                              <span class="shrink-0 text-text-weak">
-                                {selection().startLine === selection().endLine
-                                  ? `:${selection().startLine}`
-                                  : `:${selection().startLine}-${selection().endLine}`}
-                              </span>
-                            )}
-                          </Show>
-                        </div>
-                        <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                          {comment().comment}
-                        </div>
-                      </div>
-                    )}
-                  </Index>
-                </div>
-              </div>
-            </div>
-          </TimelineRowFrame>
-        )
-      }
       case "UserMessage": {
         const userMessageRow = row as Accessor<TimelineRowByTag<"UserMessage">>
         const message = createMemo(() => {
@@ -1035,7 +981,6 @@ function MessageTimelineView(
           if (m?.role === "user") return m
         })
         const messageComments = createMemo(() => {
-          if (!props.data.newLayoutDesigns()) return []
           return getMsgParts(userMessageRow().userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? [])
         })
         return (
@@ -1048,7 +993,7 @@ function MessageTimelineView(
                       message={message()}
                       parts={getMsgParts(userMessageRow().userMessageID)}
                       actions={props.actions}
-                      useV2Actions={props.data.newLayoutDesigns()}
+                      useV2Actions
                       comments={messageComments()}
                     />
                   </div>
@@ -1068,9 +1013,12 @@ function MessageTimelineView(
           <TimelineRowFrame row={noticeRow()}>
             <Show when={content()}>
               {(content) => (
-                <div data-slot="session-timeline-notice" class={`w-full pt-3 pb-1 text-13-regular ${turnPadding()}`}>
-                  <span class="text-13-medium text-text-strong">{content().label}</span>
-                  <Show when={content().data}>{(data) => <span class="text-text-weak"> · {data()}</span>}</Show>
+                <div
+                  data-slot="session-timeline-notice"
+                  class={`w-full pt-3 pb-1 text-13-regular text-text-weak ${turnPadding()}`}
+                >
+                  <span class="text-13-medium">{content().label}</span>
+                  <Show when={content().data}>{(data) => <span> · {data()}</span>}</Show>
                 </div>
               )}
             </Show>
@@ -1134,7 +1082,6 @@ function MessageTimelineView(
       case "DiffSummary": {
         const diffSummaryRow = row as Accessor<TimelineRowByTag<"DiffSummary">>
         const canMove = () =>
-          props.data.newLayoutDesigns() &&
           diffSummaryRow().userMessageID === props.userMessages.at(-1)?.id &&
           !workspaceSession() &&
           props.workspaceMoveEligible &&
@@ -1214,6 +1161,8 @@ function MessageTimelineView(
 
     onCleanup(() => {
       if (contentMeasureFrame !== undefined) cancelAnimationFrame(contentMeasureFrame)
+      // Solid runs cleanup before it disconnects the row, so defer TanStack's null-ref cleanup.
+      queueMicrotask(() => virtualizer.measureElement(null))
     })
 
     return (
@@ -1255,54 +1204,30 @@ function MessageTimelineView(
       <div
         class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-200 ease-out"
         classList={{
-          "bottom-8": props.data.newLayoutDesigns(),
-          "bottom-6": !props.data.newLayoutDesigns(),
+          "bottom-8": true,
           "opacity-100 translate-y-0 scale-100": props.scroll.overflow && props.scroll.jump,
           "opacity-0 translate-y-2 pointer-events-none": !props.scroll.overflow || !props.scroll.jump,
-          "scale-[0.8]": (!props.scroll.overflow || !props.scroll.jump) && props.data.newLayoutDesigns(),
-          "scale-95": (!props.scroll.overflow || !props.scroll.jump) && !props.data.newLayoutDesigns(),
+          "scale-[0.8]": !props.scroll.overflow || !props.scroll.jump,
         }}
       >
-        <Show
-          when={props.data.newLayoutDesigns()}
-          fallback={
-            <button
-              type="button"
-              aria-label={language.t("session.messages.jumpToLatest")}
-              class="pointer-events-auto flex items-center justify-center w-10 h-8 bg-transparent border-none cursor-pointer p-0 group"
-              onClick={props.onResumeScroll}
-            >
-              <div
-                class="flex items-center justify-center w-8 h-6 rounded-[6px] border border-border-weaker-base bg-[color-mix(in_srgb,var(--surface-raised-stronger-non-alpha)_80%,transparent)] backdrop-blur-[0.75px] transition-colors group-hover:border-[var(--border-weak-base)] group-hover:[--icon-base:var(--icon-hover)]"
-                style={{
-                  "box-shadow":
-                    "0 51px 60px 0 rgba(0,0,0,0.10), 0 15px 18px 0 rgba(0,0,0,0.12), 0 6.386px 7.513px 0 rgba(0,0,0,0.12), 0 2.31px 2.717px 0 rgba(0,0,0,0.20)",
-                }}
-              >
-                <Icon name="arrow-down-to-line" size="small" />
-              </div>
-            </button>
-          }
+        <button
+          type="button"
+          aria-label={language.t("session.messages.jumpToLatest")}
+          class="pointer-events-auto flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px]"
+          style={{
+            background: "color-mix(in srgb, var(--v2-background-bg-base) 92%, transparent)",
+            "box-shadow": "var(--v2-elevation-raised), 0px 2px 8px var(--v2-background-bg-base)",
+          }}
+          onClick={props.onResumeScroll}
         >
-          <button
-            type="button"
-            aria-label={language.t("session.messages.jumpToLatest")}
-            class="pointer-events-auto flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px]"
-            style={{
-              background: "color-mix(in srgb, var(--v2-background-bg-base) 92%, transparent)",
-              "box-shadow": "var(--v2-elevation-raised), 0px 2px 8px var(--v2-background-bg-base)",
-            }}
-            onClick={props.onResumeScroll}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path
-                d="M12.3333 8.66665L8 13L3.66667 8.66665M8 12.6667V2.83332"
-                stroke="currentColor"
-                stroke-linecap="square"
-              />
-            </svg>
-          </button>
-        </Show>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d="M12.3333 8.66665L8 13L3.66667 8.66665M8 12.6667V2.83332"
+              stroke="currentColor"
+              stroke-linecap="square"
+            />
+          </svg>
+        </button>
       </div>
       <ScrollView
         viewportRef={bindListRoot}
@@ -1324,51 +1249,32 @@ function MessageTimelineView(
         <Show when={showHeader()}>
           <div
             data-session-title
-            classList={{
-              "sticky top-0 z-30": true,
-              "bg-[linear-gradient(to_bottom,var(--v2-background-bg-base)_48px,transparent)]":
-                props.data.newLayoutDesigns(),
-              "bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]":
-                !props.data.newLayoutDesigns(),
-              "w-full": true,
-              "pb-4": true,
-              "pr-3": true,
-              "pl-2.5": props.data.newLayoutDesigns(),
-              "pl-2 md:pl-4": !props.data.newLayoutDesigns(),
-              "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered && !props.data.newLayoutDesigns(),
-            }}
+            class="sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--v2-background-bg-base)_48px,transparent)] w-full pb-4 pr-3 pl-2.5"
           >
             <div class="h-12 w-full flex items-center justify-between gap-2">
-              <div
-                classList={{
-                  "flex items-center gap-1 min-w-0 flex-1": true,
-                  "pr-3": !props.data.newLayoutDesigns(),
-                }}
-              >
+              <div class="flex items-center gap-1 min-w-0 flex-1">
                 <div class="flex items-center min-w-0 flex-1 w-full">
-                  <Show when={props.data.newLayoutDesigns()}>
-                    <Show
-                      when={workspaceSession()}
-                      fallback={
-                        <span class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-muted">
-                          <IconV2 name="monitor" />
-                        </span>
-                      }
+                  <Show
+                    when={workspaceSession()}
+                    fallback={
+                      <span class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-muted">
+                        <IconV2 name="monitor" />
+                      </span>
+                    }
+                  >
+                    <TooltipV2
+                      placement="bottom-start"
+                      value={sessionDirectory()}
+                      contentClass="max-w-[calc(100vw-32px)] break-all"
                     >
-                      <TooltipV2
-                        placement="bottom-start"
-                        value={sessionDirectory()}
-                        contentClass="max-w-[calc(100vw-32px)] break-all"
+                      <span
+                        tabIndex={0}
+                        aria-label={sessionDirectory()}
+                        class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-accent"
                       >
-                        <span
-                          tabIndex={0}
-                          aria-label={sessionDirectory()}
-                          class="flex size-6 shrink-0 items-center justify-center text-v2-icon-icon-accent"
-                        >
-                          <IconV2 name="workspace-isolated" />
-                        </span>
-                      </TooltipV2>
-                    </Show>
+                        <IconV2 name="workspace-isolated" />
+                      </span>
+                    </TooltipV2>
                   </Show>
                   <Show when={parentID()}>
                     <button
@@ -1393,12 +1299,7 @@ function MessageTimelineView(
                       fallback={
                         <h1
                           data-slot="session-title-child"
-                          classList={{
-                            "truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
-                            "w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover":
-                              props.data.newLayoutDesigns(),
-                            "grow-1 min-w-0": !props.data.newLayoutDesigns(),
-                          }}
+                          class="truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base w-fit rounded-[6px] px-2 py-1 hover:bg-v2-overlay-simple-overlay-hover"
                           onClick={openTitleEditor}
                         >
                           {childTitle()}
@@ -1413,15 +1314,9 @@ function MessageTimelineView(
                         dir="auto"
                         value={title.draft}
                         disabled={props.pending.rename()}
-                        classList={{
-                          "block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base": true,
-                          "w-full flex-1 grow-1 min-w-0 pl-1 -ml-1 rounded-[6px]": !props.data.newLayoutDesigns(),
-                          "field-sizing-content self-start rounded-[6px] px-2 py-1 ": props.data.newLayoutDesigns(),
-                        }}
+                        class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content self-start rounded-[6px] px-2 py-1"
                         style={{
-                          "--inline-input-shadow": props.data.newLayoutDesigns()
-                            ? "none"
-                            : "var(--shadow-xs-border-select)",
+                          "--inline-input-shadow": "none",
                           "text-align": "start",
                         }}
                         onInput={(event) => setTitle("draft", event.currentTarget.value)}
@@ -1445,18 +1340,9 @@ function MessageTimelineView(
               </div>
               <Show when={sessionID()} keyed>
                 {(id) => (
-                  <div
-                    classList={{
-                      "shrink-0 flex items-center": true,
-                      "gap-2": props.data.newLayoutDesigns(),
-                      "gap-3": !props.data.newLayoutDesigns(),
-                    }}
-                  >
-                    <SessionContextUsage
-                      placement="bottom"
-                      buttonAppearance={props.data.newLayoutDesigns() ? "v2" : "default"}
-                    />
-                    <Show when={props.data.newLayoutDesigns() && !parentID() && project()}>
+                  <div class="shrink-0 flex items-center gap-2">
+                    <SessionContextUsage placement="bottom" />
+                    <Show when={!parentID() && project()}>
                       {(project) => (
                         <KobaltePopover
                           open={summaryOpen()}
@@ -1497,158 +1383,80 @@ function MessageTimelineView(
                       )}
                     </Show>
                     <Show when={!parentID()}>
-                      <Show
-                        when={props.data.newLayoutDesigns()}
-                        fallback={
-                          <DropdownMenu
-                            gutter={4}
-                            placement="bottom-end"
-                            open={title.menuOpen}
-                            onOpenChange={(open) => {
-                              setTitle("menuOpen", open)
-                              if (open) return
+                      <MenuV2
+                        gutter={6}
+                        placement="bottom-end"
+                        open={title.menuOpen}
+                        onOpenChange={(open) => {
+                          setTitle("menuOpen", open)
+                          if (open) return
+                        }}
+                      >
+                        <MenuV2.Trigger
+                          as={IconButtonV2}
+                          icon={<IconV2 name="outline-dots" />}
+                          variant="ghost-muted"
+                          size="large"
+                          state={share.open || title.pendingShare ? "pressed" : undefined}
+                          aria-label={language.t("common.moreOptions")}
+                          aria-expanded={title.menuOpen || share.open || title.pendingShare}
+                          ref={(el: HTMLButtonElement) => {
+                            more = el
+                          }}
+                        />
+                        <MenuV2.Portal>
+                          <MenuV2.Content
+                            style={{ width: "120px", "min-width": "120px" }}
+                            onCloseAutoFocus={(event) => {
+                              if (title.pendingRename) {
+                                event.preventDefault()
+                                setTitle("pendingRename", false)
+                                openTitleEditor()
+                                return
+                              }
+                              if (title.pendingShare) {
+                                event.preventDefault()
+                                requestAnimationFrame(() => {
+                                  setShare({ open: true, dismiss: null })
+                                  setTitle("pendingShare", false)
+                                })
+                              }
                             }}
                           >
-                            <DropdownMenu.Trigger
-                              as={IconButton}
-                              icon="dot-grid"
-                              variant="ghost"
-                              class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
-                              classList={{
-                                "bg-surface-base-active": share.open || title.pendingShare,
-                              }}
-                              aria-label={language.t("common.moreOptions")}
-                              aria-expanded={title.menuOpen || share.open || title.pendingShare}
-                              ref={(el: HTMLButtonElement) => {
-                                more = el
-                              }}
-                            />
-                            <DropdownMenu.Portal>
-                              <DropdownMenu.Content
-                                style={{ "min-width": "104px" }}
-                                onCloseAutoFocus={(event) => {
-                                  if (title.pendingRename) {
-                                    event.preventDefault()
-                                    setTitle("pendingRename", false)
-                                    openTitleEditor()
-                                    return
-                                  }
-                                  if (title.pendingShare) {
-                                    event.preventDefault()
-                                    requestAnimationFrame(() => {
-                                      setShare({ open: true, dismiss: null })
-                                      setTitle("pendingShare", false)
-                                    })
-                                  }
-                                }}
-                              >
-                                <DropdownMenu.Item
-                                  onSelect={() => {
-                                    setTitle("pendingRename", true)
-                                    setTitle("menuOpen", false)
-                                  }}
-                                >
-                                  <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
-                                <Show when={shareEnabled()}>
-                                  <DropdownMenu.Item
-                                    onSelect={() => {
-                                      setTitle({ pendingShare: true, menuOpen: false })
-                                    }}
-                                  >
-                                    <DropdownMenu.ItemLabel>
-                                      {language.t("session.share.action.share")}
-                                    </DropdownMenu.ItemLabel>
-                                  </DropdownMenu.Item>
-                                </Show>
-                                <DropdownMenu.Item onSelect={() => void props.action.export(id)}>
-                                  <DropdownMenu.ItemLabel>{language.t("common.export")}</DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
-                                {/* TODO: Need a V2 session archive API. */}
-                                <DropdownMenu.Separator />
-                                <DropdownMenu.Item onSelect={() => props.action.showDelete(id)}>
-                                  <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
-                                </DropdownMenu.Item>
-                              </DropdownMenu.Content>
-                            </DropdownMenu.Portal>
-                          </DropdownMenu>
-                        }
-                      >
-                        <MenuV2
-                          gutter={6}
-                          placement="bottom-end"
-                          open={title.menuOpen}
-                          onOpenChange={(open) => {
-                            setTitle("menuOpen", open)
-                            if (open) return
-                          }}
-                        >
-                          <MenuV2.Trigger
-                            as={IconButtonV2}
-                            icon={<IconV2 name="outline-dots" />}
-                            variant="ghost-muted"
-                            size="large"
-                            state={share.open || title.pendingShare ? "pressed" : undefined}
-                            aria-label={language.t("common.moreOptions")}
-                            aria-expanded={title.menuOpen || share.open || title.pendingShare}
-                            ref={(el: HTMLButtonElement) => {
-                              more = el
-                            }}
-                          />
-                          <MenuV2.Portal>
-                            <MenuV2.Content
-                              style={{ width: "120px", "min-width": "120px" }}
-                              onCloseAutoFocus={(event) => {
-                                if (title.pendingRename) {
-                                  event.preventDefault()
-                                  setTitle("pendingRename", false)
-                                  openTitleEditor()
-                                  return
-                                }
-                                if (title.pendingShare) {
-                                  event.preventDefault()
-                                  requestAnimationFrame(() => {
-                                    setShare({ open: true, dismiss: null })
-                                    setTitle("pendingShare", false)
-                                  })
-                                }
+                            <MenuV2.Item
+                              onSelect={() => {
+                                setTitle("pendingRename", true)
+                                setTitle("menuOpen", false)
                               }}
                             >
+                              {language.t("common.rename")}
+                            </MenuV2.Item>
+                            <Show when={shareEnabled()}>
                               <MenuV2.Item
                                 onSelect={() => {
-                                  setTitle("pendingRename", true)
-                                  setTitle("menuOpen", false)
+                                  setTitle({ pendingShare: true, menuOpen: false })
                                 }}
                               >
-                                {language.t("common.rename")}
+                                {language.t("session.share.action.share")}...
                               </MenuV2.Item>
-                              <Show when={shareEnabled()}>
-                                <MenuV2.Item
-                                  onSelect={() => {
-                                    setTitle({ pendingShare: true, menuOpen: false })
-                                  }}
-                                >
-                                  {language.t("session.share.action.share")}...
-                                </MenuV2.Item>
-                              </Show>
-                              <MenuV2.Item onSelect={() => void props.action.export(id)}>
-                                {language.t("common.export")}...
-                              </MenuV2.Item>
-                              {/* TODO: Need a V2 session archive API. */}
-                              <MenuV2.Separator />
-                              <MenuV2.Item onSelect={() => props.action.showDelete(id)}>
-                                {language.t("common.delete")}...
-                              </MenuV2.Item>
-                            </MenuV2.Content>
-                          </MenuV2.Portal>
-                        </MenuV2>
-                      </Show>
+                            </Show>
+                            <MenuV2.Item onSelect={() => void props.action.export(id)}>
+                              {language.t("common.export")}...
+                            </MenuV2.Item>
+                            {/* TODO: Need a V2 session archive API. */}
+                            <MenuV2.Separator />
+                            <MenuV2.Item onSelect={() => props.action.showDelete(id)}>
+                              {language.t("common.delete")}...
+                            </MenuV2.Item>
+                          </MenuV2.Content>
+                        </MenuV2.Portal>
+                      </MenuV2>
 
                       <KobaltePopover
                         open={share.open}
                         anchorRef={() => more}
                         placement="bottom-end"
-                        gutter={props.data.newLayoutDesigns() ? 6 : 4}
+                        gutter={6}
                         modal={false}
                         onOpenChange={(open) => {
                           if (open) setShare("dismiss", null)
@@ -1658,10 +1466,7 @@ function MessageTimelineView(
                         <KobaltePopover.Portal>
                           <KobaltePopover.Content
                             data-component="popover-content"
-                            classList={{
-                              "flex w-80 max-w-none flex-col items-start gap-3 rounded-[10px] border-0 bg-v2-background-bg-layer-01 p-3 shadow-[var(--v2-elevation-floating)]":
-                                props.data.newLayoutDesigns(),
-                            }}
+                            class="flex w-80 max-w-none flex-col items-start gap-3 rounded-[10px] border-0 bg-v2-background-bg-layer-01 p-3 shadow-[var(--v2-elevation-floating)]"
                             style={{ "min-width": "320px" }}
                             onEscapeKeyDown={(event) => {
                               setShare({ dismiss: "escape", open: false })
@@ -1679,148 +1484,79 @@ function MessageTimelineView(
                               setShare("dismiss", null)
                             }}
                           >
-                            <Show
-                              when={props.data.newLayoutDesigns()}
-                              fallback={
-                                <div class="flex flex-col p-3">
-                                  <div class="flex flex-col gap-1">
-                                    <div class="text-13-medium text-text-strong">
-                                      {language.t("session.share.popover.title")}
-                                    </div>
-                                    <div class="text-12-regular text-text-weak">
-                                      {shareUrl()
-                                        ? language.t("session.share.popover.description.shared")
-                                        : language.t("session.share.popover.description.unshared")}
-                                    </div>
-                                  </div>
-                                  <div class="mt-3 flex flex-col gap-2">
-                                    <Show
-                                      when={shareUrl()}
-                                      fallback={
-                                        <Button
-                                          size="large"
-                                          variant="primary"
-                                          class="w-full"
-                                          onClick={() => void props.action.share()}
-                                          disabled={props.pending.share()}
-                                        >
-                                          {props.pending.share()
-                                            ? language.t("session.share.action.publishing")
-                                            : language.t("session.share.action.publish")}
-                                        </Button>
-                                      }
-                                    >
-                                      <div class="flex flex-col gap-2">
-                                        <TextField
-                                          value={shareUrl() ?? ""}
-                                          readOnly
-                                          copyable
-                                          copyKind="link"
-                                          tabIndex={-1}
-                                          class="w-full"
-                                        />
-                                        <div class="grid grid-cols-2 gap-2">
-                                          <Button
-                                            size="large"
-                                            variant="secondary"
-                                            class="w-full shadow-none border border-border-weak-base"
-                                            onClick={() => void props.action.unshare()}
-                                            disabled={props.pending.unshare()}
-                                          >
-                                            {props.pending.unshare()
-                                              ? language.t("session.share.action.unpublishing")
-                                              : language.t("session.share.action.unpublish")}
-                                          </Button>
-                                          <Button
-                                            size="large"
-                                            variant="primary"
-                                            class="w-full"
-                                            onClick={props.action.viewShare}
-                                            disabled={props.pending.unshare()}
-                                          >
-                                            {language.t("session.share.action.view")}
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    </Show>
-                                  </div>
-                                </div>
-                              }
-                            >
-                              <div class="flex w-full flex-col gap-1.5 px-0.5 pt-0.5">
-                                <div class="select-none text-[13px] font-[530] leading-none tracking-[-0.04px] text-v2-text-text-base [font-variation-settings:'slnt'_0]">
-                                  {language.t("session.share.popover.title")}
-                                </div>
-                                <div class="select-none text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-variation-settings:'slnt'_0]">
-                                  {shareUrl()
-                                    ? language.t("session.share.popover.description.shared")
-                                    : language.t("session.share.popover.description.unshared")}
-                                </div>
+                            <div class="flex w-full flex-col gap-1.5 px-0.5 pt-0.5">
+                              <div class="select-none text-[13px] font-[530] leading-none tracking-[-0.04px] text-v2-text-text-base [font-variation-settings:'slnt'_0]">
+                                {language.t("session.share.popover.title")}
                               </div>
-                              <div class="flex w-full flex-col gap-2">
-                                <Show
-                                  when={shareUrl()}
-                                  fallback={
-                                    <ButtonV2
-                                      variant="contrast"
-                                      class="w-full"
-                                      onClick={() => void props.action.share()}
-                                      disabled={props.pending.share()}
-                                    >
-                                      {props.pending.share()
-                                        ? language.t("session.share.action.publishing")
-                                        : language.t("session.share.action.publish")}
-                                    </ButtonV2>
-                                  }
-                                >
-                                  <div class="flex flex-col gap-2">
+                              <div class="select-none text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-variation-settings:'slnt'_0]">
+                                {shareUrl()
+                                  ? language.t("session.share.popover.description.shared")
+                                  : language.t("session.share.popover.description.unshared")}
+                              </div>
+                            </div>
+                            <div class="flex w-full flex-col gap-2">
+                              <Show
+                                when={shareUrl()}
+                                fallback={
+                                  <ButtonV2
+                                    variant="contrast"
+                                    class="w-full"
+                                    onClick={() => void props.action.share()}
+                                    disabled={props.pending.share()}
+                                  >
+                                    {props.pending.share()
+                                      ? language.t("session.share.action.publishing")
+                                      : language.t("session.share.action.publish")}
+                                  </ButtonV2>
+                                }
+                              >
+                                <div class="flex flex-col gap-2">
+                                  <div
+                                    class="flex h-8 w-full items-center gap-1.5 rounded-[6px] py-1 pl-2.5 pr-1.5 shadow-[var(--v2-elevation-button-neutral)]"
+                                    style={{
+                                      background:
+                                        "linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-button-neutral)",
+                                    }}
+                                  >
                                     <div
-                                      class="flex h-8 w-full items-center gap-1.5 rounded-[6px] py-1 pl-2.5 pr-1.5 shadow-[var(--v2-elevation-button-neutral)]"
-                                      style={{
-                                        background:
-                                          "linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-button-neutral)",
-                                      }}
+                                      class="min-w-0 flex-1 truncate select-text cursor-text text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-variation-settings:'slnt'_0]"
+                                      onClick={selectShareUrlText}
                                     >
-                                      <div
-                                        class="min-w-0 flex-1 truncate select-text cursor-text text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-variation-settings:'slnt'_0]"
-                                        onClick={selectShareUrlText}
-                                      >
-                                        {shareUrl()}
-                                      </div>
-                                      <IconButtonV2
-                                        type="button"
-                                        size="small"
-                                        variant="ghost-muted"
-                                        icon={<IconV2 name="outline-copy" />}
-                                        aria-label={language.t("session.share.copy.copyLink")}
-                                        onClick={() => void props.action.copyShareUrl()}
-                                      />
-                                      <IconButtonV2
-                                        type="button"
-                                        size="small"
-                                        variant="ghost-muted"
-                                        icon={<IconV2 name="outline-square-arrow" />}
-                                        aria-label={language.t("session.share.action.view")}
-                                        onClick={props.action.viewShare}
-                                        disabled={props.pending.unshare()}
-                                      />
+                                      {shareUrl()}
                                     </div>
-                                    <div class="flex w-full">
-                                      <ButtonV2
-                                        variant="outline"
-                                        class="w-full"
-                                        onClick={() => void props.action.unshare()}
-                                        disabled={props.pending.unshare()}
-                                      >
-                                        {props.pending.unshare()
-                                          ? language.t("session.share.action.unpublishing")
-                                          : language.t("session.share.action.unpublish")}
-                                      </ButtonV2>
-                                    </div>
+                                    <IconButtonV2
+                                      type="button"
+                                      size="small"
+                                      variant="ghost-muted"
+                                      icon={<IconV2 name="outline-copy" />}
+                                      aria-label={language.t("session.share.copy.copyLink")}
+                                      onClick={() => void props.action.copyShareUrl()}
+                                    />
+                                    <IconButtonV2
+                                      type="button"
+                                      size="small"
+                                      variant="ghost-muted"
+                                      icon={<IconV2 name="outline-square-arrow" />}
+                                      aria-label={language.t("session.share.action.view")}
+                                      onClick={props.action.viewShare}
+                                      disabled={props.pending.unshare()}
+                                    />
                                   </div>
-                                </Show>
-                              </div>
-                            </Show>
+                                  <div class="flex w-full">
+                                    <ButtonV2
+                                      variant="outline"
+                                      class="w-full"
+                                      onClick={() => void props.action.unshare()}
+                                      disabled={props.pending.unshare()}
+                                    >
+                                      {props.pending.unshare()
+                                        ? language.t("session.share.action.unpublishing")
+                                        : language.t("session.share.action.unpublish")}
+                                    </ButtonV2>
+                                  </div>
+                                </div>
+                              </Show>
+                            </div>
                           </KobaltePopover.Content>
                         </KobaltePopover.Portal>
                       </KobaltePopover>

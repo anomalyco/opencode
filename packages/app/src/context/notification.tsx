@@ -286,7 +286,8 @@ export function createServerNotificationState(input: { sdk: ServerSDK; data: Dat
     )
       return
 
-    const directory = e.name
+    const directory = event.current?.location?.directory
+    if (!directory) return
     const time = Date.now()
     if (event.type === "session.execution.failed") {
       handleSessionError(directory, event, time)

@@ -171,7 +171,7 @@ export interface SlotMap {
   readonly "prompt.footer.file": PromptFooterInput
   readonly "session.composer.top": { readonly sessionID: string }
   readonly "sidebar.content": { readonly sessionID: string }
-  readonly "sidebar.footer": Readonly<Record<string, never>>
+  readonly "sidebar.footer": { readonly sessionID: string }
 }
 export type SlotPath = keyof SlotMap
 

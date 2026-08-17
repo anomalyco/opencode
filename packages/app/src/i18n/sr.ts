@@ -509,21 +509,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "десктоп {{version}}",
   "wsl.onboarding.versionMismatch": "Инсталирана верзија не одговара верзији апликације за рачунар.",
   "wsl.onboarding.adding": "Додавање...",
-  "help.tabs.toast.ariaLabel": "Представљамо картице. Организујте свој рад и активне сесије помоћу картица",
-  "help.tabs.toast.dismiss": "Одбаци информације о картицама",
-  "help.tabs.title": "Представљамо картице",
-  "help.tabs.description": "Организујте свој рад и активне сесије помоћу картица",
-  "help.tabs.date": "14. јул",
-  "help.tabs.introduction": "OpenCode Desktop је сада направљен око картица.",
-  "help.tabs.sessions":
-    "Започните нову сесију на картици или отворите постојећу сесију из било ког пројекта. Отворите нову картицу када започињете нешто ново и затворите је када завршите.",
-  "help.tabs.organize":
-    "Одржавање неколико отворених картица олакшава организовање активних сесија. Преименујте картице у нешто незаборавно ако планирате да их задржите.",
-  "help.tabs.home":
-    "Наћи ћете све своје сесије и пројекте на новом почетном екрану. Избор сесије отвара је на картици.",
-  "help.tabs.persistence": "Када поново отворите апликацију, ваше картице су и даље отворене.",
-  "help.tabs.worktrees":
-    "Нови дизајн још увек не подржава Git Ворктреес, ускоро долази. Дакле, ако желите да наставите да користите претходни изглед, можете да прелазите између изгледа у подешавањима. Само имајте на уму да ће нови изглед постати трајан за неколико недеља.",
   "server.row.noUsername": "нема корисничког имена",
   "dialog.project.edit.title": "Уреди пројекат",
   "dialog.project.edit.name": "Назив",
@@ -973,13 +958,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Проширите делове алата за уређивање",
   "settings.general.row.editToolPartsExpanded.description":
     "Прикажите делове алата за уређивање, писање и закрпе проширене подразумевано на временској линији",
-  "settings.general.row.newInterface.title": "Нови изглед",
-  "settings.general.row.newInterface.badge": "Ново",
-  "settings.general.row.newInterface.description":
-    "Користите нове картице и изглед куће. Пребацивање између распореда ограничено време.",
-  "settings.general.row.newInterfaceNotice.title": "Сада користите нови изглед",
-  "settings.general.row.newInterfaceNotice.description": "Претходни изглед више није доступан",
-  "settings.general.row.newInterfaceNotice.dismiss": "Одбаци",
   "settings.general.row.pinchZoom.title": "Пинцх за зумирање",
   "settings.general.row.pinchZoom.description":
     "Дозволите зумирање прстима додиром додирне табле и покретима Цтрл и скроловањем",

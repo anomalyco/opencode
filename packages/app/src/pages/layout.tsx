@@ -1,15 +1,13 @@
-import { onMount, Show, Suspense, type ParentProps } from "solid-js"
+import { Show, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DebugBar } from "@/components/debug-bar"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { usePlatform } from "@/context/platform"
-import { setV2Toast, ToastRegion } from "@/utils/toast"
+import { ToastRegion } from "@/utils/toast"
 
 export default function Layout(props: ParentProps) {
   const platform = usePlatform()
   const [state, setState] = createStore({ debugTools: true })
-
-  onMount(() => setV2Toast(true))
 
   const update: TitlebarUpdate = {
     get version() {
@@ -45,7 +43,7 @@ export default function Layout(props: ParentProps) {
       <Show when={import.meta.env.DEV && state.debugTools}>
         <DebugBar inline />
       </Show>
-      <ToastRegion v2 />
+      <ToastRegion />
     </div>
   )
 }

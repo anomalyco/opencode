@@ -28,6 +28,10 @@ interface Failures extends Record<keyof Domains, unknown> {
 type Callback<Event, Error> = (event: Event) => Effect.Effect<void, Error>
 
 export interface Interface {
+  readonly has: <Domain extends keyof Domains>(
+    domain: Domain,
+    name: keyof Domains[Domain] & keyof Failures[Domain],
+  ) => Effect.Effect<boolean>
   readonly register: <Domain extends keyof Domains, Name extends keyof Domains[Domain] & keyof Failures[Domain]>(
     domain: Domain,
     name: Name,
@@ -74,7 +78,9 @@ const layer = Layer.effect(
       return event
     })
 
-    return Service.of({ register, trigger })
+    const has: Interface["has"] = (domain, name) => Effect.sync(() => callbacks.has(key(domain, name)))
+
+    return Service.of({ has, register, trigger })
   }),
 )
 

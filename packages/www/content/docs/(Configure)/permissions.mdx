@@ -1,6 +1,5 @@
 ---
 title: "Permissions"
-description: ""
 ---
 
 Permissions control whether an agent may perform an action on a resource. V2
@@ -120,15 +119,30 @@ raw command text and are **not** home-expanded.
   `shell` runs with the host user's filesystem, process, and network authority. Its resource is raw text, not a parsed
   command. External command arguments produce only best-effort warnings; `external_directory` is enforced for the
   working directory, not every path embedded in a command. Prefer a narrow shell allowlist over patterns intended to
-  identify every dangerous command. Shell permission scanning identifies commands introduced by shell syntax, but it
-  does not inspect source, callbacks, plugins, package scripts, remote commands, or other executable behavior delegated
-  through an allowed program. For example, allowing `npm *`, `make *`, or `ssh *` also trusts what that program
-  executes.
+  identify every dangerous command.
 </Callout>
 
 Relative mutation paths cannot escape the active Location, and symlink escapes
 from inside it are rejected. Explicit external paths are canonicalized before
 matching, so authorize only trusted directory boundaries.
+
+## Experimental shell scanner
+
+Set `experimental.portable_shell_scanner` to `true` to test the portable shell
+permission scanner. The default remains the tree-sitter scanner.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "portable_shell_scanner": true,
+  },
+}
+```
+
+When enabled, the portable scanner is authoritative and tree-sitter is not
+consulted. Unsupported syntax, including heredocs, requests permission for the
+original shell command without inferring external directories.
 
 ## Defaults
 
@@ -210,6 +224,4 @@ shell proposes the exact command text, and skills and subagents propose their
 IDs. Review the confirmation carefully and remove saved approvals that are no
 longer needed.
 
-For non-interactive runs, `opencode2 run --auto` replies `once` to permission
-requests. It does not save approvals, and explicit `deny` rules remain enforced.
-Without `--auto`, a non-interactive run rejects permission requests.
+Non-interactive clients must decide how to handle requests that require approval; explicit `deny` rules remain enforced.

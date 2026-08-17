@@ -510,7 +510,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  it.live("normalizes ref key shapes to one cached location graph", () =>
+  it.live("normalizes equivalent refs to one cached location graph", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -520,16 +520,20 @@ describe("LocationServiceMap", () => {
           Effect.gen(function* () {
             const locations = yield* LocationServiceMap.Service
             const directory = AbsolutePath.make(dir.path)
-            const absent = Location.Ref.make({ directory })
+            const alternate = AbsolutePath.make(directory.replaceAll("\\", "/"))
+            const absent = Location.Ref.make({ directory: alternate })
             const present = Location.Ref.make({ directory, workspaceID: undefined })
             // The two shapes are not structurally Equal: own-key sets differ.
             expect(Object.keys(absent)).toEqual(["directory"])
             expect(Object.keys(present)).toEqual(["directory", "workspaceID"])
             expect(Equal.equals(absent, present)).toBe(false)
+            if (process.platform === "win32") expect(absent.directory).not.toBe(present.directory)
 
             const first = yield* locations.contextEffect(absent)
             expect(yield* locations.contextEffect(present)).toBe(first)
-            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(1)
+            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([
+              Location.Ref.make({ directory, workspaceID: undefined }),
+            ])
 
             // Invalidating with the shape opposite to the one that booted must evict.
             yield* locations.invalidate(present)

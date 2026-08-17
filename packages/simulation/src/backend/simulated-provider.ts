@@ -332,9 +332,7 @@ function handle(
             fibers,
             driver.requests.pipe(
               Stream.runForEach((invocation) =>
-                Effect.sync(() => {
-                  socket.send(JSON.stringify({ jsonrpc: "2.0", method: "llm.request", params: invocation }))
-                }),
+                socket.send(JSON.stringify({ jsonrpc: "2.0", method: "llm.request", params: invocation })),
               ),
             ),
           )
@@ -405,10 +403,7 @@ const makeToolDriver = Effect.fn("SimulatedProvider.makeToolDriver")(function* (
     socket: ControlSocket,
     method: "tool.invocation" | "tool.cancel",
     params: SimulationProtocol.Backend.ToolInvocation | SimulationProtocol.Backend.ToolCancellation,
-  ) =>
-    Effect.sync(() => {
-      socket.send(JSON.stringify({ jsonrpc: "2.0", method, params }))
-    })
+  ) => socket.send(JSON.stringify({ jsonrpc: "2.0", method, params }))
 
   const requireController = (socket: ControlSocket) =>
     Effect.gen(function* () {

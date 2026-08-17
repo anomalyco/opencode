@@ -83,6 +83,66 @@ test("labels all web search provider variants", async ({ page }) => {
   await expect(page.getByRole("button", { name: /^Web Search/ })).toBeVisible()
 })
 
+test("labels completed searches with result counts", async ({ page }) => {
+  const glob = "prt_glob_count"
+  const grep = "prt_grep_count"
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        toolPart(glob, "glob", "completed", { path: ".", pattern: "**/*.ts" }, { metadata: { count: 1 } }),
+        toolPart(grep, "grep", "completed", { path: ".", pattern: "value" }, { metadata: { matches: 12 } }),
+      ]),
+    ],
+  })
+
+  const group = page.locator(`[data-timeline-part-ids="${glob},${grep}"]`)
+  await group.locator('[data-slot="collapsible-trigger"]').click()
+  const rows = group.locator('[data-component="tool-trigger"]')
+  await expect(rows.nth(0)).toContainText("(1 match)")
+  await expect(rows.nth(1)).toContainText("(12 matches)")
+})
+
+test("labels V2 read tools from their path input", async ({ page }) => {
+  const id = "prt_read_path"
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([toolPart(id, "read", "completed", { path: "src/a.ts" })])],
+  })
+
+  const group = page.locator(`[data-timeline-part-ids="${id}"]`)
+  await group.locator('[data-slot="collapsible-trigger"]').click()
+  await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("a.ts")
+})
+
+test("labels V2 skill tools from IDs and result metadata", async ({ page }) => {
+  const pending = "prt_skill_id"
+  const completed = "prt_skill_name"
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        toolPart(pending, "skill", "running", { id: "sample-skill" }),
+        toolPart(completed, "skill", "completed", { id: "opencode" }, { metadata: { name: "OpenCode" } }),
+      ]),
+    ],
+  })
+
+  await expect(page.locator(`[data-timeline-part-id="${pending}"] [data-component="text-shimmer"]`)).toHaveAttribute(
+    "aria-label",
+    "sample-skill",
+  )
+  await expect(page.locator(`[data-timeline-part-id="${completed}"] [data-component="text-shimmer"]`)).toHaveAttribute(
+    "aria-label",
+    "OpenCode",
+  )
+  for (const id of [pending, completed]) {
+    const skill = page.locator(`[data-timeline-part-id="${id}"]`)
+    await expect(skill.locator('[data-slot="skill-tool-label"]')).toHaveText("Skill")
+    await expect(skill.locator('[data-slot="skill-tool-separator"]')).toHaveText("·")
+    await expect(skill.locator('use[href="#opencode-icon-post-skill"]')).toBeVisible()
+  }
+})
+
 function questionInput() {
   return { questions: [{ header: "Stability", question: "Keep it stable?", options: [] }] }
 }

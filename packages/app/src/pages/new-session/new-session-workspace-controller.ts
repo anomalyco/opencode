@@ -39,6 +39,10 @@ export function resolveNewSessionBranch(input: {
   return input.worktreeBranch(input.worktree) ?? input.local
 }
 
+export function resolveNewSessionGit(input: { projectVcs?: string; branch?: string }) {
+  return input.projectVcs === "git" || input.branch !== undefined
+}
+
 export function createNewSessionWorkspaceController(input: {
   selected: () => string | undefined
   setSelected: (worktree: string | undefined) => void
@@ -53,7 +57,12 @@ export function createNewSessionWorkspaceController(input: {
     const current = projectID ? data.project.get(projectID) : undefined
     return current ? normalizeProjectInfo(current) : undefined
   })
-  const visible = createMemo(() => currentProject()?.vcs === "git")
+  const visible = createMemo(() =>
+    resolveNewSessionGit({
+      projectVcs: currentProject()?.vcs,
+      branch: data.location.vcs.info({ directory: sdk().directory })?.branch.current,
+    }),
+  )
   const selected = createMemo(() => {
     const project = currentProject()
     const worktree = input.selected()
@@ -120,7 +129,7 @@ export function createNewSessionWorkspaceController(input: {
         const project = currentProject()
         return project ? workspaceDirectories(project) : []
       },
-      git: () => currentProject()?.vcs === "git",
+      git: visible,
       openAll: input.onViewAll,
     },
     bar: {

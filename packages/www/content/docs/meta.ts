@@ -1,5 +1,5 @@
 import { defineMeta } from "blume"
 
 export default defineMeta({
-  pages: ["index", "migrate-v1", "config", "troubleshooting", "configure", "build"],
+  pages: ["cli", "build", "index", "config", "configure", "migrate-v1", "troubleshooting"],
 })

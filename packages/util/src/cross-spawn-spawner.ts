@@ -258,7 +258,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     return { stdout, stderr, all: Stream.merge(stdout, stderr) }
   }
 
-  const spawn = (command: ChildProcess.StandardCommand, opts: NodeChildProcess.SpawnOptions) =>
+  const launchProcess = (command: ChildProcess.StandardCommand, opts: NodeChildProcess.SpawnOptions) =>
     Effect.callback<readonly [NodeChildProcess.ChildProcess, ExitSignal], PlatformError.PlatformError>((resume) => {
       const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const proc = launch(command.command, command.args, opts)
@@ -282,6 +282,14 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
         proc.kill("SIGTERM")
       })
     })
+
+  const spawn = Effect.fnUntraced(function* (
+    command: ChildProcess.StandardCommand,
+    opts: NodeChildProcess.SpawnOptions,
+  ) {
+    yield* Effect.logInfo("spawning process", { command: command.command, args: command.args, cwd: opts.cwd })
+    return yield* launchProcess(command, opts)
+  })
 
   const killGroup = (
     command: ChildProcess.StandardCommand,

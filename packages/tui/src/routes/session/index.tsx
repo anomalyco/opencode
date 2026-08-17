@@ -68,7 +68,6 @@ import { errorMessage } from "../../util/error"
 import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
-import { sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
 import { projectedPromptInput } from "../../prompt/codec"
 import { deduplicateVisibleImages } from "../../prompt/attachment"
 import { useEpilogue } from "../../context/epilogue"
@@ -114,7 +113,7 @@ addDefaultParsers(parsers.parsers)
 
 // Exclude temporary bottom space when measuring the real transcript height.
 const NAVIGATION_SLACK_ID = "session-navigation-slack"
-const BACKGROUND_TOOL_HINT_DELAY = 1_000
+const BACKGROUND_TOOL_HINT_DELAY = 3_000
 
 // The tail comfortably overfills a tall viewport; older rows mount as the reader approaches them.
 const TRANSCRIPT_TAIL_ROWS = 40
@@ -141,7 +140,7 @@ function use() {
   return ctx
 }
 
-export function Session() {
+export function Session(props: { verticalTabsWidth: number }) {
   const setEpilogue = useEpilogue()
   const clipboard = useClipboard()
   const writeExport = async (file: string, content: string) => {
@@ -228,13 +227,7 @@ export function Session() {
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
 
-  const availableWidth = createMemo(
-    () =>
-      dimensions().width -
-      (config.tabs?.enabled && config.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width)
-        ? SESSION_SIDEBAR_WIDTH
-        : 0),
-  )
+  const availableWidth = createMemo(() => dimensions().width - props.verticalTabsWidth)
   const wide = createMemo(() => availableWidth() > 120)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
@@ -290,7 +283,7 @@ export function Session() {
 
   createEffect(
     on(
-      () => [dimensions().width, dimensions().height] as const,
+      () => [dimensions().width, dimensions().height, props.verticalTabsWidth] as const,
       (_, previous) => {
         if (previous) clearMessageNavigation()
       },
@@ -1530,9 +1523,13 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
       return name === "shell" || name === "subagent"
     })
     if (!current || !part) return
-    return `${current.id}:${part.id}`
+    return { key: `${current.id}:${part.id}`, started: part.time.ran ?? part.time.created }
   })
-  const visible = createDelayedPresence(running, BACKGROUND_TOOL_HINT_DELAY)
+  const visible = createDelayedPresence(
+    running,
+    (tool) => Math.max(0, BACKGROUND_TOOL_HINT_DELAY - (Date.now() - tool.started)),
+    (previous, next) => previous.key === next.key && previous.started === next.started,
+  )
   return (
     <Show when={visible() && shortcut()}>
       {(value) => (

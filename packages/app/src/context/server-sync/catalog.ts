@@ -4,7 +4,7 @@ import { pathKey, type PathKey } from "@/utils/path-key"
 
 type CatalogEvent = {
   type: string
-  directory: string
+  directory?: string
 }
 
 export function createCatalogSync(input: {
@@ -24,7 +24,7 @@ export function createCatalogSync(input: {
       event.type === "integration.updated" ||
       event.type === "integration.connection.updated"
     ) {
-      void refresh(event.directory === "global" ? null : pathKey(event.directory)).catch(() => undefined)
+      void refresh(event.directory ? pathKey(event.directory) : null).catch(() => undefined)
     }
   }
 

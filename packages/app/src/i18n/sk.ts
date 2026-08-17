@@ -508,21 +508,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "desktop {{version}}",
   "wsl.onboarding.versionMismatch": "Nainštalovaná verzia sa nezhoduje s verziou desktopovej aplikácie.",
   "wsl.onboarding.adding": "Pridáva sa...",
-  "help.tabs.toast.ariaLabel": "Predstavujeme karty. Organizujte si prácu a aktívne relácie pomocou kariet",
-  "help.tabs.toast.dismiss": "Zavrieť informácie o kartách",
-  "help.tabs.title": "Predstavujeme karty",
-  "help.tabs.description": "Organizujte si prácu a aktívne relácie pomocou kariet",
-  "help.tabs.date": "14. júl",
-  "help.tabs.introduction": "OpenCode Desktop je teraz postavený na kartách.",
-  "help.tabs.sessions":
-    "Spustite novú reláciu na karte alebo otvorte existujúcu reláciu z niektorého zo svojich projektov. Otvorte novú kartu, keď začínate niečo nové, a zatvorte ju, keď skončíte.",
-  "help.tabs.organize":
-    "Ak necháte otvorených niekoľko kariet, ľahšie si zorganizujete aktívne relácie. Ak plánujete kartu ponechať, premenujte ju na niečo zapamätateľné.",
-  "help.tabs.home":
-    "Všetky svoje relácie a projekty nájdete na novej domovskej obrazovke. Výberom relácie ju otvoríte na karte.",
-  "help.tabs.persistence": "Po opätovnom otvorení aplikácie zostanú vaše karty otvorené.",
-  "help.tabs.worktrees":
-    "Nový dizajn zatiaľ nepodporuje Git Worktrees, podpora čoskoro pribudne. Ak chcete naďalej používať predchádzajúce rozloženie, môžete medzi rozloženiami prepínať v nastaveniach. Majte však na pamäti, že nové rozloženie sa o niekoľko týždňov stane trvalým.",
   "server.row.noUsername": "bez používateľského mena",
   "dialog.project.edit.title": "Upraviť projekt",
   "dialog.project.edit.name": "Názov",
@@ -972,13 +957,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Rozbaliť časti editačného nástroja",
   "settings.general.row.editToolPartsExpanded.description":
     "Predvolene rozbaliť časti editácie, písania a patchovania v časovej osi",
-  "settings.general.row.newInterface.title": "Nové rozloženie",
-  "settings.general.row.newInterface.badge": "Nové",
-  "settings.general.row.newInterface.description":
-    "Použiť nové karty a domovské rozloženie. Prepínanie rozložení je dostupné len dočasne.",
-  "settings.general.row.newInterfaceNotice.title": "Používate nové rozloženie",
-  "settings.general.row.newInterfaceNotice.description": "Predchádzajúce rozloženie už nie je dostupné",
-  "settings.general.row.newInterfaceNotice.dismiss": "Zavrieť",
   "settings.general.row.pinchZoom.title": "Priblíženie gestom",
   "settings.general.row.pinchZoom.description": "Povoliť priblíženie pomocou gest na touchpade a Ctrl-posúvanie",
   "settings.general.row.wayland.title": "Použiť natívny Wayland",

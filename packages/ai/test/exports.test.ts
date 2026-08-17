@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { AIError, ImageInput, LanguageModel, LLM, LLMClient, Provider } from "@opencode-ai/ai"
-import { Route, Protocol } from "@opencode-ai/ai/route"
+import { Route, Protocol, WebSocketTransport } from "@opencode-ai/ai/route"
 import { Provider as ProviderSubpath } from "@opencode-ai/ai/provider"
 import {
   CloudflareAIGateway,
@@ -16,6 +16,7 @@ import {
   OpenAICompatibleResponses,
   OpenAIResponses,
   OpenResponses,
+  OpenResponsesChannel,
 } from "@opencode-ai/ai/protocols"
 import * as AnthropicMessages from "@opencode-ai/ai/protocols/anthropic-messages"
 import { TestLLM } from "@opencode-ai/ai/testing"
@@ -36,6 +37,7 @@ describe("public exports", () => {
   test("route barrel exposes route-authoring APIs", () => {
     expect(Route.make).toBeFunction()
     expect(Protocol.make).toBeFunction()
+    expect(WebSocketTransport.makeDirect).toBeFunction()
   })
 
   test("provider barrels expose user-facing facades", async () => {
@@ -43,7 +45,6 @@ describe("public exports", () => {
 
     expect(OpenAI.model).toBeFunction()
     expect(OpenAI.provider.responses).toBe(OpenAI.responses)
-    expect(OpenAI.provider.responsesWebSocket).toBe(OpenAI.responsesWebSocket)
     expect(OpenAI.configure({ apiKey: "fixture" }).responses).toBeFunction()
     expect(OpenAICompatible.deepseek.model).toBeFunction()
     expect(
@@ -65,10 +66,10 @@ describe("public exports", () => {
     expect(OpenAIChat.route.id).toBe("openai-chat")
     expect(OpenAICompatibleChat.route.id).toBe("openai-compatible-chat")
     expect(OpenResponses.protocol.id).toBe("open-responses")
+    expect(OpenResponsesChannel.transport).toBeFunction()
     expect(OpenAICompatibleResponses.route.id).toBe("openai-compatible-responses")
     expect(OpenAICompatibleResponses.route.protocol).toBe("open-responses")
     expect(OpenAIResponses.route.id).toBe("openai-responses")
-    expect(OpenAIResponses.webSocketRoute.id).toBe("openai-responses-websocket")
     expect(AnthropicMessages.route.id).toBe("anthropic-messages")
   })
 })

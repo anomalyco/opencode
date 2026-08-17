@@ -192,7 +192,7 @@ export type ProviderInfo = {
   id: string
   integrationID?: string
   name: string
-  disabled?: boolean
+  activation: "auto" | "enabled" | "disabled"
   package: string
   settings?: { [x: string]: any }
   headers?: { [x: string]: string }
@@ -323,12 +323,6 @@ export type Pty = {
   pid: number
   exitCode?: number
 }
-
-export type QuestionOption = { label: string; description: string }
-
-export type QuestionTool = { messageID: string; id: string }
-
-export type QuestionAnswer = Array<string>
 
 export type FormMetadata1 = { [x: string]: any }
 
@@ -910,15 +904,6 @@ export type ShellDeleted = {
   data: { id: string }
 }
 
-export type QuestionRejected = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "question.rejected"
-  location?: LocationRef
-  data: { sessionID: string; requestID: string }
-}
-
 export type FormCancelled = {
   id: string
   created: number
@@ -1377,7 +1362,6 @@ export type PermissionRequest = {
   action: string
   resources: Array<string>
   save?: Array<string>
-  opaque?: boolean
   metadata?: { [x: string]: JsonValue }
   source?: PermissionSource
 }
@@ -1394,7 +1378,6 @@ export type PermissionAsked = {
     action: string
     resources: Array<string>
     save?: Array<string>
-    opaque?: boolean
     metadata?: { [x: string]: any }
     source?: PermissionSource
   }
@@ -1425,23 +1408,6 @@ export type PtyUpdated = {
   type: "pty.updated"
   location?: LocationRef
   data: { info: Pty }
-}
-
-export type QuestionInfo = {
-  question: string
-  header: string
-  options: Array<QuestionOption>
-  multiple?: boolean
-  custom?: boolean
-}
-
-export type QuestionReplied = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "question.replied"
-  location?: LocationRef
-  data: { sessionID: string; requestID: string; answers: Array<QuestionAnswer> }
 }
 
 export type FormStringField1 = {
@@ -1684,17 +1650,6 @@ export type FormReplied = {
   data: { id: string; sessionID: string; answer: FormAnswer }
 }
 
-export type QuestionAsked = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "question.asked"
-  location?: LocationRef
-  data: { id: string; sessionID: string; questions: Array<QuestionInfo>; tool?: QuestionTool }
-}
-
-export type QuestionRequest = { id: string; sessionID: string; questions: Array<QuestionInfo>; tool?: QuestionTool }
-
 export type FormField1 =
   | FormStringField1
   | FormNumberField1
@@ -1832,7 +1787,7 @@ export type ConfigEntry =
             | { repository: string; branch?: string; description?: string; hidden?: boolean }
             | { path: string; description?: string; hidden?: boolean }
         }
-        websearch?: { provider: string }
+        websearch?: false | { provider: "random" | (string & {}) }
         plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
         warming?: boolean | { prompt?: string; interval?: string; duration?: string }
         providers?: {
@@ -1880,13 +1835,13 @@ export type ConfigEntry =
           }
         }
         experimental?: {
+          portable_shell_scanner?: boolean
           subagent_depth?: number
           policies?: Array<{ action: "provider.use"; resource: string; effect: "allow" | "deny" }>
         }
       }
     }
   | { type: "directory"; path: string }
-  | { type: "file"; path: string }
   | { type: "agents"; path: string }
   | { type: "claude"; path: string }
 
@@ -2116,9 +2071,6 @@ export type V2Event =
   | ShellCreated
   | ShellExited
   | ShellDeleted
-  | QuestionAsked
-  | QuestionReplied
-  | QuestionRejected
   | FormCreated
   | FormReplied
   | FormCancelled
@@ -2297,14 +2249,6 @@ export const isPtyNotFoundError = (value: unknown): value is PtyNotFoundError =>
 export type ShellNotFoundError = { readonly _tag: "ShellNotFoundError"; readonly id: string; readonly message: string }
 export const isShellNotFoundError = (value: unknown): value is ShellNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ShellNotFoundError"
-
-export type QuestionNotFoundError = {
-  readonly _tag: "QuestionNotFoundError"
-  readonly requestID: string
-  readonly message: string
-}
-export const isQuestionNotFoundError = (value: unknown): value is QuestionNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "QuestionNotFoundError"
 
 export type WorktreeError = {
   readonly name: "WorktreeError"
@@ -5232,7 +5176,6 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5242,7 +5185,6 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5252,7 +5194,6 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5262,27 +5203,15 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
   }["save"]
-  readonly opaque?: {
-    readonly id?: string | null
-    readonly action: string
-    readonly resources: ReadonlyArray<string>
-    readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
-    readonly metadata?: { readonly [x: string]: JsonValue }
-    readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
-    readonly agent?: string | null
-  }["opaque"]
   readonly metadata?: {
     readonly id?: string | null
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5292,7 +5221,6 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5302,7 +5230,6 @@ export type PermissionCreateInput = {
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
-    readonly opaque?: boolean
     readonly metadata?: { readonly [x: string]: JsonValue }
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
     readonly agent?: string | null
@@ -5610,36 +5537,6 @@ export type ShellRemoveInput = {
 }
 
 export type ShellRemoveOutput = void
-
-export type QuestionRequestListInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined; readonly workspace?: string | undefined } | undefined
-  }["location"]
-}
-
-export type QuestionRequestListOutput = {
-  location: { directory: string; workspaceID?: string; project: { id: string; directory: string; canonical: string } }
-  data: Array<QuestionRequest>
-}
-
-export type QuestionListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
-
-export type QuestionListOutput = { data: Array<QuestionRequest> }["data"]
-
-export type QuestionReplyInput = {
-  readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
-  readonly requestID: { readonly sessionID: string; readonly requestID: string }["requestID"]
-  readonly answers: { readonly answers: ReadonlyArray<ReadonlyArray<string>> }["answers"]
-}
-
-export type QuestionReplyOutput = void
-
-export type QuestionRejectInput = {
-  readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
-  readonly requestID: { readonly sessionID: string; readonly requestID: string }["requestID"]
-}
-
-export type QuestionRejectOutput = void
 
 export type ReferenceListInput = {
   readonly location?: {

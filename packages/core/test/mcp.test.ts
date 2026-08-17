@@ -185,7 +185,11 @@ function resourceMcpLayer(
         overrides?.entries
           ? Layer.succeed(
               Config.Service,
-              Config.Service.of({ entries: overrides.entries, changes: () => Stream.never }),
+              Config.Service.of({
+                entries: overrides.entries,
+                update: () => Effect.die("unused config update"),
+                changes: () => Stream.never,
+              }),
             )
           : Config.testLayer([
               new Document({
@@ -998,7 +1002,7 @@ test("reconciles only changed MCP server config", async () => {
         const publishUpdate = () =>
           PubSub.publish(updates, {
             id: ID.create(),
-            created: DateTime.makeUnsafe(0),
+            created: 0,
             type: Event.Updated.type,
             data: {},
           } satisfies Payload<typeof Event.Updated>)

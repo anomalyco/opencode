@@ -42,7 +42,7 @@ export default {
 
     const segments = url.pathname.split("/").filter(Boolean)
     if (segments.length === 2 && segments[0] === "api" && validIdentifier(segments[1])) {
-      return channel(env.DB, segments[1])
+      return channel(env.DB, resolveChannel(segments[1]))
     }
     if (
       segments.length === 3 &&
@@ -50,7 +50,7 @@ export default {
       validIdentifier(segments[1]) &&
       validIdentifier(segments[2])
     ) {
-      return artifactName(env.DB, segments[1], segments[2])
+      return artifactName(env.DB, resolveChannel(segments[1]), segments[2])
     }
     if (
       segments.length === 4 &&
@@ -59,7 +59,7 @@ export default {
       validIdentifier(segments[2]) &&
       validIdentifier(segments[3])
     ) {
-      return artifactDistribution(env.DB, segments[1], segments[2], segments[3])
+      return artifactDistribution(env.DB, resolveChannel(segments[1]), segments[2], segments[3])
     }
     return new Response("Not found", { status: 404 })
   },
@@ -344,12 +344,16 @@ export function validGitHubClaims(claims: JWTPayload): claims is GitHubClaims {
 
 export function channelsForRef(ref: string) {
   if (ref === "refs/heads/dev") return ["dev", "latest"]
-  if (ref === "refs/heads/v2") return ["next"]
+  if (ref === "refs/heads/v2") return ["dev"]
   if (ref === "refs/heads/beta") return ["beta"]
   if (ref === "refs/heads/ci") return ["ci"]
   if (ref === "refs/heads/fix/npm-native-binary-install") return ["fix/npm-native-binary-install"]
   const snapshot = ref.match(/^refs\/heads\/(snapshot-[a-zA-Z0-9._-]+)$/)?.[1]
   return snapshot ? [snapshot] : []
+}
+
+export function resolveChannel(channel: string) {
+  return channel === "next" ? "beta" : channel
 }
 
 function validMutation(request: Request) {

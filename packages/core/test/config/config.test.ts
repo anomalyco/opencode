@@ -72,6 +72,53 @@ const provider = {
 }
 
 describe("Config", () => {
+  it.live("updates the first file-backed document", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const globalFile = path.join(global, "opencode.jsonc")
+        const projectFile = path.join(project, "opencode.json")
+        return Effect.promise(async () => {
+          await Promise.all([fs.mkdir(global, { recursive: true }), fs.mkdir(project, { recursive: true })])
+          await Promise.all([
+            fs.writeFile(globalFile, '{\n  // Keep this comment.\n  "shell": "global"\n}\n'),
+            fs.writeFile(projectFile, JSON.stringify({ shell: "project" })),
+          ])
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const updated = yield* config.update((draft) => {
+                draft.shell = "updated"
+              })
+
+              expect(updated.shell).toBe("updated")
+              expect(yield* Effect.promise(() => fs.readFile(globalFile, "utf8"))).toContain("// Keep this comment.")
+              expect(yield* Effect.promise(() => fs.readFile(globalFile, "utf8"))).toContain('"shell": "updated"')
+              expect(JSON.parse(yield* Effect.promise(() => fs.readFile(projectFile, "utf8")))).toEqual({
+                shell: "project",
+              })
+            }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.effect("fails updates when no file-backed document exists", () =>
+    Effect.gen(function* () {
+      const config = yield* Config.Service
+      const error = yield* config.update((draft) => void draft).pipe(Effect.flip)
+      expect(error.message).toBe("No editable config document found")
+    }).pipe(
+      Effect.provide(Config.testLayer([new Document({ type: "document", info: new Info({ shell: "virtual" }) })])),
+    ),
+  )
+
   it.live("loads explicit file and content overrides in priority order", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -858,7 +905,7 @@ describe("Config", () => {
             expect(documents.map((document) => document.type)).toEqual(["document", "document"])
             expect(documents.map((document) => document.info.$schema)).toEqual(["base", "last"])
             expect(documents[0]).toBeInstanceOf(Document)
-            expect(documents[0]?.path).toBe(path.join(tmp.path, "opencode.json"))
+            expect(documents[0]?.path).toBe(AbsolutePath.make(path.join(tmp.path, "opencode.json")))
             expect(documents[1]?.info.providers?.last).toBeInstanceOf(ConfigProvider.Info)
 
             yield* Effect.promise(() =>
@@ -1405,9 +1452,14 @@ describe("Config", () => {
           )
           return yield* Effect.gen(function* () {
             const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
             const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
 
             expect(documents.map((document) => document.info.$schema)).toEqual(["base"])
+            expect(yield* watcher.subscriptions()).toContainEqual({
+              path: path.join(tmp.path, "opencode.jsonc"),
+              type: "file",
+            })
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),
@@ -1491,13 +1543,9 @@ describe("Config", () => {
               "global",
               AbsolutePath.make(global),
               "outside",
-              AbsolutePath.make(path.join(tmp.path, "opencode.json")),
               "root",
-              AbsolutePath.make(path.join(root, "opencode.json")),
               "parent",
-              AbsolutePath.make(path.join(parent, "opencode.jsonc")),
               "directory",
-              AbsolutePath.make(path.join(directory, "opencode.json")),
               "root-dot",
               AbsolutePath.make(path.join(root, ".opencode")),
               "directory-dot",

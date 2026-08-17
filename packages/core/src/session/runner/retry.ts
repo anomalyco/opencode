@@ -18,8 +18,9 @@ export function isRetryable(error: AIError) {
   switch (error.reason._tag) {
     case "RateLimit":
     case "ProviderInternal":
-    case "Transport":
       return true
+    case "Transport":
+      return error.reason.delivery === undefined || error.reason.delivery === "not-sent"
     case "InvalidProviderOutput":
       return error.reason.classification === "incomplete-stream"
     case "Authentication":

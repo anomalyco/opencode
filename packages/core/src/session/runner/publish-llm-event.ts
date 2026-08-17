@@ -1,5 +1,5 @@
 import { type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode-ai/ai"
-import { Effect } from "effect"
+import { Clock, Effect } from "effect"
 import { Bus } from "../../bus.js"
 import { Model } from "../../model.js"
 import { SessionEvent } from "../event.js"
@@ -81,6 +81,7 @@ const hostedContent = (result: ToolResultValue): NonEmptyContent => {
  * and consumers fold by id/ordinal rather than global position.
  */
 export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, input: Input) => {
+  const deltaBatchInterval = 100
   const tools = new Map<
     string,
     {
@@ -123,32 +124,56 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   const fragments = (
     name: string,
     ended: (id: string, value: string, ordinal: number, state?: Record<string, unknown>) => Effect.Effect<void>,
+    delta?: (id: string, value: string, ordinal: number) => Effect.Effect<void>,
     single = false,
   ) => {
-    const chunks = new Map<
-      string,
-      { readonly ordinal: number; readonly values: string[]; state?: Record<string, unknown> }
-    >()
+    type Fragment = {
+      readonly ordinal: number
+      readonly values: string[]
+      pending: string
+      publishedAt?: number
+      state?: Record<string, unknown>
+    }
+    const chunks = new Map<string, Fragment>()
     let nextOrdinal = 0
     const start = (id: string, state?: Record<string, unknown>) =>
       Effect.suspend(() => {
         if (chunks.has(id)) return Effect.die(new Error(`Duplicate ${name} start: ${id}`))
         if (single && chunks.size > 0) return Effect.die(new Error(`${name} start before end: ${id}`))
         const ordinal = nextOrdinal++
-        chunks.set(id, { ordinal, values: [], state })
+        chunks.set(id, { ordinal, values: [], pending: "", state })
         return Effect.succeed(ordinal)
       })
-    const append = (id: string, value: string, state?: Record<string, unknown>) =>
-      Effect.suspend(() => {
-        const current = chunks.get(id)
-        if (!current) return Effect.die(new Error(`${name} delta before start: ${id}`))
-        current.values.push(value)
-        if (state !== undefined) current.state = { ...current.state, ...state }
-        return Effect.succeed(current.ordinal)
-      })
+    const publishDelta = Effect.fnUntraced(function* (id: string, force = false) {
+      if (!delta) return undefined
+      const current = chunks.get(id)
+      if (!current) return yield* Effect.die(new Error(`${name} delta before start: ${id}`))
+      if (!current.pending) return undefined
+      const now = yield* Clock.currentTimeMillis
+      if (!force && current.publishedAt === undefined) {
+        current.publishedAt = now
+        return undefined
+      }
+      if (!force && current.publishedAt !== undefined && now - current.publishedAt < deltaBatchInterval)
+        return undefined
+      yield* delta(id, current.pending, current.ordinal)
+      current.pending = ""
+      current.publishedAt = now
+      return undefined
+    })
+    const append = Effect.fnUntraced(function* (id: string, value: string, state?: Record<string, unknown>) {
+      const current = chunks.get(id)
+      if (!current) return yield* Effect.die(new Error(`${name} delta before start: ${id}`))
+      current.values.push(value)
+      if (delta) current.pending += value
+      if (state !== undefined) current.state = { ...current.state, ...state }
+      yield* publishDelta(id)
+      return current.ordinal
+    })
     const end = Effect.fnUntraced(function* (id: string, state?: Record<string, unknown>, value?: string) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} end before start: ${id}`))
+      yield* publishDelta(id, true)
       yield* ended(
         id,
         value ?? current.values.join(""),
@@ -156,9 +181,10 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         state === undefined ? current.state : { ...current.state, ...state },
       )
       chunks.delete(id)
+      return undefined
     })
     const flush = Effect.fnUntraced(function* () {
-      for (const id of chunks.keys()) yield* end(id)
+      for (const id of Array.from(chunks.keys())) yield* end(id)
     })
     return { start, append, end, flush, has: (id: string) => chunks.has(id) }
   }
@@ -175,6 +201,15 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           state,
         })
       }),
+    (_textID, value, ordinal) =>
+      Effect.gen(function* () {
+        yield* bus.publish(SessionEvent.Text.Delta, {
+          sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
+          ordinal,
+          delta: value,
+        })
+      }),
     true,
   )
   const reasoning = fragments(
@@ -187,6 +222,15 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           ordinal,
           text: value,
           state,
+        })
+      }),
+    (_reasoningID, value, ordinal) =>
+      Effect.gen(function* () {
+        yield* bus.publish(SessionEvent.Reasoning.Delta, {
+          sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
+          ordinal,
+          delta: value,
         })
       }),
     true,
@@ -351,13 +395,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         })
         return
       case "text-delta":
-        const deltaTextOrdinal = yield* text.append(event.id, event.text, providerState(event.providerMetadata))
-        yield* bus.publish(SessionEvent.Text.Delta, {
-          sessionID: input.sessionID,
-          assistantMessageID: yield* currentAssistantMessageID(),
-          ordinal: deltaTextOrdinal,
-          delta: event.text,
-        })
+        yield* text.append(event.id, event.text, providerState(event.providerMetadata))
         return
       case "text-end":
         yield* text.end(event.id, providerState(event.providerMetadata))
@@ -373,17 +411,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         })
         return
       case "reasoning-delta":
-        const deltaReasoningOrdinal = yield* reasoning.append(
-          event.id,
-          event.text,
-          providerState(event.providerMetadata),
-        )
-        yield* bus.publish(SessionEvent.Reasoning.Delta, {
-          sessionID: input.sessionID,
-          assistantMessageID: yield* currentAssistantMessageID(),
-          ordinal: deltaReasoningOrdinal,
-          delta: event.text,
-        })
+        yield* reasoning.append(event.id, event.text, providerState(event.providerMetadata))
         return
       case "reasoning-end":
         yield* reasoning.end(event.id, providerState(event.providerMetadata))
@@ -399,12 +427,6 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           return yield* Effect.die(new Error(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`))
         if (!toolInput.has(event.id)) return yield* Effect.die(new Error(`Tool input delta after end: ${event.id}`))
         yield* toolInput.append(event.id, event.text)
-        yield* bus.publish(SessionEvent.Tool.Input.Delta, {
-          sessionID: input.sessionID,
-          assistantMessageID: tool.assistantMessageID,
-          id: event.id,
-          delta: event.text,
-        })
         return
       }
       case "tool-input-end":

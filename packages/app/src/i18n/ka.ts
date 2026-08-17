@@ -509,21 +509,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "დესკტოპის {{version}}",
   "wsl.onboarding.versionMismatch": "დაინსტალირებული ვერსია არ ემთხვევა დესკტოპის აპის ვერსიას.",
   "wsl.onboarding.adding": "დამატება...",
-  "help.tabs.toast.ariaLabel": "გაცნობა ჩანართებს. მოაწყეთ თქვენი სამუშაო და აქტიური სესიები ჩანართებით",
-  "help.tabs.toast.dismiss": "ჩანართების ინფორმაციის უარყოფა",
-  "help.tabs.title": "ჩანართების გაცნობა",
-  "help.tabs.description": "მოაწყვეთ თქვენი სამუშაო და აქტიური სესიები ჩანართებით",
-  "help.tabs.date": "14 ივლისი",
-  "help.tabs.introduction": "OpenCode სამუშაო მაგიდა ახლა აგებულია ჩანართების გარშემო.",
-  "help.tabs.sessions":
-    "დაიწყეთ ახალი სესია ჩანართში, ან გახსენით არსებული სესია თქვენი რომელიმე პროექტიდან. გახსენით ახალი ჩანართი, როდესაც რაიმე ახალს იწყებთ და დახურეთ, როდესაც დაასრულებთ.",
-  "help.tabs.organize":
-    "რამდენიმე ჩანართის გახსნა გაადვილებს თქვენი აქტიური სესიების ორგანიზებას. გადაარქვით ჩანართებს რაიმე დასამახსოვრებლად, თუ აპირებთ მათ შენარჩუნებას.",
-  "help.tabs.home":
-    "თქვენ იპოვით ყველა თქვენს სესიას და პროექტს ახალ მთავარ ეკრანზე. სესიის არჩევა ხსნის მას ჩანართში.",
-  "help.tabs.persistence": "აპის ხელახლა გახსნისას, თქვენი ჩანართები კვლავ ღიაა.",
-  "help.tabs.worktrees":
-    "ახალი დიზაინი ჯერ არ უჭერს მხარს Git Worktrees-ს, ის მალე გამოვა. ასე რომ, თუ გსურთ გააგრძელოთ წინა განლაგების გამოყენება, შეგიძლიათ გადართოთ განლაგებებს შორის პარამეტრებიდან. უბრალოდ გაითვალისწინეთ, რომ ახალი განლაგება მუდმივი გახდება რამდენიმე კვირაში.",
   "server.row.noUsername": "მომხმარებლის სახელის გარეშე",
   "dialog.project.edit.title": "პროექტის რედაქტირება",
   "dialog.project.edit.name": "სახელი",
@@ -969,13 +954,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "გაფართოვდეს ხელსაწყოს ნაწილები",
   "settings.general.row.editToolPartsExpanded.description":
     "აჩვენეთ რედაქტირების, ჩაწერის და პაჩის ხელსაწყოს ნაწილები, რომლებიც ნაგულისხმევად გაფართოვდა ვადებში",
-  "settings.general.row.newInterface.title": "ახალი განლაგება",
-  "settings.general.row.newInterface.badge": "ახალი",
-  "settings.general.row.newInterface.description":
-    "გამოიყენეთ ახალი ჩანართები და სახლის განლაგება. განლაგებებს შორის გადართვა შეზღუდული დროით.",
-  "settings.general.row.newInterfaceNotice.title": "თქვენ ახლა იყენებთ ახალ განლაგებას",
-  "settings.general.row.newInterfaceNotice.description": "წინა განლაგება აღარ არის ხელმისაწვდომი",
-  "settings.general.row.newInterfaceNotice.dismiss": "დატოვება",
   "settings.general.row.pinchZoom.title": "დააჭირე გასადიდებლად",
   "settings.general.row.pinchZoom.description": "Trackpad pinch და Ctrl-scroll ჟესტებით მასშტაბირება",
   "settings.general.row.wayland.title": "გამოიყენე მშობლიური Wayland",

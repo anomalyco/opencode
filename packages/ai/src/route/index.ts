@@ -16,11 +16,28 @@ export { AuthOptions } from "./auth-options.js"
 export { Endpoint } from "./endpoint.js"
 export { Framing } from "./framing.js"
 export { Protocol } from "./protocol.js"
-export { HttpTransport, WebSocketExecutor, WebSocketTransport } from "./transport/index.js"
+export { HttpTransport, WebSocketTransport } from "./transport/index.js"
 export * as Transport from "./transport/index.js"
 export type { Definition as AuthShape, AuthInput, Credential, CredentialError } from "./auth.js"
 export type { ApiKeyMode, AuthOverride, ProviderAuthOption } from "./auth-options.js"
 export type { Definition as EndpointFn, EndpointInput } from "./endpoint.js"
 export type { Definition as FramingDef } from "./framing.js"
 export type { Protocol as ProtocolDef } from "./protocol.js"
-export type { HttpHandler, HttpMiddleware, Transport as TransportDef, TransportRuntime } from "./transport/index.js"
+export type {
+  ChannelCheckpoint,
+  ChannelCreate,
+  ChannelObservation,
+  HttpHandler,
+  HttpMiddleware,
+  Transport as TransportDef,
+  TransportExecuteOptions,
+  TransportExecution,
+  TransportRuntime,
+  WebSocketConnection,
+  WebSocketChannelDriver,
+  WebSocketChannelExchange,
+  WebSocketChannelExecution,
+  WebSocketChannelExecutor,
+  WebSocketConnector,
+  WebSocketRequest,
+} from "./transport/index.js"

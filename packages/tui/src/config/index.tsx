@@ -103,7 +103,9 @@ export const Info = Schema.Struct({
   terminal: Schema.optional(
     Schema.Struct({
       title: Schema.optional(Schema.Boolean).annotate({ description: "Update the terminal window title" }),
-      copy_on_select: Schema.optional(Schema.Boolean).annotate({ description: "Copy selected terminal text" }),
+      copy: Schema.optional(Schema.Literals(["manual", "select"])).annotate({
+        description: "Copy text manually or immediately after selecting it",
+      }),
     }),
   ).annotate({ description: "Terminal integration settings" }),
   prompt: Schema.optional(

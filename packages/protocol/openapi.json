@@ -3964,7 +3964,7 @@
             }
           }
         },
-        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes if durable inbox work remains after interruption.",
+        "description": "Interrupt active execution owned by this OpenCode process. Idle interruption is a no-op. When continue=true, execution resumes pending steering input while queued work remains parked.",
         "summary": "Interrupt session execution"
       }
     },
@@ -7933,9 +7933,6 @@
                       "type": "string"
                     }
                   },
-                  "opaque": {
-                    "type": "boolean"
-                  },
                   "metadata": {
                     "type": "object"
                   },
@@ -10441,359 +10438,6 @@
         "summary": "Read shell output"
       }
     },
-    "/api/question/request": {
-      "get": {
-        "tags": ["question"],
-        "operationId": "v2.question.request.list",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "location": {
-                      "$ref": "#/components/schemas/Location.Info"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Question.Request"
-                      }
-                    }
-                  },
-                  "required": ["location", "data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Retrieve pending question requests for a location.",
-        "summary": "List pending question requests"
-      }
-    },
-    "/api/session/{sessionID}/question": {
-      "get": {
-        "tags": ["question"],
-        "operationId": "v2.session.question.list",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Question.Request"
-                      }
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "description": "Retrieve pending question requests owned by a session.",
-        "summary": "List session question requests"
-      }
-    },
-    "/api/session/{sessionID}/question/{requestID}/reply": {
-      "post": {
-        "tags": ["question"],
-        "operationId": "v2.session.question.reply",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
-            },
-            "required": true
-          },
-          {
-            "name": "requestID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^que"
-                }
-              ]
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError | QuestionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/QuestionNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "description": "Answer a pending question request owned by a session.",
-        "summary": "Reply to pending question request",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Question.Reply"
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
-    "/api/session/{sessionID}/question/{requestID}/reject": {
-      "post": {
-        "tags": ["question"],
-        "operationId": "v2.session.question.reject",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^ses"
-                }
-              ]
-            },
-            "required": true
-          },
-          {
-            "name": "requestID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "allOf": [
-                {
-                  "pattern": "^que"
-                }
-              ]
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError | QuestionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/QuestionNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundError"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "description": "Reject a pending question request owned by a session.",
-        "summary": "Reject pending question request"
-      }
-    },
     "/api/reference": {
       "get": {
         "tags": ["reference"],
@@ -10890,7 +10534,7 @@
         "summary": "List references"
       }
     },
-    "/api/experimental/project/{projectID}/worktree": {
+    "/api/worktree/{projectID}": {
       "get": {
         "tags": ["worktree"],
         "operationId": "v2.worktree.list",
@@ -11092,7 +10736,7 @@
         }
       }
     },
-    "/api/experimental/project/{projectID}/worktree/refresh": {
+    "/api/worktree/{projectID}/refresh": {
       "post": {
         "tags": ["worktree"],
         "operationId": "v2.worktree.refresh",
@@ -18084,8 +17728,9 @@
           "name": {
             "type": "string"
           },
-          "disabled": {
-            "type": "boolean"
+          "activation": {
+            "type": "string",
+            "enum": ["auto", "enabled", "disabled"]
           },
           "package": {
             "type": "string"
@@ -18103,7 +17748,7 @@
             "type": "object"
           }
         },
-        "required": ["id", "name", "package"],
+        "required": ["id", "name", "activation", "package"],
         "additionalProperties": false
       },
       "ProviderNotFoundError": {
@@ -20232,9 +19877,6 @@
               "type": "string"
             }
           },
-          "opaque": {
-            "type": "boolean"
-          },
           "metadata": {
             "type": "object"
           },
@@ -21013,9 +20655,6 @@
                   "type": "string"
                 }
               },
-              "opaque": {
-                "type": "boolean"
-              },
               "metadata": {
                 "type": "object"
               },
@@ -21723,237 +21362,6 @@
               }
             },
             "required": ["id"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "created", "type", "data"],
-        "additionalProperties": false
-      },
-      "Question.Option": {
-        "type": "object",
-        "properties": {
-          "label": {
-            "type": "string",
-            "description": "Display text (1-5 words, concise)"
-          },
-          "description": {
-            "type": "string",
-            "description": "Explanation of choice"
-          }
-        },
-        "required": ["label", "description"],
-        "additionalProperties": false
-      },
-      "Question.Info": {
-        "type": "object",
-        "properties": {
-          "question": {
-            "type": "string",
-            "description": "Complete question"
-          },
-          "header": {
-            "type": "string",
-            "description": "Very short label (max 30 chars)"
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Question.Option"
-            },
-            "description": "Available choices"
-          },
-          "multiple": {
-            "type": "boolean"
-          },
-          "custom": {
-            "type": "boolean"
-          }
-        },
-        "required": ["question", "header", "options"],
-        "additionalProperties": false
-      },
-      "Question.Tool": {
-        "type": "object",
-        "properties": {
-          "messageID": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          }
-        },
-        "required": ["messageID", "id"],
-        "additionalProperties": false
-      },
-      "question.asked": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^evt_"
-              }
-            ]
-          },
-          "created": {
-            "type": "number"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["question.asked"]
-          },
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^que"
-                  }
-                ]
-              },
-              "sessionID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^ses"
-                  }
-                ]
-              },
-              "questions": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/Question.Info"
-                },
-                "description": "Questions to ask"
-              },
-              "tool": {
-                "$ref": "#/components/schemas/Question.Tool"
-              }
-            },
-            "required": ["id", "sessionID", "questions"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "created", "type", "data"],
-        "additionalProperties": false
-      },
-      "Question.Answer": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "question.replied": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^evt_"
-              }
-            ]
-          },
-          "created": {
-            "type": "number"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["question.replied"]
-          },
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^ses"
-                  }
-                ]
-              },
-              "requestID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^que"
-                  }
-                ]
-              },
-              "answers": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/Question.Answer"
-                }
-              }
-            },
-            "required": ["sessionID", "requestID", "answers"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "created", "type", "data"],
-        "additionalProperties": false
-      },
-      "question.rejected": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^evt_"
-              }
-            ]
-          },
-          "created": {
-            "type": "number"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["question.rejected"]
-          },
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^ses"
-                  }
-                ]
-              },
-              "requestID": {
-                "type": "string",
-                "allOf": [
-                  {
-                    "pattern": "^que"
-                  }
-                ]
-              }
-            },
-            "required": ["sessionID", "requestID"],
             "additionalProperties": false
           }
         },
@@ -23431,15 +22839,6 @@
             "$ref": "#/components/schemas/shell.deleted"
           },
           {
-            "$ref": "#/components/schemas/question.asked"
-          },
-          {
-            "$ref": "#/components/schemas/question.replied"
-          },
-          {
-            "$ref": "#/components/schemas/question.rejected"
-          },
-          {
             "$ref": "#/components/schemas/form.created"
           },
           {
@@ -23618,70 +23017,6 @@
           }
         },
         "required": ["_tag", "id", "message"],
-        "additionalProperties": false
-      },
-      "Question.Request": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^que"
-              }
-            ]
-          },
-          "sessionID": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^ses"
-              }
-            ]
-          },
-          "questions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Question.Info"
-            },
-            "description": "Questions to ask"
-          },
-          "tool": {
-            "$ref": "#/components/schemas/Question.Tool"
-          }
-        },
-        "required": ["id", "sessionID", "questions"],
-        "additionalProperties": false
-      },
-      "Question.Reply": {
-        "type": "object",
-        "properties": {
-          "answers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Question.Answer"
-            },
-            "description": "User answers in order of questions (each answer is an array of selected labels)"
-          }
-        },
-        "required": ["answers"],
-        "additionalProperties": false
-      },
-      "QuestionNotFoundError": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["QuestionNotFoundError"]
-          },
-          "requestID": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "requestID", "message"],
         "additionalProperties": false
       },
       "Reference.LocalSource": {
@@ -24181,6 +23516,24 @@
           }
         },
         "required": ["path"],
+        "additionalProperties": false
+      },
+      "ConfigWebSearch.Info": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["random"]
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "required": ["provider"],
         "additionalProperties": false
       },
       "Config.Plugin.Entry": {
@@ -24701,14 +24054,15 @@
             }
           },
           "websearch": {
-            "type": "object",
-            "properties": {
-              "provider": {
-                "type": "string"
+            "anyOf": [
+              {
+                "type": "boolean",
+                "enum": [false]
+              },
+              {
+                "$ref": "#/components/schemas/ConfigWebSearch.Info"
               }
-            },
-            "required": ["provider"],
-            "additionalProperties": false
+            ]
           },
           "plugins": {
             "type": "array",
@@ -24742,6 +24096,9 @@
           "experimental": {
             "type": "object",
             "properties": {
+              "portable_shell_scanner": {
+                "type": "boolean"
+              },
               "subagent_depth": {
                 "type": "integer",
                 "allOf": [
@@ -24808,20 +24165,6 @@
         "required": ["type", "path"],
         "additionalProperties": false
       },
-      "Config.File": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["file"]
-          },
-          "path": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "path"],
-        "additionalProperties": false
-      },
       "Config.AgentsDirectory": {
         "type": "object",
         "properties": {
@@ -24857,9 +24200,6 @@
           },
           {
             "$ref": "#/components/schemas/Config.Directory"
-          },
-          {
-            "$ref": "#/components/schemas/Config.File"
           },
           {
             "$ref": "#/components/schemas/Config.AgentsDirectory"
@@ -24956,10 +24296,6 @@
     {
       "name": "shell",
       "description": "Experimental location-scoped shell command routes."
-    },
-    {
-      "name": "question",
-      "description": "Experimental session question routes."
     },
     {
       "name": "reference",

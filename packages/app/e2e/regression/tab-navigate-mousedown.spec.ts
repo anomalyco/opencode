@@ -12,7 +12,6 @@ test("pressing mouse down on a tab navigates before mouse up", async ({ page }) 
   await mockServer(page)
   await page.addInitScript(
     ({ server, sessionA, sessionB }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",
         JSON.stringify([
@@ -46,7 +45,6 @@ test("keyboard navigation follows the visible tab order", async ({ page }) => {
   await mockServer(page)
   await page.addInitScript(
     ({ server, sessionA, unresolved, sessionC }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",
         JSON.stringify([
@@ -90,7 +88,8 @@ async function mockServer(page: Page) {
     if ([`/api/session/${unresolvedSessionID}`, `/session/${unresolvedSessionID}`].includes(url.pathname))
       return new Promise(() => {})
     if (url.pathname === "/api/event") return sse(route)
-    if (url.pathname === "/api/session") return json(route, { data: sessions.map(currentSession), cursor: {} })
+    if (url.pathname === "/api/session")
+      return json(route, { data: sessions.map((session) => currentSession(session)), cursor: {} })
     if (url.pathname === "/api/session/active") return json(route, { data: {} })
     const currentSessionInfo = sessions.find((item) => url.pathname === `/api/session/${item.id}`)
     if (currentSessionInfo) return json(route, { data: currentSession(currentSessionInfo) })

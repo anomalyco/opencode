@@ -32,10 +32,6 @@ test("preserves the draft when a populated command menu triggers a built-in", as
     ],
     pageMessages: () => ({ items: [] }),
   })
-  await page.addInitScript(() => {
-    localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
-  })
-
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   const composer = page.locator('[data-component="prompt-input-v2"]')
   const input = composer.locator('[data-component="prompt-input"]')

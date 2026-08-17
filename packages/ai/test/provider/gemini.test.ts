@@ -4,7 +4,6 @@ import { LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage 
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as Gemini from "../../src/protocols/gemini.js"
-import { ProviderShared } from "../../src/protocols/shared.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents, sseRaw } from "../lib/sse.js"
@@ -291,35 +290,30 @@ describe("Gemini route", () => {
     }),
   )
 
-  for (const [name, media] of [
-    ["mismatched data URL MIME", { mediaType: "image/png", data: "data:image/jpeg;base64,/9j/" }],
-    ["malformed base64", { mediaType: "image/png", data: "%%%=" }],
-    ["unsupported SVG", { mediaType: "image/svg+xml", data: "PHN2Zz4=" }],
-  ] as const)
-    it.effect(`rejects ${name}`, () =>
-      Effect.gen(function* () {
-        const error = yield* compileRequest(
-          LLM.request({ model, messages: [Message.user({ type: "media", ...media })] }),
-        ).pipe(Effect.flip)
-        expect(error.message).toMatch(/does not support|does not match|valid base64/)
-      }),
-    )
-
-  it.effect("rejects oversized image input", () =>
+  it.effect("passes encoded media through without local validation", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
-            Message.user({
-              type: "media",
-              mediaType: "image/png",
-              data: "A".repeat(ProviderShared.MAX_MEDIA_ENCODED_BYTES + 4),
-            }),
+            Message.user([
+              { type: "media", mediaType: "image/png", data: "%%%=" },
+              { type: "media", mediaType: "image/png", data: "data:image/jpeg;base64,/9j/" },
+              { type: "media", mediaType: "image/svg+xml", data: "PHN2Zz4=" },
+            ]),
           ],
         }),
-      ).pipe(Effect.flip)
-      expect(error.message).toContain("encoded limit")
+      )
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: "image/png", data: "%%%=" } },
+            { inlineData: { mimeType: "image/png", data: "/9j/" } },
+            { inlineData: { mimeType: "image/svg+xml", data: "PHN2Zz4=" } },
+          ],
+        },
+      ])
     }),
   )
 

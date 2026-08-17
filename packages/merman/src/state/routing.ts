@@ -216,6 +216,11 @@ function verticalCorridorCrossesUnrelatedState(
   })
 }
 
+function hasVerticalCorridor(from: BoxBounds, to: BoxBounds): boolean {
+  if (from.centerY < to.centerY) return from.top + from.height <= to.top - 1
+  return from.top - 1 >= to.top + to.height
+}
+
 function horizontalCorridorCrossesUnrelatedState(
   diagram: StateVisibleDiagram,
   transition: StateVisibleTransition,
@@ -388,6 +393,9 @@ export function createStateTransitionRoutePlans(
         }
         return [{ ...base, kind: "horizontal-forward", leftToRight: from.centerX <= to.centerX }]
       }
+      if (!hasVerticalCorridor(from, to)) {
+        return [{ ...base, kind: "side-parallel", railX: allocateSideRail(transition.label) }]
+      }
       if (from.centerX !== to.centerX) {
         return [{ ...base, kind: "vertical-elbow", hasReverse: false, offsetConnector: false }]
       }
@@ -395,6 +403,9 @@ export function createStateTransitionRoutePlans(
     }
 
     if (from.centerY !== to.centerY) {
+      if (!hasVerticalCorridor(from, to)) {
+        return [{ ...base, kind: "side-parallel", railX: allocateSideRail(transition.label) }]
+      }
       if (from.centerY > to.centerY && feedback)
         return [
           {

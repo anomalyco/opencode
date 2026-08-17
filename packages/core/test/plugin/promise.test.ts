@@ -4,6 +4,7 @@ import { DateTime, Effect, Schema } from "effect"
 import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Model } from "@opencode-ai/core/model"
+import { Location } from "@opencode-ai/core/location"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
@@ -14,7 +15,10 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionInbox } from "@opencode-ai/core/session/inbox"
 import { Tool } from "@opencode-ai/core/tool"
 import { Provider } from "@opencode-ai/core/provider"
+import { Project } from "@opencode-ai/core/project"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { define } from "@opencode-ai/plugin/promise/plugin"
+import { Money } from "@opencode-ai/schema/money"
 import type { SessionHooks } from "@opencode-ai/plugin/effect/session"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -23,6 +27,53 @@ import { host as testHost } from "./host"
 const it = testEffect(PluginTestLayer)
 
 describe("fromPromise", () => {
+  it.effect("adapts session creation through the protocol schema", () =>
+    Effect.gen(function* () {
+      let seen: unknown
+      const host = testHost({
+        session: {
+          create: (input) => {
+            seen = input
+            return Effect.succeed(
+              Session.Info.make({
+                id: Session.ID.make("ses_protocol_adapter"),
+                projectID: Project.ID.make("project"),
+                cost: Money.USD.make(0),
+                tokens: { input: 1, output: 2, reasoning: 3, cache: { read: 4, write: 5 } },
+                time: { created: DateTime.makeUnsafe(10), updated: DateTime.makeUnsafe(20) },
+                title: input?.title,
+                location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+              }),
+            )
+          },
+        },
+      })
+
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-session-create",
+          setup: async (ctx) => {
+            await expect(Reflect.apply(ctx.session.create, undefined, [{ title: 42 }])).rejects.toBeDefined()
+            const result = await ctx.session.create({
+              id: null,
+              title: "Promise title",
+              agent: null,
+              model: null,
+              location: null,
+            })
+            expect(result).toMatchObject({
+              id: "ses_protocol_adapter",
+              title: "Promise title",
+              time: { created: 10, updated: 20 },
+            })
+          },
+        }),
+      ).effect(host)
+
+      expect(seen).toEqual({ title: "Promise title" })
+    }),
+  )
+
   it.effect("forwards transient session generation", () =>
     Effect.gen(function* () {
       const host = testHost({
@@ -41,6 +92,42 @@ describe("fromPromise", () => {
           },
         }),
       ).effect(host)
+    }),
+  )
+
+  it.effect("preserves no-content and rejected Promise behavior", () =>
+    Effect.gen(function* () {
+      const seen: unknown[] = []
+      const host = testHost({
+        session: {
+          interrupt: (input) => {
+            if (input.sessionID === Session.ID.make("ses_failure")) {
+              return Effect.fail(new Error("interrupt failed"))
+            }
+            expect(input.continue).toBe(true)
+            return Effect.void
+          },
+          rename: (input) => Effect.sync(() => seen.push(input)),
+          wait: (input) => Effect.sync(() => seen.push(input)),
+        },
+      })
+
+      yield* PluginPromise.fromPromise(
+        define({
+          id: "promise-session-interrupt",
+          setup: async (ctx) => {
+            expect(await ctx.session.interrupt({ sessionID: "ses_success", continue: true })).toBeUndefined()
+            await expect(ctx.session.interrupt({ sessionID: "ses_failure" })).rejects.toThrow("interrupt failed")
+            expect(await ctx.session.rename({ sessionID: "ses_success", title: "Renamed" })).toBeUndefined()
+            expect(await ctx.session.wait({ sessionID: "ses_success" })).toBeUndefined()
+          },
+        }),
+      ).effect(host)
+
+      expect(seen).toEqual([
+        { sessionID: Session.ID.make("ses_success"), title: "Renamed" },
+        { sessionID: Session.ID.make("ses_success") },
+      ])
     }),
   )
 
@@ -114,6 +201,7 @@ describe("fromPromise", () => {
             ctx.skill.list(),
           ])
           seen.push(...results.map((result) => result.location.directory))
+          expect((await ctx.integration.get({ integrationID: "missing" })).data).toBeNull()
         },
       })
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   normalizeNewSessionWorktree,
   resolveNewSessionBranch,
+  resolveNewSessionGit,
   resolveNewSessionWorktree,
 } from "./new-session-workspace-controller"
 
@@ -46,5 +47,11 @@ describe("new session workspace selection", () => {
       "feature",
     )
     expect(resolveNewSessionBranch({ worktree: "/missing", local: "dev", worktreeBranch: branch })).toBe("dev")
+  })
+
+  test("uses location VCS state when the project inventory is stale", () => {
+    expect(resolveNewSessionGit({ branch: "dev" })).toBe(true)
+    expect(resolveNewSessionGit({ projectVcs: "git" })).toBe(true)
+    expect(resolveNewSessionGit({})).toBe(false)
   })
 })

@@ -19,6 +19,7 @@ import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
 import { SessionInbox } from "../inbox.js"
 import { SessionModelRequest } from "../model-request.js"
+import { SessionModelTransport } from "../model-transport.js"
 import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
@@ -34,7 +35,7 @@ import { SessionRunnerRetry } from "./retry.js"
 import { SessionUsage } from "../usage.js"
 import { ToolOutput } from "../../tool-output.js"
 
-/** How one model call ended: settled, awaiting a scheduled retry, or restarted by compaction. */
+/** How one model call ended: settled, awaiting retry/recovery, or restarted by compaction. */
 type CallOutcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean; readonly step: number }
   Retry: { readonly step: number }
@@ -43,6 +44,7 @@ type CallOutcome = Data.TaggedEnum<{
     readonly error: SessionRunnerRetry.RetryableFailure["error"]
     readonly step: number
   }
+  RecoverFull: { readonly step: number }
   Restart: { readonly step: number; readonly recoveredOverflow: boolean }
 }>
 const CallOutcome = Data.taggedEnum<CallOutcome>()
@@ -108,6 +110,7 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const context = yield* SessionContext.Service
     const modelRequests = yield* SessionModelRequest.Service
+    const modelTransport = yield* SessionModelTransport.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
@@ -125,22 +128,25 @@ const layer = Layer.effect(
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
       readonly continuation?: Continuation
+      readonly promotable?: SessionInbox.Promotable
     }) {
       let force = input.force
       let continuation = input.continuation
-      if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, "any")))
+      const promotable = input.promotable ?? "input"
+      if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
         return { type: "complete" as const }
       yield* settleStaleToolCalls(input.sessionID)
       while (true) {
-        if (yield* runPendingCompaction(input.sessionID)) {
+        if (yield* runPendingCompaction(input.sessionID, promotable)) {
           force = false
           continue
         }
-        if (yield* runPendingMove(input.sessionID, "input")) return { type: "moved" as const }
-        if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, "input")))
+        if (yield* runPendingMove(input.sessionID, promotable)) return { type: "moved" as const }
+        if (!force && !continuation && !(yield* SessionInbox.has(db, input.sessionID, promotable)))
           return { type: "complete" as const }
-        const result = yield* runSteps(input.sessionID, continuation)
+        const result = yield* runSteps(input.sessionID, continuation, promotable)
         if (result.type === "moved") return result
+        if (promotable === "steer") return { type: "complete" as const }
         force = false
         continuation = undefined
       }
@@ -152,14 +158,15 @@ const layer = Layer.effect(
      */
     const runSteps = Effect.fn("SessionRunner.runSteps")(function* (
       sessionID: SessionSchema.ID,
-      continuation?: Continuation,
+      continuation: Continuation | undefined,
+      drainPromotable: SessionInbox.Promotable,
     ) {
-      // Fresh work may promote queued input; later steps absorb steers only.
-      let promotable: SessionInbox.Promotable = continuation ? "steer" : "input"
+      // Fresh work may promote queued input; resumed turns and later steps absorb steers only.
+      let promotable: SessionInbox.Promotable = continuation ? "steer" : drainPromotable
       let step = continuation?.step ?? 1
       let next = continuation
       while (true) {
-        if (yield* runPendingCompaction(sessionID)) continue
+        if (yield* runPendingCompaction(sessionID, "steer")) continue
         if (yield* runPendingMove(sessionID, "steer")) return { type: "moved" as const, continuation: next }
         const result = yield* runStep(sessionID, promotable, step)
         next = result.needsContinuation ? { step: result.step + 1 } : undefined
@@ -205,12 +212,15 @@ const layer = Layer.effect(
       let currentStep = step
       // Overflow recovery is one-shot: a call after recovery must not recover another overflow.
       let recoverOverflow = true
+      // Continuation rejection permits one immediate full-context Physical Attempt without generic backoff.
+      let recoverContinuation = true
       while (true) {
         const outcome = yield* callModel(
           sessionID,
           currentPromotable,
           currentStep,
           recoverOverflow,
+          recoverContinuation,
           assistantMessageID,
         ).pipe(Effect.catchTag("SessionRunner.RetryableFailure", waitForRetry))
         if (outcome._tag === "Completed") return { needsContinuation: outcome.needsContinuation, step: outcome.step }
@@ -232,6 +242,7 @@ const layer = Layer.effect(
           if (outcome.recoveredOverflow) recoverOverflow = false
           assistantMessageID = SessionMessage.ID.create()
         }
+        if (outcome._tag === "RecoverFull") recoverContinuation = false
         // Neither a retry nor a compaction restart re-promotes input.
         currentPromotable = undefined
         currentStep = outcome.step
@@ -247,6 +258,7 @@ const layer = Layer.effect(
       promotable: SessionInbox.Promotable | undefined,
       step: number,
       recoverOverflow: boolean,
+      recoverContinuation: boolean,
       assistantMessageID: SessionMessage.ID,
     ) {
       const selected = yield* context.select(sessionID)
@@ -413,6 +425,13 @@ const layer = Layer.effect(
           const llmFailure = streamFailure instanceof AIError ? streamFailure : undefined
           const llmError = llmFailure && !publisher.record().providerFailed ? toSessionError(llmFailure) : undefined
           if (
+            recoverContinuation &&
+            llmFailure?.reason._tag === "Transport" &&
+            (llmFailure.reason.recovery === "retry-full" || llmFailure.reason.recovery === "rotate-and-retry-full") &&
+            !publisher.record().outputStarted
+          )
+            return CallOutcome.RecoverFull({ step: currentStep })
+          if (
             llmFailure &&
             llmError &&
             SessionRunnerRetry.isRetryable(llmFailure) &&
@@ -500,14 +519,14 @@ const layer = Layer.effect(
     /** Executes a previously admitted manual compaction request, if one is pending. */
     const runPendingCompaction = Effect.fn("SessionRunner.runPendingCompaction")(function* (
       sessionID: SessionSchema.ID,
+      promotable: SessionInbox.Promotable,
     ) {
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const pending = yield* SessionInbox.serialized(
             sessionID,
             Effect.gen(function* () {
-              const selected =
-                (yield* SessionInbox.nextSteer(db, sessionID)) ?? (yield* SessionInbox.nextQueued(db, sessionID))
+              const selected = yield* SessionInbox.nextPromotable(db, sessionID, promotable)
               if (selected?.type !== "compaction") return
               yield* bus.publishAll([
                 [SessionEvent.InboxDelivered, { sessionID, inboxID: selected.id }],
@@ -549,10 +568,9 @@ const layer = Layer.effect(
       return yield* SessionInbox.serialized(
         sessionID,
         Effect.gen(function* () {
-          const pending =
-            (yield* SessionInbox.nextSteer(db, sessionID)) ??
-            (promotable === "input" ? yield* SessionInbox.nextQueued(db, sessionID) : undefined)
+          const pending = yield* SessionInbox.nextPromotable(db, sessionID, promotable)
           if (pending?.type !== "move") return false
+          yield* modelTransport.close(sessionID)
           yield* bus.publishAll([
             [SessionEvent.InboxDelivered, { sessionID, inboxID: pending.id }],
             [
@@ -623,6 +641,7 @@ export const node = makeLocationNode({
     llmClient,
     SessionContext.node,
     SessionModelRequest.node,
+    SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
     SessionTitle.node,

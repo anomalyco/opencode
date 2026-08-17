@@ -22,13 +22,24 @@ export namespace JsonRpc {
     data: Schema.optional(Schema.Json),
   })
 
-  export const Response = Schema.Struct({
-    jsonrpc: Schema.Literal("2.0"),
-    id: JsonRpcID,
-    result: Schema.optional(Schema.Json),
-    error: Schema.optional(ErrorObject),
-  })
-  export interface Response extends Schema.Schema.Type<typeof Response> {}
+  export const Response = Schema.Union(
+    [
+      Schema.Struct({
+        jsonrpc: Schema.Literal("2.0"),
+        id: JsonRpcID,
+        result: Schema.Json,
+        error: Schema.optionalKey(Schema.Never),
+      }),
+      Schema.Struct({
+        jsonrpc: Schema.Literal("2.0"),
+        id: JsonRpcID,
+        result: Schema.optionalKey(Schema.Never),
+        error: ErrorObject,
+      }),
+    ],
+    { mode: "oneOf" },
+  )
+  export type Response = Schema.Schema.Type<typeof Response>
 
   export const decodeRequest = Schema.decodeUnknownSync(Request)
 
@@ -48,6 +59,28 @@ export namespace JsonRpc {
     }
   }
 }
+
+export class SimulationRequestError extends Schema.TaggedErrorClass<SimulationRequestError>()(
+  "SimulationRequestError",
+  {
+    method: Schema.String,
+    code: Schema.Number,
+    message: Schema.String,
+    data: Schema.optionalKey(Schema.Json),
+  },
+) {}
+
+const request = <
+  const Tag extends string,
+  Payload extends Schema.Top | Schema.Struct.Fields = typeof Schema.Void,
+  Success extends Schema.Top = typeof Schema.Void,
+>(
+  tag: Tag,
+  options?: {
+    readonly payload?: Payload
+    readonly success?: Success
+  },
+) => Rpc.make(tag, { ...options, error: SimulationRequestError })
 
 export namespace Handshake {
   export const ProtocolVersion = Schema.Literal(1)
@@ -81,7 +114,7 @@ export namespace Handshake {
     protocolVersion: ProtocolVersion,
     role: EndpointRole,
     server: Identity,
-    capabilities: Schema.Array(Capability),
+    capabilities: Schema.Array(Capability).check(Schema.isUnique()),
   })
   export interface Response extends Schema.Schema.Type<typeof Response> {}
 
@@ -175,7 +208,6 @@ export namespace Frontend {
     "ui.click.semantic",
     "ui.resize",
     "ui.matches",
-    "ui.screenshot",
     "ui.state",
     "ui.snapshot",
     "ui.capture",
@@ -279,9 +311,6 @@ export namespace Frontend {
   })
   export interface SemanticSnapshot extends Schema.Schema.Type<typeof SemanticSnapshot> {}
 
-  export const Screenshot = Schema.String
-  export type Screenshot = Schema.Schema.Type<typeof Screenshot>
-
   export const Color = Schema.Tuple([Schema.Number, Schema.Number, Schema.Number, Schema.Number])
   export type Color = Schema.Schema.Type<typeof Color>
 
@@ -310,9 +339,6 @@ export namespace Frontend {
 
   export const Matches = Schema.Boolean
   export type Matches = Schema.Schema.Type<typeof Matches>
-
-  export const ScreenshotParams = Schema.Struct({ name: Schema.optional(Schema.String) })
-  export interface ScreenshotParams extends Schema.Schema.Type<typeof ScreenshotParams> {}
 
   export const TypeParams = Schema.Struct({ text: Schema.String })
   export interface TypeParams extends Schema.Schema.Type<typeof TypeParams> {}
@@ -354,11 +380,6 @@ export namespace Frontend {
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.click"), params: ClickParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.resize"), params: ResizeParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.matches"), params: MatchesParams }),
-    Schema.Struct({
-      ...JsonRpc.RequestFields,
-      method: Schema.Literal("ui.screenshot"),
-      params: Schema.optional(ScreenshotParams),
-    }),
     Schema.Struct({
       ...JsonRpc.RequestFields,
       method: Schema.Literals(["ui.enter", "ui.state", "ui.snapshot", "ui.recording.finish"]),
@@ -576,29 +597,28 @@ export namespace Backend {
     matched: Schema.Boolean,
   })
   export interface NetworkLogEntry extends Schema.Schema.Type<typeof NetworkLogEntry> {}
+
+  export const Notification = Schema.Union([
+    Schema.Struct({
+      jsonrpc: Schema.Literal("2.0"),
+      method: Schema.Literal("llm.request"),
+      params: ProviderInvocation,
+    }),
+    Schema.Struct({
+      jsonrpc: Schema.Literal("2.0"),
+      method: Schema.Literal("tool.invocation"),
+      params: ToolInvocation,
+    }),
+    Schema.Struct({
+      jsonrpc: Schema.Literal("2.0"),
+      method: Schema.Literal("tool.cancel"),
+      params: ToolCancellation,
+    }),
+  ])
+  export type Notification = Schema.Schema.Type<typeof Notification>
+  export const decodeNotification = Schema.decodeUnknownSync(Notification)
+  export const decodeNotificationEffect = Schema.decodeUnknownEffect(Schema.fromJsonString(Notification))
 }
-
-export class SimulationRequestError extends Schema.TaggedErrorClass<SimulationRequestError>()(
-  "SimulationRequestError",
-  {
-    method: Schema.String,
-    code: Schema.Number,
-    message: Schema.String,
-    data: Schema.optionalKey(Schema.Json),
-  },
-) {}
-
-const request = <
-  const Tag extends string,
-  Payload extends Schema.Top | Schema.Struct.Fields = typeof Schema.Void,
-  Success extends Schema.Top = typeof Schema.Void,
->(
-  tag: Tag,
-  options?: {
-    readonly payload?: Payload
-    readonly success?: Success
-  },
-) => Rpc.make(tag, { ...options, error: SimulationRequestError })
 
 export const UiRpcs = RpcGroup.make(
   request("simulation.handshake", { payload: Handshake.Params, success: Handshake.Response }),
@@ -606,10 +626,6 @@ export const UiRpcs = RpcGroup.make(
   request("ui.snapshot", { success: Frontend.SemanticSnapshot }),
   request("ui.capture", { success: Frontend.CapturedFrame }),
   request("ui.matches", { payload: Frontend.MatchesParams, success: Frontend.Matches }),
-  request("ui.screenshot", {
-    payload: Schema.UndefinedOr(Frontend.ScreenshotParams),
-    success: Frontend.Screenshot,
-  }),
   request("ui.recording.finish", { success: Frontend.RecordingFinish }),
   request("ui.type", { payload: Frontend.TypeParams, success: Frontend.State }),
   request("ui.press", { payload: Frontend.PressParams, success: Frontend.State }),

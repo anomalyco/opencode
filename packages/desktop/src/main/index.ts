@@ -24,8 +24,7 @@ import {
   isOldLayoutEligible,
 } from "./onboarding"
 import { getDefaultServerUrl, preferAppEnv, setDefaultServerUrl } from "./server"
-import { setupAutoUpdater, showUpdaterDialog } from "./updater"
-import { registerUpdaterIpc } from "./updater-ipc"
+import { registerUpdaterIpc, setupAutoUpdater, showUpdaterDialog } from "./updater"
 import { safeWebContentsURL } from "./window-state"
 import {
   getLastFocusedWindow,
@@ -242,7 +241,7 @@ const main = Effect.gen(function* () {
       const win = getLastFocusedWindow()
       if (win) sendMenuCommand(win, id)
     },
-    checkForUpdates: () => void showUpdaterDialog(updater, true),
+    checkForUpdates: () => void showUpdaterDialog(updater),
     relaunch,
   }
   registerIpcHandlers({
@@ -267,7 +266,7 @@ const main = Effect.gen(function* () {
     setDisplayBackend: async () => undefined,
     checkAppExists: (appName) => checkAppExists(appName),
     resolveAppPath: async (appName) => resolveAppPath(appName),
-    showUpdater: () => showUpdaterDialog(updater, true),
+    showUpdater: () => showUpdaterDialog(updater),
     setBackgroundColor: (color) => setBackgroundColor(color),
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),

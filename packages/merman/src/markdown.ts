@@ -44,6 +44,7 @@ interface PreparedDiagram {
 }
 
 export interface MermaidMarkdownRendererOptions {
+  /** Use terminal-optimized diagram spacing. Defaults to true. */
   compact?: boolean
   /** Fold horizontal flowcharts that exceed this width. Defaults to 120 columns. */
   layoutMaxWidth?: number
@@ -118,10 +119,11 @@ function prepareDiagram(
   layoutMaxWidth: number,
 ): PreparedDiagram {
   const colors = options.colors ?? {}
+  const compact = options.compact ?? true
   switch (kind) {
     case "flowchart": {
       const grid = drawFlowchartDiagramGrid(parseMermaidFlowchartDiagram(source), {
-        compact: options.compact,
+        compact,
         layoutMaxWidth,
       })
       const size = grid.getTextSize({ trimTop: true, trimBottom: true })
@@ -161,7 +163,7 @@ function prepareDiagram(
       }
     }
     case "sequence": {
-      const grid = drawSequenceDiagramGrid(parseMermaidSequenceDiagram(source), { compact: options.compact })
+      const grid = drawSequenceDiagramGrid(parseMermaidSequenceDiagram(source), { compact })
       const size = grid.getTextSize()
       return {
         kind,

@@ -19,7 +19,7 @@ const result = await Bun.build({
   target: "node",
   format: "esm",
   packages: "external",
-  external: ["#sqlite", "#pty", "#fff", "#photon-wasm", "#process-lock-ffi", "#v1-migration"],
+  external: ["#sqlite", "#pty", "#fff", "#photon-wasm", "#shell-parser-wasm", "#process-lock-ffi", "#v1-migration"],
   plugins: [
     {
       name: "bundle-shell-scan",

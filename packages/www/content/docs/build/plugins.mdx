@@ -1,6 +1,5 @@
 ---
 title: "Plugins"
-description: "Extend OpenCode with plugins."
 ---
 
 Plugins extend OpenCode in-process. They can transform agents, models, commands,
@@ -106,7 +105,7 @@ visible from the plugin file, for example:
 
 ```sh
 cd .opencode
-bun add @opencode-ai/plugin@next
+bun add @opencode-ai/plugin@beta
 ```
 
 Match the plugin package version to the OpenCode release you target.
@@ -400,7 +399,7 @@ manifest is:
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
-    "@opencode-ai/plugin": "next"
+    "@opencode-ai/plugin": "beta"
   }
 }
 ```
@@ -430,7 +429,7 @@ OpenCode provides a first-class Effect API for plugins through the
 plugin package and export an `effect` function instead of `setup`:
 
 ```sh
-bun add @opencode-ai/plugin@next effect
+bun add @opencode-ai/plugin@beta effect
 ```
 
 ```ts title=".opencode/plugins/reviewer-effect.ts"

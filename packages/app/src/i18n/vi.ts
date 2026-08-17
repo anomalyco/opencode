@@ -515,21 +515,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "Desktop {{version}}",
   "wsl.onboarding.versionMismatch": "Phiên bản đã cài đặt không khớp với phiên bản ứng dụng desktop.",
   "wsl.onboarding.adding": "Đang thêm...",
-  "help.tabs.toast.ariaLabel": "Giới thiệu về tab. Sắp xếp công việc và các phiên đang hoạt động bằng tab",
-  "help.tabs.toast.dismiss": "Bỏ qua thông tin về tab",
-  "help.tabs.title": "Giới thiệu về tab",
-  "help.tabs.description": "Sắp xếp công việc và các phiên đang hoạt động bằng tab",
-  "help.tabs.date": "14 tháng 7",
-  "help.tabs.introduction": "OpenCode Desktop nay được xây dựng xoay quanh các tab.",
-  "help.tabs.sessions":
-    "Bắt đầu phiên mới trong một tab hoặc mở phiên hiện có từ bất kỳ dự án nào của bạn. Hãy mở tab mới khi bắt đầu công việc mới và đóng tab khi hoàn tất.",
-  "help.tabs.organize":
-    "Việc mở một vài tab giúp bạn dễ dàng sắp xếp các phiên đang hoạt động. Hãy đổi tên tab thành tên dễ nhớ nếu bạn định giữ tab đó lâu dài.",
-  "help.tabs.home":
-    "Bạn sẽ tìm thấy tất cả các phiên và dự án trên màn hình Trang chủ mới. Khi bạn chọn một phiên, phiên đó sẽ mở trong một tab.",
-  "help.tabs.persistence": "Khi bạn mở lại ứng dụng, các tab vẫn mở.",
-  "help.tabs.worktrees":
-    "Thiết kế mới chưa hỗ trợ Git Worktrees, nhưng tính năng này sẽ sớm ra mắt. Vì vậy, nếu muốn tiếp tục sử dụng bố cục trước đó, bạn có thể chuyển đổi giữa các bố cục trong Cài đặt. Xin lưu ý rằng bố cục mới sẽ trở thành cố định sau vài tuần nữa.",
   "server.row.noUsername": "không có tên người dùng",
   "dialog.project.edit.title": "Chỉnh sửa dự án",
   "dialog.project.edit.name": "Tên",
@@ -982,13 +967,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Mở rộng các phần công cụ chỉnh sửa",
   "settings.general.row.editToolPartsExpanded.description":
     "Hiển thị các phần công cụ chỉnh sửa, viết và vá lỗi được mở rộng theo mặc định trong dòng thời gian",
-  "settings.general.row.newInterface.title": "Bố cục mới",
-  "settings.general.row.newInterface.badge": "Mới",
-  "settings.general.row.newInterface.description":
-    "Sử dụng các tab mới và bố cục trang chủ. Chuyển đổi giữa các bố cục trong một thời gian giới hạn.",
-  "settings.general.row.newInterfaceNotice.title": "Bạn hiện đang sử dụng bố cục mới",
-  "settings.general.row.newInterfaceNotice.description": "Bố cục trước đó không còn khả dụng",
-  "settings.general.row.newInterfaceNotice.dismiss": "Bỏ qua",
   "settings.general.row.pinchZoom.title": "Chụm để thu phóng",
   "settings.general.row.pinchZoom.description": "Cho phép chụm bàn di chuột và cử chỉ cuộn Ctrl để thu phóng",
   "settings.general.row.wayland.title": "Sử dụng Wayland gốc",

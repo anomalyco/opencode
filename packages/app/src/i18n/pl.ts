@@ -511,21 +511,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "aplikacja komputerowa {{version}}",
   "wsl.onboarding.versionMismatch": "Zainstalowana wersja nie jest zgodna z wersją aplikacji komputerowej.",
   "wsl.onboarding.adding": "Dodawanie...",
-  "help.tabs.toast.ariaLabel": "Przedstawiamy karty. Organizuj pracę i aktywne sesje za pomocą kart",
-  "help.tabs.toast.dismiss": "Odrzuć informacje o kartach",
-  "help.tabs.title": "Przedstawiamy karty",
-  "help.tabs.description": "Organizuj pracę i aktywne sesje za pomocą kart",
-  "help.tabs.date": "14 lipca",
-  "help.tabs.introduction": "OpenCode Desktop korzysta teraz z układu opartego na kartach.",
-  "help.tabs.sessions":
-    "Rozpocznij nową sesję na karcie lub otwórz istniejącą sesję z dowolnego projektu. Otwórz nową kartę, gdy zaczynasz coś nowego, i zamknij ją po zakończeniu.",
-  "help.tabs.organize":
-    "Kilka otwartych kart ułatwia organizowanie aktywnych sesji. Jeśli chcesz zachować karty na dłużej, nadaj im łatwe do zapamiętania nazwy.",
-  "help.tabs.home":
-    "Wszystkie sesje i projekty znajdziesz na nowym ekranie głównym. Wybranie sesji powoduje otwarcie jej na karcie.",
-  "help.tabs.persistence": "Po ponownym otwarciu aplikacji karty pozostają otwarte.",
-  "help.tabs.worktrees":
-    "Nowy układ nie obsługuje jeszcze drzew roboczych Git, ale ta funkcja pojawi się wkrótce. Jeśli wolisz nadal korzystać z poprzedniego układu, możesz przełączać układy w Ustawieniach. Pamiętaj jednak, że za kilka tygodni nowy układ stanie się jedynym dostępnym.",
   "dialog.project.edit.title": "Edytuj projekt",
   "dialog.project.edit.name": "Nazwa",
   "dialog.project.edit.icon": "Ikona",
@@ -895,13 +880,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Rozwijaj elementy narzędzia edit",
   "settings.general.row.editToolPartsExpanded.description":
     "Domyślnie pokazuj rozwinięte elementy narzędzi edit, write i patch na osi czasu",
-  "settings.general.row.newInterface.title": "Nowy układ",
-  "settings.general.row.newInterface.badge": "Nowość",
-  "settings.general.row.newInterface.description":
-    "Używaj nowych kart i układu strony głównej. Przez ograniczony czas możesz przełączać się między układami.",
-  "settings.general.row.newInterfaceNotice.title": "Korzystasz teraz z nowego układu",
-  "settings.general.row.newInterfaceNotice.description": "Poprzedni układ nie jest już dostępny",
-  "settings.general.row.newInterfaceNotice.dismiss": "Odrzuć",
   "settings.general.row.pinchZoom.title": "Powiększanie gestem szczypania",
   "settings.general.row.pinchZoom.description":
     "Zezwalaj na powiększanie gestem szczypania na gładziku lub przez przewijanie z wciśniętym klawiszem Ctrl",

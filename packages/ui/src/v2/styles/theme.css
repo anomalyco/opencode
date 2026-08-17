@@ -1,16 +1,4 @@
 @layer theme {
-  html[data-theme="oc-2"] body:not([data-new-layout]) {
-    --text-diff-add-base: light-dark(#167517, #c4ffc0);
-    --text-diff-delete-base: light-dark(#fa3012, #ec2f14);
-    --syntax-comment: light-dark(#7a7a7a, #8f8f8f);
-    --syntax-keyword: light-dark(#a753ae, #edb2f1);
-    --syntax-string: #00ceb9;
-    --syntax-primitive: light-dark(#034cff, #8cb0ff);
-    --syntax-property: light-dark(#a753ae, #fab283);
-    --syntax-type: light-dark(#8a6f00, #fcd53a);
-    --syntax-critical: light-dark(#ff8c00, #fab283);
-  }
-
   :root {
     color-scheme: light;
 

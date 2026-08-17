@@ -510,22 +510,6 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "работна површина {{version}}",
   "wsl.onboarding.versionMismatch": "Инсталираната верзија не се совпаѓа со верзијата на апликацијата за десктоп.",
   "wsl.onboarding.adding": "Се додава...",
-  "help.tabs.toast.ariaLabel":
-    "Ви ги претставуваме јазичињата. Организирајте ја вашата работа и активни сесии со јазичиња",
-  "help.tabs.toast.dismiss": "Отфрли ги информациите за картичките",
-  "help.tabs.title": "Ви ги претставуваме јазичињата",
-  "help.tabs.description": "Организирајте ја вашата работа и активни сесии со јазичиња",
-  "help.tabs.date": "14 јули",
-  "help.tabs.introduction": "OpenCode Desktop сега е изграден околу картичките.",
-  "help.tabs.sessions":
-    "Започнете нова сесија во картичка или отворете постоечка сесија од кој било од вашите проекти. Отворете нова картичка кога започнувате нешто ново и затворете ја кога ќе завршите.",
-  "help.tabs.organize":
-    "Одржувањето отворени неколку јазичиња го олеснува организирањето на вашите активни сесии. Преименувајте ги картичките во нешто незаборавно ако планирате да ги задржите наоколу.",
-  "help.tabs.home":
-    "Сите ваши сесии и проекти ќе ги најдете на новиот Почетен екран. Изборот на сесија ја отвора во таб.",
-  "help.tabs.persistence": "Кога повторно ќе ја отворите апликацијата, вашите картички се сè уште отворени.",
-  "help.tabs.worktrees":
-    "Новиот дизајн сè уште не поддржува Git Worktrees, тој доаѓа наскоро. Значи, ако сакате да продолжите да го користите претходниот распоред, можете да се префрлате помеѓу распоредот во Поставки. Само имајте на ум дека новиот распоред ќе стане постојан за неколку недели.",
   "server.row.noUsername": "нема корисничко име",
   "dialog.project.edit.title": "Уреди проект",
   "dialog.project.edit.name": "Име",
@@ -978,13 +962,6 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Проширете ги деловите на алатката за уредување",
   "settings.general.row.editToolPartsExpanded.description":
     "Прикажи ги деловите на алатката за уредување, пишување и закрпи стандардно проширени во временската линија",
-  "settings.general.row.newInterface.title": "Нов распоред",
-  "settings.general.row.newInterface.badge": "Ново",
-  "settings.general.row.newInterface.description":
-    "Користете ги новите јазичиња и распоредот на домот. Префрлете се помеѓу распоредот за ограничено време.",
-  "settings.general.row.newInterfaceNotice.title": "Сега користите нов распоред",
-  "settings.general.row.newInterfaceNotice.description": "Претходниот распоред веќе не е достапен",
-  "settings.general.row.newInterfaceNotice.dismiss": "Отфрли",
   "settings.general.row.pinchZoom.title": "Стиснете за да зумирате",
   "settings.general.row.pinchZoom.description":
     "Дозволете зумирање на гестовите за стискање на подлогата и Ctrl-scroll",

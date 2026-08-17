@@ -203,10 +203,10 @@ export const OpenAIPlugin = define({
       if (!item) return
       item.provider.settings = Provider.mergeOverlay(item.provider.settings, { baseURL: codexBaseURL })
       const account = chatgpt.metadata?.accountID
-      item.provider.headers = Provider.mergeHeaders(
-        item.provider.headers,
-        typeof account === "string" ? { "chatgpt-account-id": account } : undefined,
-      )
+      item.provider.headers = Provider.mergeHeaders(item.provider.headers, {
+        originator: "opencode",
+        ...(typeof account === "string" ? { "chatgpt-account-id": account } : {}),
+      })
       for (const model of item.models.values()) {
         // ChatGPT-plan tokens only authorize codex-eligible models, and the
         // subscription covers usage, so hide the rest and zero the cost.
@@ -240,7 +240,6 @@ export const OpenAIPlugin = define({
         evt.request = new Request(`${codexBaseURL}${url.pathname.replace(/^\/v1/, "")}${url.search}`, evt.request)
       }),
     )
-
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
     yield* bus.subscribe(Integration.Event.ConnectionUpdated).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),

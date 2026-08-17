@@ -5,4 +5,5 @@
 "@opencode-ai/client": minor
 ---
 
-Replace Core shell permission parsing with portable, fail-closed Bash and PowerShell scanners.
+Add an opt-in portable shell permission scanner. Opaque commands use normal shell authorization without inferring
+external directories, while the default tree-sitter path remains unchanged.

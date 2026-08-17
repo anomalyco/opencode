@@ -1,10 +1,17 @@
 import { createStore } from "solid-js/store"
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import { useRenderer, useTerminalDimensions } from "@opentui/solid"
-import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { usePaste, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import {
+  CliRenderEvents,
+  decodePasteBytes,
+  stripAnsiSequences,
+  TextAttributes,
+  type ScrollBoxRenderable,
+  type TextareaRenderable,
+} from "@opentui/core"
 import open from "open"
 import { useTheme, useThemes } from "../../context/theme"
-import type { FormField, FormValue } from "@opencode-ai/client"
+import type { FormAnswer, FormField, FormValue } from "@opencode-ai/client"
 import type { FormWithLocation } from "../../context/data"
 import { useClient } from "../../context/client"
 import { useClipboard } from "../../context/clipboard"
@@ -12,6 +19,7 @@ import { SplitBorder } from "../../ui/border"
 import { useToast } from "../../ui/toast"
 import { Keymap } from "../../context/keymap"
 import { useConfig } from "../../config"
+import { errorMessage } from "../../util/error"
 import {
   formCustom,
   formDisplayValue,
@@ -27,7 +35,7 @@ import {
 } from "../../util/form"
 import type { FormAnswerField } from "../../util/form"
 
-const FORM_MODE = "form"
+export const FORM_MODE = "form"
 
 function truncate(label: string, max: number) {
   return label.length > max ? label.slice(0, max - 1).trimEnd() + "…" : label
@@ -43,7 +51,11 @@ function requestOptions(form: FormWithLocation) {
   }
 }
 
-export function FormPrompt(props: { form: FormWithLocation }) {
+export function FormPrompt(props: {
+  form: FormWithLocation
+  onReply?: (answer: FormAnswer) => void | Promise<void>
+  onCancel?: () => void | Promise<void>
+}) {
   const client = useClient()
   const themes = useThemes()
   const theme = useTheme("elevated")
@@ -58,6 +70,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   const initial = formInitialValues(props.form.fields)
 
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
+  const [reviewHeight, setReviewHeight] = createSignal(1)
+  const [reviewScrollable, setReviewScrollable] = createSignal(false)
   const [store, setStore] = createStore({
     tab: 0,
     answers: initial.answers,
@@ -70,6 +84,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
 
   let textarea: TextareaRenderable | undefined
   let review: ScrollBoxRenderable | undefined
+  let measureReview: (() => void) | undefined
 
   const message = createMemo(() => {
     const value = props.form.metadata?.["message"]
@@ -98,16 +113,16 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   })
   const tabs = createMemo(() => (single() ? 1 : fields().length + 1))
   const tabbed = createMemo(() => {
-    const width = fields().reduce((sum, item) => sum + truncate(formLabel(item), 24).length + 3, "Confirm".length + 3)
+    const width = fields().reduce((sum, item) => sum + truncate(formLabel(item), 24).length + 3, "Submit".length + 3)
     return width <= dimensions().width - 8
   })
-  const answered = createMemo(
-    () =>
-      fields().filter((item) => {
-        const value = store.answers[item.key]
-        return value !== undefined
-      }).length,
-  )
+  const completed = (item: FormField) => {
+    const value = store.answers[item.key]
+    if (value === undefined) return false
+    if (item.type === "external") return value === true
+    return formValidateValue(item, value) === undefined
+  }
+  const answered = createMemo(() => fields().filter(completed).length)
   const field = createMemo(() => fields()[store.tab])
   const answerField = createMemo(() => {
     const current = field()
@@ -118,16 +133,22 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     return current?.type === "external" ? current : undefined
   })
   const confirm = createMemo(() => !single() && store.tab >= fields().length)
+  const configuredRows = createMemo(() => {
+    const current = answerField()
+    return current ? formRows(current) : []
+  })
   const rows = createMemo(() => {
     const current = answerField()
     if (!current) return []
-    const configured = formRows(current)
+    const configured = configuredRows()
     const value = store.answers[current.key]
     if (current.type !== "multiselect" || !Array.isArray(value)) return configured
     const known = new Set(configured.map((row) => row.value))
     return [
       ...configured,
-      ...value.filter((item) => !known.has(item)).map((item) => ({ value: item, label: item, description: undefined })),
+      ...value
+        .filter((item) => !known.has(item) && item !== store.custom[current.key])
+        .map((item) => ({ value: item, label: item, description: undefined })),
     ]
   })
   const textual = createMemo(() => {
@@ -138,17 +159,6 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     return formCustom(answerField())
   })
   const multi = createMemo(() => answerField()?.type === "multiselect")
-  const actionLabel = createMemo(() => {
-    if (confirm()) return "submit"
-    const external = externalField()
-    if (external) {
-      if (store.answers[external.key] === true) return "continue"
-      return store.externalReady[external.key] ? "I finished" : "open link"
-    }
-    if (multi()) return "toggle"
-    if (single()) return "submit"
-    return "confirm"
-  })
   const placeholder = createMemo(() => {
     const current = answerField()
     if (current?.type === "string") {
@@ -176,30 +186,92 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     if (Array.isArray(answer)) return answer.includes(value)
     return answer === value
   })
+  const customChecked = createMemo(() => customPicked() || (multi() && other() && store.editing))
+  const actionLabel = createMemo(() => {
+    if (confirm()) return "submit"
+    const external = externalField()
+    if (external) {
+      if (store.answers[external.key] === true) return "continue"
+      return store.externalReady[external.key] ? "I finished" : "open link"
+    }
+    if (multi()) {
+      if (other() && store.editing) return "done"
+      if (other() && !input()) return "edit"
+      return "toggle"
+    }
+    if (single()) return "submit"
+    return "confirm"
+  })
+
+  createEffect(() => {
+    if (measureReview) renderer.off(CliRenderEvents.FRAME, measureReview)
+    if (!confirm()) {
+      measureReview = undefined
+      review = undefined
+      setReviewScrollable(false)
+      return
+    }
+    const limit = Math.max(3, dimensions().height - 14)
+    const initial = Math.min(Math.max(1, fields().length), limit)
+    Object.values(store.answers)
+    setReviewHeight(initial)
+    setReviewScrollable(false)
+    measureReview = () => {
+      measureReview = undefined
+      const content = review?.scrollHeight ?? initial
+      const height = Math.min(Math.max(1, content), limit)
+      setReviewHeight(height)
+      setReviewScrollable(content > height)
+    }
+    renderer.once(CliRenderEvents.FRAME, measureReview)
+    renderer.requestRender()
+  })
+
+  onCleanup(() => {
+    if (measureReview) renderer.off(CliRenderEvents.FRAME, measureReview)
+  })
+
+  onCleanup(
+    keymap.intercept("key", ({ event, consume }) => {
+      if (keymap.mode.current() !== FORM_MODE) return
+      if (textual() || !other() || (store.editing && renderer.currentFocusedEditor === textarea)) return
+      if (event.ctrl || event.meta || event.option || event.super || event.hyper) return
+      if ((!store.editing && event.sequence === " ") || !/^[^\p{C}\p{Zl}\p{Zp}]$/u.test(event.sequence)) return
+      const current = answerField()
+      if (!current) return
+      updateCustom(current, input() + event.sequence)
+      if (!store.editing) setStore("editing", true)
+      consume()
+    }),
+  )
 
   function answer(key: string, value: FormValue | undefined) {
-    setStore("answers", { ...store.answers, [key]: value })
+    const field = fields().find((item) => item.key === key)
+    setStore(
+      "answers",
+      key,
+      Array.isArray(value) && value.length === 0 && field?.type === "multiselect" && !field.required
+        ? undefined
+        : value,
+    )
     setStore("error", "")
   }
 
-  function replySingle(field: FormAnswerField, value: FormValue) {
-    client.api.form
-      .reply(
-        {
-          sessionID: props.form.sessionID,
-          formID: props.form.id,
-          answer: { [field.key]: value },
-        },
-        requestOptions(props.form),
+  function reply(answer: FormAnswer) {
+    void Promise.resolve()
+      .then(() =>
+        props.onReply
+          ? props.onReply(answer)
+          : client.api.form.reply(
+              { sessionID: props.form.sessionID, formID: props.form.id, answer },
+              requestOptions(props.form),
+            ),
       )
-      .catch((error: unknown) => {
-        setStore(
-          "error",
-          typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
-            ? error.message
-            : "Invalid answer",
-        )
-      })
+      .catch((error: unknown) => setStore("error", errorMessage(error)))
+  }
+
+  function replySingle(field: FormAnswerField, value: FormValue) {
+    reply({ [field.key]: value })
   }
 
   function pick(value: FormValue, customValue?: string) {
@@ -211,7 +283,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
       return
     }
     answer(current.key, value)
-    if (customValue !== undefined) setStore("custom", { ...store.custom, [current.key]: customValue })
+    if (customValue !== undefined) setStore("custom", current.key, customValue)
     if (single()) {
       replySingle(current, value)
       return
@@ -225,18 +297,19 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     answer(current.key, formToggleMultiselect(store.answers[current.key], value))
   }
 
-  function validateCurrent() {
-    if (confirm()) return true
-    const current = answerField()
-    if (!current) return true
-    const invalid = formValidateValue(current, store.answers[current.key])
-    if (!invalid) return true
-    setStore("error", invalid)
-    return false
+  function updateCustom(current: FormAnswerField, value: string) {
+    const previous = store.custom[current.key]
+    if (previous === value) return
+    setStore("custom", current.key, value)
+    answer(
+      current.key,
+      current.type === "multiselect"
+        ? formSetMultiselectCustom(store.answers[current.key], previous, value)
+        : value || undefined,
+    )
   }
 
   function selectTab(index: number) {
-    if (!confirm() && index > store.tab && !validateCurrent()) return
     const next = fields()[index]
     setStore("tab", index)
     setStore("selected", next && isFormAnswerField(next) ? formSelected(next, store.answers[next.key]) : 0)
@@ -267,23 +340,35 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     pick(row.value)
   }
 
+  usePaste((event) => {
+    if (keymap.mode.current() !== FORM_MODE) return
+    const current = answerField()
+    if (!current || textual() || !custom() || confirm()) return
+    event.preventDefault()
+    setStore("selected", rows().length)
+    updateCustom(current, input() + stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n"))
+    setStore("editing", true)
+  })
+
   function commitInput(text: string) {
     const current = answerField()
     if (!current) return false
     const isTextual = textual()
     const isMulti = multi()
     if (!text) {
-      const previous = store.custom[current.key]
-      const existing = store.answers[current.key]
-      const values = Array.isArray(existing) ? existing.filter((value) => value !== previous) : []
-      const value = !isTextual && isMulti && Array.isArray(existing) ? values : undefined
-      const invalid = formValidateValue(current, value)
-      if (invalid) {
-        setStore("error", invalid)
-        return false
+      const value =
+        !isTextual && isMulti
+          ? formSetMultiselectCustom(store.answers[current.key], store.custom[current.key], "")
+          : undefined
+      if (isTextual || !isMulti) {
+        const invalid = formValidateValue(current, value)
+        if (invalid) {
+          setStore("error", invalid)
+          return false
+        }
       }
       answer(current.key, value)
-      setStore("custom", { ...store.custom, [current.key]: "" })
+      setStore("custom", current.key, "")
       setStore("editing", false)
       return true
     }
@@ -321,7 +406,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     }
 
     const configured = current.type === "string" && current.options?.some((option) => option.value === text)
-    setStore("custom", { ...store.custom, [current.key]: isMulti || configured ? "" : text })
+    setStore("custom", current.key, configured ? "" : text)
     setStore("editing", false)
     return true
   }
@@ -352,6 +437,10 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   }
 
   function cancel() {
+    if (props.onCancel) {
+      void props.onCancel()
+      return
+    }
     void client.api.form.cancel({ sessionID: props.form.sessionID, formID: props.form.id }, requestOptions(props.form))
   }
 
@@ -404,34 +493,21 @@ export function FormPrompt(props: { form: FormWithLocation }) {
       setStore("error", formValidateValue(invalid, store.answers[invalid.key]) ?? "Invalid answer")
       return
     }
-    client.api.form
-      .reply(
-        {
-          sessionID: props.form.sessionID,
-          formID: props.form.id,
-          answer: Object.fromEntries(
-            fields().flatMap((field) => {
-              const value = store.answers[field.key]
-              return value === undefined ? [] : [[field.key, value] as const]
-            }),
-          ),
-        },
-        requestOptions(props.form),
-      )
-      .catch((error: unknown) => {
-        setStore(
-          "error",
-          typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
-            ? error.message
-            : "Invalid answer",
-        )
-      })
+    reply(
+      Object.fromEntries(
+        fields().flatMap((field) => {
+          const value = store.answers[field.key]
+          return value === undefined ? [] : [[field.key, value] as const]
+        }),
+      ),
+    )
   }
 
   onMount(() => onCleanup(keymap.mode.push(FORM_MODE)))
 
   Keymap.createLayer(() => ({
     mode: FORM_MODE,
+    priority: 1,
     enabled: (store.editing || textual()) && !confirm(),
     commands: [
       {
@@ -449,14 +525,11 @@ export function FormPrompt(props: { form: FormWithLocation }) {
       },
       {
         bind: "escape",
-        title: "Cancel answer edit",
+        title: textual() ? "Dismiss form" : "Close answer edit",
         group: "Form",
         run: () => {
           if (textual()) {
-            void client.api.form.cancel(
-              { sessionID: props.form.sessionID, formID: props.form.id },
-              requestOptions(props.form),
-            )
+            cancel()
             return
           }
           setStore("editing", false)
@@ -478,6 +551,17 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         run: () => {
           const text = textarea?.plainText?.trim() ?? ""
           submitInput(text, -1)
+        },
+      },
+      {
+        bind: "up",
+        title: "Leave answer edit",
+        group: "Form",
+        run: () => {
+          if (textual() || !textarea || textarea.isDestroyed || store.selected === 0) return false
+          if (textarea.scrollY + textarea.visualCursor.visualRow > 0) return false
+          setStore("editing", false)
+          setStore("selected", store.selected - 1)
         },
       },
       {
@@ -615,6 +699,9 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   run: () => setStore("selected", (store.selected + 1) % total),
                 },
                 { bind: "return", title: "Select answer", group: "Form", run: () => selectOption() },
+                ...(multi()
+                  ? [{ bind: "space", title: "Toggle answer", group: "Form", run: () => selectOption() }]
+                  : []),
                 {
                   bind: "escape",
                   title: "Dismiss form",
@@ -643,7 +730,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
           </box>
         </Show>
         <Show when={!single() && !tabbed()}>
-          <box flexDirection="row" gap={1} paddingLeft={1}>
+          <box flexDirection="row" gap={3} paddingLeft={1}>
             <text fg={theme.text.subdued}>
               {confirm() ? "Review" : `Field ${Math.min(store.tab, fields().length - 1) + 1} of ${fields().length}`}
             </text>
@@ -655,11 +742,16 @@ export function FormPrompt(props: { form: FormWithLocation }) {
           </box>
         </Show>
         <Show when={!single() && tabbed()}>
-          <box flexDirection="row" gap={1} paddingLeft={1}>
+          <box flexDirection="row" paddingLeft={1}>
             <For each={fields()}>
               {(item, index) => {
                 const isTab = () => index() === store.tab
-                const isAnswered = () => store.answers[item.key] !== undefined
+                const color = () =>
+                  isTab()
+                    ? theme.text.default
+                    : tabHover() === index()
+                      ? theme.text.formfield.focused
+                      : theme.text.subdued
                 return (
                   <box
                     paddingRight={2}
@@ -677,17 +769,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                       selectTabFromMouse(item)
                     }}
                   >
-                    <text
-                      fg={
-                        isTab()
-                          ? theme.text.formfield.selected
-                          : tabHover() === index()
-                            ? theme.text.formfield.focused
-                            : isAnswered()
-                              ? theme.text.default
-                              : theme.text.subdued
-                      }
-                    >
+                    <text fg={color()} attributes={isTab() ? TextAttributes.BOLD : undefined}>
                       {truncate(formLabel(item), 24)}
                     </text>
                   </box>
@@ -709,7 +791,18 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 selectTabFromMouse()
               }}
             >
-              <text fg={confirm() ? theme.text.formfield.selected : theme.text.formfield.default}>Confirm</text>
+              <text
+                fg={
+                  confirm()
+                    ? theme.text.default
+                    : tabHover() === "confirm"
+                      ? theme.text.formfield.focused
+                      : theme.text.subdued
+                }
+                attributes={confirm() ? TextAttributes.BOLD : undefined}
+              >
+                Submit
+              </text>
             </box>
           </box>
         </Show>
@@ -724,7 +817,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 <text fg={theme.text.subdued}>{external().description}</text>
               </Show>
               <text
-                fg={theme.background.action.primary.default}
+                fg={theme.text.action.primary.default}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
                   openExternal()
@@ -800,22 +893,30 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                             paddingRight={1}
                           >
                             <text
-                              fg={active() ? theme.text.formfield.focused : theme.text.formfield.default}
+                              fg={active() ? theme.text.formfield.focused : theme.text.subdued}
                             >{`${i() + 1}.`}</text>
                           </box>
                           <box
                             backgroundColor={active() ? theme.background.formfield.focused : theme.background.default}
+                            flexDirection="row"
                           >
-                            <text
-                              fg={
-                                active()
-                                  ? theme.text.formfield.focused
-                                  : picked()
-                                    ? theme.text.formfield.selected
-                                    : theme.text.formfield.default
-                              }
-                            >
-                              {multi() ? `[${picked() ? "✓" : " "}] ${row.label}` : row.label}
+                            <Show when={multi()}>
+                              <text
+                                width={4}
+                                flexShrink={0}
+                                fg={
+                                  active()
+                                    ? theme.text.formfield.focused
+                                    : picked()
+                                      ? theme.text.formfield.selected
+                                      : theme.text.subdued
+                                }
+                              >
+                                [{picked() ? "✓" : " "}]
+                              </text>
+                            </Show>
+                            <text fg={active() ? theme.text.formfield.focused : theme.text.formfield.default}>
+                              {row.label}
                             </text>
                           </box>
                           <Show when={!multi()}>
@@ -823,7 +924,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                           </Show>
                         </box>
                         <Show when={row.description}>
-                          <box paddingLeft={3}>
+                          <box paddingLeft={multi() ? 7 : 3}>
                             <text fg={theme.text.subdued}>{row.description}</text>
                           </box>
                         </Show>
@@ -845,55 +946,72 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                         backgroundColor={other() ? theme.background.formfield.focused : theme.background.default}
                         paddingRight={1}
                       >
-                        <text fg={other() ? theme.text.formfield.focused : theme.text.formfield.default}>
+                        <text fg={other() ? theme.text.formfield.focused : theme.text.subdued}>
                           {`${rows().length + 1}.`}
                         </text>
                       </box>
-                      <box backgroundColor={other() ? theme.background.formfield.focused : theme.background.default}>
-                        <text
-                          fg={
-                            other()
-                              ? theme.text.formfield.focused
-                              : customPicked()
-                                ? theme.text.feedback.success.default
-                                : theme.text.default
+                      <box
+                        flexDirection="row"
+                        flexGrow={1}
+                        backgroundColor={other() ? theme.background.formfield.focused : theme.background.default}
+                      >
+                        <Show when={multi()}>
+                          <text
+                            width={4}
+                            flexShrink={0}
+                            fg={
+                              other()
+                                ? theme.text.formfield.focused
+                                : customChecked()
+                                  ? theme.text.formfield.selected
+                                  : theme.text.subdued
+                            }
+                          >
+                            [{customChecked() ? "✓" : " "}]
+                          </text>
+                        </Show>
+                        <Show
+                          when={store.editing}
+                          fallback={
+                            <>
+                              <text fg={other() ? theme.text.formfield.focused : theme.text.formfield.default}>
+                                {input() || "Type your own answer"}
+                              </text>
+                              <Show when={!multi() && customPicked()}>
+                                <text fg={theme.text.formfield.selected}>✓</text>
+                              </Show>
+                            </>
                           }
                         >
-                          {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
-                        </text>
+                          <textarea
+                            flexGrow={1}
+                            cursorStyle={config.cursor}
+                            ref={(val: TextareaRenderable) => {
+                              textarea = val
+                              val.traits = { status: "ANSWER" }
+                              queueMicrotask(() => {
+                                val.setText(input())
+                                val.focus()
+                                val.gotoLineEnd()
+                              })
+                            }}
+                            initialValue={input()}
+                            placeholder="Type your own answer"
+                            placeholderColor={theme.text.subdued}
+                            minHeight={1}
+                            maxHeight={6}
+                            textColor={theme.text.formfield.focused}
+                            focusedTextColor={theme.text.formfield.focused}
+                            cursorColor={theme.text.formfield.focused}
+                            onContentChange={(value) => {
+                              const current = answerField()
+                              if (!current || !textarea || textarea.isDestroyed) return
+                              updateCustom(current, typeof value === "string" ? value : textarea.plainText)
+                            }}
+                          />
+                        </Show>
                       </box>
-                      <Show when={!multi()}>
-                        <text fg={theme.text.feedback.success.default}>{customPicked() ? " ✓" : ""}</text>
-                      </Show>
                     </box>
-                    <Show when={store.editing}>
-                      <box paddingLeft={3}>
-                        <textarea
-                          cursorStyle={config.cursor}
-                          ref={(val: TextareaRenderable) => {
-                            textarea = val
-                            val.traits = { status: "ANSWER" }
-                            queueMicrotask(() => {
-                              val.focus()
-                              val.gotoLineEnd()
-                            })
-                          }}
-                          initialValue={input()}
-                          placeholder="Type your own answer"
-                          placeholderColor={theme.text.subdued}
-                          minHeight={1}
-                          maxHeight={6}
-                          textColor={theme.text.default}
-                          focusedTextColor={theme.text.default}
-                          cursorColor={theme.text.default}
-                        />
-                      </box>
-                    </Show>
-                    <Show when={!store.editing && input()}>
-                      <box paddingLeft={3}>
-                        <text fg={theme.text.subdued}>{input()}</text>
-                      </box>
-                    </Show>
                   </box>
                 </Show>
               </box>
@@ -902,13 +1020,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         </Show>
 
         <Show when={confirm()}>
-          <Show when={tabbed()}>
-            <box paddingLeft={1}>
-              <text fg={theme.text.default}>Review</text>
-            </box>
-          </Show>
           <scrollbox
-            maxHeight={Math.min(fields().length, Math.max(3, dimensions().height - 14))}
+            height={reviewHeight()}
             scrollbarOptions={{ visible: false }}
             ref={(r: ScrollBoxRenderable) => (review = r)}
           >
@@ -976,12 +1089,12 @@ export function FormPrompt(props: { form: FormWithLocation }) {
               {"⇆"} <span style={{ fg: theme.text.subdued }}>tab</span>
             </text>
           </Show>
-          <Show when={!confirm() && !textual() && !externalField()}>
+          <Show when={!confirm() && !textual() && !externalField() && !store.editing}>
             <text fg={theme.text.default}>
               {"↑↓"} <span style={{ fg: theme.text.subdued }}>select</span>
             </text>
           </Show>
-          <Show when={confirm() && fields().length > 0}>
+          <Show when={confirm() && reviewScrollable()}>
             <text fg={theme.text.default}>
               {"↑↓"} <span style={{ fg: theme.text.subdued }}>scroll</span>
             </text>
@@ -1002,7 +1115,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
             </text>
           </Show>
           <text fg={theme.text.default} onMouseUp={cancel}>
-            esc <span style={{ fg: theme.text.subdued }}>dismiss</span>
+            esc <span style={{ fg: theme.text.subdued }}>{store.editing && !textual() ? "close" : "dismiss"}</span>
           </text>
         </box>
         <Show when={store.error}>

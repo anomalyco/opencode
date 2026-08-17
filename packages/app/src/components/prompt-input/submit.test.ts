@@ -26,6 +26,7 @@ const sessionRequestOrder: string[] = []
 const updatedDrafts: Array<{ draftID: string; worktree?: string }> = []
 const promptCaptures: Array<{ scope?: unknown; target?: unknown }> = []
 let serverSessionSyncs = 0
+let restoredPrompts = 0
 
 let params: { id?: string } = {}
 let search: { draftId?: string } = {}
@@ -35,6 +36,7 @@ let createSessionGate: Promise<void> | undefined
 let createWorktreeGate: Promise<void> | undefined
 let worktreeFailure: Error | undefined
 let locationFailure: Error | undefined
+let promptFailure: Error | undefined
 let worktreeCreates = 0
 let activeSDK = "server-a"
 let commands: Array<{ name: string }> = []
@@ -60,7 +62,7 @@ const prompt = {
     set: () => undefined,
   },
   reset: () => undefined,
-  set: () => undefined,
+  set: () => restoredPrompts++,
   context: {
     add: () => undefined,
     remove: () => undefined,
@@ -102,7 +104,16 @@ const clientFor = (directory: string) => {
           sessionRequestOrder.push("prompt")
           sentPrompts.push(sessionDirectories[(input as { sessionID: string }).sessionID] ?? directory)
           promptInputs.push(input)
-          return { data: undefined }
+          if (promptFailure) throw promptFailure
+          const prompt = input as { sessionID: string; id: string; text: string }
+          return {
+            id: prompt.id,
+            sessionID: prompt.sessionID,
+            timeCreated: 1,
+            type: "user" as const,
+            delivery: "steer" as const,
+            payload: { text: prompt.text },
+          }
         },
         switchAgent: async (input: { sessionID: string; agent: string }) => {
           sessionRequestOrder.push("agent")
@@ -261,6 +272,7 @@ beforeEach(() => {
   switchedModels.length = 0
   sessionRequestOrder.length = 0
   promptCaptures.length = 0
+  restoredPrompts = 0
   params = {}
   search = {}
   sentShell.length = 0
@@ -276,6 +288,7 @@ beforeEach(() => {
   createWorktreeGate = undefined
   worktreeFailure = undefined
   locationFailure = undefined
+  promptFailure = undefined
   worktreeCreates = 0
   for (const key of Object.keys(draftServers)) delete draftServers[key]
   for (const key of Object.keys(sessionDirectories)) delete sessionDirectories[key]
@@ -395,6 +408,19 @@ describe("prompt submit worktree selection", () => {
       agents: [],
     })
     expect((promptInputs[0] as { id?: string }).id).toStartWith("msg_")
+  })
+
+  test("restores the prompt when sending fails", async () => {
+    params = { id: "session-1" }
+    promptFailure = new Error("connection lost")
+    const submit = makeSubmit({
+      info: () => ({ id: "session-1", agent: "agent", model: { id: "model", providerID: "provider" } }),
+    })
+
+    await submit.handleSubmit(event)
+    await settle()
+
+    expect(restoredPrompts).toBe(1)
   })
 
   test("submits slash commands through the current session API", async () => {

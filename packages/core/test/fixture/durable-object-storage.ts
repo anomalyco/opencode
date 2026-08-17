@@ -3,8 +3,7 @@ import type { DurableObjectStorage } from "@opencode-ai/core/database/sqlite.wor
 
 // Emulates the Durable Object storage API over bun:sqlite so the workerd
 // adapter and the workerd server profile can be verified without workerd or
-// Cloudflare runtime dependencies. The real runtime is covered by the
-// workerd-spike package, which boots inside an actual isolate.
+// Cloudflare runtime dependencies.
 export const makeDurableObjectStorage = (): DurableObjectStorage => {
   const native = new Database(":memory:")
   const toSqlStorageValue = (value: unknown) => {

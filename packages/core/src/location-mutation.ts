@@ -76,9 +76,11 @@ const layer = Layer.effect(
       const type =
         input.kind === "directory"
           ? "Directory"
-          : (yield* fs
-              .stat(absolute)
-              .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined))))?.type
+          : input.kind === "file"
+            ? "File"
+            : (yield* fs
+                .stat(absolute)
+                .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined))))?.type
       const externalDirectory = type === "Directory" ? absolute : path.dirname(absolute)
       const externalResource = slash(path.join(externalDirectory, "*"))
       return {

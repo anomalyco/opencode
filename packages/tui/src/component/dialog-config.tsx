@@ -274,12 +274,11 @@ export const settings: Setting[] = [
     keywords: ["terminal title", "tab title"],
   },
   {
-    title: "Copy on select",
+    title: "Copy behavior",
     category: "Terminal",
-    path: ["terminal", "copy_on_select"],
-    default: process.platform !== "win32",
-    values: [false, true],
-    labels: ["off", "on"],
+    path: ["terminal", "copy"],
+    default: process.platform === "win32" ? "manual" : "select",
+    values: ["manual", "select"],
     keywords: ["selection", "clipboard"],
   },
   {

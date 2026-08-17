@@ -2,13 +2,16 @@ import { describe, expect } from "bun:test"
 import { LLM, LanguageModel } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { compileRequest } from "@opencode-ai/ai/route/client"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { Compatibility, ID, Info, VariantID } from "@opencode-ai/core/model"
 import { Provider } from "@opencode-ai/core/provider"
 import { ModelResolver } from "@opencode-ai/core/model-resolver"
+import { Catalog } from "@opencode-ai/core/catalog"
+import { AISDK } from "@opencode-ai/core/aisdk"
+import { Npm } from "@opencode-ai/util/npm"
 import { it } from "./lib/effect"
 
 interface ModelOptions {
@@ -267,6 +270,109 @@ describe("ModelResolver", () => {
 
       expect(headers.authorization).toBeUndefined()
     }),
+  )
+
+  it.effect("uses no native API-key auth for an explicitly enabled provider without credentials", () => {
+    const selected = model(Provider.aisdk("@ai-sdk/google"), {
+      providerID: Provider.ID.make("gateway"),
+      settings: { baseURL: "https://gateway.example.com/v1" },
+      headers: { "cf-access-token": "access-token" },
+    })
+    const provider = Provider.Info.make({
+      ...Provider.Info.empty(selected.providerID),
+      activation: "enabled",
+      package: selected.package ?? "",
+      settings: selected.settings,
+      headers: selected.headers,
+    })
+    const catalog = Layer.mock(Catalog.Service, {
+      provider: {
+        get: () => Effect.succeed(provider),
+        all: () => Effect.die("unused"),
+        available: () => Effect.die("unused"),
+      },
+      model: {
+        get: () => Effect.succeed(selected),
+        all: () => Effect.die("unused"),
+        available: () => Effect.die("unused"),
+        default: () => Effect.die("unused"),
+        small: () => Effect.die("unused"),
+      },
+    })
+    const integrations = Layer.mock(Integration.Service, {
+      connection: {
+        active: () => Effect.succeed(undefined),
+        resolve: () => Effect.die("unused"),
+        key: () => Effect.die("unused"),
+        update: () => Effect.die("unused"),
+        remove: () => Effect.die("unused"),
+      },
+      oauth: {
+        connect: () => Effect.die("unused"),
+        status: () => Effect.die("unused"),
+        complete: () => Effect.die("unused"),
+        cancel: () => Effect.die("unused"),
+      },
+      command: {
+        connect: () => Effect.die("unused"),
+        status: () => Effect.die("unused"),
+        cancel: () => Effect.die("unused"),
+      },
+    })
+    const npm = Layer.mock(Npm.Service, {
+      add: () => Effect.die("unused"),
+      which: () => Effect.die("unused"),
+    })
+    const aisdk = Layer.mock(AISDK.Service, {
+      hook: {
+        sdk: () => Effect.die("unused"),
+        language: () => Effect.die("unused"),
+      },
+      model: () => Effect.die("unused"),
+    })
+    const layer = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
+
+    return withEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined }, () =>
+      Effect.gen(function* () {
+        const resolver = yield* ModelResolver.Service
+        const resolved = yield* resolver.resolveModel(selected)
+
+        const headers = yield* resolved.model.route.auth.apply({
+          request: LLM.request({ model: resolved.model, prompt: "Hello" }),
+          method: "POST",
+          url: "https://gateway.example.com/v1",
+          body: "{}",
+          headers: Headers.fromInput(resolved.model.route.defaults.headers),
+        })
+
+        expect(headers["cf-access-token"]).toBe("access-token")
+        expect(headers.authorization).toBeUndefined()
+        expect(headers["x-goog-api-key"]).toBeUndefined()
+      }).pipe(Effect.provide(layer)),
+    )
+  })
+
+  it.effect("keeps native provider environment auth strict when no API key is configured", () =>
+    withEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined }, () =>
+      Effect.gen(function* () {
+        const resolved = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/google"), {
+            settings: { baseURL: "https://google.example.com/v1" },
+          }),
+        )
+        const exit = yield* Effect.exit(
+          resolved.route.auth.apply({
+            request: LLM.request({ model: resolved, prompt: "Hello" }),
+            method: "POST",
+            url: "https://google.example.com/v1",
+            body: "{}",
+            headers: Headers.empty,
+          }),
+        )
+
+        expect(exit._tag).toBe("Failure")
+      }),
+    ),
   )
 
   it.effect("uses merged API settings for OpenAI-compatible auth and request defaults", () =>

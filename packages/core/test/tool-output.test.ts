@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Layer, Stream } from "effect"
+import { Effect } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { Document, Info } from "@opencode-ai/schema/config"
 import { ConfigToolOutput } from "@opencode-ai/schema/config/tool-output"
@@ -20,13 +20,7 @@ const withStore = <A, E, R>(
   Effect.acquireUseRelease(
     Effect.promise(() => tmpdir()),
     (tmp) => {
-      const config = Layer.succeed(
-        Config.Service,
-        Config.Service.of({
-          entries: () => Effect.succeed([new Document({ type: "document", info })]),
-          changes: () => Stream.empty,
-        }),
-      )
+      const config = Config.testLayer([new Document({ type: "document", info })])
       const layer = AppNodeBuilder.build(LayerNode.group([ToolOutput.node, FSUtil.node]), [
         [Config.node, config],
         [Global.node, Global.layerWith({ data: tmp.path })],

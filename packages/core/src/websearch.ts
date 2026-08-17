@@ -4,7 +4,6 @@ import { WebSearch } from "@opencode-ai/schema/websearch"
 import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Bus } from "./bus.js"
-import { KV } from "./kv.js"
 import { State } from "./state.js"
 
 export const ID = WebSearch.ID
@@ -60,14 +59,14 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/We
 
 type Data = {
   readonly providers: Map<ID, ProviderImplementation>
-  defaultProviderID?: ID
+  selection?: ID | "random" | false
 }
 
 export type Draft = {
   add: (provider: ProviderImplementation) => void
   default: {
-    get: () => ID | undefined
-    set: (providerID: ID) => void
+    get: () => ID | "random" | false | undefined
+    set: (selection: ID | "random" | false) => void
   }
 }
 
@@ -75,15 +74,14 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const kv = yield* KV.Service
     const decodeResults = Schema.decodeUnknownEffect(Schema.Array(Result))
     const state = State.create<Data, Draft>({
       initial: () => ({ providers: new Map() }),
       draft: (draft) => ({
         add: (provider) => draft.providers.set(provider.id, provider),
         default: {
-          get: () => draft.defaultProviderID,
-          set: (providerID) => (draft.defaultProviderID = providerID),
+          get: () => draft.selection,
+          set: (selection) => (draft.selection = selection),
         },
       }),
       finalize: () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
@@ -96,12 +94,12 @@ const layer = Layer.effect(
 
     const defaultProvider = Effect.fn("WebSearch.default")(function* () {
       const data = state.get()
-      const configured = data.defaultProviderID ? data.providers.get(data.defaultProviderID) : undefined
-      if (configured) return configured
-      const stored = yield* kv.get("websearch:provider")
-      if (stored === false) return yield* new DisabledError()
-      if (typeof stored !== "string") return
-      return data.providers.get(ID.make(stored))
+      if (data.selection === false) return yield* new DisabledError()
+      if (data.selection === "random") {
+        const providers = Array.from(data.providers.values())
+        return providers[Math.floor(Math.random() * providers.length)]
+      }
+      return data.selection ? data.providers.get(data.selection) : undefined
     })
 
     const resolve = Effect.fn("WebSearch.resolve")(function* (input: Input) {
@@ -140,5 +138,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, KV.node],
+  deps: [Bus.node],
 })

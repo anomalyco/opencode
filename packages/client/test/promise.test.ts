@@ -66,7 +66,6 @@ test("config.get returns ordered config entries for a location", async () => {
         ],
       },
     },
-    { type: "file" as const, path: "/tmp/project/opencode.json" },
   ]
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
@@ -283,10 +282,10 @@ test("worktree methods use the global project contract", async () => {
   await client.worktree.refresh({ projectID: "proj_test" })
 
   expect(requests.map((request) => [request.method, request.url])).toEqual([
-    ["GET", "http://localhost:3000/api/experimental/project/proj_test/worktree"],
-    ["POST", "http://localhost:3000/api/experimental/project/proj_test/worktree"],
-    ["DELETE", "http://localhost:3000/api/experimental/project/proj_test/worktree"],
-    ["POST", "http://localhost:3000/api/experimental/project/proj_test/worktree/refresh"],
+    ["GET", "http://localhost:3000/api/worktree/proj_test"],
+    ["POST", "http://localhost:3000/api/worktree/proj_test"],
+    ["DELETE", "http://localhost:3000/api/worktree/proj_test"],
+    ["POST", "http://localhost:3000/api/worktree/proj_test/refresh"],
   ])
   expect(await requests[1]?.json()).toEqual({
     strategy: "git",

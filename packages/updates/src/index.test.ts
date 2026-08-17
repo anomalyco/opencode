@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { channelsForRef, validGitHubClaims } from "./index"
+import { channelsForRef, resolveChannel, validGitHubClaims } from "./index"
 
 const claims = {
   repository: "anomalyco/opencode",
@@ -19,6 +19,10 @@ describe("GitHub publish authorization", () => {
     expect(channelsForRef(claims.ref)).toEqual(["dev", "latest"])
   })
 
+  test("maps V2 development to the dev channel", () => {
+    expect(channelsForRef("refs/heads/v2")).toEqual(["dev"])
+  })
+
   test("rejects another repository or workflow", () => {
     expect(validGitHubClaims({ ...claims, repository_id: "1" })).toBe(false)
     expect(
@@ -32,4 +36,9 @@ describe("GitHub publish authorization", () => {
       validGitHubClaims({ ...claims, ref, workflow_ref: `anomalyco/opencode/.github/workflows/publish.yml@${ref}` }),
     ).toBe(false)
   })
+})
+
+test("routes the retired next channel to beta", () => {
+  expect(resolveChannel("next")).toBe("beta")
+  expect(resolveChannel("dev")).toBe("dev")
 })

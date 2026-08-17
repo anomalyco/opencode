@@ -17,7 +17,6 @@ import { ServerHandler } from "./handlers/server"
 import { DebugHandler } from "./handlers/debug"
 import { PtyHandler } from "./handlers/pty"
 import { ShellHandler } from "./handlers/shell"
-import { QuestionHandler } from "./handlers/question"
 import { ReferenceHandler } from "./handlers/reference"
 import { LocationHandler } from "./handlers/location"
 import { IntegrationHandler } from "./handlers/integration"
@@ -57,7 +56,6 @@ export const handlers = Layer.mergeAll(
   EventHandler.pipe(Layer.provide(EventFeed.layer)),
   PtyHandler,
   ShellHandler,
-  QuestionHandler,
   ReferenceHandler,
   WorktreeHandler,
   VcsHandler,

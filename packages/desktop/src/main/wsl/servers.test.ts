@@ -27,7 +27,7 @@ test("installs and verifies the bundled CLI version", async () => {
 
   await controller.installOpencode("Debian")
 
-  expect(installs).toEqual([["Debian", "0.0.0-next-16365"]])
+  expect(installs).toEqual([["Debian", "0.0.0-dev-16365"]])
   expect(controller.getState().opencodeChecks.Debian?.matchesDesktop).toBe(true)
 })
 
@@ -37,12 +37,12 @@ test("rejects a WSL CLI version that differs from the bundled version", async ()
     testControllerOptions({
       installCli: async () => undefined,
       resolveCli: async () => "/home/me/.opencode/bin/opencode2",
-      readCliVersion: async () => "0.0.0-next-older",
+      readCliVersion: async () => "0.0.0-dev-older",
     }),
   )
 
   await expect(controller.installOpencode("Debian")).rejects.toThrow(
-    "OpenCode update finished but Debian still reports 0.0.0-next-older; expected 0.0.0-next-16365",
+    "OpenCode update finished but Debian still reports 0.0.0-dev-older; expected 0.0.0-dev-16365",
   )
 })
 
@@ -147,7 +147,7 @@ async function waitFor(check: () => boolean) {
 
 function testControllerOptions(overrides: Partial<ControllerOptions> = {}): ControllerOptions {
   return {
-    cli: { version: "0.0.0-next-16365" },
+    cli: { version: "0.0.0-dev-16365" },
     spawnSidecar: async () => ({
       stop: async () => undefined,
       onExit: () => undefined,
@@ -159,7 +159,7 @@ function testControllerOptions(overrides: Partial<ControllerOptions> = {}): Cont
     writeServers: (servers: WslServerConfig[]) => {
       persistedServers = servers
     },
-    readCliVersion: async () => "0.0.0-next-16365",
+    readCliVersion: async () => "0.0.0-dev-16365",
     resolveCli: async () => "/home/me/.opencode/bin/opencode2",
     ...overrides,
   }

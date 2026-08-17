@@ -3,7 +3,6 @@ import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { ClipboardProvider } from "../../../src/context/clipboard"
 import type { FormWithLocation } from "../../../src/context/data"
 import { ClientProvider } from "../../../src/context/client"
 import { ThemeProvider } from "../../../src/context/theme"
@@ -15,7 +14,7 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { createApi, createEventStream, createFetch } from "../../fixture/tui-client"
 
-async function mountForm(root: string, width = 80) {
+async function mountForm(root: string, width = 80, fields?: FormWithLocation["fields"], height = 20) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
 
@@ -37,7 +36,7 @@ async function mountForm(root: string, width = 80) {
     id: "frm_test",
     sessionID: "ses_test",
     title: "Authorization required",
-    fields: [
+    fields: fields ?? [
       {
         key: "authorization",
         type: "external",
@@ -57,35 +56,32 @@ async function mountForm(root: string, width = 80) {
           state,
           worktree: root,
         }}
+        clipboard={{
+          async read() {
+            return undefined
+          },
+          write(text) {
+            copied.push(text)
+            return Promise.resolve()
+          },
+        }}
       >
-        <ClipboardProvider
-          value={{
-            async read() {
-              return undefined
-            },
-            write(text) {
-              copied.push(text)
-              return Promise.resolve()
-            },
-          }}
-        >
-          <ConfigProvider config={config}>
-            <Keymap.Provider>
-              <ClientProvider api={createApi(transport.fetch)}>
-                <ThemeProvider mode="dark" source={emptyThemeSource}>
-                  <ToastProvider>
-                    <FormPrompt form={form} />
-                  </ToastProvider>
-                </ThemeProvider>
-              </ClientProvider>
-            </Keymap.Provider>
-          </ConfigProvider>
-        </ClipboardProvider>
+        <ConfigProvider config={config}>
+          <Keymap.Provider>
+            <ClientProvider api={createApi(transport.fetch)}>
+              <ThemeProvider mode="dark" source={emptyThemeSource}>
+                <ToastProvider>
+                  <FormPrompt form={form} />
+                </ToastProvider>
+              </ThemeProvider>
+            </ClientProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
       </TestTuiContexts>
     )
   }
 
-  const app = await testRender(() => <Harness />, { width, height: 20, kittyKeyboard: true })
+  const app = await testRender(() => <Harness />, { width, height, kittyKeyboard: true })
   app.renderer.start()
   await app.waitForFrame((frame) => frame.includes("Authorization required"))
   return { app, copied, replies }
@@ -124,6 +120,443 @@ test("includes external acknowledgements in progress", async () => {
   const prompt = await mountForm(tmp.path, 32)
   try {
     expect(prompt.app.captureCharFrame()).toContain("0/1")
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("shows a compact confirmation summary", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [{ value: "staging", label: "Staging" }],
+      default: ["staging"],
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressArrow("right")
+    await prompt.app.waitForFrame((frame) => frame.includes("enter submit"))
+
+    const frame = prompt.app.captureCharFrame()
+    expect(frame).not.toContain("Review")
+    expect(frame).not.toContain("Submit answers")
+
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitFor(() => prompt.replies.length === 1)
+    expect(prompt.replies).toEqual([{ answer: { targets: ["staging"] } }])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("confirmation fits wrapped answers before offering scroll", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(
+    tmp.path,
+    48,
+    [
+      {
+        key: "targets",
+        title: "Include",
+        type: "multiselect",
+        options: [
+          {
+            value: "a very long selected deliverable that wraps",
+            label: "A very long selected deliverable that wraps",
+          },
+        ],
+        default: ["a very long selected deliverable that wraps"],
+      },
+      {
+        key: "priority",
+        title: "Priority",
+        type: "multiselect",
+        options: [{ value: "now", label: "Now" }],
+        default: ["now"],
+      },
+    ],
+    40,
+  )
+  try {
+    expect(prompt.app.captureCharFrame()).toContain("Include  Priority  Submit")
+    prompt.app.mockInput.pressArrow("right")
+    prompt.app.mockInput.pressArrow("right")
+    await prompt.app.waitForFrame((frame) => frame.includes("Priority: Now") && frame.includes("enter submit"))
+
+    const frame = prompt.app.captureCharFrame()
+    expect(frame).not.toContain("↑↓ scroll")
+    const lines = frame.split("\n")
+    expect(lines.findIndex((line) => line.includes("enter submit"))).toBeLessThan(20)
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("pasting on a custom choice opens its editor without submitting", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "target",
+      type: "string",
+      options: [{ value: "staging", label: "Staging" }],
+      custom: true,
+    },
+  ])
+  try {
+    await prompt.app.mockInput.pasteBracketedText("production\nwest")
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "production\nwest")
+
+    await prompt.app.waitForFrame((frame) => frame.includes("production"))
+    expect(prompt.app.captureCharFrame()).not.toContain("Type your own answer")
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("typing a custom multiselect answer selects it before commit", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [{ value: "staging", label: "Staging" }],
+      custom: true,
+      minItems: 1,
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressArrow("down")
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
+    await prompt.app.mockInput.typeText("production")
+    await prompt.app.waitForFrame((frame) => frame.includes("[✓] production"))
+
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("up leaves a custom editor only from its first visual line", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [{ value: "staging", label: "Staging" }],
+      custom: true,
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressArrow("down")
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
+    const editor = prompt.app.renderer.currentFocusedEditor
+    editor?.setText("production\nwest")
+    if (editor) editor.cursorOffset = editor.plainText.length
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.visualCursor.visualRow === 1)
+
+    prompt.app.mockInput.pressArrow("up")
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.visualCursor.visualRow === 0)
+    expect(prompt.app.renderer.currentFocusedEditor).not.toBeNull()
+
+    prompt.app.mockInput.pressArrow("up")
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor === null)
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitForFrame((frame) => frame.includes("[✓] Staging"))
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("typing on the highlighted custom option opens it without losing burst input", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [{ value: "staging", label: "Staging" }],
+      custom: true,
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressArrow("down")
+    await prompt.app.mockInput.typeText("production target")
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "production target")
+    await prompt.app.waitForFrame((frame) => frame.includes("[✓] production target"))
+
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("enter on an empty custom multiselect option clearly enters editing", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [{ value: "staging", label: "Staging" }],
+      custom: true,
+      minItems: 1,
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressArrow("down")
+    await prompt.app.waitForFrame((frame) => frame.includes("enter edit"))
+
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
+    await prompt.app.waitForFrame((frame) => frame.includes("[✓] Type your own answer") && frame.includes("enter done"))
+    expect(prompt.app.captureCharFrame()).toContain("esc close")
+    expect(prompt.app.captureCharFrame()).not.toContain("↑↓ select")
+
+    prompt.app.mockInput.pressEscape()
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor === null)
+    await prompt.app.waitForFrame((frame) => frame.includes("[ ] Type your own answer"))
+
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor === null)
+    await prompt.app.waitForFrame((frame) => frame.includes("[ ] Type your own answer"))
+    expect(prompt.app.captureCharFrame()).not.toContain("Select at least")
+
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("defers multiselect validation until submission", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [{ value: "staging", label: "Staging" }],
+      required: true,
+      minItems: 1,
+    },
+    {
+      key: "priority",
+      type: "multiselect",
+      options: [{ value: "now", label: "Now" }],
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressEnter()
+    prompt.app.mockInput.pressEnter()
+    prompt.app.mockInput.pressArrow("right")
+    await prompt.app.waitForFrame((frame) => frame.includes("[ ] Now"))
+    expect(prompt.app.captureCharFrame()).not.toContain("Select at least")
+
+    prompt.app.mockInput.pressArrow("right")
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitForFrame((frame) => frame.includes("Select at least"))
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("submits an optional empty multiselect as an omitted answer", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [{ value: "staging", label: "Staging" }],
+      minItems: 1,
+    },
+    {
+      key: "priority",
+      type: "multiselect",
+      options: [{ value: "now", label: "Now" }],
+      default: ["now"],
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressEnter()
+    prompt.app.mockInput.pressEnter()
+    prompt.app.mockInput.pressArrow("right")
+    prompt.app.mockInput.pressArrow("right")
+    prompt.app.mockInput.pressEnter()
+
+    await prompt.app.waitFor(() => prompt.replies.length === 1)
+    expect(prompt.replies).toEqual([{ answer: { priority: ["now"] } }])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("typing a custom single-select answer selects it without submitting", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "target",
+      type: "string",
+      options: [{ value: "staging", label: "Staging" }],
+      custom: true,
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressArrow("down")
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
+    await prompt.app.mockInput.typeText("production")
+    await prompt.app.waitForFrame((frame) => frame.includes("production"))
+
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("committing a custom multiselect answer keeps one editable custom row", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [{ value: "staging", label: "Staging" }],
+      custom: true,
+    },
+  ])
+  try {
+    await prompt.app.mockInput.pasteBracketedText("production")
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "production")
+    prompt.app.mockInput.pressEnter()
+    await prompt.app.waitForFrame((frame) => frame.includes("2. [✓] production"))
+
+    const frame = prompt.app.captureCharFrame()
+    expect(frame).not.toContain("Type your own answer")
+    expect(frame).not.toContain("3.")
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("text fields retain default paste behavior", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [{ key: "notes", type: "string" }])
+  try {
+    await prompt.app.mockInput.pasteBracketedText("normal paste")
+
+    expect(prompt.app.renderer.currentFocusedEditor?.plainText).toBe("normal paste")
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("pasting on a choice without custom answers does not open an editor", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "target",
+      type: "string",
+      options: [{ value: "staging", label: "Staging" }],
+    },
+  ])
+  try {
+    await prompt.app.mockInput.pasteBracketedText("production")
+
+    expect(prompt.app.renderer.currentFocusedEditor).toBeNull()
+    expect(prompt.app.captureCharFrame()).not.toContain("production")
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("space toggles the selected multiselect option", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [
+        { value: "staging", label: "Staging" },
+        { value: "production", label: "Production" },
+      ],
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressKey(" ")
+    await prompt.app.waitForFrame((frame) => frame.includes("[✓] Staging"))
+    expect(prompt.replies).toEqual([])
+
+    prompt.app.mockInput.pressKey(" ")
+    await prompt.app.waitForFrame((frame) => frame.includes("[ ] Staging"))
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("keeps a visible space between a multiselect marker and wrapped label", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 58, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [
+        {
+          value: "responsive verification across narrow and wide terminal layouts",
+          label: "Responsive verification across narrow and wide terminal layouts",
+        },
+      ],
+      default: ["responsive verification across narrow and wide terminal layouts"],
+    },
+  ])
+  try {
+    expect(prompt.app.captureCharFrame()).toContain("[✓] Responsive verification")
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("space activates the custom multiselect option", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "targets",
+      type: "multiselect",
+      options: [{ value: "staging", label: "Staging" }],
+      custom: true,
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressArrow("down")
+    prompt.app.mockInput.pressKey(" ")
+
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
+    await prompt.app.waitForFrame((frame) => frame.includes("[✓] Type your own answer"))
+    expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("space does not select a single-choice option", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [
+    {
+      key: "target",
+      type: "string",
+      options: [{ value: "staging", label: "Staging" }],
+    },
+  ])
+  try {
+    prompt.app.mockInput.pressKey(" ")
+    expect(prompt.app.captureCharFrame()).not.toContain("Staging ✓")
     expect(prompt.replies).toEqual([])
   } finally {
     prompt.app.renderer.destroy()

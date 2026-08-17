@@ -200,38 +200,30 @@ import type {
   Endpoint21_5Output,
   Endpoint22_0Input,
   Endpoint22_0Output,
-  Endpoint22_1Input,
-  Endpoint22_1Output,
-  Endpoint22_2Input,
-  Endpoint22_2Output,
-  Endpoint22_3Input,
-  Endpoint22_3Output,
   Endpoint23_0Input,
   Endpoint23_0Output,
+  Endpoint23_1Input,
+  Endpoint23_1Output,
+  Endpoint23_2Input,
+  Endpoint23_2Output,
+  Endpoint23_3Input,
+  Endpoint23_3Output,
   Endpoint24_0Input,
   Endpoint24_0Output,
   Endpoint24_1Input,
   Endpoint24_1Output,
   Endpoint24_2Input,
   Endpoint24_2Output,
-  Endpoint24_3Input,
-  Endpoint24_3Output,
-  Endpoint25_0Input,
   Endpoint25_0Output,
   Endpoint25_1Input,
   Endpoint25_1Output,
-  Endpoint25_2Input,
-  Endpoint25_2Output,
   Endpoint26_0Output,
-  Endpoint26_1Input,
-  Endpoint26_1Output,
+  Endpoint27_0Input,
   Endpoint27_0Output,
+  Endpoint27_1Input,
+  Endpoint27_1Output,
   Endpoint28_0Input,
   Endpoint28_0Output,
-  Endpoint28_1Input,
-  Endpoint28_1Output,
-  Endpoint29_0Input,
-  Endpoint29_0Output,
 } from "../api/api.js"
 import { ClientError } from "./client-error.js"
 
@@ -970,7 +962,6 @@ const Endpoint15_3 = (raw: RawClient["server.permission"]) => (input: Endpoint15
         action: input["action"],
         resources: input["resources"],
         save: input["save"],
-        opaque: input["opaque"],
         metadata: input["metadata"],
         source: input["source"],
         agent: input["agent"],
@@ -1159,145 +1150,110 @@ const adaptGroup21 = (raw: RawClient["server.shell"]) => ({
   remove: Endpoint21_5(raw),
 })
 
-const Endpoint22_0 = (raw: RawClient["server.question"]) => (input?: Endpoint22_0Input) =>
+const Endpoint22_0 = (raw: RawClient["server.reference"]) => (input?: Endpoint22_0Input) =>
   preserveEffect<Endpoint22_0Output>()(
-    raw["question.request.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
-  )
-
-const Endpoint22_1 = (raw: RawClient["server.question"]) => (input: Endpoint22_1Input) =>
-  preserveEffect<Endpoint22_1Output>()(
-    raw["session.question.list"]({ params: { sessionID: input["sessionID"] } }).pipe(
-      Effect.mapError(mapClientError),
-      Effect.map((value) => value.data),
-    ),
-  )
-
-const Endpoint22_2 = (raw: RawClient["server.question"]) => (input: Endpoint22_2Input) =>
-  preserveEffect<Endpoint22_2Output>()(
-    raw["session.question.reply"]({
-      params: { sessionID: input["sessionID"], requestID: input["requestID"] },
-      payload: { answers: input["answers"] },
-    }).pipe(Effect.mapError(mapClientError)),
-  )
-
-const Endpoint22_3 = (raw: RawClient["server.question"]) => (input: Endpoint22_3Input) =>
-  preserveEffect<Endpoint22_3Output>()(
-    raw["session.question.reject"]({ params: { sessionID: input["sessionID"], requestID: input["requestID"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
-  )
-
-const adaptGroup22 = (raw: RawClient["server.question"]) => ({
-  request: { list: Endpoint22_0(raw) },
-  list: Endpoint22_1(raw),
-  reply: Endpoint22_2(raw),
-  reject: Endpoint22_3(raw),
-})
-
-const Endpoint23_0 = (raw: RawClient["server.reference"]) => (input?: Endpoint23_0Input) =>
-  preserveEffect<Endpoint23_0Output>()(
     raw["reference.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroup23 = (raw: RawClient["server.reference"]) => ({ list: Endpoint23_0(raw) })
+const adaptGroup22 = (raw: RawClient["server.reference"]) => ({ list: Endpoint22_0(raw) })
 
-const Endpoint24_0 = (raw: RawClient["server.worktree"]) => (input: Endpoint24_0Input) =>
-  preserveEffect<Endpoint24_0Output>()(
+const Endpoint23_0 = (raw: RawClient["server.worktree"]) => (input: Endpoint23_0Input) =>
+  preserveEffect<Endpoint23_0Output>()(
     raw["worktree.list"]({ params: { projectID: input["projectID"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const Endpoint24_1 = (raw: RawClient["server.worktree"]) => (input: Endpoint24_1Input) =>
-  preserveEffect<Endpoint24_1Output>()(
+const Endpoint23_1 = (raw: RawClient["server.worktree"]) => (input: Endpoint23_1Input) =>
+  preserveEffect<Endpoint23_1Output>()(
     raw["worktree.create"]({
       params: { projectID: input["projectID"] },
       payload: { strategy: input["strategy"], from: input["from"], directory: input["directory"], name: input["name"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const Endpoint24_2 = (raw: RawClient["server.worktree"]) => (input: Endpoint24_2Input) =>
-  preserveEffect<Endpoint24_2Output>()(
+const Endpoint23_2 = (raw: RawClient["server.worktree"]) => (input: Endpoint23_2Input) =>
+  preserveEffect<Endpoint23_2Output>()(
     raw["worktree.remove"]({
       params: { projectID: input["projectID"] },
       payload: { directory: input["directory"], force: input["force"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const Endpoint24_3 = (raw: RawClient["server.worktree"]) => (input: Endpoint24_3Input) =>
-  preserveEffect<Endpoint24_3Output>()(
+const Endpoint23_3 = (raw: RawClient["server.worktree"]) => (input: Endpoint23_3Input) =>
+  preserveEffect<Endpoint23_3Output>()(
     raw["worktree.refresh"]({ params: { projectID: input["projectID"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroup24 = (raw: RawClient["server.worktree"]) => ({
-  list: Endpoint24_0(raw),
-  create: Endpoint24_1(raw),
-  remove: Endpoint24_2(raw),
-  refresh: Endpoint24_3(raw),
+const adaptGroup23 = (raw: RawClient["server.worktree"]) => ({
+  list: Endpoint23_0(raw),
+  create: Endpoint23_1(raw),
+  remove: Endpoint23_2(raw),
+  refresh: Endpoint23_3(raw),
 })
 
-const Endpoint25_0 = (raw: RawClient["server.vcs"]) => (input?: Endpoint25_0Input) =>
-  preserveEffect<Endpoint25_0Output>()(
+const Endpoint24_0 = (raw: RawClient["server.vcs"]) => (input?: Endpoint24_0Input) =>
+  preserveEffect<Endpoint24_0Output>()(
     raw["vcs.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const Endpoint25_1 = (raw: RawClient["server.vcs"]) => (input?: Endpoint25_1Input) =>
-  preserveEffect<Endpoint25_1Output>()(
+const Endpoint24_1 = (raw: RawClient["server.vcs"]) => (input?: Endpoint24_1Input) =>
+  preserveEffect<Endpoint24_1Output>()(
     raw["vcs.status"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const Endpoint25_2 = (raw: RawClient["server.vcs"]) => (input: Endpoint25_2Input) =>
-  preserveEffect<Endpoint25_2Output>()(
+const Endpoint24_2 = (raw: RawClient["server.vcs"]) => (input: Endpoint24_2Input) =>
+  preserveEffect<Endpoint24_2Output>()(
     raw["vcs.diff"]({ query: { location: input["location"], mode: input["mode"], context: input["context"] } }).pipe(
       Effect.mapError(mapClientError),
     ),
   )
 
-const adaptGroup25 = (raw: RawClient["server.vcs"]) => ({
-  get: Endpoint25_0(raw),
-  status: Endpoint25_1(raw),
-  diff: Endpoint25_2(raw),
+const adaptGroup24 = (raw: RawClient["server.vcs"]) => ({
+  get: Endpoint24_0(raw),
+  status: Endpoint24_1(raw),
+  diff: Endpoint24_2(raw),
 })
 
-const Endpoint26_0 = (raw: RawClient["server.debug"]) => () =>
-  preserveEffect<Endpoint26_0Output>()(raw["debug.location"]({}).pipe(Effect.mapError(mapClientError)))
+const Endpoint25_0 = (raw: RawClient["server.debug"]) => () =>
+  preserveEffect<Endpoint25_0Output>()(raw["debug.location"]({}).pipe(Effect.mapError(mapClientError)))
 
-const Endpoint26_1 = (raw: RawClient["server.debug"]) => (input?: Endpoint26_1Input) =>
-  preserveEffect<Endpoint26_1Output>()(
+const Endpoint25_1 = (raw: RawClient["server.debug"]) => (input?: Endpoint25_1Input) =>
+  preserveEffect<Endpoint25_1Output>()(
     raw["debug.location.evict"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroup26 = (raw: RawClient["server.debug"]) => ({
-  location: { list: Endpoint26_0(raw), evict: Endpoint26_1(raw) },
+const adaptGroup25 = (raw: RawClient["server.debug"]) => ({
+  location: { list: Endpoint25_0(raw), evict: Endpoint25_1(raw) },
 })
 
-const Endpoint27_0 = (raw: RawClient["server.migration"]) => () =>
-  preserveEffect<Endpoint27_0Output>()(raw["migration.v1.status"]({}).pipe(Effect.mapError(mapClientError)))
+const Endpoint26_0 = (raw: RawClient["server.migration"]) => () =>
+  preserveEffect<Endpoint26_0Output>()(raw["migration.v1.status"]({}).pipe(Effect.mapError(mapClientError)))
 
-const adaptGroup27 = (raw: RawClient["server.migration"]) => ({ v1: { status: Endpoint27_0(raw) } })
+const adaptGroup26 = (raw: RawClient["server.migration"]) => ({ v1: { status: Endpoint26_0(raw) } })
 
-const Endpoint28_0 = (raw: RawClient["server.websearch"]) => (input?: Endpoint28_0Input) =>
-  preserveEffect<Endpoint28_0Output>()(
+const Endpoint27_0 = (raw: RawClient["server.websearch"]) => (input?: Endpoint27_0Input) =>
+  preserveEffect<Endpoint27_0Output>()(
     raw["websearch.providers"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const Endpoint28_1 = (raw: RawClient["server.websearch"]) => (input: Endpoint28_1Input) =>
-  preserveEffect<Endpoint28_1Output>()(
+const Endpoint27_1 = (raw: RawClient["server.websearch"]) => (input: Endpoint27_1Input) =>
+  preserveEffect<Endpoint27_1Output>()(
     raw["websearch.query"]({
       query: { location: input["location"] },
       payload: { query: input["query"], providerID: input["providerID"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroup28 = (raw: RawClient["server.websearch"]) => ({
-  providers: Endpoint28_0(raw),
-  query: Endpoint28_1(raw),
+const adaptGroup27 = (raw: RawClient["server.websearch"]) => ({
+  providers: Endpoint27_0(raw),
+  query: Endpoint27_1(raw),
 })
 
-const Endpoint29_0 = (raw: RawClient["server.config"]) => (input?: Endpoint29_0Input) =>
-  preserveEffect<Endpoint29_0Output>()(
+const Endpoint28_0 = (raw: RawClient["server.config"]) => (input?: Endpoint28_0Input) =>
+  preserveEffect<Endpoint28_0Output>()(
     raw["config.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroup29 = (raw: RawClient["server.config"]) => ({ get: Endpoint29_0(raw) })
+const adaptGroup28 = (raw: RawClient["server.config"]) => ({ get: Endpoint28_0(raw) })
 
 const adaptClient = (raw: RawClient) => ({
   health: adaptGroup0(raw["server.health"]),
@@ -1322,14 +1278,13 @@ const adaptClient = (raw: RawClient) => ({
   event: adaptGroup19(raw["server.event"]),
   pty: adaptGroup20(raw["server.pty"]),
   shell: adaptGroup21(raw["server.shell"]),
-  question: adaptGroup22(raw["server.question"]),
-  reference: adaptGroup23(raw["server.reference"]),
-  worktree: adaptGroup24(raw["server.worktree"]),
-  vcs: adaptGroup25(raw["server.vcs"]),
-  debug: adaptGroup26(raw["server.debug"]),
-  migration: adaptGroup27(raw["server.migration"]),
-  websearch: adaptGroup28(raw["server.websearch"]),
-  config: adaptGroup29(raw["server.config"]),
+  reference: adaptGroup22(raw["server.reference"]),
+  worktree: adaptGroup23(raw["server.worktree"]),
+  vcs: adaptGroup24(raw["server.vcs"]),
+  debug: adaptGroup25(raw["server.debug"]),
+  migration: adaptGroup26(raw["server.migration"]),
+  websearch: adaptGroup27(raw["server.websearch"]),
+  config: adaptGroup28(raw["server.config"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>

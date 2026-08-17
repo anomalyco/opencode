@@ -181,9 +181,7 @@ export const Plugin = {
                 )
 
               const background = input.background === true
-              yield* context.progress({
-                metadata: { sessionID: child.id, status: "running" },
-              })
+              yield* context.progress({ sessionID: child.id, status: "running" })
 
               const run = Effect.gen(function* () {
                 // The child session owns its agent/model (set at create); prompt only admits input.

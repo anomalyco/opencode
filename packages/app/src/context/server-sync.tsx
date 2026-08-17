@@ -18,7 +18,7 @@ import { formatServerError } from "@/utils/server-errors"
 import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createRefreshQueue } from "./global-sync/queue"
 import { directoryKey } from "./global-sync/utils"
-import { pathKey, PathKey } from "@/utils/path-key"
+import { PathKey } from "@/utils/path-key"
 import type { ServerScope } from "@/utils/server-scope"
 import { persisted } from "@/utils/persist"
 import type { ServerApi } from "@/utils/server"
@@ -229,7 +229,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     const key = directoryKey(directory)
     const event = e.details
     const eventType: string = event.type
-    connection.handleEvent({ type: eventType, directory })
+    connection.handleEvent({ type: eventType })
 
     if (directory === "global") {
       applyGlobalEvent({

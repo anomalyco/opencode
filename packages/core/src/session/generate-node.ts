@@ -11,9 +11,10 @@ import { SessionContext } from "./context.js"
 import { SessionGenerate } from "./generate.js"
 import { SessionHistory } from "./history.js"
 import { SessionModelHeaders } from "./model-headers.js"
+import { SessionModelHttp } from "./model-http.js"
 import { SessionPromptCacheKey } from "./prompt-cache-key.js"
 import { SessionRunnerModel } from "./runner/model.js"
-import PROMPT_DEFAULT from "./runner/prompt/base.txt"
+import { SessionSystemPrompt } from "./system-prompt.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 
 export const layer = Layer.effect(
@@ -39,7 +40,12 @@ export const layer = Layer.effect(
           sessionID: selection.session.id,
           agent: selection.agent.id,
           model: model.ref,
-          system: [selection.agent.info.system ? selection.agent.info.system : PROMPT_DEFAULT, history.initial]
+          system: [
+            selection.agent.info.system
+              ? selection.agent.info.system
+              : SessionSystemPrompt.make(toolDefinitions.map((tool) => tool.name)),
+            history.initial,
+          ]
             .filter((part) => part.length > 0)
             .map(SystemPart.make),
           messages: [
@@ -74,6 +80,13 @@ export const layer = Layer.effect(
             messages: contextEvent.messages,
             tools: hookedTools,
           }),
+          {
+            http: SessionModelHttp.middleware(hooks, {
+              sessionID: selection.session.id,
+              agent: selection.agent.id,
+              model: model.ref,
+            }),
+          },
         )
         yield* Effect.logInfo("session generation usage diagnostic", { usage: response.usage })
         return response.text

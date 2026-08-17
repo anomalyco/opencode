@@ -1,6 +1,7 @@
 import { createMemo, createResource, createSignal, onMount, Show } from "solid-js"
 import path from "path"
 import type { SessionInfo } from "@opencode-ai/client"
+import { Project } from "@opencode-ai/schema/project"
 import { TextAttributes } from "@opentui/core"
 import type { RGBA } from "@opentui/core"
 import { useDialog } from "../ui/dialog"
@@ -54,10 +55,12 @@ export function DialogSessionList() {
         const response = await client.api.session.list({
           ...(allProjects
             ? {}
-            : {
-                project: current.project.id,
-                subpath: path.relative(current.project.directory, current.directory).replaceAll("\\", "/"),
-              }),
+            : current.project.id === Project.ID.global
+              ? { directory: current.directory }
+              : {
+                  project: current.project.id,
+                  subpath: path.relative(current.project.directory, current.directory).replaceAll("\\", "/"),
+                }),
           ...(query ? { search: query } : {}),
           limit: 50,
           order: "desc",

@@ -21,7 +21,7 @@ type EventPayload = {
   payload: Record<string, unknown>
 }
 
-test.use({ viewport: { width: 1440, height: 900 }, reducedMotion: "no-preference" })
+test.use({ viewport: { width: 1440, height: 900 } })
 
 test("animates todo opening without replaying it across session tabs", async ({ page }) => {
   test.setTimeout(90_000)
@@ -57,7 +57,6 @@ test("animates todo opening without replaying it across session tabs", async ({ 
       default: { providerID: "opencode", modelID: "claude-opus-4-6" },
     },
     sessions: [session(sourceID, sourceTitle, 1700000000000), session(otherID, otherTitle, 1700000001000)],
-    sessionStatus: { [sourceID]: { type: "busy" } },
     pageMessages: () => ({ items: [] }),
     events: () => events.splice(0, 1),
     eventRetry: 16,
@@ -120,7 +119,6 @@ async function configurePage(page: Page) {
   const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
   await page.addInitScript(
     ({ directory, dirBase64, server, sessionIDs }) => {
-      localStorage.setItem("settings.v3", JSON.stringify({ general: { newLayoutDesigns: true } }))
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({

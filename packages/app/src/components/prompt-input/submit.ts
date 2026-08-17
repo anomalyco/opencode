@@ -13,7 +13,7 @@ import { useWorkspaceLocation } from "@/context/location"
 import { useServerSDK, type ServerSDK } from "@/context/server-sdk"
 import { Identifier } from "@/utils/id"
 import { getDirectory } from "@opencode-ai/core/util/path"
-import { buildRequestParts } from "./build-request-parts"
+import { buildPromptRequest } from "./build-prompt-request"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
 import { ScopedKey } from "@/utils/server-scope"
@@ -97,13 +97,11 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       dataUrl: await blobDataUrl(attachment.blob, attachment.mime),
     })),
   )
-  const { requestParts } = buildRequestParts({
+  const request = buildPromptRequest({
     prompt: input.draft.prompt,
     context: input.draft.context,
     images: encodedImages,
     text,
-    sessionID: input.draft.sessionID,
-    messageID,
     sessionDirectory: input.draft.sessionDirectory,
   })
 
@@ -132,30 +130,9 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     await input.api.prompt({
       sessionID: input.draft.sessionID,
       id: messageID,
-      text: requestParts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
-      files: requestParts.flatMap((part) => {
-        if (part.type !== "file") return []
-        const text = part.source?.text
-        return [
-          {
-            uri: part.url,
-            name: part.filename,
-            mention: text ? { start: text.start, end: text.end, text: text.value } : undefined,
-          },
-        ]
-      }),
-      agents: requestParts.flatMap((part) =>
-        part.type === "agent"
-          ? [
-              {
-                name: part.name,
-                mention: part.source
-                  ? { start: part.source.start, end: part.source.end, text: part.source.value }
-                  : undefined,
-              },
-            ]
-          : [],
-      ),
+      text: request.text,
+      files: request.files.map((file) => ({ uri: file.uri, name: file.name, mention: file.mention })),
+      agents: request.agents,
     })
     return true
   } catch (err) {
@@ -450,9 +427,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       if (text.startsWith("/")) {
         const [cmdName, ...args] = text.split(" ")
         const commandName = cmdName.slice(1)
-          const customCommand = submissionData.location.command
-            .list({ directory: sessionDirectory })
-            ?.find((command) => command.name === commandName)
+        const customCommand = submissionData.location.command
+          .list({ directory: sessionDirectory })
+          ?.find((command) => command.name === commandName)
         if (customCommand) {
           clearInput()
           const messageID = Identifier.ascending("message")

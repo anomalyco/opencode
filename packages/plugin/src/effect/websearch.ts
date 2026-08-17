@@ -17,7 +17,7 @@ export interface WebSearchDomain extends WebsearchApi<unknown> {
 export interface WebSearchDraft {
   add(definition: WebSearchDefinition): void
   readonly default: {
-    get(): string | undefined
-    set(providerID: string): void
+    get(): string | false | undefined
+    set(selection: string | false): void
   }
 }

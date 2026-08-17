@@ -67,7 +67,6 @@ Examples:
 ```ts
 OpenAI.responses("gpt-4o")
 OpenAI.chat("gpt-4o")
-OpenAI.responsesWebSocket("gpt-4o")
 
 Azure.configure({ resourceName, apiKey }).responses("my-deployment")
 AmazonBedrock.configure({ region, credentials }).model("anthropic.claude-3-5-sonnet-20241022-v2:0")
@@ -250,11 +249,6 @@ const openAIChat = Route.make({
   auth: Auth.envBearer("OPENAI_API_KEY"),
 })
 
-const openAIResponsesWebSocket = openAIResponses.with({
-  id: "openai-responses-websocket",
-  transport: WebSocketTransport.json,
-})
-
 const openAIConfig = (input: OpenAIConfig) => ({
   endpoint: input.endpoint,
   auth: input.auth ?? (input.apiKey ? Auth.bearer(input.apiKey) : undefined),
@@ -266,13 +260,11 @@ const openAIConfig = (input: OpenAIConfig) => ({
 
 const configureOpenAI = (input: OpenAIConfig = {}) => {
   const responses = openAIResponses.with(openAIConfig(input))
-  const responsesWebSocket = openAIResponsesWebSocket.with(openAIConfig(input))
   const chat = openAIChat.with(openAIConfig(input))
 
   return {
     id: openAIProvider,
     responses: responses.model,
-    responsesWebSocket: responsesWebSocket.model,
     chat: chat.model,
     model: responses.model,
     configure: configureOpenAI,
@@ -342,22 +334,19 @@ const response =
   )
 ```
 
-For direct provider-facade calls, HTTP versus WebSocket is represented as named
-route selectors, not as model or request overrides. Same protocol, different
-transport, different route:
+For direct provider-facade calls, Responses has one semantic model and route:
 
 ```ts
 OpenAI.responses("gpt-4o")
-OpenAI.responsesWebSocket("gpt-4o")
 ```
 
-The package-like OpenAI Responses entrypoint instead keeps transport scoped to
-Responses settings while preserving the same `model(...)` contract:
+The package-like OpenAI Responses entrypoint has the same transport-neutral
+`model(...)` contract:
 
 ```ts
 import { model } from "@opencode-ai/ai/providers/openai/responses"
 
-model("gpt-4o", { apiKey, transport: "websocket" })
+model("gpt-4o", { apiKey })
 ```
 
 Vertex keeps Gemini, Chat, Responses, and Messages as separate package-like entrypoints,
@@ -387,11 +376,9 @@ import { model } from "@opencode-ai/ai/providers/google-vertex/messages"
 model("claude-sonnet-4-6", { project, location: "global" })
 ```
 
-The client should not require a different public layer just because a selected
-route uses WebSocket. Use one `LLMClient.layer` with HTTP and WebSocket runtime
-capabilities available; routes that do not need WebSocket simply never touch it.
-If a WebSocket route is selected in an environment without WebSocket support,
-fail with a typed transport configuration error.
+The client does not require a different public layer for WebSocket execution.
+Responses routes use HTTP by default, and callers may pass a channel executor per
+call. Routes without channel support simply ignore that execution capability.
 
 Azure is a route specialization with auth/path/default changes plus input
 mapping. The public API configures the Azure resource once, then selects
@@ -497,18 +484,13 @@ generic dynamic resolver:
 
 ```ts
 const model =
-  providerID === "azure"
-    ? Azure.configure(resolvedAzureConfig).responses(apiModelID)
-    : endpoint.websocket
-      ? OpenAI.responsesWebSocket(apiModelID)
-      : OpenAI.responses(apiModelID)
+  providerID === "azure" ? Azure.configure(resolvedAzureConfig).responses(apiModelID) : OpenAI.responses(apiModelID)
 ```
 
 That boundary can branch on durable config/catalog metadata and call typed
-provider APIs directly. A direct provider-facade boundary maps metadata like
-`endpoint.websocket` to `OpenAI.responsesWebSocket(apiModelID)`. A package-loading
-boundary passes `transport: "websocket"` to the OpenAI Responses entrypoint.
-The client runtime only executes the route carried by the resulting model.
+provider APIs directly. Transport selection remains execution policy: a Session
+or other caller may pass a WebSocket channel executor per call without changing
+the model constructed by this boundary.
 
 ## Competitive Shape
 
@@ -544,9 +526,8 @@ App boundary = explicit durable-config -> typed-provider call
   id.
 - No `model(id, overrides)` escape hatch. Model selection takes the model id;
   endpoint/auth/deployment customization happens by configuring the route first.
-- No transport override on an executable model or request. Direct provider
-  facades use `responses` versus `responsesWebSocket`; the package-like Responses
-  entrypoint maps its scoped `transport` setting before constructing the model.
+- No transport setting on a provider or executable model. OpenAI Responses uses
+  HTTP by default and accepts an optional per-call channel executor as execution policy.
 - No separate public `LLMClient.layerWithWebSocket`. The runtime should expose one
   client layer with the available transport capabilities.
 - No executable `ModelRef`. The executable handle is `LanguageModel`; durable model
@@ -580,12 +561,10 @@ App boundary = explicit durable-config -> typed-provider call
 - [x] Make unconfigured transports reusable constants such as
       `HttpTransport.sseJson`; keep transport functions only for configured/fresh
       state construction.
-- [x] Collapse the public WebSocket runtime split so one `LLMClient.layer`
-      exposes available transport capabilities and selected routes fail with typed
-      transport config errors when a required capability is missing.
+- [x] Collapse the public WebSocket runtime split so one `LLMClient.layer` accepts
+      optional per-call channel execution without changing route identity.
 - [x] Convert OpenAI provider APIs to provider-facade shape:
-      `OpenAI.configure(config).responses(id)`, `.chat(id)`, and
-      `.responsesWebSocket(id)`.
+      `OpenAI.configure(config).responses(id)` and `.chat(id)`.
 - [x] Convert Azure to a configured facade where resource/base URL/api version
       setup happens before selecting deployment ids.
 - [x] Split Cloudflare products into separate facades such as
@@ -599,10 +578,8 @@ App boundary = explicit durable-config -> typed-provider call
 - [ ] Decide whether a tiny `Provider.define(...)` helper is warranted after two
       or three provider conversions; start with plain objects if duplication is not
       yet painful.
-- [x] Update `packages/opencode/src/session/llm/native-request.ts` to construct
-      executable models at the session boundary with explicit provider facade
-      calls, mapping catalog metadata such as `endpoint.websocket` to the correct
-      named route selector.
+- [x] Keep executable model construction transport-neutral at the Session boundary;
+      Session-scoped execution policy supplies channel capability separately.
 - [ ] Update tests so direct route/provider tests assert route values are carried
       by executable models, and opencode/native tests assert boundary-based route
       selection.

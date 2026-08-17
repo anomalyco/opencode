@@ -8,7 +8,6 @@ import { Model } from "../src/model.js"
 import { Project } from "../src/project.js"
 import { Provider } from "../src/provider.js"
 import { Pty } from "../src/pty.js"
-import { Question } from "../src/question.js"
 import { Session } from "../src/session.js"
 import { SessionMessage } from "../src/session-message.js"
 import { SessionInbox } from "../src/session-inbox.js"
@@ -121,10 +120,12 @@ describe("contract hygiene", () => {
   test("model defaults and provider overlays preserve public invariants", () => {
     const id = Model.ID.make("model")
     expect(Model.Info.default(Provider.ID.make("provider"), id)).toMatchObject({ modelID: id, variants: [] })
+    expect(Provider.Info.empty(Provider.ID.make("provider")).activation).toBe("auto")
     expect(
       Schema.decodeUnknownSync(Provider.Info)({
         id: "provider",
         name: "Provider",
+        activation: "auto",
         package: "native",
         settings: { arbitrary: 1n },
       }).settings,
@@ -132,7 +133,7 @@ describe("contract hygiene", () => {
   })
 
   test("current ID constructors expose create", () => {
-    expect(Question.ID.create()).toStartWith("que_")
+    expect(Form.ID.create()).toStartWith("frm_")
     expect(Pty.ID.create()).toStartWith("pty_")
   })
 
