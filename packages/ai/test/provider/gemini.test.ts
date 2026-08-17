@@ -702,6 +702,80 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("leaves unsigned parallel calls unchanged after a signed Gemini 3 call", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: gemini3,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({
+                id: "tool_0",
+                name: "lookup",
+                input: { query: "weather" },
+                providerMetadata: { google: { thoughtSignature: "parallel_signature" } },
+              }),
+              ToolCallPart.make({ id: "tool_1", name: "lookup", input: { query: "news" } }),
+              ToolCallPart.make({ id: "tool_2", name: "lookup", input: { query: "sports" } }),
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            {
+              functionCall: { id: undefined, name: "lookup", args: { query: "weather" } },
+              thoughtSignature: "parallel_signature",
+            },
+            {
+              functionCall: { id: undefined, name: "lookup", args: { query: "news" } },
+              thoughtSignature: undefined,
+            },
+            {
+              functionCall: { id: undefined, name: "lookup", args: { query: "sports" } },
+              thoughtSignature: undefined,
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("adds the validator bypass sentinel to every call in an unsigned Gemini 3 batch", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: gemini3,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "tool_0", name: "lookup", input: { query: "weather" } }),
+              ToolCallPart.make({ id: "tool_1", name: "lookup", input: { query: "news" } }),
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "model",
+          parts: [
+            {
+              functionCall: { id: undefined, name: "lookup", args: { query: "weather" } },
+              thoughtSignature: "skip_thought_signature_validator",
+            },
+            {
+              functionCall: { id: undefined, name: "lookup", args: { query: "news" } },
+              thoughtSignature: "skip_thought_signature_validator",
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("emits streamed tool calls and maps finish reason", () =>
     Effect.gen(function* () {
       const body = sseEvents({
