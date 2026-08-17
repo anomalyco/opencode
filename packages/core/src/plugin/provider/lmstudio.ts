@@ -51,6 +51,7 @@ export function make(origin = "http://127.0.0.1:1234", interval: Duration.Input 
         }
         catalog.provider.update(providerID, (provider) => {
           provider.name = "LM Studio"
+          provider.activation = "enabled"
           provider.package = "@opencode-ai/ai/providers/openai-compatible"
           provider.settings = {
             baseURL: source.current.baseURL,

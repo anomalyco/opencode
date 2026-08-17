@@ -95,6 +95,7 @@ describe("LMStudioPlugin", () => {
           expect(yield* catalog.provider.get(providerID)).toEqual({
             id: providerID,
             name: "LM Studio",
+            activation: "enabled",
             package: "@opencode-ai/ai/providers/openai-compatible",
             settings: { baseURL: `${server.url.origin}/v1`, provider: "lmstudio", apiKey: "" },
           })
