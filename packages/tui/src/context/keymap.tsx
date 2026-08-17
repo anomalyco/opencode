@@ -66,6 +66,32 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
     }
   }
   const dispose = [
+    keymap.registerBindingFields({
+      source: (source, context) => {
+        if (source !== "raw" && source !== "kitty") throw new Error(`Invalid key source: ${String(source)}`)
+        context.attr("source", source)
+      },
+    }),
+    keymap.appendBindingTransformer((binding, context) => {
+      const source = binding.source
+      if (source !== "raw" && source !== "kitty") return
+      const command = binding.cmd
+      if (!command) return
+      context.add({
+        ...binding,
+        cmd: (commandContext) => {
+          if (commandContext.event.source !== source) return false
+          if (typeof command === "function") return command(commandContext)
+          return commandContext.keymap.runCommand(command, {
+            event: commandContext.event,
+            focused: commandContext.focused,
+            target: commandContext.target,
+            payload: commandContext.payload,
+          })
+        },
+      })
+      context.skipOriginal()
+    }),
     registerCommaBindings(keymap),
     keymap.appendBindingExpander((context) => {
       const key = Object.entries({ enter: "return", esc: "escape", pgdown: "pagedown", pgup: "pageup" }).reduce(

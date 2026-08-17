@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
+import type { TextareaRenderable } from "@opentui/core"
 import { expect, test } from "bun:test"
 import { ConfigProvider } from "../src/config"
 import { Keymap } from "../src/context/keymap"
@@ -138,4 +139,40 @@ test("global commands stay reachable when the mode changes", async () => {
   } finally {
     app.renderer.destroy()
   }
+})
+
+test("queues explicit option enter and keeps raw option enter as newline", async () => {
+  async function exercise(kittyKeyboard: boolean) {
+    let area: TextareaRenderable | undefined
+    let queued = 0
+
+    function Harness() {
+      Keymap.createLayer(() => ({
+        priority: 1,
+        commands: [{ id: "prompt.queue", run: () => void queued++ }],
+      }))
+      return <textarea ref={(value) => (area = value)} focused />
+    }
+
+    const app = await testRender(
+      () => (
+        <ConfigProvider config={createTuiResolvedConfig()}>
+          <Keymap.Provider>
+            <Harness />
+          </Keymap.Provider>
+        </ConfigProvider>
+      ),
+      { kittyKeyboard },
+    )
+    try {
+      app.mockInput.pressEnter({ meta: true })
+      await app.renderOnce()
+      return { queued, text: area?.plainText }
+    } finally {
+      app.renderer.destroy()
+    }
+  }
+
+  expect(await exercise(true)).toEqual({ queued: 1, text: "" })
+  expect(await exercise(false)).toEqual({ queued: 0, text: "\n" })
 })

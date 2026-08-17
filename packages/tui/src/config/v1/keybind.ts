@@ -18,6 +18,7 @@ const BindingObject = Schema.StructWithRest(
   Schema.Struct({
     key: Schema.Union([Schema.String, KeyStroke]),
     event: Schema.optional(Schema.Literals(["press", "release"])),
+    source: Schema.optional(Schema.Literals(["raw", "kitty"])),
     preventDefault: Schema.optional(Schema.Boolean),
     fallthrough: Schema.optional(Schema.Boolean),
   }),
@@ -163,7 +164,7 @@ export const Definitions = {
   display_thinking: keybind("none", "Toggle thinking blocks visibility"),
 
   prompt_submit: keybind("none", "Submit prompt"),
-  prompt_queue: keybind("alt+return", "Queue prompt"),
+  prompt_queue: keybind({ key: "alt+return", source: "kitty" }, "Queue prompt"),
   prompt_editor_context_clear: keybind("none", "Clear editor context"),
   prompt_images_view: keybind("<leader>i", "View image attachments"),
   prompt_skills: keybind("none", "Open skill selector"),
@@ -174,7 +175,7 @@ export const Definitions = {
   input_clear: keybind("ctrl+c", "Clear input field"),
   input_paste: keybind({ key: "ctrl+v", preventDefault: false }, "Paste from clipboard"),
   input_submit: keybind("return", "Submit input"),
-  input_newline: keybind("shift+return,ctrl+return,ctrl+j", "Insert newline in input"),
+  input_newline: keybind("shift+return,ctrl+return,alt+return,ctrl+j", "Insert newline in input"),
   input_move_left: keybind("left,ctrl+b", "Move cursor left in input"),
   input_move_right: keybind("right,ctrl+f", "Move cursor right in input"),
   input_move_up: keybind("up", "Move cursor up in input"),
