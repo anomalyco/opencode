@@ -119,7 +119,7 @@ export function catalogSlug(value: string) {
     .replace(/-{2,}/g, "-")
 }
 
-function buildModelCatalog(payload: unknown, pricingPayload?: unknown, labPayload?: unknown): ModelCatalog {
+export function buildModelCatalog(payload: unknown, pricingPayload?: unknown, labPayload?: unknown): ModelCatalog {
   const costs = readCatalogCosts(pricingPayload)
   const labDescriptions = readCatalogLabDescriptions(payload, pricingPayload, labPayload)
   const models = readCatalogModels(payload)
@@ -129,6 +129,7 @@ function buildModelCatalog(payload: unknown, pricingPayload?: unknown, labPayloa
       cost:
         costs.get(catalogIdKey(model.id)) ??
         costs.get(`${model.lab}/${model.slug}`) ??
+        costs.get(`opencode-go/${model.slug}`) ??
         costs.get(model.slug) ??
         model.cost,
     }))
