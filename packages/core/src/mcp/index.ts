@@ -128,7 +128,7 @@ const URL_ELICITATION_FIELD_KEY = "elicitation"
 
 type Data = {
   servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
-  blocked: Set<ServerName>
+  removed: Set<ServerName>
 }
 
 export type Draft = {
@@ -192,7 +192,7 @@ export const layer = (options?: Options) =>
 
       // Materialized definitions and live connections are kept separate so operational additions
       // survive unrelated definition reloads.
-      const runtime = new Map<ServerName, ServerEntry>()
+      const entries = new Map<ServerName, ServerEntry>()
       // Serializes lifecycle operations per server. Anything taking this lock from a connection
       // callback must stay forked: lifecycle operations close scopes while holding it, firing onClose.
       const locks = KeyedMutex.makeUnsafe<ServerName>()
@@ -241,7 +241,7 @@ export const layer = (options?: Options) =>
       })
       const requireServer = Effect.fnUntraced(function* (server: ServerName | string) {
         const name = ServerName.make(server)
-        const entry = runtime.get(name)
+        const entry = entries.get(name)
         if (!entry) return yield* new NotFoundError({ server: name })
         return { name, entry }
       })
@@ -557,14 +557,14 @@ export const layer = (options?: Options) =>
       })
 
       const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: Mcp.ServerConfig) {
-        const previous = runtime.get(name)
+        const previous = entries.get(name)
         if (previous) yield* disposeServer(name, previous)
         const entry: ServerEntry = {
           config: serverConfig,
           status: { status: "pending" },
           startup: Deferred.makeUnsafe<void>(),
         }
-        runtime.set(name, entry)
+        entries.set(name, entry)
         yield* Effect.gen(function* () {
           yield* register(name, entry)
           if (serverConfig.disabled) {
@@ -580,11 +580,11 @@ export const layer = (options?: Options) =>
       })
 
       const removeServer = Effect.fnUntraced(function* (name: ServerName) {
-        const entry = runtime.get(name)
+        const entry = entries.get(name)
         if (!entry) return
         yield* disposeServer(name, entry)
         // Credentials are keyed by name + URL and intentionally survive removal for a later re-add.
-        runtime.delete(name)
+        entries.delete(name)
         yield* bus.publish(McpEvent.StatusChanged, { server: name }).pipe(Effect.ignore)
       })
 
@@ -597,20 +597,20 @@ export const layer = (options?: Options) =>
         yield* reloadLock.withPermit(
           Effect.gen(function* () {
             const servers = new Map(next.list())
-            if (!configured.initialized && runtime.size === 0) {
+            if (!configured.initialized && entries.size === 0) {
               for (const [name, server] of servers) {
-                runtime.set(name, {
+                entries.set(name, {
                   config: server,
                   status: { status: "pending" },
                   startup: Deferred.makeUnsafe<void>(),
                 })
               }
-              yield* Effect.forEach(runtime, ([name, entry]) => register(name, entry), { discard: true })
+              yield* Effect.forEach(entries, ([name, entry]) => register(name, entry), { discard: true })
               configured.initialized = true
               configured.servers = new Map(servers)
 
               // Initial connections stay asynchronous so one slow server does not block Location startup.
-              for (const [name, entry] of runtime) {
+              for (const [name, entry] of entries) {
                 if (entry.config.disabled) {
                   entry.status = { status: "disabled" }
                   Deferred.doneUnsafe(entry.startup, Exit.void)
@@ -642,12 +642,12 @@ export const layer = (options?: Options) =>
       // OAuth login takes effect without a restart. Only fires for the integrations we registered.
       const reconnect = (integrationID: Integration.ID) =>
         Effect.gen(function* () {
-          const match = Array.from(runtime).find(([, entry]) => entry.integrationID === integrationID)
+          const match = Array.from(entries).find(([, entry]) => entry.integrationID === integrationID)
           if (!match) return
           const name = match[0]
           yield* Effect.gen(function* () {
             // add() or remove() may have replaced or deleted the entry while we waited for the lock.
-            const entry = runtime.get(name)
+            const entry = entries.get(name)
             if (!entry || entry.integrationID !== integrationID) return
             if (entry.status.status === "disabled") return
             yield* stopServer(name, entry)
@@ -669,7 +669,7 @@ export const layer = (options?: Options) =>
               config === false ? [] : [[name, config as Types.DeepMutable<Mcp.ServerConfig>] as const],
             ),
           ),
-          blocked: new Set(
+          removed: new Set(
             Array.from(overrides).flatMap(([name, config]) => (config === false ? [name] : [])),
           ),
         }),
@@ -678,7 +678,7 @@ export const layer = (options?: Options) =>
           get: (server) => draft.servers.get(ServerName.make(server)),
           set: (server, serverConfig) => {
             const name = ServerName.make(server)
-            if (draft.blocked.has(name)) return
+            if (draft.removed.has(name)) return
             draft.servers.set(name, serverConfig as Types.DeepMutable<Mcp.ServerConfig>)
           },
           update: (server, update) => {
@@ -693,7 +693,7 @@ export const layer = (options?: Options) =>
 
       // Suspend so each await sees current entries; a bare Map iterator is exhausted after one run.
       const whenAllReady = Effect.suspend(() =>
-        Effect.forEach(Array.from(runtime.values()), (entry) => Deferred.await(entry.startup), {
+        Effect.forEach(Array.from(entries.values()), (entry) => Deferred.await(entry.startup), {
           concurrency: "unbounded",
           discard: true,
         }),
@@ -702,7 +702,7 @@ export const layer = (options?: Options) =>
         transform: state.transform,
         reload: state.reload,
         servers: Effect.fn("MCP.servers")(function* () {
-          return Array.from(runtime)
+          return Array.from(entries)
             .toSorted(([a], [b]) => a.localeCompare(b))
             .map(([name, entry]) => new ServerInfo({ name, status: entry.status, integrationID: entry.integrationID }))
         }),
@@ -736,7 +736,7 @@ export const layer = (options?: Options) =>
         }),
         tools: Effect.fn("MCP.tools")(function* () {
           yield* whenAllReady
-          return Array.from(runtime.values())
+          return Array.from(entries.values())
             .flatMap((entry) => entry.tools ?? [])
             .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
         }),
@@ -766,7 +766,7 @@ export const layer = (options?: Options) =>
         }),
         instructions: Effect.fn("MCP.instructions")(function* () {
           yield* whenAllReady
-          return Array.from(runtime)
+          return Array.from(entries)
             .flatMap(([server, entry]) => {
               const instructions = entry.client?.instructions
               if (!instructions) return []
@@ -775,7 +775,7 @@ export const layer = (options?: Options) =>
             .toSorted((a, b) => a.server.localeCompare(b.server))
         }),
         prompts: Effect.fn("MCP.prompts")(function* () {
-          return Array.from(runtime.values())
+          return Array.from(entries.values())
             .flatMap((entry) => entry.prompts ?? [])
             .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
         }),
@@ -798,7 +798,7 @@ export const layer = (options?: Options) =>
         resourceCatalog: Effect.fn("MCP.resourceCatalog")(function* () {
           yield* whenAllReady
           const catalogs = yield* Effect.forEach(
-            Array.from(runtime),
+            Array.from(entries),
             ([name, entry]) => {
               if (!entry.client) return Effect.succeed({ resources: [], templates: [] })
               return Effect.all(
