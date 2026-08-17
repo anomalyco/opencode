@@ -1,6 +1,6 @@
 export * as SessionEnvironment from "./environment.js"
 
-import { Context, Effect, Layer, Ref } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
 import { SessionSchema } from "./schema.js"
 
@@ -14,28 +14,20 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionEnvironment") {}
 
-const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const environments = yield* Ref.make(new Map<SessionSchema.ID, Variables>())
+const layer = Layer.sync(Service, () => {
+  const environments = new Map<SessionSchema.ID, Variables>()
 
-    return Service.of({
-      get: Effect.fn("SessionEnvironment.get")(function* (sessionID) {
-        return (yield* Ref.get(environments)).get(sessionID)
+  return Service.of({
+    get: (sessionID) => Effect.sync(() => environments.get(sessionID)),
+    set: (sessionID, variables) =>
+      Effect.sync(() => {
+        environments.set(sessionID, { ...variables })
       }),
-      set: Effect.fn("SessionEnvironment.set")(function* (sessionID, variables) {
-        yield* Ref.update(environments, (current) => new Map(current).set(sessionID, { ...variables }))
+    clear: (sessionID) =>
+      Effect.sync(() => {
+        environments.delete(sessionID)
       }),
-      clear: Effect.fn("SessionEnvironment.clear")(function* (sessionID) {
-        yield* Ref.update(environments, (current) => {
-          if (!current.has(sessionID)) return current
-          const next = new Map(current)
-          next.delete(sessionID)
-          return next
-        })
-      }),
-    })
-  }),
-)
+  })
+})
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [] })
