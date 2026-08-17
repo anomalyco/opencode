@@ -2111,15 +2111,15 @@ ToolRegistry.register({
     const pending = () =>
       props.status === "pending" || props.status === "running" || props.metadata.status === "running"
     const sawPending = pending()
+    const command = () => props.input.command ?? props.metadata.command ?? ""
     const text = createMemo(() => {
-      const cmd = props.input.command ?? props.metadata.command ?? ""
       const out = stripAnsi(props.output || props.metadata.output || "").replace(/\r\n?/g, "\n")
-      return `$ ${cmd}${out ? "\n\n" + out : ""}`
+      return `${command()}${out ? "\n\n" + out : ""}`
     })
     const [copied, setCopied] = createSignal(false)
 
     const handleCopy = async () => {
-      const content = text()
+      const content = command()
       if (!content) return
       if (await writeClipboard(content)) {
         setCopied(true)
@@ -2166,7 +2166,12 @@ ToolRegistry.register({
             aria-label={i18n.t("ui.scrollView.ariaLabel")}
           >
             <pre data-slot="bash-pre">
-              <code>{text()}</code>
+              <code>
+                <span data-slot="bash-prompt" aria-hidden="true">
+                  {"$ "}
+                </span>
+                {text()}
+              </code>
             </pre>
           </div>
         </div>

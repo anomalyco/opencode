@@ -418,6 +418,10 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
+
+  [data-slot="bash-prompt"] {
+    user-select: none;
+  }
 }
 
 [data-component="edit-trigger"],
