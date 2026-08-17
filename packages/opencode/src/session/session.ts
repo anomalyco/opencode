@@ -343,7 +343,17 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   // provider cost fields are typed as finite numbers but never decoded against that schema,
   // so anything non-numeric reaching decimal.js would throw and abort the turn
   const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value)
-  const num = (value: unknown) => (finite(value) ? value : 0)
+  // decimal.js used to price numeric strings correctly — a hand-written provider config or a
+  // plugin can easily produce one — so keep charging for those rather than silently billing 0.
+  // Only what decimal.js would have thrown on (or would have turned into NaN) degrades to 0.
+  const num = (value: unknown) => {
+    if (finite(value)) return value
+    if (typeof value === "string") {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) return parsed
+    }
+    return 0
+  }
   const inputTokens = safe(input.usage.inputTokens ?? 0)
   const outputTokens = safe(input.usage.outputTokens ?? 0)
   const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)

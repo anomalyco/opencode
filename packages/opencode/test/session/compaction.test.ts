@@ -2044,6 +2044,31 @@ describe("SessionNs.getUsage", () => {
     expect(SessionNs.getUsage(input).cost).toBe(3 + 1.5)
   })
 
+  test("still prices numeric strings, as decimal.js did before the guard", () => {
+    const model = createModel({
+      context: 100_000,
+      output: 32_000,
+      cost: {
+        input: "3",
+        output: "15",
+        cache: { read: "0.3", write: "3.75" },
+      } as unknown as Provider.Model["cost"],
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: usage({
+        inputTokens: 1_000_000,
+        outputTokens: 100_000,
+        totalTokens: 1_100_000,
+        cacheReadInputTokens: 200_000,
+      }),
+      metadata: { anthropic: { cacheCreationInputTokens: 300_000 } },
+    })
+
+    // identical to the all-numeric case below: a numeric string must not bill 0
+    expect(result.cost).toBe(4.185)
+  })
+
   test("keeps the full cost when every provider cost field is a number", () => {
     const model = createModel({
       context: 100_000,
