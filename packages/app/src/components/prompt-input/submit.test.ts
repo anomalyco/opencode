@@ -534,11 +534,14 @@ describe("prompt submit worktree selection", () => {
         id: expect.stringMatching(/^msg_/),
         command: "review",
         arguments: "staged changes",
-        agent: "agent",
-        model: { id: "model", providerID: "provider", variant: "high" },
         files: [],
       },
     ])
+    expect(switchedAgents).toEqual([{ sessionID: "session-1", agent: "agent" }])
+    expect(switchedModels).toEqual([
+      { sessionID: "session-1", model: { id: "model", providerID: "provider", variant: "high" } },
+    ])
+    expect(sessionRequestOrder).toEqual(["agent", "model"])
     expect(serverSessionSyncs).toBe(0)
   })
 

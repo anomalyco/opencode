@@ -3511,8 +3511,6 @@ export type SessionCommandInput = {
     readonly id?: string | null
     readonly command: string
     readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string
@@ -3534,8 +3532,6 @@ export type SessionCommandInput = {
     readonly id?: string | null
     readonly command: string
     readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string
@@ -3557,8 +3553,6 @@ export type SessionCommandInput = {
     readonly id?: string | null
     readonly command: string
     readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string
@@ -3576,58 +3570,10 @@ export type SessionCommandInput = {
     readonly delivery?: ("steer" | "queue") | null
     readonly resume?: boolean | null
   }["arguments"]
-  readonly agent?: {
-    readonly id?: string | null
-    readonly command: string
-    readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
-    readonly files?: ReadonlyArray<{
-      readonly uri: string
-      readonly name?: string
-      readonly description?: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly agents?: ReadonlyArray<{
-      readonly name: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly skills?: ReadonlyArray<{
-      readonly id: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly delivery?: ("steer" | "queue") | null
-    readonly resume?: boolean | null
-  }["agent"]
-  readonly model?: {
-    readonly id?: string | null
-    readonly command: string
-    readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
-    readonly files?: ReadonlyArray<{
-      readonly uri: string
-      readonly name?: string
-      readonly description?: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly agents?: ReadonlyArray<{
-      readonly name: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly skills?: ReadonlyArray<{
-      readonly id: string
-      readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
-    }>
-    readonly delivery?: ("steer" | "queue") | null
-    readonly resume?: boolean | null
-  }["model"]
   readonly files?: {
     readonly id?: string | null
     readonly command: string
     readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string
@@ -3649,8 +3595,6 @@ export type SessionCommandInput = {
     readonly id?: string | null
     readonly command: string
     readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string
@@ -3672,8 +3616,6 @@ export type SessionCommandInput = {
     readonly id?: string | null
     readonly command: string
     readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string
@@ -3695,8 +3637,6 @@ export type SessionCommandInput = {
     readonly id?: string | null
     readonly command: string
     readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string
@@ -3718,8 +3658,6 @@ export type SessionCommandInput = {
     readonly id?: string | null
     readonly command: string
     readonly arguments?: string | null
-    readonly agent?: string | null
-    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly files?: ReadonlyArray<{
       readonly uri: string
       readonly name?: string

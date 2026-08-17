@@ -1220,15 +1220,23 @@ export function Prompt(props: PromptProps) {
     } else if (slashHead && isCommand) {
       move.startSubmit()
       const model = { providerID: selection.providerID, id: selection.modelID, variant }
+      if (session?.agent !== agent.id) await client.api.session.switchAgent({ sessionID, agent: agent.id })
       const cancelCommit = local.model.trackSessionCommit(sessionID, model)
+      if (
+        session?.model?.providerID !== model.providerID ||
+        session.model.id !== model.id ||
+        (session.model.variant ?? "default") !== (model.variant ?? "default")
+      )
+        await client.api.session.switchModel({ sessionID, model }).catch((error) => {
+          cancelCommit()
+          throw error
+        })
 
       void client.api.session
         .command({
           sessionID,
           command: slashHead.name,
           arguments: slashHead.arguments,
-          agent: agent.id,
-          model,
           files: store.prompt.files,
           agents: store.prompt.agents,
           skills: store.prompt.skills?.length ? store.prompt.skills : undefined,

@@ -233,8 +233,6 @@ export interface Interface {
     sessionID: SessionSchema.ID
     command: string
     arguments?: string
-    agent?: Agent.ID
-    model?: Model.Ref
     files?: PromptInput.Prompt["files"]
     agents?: PromptInput.Prompt["agents"]
     skills?: PromptInput.Prompt["skills"]
@@ -621,13 +619,13 @@ const layer = Layer.effect(
         const evaluated = yield* commands.evaluate({ name: input.command, arguments: input.arguments })
 
         // TODO(v2 commands): decide whether command-level subtask/background execution belongs in v2 commands.
-        const agent = command.agent ?? input.agent
+        const agent = command.agent
         const commandAgent = yield* Effect.gen(function* () {
           if (!command.agent) return undefined
           const agents = yield* Agent.Service.pipe(Effect.provide(locations.get(session.location)))
           return yield* agents.get(Agent.ID.make(command.agent))
         })
-        const model = command.model ?? commandAgent?.model ?? input.model
+        const model = command.model ?? commandAgent?.model
         if (agent !== undefined && session.agent !== Agent.ID.make(agent))
           yield* result.switchAgent({ sessionID: input.sessionID, agent: Agent.ID.make(agent) })
         if (model !== undefined) yield* result.switchModel({ sessionID: input.sessionID, model })

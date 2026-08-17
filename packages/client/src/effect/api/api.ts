@@ -192,8 +192,6 @@ export type Endpoint5_13Input = {
   readonly id?: SessionMessage.ID | undefined
   readonly command: string
   readonly arguments?: string | undefined
-  readonly agent?: Agent.ID | undefined
-  readonly model?: Model.Ref | undefined
   readonly files?: ReadonlyArray<PromptInput.FileAttachment> | undefined
   readonly agents?: ReadonlyArray<AgentAttachment> | undefined
   readonly skills?: ReadonlyArray<PromptInput.SkillAttachment> | undefined

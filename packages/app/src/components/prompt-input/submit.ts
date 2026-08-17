@@ -61,23 +61,39 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     input.serverSync.session.set("session_status", input.draft.sessionID, { type: "idle" })
   }
 
+  const select = async () => {
+    const session = input.session()
+    if (session?.agent !== input.draft.agent) {
+      await input.api.switchAgent({ sessionID: input.draft.sessionID, agent: input.draft.agent })
+    }
+    if (
+      session?.model?.providerID === input.draft.model.providerID &&
+      session.model.id === input.draft.model.modelID &&
+      (session.model.variant ?? "default") === (input.draft.variant ?? "default")
+    )
+      return
+    await input.api.switchModel({
+      sessionID: input.draft.sessionID,
+      model: {
+        id: input.draft.model.modelID,
+        providerID: input.draft.model.providerID,
+        variant: input.draft.variant,
+      },
+    })
+  }
+
   const [head, ...tail] = text.split(" ")
   const cmd = head?.startsWith("/") ? head.slice(1) : undefined
   if (cmd && input.sync.data.command.find((item) => item.name === cmd)) {
     setBusy()
     try {
+      await select()
       const messageID = Identifier.ascending("message")
       await input.api.command({
         sessionID: input.draft.sessionID,
         id: messageID,
         command: cmd,
         arguments: tail.join(" "),
-        agent: input.draft.agent,
-        model: {
-          id: input.draft.model.modelID,
-          providerID: input.draft.model.providerID,
-          variant: input.draft.variant,
-        },
         files: await Promise.all(
           images.map(async (attachment) => ({
             uri: await blobDataUrl(attachment.blob, attachment.mime),
@@ -118,24 +134,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   })
 
   try {
-    const session = input.session()
-    if (session?.agent !== input.draft.agent) {
-      await input.api.switchAgent({ sessionID: input.draft.sessionID, agent: input.draft.agent })
-    }
-    if (
-      session?.model?.providerID !== input.draft.model.providerID ||
-      session.model.id !== input.draft.model.modelID ||
-      (session.model.variant ?? "default") !== (input.draft.variant ?? "default")
-    ) {
-      await input.api.switchModel({
-        sessionID: input.draft.sessionID,
-        model: {
-          id: input.draft.model.modelID,
-          providerID: input.draft.model.providerID,
-          variant: input.draft.variant,
-        },
-      })
-    }
+    await select()
 
     const admitted = await input.api.prompt({
       sessionID: input.draft.sessionID,
@@ -469,14 +468,23 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           clearInput()
           const messageID = Identifier.ascending("message")
           submissionServerSync.session.set("session_status", session.id, { type: "busy" })
-          void submissionSDK.api.session
-            .command({
+          void (async () => {
+            if (session.agent !== agent)
+              await submissionSDK.api.session.switchAgent({ sessionID: session.id, agent })
+            if (
+              session.model?.providerID !== model.providerID ||
+              session.model.id !== model.modelID ||
+              (session.model.variant ?? "default") !== (variant ?? "default")
+            )
+              await submissionSDK.api.session.switchModel({
+                sessionID: session.id,
+                model: { id: model.modelID, providerID: model.providerID, variant },
+              })
+            await submissionSDK.api.session.command({
               sessionID: session.id,
               id: messageID,
               command: commandName,
               arguments: args.join(" "),
-              agent,
-              model: { id: model.modelID, providerID: model.providerID, variant },
               files: await Promise.all(
                 images.map(async (attachment) => ({
                   uri: await blobDataUrl(attachment.blob, attachment.mime),
@@ -484,14 +492,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
                 })),
               ),
             })
-            .catch((err) => {
-              submissionServerSync.session.set("session_status", session.id, { type: "idle" })
-              showToast({
-                title: language.t("prompt.toast.commandSendFailed.title"),
-                description: formatServerError(err, language.t, language.t("common.requestFailed")),
-              })
-              restoreInput()
+          })().catch((err) => {
+            submissionServerSync.session.set("session_status", session.id, { type: "idle" })
+            showToast({
+              title: language.t("prompt.toast.commandSendFailed.title"),
+              description: formatServerError(err, language.t, language.t("common.requestFailed")),
             })
+            restoreInput()
+          })
           return
         }
       }

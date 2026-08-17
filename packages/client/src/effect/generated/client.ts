@@ -423,8 +423,6 @@ const Endpoint5_13 = (raw: RawClient["server.session"]) => (input: Endpoint5_13I
         id: input["id"],
         command: input["command"],
         arguments: input["arguments"],
-        agent: input["agent"],
-        model: input["model"],
         files: input["files"],
         agents: input["agents"],
         skills: input["skills"],

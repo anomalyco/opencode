@@ -341,8 +341,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           id: SessionMessage.ID.pipe(Schema.optional),
           command: Schema.String,
           arguments: Schema.String.pipe(Schema.optional),
-          agent: Agent.ID.pipe(Schema.optional),
-          model: Model.Ref.pipe(Schema.optional),
           files: PromptInput.Prompt.fields.files,
           agents: PromptInput.Prompt.fields.agents,
           skills: PromptInput.Prompt.fields.skills,
