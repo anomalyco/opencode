@@ -4,6 +4,22 @@ import { dirname, extname, join } from "node:path"
 import util from "node:util"
 
 const execFilePromise = util.promisify(execFile)
+const macosOpenApps = new Set([
+  "Visual Studio Code",
+  "Cursor",
+  "Zed",
+  "TextMate",
+  "Antigravity",
+  "Terminal",
+  "iTerm",
+  "Ghostty",
+  "Warp",
+  "Xcode",
+  "Android Studio",
+  "Sublime Text",
+])
+const windowsOpenApps = new Set(["code", "cursor", "zed", "powershell", "Sublime Text"])
+const linuxOpenApps = new Set(["code", "cursor", "zed", "Sublime Text"])
 
 const exists = (path: string) =>
   access(path)
@@ -16,9 +32,17 @@ export function checkAppExists(appName: string) {
   return checkMacosApp(appName)
 }
 
-export function resolveAppPath(appName: string) {
+export async function resolveAppPath(appName: string) {
+  if (!isAllowedOpenApp(process.platform, appName)) return null
   if (process.platform !== "win32") return appName
   return resolveWindowsAppPath(appName)
+}
+
+export function isAllowedOpenApp(platform: NodeJS.Platform, appName: string) {
+  if (platform === "darwin") return macosOpenApps.has(appName)
+  if (platform === "win32") return windowsOpenApps.has(appName)
+  if (platform === "linux") return linuxOpenApps.has(appName)
+  return false
 }
 
 async function checkMacosApp(appName: string) {
