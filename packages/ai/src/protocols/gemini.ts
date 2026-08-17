@@ -517,31 +517,30 @@ const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean
 
 const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
   const promptBlockReason = state.finishReason === undefined ? state.promptFeedback?.blockReason : undefined
-  return state.finishReason || state.usage || promptBlockReason
-    ? (() => {
-        const events: LLMEvent[] = []
-        const lifecycle = state.reasoningSignature
-          ? Lifecycle.reasoningEnd(
-              state.lifecycle,
-              events,
-              "reasoning-0",
-              googleMetadata({ thoughtSignature: state.reasoningSignature }),
-            )
-          : state.lifecycle
-        Lifecycle.finish(lifecycle, events, {
-          reason: {
-            normalized: promptBlockReason === undefined ? mapFinishReason(state.finishReason, state.hasToolCalls) : "content-filter",
-            raw: state.finishReason ?? promptBlockReason,
-          },
-          usage: state.usage,
-          providerMetadata:
-            state.promptFeedback === undefined
-              ? undefined
-              : googleMetadata({ promptFeedback: state.promptFeedback }),
-        })
-        return events
-      })()
-    : []
+  const finishReason = state.finishReason ?? promptBlockReason
+  if (finishReason === undefined && state.usage === undefined) return []
+
+  const events: LLMEvent[] = []
+  const lifecycle = state.reasoningSignature
+    ? Lifecycle.reasoningEnd(
+        state.lifecycle,
+        events,
+        "reasoning-0",
+        googleMetadata({ thoughtSignature: state.reasoningSignature }),
+      )
+    : state.lifecycle
+  Lifecycle.finish(lifecycle, events, {
+    reason: {
+      normalized: promptBlockReason === undefined
+        ? mapFinishReason(finishReason, state.hasToolCalls)
+        : "content-filter",
+      raw: finishReason,
+    },
+    usage: state.usage,
+    providerMetadata:
+      state.promptFeedback === undefined ? undefined : googleMetadata({ promptFeedback: state.promptFeedback }),
+  })
+  return events
 }
 
 const step = (state: ParserState, event: GeminiEvent) => {
