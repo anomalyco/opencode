@@ -1857,10 +1857,6 @@ export default function Page() {
             prompt,
             ready: () => !store.deferRender && messagesReady(),
             centered,
-            todo: {
-              collapsed: () => controller.layout.view().todoCollapsed.get(),
-              onToggle: () => controller.layout.view().todoCollapsed.set(!controller.layout.view().todoCollapsed.get()),
-            },
             followup: () =>
               controller.identity.params.id && !controller.data.isChild()
                 ? {

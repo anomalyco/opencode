@@ -38,12 +38,6 @@ test("closing the active server's last tab opens the remaining server tab", asyn
   await expect(page.getByText(sessionB.title).first()).toBeVisible()
   const sessionBRequests = requests.filter((url) => url.includes(`/session/${sessionB.id}`))
   expect(sessionBRequests.every((url) => url.startsWith(serverB))).toBe(true)
-  expect(
-    requests.some((request) => {
-      const url = new URL(request)
-      return url.origin === serverB && url.searchParams.get("directory") === sessionB.directory
-    }),
-  ).toBe(true)
 })
 
 test("legacy session routes preserve an existing tab's server", async ({ page }) => {

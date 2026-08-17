@@ -39,5 +39,7 @@ test("reducer-hardening: converges when idle arrives before final part and messa
   await timeline.send(messageUpdated(completedAssistantInfo(assistant.info)), 250)
 
   await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-  await expect(page.locator(`[data-timeline-part-id="${textID}"]`)).toContainText("Final after early idle")
+  await expect(page.locator('[data-timeline-part-id="msg_1001_timeline_assistant:text:1"]')).toContainText(
+    "Final after early idle",
+  )
 })

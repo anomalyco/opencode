@@ -89,7 +89,7 @@ function SessionTabEntry(props: {
   const [loadedSession] = createResource(
     () => {
       const ctx = props.serverCtx
-      return ctx?.sdk.connection.status() === "connected" ? { id: props.tab.sessionId, ctx } : null
+      return ctx ? { id: props.tab.sessionId, ctx } : null
     },
     ({ id, ctx }) =>
       ctx.data.session

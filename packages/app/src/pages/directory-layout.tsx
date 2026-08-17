@@ -42,11 +42,14 @@ export function DirectoryDataProvider(
     const transcript = sessionID ? normalizeSessionMessages(sessionID, data.session.message.list(sessionID)) : undefined
     return {
       session: data.session.list(),
-      session_status: sessionID
-        ? {
-            [sessionID]: data.session.status(sessionID) === "running" ? ({ type: "busy" } as const) : ({ type: "idle" } as const),
-          }
-        : {},
+      session_status: Object.fromEntries(
+        data.session
+          .list()
+          .map((session) => [
+            session.id,
+            data.session.status(session.id) === "running" ? ({ type: "busy" } as const) : ({ type: "idle" } as const),
+          ]),
+      ),
       session_diff: {},
       message: sessionID && transcript ? { [sessionID]: transcript.messages } : {},
       part: transcript ? Object.fromEntries(transcript.parts) : {},

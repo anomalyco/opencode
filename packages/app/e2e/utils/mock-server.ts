@@ -29,7 +29,6 @@ export interface MockServerConfig {
   onMessage?: (input: { sessionID: string; messageID: string }) => void
   events?: () => unknown[]
   eventRetry?: number
-  todos?: (sessionID: string) => unknown[]
   permissions?: unknown[] | (() => unknown[])
   questions?: unknown[] | (() => unknown[])
   forms?: unknown[] | (() => unknown[])
@@ -303,6 +302,16 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
           currentPermission,
         ),
       })
+    const sessionPermissions = path.match(/^\/api\/session\/([^/]+)\/permission$/)?.[1]
+    if (sessionPermissions)
+      return json(
+        route,
+        {
+          data: (typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []))
+            .map(currentPermission)
+            .filter((permission) => permission.sessionID === sessionPermissions),
+        },
+      )
     if (path === "/api/question/request")
       return json(route, {
         location: location(config),
@@ -466,8 +475,6 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       return json(route, message)
     }
 
-    const todoMatch = path.match(/^\/session\/([^/]+)\/todo$/)
-    if (todoMatch) return json(route, config.todos?.(todoMatch[1]!) ?? [])
     if (/^\/session\/[^/]+\/(children|diff)$/.test(path)) return json(route, [])
 
     const currentMessagesMatch = path.match(/^\/api\/session\/([^/]+)\/message$/)

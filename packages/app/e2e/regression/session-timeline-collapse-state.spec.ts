@@ -119,15 +119,11 @@ test.describe("regression: session timeline local row state", () => {
     await wrapper.locator('[data-slot="collapsible-trigger"]').first().click()
     await expectExpanded(wrapper, false)
 
-    events.push({
-      directory,
-      payload: {
-        type: "message.part.updated",
-        properties: { part: streamedTextPart },
-      },
-    })
+    events.push(...streamedTextEvents())
 
-    await expect(page.locator(`[data-timeline-part-id="${textPartID}"]`).first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator(`[data-timeline-part-id="${assistantMessageID}:text:0"]`).first()).toBeVisible({
+      timeout: 10_000,
+    })
 
     expect(await readToolState(page)).toEqual({
       expanded: false,
@@ -151,15 +147,11 @@ test.describe("regression: session timeline local row state", () => {
     await expectAppVisible(file)
     await markDiffProbe(page)
 
-    events.push({
-      directory,
-      payload: {
-        type: "message.part.updated",
-        properties: { part: streamedTextPart },
-      },
-    })
+    events.push(...streamedTextEvents())
 
-    await expect(page.locator(`[data-timeline-part-id="${textPartID}"]`).first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator(`[data-timeline-part-id="${assistantMessageID}:text:0"]`).first()).toBeVisible({
+      timeout: 10_000,
+    })
     const siblingProbe = await readDiffProbe(page)
     expect(siblingProbe).toEqual({
       fileMarker: "before",
@@ -171,13 +163,7 @@ test.describe("regression: session timeline local row state", () => {
     })
 
     await markDiffProbe(page)
-    events.push({
-      directory,
-      payload: {
-        type: "message.part.updated",
-        properties: { part: editPartWithAdditions(2) },
-      },
-    })
+    events.push(...toolEvents(editPartWithAdditions(2)))
 
     await expect(wrapper.locator('[data-slot="diff-changes-additions"]').filter({ hasText: "+2" }).first()).toBeVisible(
       { timeout: 10_000 },
@@ -293,7 +279,7 @@ async function readToolState(page: Page) {
         row: element.closest("[data-timeline-row]")?.getAttribute("data-timeline-row"),
         streamedTextVisible: !!document.querySelector(`[data-timeline-part-id="${textPartID}"]`),
       }),
-      textPartID,
+      `${assistantMessageID}:text:0`,
     )
 }
 
@@ -395,6 +381,39 @@ async function mockServer(page: Page, events: EventPayload[], messages = [userMe
     events: () => events.splice(0, 1),
     eventRetry: 16,
   })
+}
+
+function streamedTextEvents(): EventPayload[] {
+  const data = { sessionID, assistantMessageID, ordinal: 0 }
+  return [
+    { directory, payload: { type: "session.text.started", properties: data } },
+    { directory, payload: { type: "session.text.ended", properties: { ...data, text: streamedTextPart.text } } },
+  ]
+}
+
+function toolEvents(part: typeof editPart): EventPayload[] {
+  const data = { sessionID, assistantMessageID, id: part.callID }
+  return [
+    {
+      directory,
+      payload: {
+        type: "session.tool.called",
+        properties: { ...data, input: part.state.input, executed: false },
+      },
+    },
+    {
+      directory,
+      payload: {
+        type: "session.tool.success",
+        properties: {
+          ...data,
+          content: [{ type: "text", text: part.state.output }],
+          metadata: part.state.metadata,
+          executed: false,
+        },
+      },
+    },
+  ]
 }
 
 function project() {

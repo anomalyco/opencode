@@ -126,6 +126,13 @@ export async function setupTimeline(
   const transport = await installSseTransport<EventPayload>(page, {
     server,
     retry: input.eventRetry ?? 20,
+    existingTools: messages.flatMap((message) =>
+      "parts" in message
+        ? message.parts.flatMap((part) => (part.type === "tool" ? [part.callID] : []))
+        : message.type === "assistant"
+          ? message.content.flatMap((part) => (part.type === "tool" ? [part.id] : []))
+          : [],
+    ),
   })
   await mockOpenCodeServer(page, {
     protocol: "v2",

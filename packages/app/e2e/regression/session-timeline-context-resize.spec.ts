@@ -75,12 +75,7 @@ test.describe("regression: session timeline context group resize", () => {
     })
     await startVisualProbe(page, regions)
     for (const [index, delay] of [120, 350, 80, 500].entries()) {
-      events.push({
-        directory,
-        payload: {
-          type: "message.part.updated",
-          properties: {
-            part: contextTool(
+      const part = contextTool(
               contextIDs[index]!,
               id("msg_assistant", 10),
               ["read", "glob", "grep", "list"][index]!,
@@ -90,10 +85,36 @@ test.describe("regression: session timeline context group resize", () => {
                 { path: directory, pattern: "Explored" },
                 { path: "src" },
               ][index]!,
-            ),
+            )
+      events.push(
+        {
+          directory,
+          payload: {
+            type: "session.tool.called",
+            properties: {
+              sessionID,
+              assistantMessageID: part.messageID,
+              id: part.callID,
+              input: part.state.input,
+              executed: false,
+            },
           },
         },
-      })
+        {
+          directory,
+          payload: {
+            type: "session.tool.success",
+            properties: {
+              sessionID,
+              assistantMessageID: part.messageID,
+              id: part.callID,
+              content: [{ type: "text", text: part.state.output }],
+              metadata: part.state.metadata,
+              executed: false,
+            },
+          },
+        },
+      )
       await page.waitForTimeout(delay)
     }
 

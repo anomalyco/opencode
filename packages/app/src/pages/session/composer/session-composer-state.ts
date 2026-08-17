@@ -1,6 +1,5 @@
-import { createEffect, createMemo, on, onCleanup } from "solid-js"
+import { createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { Todo } from "@/types"
 import type { FormInfo, PermissionRequest } from "@opencode-ai/client/promise"
 import { useParams } from "@solidjs/router"
 import { showToast } from "@/utils/toast"
@@ -11,22 +10,9 @@ import { useWorkspaceLocation } from "@/context/location"
 import { sessionPermissionRequest, sessionQuestionForm } from "./session-request-tree"
 import { useData } from "@/context/server"
 
-export const todoState = (input: {
-  count: number
-  done: boolean
-  live: boolean
-}): "hide" | "clear" | "open" | "close" => {
-  if (input.count === 0) return "hide"
-  if (!input.live) return "clear"
-  if (!input.done) return "open"
-  return "close"
-}
-
-export const todoDockAtBoundary = (state: ReturnType<typeof todoState>) => state === "open"
-
 const idle = { type: "idle" as const }
 
-export function createSessionComposerController(options?: { closeMs?: number | (() => number) }) {
+export function createSessionComposerController() {
   const params = useParams()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
@@ -54,14 +40,6 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     return !!permissionRequest() || !!questionRequest()
   })
 
-  // TODO: Restore todos when they are available from the current session API.
-  const todos = createMemo((): Todo[] => [])
-
-  const done = createMemo(
-    () => todos().length > 0 && todos().every((todo) => todo.status === "completed" || todo.status === "cancelled"),
-  )
-
-  const live = createMemo(() => data.session.status(params.id ?? "") === "running" || blocked())
   const primary = () => {
     const id = params.id
     return !!id && !data.session.get(id)?.parentID
@@ -177,11 +155,7 @@ export function createSessionComposerController(options?: { closeMs?: number | (
   }
 
   const [store, setStore] = createStore({
-    sessionID: params.id,
     responding: undefined as string | undefined,
-    dock: todos().length > 0 && !done() && live(),
-    closing: false,
-    opening: false,
   })
 
   const permissionResponding = createMemo(() => {
@@ -207,90 +181,6 @@ export function createSessionComposerController(options?: { closeMs?: number | (
       })
   }
 
-  let timer: number | undefined
-  let raf: number | undefined
-
-  const closeMs = () => {
-    const value = options?.closeMs
-    if (typeof value === "function") return Math.max(0, value())
-    if (typeof value === "number") return Math.max(0, value)
-    return 400
-  }
-
-  const scheduleClose = () => {
-    if (timer) window.clearTimeout(timer)
-    timer = window.setTimeout(() => {
-      setStore({ dock: false, closing: false })
-      timer = undefined
-    }, closeMs())
-  }
-
-  createEffect(
-    on(
-      () => [params.id, todos().length, done(), live()] as const,
-      ([id, count, complete, active], previous) => {
-        if (raf) cancelAnimationFrame(raf)
-        raf = undefined
-
-        const next = todoState({
-          count,
-          done: complete,
-          live: active,
-        })
-
-        if (!previous || previous[0] !== id) {
-          if (timer) window.clearTimeout(timer)
-          timer = undefined
-          setStore({ sessionID: id, dock: todoDockAtBoundary(next), closing: false, opening: false })
-          return
-        }
-
-        if (next === "hide") {
-          if (timer) window.clearTimeout(timer)
-          timer = undefined
-          setStore({ dock: false, closing: false, opening: false })
-          return
-        }
-
-        if (next === "clear") {
-          if (timer) window.clearTimeout(timer)
-          timer = undefined
-          return
-        }
-
-        if (next === "open") {
-          if (timer) window.clearTimeout(timer)
-          timer = undefined
-          const hidden = !store.dock || store.closing
-          setStore({ dock: true, closing: false })
-          if (hidden) {
-            setStore("opening", true)
-            raf = requestAnimationFrame(() => {
-              setStore("opening", false)
-              raf = undefined
-            })
-            return
-          }
-          setStore("opening", false)
-          return
-        }
-
-        setStore({ dock: true, opening: false, closing: true })
-        if (!timer) scheduleClose()
-      },
-    ),
-  )
-
-  onCleanup(() => {
-    if (!timer) return
-    window.clearTimeout(timer)
-  })
-
-  onCleanup(() => {
-    if (!raf) return
-    cancelAnimationFrame(raf)
-  })
-
   return {
     blocked,
     questionRequest,
@@ -302,13 +192,6 @@ export function createSessionComposerController(options?: { closeMs?: number | (
       move: moveToBackground,
     },
     decide,
-    todos,
-    dock: () =>
-      store.sessionID === params.id
-        ? store.dock
-        : todoDockAtBoundary(todoState({ count: todos().length, done: done(), live: live() })),
-    closing: () => store.sessionID === params.id && store.closing,
-    opening: () => store.sessionID === params.id && store.opening,
   }
 }
 

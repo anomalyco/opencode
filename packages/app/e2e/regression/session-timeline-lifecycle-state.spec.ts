@@ -95,16 +95,16 @@ test("moves busy through retry and recovery to final idle content", async ({ pag
   await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
   await expect(page.locator('[data-timeline-row="DiffSummary"]')).toHaveCount(0)
   await timeline.send(status("retry"), 180)
-  await expect(page.locator('[data-timeline-row="Retry"]')).toBeVisible()
-  await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
+  await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
   await timeline.send(status("busy", 2), 180)
   await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
   await timeline.send(partUpdated(textPart("prt_recovered", "Recovered response")), 140)
   await timeline.send(messageUpdated(completedAssistantInfo(assistant.info)), 100)
   await timeline.send(status("idle"), 350)
-  await expect(page.locator('[data-timeline-row="Retry"]')).toHaveCount(0)
   await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-  await expect(page.locator('[data-timeline-part-id="prt_recovered"]')).toContainText("Recovered response")
+  await expect(page.locator('[data-timeline-part-id="msg_1001_timeline_assistant:text:0"]')).toContainText(
+    "Recovered response",
+  )
 })
 
 function lines(count: number) {

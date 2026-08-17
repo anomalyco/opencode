@@ -16,15 +16,20 @@ export function createTimelineModel(input: { session: Pick<SessionController, "i
     (id) => (id ? data.session.message.sync(id) : undefined),
   )
   const ready = createMemo(() => !input.session.identity.sessionID() || !resource.loading)
-  // TODO: Restore paging when the current message API exposes history cursors.
-  const more = () => false
-  const loading = () => false
+  const more = () => {
+    const id = input.session.identity.sessionID()
+    return id ? data.session.message.more(id) : false
+  }
+  const loading = () => {
+    const id = input.session.identity.sessionID()
+    return id ? data.session.message.loading(id) : false
+  }
   const loadOlder = async (options?: { before?: () => void; after?: (done: boolean) => void }) => {
     return loadOlderTimeline({
       sessionID: input.session.identity.sessionID,
       more,
       loading,
-      loadMore: async () => undefined,
+      loadMore: data.session.message.loadMore,
       before: options?.before,
       after: options?.after,
     })
