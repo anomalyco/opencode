@@ -232,6 +232,26 @@ describe("plugin.openai.ws-pool", () => {
     fetch.close()
   })
 
+  test("falls back immediately to HTTP when a websocket request is too large", async () => {
+    let connections = 0
+    await using server = await createWebSocketServer((socket) => {
+      connections += 1
+      socket.once("message", () => socket.close(1009, "payload too large"))
+    })
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+    })
+
+    const first = await fetch(server.url, streamRequest())
+    const second = await fetch(server.url, streamRequest())
+
+    expect(await first.text()).toBe("http")
+    expect(await second.text()).toBe("http")
+    expect(connections).toBe(1)
+    expect(server.httpRequests).toHaveLength(2)
+    fetch.close()
+  })
+
   test("removes HTTP fallback when its session is deleted", async () => {
     let websocketAttempts = 0
     await using server = await createRejectingWebSocketServer(() => websocketAttempts++)
