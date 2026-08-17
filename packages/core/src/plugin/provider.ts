@@ -18,6 +18,7 @@ import { LLMGatewayPlugin } from "./provider/llmgateway.js"
 import { LMStudioPlugin } from "./provider/lmstudio.js"
 import { MistralPlugin } from "./provider/mistral.js"
 import { NvidiaPlugin } from "./provider/nvidia.js"
+import { OllamaPlugin } from "./provider/ollama.js"
 import { OpenAIPlugin } from "./provider/openai.js"
 import { SnowflakeCortexPlugin } from "./provider/snowflake-cortex.js"
 import { OpenAICompatiblePlugin } from "./provider/openai-compatible.js"
@@ -52,6 +53,7 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   LMStudioPlugin,
   MistralPlugin,
   NvidiaPlugin,
+  OllamaPlugin,
   OpencodePlugin,
   SnowflakeCortexPlugin,
   OpenAICompatiblePlugin,

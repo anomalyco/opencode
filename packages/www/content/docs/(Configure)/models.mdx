@@ -152,6 +152,43 @@ provider and model configuration. An unknown variant fails model resolution inst
 
 ### Local models
 
+#### Ollama
+
+OpenCode automatically discovers language models from an Ollama server listening on its default address,
+`http://127.0.0.1:11434`. Discovered models use the `ollama` provider ID and Ollama's model name:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ollama/gemma3:4b",
+}
+```
+
+OpenCode refreshes the inventory in the background and reads context, vision, and tool-use capabilities from Ollama.
+Embedding-only models are excluded because they cannot drive a session. Disable discovery with
+`"plugins": ["-opencode.provider.ollama"]`.
+
+For a different host or port, configure Ollama's OpenAI-compatible base URL. Models are still discovered through the
+native Ollama API at the same path prefix:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "ollama": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+Omit `apiKey` when the Ollama endpoint does not require bearer authentication.
+
+#### LM Studio
+
 OpenCode automatically discovers language models from an unauthenticated LM Studio server listening on its default
 address, `http://127.0.0.1:1234`. Discovered models use the `lmstudio` provider ID and LM Studio's model key:
 
