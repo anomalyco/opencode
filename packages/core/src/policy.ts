@@ -28,17 +28,32 @@ const layer = Layer.effect(
     let statements: Info[] = []
     yield* Location.Service
 
+    function specificity(s: string): number {
+      const idx = s.search(/[*?]/)
+      return idx === -1 ? s.length : idx
+    }
+
     return Service.of({
       load: EffectRuntime.fn("Policy.load")(function* (input) {
         statements = input
       }),
       hasStatements: () => statements.length > 0,
       evaluate: EffectRuntime.fn("Policy.evaluate")(function* (action, resource, fallback) {
-        return (
-          statements.findLast(
-            (statement) => Wildcard.match(action, statement.action) && Wildcard.match(resource, statement.resource),
-          )?.effect ?? fallback
-        )
+        let best: Info | undefined
+        let bestActionSpec = -1
+        let bestResSpec = -1
+        for (const statement of statements) {
+          if (Wildcard.match(action, statement.action) && Wildcard.match(resource, statement.resource)) {
+            const actionSpec = specificity(statement.action)
+            const resSpec = specificity(statement.resource)
+            if (best === undefined || actionSpec > bestActionSpec || (actionSpec === bestActionSpec && resSpec > bestResSpec) || (actionSpec === bestActionSpec && resSpec === bestResSpec)) {
+              best = statement
+              bestActionSpec = actionSpec
+              bestResSpec = resSpec
+            }
+          }
+        }
+        return best?.effect ?? fallback
       }),
     })
   }),

@@ -25,16 +25,30 @@ interface State {
   approved: PermissionV1.Rule[]
 }
 
+function specificity(s: string): number {
+  const idx = s.search(/[*?]/)
+  return idx === -1 ? s.length : idx
+}
+
 export function evaluate(permission: string, pattern: string, ...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule {
-  return (
-    rulesets
-      .flat()
-      .findLast((rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern)) ?? {
-      action: "ask",
-      permission,
-      pattern: "*",
+  const all = rulesets.flat()
+  let best: PermissionV1.Rule | undefined
+  let bestPermSpec = -1
+  let bestPatSpec = -1
+
+  for (const rule of all) {
+    if (Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern)) {
+      const permSpec = specificity(rule.permission)
+      const patSpec = specificity(rule.pattern)
+      if (best === undefined || permSpec > bestPermSpec || (permSpec === bestPermSpec && patSpec > bestPatSpec) || (permSpec === bestPermSpec && patSpec === bestPatSpec)) {
+        best = rule
+        bestPermSpec = permSpec
+        bestPatSpec = patSpec
+      }
     }
-  )
+  }
+
+  return best ?? { action: "ask", permission, pattern: "*" }
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
@@ -207,8 +221,21 @@ export function disabled(tools: string[], ruleset: PermissionV1.Ruleset): Set<st
   return new Set(
     tools.filter((tool) => {
       const permission = edits.includes(tool) ? "edit" : reads.includes(tool) ? "read" : tool
-      const rule = ruleset.findLast((rule) => Wildcard.match(permission, rule.permission))
-      return rule?.pattern === "*" && rule.action === "deny"
+      let best: PermissionV1.Rule | undefined
+      let bestPermSpec = -1
+      let bestPatSpec = -1
+      for (const rule of ruleset) {
+        if (Wildcard.match(permission, rule.permission)) {
+          const permSpec = specificity(rule.permission)
+          const patSpec = specificity(rule.pattern)
+          if (best === undefined || permSpec > bestPermSpec || (permSpec === bestPermSpec && patSpec > bestPatSpec) || (permSpec === bestPermSpec && patSpec === bestPatSpec)) {
+            best = rule
+            bestPermSpec = permSpec
+            bestPatSpec = patSpec
+          }
+        }
+      }
+      return best?.pattern === "*" && best.action === "deny"
     }),
   )
 }

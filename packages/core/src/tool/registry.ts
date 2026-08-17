@@ -129,9 +129,27 @@ const layer = Layer.effect(
   Service.use((registry) => Effect.succeed(Tools.Service.of({ register: registry.register }))),
 ).pipe(Layer.provideMerge(registryLayer))
 
+function specificity(s: string): number {
+  const idx = s.search(/[*?]/)
+  return idx === -1 ? s.length : idx
+}
+
 function whollyDisabled(action: string, rules: PermissionV2.Ruleset) {
-  const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
-  return rule?.resource === "*" && rule.effect === "deny"
+  let best: PermissionV2.Rule | undefined
+  let bestActionSpec = -1
+  let bestResSpec = -1
+  for (const rule of rules) {
+    if (Wildcard.match(action, rule.action)) {
+      const actionSpec = specificity(rule.action)
+      const resSpec = specificity(rule.resource)
+      if (best === undefined || actionSpec > bestActionSpec || (actionSpec === bestActionSpec && resSpec > bestResSpec) || (actionSpec === bestActionSpec && resSpec === bestResSpec)) {
+        best = rule
+        bestActionSpec = actionSpec
+        bestResSpec = resSpec
+      }
+    }
+  }
+  return best?.resource === "*" && best.effect === "deny"
 }
 
 export const node = makeLocationNode({

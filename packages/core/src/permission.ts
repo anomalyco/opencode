@@ -73,16 +73,30 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Per
 
 export type Error = BlockedError | CorrectedError
 
+function specificity(s: string): number {
+  const idx = s.search(/[*?]/)
+  return idx === -1 ? s.length : idx
+}
+
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
-  return (
-    rulesets
-      .flat()
-      .findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource)) ?? {
-      action,
-      resource: "*",
-      effect: "ask",
+  const all = rulesets.flat()
+  let best: Permission.Rule | undefined
+  let bestActionSpec = -1
+  let bestResSpec = -1
+
+  for (const rule of all) {
+    if (Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource)) {
+      const actionSpec = specificity(rule.action)
+      const resSpec = specificity(rule.resource)
+      if (best === undefined || actionSpec > bestActionSpec || (actionSpec === bestActionSpec && resSpec > bestResSpec) || (actionSpec === bestActionSpec && resSpec === bestResSpec)) {
+        best = rule
+        bestActionSpec = actionSpec
+        bestResSpec = resSpec
+      }
     }
-  )
+  }
+
+  return best ?? { action, resource: "*", effect: "ask" }
 }
 
 export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {

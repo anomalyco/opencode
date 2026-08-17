@@ -47,6 +47,28 @@ describe("Policy", () => {
     }),
   )
 
+  it.effect("more specific action beats less specific regardless of order", () =>
+    Effect.gen(function* () {
+      const policy = yield* Policy.Service
+      yield* policy.load([
+        new Policy.Info({
+          effect: "allow",
+          action: "provider.use",
+          resource: "anthropic",
+        }),
+        new Policy.Info({
+          effect: "deny",
+          action: "provider.*",
+          resource: "*",
+        }),
+      ])
+
+      // "provider.use" (spec 12) beats "provider.*" (spec 9), so allow wins
+      expect(yield* policy.evaluate("provider.use", "anthropic", "deny")).toBe("allow")
+      expect(yield* policy.evaluate("provider.use", "openai", "deny")).toBe("deny")
+    }),
+  )
+
   it.effect("matches action and resource independently", () =>
     Effect.gen(function* () {
       const policy = yield* Policy.Service

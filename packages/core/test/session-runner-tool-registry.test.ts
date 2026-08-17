@@ -89,7 +89,7 @@ describe("ToolRegistry", () => {
           { action: "question", resource: "private", effect: "allow" },
           { action: "*", resource: "*", effect: "deny" },
         ]),
-      ).toEqual([])
+      ).toEqual(["question"])
       expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["question", "bash"])
     }),
   )

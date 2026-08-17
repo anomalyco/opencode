@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
@@ -101,6 +101,71 @@ function waitForRequest() {
     return { service, fiber, request }
   })
 }
+
+describe("evaluate specificity", () => {
+  test("exact match", () => {
+    expect(PermissionV2.evaluate("bash", "rm", [{ action: "bash", resource: "rm", effect: "deny" }]).effect).toBe("deny")
+  })
+
+  test("wildcard match", () => {
+    expect(PermissionV2.evaluate("bash", "rm", [{ action: "bash", resource: "*", effect: "allow" }]).effect).toBe("allow")
+  })
+
+  test("no match returns ask", () => {
+    expect(PermissionV2.evaluate("bash", "rm", [{ action: "edit", resource: "*", effect: "allow" }]).effect).toBe("ask")
+  })
+
+  test("empty ruleset returns ask", () => {
+    expect(PermissionV2.evaluate("bash", "rm", []).effect).toBe("ask")
+  })
+
+  test("more specific action beats less specific", () => {
+    const result = PermissionV2.evaluate("bash", "rm", [
+      { action: "bash", resource: "*", effect: "allow" },
+      { action: "*", resource: "*", effect: "deny" },
+    ])
+    expect(result.effect).toBe("allow")
+  })
+
+  test("more specific resource beats less specific", () => {
+    const result = PermissionV2.evaluate("bash", "rm", [
+      { action: "bash", resource: "rm", effect: "deny" },
+      { action: "bash", resource: "*", effect: "allow" },
+    ])
+    expect(result.effect).toBe("deny")
+  })
+
+  test("exact resource beats wildcard regardless of order", () => {
+    const result = PermissionV2.evaluate("bash", "/bin/rm", [
+      { action: "bash", resource: "/bin/rm", effect: "deny" },
+      { action: "bash", resource: "*", effect: "allow" },
+    ])
+    expect(result.effect).toBe("deny")
+  })
+
+  test("same specificity picks last (tiebreaker)", () => {
+    const result = PermissionV2.evaluate("bash", "rm", [
+      { action: "bash", resource: "rm", effect: "deny" },
+      { action: "bash", resource: "rm", effect: "allow" },
+    ])
+    expect(result.effect).toBe("allow")
+  })
+
+  test("glob resource specificity", () => {
+    const result = PermissionV2.evaluate("edit", "src/components/Button.tsx", [
+      { action: "edit", resource: "src/components/*", effect: "allow" },
+      { action: "edit", resource: "src/*", effect: "deny" },
+    ])
+    expect(result.effect).toBe("allow")
+  })
+
+  test("action wildcard with specific resource", () => {
+    const result = PermissionV2.evaluate("bash", "rm", [
+      { action: "*", resource: "rm", effect: "deny" },
+    ])
+    expect(result.effect).toBe("deny")
+  })
+})
 
 describe("PermissionV2", () => {
   it.effect("returns the evaluated effect and only queues prompts", () =>
