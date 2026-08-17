@@ -92,7 +92,7 @@ const GeminiFunctionCallPart = Schema.Struct({
   functionCall: Schema.Struct({
     id: Schema.optional(Schema.String),
     name: Schema.String,
-    args: Schema.Unknown,
+    args: Schema.optional(Schema.Unknown),
   }),
   thoughtSignature: Schema.optional(Schema.String),
 })
@@ -586,7 +586,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
     }
 
     if ("functionCall" in part) {
-      const input = part.functionCall.args
+      const input = part.functionCall.args === undefined ? {} : part.functionCall.args
       const id = `tool_${nextToolCallId++}`
       const metadata = {
         ...(part.functionCall.id === undefined ? {} : { functionCallId: part.functionCall.id }),

@@ -767,6 +767,31 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("defaults omitted function call args to an empty object", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "ping", description: "Ping", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              candidates: [
+                {
+                  content: { role: "model", parts: [{ functionCall: { name: "ping" } }] },
+                  finishReason: "STOP",
+                },
+              ],
+            }),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toEqual([{ type: "tool-call", id: "tool_0", name: "ping", input: {} }])
+    }),
+  )
+
   it.effect("maps tool calls without a finish reason", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
