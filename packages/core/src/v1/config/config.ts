@@ -190,3 +190,31 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "Config" })
 
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
+
+const Removable = <S extends Schema.Top>(value: S) => Schema.Record(Schema.String, Schema.NullOr(value))
+
+/**
+ * `Config` as accepted by a PATCH request body.
+ *
+ * Identical to `Info` except that every map-shaped field accepts `null` as a
+ * member value, following JSON Merge Patch (RFC 7396) where `null` means
+ * "remove this member". A merge patch cannot otherwise express a removal:
+ * omitting a key preserves it, and `{}` is a no-op, so without `null` a client
+ * can add and change config entries but never delete one.
+ *
+ * `null` is deliberately NOT part of `Info` itself, so it stays invalid inside
+ * an on-disk config file — it is a request-body verb, not a config value.
+ */
+export const Patch = Schema.Struct({
+  ...Info.fields,
+  command: Schema.optional(Removable(ConfigCommandV1.Info)),
+  references: Schema.optional(Removable(ConfigReference.Entry)),
+  reference: Schema.optional(Removable(ConfigReference.Entry)),
+  mode: Schema.optional(Removable(ConfigAgentV1.Info)),
+  agent: Schema.optional(Removable(ConfigAgentV1.Info)),
+  provider: Schema.optional(Removable(ConfigProviderV1.Info)),
+  mcp: Schema.optional(Removable(Schema.Union([ConfigMCPV1.Info, Schema.Struct({ enabled: Schema.Boolean })]))),
+  tools: Schema.optional(Removable(Schema.Boolean)),
+}).annotate({ identifier: "ConfigPatch" })
+
+export type Patch = DeepMutable<Schema.Schema.Type<typeof Patch>>
