@@ -1,5 +1,6 @@
 export { AppBaseProviders, AppInterface } from "./app"
 export { useLayout } from "./context/layout"
+export { useGlobal } from "./context/global"
 export { useServerSDK } from "./context/server-sdk"
 export { useServerSync } from "./context/server-sync"
 export { useServers as useServers } from "./context/servers"

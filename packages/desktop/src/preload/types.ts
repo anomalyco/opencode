@@ -1,4 +1,4 @@
-import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
+import type { DesktopMenuAction, DesktopRecentProject } from "@opencode-ai/app/desktop-menu"
 import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import type { DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
@@ -66,6 +66,7 @@ export type ElectronAPI = {
 
   getWindowID: () => Promise<string>
   onMenuCommand: (cb: (id: string) => void) => () => void
+  setRecentProjects: (projects: DesktopRecentProject[]) => Promise<void>
   onDeepLink: (cb: (urls: string[]) => void) => () => void
 
   openDirectoryPicker: (opts?: {

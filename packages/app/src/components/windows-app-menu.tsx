@@ -5,9 +5,18 @@ import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 
 import { useCommand } from "@/context/command"
-import { DESKTOP_MENU, desktopMenuVisible, type DesktopMenuAction, type DesktopMenuEntry } from "@/desktop-menu"
+import {
+  DESKTOP_MENU,
+  desktopMenuVisible,
+  desktopRecentProjectCommand,
+  type DesktopMenuAction,
+  type DesktopMenuEntry,
+} from "@/desktop-menu"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
+import { useGlobal } from "@/context/global"
+import { ServerConnection, serverName } from "@/context/servers"
+import { displayName } from "@/pages/layout/helpers"
 
 export function WindowsAppMenu(props: {
   command: ReturnType<typeof useCommand>
@@ -15,6 +24,7 @@ export function WindowsAppMenu(props: {
 }) {
   let lastFocused: HTMLElement | undefined
   const language = useLanguage()
+  const global = useGlobal()
 
   const rememberFocus = () => {
     const active = document.activeElement
@@ -73,6 +83,49 @@ export function WindowsAppMenu(props: {
                     {(entry) => {
                       // Static menu data: an early return keeps the union narrowing a Show fallback would lose.
                       if (entry.type === "separator") return <DropdownMenu.Separator />
+                      if (entry.dynamic === "recentProjects") {
+                        const servers = global.servers.list()
+                        const groups = servers
+                          .map((server) => ({
+                            server,
+                            projects: global.ensureServerCtx(server).projects.recent().slice(0, 5),
+                          }))
+                          .filter((group) => group.projects.length > 0)
+                        return (
+                          <DesktopMenuSubmenu label={entry.labelKey ? language.t(entry.labelKey) : ""}>
+                            <For each={groups}>
+                              {(group, index) => (
+                                <>
+                                  <Show when={index() > 0}>
+                                    <DropdownMenu.Separator />
+                                  </Show>
+                                  <Show when={servers.length > 1}>
+                                    <DropdownMenu.GroupLabel class="desktop-app-menu-heading">
+                                      {serverName(group.server)}
+                                    </DropdownMenu.GroupLabel>
+                                  </Show>
+                                  <For each={group.projects}>
+                                    {(project) => (
+                                      <DesktopMenuItem
+                                        label={displayName(project)}
+                                        disabled={false}
+                                        onSelect={() =>
+                                          runCommand(
+                                            desktopRecentProjectCommand(
+                                              ServerConnection.key(group.server),
+                                              project.worktree,
+                                            ),
+                                          )
+                                        }
+                                      />
+                                    )}
+                                  </For>
+                                </>
+                              )}
+                            </For>
+                          </DesktopMenuSubmenu>
+                        )
+                      }
                       return (
                         <DesktopMenuItem
                           label={entry.labelKey ? language.t(entry.labelKey) : ""}

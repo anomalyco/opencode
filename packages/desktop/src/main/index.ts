@@ -9,6 +9,7 @@ import { app, BrowserWindow } from "electron"
 
 import { Deferred, Effect, Fiber } from "effect"
 import contextMenu from "electron-context-menu"
+import type { DesktopRecentProject } from "@opencode-ai/app/desktop-menu"
 
 import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
@@ -233,6 +234,7 @@ const main = Effect.gen(function* () {
   registerRendererProtocol()
   setDockIcon()
   const updater = setupAutoUpdater(() => stopWslServers())
+  const recentProjects = new Map<number, DesktopRecentProject[]>()
   const menuDeps = {
     trigger: (id: string) => {
       const win = getLastFocusedWindow()
@@ -240,6 +242,10 @@ const main = Effect.gen(function* () {
     },
     checkForUpdates: () => void showUpdaterDialog(updater),
     relaunch,
+    recentProjects: () => {
+      const win = getLastFocusedWindow()
+      return win ? (recentProjects.get(win.webContents.id) ?? []) : []
+    },
   }
   registerIpcHandlers({
     relaunch,
@@ -266,12 +272,17 @@ const main = Effect.gen(function* () {
     setNativeTranslations: (bundle) => {
       if (setNativeTranslations(bundle)) createMenu(menuDeps)
     },
+    setRecentProjects: (webContentsID, projects) => {
+      recentProjects.set(webContentsID, projects)
+      createMenu(menuDeps)
+    },
   })
   registerUpdaterIpc(updater)
   void updater.start()
   const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)
   updateTimer.unref()
   app.once("will-quit", () => clearInterval(updateTimer))
+  app.on("browser-window-focus", () => createMenu(menuDeps))
   yield* Effect.promise(() => startNetLog()).pipe(
     Effect.catch((error) =>
       Effect.sync(() => {

@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises"
 import { basename, join } from "node:path"
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
-import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
+import type { DesktopMenuAction, DesktopRecentProject } from "@opencode-ai/app/desktop-menu"
 import { parseDesktopNativeBundle, type DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
 
 import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
@@ -45,6 +45,7 @@ type Deps = {
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
   setNativeTranslations: (bundle: DesktopNativeBundle) => void
+  setRecentProjects: (webContentsID: number, projects: DesktopRecentProject[]) => void
 }
 
 export function registerIpcHandlers(deps: Deps) {
@@ -81,6 +82,20 @@ export function registerIpcHandlers(deps: Deps) {
     const bundle = parseDesktopNativeBundle(value)
     if (!bundle) throw new Error("Invalid native translation bundle")
     deps.setNativeTranslations(bundle)
+  })
+  ipcMain.handle("set-recent-projects", (event: IpcMainInvokeEvent, value: unknown) => {
+    if (event.senderFrame !== event.sender.mainFrame) throw new Error("Invalid recent projects sender")
+    if (!Array.isArray(value)) throw new Error("Invalid recent projects")
+    const projects = value.filter((item): item is DesktopRecentProject => {
+      if (!item || typeof item !== "object") return false
+      const project = item as Record<string, unknown>
+      return (
+        typeof project.command === "string" &&
+        typeof project.label === "string" &&
+        (project.server === undefined || typeof project.server === "string")
+      )
+    })
+    deps.setRecentProjects(event.sender.id, projects.slice(0, 50))
   })
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     try {

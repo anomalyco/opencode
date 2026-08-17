@@ -15,7 +15,9 @@ import {
   useCommand,
   useWslServers,
   useLanguage,
+  useGlobal,
 } from "@opencode-ai/app"
+import { desktopRecentProjectCommand } from "@opencode-ai/app/desktop-menu"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
@@ -348,6 +350,7 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
   )
   function DesktopEffects() {
     const cmd = useCommand()
+    const global = useGlobal()
     menuTrigger = (id) => cmd.trigger(id)
 
     const theme = useTheme()
@@ -359,6 +362,22 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
       if (bg) {
         void window.api.setBackgroundColor(bg)
       }
+    })
+
+    createEffect(() => {
+      const servers = global.servers.list()
+      const multiple = servers.length > 1
+      const projects = servers.flatMap((server) =>
+        global
+          .ensureServerCtx(server)
+          .projects.recent()
+          .map((project) => ({
+            command: desktopRecentProjectCommand(ServerConnection.key(server), project.worktree),
+            label: project.name ?? project.worktree.split(/[\\/]/).filter(Boolean).at(-1) ?? project.worktree,
+            server: multiple ? (server.displayName ?? new URL(server.http.url).host) : undefined,
+          })),
+      )
+      void window.api.setRecentProjects(projects)
     })
 
     return null

@@ -80,6 +80,7 @@ const api: ElectronAPI = {
     ipcRenderer.on("menu-command", handler)
     return () => ipcRenderer.removeListener("menu-command", handler)
   },
+  setRecentProjects: (projects) => ipcRenderer.invoke("set-recent-projects", projects),
   onDeepLink: (cb) => {
     const handler = (_: unknown, urls: string[]) => cb(urls)
     ipcRenderer.on("deep-link", handler)

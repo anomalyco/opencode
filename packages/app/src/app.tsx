@@ -8,7 +8,7 @@ import { File } from "@opencode-ai/session-ui/file"
 import { Font } from "@opencode-ai/ui/font"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Navigate, Route, Router, useParams, useSearchParams } from "@solidjs/router"
+import { type BaseRouterProps, Navigate, Route, Router, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import {
   type Component,
@@ -36,6 +36,8 @@ import { SettingsProvider } from "@/context/settings"
 import { TabsProvider, useTabs, type DraftTab } from "@/context/tabs"
 import { SDKProvider } from "@/context/sdk"
 import { WslServersProvider } from "@/wsl/context"
+import { desktopRecentProjectCommand } from "@/desktop-menu"
+import { displayName } from "@/pages/layout/helpers"
 import { DirectoryDataProvider } from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
@@ -164,6 +166,8 @@ function DesktopCommands() {
   const command = useCommand()
   const language = useLanguage()
   const platform = usePlatform()
+  const global = useGlobal()
+  const navigate = useNavigate()
 
   command.register("desktop", () => {
     const commands: CommandOption[] = []
@@ -177,6 +181,28 @@ function DesktopCommands() {
         },
       })
     }
+    global.servers.list().forEach((server) => {
+      const ctx = global.ensureServerCtx(server)
+      ctx.projects.recent().forEach((project) => {
+        commands.push({
+          id: desktopRecentProjectCommand(ServerConnection.key(server), project.worktree),
+          title: displayName(project),
+          category: language.t("command.category.file"),
+          hidden: true,
+          onSelect: () => {
+            const location = { directory: project.worktree }
+            void ctx.sdk.api.file
+              .list({ path: ".", location })
+              .then(() => ctx.sdk.api.project.current({ location }))
+              .then((value) => ctx.sync.child(project.worktree, { bootstrap: false })[1]("project", value.id))
+              .catch(() => undefined)
+            ctx.projects.open(project.worktree)
+            ctx.projects.touch(project.worktree)
+            navigate("/")
+          },
+        })
+      })
+    })
     return commands
   })
 
