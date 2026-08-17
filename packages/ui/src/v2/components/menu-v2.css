@@ -24,7 +24,10 @@
   text-rendering: geometricPrecision;
 
   transform-origin: var(--kb-menu-content-transform-origin);
-  animation: menu-v2-in 120ms ease-out;
+
+  &[data-expanded] {
+    animation: menu-v2-in 120ms ease-out;
+  }
 
   &:focus-visible {
     outline: none;
