@@ -696,6 +696,10 @@ export const RunCommand = effectCmd({
         // created, and replies issued from inside the loop must use that client.
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
+          // Track partID -> part.type so `message.part.delta` events (which only
+          // carry a partID) can be attributed to the reasoning/text part they
+          // belong to when streamed in --format json.
+          const partTypes = new Map<string, string>()
           let error: string | undefined
 
           for await (const event of events.stream) {
@@ -715,6 +719,7 @@ export const RunCommand = effectCmd({
             if (event.type === "message.part.updated") {
               const part = event.properties.part
               if (part.sessionID !== sessionID) continue
+              partTypes.set(part.id, part.type)
 
               if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
                 if (emit("tool_use", { part })) continue
@@ -771,6 +776,16 @@ export const RunCommand = effectCmd({
                 }
                 process.stdout.write(line + EOL)
               }
+            }
+
+            // Stream incremental reasoning/text tokens in --format json. The
+            // formatted (non-json) renderer intentionally waits for the whole
+            // part (see the `part.time?.end` gates above), so `emit` is a no-op
+            // there and this only affects the raw JSON event stream.
+            if (event.type === "message.part.delta") {
+              const props = event.properties
+              if (props.sessionID !== sessionID) continue
+              if (emit("part_delta", { ...props, partType: partTypes.get(props.partID) })) continue
             }
 
             if (event.type === "session.error") {
