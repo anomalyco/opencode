@@ -357,6 +357,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
                 {
                   command: "dialog.move_session.delete",
                   title: "delete",
+                  variant: "destructive",
                   disabled: (option) => {
                     const value = option?.value
                     if (!value || value.type !== "directory" || value.subdirectory) return true

@@ -46,6 +46,7 @@ export interface DialogSelectProps<T> {
 type DialogSelectActionBase<T> = {
   command: string
   title: string
+  variant?: "primary" | "destructive"
   side?: "left" | "right"
   hidden?: boolean
   disabled?: boolean | ((option: DialogSelectOption<T> | undefined) => boolean)
@@ -577,18 +578,19 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const item = action.item
     const active = createMemo(() => isActionFocused(item))
     const disabled = createMemo(() => isActionDisabled(item))
+    const variant = () => item.variant ?? "primary"
     return (
       <box
         flexDirection="row"
-        backgroundColor={active() ? theme.background.action.primary.focused : RGBA.fromInts(0, 0, 0, 0)}
+        backgroundColor={active() ? theme.background.action[variant()].focused : RGBA.fromInts(0, 0, 0, 0)}
         onMouseUp={() => trigger(item)}
       >
         <text
           fg={
             disabled()
-              ? theme.text.action.primary.disabled
+              ? theme.text.action[variant()].disabled
               : active()
-                ? theme.text.action.primary.focused
+                ? theme.text.action[variant()].focused
                 : theme.text.default
           }
           attributes={active() ? TextAttributes.BOLD : undefined}
@@ -598,9 +600,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         <text
           fg={
             disabled()
-              ? theme.text.action.primary.disabled
+              ? theme.text.action[variant()].disabled
               : active()
-                ? theme.text.action.primary.focused
+                ? theme.text.action[variant()].focused
                 : theme.text.subdued
           }
         >
