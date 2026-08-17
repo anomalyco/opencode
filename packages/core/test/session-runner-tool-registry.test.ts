@@ -161,6 +161,25 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("advertises the admitted direct lookup identity", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const tool = {
+        ...make(),
+        name: "send.message",
+        options: { namespace: "slack.admin", codemode: false },
+      }
+      yield* service.transform((draft) => draft.add(tool))
+      tool.name = "renamed"
+
+      const snapshot = yield* service.snapshot()
+      expect(snapshot.definitions.map((definition) => definition.name)).toEqual(["slack_admin_send_message", "execute"])
+      expect((yield* snapshot.execute(call("slack_admin_send_message"))).content).toEqual([
+        { type: "text", text: "slack_admin_send_message" },
+      ])
+    }),
+  )
+
   it.effect("snapshots external tools with missing input schemas", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service

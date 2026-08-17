@@ -226,8 +226,8 @@ const layer = Layer.effect(
               definitions: [
                 ...Array.from(direct)
                   .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-                  .map(([, tool]) => definition(tool)),
-                ...(codemodeTool ? [definition(codemodeTool)] : []),
+                  .map(([name, tool]) => definition(name, tool)),
+                ...(codemodeTool ? [definition("execute", codemodeTool)] : []),
               ],
               execute: (input: {
                 readonly sessionID: SessionSchema.ID
