@@ -3,7 +3,7 @@ export * as Patch from "./patch.js"
 import { Result, Schema } from "effect"
 import { Bom } from "./bom.js"
 
-export class BoundaryError extends Schema.TaggedErrorClass<BoundaryError>()("Patch.BoundaryError", {
+export class BoundaryError extends Schema.TaggedError<BoundaryError>()("Patch.BoundaryError", {
   boundary: Schema.Literals(["first", "last"]),
 }) {
   override get message() {
@@ -11,7 +11,7 @@ export class BoundaryError extends Schema.TaggedErrorClass<BoundaryError>()("Pat
   }
 }
 
-export class InvalidHunkError extends Schema.TaggedErrorClass<InvalidHunkError>()("Patch.InvalidHunkError", {
+export class InvalidHunkError extends Schema.TaggedError<InvalidHunkError>()("Patch.InvalidHunkError", {
   line: Schema.String,
   lineNumber: Schema.Number,
   reason: Schema.optional(Schema.String),

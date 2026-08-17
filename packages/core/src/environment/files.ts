@@ -14,16 +14,16 @@ export interface DirEntry {
   readonly type: FileType
 }
 
-export class NotFound extends Schema.TaggedErrorClass<NotFound>()("Environment.NotFound", {
+export class NotFound extends Schema.TaggedError<NotFound>()("Environment.NotFound", {
   path: Schema.String,
 }) {}
 
-export class WrongKind extends Schema.TaggedErrorClass<WrongKind>()("Environment.WrongKind", {
+export class WrongKind extends Schema.TaggedError<WrongKind>()("Environment.WrongKind", {
   path: Schema.String,
   actual: FileType,
 }) {}
 
-export class Failed extends Schema.TaggedErrorClass<Failed>()("Environment.Failed", {
+export class Failed extends Schema.TaggedError<Failed>()("Environment.Failed", {
   path: Schema.String,
   cause: Schema.Defect(),
 }) {}

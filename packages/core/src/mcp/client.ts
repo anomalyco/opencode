@@ -44,7 +44,7 @@ const TolerantListPromptsResult = ListPromptsResultSchema.extend({
   prompts: PromptSchema.array(),
 })
 
-export class NeedsAuthError extends Schema.TaggedErrorClass<NeedsAuthError>()("MCP.NeedsAuthError", {
+export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.NeedsAuthError", {
   server: Schema.String,
 }) {
   override get message() {
@@ -52,7 +52,7 @@ export class NeedsAuthError extends Schema.TaggedErrorClass<NeedsAuthError>()("M
   }
 }
 
-export class ConnectError extends Schema.TaggedErrorClass<ConnectError>()("MCP.ConnectError", {
+export class ConnectError extends Schema.TaggedError<ConnectError>()("MCP.ConnectError", {
   server: Schema.String,
   message: Schema.String,
 }) {}

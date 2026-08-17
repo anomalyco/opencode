@@ -23,7 +23,7 @@ export class Info extends Schema.Class<Info>("Workspace.Info")({
   lastUsedAt: Schema.Number,
 }) {}
 
-export class NotFound extends Schema.TaggedErrorClass<NotFound>()("Workspace.NotFound", { workspaceID: ID }) {}
+export class NotFound extends Schema.TaggedError<NotFound>()("Workspace.NotFound", { workspaceID: ID }) {}
 
 export interface Interface {
   readonly create: (provider: string) => Effect.Effect<Info, WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>

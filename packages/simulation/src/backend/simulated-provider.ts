@@ -32,7 +32,7 @@ export type ProviderResponseEvent =
   | SimulationProtocol.Backend.Item
   | { readonly type: "finish"; readonly reason: SimulationProtocol.Backend.FinishReason }
 
-export class ProviderDisconnectedError extends Schema.TaggedErrorClass<ProviderDisconnectedError>()(
+export class ProviderDisconnectedError extends Schema.TaggedError<ProviderDisconnectedError>()(
   "SimulatedProvider.ProviderDisconnectedError",
   { message: Schema.String },
 ) {}
@@ -132,22 +132,22 @@ interface ToolDriver {
   readonly shutdown: Effect.Effect<void>
 }
 
-class InvocationNotFoundError extends Schema.TaggedErrorClass<InvocationNotFoundError>()(
+class InvocationNotFoundError extends Schema.TaggedError<InvocationNotFoundError>()(
   "SimulatedProvider.InvocationNotFoundError",
   { id: Schema.String, message: Schema.String },
 ) {}
 
-class ControllerDisconnectedError extends Schema.TaggedErrorClass<ControllerDisconnectedError>()(
+class ControllerDisconnectedError extends Schema.TaggedError<ControllerDisconnectedError>()(
   "SimulatedProvider.ControllerDisconnectedError",
   { message: Schema.String },
 ) {}
 
-class ToolInvocationNotFoundError extends Schema.TaggedErrorClass<ToolInvocationNotFoundError>()(
+class ToolInvocationNotFoundError extends Schema.TaggedError<ToolInvocationNotFoundError>()(
   "SimulatedProvider.ToolInvocationNotFoundError",
   { id: Schema.String, message: Schema.String },
 ) {}
 
-class ToolControllerError extends Schema.TaggedErrorClass<ToolControllerError>()(
+class ToolControllerError extends Schema.TaggedError<ToolControllerError>()(
   "SimulatedProvider.ToolControllerError",
   { message: Schema.String },
 ) {}

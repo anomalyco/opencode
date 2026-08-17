@@ -48,7 +48,7 @@ export type EffectOutputType = {
 
 type ResolvedEffectTypeReference = Omit<EffectTypeReference, "schema"> & { readonly ast: SchemaAST.AST }
 
-export class GenerationError extends Schema.TaggedErrorClass<GenerationError>()("GenerationError", {
+export class GenerationError extends Schema.TaggedError<GenerationError>()("GenerationError", {
   reason: Schema.String,
 }) {
   override get message() {
@@ -92,7 +92,6 @@ type PromiseInputField =
 
 const resolveHttpApiStatus = SchemaAST.resolveAt<number>("httpApiStatus")
 const resolveHttpApiEncoding = SchemaAST.resolveAt<HttpApiSchema.Encoding>("~httpApiEncoding")
-const resolveContentSchema = SchemaAST.resolveAt<SchemaAST.AST>("contentSchema")
 const Manifest = Schema.fromJsonString(Schema.Array(Schema.String))
 const manifestName = ".httpapi-codegen.json"
 
@@ -430,7 +429,7 @@ function effectTypeReferences(input: ReadonlyArray<EffectTypeReference>) {
   for (const reference of input) {
     const value = { name: reference.name, import: reference.import, ast: reference.schema.ast }
     const document = SchemaRepresentation.toCodeDocument(
-      SchemaRepresentation.fromASTs([Schema.toType(reference.schema).ast]),
+      SchemaRepresentation.toRepresentations([codegenAst(Schema.toType(reference.schema).ast)]),
     )
     const name = document.codes[0]?.Type
     const type =
@@ -462,7 +461,7 @@ function effectType(schema: Schema.Top, references: ReturnType<typeof effectType
     imports.add(direct.import)
     return direct.name
   }
-  const document = SchemaRepresentation.toCodeDocument(SchemaRepresentation.fromASTs([projected.ast]))
+  const document = SchemaRepresentation.toCodeDocument(SchemaRepresentation.toRepresentations([codegenAst(projected.ast)]))
   const source = new Map(document.references.nonRecursives.map((reference) => [reference.$ref, reference.code.Type]))
   const expand = (type: string, seen = new Set<string>()): string => {
     for (const [name, value] of source) {
@@ -588,7 +587,7 @@ function renderEffectFiles(groups: ReadonlyArray<Group>): Output["files"] {
     {
       path: "client-error.ts",
       content:
-        'import { Schema } from "effect"\n\nexport class ClientError extends Schema.TaggedErrorClass<ClientError>()("ClientError", {\n  cause: Schema.Defect(),\n}) {}\n',
+        'import { Schema } from "effect"\n\nexport class ClientError extends Schema.TaggedError<ClientError>()("ClientError", {\n  cause: Schema.Defect(),\n}) {}\n',
     },
     { path: "client.ts", content: renderClient(groups) },
     {
@@ -706,7 +705,7 @@ function renderImportedEffectFiles(
     {
       path: "client-error.ts",
       content:
-        'import { Schema } from "effect"\n\nexport class ClientError extends Schema.TaggedErrorClass<ClientError>()("ClientError", {\n  cause: Schema.Defect(),\n}) {}\n',
+        'import { Schema } from "effect"\n\nexport class ClientError extends Schema.TaggedError<ClientError>()("ClientError", {\n  cause: Schema.Defect(),\n}) {}\n',
     },
     { path: "client.ts", content: client },
     {
@@ -983,9 +982,10 @@ function identifierPart(value: string) {
 
 function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, reservedNames: ReadonlySet<string>) {
   if (schemas.length === 0) return { types: [], definitions: [] }
-  const document = SchemaRepresentation.toCodeDocument(
-    SchemaRepresentation.fromASTs(schemas.map((schema) => schema.ast) as [SchemaAST.AST, ...Array<SchemaAST.AST>]),
+  const representations = SchemaRepresentation.toRepresentations(
+    promiseTypeAsts(schemas) as [SchemaAST.AST, ...Array<SchemaAST.AST>],
   )
+  const document = SchemaRepresentation.toCodeDocument(representations)
   if (
     document.artifacts.some(
       (artifact) =>
@@ -995,9 +995,35 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
   ) {
     throw new GenerationError({ reason: "Referenced Promise types are not implemented" })
   }
+  const anonymous = new Set(
+    Object.entries(representations.references)
+      .filter(([, reference]) => {
+        if (!("annotations" in reference) || reference.annotations === undefined) return true
+        return reference.annotations.identifier === undefined && reference.annotations["~identifier"] === undefined
+      })
+      .map(([name]) => name),
+  )
+  const anonymousTypes = new Map(
+    document.references.nonRecursives
+      .filter((reference) => anonymous.has(reference.$ref))
+      .map((reference) => [reference.$ref, reference.code.Type]),
+  )
+  const inlineAnonymous = (type: string, seen = new Set<string>()): string => {
+    for (const [reference, value] of anonymousTypes) {
+      const pattern = `(?<![A-Za-z0-9_$.'"])${reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_$.'"])`
+      if (!new RegExp(pattern).test(type)) continue
+      if (seen.has(reference)) {
+        throw new GenerationError({ reason: `Recursive Promise types are not implemented: ${reference}` })
+      }
+      type = type.replaceAll(new RegExp(pattern, "g"), `(${inlineAnonymous(value, new Set([...seen, reference]))})`)
+    }
+    return type
+  }
   const names = new Map<string, string>()
   const usedNames = new Set(reservedNames)
-  for (const reference of document.references.nonRecursives) {
+  const references = document.references.nonRecursives.filter((reference) => !anonymous.has(reference.$ref))
+  const referenceNames = new Set(references.map((reference) => reference.$ref))
+  for (const reference of references) {
     const seed = identifierPart(reference.$ref)
     const name = uniqueTypeName(seed, usedNames)
     names.set(reference.$ref, name)
@@ -1014,11 +1040,30 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
       .replaceAll(/(?<!["'])\bunknown\b(?!["'])/g, "any")
     return mutable ? mutableType(preserveStringSuggestions(output)) : preserveStringSuggestions(output)
   }
+  const equivalent = new Map<string, string>()
+  for (const reference of references) {
+    const base = reference.$ref.replace(/_\d+$/, "")
+    const identifier = referenceNames.has(base) ? base : reference.$ref
+    const key = `${identifier}\0${render(inlineAnonymous(reference.code.Type))}`
+    const existing = equivalent.get(key)
+    if (existing !== undefined) {
+      names.set(reference.$ref, existing)
+      continue
+    }
+    const name = names.get(reference.$ref)
+    if (name === undefined) throw new GenerationError({ reason: `Missing Promise type name: ${reference.$ref}` })
+    equivalent.set(key, name)
+  }
+  const emitted = new Set<string>()
   return {
-    types: document.codes.map((code) => render(code.Type)),
-    definitions: document.references.nonRecursives.map(
-      (reference) => `export type ${names.get(reference.$ref)} = ${render(reference.code.Type)}`,
-    ),
+    types: document.codes.map((code) => render(inlineAnonymous(code.Type))),
+    definitions: references.flatMap((reference) => {
+      const name = names.get(reference.$ref)
+      if (name === undefined) throw new GenerationError({ reason: `Missing Promise type name: ${reference.$ref}` })
+      if (emitted.has(name)) return []
+      emitted.add(name)
+      return [`export type ${name} = ${render(inlineAnonymous(reference.code.Type))}`]
+    }),
   }
 }
 
@@ -1028,7 +1073,7 @@ function uniqueTypeName(seed: string, used: ReadonlySet<string>, suffix = 1): st
 }
 
 function structuralType(schema: Schema.Top) {
-  const document = SchemaRepresentation.toCodeDocument(SchemaRepresentation.fromASTs([schema.ast]))
+  const document = SchemaRepresentation.toCodeDocument(SchemaRepresentation.toRepresentations([promiseTypeAst(schema)]))
   if (
     document.artifacts.some(
       (artifact) =>
@@ -1057,6 +1102,63 @@ function structuralType(schema: Schema.Top) {
       .replaceAll(/ & Brand\.Brand<"[^"]+">/g, "")
       .replaceAll("Schema.Json", "JsonValue"),
   )
+}
+
+function promiseTypeAst(schema: Schema.Top) {
+  return codegenAst(schema.ast)
+}
+
+function promiseTypeAsts(schemas: ReadonlyArray<Schema.Top>) {
+  return codegenAsts(schemas.map((schema) => schema.ast))
+}
+
+function codegenAst(root: SchemaAST.AST) {
+  return codegenAsts([root])[0]
+}
+
+function codegenAsts(roots: ReadonlyArray<SchemaAST.AST>) {
+  const cache = new WeakMap<SchemaAST.AST, SchemaAST.AST>()
+  const references = new Map<string, SchemaAST.AST>()
+  const recur = (ast: SchemaAST.AST): SchemaAST.AST => {
+    const cached = cache.get(ast)
+    if (cached !== undefined) return cached
+    const identifier = SchemaAST.resolveIdentifier(ast)
+    const output = normalize(ast)
+    const referenceKey =
+      identifier === undefined
+        ? undefined
+        : `${identifier}\0${ast.context?.isOptional === true}\0${ast.context?.isMutable === true}\0${representationEncoding(output)}`
+    const reference = referenceKey === undefined ? undefined : references.get(referenceKey)
+    if (reference !== undefined) {
+      cache.set(ast, reference)
+      return reference
+    }
+    cache.set(ast, output)
+    if (referenceKey !== undefined) references.set(referenceKey, output)
+    return output
+  }
+  const normalize = (ast: SchemaAST.AST): SchemaAST.AST => {
+    if (SchemaAST.isDeclaration(ast) && ast.annotations?.toCode === undefined) {
+      const representation = ast.annotations?.representation
+      if (
+        typeof representation === "object" &&
+        representation !== null &&
+        "id" in representation &&
+        representation.id === "effect/schema/Json"
+      ) {
+        return Schema.Json.ast
+      }
+      if (ast.annotations?.["~constructor"] !== undefined && ast.typeParameters[0] !== undefined) {
+        const identifier = SchemaAST.resolveIdentifier(ast)
+        const fields = recur(ast.typeParameters[0])
+        if (identifier === undefined) return fields
+        return Schema.make<Schema.Top>(fields).annotate({ identifier }).ast
+      }
+    }
+    if (!("recur" in ast) || typeof ast.recur !== "function") return ast
+    return ast.recur(recur)
+  }
+  return roots.map(recur)
 }
 
 function preserveStringSuggestions(type: string) {
@@ -1206,40 +1308,64 @@ function isPathInput(path: string): path is HttpRouter.PathInput {
   return path === "*" || path.startsWith("/")
 }
 
+const encodings = new WeakMap<SchemaAST.AST, string>()
+
 function sameEncoding(left: SchemaAST.AST, right: SchemaAST.AST): boolean {
+  if (!sameRuntimeEncoding(left, right)) return false
+  return sameRepresentation(left, right)
+}
+
+function sameRepresentation(left: SchemaAST.AST, right: SchemaAST.AST): boolean {
+  return representationEncoding(left) === representationEncoding(right)
+}
+
+function representationEncoding(ast: SchemaAST.AST) {
+  const cached = encodings.get(ast)
+  if (cached !== undefined) return cached
+  const encoded = JSON.stringify(SchemaRepresentation.toJson(SchemaRepresentation.toRepresentation(ast)))
+  encodings.set(ast, encoded)
+  return encoded
+}
+
+function sameRuntimeEncoding(left: SchemaAST.AST, right: SchemaAST.AST): boolean {
   if (left._tag !== right._tag || left.encoding?.length !== right.encoding?.length) return false
   if (
     left.encoding?.some((link, index) => {
       const other = right.encoding?.[index]
-      return other === undefined || link.transformation !== other.transformation || !sameEncoding(link.to, other.to)
+      return other === undefined || !sameRuntimeEncoding(link.to, other.to)
     })
-  )
+  ) {
     return false
+  }
   if (!sameChecks(left.checks, right.checks) || !sameContext(left.context, right.context)) return false
-  if (SchemaAST.isSuspend(left) && SchemaAST.isSuspend(right)) return sameEncoding(left.thunk(), right.thunk())
+  if (SchemaAST.isSuspend(left) && SchemaAST.isSuspend(right)) {
+    return sameRuntimeEncoding(left.thunk(), right.thunk())
+  }
   if (SchemaAST.isUnion(left) && SchemaAST.isUnion(right)) {
     return (
       left.types.length === right.types.length &&
-      left.types.every((ast, index) => sameEncoding(ast, right.types[index]))
+      left.types.every((ast, index) => sameRuntimeEncoding(ast, right.types[index]))
     )
   }
   if (SchemaAST.isArrays(left) && SchemaAST.isArrays(right)) {
     return (
       left.elements.length === right.elements.length &&
       left.rest.length === right.rest.length &&
-      left.elements.every((ast, index) => sameEncoding(ast, right.elements[index])) &&
-      left.rest.every((ast, index) => sameEncoding(ast, right.rest[index]))
+      left.elements.every((ast, index) => sameRuntimeEncoding(ast, right.elements[index])) &&
+      left.rest.every((ast, index) => sameRuntimeEncoding(ast, right.rest[index]))
     )
   }
   if (SchemaAST.isObjects(left) && SchemaAST.isObjects(right)) {
     return (
       left.propertySignatures.length === right.propertySignatures.length &&
       left.indexSignatures.length === right.indexSignatures.length &&
-      left.propertySignatures.every((field, index) => sameEncoding(field.type, right.propertySignatures[index].type)) &&
+      left.propertySignatures.every((field, index) =>
+        sameRuntimeEncoding(field.type, right.propertySignatures[index].type),
+      ) &&
       left.indexSignatures.every(
         (field, index) =>
-          sameEncoding(field.parameter, right.indexSignatures[index].parameter) &&
-          sameEncoding(field.type, right.indexSignatures[index].type),
+          sameRuntimeEncoding(field.parameter, right.indexSignatures[index].parameter) &&
+          sameRuntimeEncoding(field.type, right.indexSignatures[index].type),
       )
     )
   }
@@ -1399,9 +1525,9 @@ function assertPortable(schema: Schema.Top, path: string, portable: Map<SchemaAS
     if (!annotationsPortable(ast.annotations)) return false
     if (!checksPortable(ast.checks) || ("encodingChecks" in ast && !checksPortable(ast.encodingChecks))) return false
     if (SchemaAST.isDeclaration(ast)) {
-      return generationPortable(ast.annotations?.generation) && ast.typeParameters.every(visit)
+      return typeof ast.annotations?.toCode === "function" && ast.typeParameters.every(visit)
     }
-    if (ast.encoding !== undefined && ast.annotations?.generation === undefined) return false
+    if (ast.encoding !== undefined && ast.annotations?.toCode === undefined) return false
     if (SchemaAST.isSuspend(ast)) return visit(ast.thunk())
     if (SchemaAST.isUnion(ast)) return ast.types.every(visit)
     if (SchemaAST.isArrays(ast)) {
@@ -1435,7 +1561,8 @@ function checksPortable(checks: SchemaAST.Checks | undefined): boolean {
   return checks.every((check) =>
     check._tag === "Filter"
       ? !check.aborted &&
-        check.annotations?.meta !== undefined &&
+        check.annotations?.representation !== undefined &&
+        serializable(check.annotations.representation) &&
         typeof check.annotations.arbitrary === "object" &&
         check.annotations.arbitrary !== null &&
         "constraint" in check.annotations.arbitrary
@@ -1469,38 +1596,23 @@ function metadataPortable(ast: SchemaAST.AST, seen: Set<SchemaAST.AST>): boolean
   return true
 }
 
-function generationPortable(generation: unknown): boolean {
-  if (typeof generation !== "object" || generation === null) return false
-  const value = generation as {
-    readonly runtime?: unknown
-    readonly Type?: unknown
-    readonly importDeclaration?: unknown
-  }
-  if (typeof value.runtime !== "string" || typeof value.Type !== "string") return false
-  if (value.importDeclaration !== undefined) {
-    if (
-      typeof value.importDeclaration !== "string" ||
-      !/from ["']effect(?:\/[^"']+)?["']$/.test(value.importDeclaration)
-    ) {
-      return false
-    }
-  }
-  const namespace =
-    typeof value.importDeclaration === "string"
-      ? /import(?: type)? \* as ([A-Za-z_$][\w$]*)/.exec(value.importDeclaration)?.[1]
-      : undefined
-  return value.runtime.startsWith("Schema.") || (namespace !== undefined && value.runtime.startsWith(`${namespace}.`))
-}
-
 function annotationsPortable(annotations: Schema.Annotations.Annotations | undefined) {
   if (annotations === undefined) return true
   return Object.entries(annotations).every(([key, value]) => {
     if (
-      ["toCodec", "toCodecJson", "toArbitrary", "toFormatter", "toEquivalence", "~effect/Schema/Class"].includes(key)
+      [
+        "toCodec",
+        "toCodecJson",
+        "toCodecStringTree",
+        "toArbitrary",
+        "toFormatter",
+        "toEquivalence",
+        "toCode",
+        "~constructor",
+      ].includes(key)
     ) {
       return true
     }
-    if (key === "generation") return generationPortable(value)
     return serializable(value)
   })
 }
@@ -1518,7 +1630,7 @@ function taggedErrorFields(schema: Schema.Top) {
 }
 
 function declaredErrorFields(schema: Schema.Top) {
-  if (!SchemaAST.isDeclaration(schema.ast) || schema.ast.annotations?.["~effect/Schema/Class"] === undefined) {
+  if (!SchemaAST.isDeclaration(schema.ast) || schema.ast.annotations?.["~constructor"] === undefined) {
     return undefined
   }
   const fields = schema.ast.typeParameters[0]
@@ -1559,12 +1671,11 @@ function streamDataSchema(schema: Extract<HttpApiSchema.StreamSchema, { readonly
 }
 
 function streamEncodedDataSchema(schema: Extract<HttpApiSchema.StreamSchema, { readonly _tag: "StreamSse" }>) {
-  const data = streamDataAst(schema.events.ast)
-  const encodedAst = data.encoding?.at(-1)?.to
-  if (encodedAst === undefined) throw new GenerationError({ reason: "Invalid SSE data schema" })
-  const encoded = resolveContentSchema(encodedAst)
-  if (!SchemaAST.isAST(encoded)) throw new GenerationError({ reason: "Invalid SSE data schema" })
-  return Schema.make<Schema.Top>(encoded)
+  const replaceEncoding: unknown = Reflect.get(SchemaAST, "replaceEncoding")
+  if (typeof replaceEncoding !== "function") throw new GenerationError({ reason: "Invalid SSE data schema" })
+  const ast: unknown = replaceEncoding(streamDataAst(schema.events.ast), undefined)
+  if (!SchemaAST.isAST(ast)) throw new GenerationError({ reason: "Invalid SSE data schema" })
+  return Schema.toEncoded(Schema.make<Schema.Top>(ast))
 }
 
 function streamDataAst(ast: SchemaAST.AST) {
@@ -1733,12 +1844,15 @@ function renderSchemas(slots: ReadonlyArray<Slot>) {
   ]
   const [first, ...rest] = expanded
   const document = SchemaRepresentation.toCodeDocument(
-    SchemaRepresentation.fromASTs([first.schema.ast, ...rest.map((slot) => slot.schema.ast)]),
+    SchemaRepresentation.toRepresentations(codegenAsts(expanded.map((slot) => slot.schema.ast)) as [
+      SchemaAST.AST,
+      ...Array<SchemaAST.AST>,
+    ]),
   )
   const artifacts = document.artifacts.flatMap((artifact) => {
     if (artifact._tag === "Import") return [artifact.importDeclaration]
-    if (artifact._tag === "Enum") return [artifact.generation.runtime]
-    return [`const ${artifact.identifier} = ${artifact.generation.runtime}`]
+    if (artifact._tag === "Enum") return [artifact.code.runtime]
+    return [`const ${artifact.identifier} = ${artifact.code.runtime}`]
   })
   const references = [
     ...document.references.nonRecursives.map(({ $ref, code }) => `const ${$ref} = ${code.runtime}`),
@@ -1761,7 +1875,7 @@ function renderSchemas(slots: ReadonlyArray<Slot>) {
       annotations.length === 0
         ? ""
         : `.annotate({ ${annotations.map(([key, value]) => `${JSON.stringify(key)}: ${JSON.stringify(value)}`).join(", ")} })`
-    return `class ${slot.name}Class extends Schema.TaggedErrorClass<${slot.name}Class>(${JSON.stringify(tagged.identifier)})(${JSON.stringify(tagged.tag)}, { ${fields} }) {}\nconst ${slot.name} = ${slot.name}Class${annotate}`
+    return `class ${slot.name}Class extends Schema.TaggedError<${slot.name}Class>(${JSON.stringify(tagged.identifier)})(${JSON.stringify(tagged.tag)}, { ${fields} }) {}\nconst ${slot.name} = ${slot.name}Class${annotate}`
   })
   return [...artifacts, ...references, ...declarations].join("\n\n")
 }

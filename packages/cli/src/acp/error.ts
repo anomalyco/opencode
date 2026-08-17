@@ -1,36 +1,36 @@
 import { RequestError } from "@agentclientprotocol/sdk"
 import { Schema } from "effect"
 
-export class SessionNotFoundError extends Schema.TaggedErrorClass<SessionNotFoundError>()("ACPSessionNotFoundError", {
+export class SessionNotFoundError extends Schema.TaggedError<SessionNotFoundError>()("ACPSessionNotFoundError", {
   sessionId: Schema.String,
 }) {}
 
-export class InvalidConfigOptionError extends Schema.TaggedErrorClass<InvalidConfigOptionError>()(
+export class InvalidConfigOptionError extends Schema.TaggedError<InvalidConfigOptionError>()(
   "ACPInvalidConfigOptionError",
   { configId: Schema.String },
 ) {}
 
-export class InvalidModelError extends Schema.TaggedErrorClass<InvalidModelError>()("ACPInvalidModelError", {
+export class InvalidModelError extends Schema.TaggedError<InvalidModelError>()("ACPInvalidModelError", {
   modelId: Schema.String,
   providerId: Schema.optional(Schema.String),
 }) {}
 
-export class InvalidEffortError extends Schema.TaggedErrorClass<InvalidEffortError>()("ACPInvalidEffortError", {
+export class InvalidEffortError extends Schema.TaggedError<InvalidEffortError>()("ACPInvalidEffortError", {
   effort: Schema.String,
 }) {}
 
-export class InvalidModeError extends Schema.TaggedErrorClass<InvalidModeError>()("ACPInvalidModeError", {
+export class InvalidModeError extends Schema.TaggedError<InvalidModeError>()("ACPInvalidModeError", {
   mode: Schema.String,
 }) {}
 
-export class AuthRequiredError extends Schema.TaggedErrorClass<AuthRequiredError>()("ACPAuthRequiredError", {}) {}
+export class AuthRequiredError extends Schema.TaggedError<AuthRequiredError>()("ACPAuthRequiredError", {}) {}
 
-export class UnknownAuthMethodError extends Schema.TaggedErrorClass<UnknownAuthMethodError>()(
+export class UnknownAuthMethodError extends Schema.TaggedError<UnknownAuthMethodError>()(
   "ACPUnknownAuthMethodError",
   { methodId: Schema.String },
 ) {}
 
-export class ServiceFailureError extends Schema.TaggedErrorClass<ServiceFailureError>()("ACPServiceFailureError", {
+export class ServiceFailureError extends Schema.TaggedError<ServiceFailureError>()("ACPServiceFailureError", {
   safeMessage: Schema.String,
   service: Schema.optional(Schema.String),
   errorName: Schema.optional(Schema.String),

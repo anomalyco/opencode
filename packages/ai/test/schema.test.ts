@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as OpenAIResponses from "../src/protocols/openai-responses.js"
 import {
@@ -88,6 +88,17 @@ describe("AI.Usage", () => {
     expect(ProviderShared.sumTokens(1, undefined, 3)).toBe(4)
     expect(ProviderShared.sumTokens(undefined, undefined, undefined)).toBeUndefined()
     expect(ProviderShared.sumTokens()).toBeUndefined()
+  })
+
+  test("sseFraming maps decoder failures to AI errors", async () => {
+    const error = await Effect.runPromise(
+      ProviderShared.sseFraming(
+        Stream.make(new TextEncoder().encode(`data: ${"x".repeat(10 * 1024 * 1024)}`)),
+      ).pipe(Stream.runCollect, Effect.flip),
+    )
+
+    expect(error).toBeInstanceOf(AIError)
+    expect(error.reason._tag).toBe("InvalidProviderOutput")
   })
 
   test("visibleOutputTokens clamps reasoning > output to zero", () => {

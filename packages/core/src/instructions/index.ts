@@ -65,7 +65,7 @@ export interface Admission {
   readonly blobs: Readonly<Record<string, Schema.Json>>
 }
 
-export class InitializationBlocked extends Schema.TaggedErrorClass<InitializationBlocked>()(
+export class InitializationBlocked extends Schema.TaggedError<InitializationBlocked>()(
   "Instructions.InitializationBlocked",
   { keys: Schema.Array(Key) },
 ) {
@@ -74,7 +74,7 @@ export class InitializationBlocked extends Schema.TaggedErrorClass<Initializatio
   }
 }
 
-export class DuplicateKeyError extends Schema.TaggedErrorClass<DuplicateKeyError>()("Instructions.DuplicateKeyError", {
+export class DuplicateKeyError extends Schema.TaggedError<DuplicateKeyError>()("Instructions.DuplicateKeyError", {
   key: Key,
 }) {
   override get message() {

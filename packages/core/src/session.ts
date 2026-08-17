@@ -111,46 +111,46 @@ type ForkInput = {
 
 export { MessageDecodeError, NotFoundError }
 
-export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
+export class PromptConflictError extends Schema.TaggedError<PromptConflictError>()("Session.PromptConflictError", {
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
-export class SyntheticConflictError extends Schema.TaggedErrorClass<SyntheticConflictError>()(
+export class SyntheticConflictError extends Schema.TaggedError<SyntheticConflictError>()(
   "Session.SyntheticConflictError",
   {
     sessionID: SessionSchema.ID,
     inputID: SessionMessage.ID,
   },
 ) {}
-export class AttachmentError extends Schema.TaggedErrorClass<AttachmentError>()("Session.AttachmentError", {
+export class AttachmentError extends Schema.TaggedError<AttachmentError>()("Session.AttachmentError", {
   uri: Schema.String,
   message: Schema.String,
 }) {}
-export class CompactionConflictError extends Schema.TaggedErrorClass<CompactionConflictError>()(
+export class CompactionConflictError extends Schema.TaggedError<CompactionConflictError>()(
   "Session.CompactionConflictError",
   {
     sessionID: SessionSchema.ID,
     inputID: SessionMessage.ID,
   },
 ) {}
-export class BusyError extends Schema.TaggedErrorClass<BusyError>()("Session.BusyError", {
+export class BusyError extends Schema.TaggedError<BusyError>()("Session.BusyError", {
   sessionID: SessionSchema.ID,
 }) {}
-export class InboxConflictError extends Schema.TaggedErrorClass<InboxConflictError>()("Session.InboxConflictError", {
+export class InboxConflictError extends Schema.TaggedError<InboxConflictError>()("Session.InboxConflictError", {
   sessionID: SessionSchema.ID,
   inboxID: SessionMessage.ID,
 }) {}
 type InboxItemRef = { readonly sessionID: SessionSchema.ID; readonly inboxID: SessionMessage.ID }
-export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundError>()("Session.SkillNotFoundError", {
+export class SkillNotFoundError extends Schema.TaggedError<SkillNotFoundError>()("Session.SkillNotFoundError", {
   skill: Skill.ID,
 }) {}
 
-export class DestinationNotFoundError extends Schema.TaggedErrorClass<DestinationNotFoundError>()(
+export class DestinationNotFoundError extends Schema.TaggedError<DestinationNotFoundError>()(
   "Session.DestinationNotFoundError",
   { directory: AbsolutePath },
 ) {}
 
-export class DestinationNotDirectoryError extends Schema.TaggedErrorClass<DestinationNotDirectoryError>()(
+export class DestinationNotDirectoryError extends Schema.TaggedError<DestinationNotDirectoryError>()(
   "Session.DestinationNotDirectoryError",
   { directory: AbsolutePath },
 ) {}

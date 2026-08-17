@@ -60,7 +60,7 @@ export namespace JsonRpc {
   }
 }
 
-export class SimulationRequestError extends Schema.TaggedErrorClass<SimulationRequestError>()(
+export class SimulationRequestError extends Schema.TaggedError<SimulationRequestError>()(
   "SimulationRequestError",
   {
     method: Schema.String,
@@ -131,7 +131,7 @@ export namespace Handshake {
     readonly capabilities: ReadonlyArray<Capability>
   }
 
-  export class RoleMismatchError extends Schema.TaggedErrorClass<RoleMismatchError>()(
+  export class RoleMismatchError extends Schema.TaggedError<RoleMismatchError>()(
     "SimulationHandshake.RoleMismatchError",
     {
       expected: EndpointRole,
@@ -140,7 +140,7 @@ export namespace Handshake {
     },
   ) {}
 
-  export class UnsupportedProtocolError extends Schema.TaggedErrorClass<UnsupportedProtocolError>()(
+  export class UnsupportedProtocolError extends Schema.TaggedError<UnsupportedProtocolError>()(
     "SimulationHandshake.UnsupportedProtocolError",
     {
       offered: Schema.Array(Schema.Number),
@@ -149,7 +149,7 @@ export namespace Handshake {
     },
   ) {}
 
-  export class MissingCapabilityError extends Schema.TaggedErrorClass<MissingCapabilityError>()(
+  export class MissingCapabilityError extends Schema.TaggedError<MissingCapabilityError>()(
     "SimulationHandshake.MissingCapabilityError",
     {
       missing: Schema.Array(Capability),

@@ -20,7 +20,7 @@ import { Capabilities, ID, Info, Ref, VariantID } from "./model.js"
 import { Npm } from "@opencode-ai/util/npm"
 import { Provider } from "./provider.js"
 
-export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnavailableError>()(
+export class VariantUnavailableError extends Schema.TaggedError<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
   {
     providerID: Provider.ID,
@@ -33,7 +33,7 @@ export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnav
   }
 }
 
-export class UnsupportedPackageError extends Schema.TaggedErrorClass<UnsupportedPackageError>()(
+export class UnsupportedPackageError extends Schema.TaggedError<UnsupportedPackageError>()(
   "SessionRunnerModel.UnsupportedPackageError",
   {
     providerID: Provider.ID,
@@ -46,7 +46,7 @@ export class UnsupportedPackageError extends Schema.TaggedErrorClass<Unsupported
   }
 }
 
-export class UnresolvedProviderVariablesError extends Schema.TaggedErrorClass<UnresolvedProviderVariablesError>()(
+export class UnresolvedProviderVariablesError extends Schema.TaggedError<UnresolvedProviderVariablesError>()(
   "SessionRunnerModel.UnresolvedProviderVariablesError",
   {
     providerID: Provider.ID,

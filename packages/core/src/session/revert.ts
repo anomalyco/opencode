@@ -11,7 +11,7 @@ import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { SessionMessageTable } from "./sql.js"
 
-export class MessageNotFoundError extends Schema.TaggedErrorClass<MessageNotFoundError>()(
+export class MessageNotFoundError extends Schema.TaggedError<MessageNotFoundError>()(
   "Session.MessageNotFoundError",
   {
     sessionID: SessionSchema.ID,

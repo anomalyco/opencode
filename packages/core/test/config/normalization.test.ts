@@ -81,7 +81,7 @@ describe("ConfigNormalize", () => {
 
   test("preserves arbitrary JSON-round-tripped native configuration", () => {
     FastCheck.assert(
-      FastCheck.property(Schema.toArbitrary(Info), (info) => {
+      FastCheck.property(Schema.toArbitrary(Info)(FastCheck), (info) => {
         const source = JSON.parse(JSON.stringify(Schema.encodeSync(Info)(info)))
         const result = normalized(source)
         expect(Schema.decodeUnknownSync(Info)(result.encoded)).toEqual(

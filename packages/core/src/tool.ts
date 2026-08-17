@@ -4,7 +4,7 @@ export type { Context, Metadata, Options, Result } from "@opencode-ai/schema/too
 
 import { ToolDefinition, type ToolCall } from "@opencode-ai/ai"
 import { Tool } from "@opencode-ai/schema/tool"
-import { Context, Effect, Layer, Schema, Scope, Semaphore } from "effect"
+import { Context, Effect, Layer, Schema, SchemaIssue, Scope, Semaphore } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
@@ -17,7 +17,7 @@ import { SessionSchema } from "./session/schema.js"
 import { definition, execute, normalizeContent } from "./tool/runtime.js"
 import { Wildcard } from "./util/wildcard.js"
 
-export class RegistrationError extends Schema.TaggedErrorClass<RegistrationError>()("Tool.RegistrationError", {
+export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
   name: Schema.String,
   message: Schema.String,
 }) {}
@@ -173,7 +173,7 @@ const layer = Layer.effect(
             catch: (error) =>
               new RegistrationError({
                 name: entry.key,
-                message: `Invalid tool definition ${entry.key}: ${error instanceof Error ? error.message : String(error)}`,
+                message: `Invalid tool definition ${entry.key}: ${schemaMakeError(error)}`,
               }),
           }),
         { discard: true },
@@ -260,6 +260,13 @@ const layer = Layer.effect(
 const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
   const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
   return rule?.resource === "*" && rule.effect === "deny"
+}
+
+const formatSchemaIssue = SchemaIssue.makeFormatterDefault()
+
+function schemaMakeError(error: unknown) {
+  if (error instanceof Error && SchemaIssue.isIssue(error.cause)) return formatSchemaIssue(error.cause)
+  return error instanceof Error ? error.message : String(error)
 }
 
 const validateName = (name: string) =>

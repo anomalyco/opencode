@@ -28,21 +28,21 @@ export interface ProviderImplementation extends Provider {
   readonly execute: (input: ProviderInput) => Effect.Effect<readonly Result[], unknown>
 }
 
-export class ProviderRequiredError extends Schema.TaggedErrorClass<ProviderRequiredError>()(
+export class ProviderRequiredError extends Schema.TaggedError<ProviderRequiredError>()(
   "WebSearch.ProviderRequired",
   {},
 ) {}
 
-export class ProviderNotFoundError extends Schema.TaggedErrorClass<ProviderNotFoundError>()(
+export class ProviderNotFoundError extends Schema.TaggedError<ProviderNotFoundError>()(
   "WebSearch.ProviderNotFound",
   {
     providerID: ID,
   },
 ) {}
 
-export class DisabledError extends Schema.TaggedErrorClass<DisabledError>()("WebSearch.Disabled", {}) {}
+export class DisabledError extends Schema.TaggedError<DisabledError>()("WebSearch.Disabled", {}) {}
 
-export class RequestError extends Schema.TaggedErrorClass<RequestError>()("WebSearch.Request", {
+export class RequestError extends Schema.TaggedError<RequestError>()("WebSearch.Request", {
   providerID: ID,
   cause: Schema.Defect(),
 }) {}

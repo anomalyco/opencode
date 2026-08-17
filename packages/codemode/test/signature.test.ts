@@ -275,8 +275,10 @@ describe("non-identifier property names render as quoted keys", () => {
       input: Schema.Struct({ "foo-bar": Schema.String, plain: Schema.optionalKey(Schema.Number) }),
       execute: () => Effect.succeed(null),
     })
-    expect(inputTypeScript(tool)).toBe('{ "foo-bar": string; plain?: number }')
-    expect(inputTypeScript(tool, true)).toBe(["{", '  "foo-bar": string,', "  plain?: number,", "}"].join("\n"))
+    expect(inputTypeScript(tool)).toBe('{ "foo-bar": string; plain?: number | "Infinity" | "-Infinity" | "NaN" }')
+    expect(inputTypeScript(tool, true)).toBe(
+      ["{", '  "foo-bar": string,', '  plain?: number | "Infinity" | "-Infinity" | "NaN",', "}"].join("\n"),
+    )
   })
 })
 

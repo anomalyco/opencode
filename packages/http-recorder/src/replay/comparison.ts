@@ -2,7 +2,7 @@ import { Option, Schema } from "effect"
 import { REDACTED } from "../redaction/redactor.js"
 import { secretFindings } from "../redaction/secrets.js"
 
-export const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+export const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value)
 
