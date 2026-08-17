@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { $ } from "bun"
+import fs from "fs/promises"
 import { fileURLToPath } from "url"
 import path from "path"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
-import { Effect, Layer } from "effect"
+import { Context, Effect, Exit, Layer, Scope } from "effect"
 import { eq, inArray, sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import { migrations } from "@opencode-ai/core/database/migration.gen"
@@ -38,6 +39,115 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
 
 describe("DatabaseMigration", () => {
+  test("backs up a corrupted database file and recreates it", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "recovery.sqlite")
+    await Bun.write(filename, new TextEncoder().encode(`SQLite format 3\0${"x".repeat(256)}`))
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const scope = yield* Scope.make()
+        const context = yield* Layer.buildWithScope(Database.layerFromPath(filename), scope)
+        const db = Context.get(context, Database.Service).db
+
+        expect((yield* Effect.promise(() => fs.readdir(tmp.path))).some((file) => file.startsWith("recovery.sqlite.corrupt-"))).toBe(true)
+        expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'migration'`)).toEqual({
+          name: "migration",
+        })
+        yield* Scope.close(scope, Exit.void)
+      }),
+    )
+  })
+
+  test("backs up a partially corrupted database detected by quick_check", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "partial-corrupt.sqlite")
+
+    const { Database: BunDatabase } = await import("bun:sqlite")
+    const native = new BunDatabase(filename, { create: true })
+    native.run("PRAGMA page_size = 4096")
+    native.run("PRAGMA journal_mode = DELETE")
+    native.run("CREATE TABLE test_data (id INTEGER PRIMARY KEY, payload TEXT)")
+    for (let i = 0; i < 200; i++) {
+      native.run(`INSERT INTO test_data VALUES (${i}, '${"a".repeat(200)}')`)
+    }
+    native.close()
+
+    const data = await Bun.file(filename).arrayBuffer()
+    const bytes = new Uint8Array(data)
+    const pageSize = 4096
+    const totalPages = Math.floor(bytes.length / pageSize)
+    if (totalPages > 3) {
+      const targetPage = totalPages - 1
+      const offset = targetPage * pageSize
+      for (let i = offset + 8; i < offset + 64; i++) {
+        bytes[i] = bytes[i]! ^ 0xaa
+      }
+    }
+    await Bun.write(filename, bytes)
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const scope = yield* Scope.make()
+        const context = yield* Layer.buildWithScope(Database.layerFromPath(filename), scope)
+        const db = Context.get(context, Database.Service).db
+
+        const files = yield* Effect.promise(() => fs.readdir(tmp.path))
+        expect(files.some((file) => file.startsWith("partial-corrupt.sqlite.corrupt-"))).toBe(true)
+        expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'migration'`)).toEqual({
+          name: "migration",
+        })
+        yield* Scope.close(scope, Exit.void)
+      }),
+    )
+  })
+
+  test("salvages readable rows from a partially corrupted database", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "salvage.sqlite")
+
+    const { Database: BunDatabase } = await import("bun:sqlite")
+    const native = new BunDatabase(filename, { create: true })
+    native.run("PRAGMA page_size = 4096")
+    native.run("PRAGMA journal_mode = DELETE")
+    native.run("CREATE TABLE project (id TEXT PRIMARY KEY, worktree TEXT NOT NULL, sandboxes TEXT NOT NULL, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL)")
+    native.run("CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT, slug TEXT, directory TEXT, title TEXT, version TEXT, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL)")
+    native.run(`INSERT INTO project VALUES ('proj_1', '/code', '[]', 1, 1)`)
+    native.run(`INSERT INTO session VALUES ('ses_1', 'proj_1', 'test', '/code', 'My Session', 'v1', 1, 1)`)
+    native.run(`INSERT INTO session VALUES ('ses_2', 'proj_1', 'test2', '/code', 'Another', 'v1', 2, 2)`)
+    native.close()
+
+    const data = await Bun.file(filename).arrayBuffer()
+    const bytes = new Uint8Array(data)
+    const pageSize = 4096
+    const totalPages = Math.floor(bytes.length / pageSize)
+    if (totalPages > 3) {
+      const targetPage = totalPages - 1
+      const offset = targetPage * pageSize
+      for (let i = offset + 8; i < offset + 64; i++) {
+        bytes[i] = bytes[i]! ^ 0xaa
+      }
+    }
+    await Bun.write(filename, bytes)
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const scope = yield* Scope.make()
+        const context = yield* Layer.buildWithScope(Database.layerFromPath(filename), scope)
+        const db = Context.get(context, Database.Service).db
+
+        const files = yield* Effect.promise(() => fs.readdir(tmp.path))
+        expect(files.some((file) => file.startsWith("salvage.sqlite.corrupt-"))).toBe(true)
+
+        const sessions = yield* db.all<{ id: string; title: string }>(sql`SELECT id, title FROM session ORDER BY id`)
+        const projects = yield* db.all<{ id: string }>(sql`SELECT id FROM project`)
+        expect(sessions.length + projects.length).toBeGreaterThan(0)
+
+        yield* Scope.close(scope, Exit.void)
+      }),
+    )
+  })
+
   test("serializes concurrent embedded initialization for one database path", async () => {
     await using tmp = await tmpdir()
     const filename = path.join(tmp.path, "embedded.sqlite")
