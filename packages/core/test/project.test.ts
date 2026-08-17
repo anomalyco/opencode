@@ -2,8 +2,10 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Fiber, Layer, Stream } from "effect"
+import { eq } from "drizzle-orm"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { Bus } from "@opencode-ai/core/bus"
 import { Database } from "@opencode-ai/core/database/database"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -12,7 +14,13 @@ import { Hash } from "@opencode-ai/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(Layer.merge(AppNodeBuilder.build(Project.node), AppNodeBuilder.build(Database.node)))
+const it = testEffect(
+  Layer.mergeAll(
+    AppNodeBuilder.build(Project.node),
+    AppNodeBuilder.build(Database.node),
+    AppNodeBuilder.build(Bus.node),
+  ),
+)
 
 describe("Project.list", () => {
   it.effect("returns complete projects ordered by recent update", () =>
@@ -62,6 +70,162 @@ describe("Project.list", () => {
           sandboxes: [abs("/older/sandbox")],
         },
       ])
+    }),
+  )
+})
+
+describe("Project.update", () => {
+  it.effect("updates metadata and publishes the complete project", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      const bus = yield* Bus.Service
+      const id = Project.ID.make("updated")
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id,
+          worktree: abs("/updated"),
+          name: "Original",
+          icon_url: "https://example.com/icon.png",
+          icon_color: "#000000",
+          commands: { start: "bun start" },
+          sandboxes: [],
+          time_created: 1,
+          time_updated: 1,
+        })
+        .run()
+
+      const event = yield* bus.subscribe(Project.Event.Updated).pipe(
+        Stream.filter((event) => event.data.id === id),
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      const result = yield* project.update(id, {
+        name: "Updated",
+        icon: { override: "data:image/png;base64,updated" },
+        commands: { start: "bun dev" },
+      })
+
+      expect(result).toEqual({
+        id,
+        canonical: abs("/updated"),
+        name: "Updated",
+        icon: {
+          url: "https://example.com/icon.png",
+          override: "data:image/png;base64,updated",
+          color: "#000000",
+        },
+        commands: { start: "bun dev" },
+        time: { created: 1, updated: result.time.updated },
+        sandboxes: [],
+      })
+      expect(result.time.updated).toBeGreaterThan(1)
+      expect(Array.from(yield* Fiber.join(event)).map((event) => event.data)).toEqual([result])
+    }),
+  )
+
+  it.effect("preserves omitted metadata", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      const id = Project.ID.make("partial")
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id,
+          worktree: abs("/partial"),
+          icon_color: "#123456",
+          commands: { start: "bun dev" },
+          sandboxes: [],
+          time_created: 1,
+          time_updated: 1,
+        })
+        .run()
+
+      expect(yield* project.update(id, { name: "Partial" })).toMatchObject({
+        name: "Partial",
+        icon: { color: "#123456" },
+        commands: { start: "bun dev" },
+      })
+    }),
+  )
+
+  it.effect("clears metadata with empty strings", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      const id = Project.ID.make("cleared")
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id,
+          worktree: abs("/cleared"),
+          name: "Cleared",
+          icon_url: "https://example.com/icon.png",
+          icon_url_override: "data:image/png;base64,original",
+          icon_color: "#123456",
+          commands: { start: "bun dev" },
+          sandboxes: [],
+          time_created: 1,
+          time_updated: 1,
+        })
+        .run()
+
+      expect(
+        yield* project.update(id, {
+          name: "",
+          icon: { url: "", override: "", color: "" },
+          commands: { start: "" },
+        }),
+      ).toEqual({
+        id,
+        canonical: abs("/cleared"),
+        time: { created: 1, updated: expect.any(Number) },
+        sandboxes: [],
+      })
+      expect(yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()).toMatchObject({
+        name: null,
+        icon_url: null,
+        icon_url_override: null,
+        icon_color: null,
+        commands: null,
+      })
+    }),
+  )
+
+  it.live("does not update or publish for an empty patch", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      const bus = yield* Bus.Service
+      const id = Project.ID.make("unchanged")
+      yield* db
+        .insert(ProjectTable)
+        .values({ id, worktree: abs("/unchanged"), sandboxes: [], time_created: 1, time_updated: 1 })
+        .run()
+      const event = yield* bus.subscribe(Project.Event.Updated).pipe(
+        Stream.filter((event) => event.data.id === id),
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true }),
+      )
+
+      expect(yield* project.update(id, {})).toMatchObject({ time: { updated: 1 } })
+      expect(yield* Fiber.join(event).pipe(Effect.timeoutOption("50 millis"))).toMatchObject({ _tag: "None" })
+    }),
+  )
+
+  it.effect("fails when the project does not exist", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const id = Project.ID.make("missing")
+
+      const error = yield* project.update(id, { name: "Missing" }).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(Project.NotFoundError)
+      expect(error.projectID).toBe(id)
     }),
   )
 })

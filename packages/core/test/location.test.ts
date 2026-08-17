@@ -13,6 +13,7 @@ const projectLayer = Layer.succeed(
   Project.Service,
   Project.Service.of({
     list: () => Effect.succeed([]),
+    update: (projectID) => Effect.fail(new Project.NotFoundError({ projectID })),
     resolve: () =>
       Effect.succeed({
         id: Project.ID.make("project"),

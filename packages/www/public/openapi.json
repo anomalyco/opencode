@@ -6866,6 +6866,77 @@
         "summary": "List projects"
       }
     },
+    "/api/project/{projectID}": {
+      "patch": {
+        "tags": ["project"],
+        "operationId": "v2.project.update",
+        "parameters": [
+          {
+            "name": "projectID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update project metadata. Omitted fields are preserved; empty string values clear fields.",
+        "summary": "Update project",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Project.UpdateInput"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/project/current": {
       "get": {
         "tags": ["project"],
@@ -19644,6 +19715,38 @@
         "required": ["id", "canonical", "time", "sandboxes"],
         "additionalProperties": false
       },
+      "Project.UpdateInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "$ref": "#/components/schemas/Project.Icon"
+          },
+          "commands": {
+            "$ref": "#/components/schemas/Project.Commands"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProjectNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ProjectNotFoundError"]
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "projectID", "message"],
+        "additionalProperties": false
+      },
       "Project.Current": {
         "type": "object",
         "properties": {
@@ -20794,6 +20897,68 @@
                 "type": "array"
               }
             ]
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "project.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^evt_"
+              }
+            ]
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["project.updated"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "canonical": {
+                "type": "string"
+              },
+              "vcs": {
+                "$ref": "#/components/schemas/Project.Vcs"
+              },
+              "name": {
+                "type": "string"
+              },
+              "icon": {
+                "$ref": "#/components/schemas/Project.Icon"
+              },
+              "commands": {
+                "$ref": "#/components/schemas/Project.Commands"
+              },
+              "time": {
+                "$ref": "#/components/schemas/Project.Time"
+              },
+              "sandboxes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["id", "canonical", "time", "sandboxes"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "created", "type", "data"],
@@ -22801,6 +22966,9 @@
           },
           {
             "$ref": "#/components/schemas/plugin.updated"
+          },
+          {
+            "$ref": "#/components/schemas/project.updated"
           },
           {
             "$ref": "#/components/schemas/worktree.updated"
