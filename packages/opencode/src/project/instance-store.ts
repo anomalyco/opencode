@@ -6,7 +6,10 @@ import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from "effect"
+import path from "path"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { type InstanceContext } from "./instance-context"
 import { InstanceBootstrap } from "./bootstrap-service"
 import * as Project from "./project"
@@ -34,11 +37,12 @@ interface Entry {
   readonly deferred: Deferred.Deferred<InstanceContext>
 }
 
-const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Service> = Layer.effect(
+const layer: Layer.Layer<Service, never, Project.Service | EventV2Bridge.Service | InstanceBootstrap.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const project = yield* Project.Service
     const bootstrap = yield* InstanceBootstrap.Service
+    const events = yield* EventV2Bridge.Service
     const scope = yield* Scope.Scope
     const cache = new Map<string, Entry>()
 
@@ -144,6 +148,20 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
       ).pipe(Effect.withSpan("InstanceStore.reload"))
     }
 
+    const unsubscribe = yield* events.listen((event) => {
+      if (event.type !== Watcher.Event.Updated.type) return Effect.void
+      const data = event.data as typeof Watcher.Event.Updated.data.Type
+      if (data.event !== "add") return Effect.void
+      if (!event.location) return Effect.void
+      if (path.relative(event.location.directory, data.file) !== ".git") return Effect.void
+      const entry = cache.get(FSUtil.resolve(event.location.directory))
+      if (!entry) return Effect.void
+      return Deferred.await(entry.deferred).pipe(
+        Effect.flatMap((ctx) => (ctx.project.vcs === "git" ? Effect.void : reload({ directory: ctx.directory }).pipe(Effect.asVoid))),
+        Effect.catch(() => Effect.void),
+      )
+    })
+
     const dispose = Effect.fn("InstanceStore.dispose")(function* (ctx: InstanceContext) {
       const entry = cache.get(ctx.directory)
       if (!entry) return yield* disposeContext(ctx)
@@ -189,6 +207,7 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
     const provide = <A, E, R>(input: LoadInput, effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
       load(input).pipe(Effect.flatMap((ctx) => effect.pipe(Effect.provideService(InstanceRef, ctx))))
 
+    yield* Effect.addFinalizer(() => unsubscribe)
     yield* Effect.addFinalizer(() => disposeAll().pipe(Effect.ignore))
 
     return Service.of({
@@ -207,7 +226,7 @@ export const bootstrapNode = LayerNode.unbound(InstanceBootstrap.Service, Node.t
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [Project.node, bootstrapNode],
+  deps: [Project.node, EventV2Bridge.node, bootstrapNode],
 })
 
 export * as InstanceStore from "./instance-store"

@@ -106,9 +106,16 @@ const layer = Layer.effect(
     const config = (yield* (yield* Config.Service).entries())
       .filter((entry): entry is Config.Document => entry.type === "document")
       .flatMap((item) => item.info.watcher?.ignore ?? [])
-    if (location.vcs && (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER)) {
+    if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
       yield* Effect.forkScoped(
-        subscribe(location.directory, [...Ignore.PATTERNS, ...config, ...protecteds(location.directory)]),
+        subscribe(
+          location.directory,
+          [
+            ...(location.vcs ? Ignore.PATTERNS : Ignore.PATTERNS.filter((pattern) => pattern !== ".git")),
+            ...config,
+            ...protecteds(location.directory),
+          ],
+        ),
       )
     }
 
