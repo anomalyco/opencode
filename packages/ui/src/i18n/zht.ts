@@ -214,4 +214,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "複製錯誤",
   "ui.message.duration.seconds": "{{count}}秒",
   "ui.message.duration.minutesSeconds": "{{minutes}}分 {{seconds}}秒",
+  "ui.messagePart.context.match.one": "（{{count}} 個相符項目）",
+  "ui.messagePart.context.match.other": "（{{count}} 個相符項目）",
+  "ui.tool.execute": "執行",
 } satisfies Partial<Record<Keys, string>>
