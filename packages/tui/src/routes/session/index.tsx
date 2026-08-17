@@ -82,6 +82,7 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import { firstChild } from "../../util/session"
 
 addDefaultParsers(parsers.parsers)
 
@@ -440,8 +441,7 @@ export function Session() {
   }
 
   function moveFirstChild() {
-    if (children().length === 1) return
-    const next = children().find((x) => !!x.parentID)
+    const next = firstChild(sync.data.session, session())
     if (next) enterChild(next.id)
   }
 
