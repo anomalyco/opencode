@@ -242,9 +242,6 @@ export function fromPromise(plugin: Plugin) {
             remove: adaptApiMethod(McpEndpoints["mcp.remove"], host.mcp.remove),
             connect: adaptApiMethod(McpEndpoints["mcp.connect"], host.mcp.connect),
             disconnect: adaptApiMethod(McpEndpoints["mcp.disconnect"], host.mcp.disconnect),
-            resource: {
-              catalog: adaptApiMethod(McpEndpoints["mcp.resource.catalog"], host.mcp.resource.catalog),
-            },
             transform: transform(host.mcp),
             reload: () => run(host.mcp.reload()),
           },

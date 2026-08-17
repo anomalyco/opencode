@@ -78,9 +78,6 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       remove: () => Effect.die("unused mcp.remove"),
       connect: () => Effect.die("unused mcp.connect"),
       disconnect: () => Effect.die("unused mcp.disconnect"),
-      resource: {
-        catalog: () => Effect.die("unused mcp.resource.catalog"),
-      },
       transform: () => Effect.die("unused mcp.transform"),
       reload: () => Effect.die("unused mcp.reload"),
     },

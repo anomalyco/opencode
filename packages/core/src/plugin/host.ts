@@ -278,9 +278,6 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../p
       remove: (input) => mcp.remove(input.server),
       connect: (input) => mcp.connect(input.server),
       disconnect: (input) => mcp.disconnect(input.server),
-      resource: {
-        catalog: () => response(mcp.resourceCatalog()),
-      },
       reload: mcp.reload,
       transform: (callback) =>
         mcp.transform((draft) => {

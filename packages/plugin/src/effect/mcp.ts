@@ -11,7 +11,7 @@ export interface MCPDraft {
   remove(name: string): void
 }
 
-export interface MCPDomain extends McpApi<unknown> {
+export interface MCPDomain extends Omit<McpApi<unknown>, "resource"> {
   readonly transform: Transform<MCPDraft>
   readonly reload: () => Effect.Effect<void>
 }
