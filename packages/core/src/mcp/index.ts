@@ -3,10 +3,9 @@ export * as MCP from "./index.js"
 import { Mcp } from "@opencode-ai/schema/mcp"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { Command } from "@opencode-ai/schema/command"
-import { ConfigMCP } from "@opencode-ai/schema/config/mcp"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Semaphore, Stream } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, FiberSet, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
 import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -110,7 +109,7 @@ export class ToolCallError extends Schema.TaggedErrorClass<ToolCallError>()("MCP
 }) {}
 
 type ServerEntry = {
-  readonly config: typeof ConfigMCP.Server.Type
+  readonly config: Mcp.ServerConfig
   status: Status
   readonly startup: Deferred.Deferred<void>
   scope?: Scope.Closeable
@@ -128,23 +127,22 @@ const GLOBAL_ELICITATION_SESSION_ID = "global"
 const URL_ELICITATION_FIELD_KEY = "elicitation"
 
 type Data = {
-  servers: Map<ServerName, typeof ConfigMCP.Server.Type>
-  timeout: typeof ConfigMCP.Timeout.Type
+  servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
+  timeout: Mcp.TimeoutConfig
 }
 
 export type Draft = {
-  list: () => readonly [ServerName, typeof ConfigMCP.Server.Type][]
-  timeout: {
-    get: () => typeof ConfigMCP.Timeout.Type
-    set: (value: typeof ConfigMCP.Timeout.Type) => void
-  }
-  update: (server: ServerName | string, config: typeof ConfigMCP.Server.Type) => void
+  list: () => readonly [ServerName, Types.DeepMutable<Mcp.ServerConfig>][]
+  get: (server: ServerName | string) => Types.DeepMutable<Mcp.ServerConfig> | undefined
+  timeout: (value: Mcp.TimeoutConfig) => void
+  set: (server: ServerName | string, config: Mcp.ServerConfig) => void
+  update: (server: ServerName | string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void) => void
   remove: (server: ServerName | string) => void
 }
 
 export interface Interface extends State.Transformable<Draft> {
   readonly servers: () => Effect.Effect<ServerInfo[]>
-  readonly add: (server: ServerName | string, config: typeof ConfigMCP.Server.Type) => Effect.Effect<void>
+  readonly add: (server: ServerName | string, config: Mcp.ServerConfig) => Effect.Effect<void>
   readonly connect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly remove: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
@@ -559,7 +557,7 @@ export const layer = (options?: Options) =>
         if (entry.registration) yield* entry.registration.dispose
       })
 
-      const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: typeof ConfigMCP.Server.Type) {
+      const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: Mcp.ServerConfig) {
         const previous = runtime.get(name)
         if (previous) yield* disposeServer(name, previous)
         const entry: ServerEntry = {
@@ -593,7 +591,7 @@ export const layer = (options?: Options) =>
 
       const configured = {
         initialized: false,
-        servers: new Map<ServerName, typeof ConfigMCP.Server.Type>(),
+        servers: new Map<ServerName, Mcp.ServerConfig>(),
       }
       const reconcile = Effect.fnUntraced(function* (next: Draft) {
         yield* reloadLock.withPermit(
@@ -609,7 +607,7 @@ export const layer = (options?: Options) =>
               }
               yield* Effect.forEach(runtime, ([name, entry]) => register(name, entry), { discard: true })
               configured.initialized = true
-              configured.servers = servers
+              configured.servers = new Map(servers)
 
               // Initial connections stay asynchronous so one slow server does not block Location startup.
               for (const [name, entry] of runtime) {
@@ -635,7 +633,7 @@ export const layer = (options?: Options) =>
               yield* replaceServer(name, updated).pipe(locks.withLock(name))
             }
             configured.initialized = true
-            configured.servers = servers
+            configured.servers = new Map(servers)
           }),
         )
       })
@@ -668,13 +666,18 @@ export const layer = (options?: Options) =>
         initial: () => ({ servers: new Map(), timeout: {} }),
         draft: (draft) => ({
           list: () => Array.from(draft.servers),
-          timeout: {
-            get: () => draft.timeout,
-            set: (value) => {
-              draft.timeout = value
-            },
+          get: (server) => draft.servers.get(ServerName.make(server)),
+          timeout: (value) => {
+            draft.timeout = value
           },
-          update: (server, serverConfig) => draft.servers.set(ServerName.make(server), serverConfig),
+          set: (server, serverConfig) => {
+            draft.servers.set(ServerName.make(server), serverConfig as Types.DeepMutable<Mcp.ServerConfig>)
+          },
+          update: (server, update) => {
+            const current = draft.servers.get(ServerName.make(server))
+            if (!current) return
+            update(current)
+          },
           remove: (server) => draft.servers.delete(ServerName.make(server)),
         }),
         finalize: reconcile,

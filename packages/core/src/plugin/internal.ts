@@ -200,6 +200,7 @@ export const requirements = LayerNode.group([
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
 const pre = [
+  ConfigMCPPlugin.Plugin,
   WellKnownPlugin.Plugin,
   AgentPlugin.Plugin,
   PlanPlugin.Plugin,
@@ -226,7 +227,6 @@ const pre = [
 
 const post = [
   ConfigInstructionPlugin.Plugin,
-  ConfigMCPPlugin.Plugin,
   ConfigReferencePlugin.Plugin,
   ConfigAgentPlugin.Plugin,
   ConfigCommandPlugin.Plugin,

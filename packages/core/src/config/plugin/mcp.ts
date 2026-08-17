@@ -42,10 +42,10 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
       {},
       ...documents.flatMap((entry) => (entry.info.mcp?.timeout ? [entry.info.mcp.timeout] : [])),
     )
-    draft.timeout.set(timeout)
+    draft.timeout(timeout)
     for (const document of documents) {
       for (const [name, server] of Object.entries(document.info.mcp?.servers ?? {})) {
-        draft.update(name, { ...server, timeout: { ...timeout, ...server.timeout } })
+        draft.set(name, { ...server, timeout: { ...timeout, ...server.timeout } })
       }
     }
   })
