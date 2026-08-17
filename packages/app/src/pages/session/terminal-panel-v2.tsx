@@ -19,7 +19,7 @@ import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useTerminal } from "@/context/terminal"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
@@ -28,7 +28,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 export function TerminalPanelV2(props: { stacked?: boolean } = {}) {
   const layout = useLayout()
   const terminal = useTerminal()
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const language = useLanguage()
   const command = useCommand()
   const { workspaceKey, view } = useSessionLayout()

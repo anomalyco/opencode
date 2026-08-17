@@ -41,7 +41,7 @@ export async function startBackgroundCli(logger: Logger) {
         ? join(app.getPath("userData"), "opencode", "service-local.json")
         : undefined,
     version: cli.version,
-    command: [...cli.command, "serve", "--service"],
+    command: [...cli.command, "serve", "--service", ...(isolated ? ["--port", "0"] : [])],
     onStart: (reason, previousVersion) => logger.log("v2 CLI background service starting", { reason, previousVersion }),
   })
   if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")

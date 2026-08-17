@@ -13,7 +13,6 @@ import { type Component, createMemo, createUniqueId, For, Match, onMount, Show, 
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { ExternalLink } from "@/components/external-link"
-import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 import { useIntegrations } from "@/hooks/use-integrations"
@@ -258,7 +257,6 @@ function ProviderConnection(props: {
   setBack: (handler: () => void) => void
 }) {
   const dialog = useDialog()
-  const serverSync = useServerSync()
   const params = useParams()
   const language = useLanguage()
   const providers = useProviders(() => props.directory)
@@ -280,10 +278,7 @@ function ProviderConnection(props: {
   const provider = createMemo(() => ({
     id: props.provider,
     name:
-      providers.all().get(props.provider)?.name ??
-      serverSync.data.provider.all.get(props.provider)?.name ??
-      controller.integration()?.name ??
-      props.provider,
+      providers.all().get(props.provider)?.name ?? controller.integration()?.name ?? props.provider,
   }))
   const methodLabel = (value?: { type?: string; label?: string }) => {
     if (!value) return ""

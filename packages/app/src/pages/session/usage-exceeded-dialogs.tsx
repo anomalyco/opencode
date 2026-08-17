@@ -1,4 +1,4 @@
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { Persist, persisted } from "@/utils/persist"
 import type { SessionStatus } from "@opencode-ai/client/promise"
 import { onCleanup } from "solid-js"
@@ -34,7 +34,7 @@ function goUpsellKeys(status: SessionStatus) {
 }
 
 export function useUsageExceededDialogs() {
-  const sdk = useSDK()
+  const sdk = useWorkspaceLocation()
   const dialog = useDialog()
   const { params } = useSessionLayout()
   const { t, locale } = useI18n()

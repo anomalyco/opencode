@@ -4,14 +4,12 @@ import type { Todo } from "@/types"
 import type { FormInfo, PermissionRequest } from "@opencode-ai/client/promise"
 import { useParams } from "@solidjs/router"
 import { showToast } from "@/utils/toast"
-import { useServerSync } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
-import { useSDK } from "@/context/sdk"
-import { useSync } from "@/context/sync"
+import { useWorkspaceLocation } from "@/context/location"
 import { sessionPermissionRequest, sessionQuestionForm } from "./session-request-tree"
-import { createQuery, useQueryClient } from "@tanstack/solid-query"
+import { useData } from "@/context/server"
 
 export const todoState = (input: {
   count: number
@@ -30,40 +28,22 @@ const idle = { type: "idle" as const }
 
 export function createSessionComposerController(options?: { closeMs?: number | (() => number) }) {
   const params = useParams()
-  const sdk = useSDK()
-  const sync = useSync()
-  const serverSync = useServerSync()
+  const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
-  const queryClient = useQueryClient()
+  const data = useData()
   const language = useLanguage()
   const permission = usePermission()
-  const shellKey = () => [serverSDK.scope, sdk().directory, "shell"] as const
-  const shells = createQuery(() => ({
-    queryKey: shellKey(),
-    enabled: !!params.id && serverSDK.connection.status() === "connected",
-    queryFn: () =>
-      sdk()
-        .api.shell.list({ location: { directory: sdk().directory } })
-        .then((result) => result.data ?? []),
-  }))
-  onCleanup(
-    sdk().event.listen((event) => {
-      if (
-        event.details.type !== "shell.created" &&
-        event.details.type !== "shell.exited" &&
-        event.details.type !== "shell.deleted"
-      )
-        return
-      void queryClient.invalidateQueries({ queryKey: shellKey(), exact: true })
-    }),
-  )
+  createEffect(() => {
+    if (!params.id || serverSDK.connection.status() !== "connected") return
+    void data.shell.sync({ directory: sdk().directory }).catch(() => undefined)
+  })
 
   const questionRequest = createMemo((): FormInfo | undefined => {
-    return sessionQuestionForm(sync().data.session, serverSync.session.data.form, params.id)
+    return sessionQuestionForm(data.session.list(), data.session.form.list, params.id)
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
-    return sessionPermissionRequest(sync().data.session, sync().data.permission, params.id, (item) => {
+    return sessionPermissionRequest(data.session.list(), data.session.permission.list, params.id, (item) => {
       return !permission.autoResponds(item, sdk().directory)
     })
   })
@@ -74,26 +54,23 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     return !!permissionRequest() || !!questionRequest()
   })
 
-  const todos = createMemo((): Todo[] => {
-    const id = params.id
-    if (!id) return []
-    return serverSync.session.data.todo[id] ?? []
-  })
+  // TODO: Restore todos when they are available from the current session API.
+  const todos = createMemo((): Todo[] => [])
 
   const done = createMemo(
     () => todos().length > 0 && todos().every((todo) => todo.status === "completed" || todo.status === "cancelled"),
   )
 
-  const live = createMemo(() => sync().data.session_working(params.id ?? "") || blocked())
+  const live = createMemo(() => data.session.status(params.id ?? "") === "running" || blocked())
   const primary = () => {
     const id = params.id
-    return !!id && !serverSync.session.get(id)?.parentID
+    return !!id && !data.session.get(id)?.parentID
   }
   const backgroundBlocking = createMemo(() => {
     if (!primary()) return []
     const id = params.id
     if (!id) return []
-    const assistant = (serverSync.session.data.session_message[id] ?? []).findLast(
+    const assistant = data.session.message.list(id).findLast(
       (message) => message.type === "assistant" && message.time.completed === undefined,
     )
     if (assistant?.type !== "assistant") return []
@@ -116,7 +93,7 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     const id = params.id
     if (!id) return []
     const blocking = backgroundBlocking()
-    const messages = serverSync.session.data.session_message[id] ?? []
+    const messages = data.session.message.list(id)
     const completed = new Set(
       messages.flatMap((message) => {
         if (message.type !== "synthetic") return []
@@ -144,9 +121,9 @@ export function createSessionComposerController(options?: { closeMs?: number | (
         ]
       })
     })
-    const active = Object.values(serverSync.session.data.info).flatMap((info) => {
+    const active = data.session.list().flatMap((info) => {
       if (info?.parentID !== id) return []
-      if ((serverSync.session.data.session_status[info.id]?.type ?? "idle") === "idle") return []
+      if (data.session.status(info.id) === "idle") return []
       if (
         blocking.some(
           (item) => item.type === "subagent" && (item.id === info.id || (!!item.label && info.title === item.label)),
@@ -171,7 +148,7 @@ export function createSessionComposerController(options?: { closeMs?: number | (
         ]
       })
     })
-    const running = (shells.isSuccess || shells.isRefetchError ? shells.data : []).flatMap((shell) => {
+    const running = data.shell.list({ directory: sdk().directory }).flatMap((shell) => {
       if (shell.status !== "running" || shell.metadata.sessionID !== id) return []
       if (
         blocking.some(
@@ -189,8 +166,8 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     if (!primary()) return
     const sessionID = params.id
     if (!sessionID) return
-    await sdk()
-      .api.session.background({ sessionID })
+    await serverSDK.api.session
+      .background({ sessionID })
       .catch((error) => {
         showToast({
           title: language.t("common.requestFailed"),
@@ -219,8 +196,8 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     if (store.responding === perm.id) return
 
     setStore("responding", perm.id)
-    sdk()
-      .api.permission.reply({ sessionID: perm.sessionID, requestID: perm.id, reply: response })
+    serverSDK.api.permission
+      .reply({ sessionID: perm.sessionID, requestID: perm.id, reply: response })
       .catch((err: unknown) => {
         const description = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description })
@@ -248,13 +225,6 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     }, closeMs())
   }
 
-  // Keep stale turn todos from reopening if the model never clears them.
-  const clear = () => {
-    const id = params.id
-    if (!id) return
-    sync().set("todo", id, [])
-  }
-
   createEffect(
     on(
       () => [params.id, todos().length, done(), live()] as const,
@@ -272,7 +242,6 @@ export function createSessionComposerController(options?: { closeMs?: number | (
           if (timer) window.clearTimeout(timer)
           timer = undefined
           setStore({ sessionID: id, dock: todoDockAtBoundary(next), closing: false, opening: false })
-          if (next === "clear") clear()
           return
         }
 
@@ -286,7 +255,6 @@ export function createSessionComposerController(options?: { closeMs?: number | (
         if (next === "clear") {
           if (timer) window.clearTimeout(timer)
           timer = undefined
-          clear()
           return
         }
 

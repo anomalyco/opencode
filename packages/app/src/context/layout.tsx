@@ -3,7 +3,6 @@ import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } fr
 import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { useServerSync } from "./server-sync"
 import { ServerConnection, useServers } from "./servers"
 import { usePlatform } from "./platform"
 import type { Project } from "@/types"
@@ -150,7 +149,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
   name: "Layout",
   gate: false,
   init: () => {
-    // const serverSync = useServerSync()
     const servers = useServers()
     const platform = usePlatform()
 

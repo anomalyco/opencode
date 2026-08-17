@@ -3,26 +3,27 @@ import { DialogFooter, DialogHeader, DialogTitleGroup, DialogV2 } from "@opencod
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, on, type Accessor } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
-import { useSDK } from "@/context/sdk"
-import { useSync } from "@/context/sync"
+import { useWorkspaceLocation } from "@/context/location"
 import { useTabs } from "@/context/tabs"
 import type { SessionController } from "@/pages/session/session-controller"
-import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { requireServerKey, sessionHref } from "@/utils/session-route"
+import { useServerSDK } from "@/context/server-sdk"
 import { sessionTitle } from "@/utils/session-title"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { showToast } from "@/utils/toast"
 import { timelineChildTitle, timelineRemovedSessionIDs } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
 import { useServer } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
+import { normalizeSessionMessages } from "@/utils/session-message"
 
 const emptyMessages: Message[] = []
-const emptyParts: Part[] = []
 const taskDescription = (part: Part, sessionID: string): string | undefined => {
   if (part.type !== "tool" || part.tool !== "task") return undefined
   const metadata = "metadata" in part.state ? part.state.metadata : undefined
@@ -35,7 +36,7 @@ const taskDescription = (part: Part, sessionID: string): string | undefined => {
 export type TimelineSessionSource = {
   identity: Pick<SessionController["identity"], "params" | "sessionID" | "sessionKey">
   data: Pick<SessionController["data"], "info" | "parent" | "parentID" | "status">
-  history: Pick<SessionController["history"], "messages">
+  history: Pick<SessionController["history"], "messages" | "parts">
 }
 
 export function createTimelineController(input: {
@@ -43,9 +44,10 @@ export function createTimelineController(input: {
   userMessages: Accessor<UserMessage[]>
 }) {
   const navigate = useNavigate()
-  const sdk = useSDK()
-  const sync = useSync()
+  const sdk = useWorkspaceLocation()
+  const serverSDK = useServerSDK()
   const server = useServer()
+  const data = server.ctx.data
   const settings = useSettings()
   const tabs = useTabs()
   const dialog = useDialog()
@@ -58,7 +60,7 @@ export function createTimelineController(input: {
     const boundary = input.session.history
       .messages()
       .find((message) => message.role === "user" && !visible.has(message.id))?.id
-    const projected = sync().data.session_message[id] ?? []
+    const projected = data.session.message.list(id)
     if (!boundary) return projected
     const index = projected.findIndex((message) => message.id === boundary)
     return index < 0 ? projected : projected.slice(0, index)
@@ -67,20 +69,21 @@ export function createTimelineController(input: {
   const titleLabel = createMemo(() => sessionTitle(titleValue()))
   const shareUrl = (): string | undefined => undefined
   const shareEnabled = () => false
-  const parentMessages = createMemo(() => {
+  const parentTranscript = createMemo(() => {
     const id = input.session.data.parentID()
-    return id ? (sync().data.message[id] ?? emptyMessages) : emptyMessages
+    return id ? normalizeSessionMessages(id, data.session.message.list(id)) : undefined
   })
+  const parentMessages = createMemo(() => parentTranscript()?.messages ?? emptyMessages)
   const parentTitle = createMemo(
     () => sessionTitle(input.session.data.parent()?.title) ?? language.t("command.session.new"),
   )
-  const parts = (messageID: string) => sync().data.part[messageID] ?? emptyParts
+  const parts = input.session.history.parts
   const part = (messageID: string, partID: string) => parts(messageID).find((item) => item.id === partID)
   const childTaskDescription = createMemo(() => {
     const id = input.session.identity.sessionID()
     if (!id) return undefined
     return parentMessages()
-      .flatMap((message) => parts(message.id))
+      .flatMap((message) => parentTranscript()?.parts.get(message.id) ?? [])
       .map((item) => taskDescription(item, id))
       .findLast((value): value is string => !!value)
   })
@@ -117,8 +120,8 @@ export function createTimelineController(input: {
     const next = title.trim()
     if (!next || next === (titleLabel() ?? "")) return true
     setPending("rename", true)
-    const success = await sdk()
-      .api.session.rename({ sessionID: id, title: next })
+    const success = await serverSDK.api.session
+      .rename({ sessionID: id, title: next })
       .then(() => true)
       .catch((error) => {
         showToast({ title: language.t("common.requestFailed"), description: errorMessage(error) })
@@ -126,12 +129,8 @@ export function createTimelineController(input: {
       })
     setPending("rename", false)
     if (!success) return false
-    sync().set(
-      produce((draft) => {
-        const index = draft.session.findIndex((session) => session.id === id)
-        if (index !== -1) draft.session[index].title = next
-      }),
-    )
+    const current = data.session.get(id)
+    if (current) data.session.remember({ ...current, title: next })
     return true
   }
   const share = async () => {
@@ -143,23 +142,26 @@ export function createTimelineController(input: {
     if (!id || pending.unshare || !shareEnabled()) return
   }
   const href = (id: string) =>
-    input.session.identity.params.serverKey
-      ? sessionHref(requireServerKey(input.session.identity.params.serverKey), id)
-      : legacySessionHref(sdk().directory, id)
+    sessionHref(
+      input.session.identity.params.serverKey
+        ? requireServerKey(input.session.identity.params.serverKey)
+        : ServerConnection.key(serverSDK.server),
+      id,
+    )
   const navigateAfterRemoval = (id: string, parent?: string, next?: string) => {
     if (input.session.identity.params.id !== id) return
     if (parent) return navigate(href(parent))
     if (next) return navigate(href(next))
-    if (input.session.identity.params.serverKey)
-      return tabs.newDraft({
-        server: requireServerKey(input.session.identity.params.serverKey),
-        directory: sdk().directory,
-      })
-    navigate(`/${input.session.identity.params.dir}/session`)
+    return tabs.newDraft({
+      server: input.session.identity.params.serverKey
+        ? requireServerKey(input.session.identity.params.serverKey)
+        : ServerConnection.key(serverSDK.server),
+      directory: sdk().directory,
+    })
   }
   const exportSession = async (id: string) => {
     try {
-      const data = await fetchSessionExport({ sessionID: id, api: sdk().api })
+      const data = await fetchSessionExport({ sessionID: id, api: serverSDK.api })
       const filename = sessionExportFilename(data.info)
       downloadSessionExport(filename, data)
       showToast({
@@ -177,30 +179,28 @@ export function createTimelineController(input: {
     }
   }
   const remove = async (id: string) => {
-    const session = sync().session.get(id)
+    const session = data.session.get(id)
     if (!session) return false
-    const sessions = sync().data.session.filter((item) => !item.parentID && !item.time?.archived)
+    const sessions = data.session.list().filter((item) => !item.parentID && !item.time?.archived)
     const index = sessions.findIndex((item) => item.id === id)
     const next = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-    const success = await sdk()
-      .api.session.remove({ sessionID: id })
+    const success = await serverSDK.api.session
+      .remove({ sessionID: id })
       .then(() => true)
       .catch((error) => {
         showToast({ title: language.t("session.delete.failed.title"), description: errorMessage(error) })
         return false
       })
     if (!success) return false
-    const removed = timelineRemovedSessionIDs(sync().data.session, id)
+    const removed = timelineRemovedSessionIDs(data.session.list(), id)
     void navigateAfterRemoval(id, session.parentID, next?.id)
-    sync().set(produce((draft) => void (draft.session = draft.session.filter((item) => !removed.has(item.id)))))
-    removed.forEach((sessionID) => sync().session.evict(sessionID))
     notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: [...removed] })
     return true
   }
 
   function DeleteDialog(props: { sessionID: string }) {
     const name = createMemo(
-      () => sessionTitle(sync().session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
+      () => sessionTitle(data.session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
     )
     const confirm = async () => {
       await remove(props.sessionID)
@@ -230,8 +230,8 @@ export function createTimelineController(input: {
     on(
       () => [input.session.data.parentID(), childTaskDescription()] as const,
       ([id, description]) => {
-        if (!id || description || sync().data.message[id] !== undefined) return
-        void sync().session.sync(id)
+        if (!id || description || data.session.message.list(id).length > 0) return
+        void Promise.all([data.session.sync(id), data.session.message.sync(id)])
       },
       { defer: true },
     ),

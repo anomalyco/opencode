@@ -1,13 +1,12 @@
 import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
-import { type Component, For, Show, createMemo, createResource, createSignal } from "solid-js"
+import { type Component, For, Show, createEffect, createMemo, createResource, createSignal } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useMcpToggle } from "@/context/mcp"
-import { useSDK } from "@/context/sdk"
+import { useWorkspaceLocation } from "@/context/location"
 import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
-import { useSync } from "@/context/sync"
+import { useData } from "@/context/server"
 import { ExternalLink } from "./external-link"
 
 type SkillItem = {
@@ -15,7 +14,6 @@ type SkillItem = {
   location: string
 }
 
-const pluginName = (item: string | [string, Record<string, unknown>]) => (typeof item === "string" ? item : item[0])
 const skillKey = (item: SkillItem) => `${item.name}\n${item.location}`
 
 const ExtensionCard: Component<{ children: unknown }> = (props) => (
@@ -23,9 +21,8 @@ const ExtensionCard: Component<{ children: unknown }> = (props) => (
 )
 
 const ExtensionRow: Component<{
-  icon: "mcp" | "cube" | "post-skill" | "code"
+  icon: "mcp" | "cube" | "post-skill"
   name: string
-  status?: string
   children?: unknown
 }> = (props) => (
   <div class="project-settings-extension-row">
@@ -33,14 +30,6 @@ const ExtensionRow: Component<{
       <Icon name={props.icon} class="project-settings-extension-row-icon" />
       <span class="project-settings-extension-row-name">{props.name}</span>
     </div>
-    <Show when={props.status}>
-      {(status) => (
-        <span class="project-settings-extension-row-status">
-          <span class="project-settings-extension-row-status-dot" />
-          {status()}
-        </span>
-      )}
-    </Show>
     {props.children as any}
   </div>
 )
@@ -75,56 +64,55 @@ const SharedSection: Component<{
 export const ProjectSettingsExtensions: Component = () => {
   const language = useLanguage()
   const serverSDK = useServerSDK()
-  const directorySDK = useSDK()
-  const serverSync = useServerSync()
-  const sync = useSync()
-  const toggleMcp = useMcpToggle()
+  const directorySDK = useWorkspaceLocation()
+  const data = useData()
+  const toggleMcp = useMcpToggle(() => directorySDK().directory)
 
-  const [serverMcp] = createResource(
-    serverSDK,
-    (sdk) =>
-      sdk.api.mcp
-        .list()
-        .then((result) => Object.fromEntries(result.data.map((server) => [server.name, server.status])))
-        .catch(() => ({})),
-    { initialValue: {} },
-  )
+  createEffect(() => {
+    if (serverSDK.connection.status() !== "connected") return
+    const ref = { directory: directorySDK().directory }
+    void Promise.all([
+      data.location.mcp.server.sync(),
+      data.location.skill.sync(),
+      data.location.mcp.server.sync(ref),
+      data.location.skill.sync(ref),
+    ]).catch(() => undefined)
+  })
+
   const globalMcpNames = createMemo(() =>
-    [...new Set([...Object.keys(serverSync.data.config.mcp ?? {}), ...Object.keys(serverMcp.latest)])].sort(),
+    [...new Set((data.location.mcp.server.list() ?? []).map((server) => server.name))].sort(),
   )
   const projectMcpNames = createMemo(() => {
     const shared = new Set(globalMcpNames())
-    const configured = Object.keys(sync().data.config.mcp ?? {}).filter((name) => !shared.has(name))
-    if (configured.length > 0) return configured.sort()
-    return Object.keys(sync().data.mcp ?? {})
+    return (data.location.mcp.server.list({ directory: directorySDK().directory }) ?? [])
+      .map((server) => server.name)
       .filter((name) => !shared.has(name))
       .sort()
   })
-  const mcpEnabled = (name: string) => sync().data.mcp?.[name]?.status === "connected"
+  const mcpEnabled = (name: string) =>
+    data.location.mcp.server.list({ directory: directorySDK().directory })?.find((server) => server.name === name)?.status
+      .status === "connected"
 
-  const globalPlugins = createMemo(() => (serverSync.data.config.plugin ?? []).map(pluginName))
+  const [globalPluginList] = createResource(
+    () => serverSDK.connection.status() === "connected",
+    () => serverSDK.api.plugin.list().then((result) => result.data),
+  )
+  const [projectPluginList] = createResource(
+    () => (serverSDK.connection.status() === "connected" ? directorySDK().directory : undefined),
+    (directory) => serverSDK.api.plugin.list({ location: { directory } }).then((result) => result.data),
+  )
+  const globalPlugins = createMemo(() => (globalPluginList.latest ?? []).map((item) => item.id))
   const projectPlugins = createMemo(() => {
     const shared = new Set(globalPlugins())
-    return (sync().data.config.plugin ?? []).map(pluginName).filter((name) => !shared.has(name))
+    return (projectPluginList.latest ?? []).map((item) => item.id).filter((name) => !shared.has(name))
   })
 
-  const [serverSkills] = createResource(
-    serverSDK,
-    (sdk): Promise<SkillItem[]> =>
-      sdk.api.skill.list().then((result) => result.data.map((item) => ({ name: item.name, location: item.location }))),
-    { initialValue: [] },
-  )
-  const [directorySkills] = createResource(
-    directorySDK,
-    (sdk): Promise<SkillItem[]> =>
-      sdk.api.skill
-        .list({ location: { directory: sdk.directory } })
-        .then((result) => result.data.map((item) => ({ name: item.name, location: item.location }))),
-    { initialValue: [] },
-  )
+  const serverSkills = createMemo(() => data.location.skill.list() ?? [])
   const projectSkills = createMemo(() => {
-    const shared = new Set(serverSkills.latest.map(skillKey))
-    return directorySkills.latest.filter((item) => !shared.has(skillKey(item)))
+    const shared = new Set(serverSkills().map(skillKey))
+    return (data.location.skill.list({ directory: directorySDK().directory }) ?? []).filter(
+      (item) => !shared.has(skillKey(item)),
+    )
   })
 
   const mcpRows = (items: string[]) => (
@@ -165,7 +153,7 @@ export const ProjectSettingsExtensions: Component = () => {
           <TabsV2.Trigger value="mcps">{language.t("settings.extensions.tab.mcps")}</TabsV2.Trigger>
           <TabsV2.Trigger value="plugins">{language.t("status.popover.tab.plugins")}</TabsV2.Trigger>
           <TabsV2.Trigger value="skills">{language.t("settings.extensions.tab.skills")}</TabsV2.Trigger>
-          <TabsV2.Trigger value="lsps">{language.t("project.settings.extensions.tab.lsps")}</TabsV2.Trigger>
+          {/* TODO: Restore LSP status when V2 exposes it. */}
         </TabsV2.List>
 
         <TabsV2.Content value="mcps">
@@ -205,33 +193,10 @@ export const ProjectSettingsExtensions: Component = () => {
             <Show when={projectSkills().length > 0}>
               <ExtensionCard>{skillRows(projectSkills())}</ExtensionCard>
             </Show>
-            <SharedSection count={serverSkills.latest.length}>{skillRows(serverSkills.latest)}</SharedSection>
+            <SharedSection count={serverSkills().length}>{skillRows(serverSkills())}</SharedSection>
           </div>
         </TabsV2.Content>
 
-        <TabsV2.Content value="lsps">
-          <div class="project-settings-extension-section">
-            <div class="project-settings-extension-section-header">
-              <span>{language.t("project.settings.extensions.lsp.detected")}</span>
-              <span>{language.t("project.settings.extensions.lsp.description")}</span>
-            </div>
-            <Show when={sync().data.lsp.length > 0}>
-              <ExtensionCard>
-                <For each={sync().data.lsp}>
-                  {(item) => (
-                    <ExtensionRow
-                      icon="code"
-                      name={item.name || item.id}
-                      status={
-                        item.status === "error" ? language.t("project.settings.extensions.setupRequired") : undefined
-                      }
-                    />
-                  )}
-                </For>
-              </ExtensionCard>
-            </Show>
-          </div>
-        </TabsV2.Content>
       </TabsV2>
     </div>
   )

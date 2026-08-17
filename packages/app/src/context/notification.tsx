@@ -2,7 +2,7 @@ import { createStore, reconcile } from "solid-js/store"
 import { type Accessor, batch, createEffect, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { ServerSDK } from "./server-sdk"
-import type { ServerSync } from "./server-sync"
+import type { Data } from "@opencode-ai/client/solid"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
@@ -109,7 +109,7 @@ function buildNotificationIndex(list: Notification[]) {
   return index
 }
 
-export function createServerNotificationState(input: { sdk: ServerSDK; sync: ServerSync; key: ServerConnection.Key }) {
+export function createServerNotificationState(input: { sdk: ServerSDK; data: Data; key: ServerConnection.Key }) {
   const platform = usePlatform()
   const settings = useSettings()
   const language = useLanguage()
@@ -197,14 +197,13 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
     })
   }
 
-  const lookup = async (directory: string, sessionID?: string) => {
+  const lookup = async (sessionID?: string) => {
     if (!sessionID) return undefined
-    const sync = input.sync.ensureDirSyncContext(directory)
-    const session = sync.session.get(sessionID)
+    const session = input.data.session.get(sessionID)
     if (session) return session
-    return sync.session
+    return input.data.session
       .sync(sessionID)
-      .then(() => sync.session.get(sessionID))
+      .then(() => input.data.session.get(sessionID))
       .catch(() => undefined)
   }
 
@@ -219,7 +218,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
 
   const handleSessionIdle = (directory: string, event: { properties: { sessionID: string } }, time: number) => {
     const sessionID = event.properties.sessionID
-    void lookup(directory, sessionID).then((session) => {
+    void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (!session) return
       if (session.parentID) return
@@ -251,7 +250,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
     time: number,
   ) => {
     const sessionID = event.properties.sessionID
-    void lookup(directory, sessionID).then((session) => {
+    void lookup(sessionID).then((session) => {
       if (meta.disposed) return
       if (session?.parentID) return
 
@@ -278,7 +277,7 @@ export function createServerNotificationState(input: { sdk: ServerSDK; sync: Ser
     })
   }
 
-  const unsub = input.sdk.event.listen((e) => {
+  const unsub = input.sdk.eventByDir.listen((e) => {
     const event = e.details
     if (
       event.type !== "session.execution.succeeded" &&

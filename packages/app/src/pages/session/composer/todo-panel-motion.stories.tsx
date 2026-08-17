@@ -2,7 +2,6 @@
 import { createEffect, createMemo, For, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Todo } from "@/types"
-import { useServerSync } from "@/context/global-sync"
 import { PromptInput } from "@/components/prompt-input"
 import { usePrompt } from "@/context/prompt"
 import {
@@ -152,7 +151,6 @@ const css = `
 
 export const Playground = {
   render: () => {
-    const global = useServerSync()
     const prompt = usePrompt()
     const [cfg, setCfg] = createStore({
       open: true,
@@ -207,7 +205,7 @@ export const Playground = {
     })
 
     createEffect(() => {
-      global.todo.set("story-session", todos())
+      // TODO: Restore story todo updates when the V2 client exposes a todo API.
     })
 
     const clear = () => {

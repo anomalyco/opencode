@@ -1,7 +1,6 @@
 export { AppBaseProviders, AppInterface } from "./app"
 export { useLayout } from "./context/layout"
 export { useServerSDK } from "./context/server-sdk"
-export { useServerSync } from "./context/server-sync"
 export { useServers as useServers } from "./context/servers"
 export { useSettings } from "./context/settings"
 export { useTabs } from "./context/tabs"
