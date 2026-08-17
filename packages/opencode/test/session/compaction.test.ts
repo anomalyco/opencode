@@ -1719,6 +1719,44 @@ describe("SessionNs.getUsage", () => {
     expect(result.tokens.cache.write).toBe(300)
   })
 
+  test("flags likely Anthropic cache busts when a step rewrites cache without reads", () => {
+    const warning = SessionNs.cacheBustWarning({
+      providerID: "anthropic",
+      modelID: "claude-opus-5",
+      sessionID: "ses_test",
+      finish: "tool-calls",
+      usage: {
+        cost: 1.63,
+        tokens: { input: 3, output: 39, reasoning: 0, cache: { read: 0, write: 259_313 }, total: 259_355 },
+      },
+    })
+
+    expect(warning).toEqual({
+      providerID: "anthropic",
+      modelID: "claude-opus-5",
+      sessionID: "ses_test",
+      finish: "tool-calls",
+      cost: 1.63,
+      cacheWriteTokens: 259_313,
+      cacheReadTokens: 0,
+    })
+  })
+
+  test("does not flag ordinary cache hits", () => {
+    const warning = SessionNs.cacheBustWarning({
+      providerID: "anthropic",
+      modelID: "claude-opus-5",
+      sessionID: "ses_test",
+      finish: "stop",
+      usage: {
+        cost: 0.03,
+        tokens: { input: 3, output: 39, reasoning: 0, cache: { read: 200_000, write: 0 }, total: 200_042 },
+      },
+    })
+
+    expect(warning).toBeUndefined()
+  })
+
   test("subtracts cached tokens for anthropic provider", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
     // AI SDK v6 normalizes inputTokens to include cached tokens for all providers
