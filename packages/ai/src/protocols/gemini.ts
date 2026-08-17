@@ -166,6 +166,7 @@ const GeminiGenerationConfig = Schema.Struct({
 const GeminiBodyFields = {
   cachedContent: Schema.optional(Schema.String),
   contents: Schema.Array(GeminiContent),
+  labels: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   safetySettings: optionalArray(GeminiSafetySetting),
   serviceTier: Schema.optional(Schema.String),
   systemInstruction: Schema.optional(GeminiSystemInstruction),

@@ -1,14 +1,21 @@
+import { Effect } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { Gemini } from "../protocols/gemini.js"
+import { ProviderShared } from "../protocols/shared.js"
 import { Auth } from "../route/auth.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type LLMRequest, type ModelID, type ProviderOptions } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
-export type GeminiOptionsInput = Gemini.OptionsInput
-export type GeminiProviderOptionsInput = Gemini.ProviderOptionsInput
+export interface GeminiOptionsInput extends Gemini.OptionsInput {
+  readonly labels?: Readonly<Record<string, string>>
+}
+
+export type GeminiProviderOptionsInput = ProviderOptions & {
+  readonly gemini?: GeminiOptionsInput
+}
 
 export const id = ProviderID.make("google-vertex")
 
@@ -17,7 +24,7 @@ export type Config = RouteDefaultsInput &
     readonly baseURL?: string
     readonly location?: string
     readonly project?: string
-    readonly providerOptions?: Gemini.ProviderOptionsInput
+    readonly providerOptions?: GeminiProviderOptionsInput
   }
 
 export type Settings = ProviderPackage.Settings &
@@ -28,14 +35,31 @@ export type Settings = ProviderPackage.Settings &
     readonly baseURL?: string
     readonly location?: string
     readonly project?: string
-    readonly providerOptions?: Gemini.ProviderOptionsInput
+    readonly providerOptions?: GeminiProviderOptionsInput
   }
+
+const fromRequest = Effect.fn("GoogleVertex.fromRequest")(function* (request: LLMRequest) {
+  const body = yield* Gemini.protocol.body.from(request)
+  const value = request.providerOptions?.gemini?.labels
+  const labels = ProviderShared.isRecord(value)
+    ? Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+    : undefined
+  return { ...body, labels }
+})
+
+const protocol = {
+  ...Gemini.protocol,
+  body: {
+    ...Gemini.protocol.body,
+    from: fromRequest,
+  },
+}
 
 const route = Route.make({
   id: "google-vertex-gemini",
   provider: id,
   providerMetadataKey: "google",
-  protocol: Gemini.protocol,
+  protocol,
   endpoint: Endpoint.path(({ request }) => {
     const model = String(request.model.id)
     return `/${model.startsWith("endpoints/") ? model : `models/${model}`}:streamGenerateContent?alt=sse`
@@ -78,7 +102,7 @@ export const configure = (input: Config = {}) => {
   return {
     id,
     model: (modelID: string | ModelID) =>
-      configuredRoute(input, modelID).model<Gemini.ProviderOptionsInput>({ id: modelID }),
+      configuredRoute(input, modelID).model<GeminiProviderOptionsInput>({ id: modelID }),
     configure,
   }
 }
@@ -87,7 +111,7 @@ export const provider = {
   id,
   configure,
 }
-export const model: ProviderPackage.Definition<Settings, Gemini.ProviderOptionsInput>["model"] = (
+export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsInput>["model"] = (
   modelID,
   settings,
 ) => {
