@@ -46,6 +46,7 @@ import type {
 } from "../types"
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment, promptLength } from "../prompt-parts"
+import { handleComposerKeyDown, type ComposerKeybinds } from "./keybind"
 import { editorMatchesPrompt, getCursorPosition, isEditorDomBlank, isPromptInlineBlank } from "./dom"
 import {
   INITIAL_EDITOR_SYNC_STATE,
@@ -94,9 +95,12 @@ export type ComposerEditorProps = {
   alternateKeybind?: string[]
   exitShellKeybind?: string[]
   suggestionBoundary?: () => HTMLElement | undefined
+  keybinds?: ComposerKeybinds
+  submitKeybind?: string[]
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
+  let composing = false
   const i18n = useI18n()
   const state = props.controller.state
   const view = props.controller.view
@@ -352,26 +356,26 @@ export function ComposerEditor(props: ComposerEditorProps) {
                     ? composer?.getBoundingClientRect().height
                     : undefined
 
-                if (!view.draftOnly && props.controller.onKeyDown(event, height)) return
+                handleComposerKeyDown({
+                  event,
+                  keybinds: props.keybinds,
+                  composing,
+                  selectSuggestion: () => {
+                    if (!isComposerPopoverOpen(state)) return false
+                    props.controller.onKeyDown(event, height)
 
-                const mod = event.metaKey || event.ctrlKey
-
-                if (mod && event.key === "ArrowUp" && !event.shiftKey && !event.altKey) {
-                  if (view.submit.queue?.editFirst()) event.preventDefault()
-
-                  return
-                }
-
-                // Safari delivers the Enter that confirms an IME candidate after compositionend, so only its
-                // keyCode 229 shows it belongs to the composition.
-                if (event.key === "Enter" && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
-                  event.preventDefault()
-
-                  if (event.repeat) return
+                    return true
+                  },
+                  handleController: () => !view.draftOnly && props.controller.onKeyDown(event, height),
+                  editFirst: view.submit.queue?.editFirst,
+                  insertNewline: props.controller.insertNewline,
                   // On touch, Cmd+Return is the touch bar's primary action, since plain Return cannot send.
-                  props.controller.submit(mod && !touch() ? { alternate: true } : undefined)
-                }
+                  submit: (alternate) =>
+                    props.controller.submit(alternate && !touch() ? { alternate: true } : undefined),
+                })
               }}
+              onCompositionStart={() => (composing = true)}
+              onCompositionEnd={() => (composing = false)}
               // The editor holds one flat run of text, mentions and <br>s. A touch keyboard's Return arrives as a
               // paragraph, which would wrap the next line in a <div> the parser joins without a newline; replace it
               // with the line break Shift+Enter inserts. Only beforeinput is cancelled, so iOS still applies its
@@ -520,6 +524,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 busy={view.submit.busy?.() ?? false}
                 disabled={!props.controller.canSubmit()}
                 sendLabel={i18n.t("ui.promptInput.send")}
+                sendKeybind={props.submitKeybind}
                 stopLabel={i18n.t("ui.promptInput.stop")}
                 onSubmit={() => props.controller.submit()}
                 onStop={props.controller.stop}
@@ -1470,6 +1475,7 @@ function ComposerEditorSubmitButton(props: {
   busy?: boolean
   disabled: boolean
   sendLabel: string
+  sendKeybind?: string[]
   stopLabel: string
   onSubmit: () => void
   onStop: () => void
@@ -1478,7 +1484,18 @@ function ComposerEditorSubmitButton(props: {
     <Tooltip
       placement="top"
       inactive={!props.stopping && props.disabled}
-      value={props.stopping ? props.stopLabel : props.sendLabel}
+      value={
+        props.stopping ? (
+          props.stopLabel
+        ) : (
+          <>
+            {props.sendLabel}
+            <Show when={props.sendKeybind?.length}>
+              <Keybind keys={props.sendKeybind ?? []} variant="neutral" />
+            </Show>
+          </>
+        )
+      }
     >
       <IconButton
         data-action="composer-submit"
