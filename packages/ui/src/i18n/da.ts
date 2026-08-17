@@ -165,7 +165,6 @@ export const dict = {
   "ui.message.forkMessage": "Forgren til ny session",
   "ui.message.revertMessage": "Nulstil til dette punkt",
   "ui.message.copyResponse": "Kopier svar",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Kopieret!",
   "ui.message.interrupted": "Afbrudt",
   "ui.message.queued": "I kø",

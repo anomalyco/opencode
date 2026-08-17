@@ -172,8 +172,6 @@ export const dict = {
   "command.session.redo": "Επανάληψη",
   "command.session.redo.description": "Επανάληψη του τελευταίου μηνύματος που αναιρέθηκε",
   "command.session.compact": "Συμπαγής συνεδρία",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Συνοψήστε τη συνεδρία για να μειώσετε το μέγεθος του περιβάλλοντος",
   "command.session.fork": "Διακλάδωση από μήνυμα",
   "command.session.fork.description": "Δημιουργία νέας συνεδρίας από προηγούμενο μήνυμα",

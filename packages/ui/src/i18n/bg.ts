@@ -178,7 +178,6 @@ export const dict = {
   "ui.message.forkMessage": "Разклоняване в нова сесия",
   "ui.message.revertMessage": "Възстановяване на съобщението",
   "ui.message.copyResponse": "Копиране на отговора",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Копирано",
   "ui.message.duration.seconds": "{{count}} сек",
   "ui.message.duration.minutesSeconds": "{{minutes}} мин {{seconds}} сек",

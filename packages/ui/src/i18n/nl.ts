@@ -178,7 +178,6 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Afsplitsen in nieuwe sessie",
   "ui.message.revertMessage": "Bericht terugdraaien",
   "ui.message.copyResponse": "Antwoord kopiëren",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Gekopieerd",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",

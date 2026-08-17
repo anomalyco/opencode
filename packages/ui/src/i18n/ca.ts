@@ -182,7 +182,6 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Bifurca en una sessió nova",
   "ui.message.revertMessage": "Reverteix el missatge",
   "ui.message.copyResponse": "Copia la resposta",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Copiat",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",

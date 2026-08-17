@@ -178,7 +178,6 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Tách sang phiên mới",
   "ui.message.revertMessage": "Hoàn nguyên tin nhắn",
   "ui.message.copyResponse": "Sao chép phản hồi",
-  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Đã sao chép",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",

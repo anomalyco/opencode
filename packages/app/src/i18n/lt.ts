@@ -175,8 +175,6 @@ export const dict = {
   "command.session.redo": "Perdaryti",
   "command.session.redo.description": "Pakartokite paskutinį anuliuotą pranešimą",
   "command.session.compact": "Glaudinti seansą",
-  "command.session.record-notes": "Save notebook learnings",
-  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Apibendrinti seansą, kad sumažėtų kontekstas",
   "command.session.fork": "Atskirti nuo pranešimo",
   "command.session.fork.description": "Sukurti naują seansą iš ankstesnio pranešimo",
