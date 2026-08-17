@@ -141,11 +141,20 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           body={
             <Switch>
               <Match when={props.request.always.length === 1 && props.request.always[0] === "*"}>
-                <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />
+                <TextBody
+                  title={
+                    "This will allow " +
+                    props.request.permission +
+                    " until OpenCode is restarted, or permanently if you choose Remember."
+                  }
+                />
               </Match>
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
-                  <text fg={theme.textMuted}>This will allow the following patterns until OpenCode is restarted</text>
+                  <text fg={theme.textMuted}>
+                    This will allow the following patterns until OpenCode is restarted, or permanently if you choose
+                    Remember
+                  </text>
                   <box>
                     <For each={props.request.always}>
                       {(pattern) => (
@@ -160,11 +169,24 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               </Match>
             </Switch>
           }
-          options={{ confirm: "Confirm", cancel: "Cancel" }}
+          options={{ confirm: "Until restart", remember: "Remember (save to config)", cancel: "Cancel" }}
           escapeKey="cancel"
           onSelect={(option) => {
             setStore("stage", "permission")
             if (option === "cancel") return
+            if (option === "remember") {
+              // Persist the same patterns to opencode.json so they survive a
+              // restart. updateGlobal deep-merges the patch, so this only adds
+              // to permission.<kind> — it never clobbers other saved rules.
+              // Mirrors the "auto" option below, which does the same
+              // config.update -> config.get -> sync.set round trip for auto_mode.
+              const rules = Object.fromEntries(props.request.always.map((pattern) => [pattern, "allow" as const]))
+              void sdk.client.global.config
+                .update({ config: { permission: { [props.request.permission]: rules } } }, { throwOnError: true })
+                .then(() => sdk.client.global.config.get({ throwOnError: true }))
+                .then((refreshed) => sync.set("config", refreshed.data!))
+                .catch(() => undefined)
+            }
             void sdk.client.permission.reply({
               reply: "always",
               requestID: props.request.id,

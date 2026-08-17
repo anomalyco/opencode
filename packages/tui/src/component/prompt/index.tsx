@@ -1687,7 +1687,10 @@ function isRunControlInput(input: string): boolean {
                         {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
                       </text>
                       <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
-                        <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
+                        {/* Distinct accent from the loop/backlog badge below (theme.success) so the
+                            two read as separate states — permission auto-approve is not the same
+                            thing as an unattended loop/backlog run, and both can be active at once. */}
+                        <text fg={fadeColor(theme.warning, agentMetaAlpha())}>{"● auto"}</text>
                       </Show>
                       <Show when={store.mode === "normal"}>
                         <Show when={activeLoop()}>

@@ -6,6 +6,9 @@ import { LoopCommand } from "../cli/cmd/loop"
 // exist despite 194 lines of working code over the live BeadsSync service.
 // The opposite failure from `hook`, which was registered and did nothing.
 import { BeadsCommand } from "../cli/cmd/beads"
+// Effective-ruleset inspector + usage-scanning setup wizard, the local
+// equivalent of `claude auto-mode config` / `/auto-mode-setup`.
+import { PermissionCommand } from "../cli/cmd/permission"
 
 /**
  * Fork-only CLI commands, registered as a single unit from `src/index.ts`.
@@ -22,4 +25,5 @@ import { BeadsCommand } from "../cli/cmd/beads"
 export const ForkCommands: CommandModule<any, any>[] = [
   LoopCommand,
   BeadsCommand,
+  PermissionCommand,
 ]
