@@ -32,6 +32,7 @@ export function TooltipV2(props: TooltipV2Props) {
   ])
 
   const close = () => setState("open", false)
+  const controlled = () => local.forceOpen !== undefined
 
   const inside = () => {
     const active = document.activeElement
@@ -93,9 +94,9 @@ export function TooltipV2(props: TooltipV2Props) {
           {...others}
           closeDelay={0}
           ignoreSafeArea={local.ignoreSafeArea ?? true}
-          open={local.forceOpen || state.open}
+          open={controlled() ? local.forceOpen : state.open}
           onOpenChange={(open) => {
-            if (local.forceOpen) return
+            if (controlled()) return
             if (state.block && open) return
             if (justClickedTrigger) {
               justClickedTrigger = false

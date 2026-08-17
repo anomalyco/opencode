@@ -1,42 +1,44 @@
-export * as PluginHost from "./host"
+export * as PluginHost from "./host.js"
 
-import type { Plugin } from "@opencode-ai/plugin/v2/effect"
+import { Plugin } from "@opencode-ai/plugin/effect"
+import type { IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
+import type { CredentialOAuth } from "@opencode-ai/sdk/v2/types"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
+import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
-import { AgentV2 } from "../agent"
-import { AISDK } from "../aisdk"
-import { Catalog } from "../catalog"
-import { CommandV2 } from "../command"
-import { Credential } from "../credential"
-import { EventV2 } from "../event"
-import { Integration } from "../integration"
-import { Location } from "../location"
-import { ModelV2 } from "../model"
-import { PluginV2 } from "../plugin"
-import { PluginRuntime } from "./runtime"
-import { ProviderV2 } from "../provider"
-import { Reference } from "../reference"
-import { AbsolutePath, type DeepMutable } from "../schema"
-import { SkillV2 } from "../skill"
-import { Tool } from "../tool/tool"
-import { Tools } from "../tool/tools"
-import { ToolHooks } from "../tool/hooks"
-import { WorkspaceV2 } from "../workspace"
-import { PluginHooks } from "./hooks"
+import { Agent } from "../agent.js"
+import { AISDK } from "../aisdk.js"
+import { Catalog } from "../catalog.js"
+import { Command } from "../command.js"
+import { Credential } from "../credential.js"
+import { Bus } from "../bus.js"
+import { Integration } from "../integration.js"
+import { Location } from "../location.js"
+import { Model } from "../model.js"
+import { PluginRuntime } from "./runtime.js"
+import { Provider } from "../provider.js"
+import { Reference } from "../reference.js"
+import { AbsolutePath, type DeepMutable } from "../schema.js"
+import { Skill } from "../skill.js"
+import { Tool } from "../tool.js"
+import { Workspace } from "../workspace.js"
+import { WebSearch } from "../websearch.js"
+import { PluginHooks } from "./hooks.js"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
-export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Interface) {
-  const agents = yield* AgentV2.Service
+export const make = Effect.fn("PluginHost.make")(function* (plugin: import("../plugin.js").Interface) {
+  const app = yield* App.Metadata
+  const agents = yield* Agent.Service
   const aisdk = yield* AISDK.Service
   const catalog = yield* Catalog.Service
-  const commands = yield* CommandV2.Service
-  const events = yield* EventV2.Service
+  const commands = yield* Command.Service
+  const bus = yield* Bus.Service
   const integration = yield* Integration.Service
   const location = yield* Location.Service
   const reference = yield* Reference.Service
-  const skill = yield* SkillV2.Service
-  const tools = yield* Tools.Service
-  const toolHooks = yield* ToolHooks.Service
+  const skill = yield* Skill.Service
+  const tools = yield* Tool.Service
+  const websearch = yield* WebSearch.Service
   const hooks = yield* PluginHooks.Service
   const runtime = yield* PluginRuntime.Service
   const locationInfo = () =>
@@ -45,15 +47,13 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       workspaceID: location.workspaceID,
       project: location.project,
     })
-  const locationRef = (input?: Parameters<Plugin.Context["agent"]["list"]>[0]) =>
+  const locationRef = (input?: { readonly location?: { readonly directory?: string; readonly workspace?: string } }) =>
     input?.location === undefined
       ? undefined
       : Location.Ref.make({
           directory: AbsolutePath.make(input.location.directory ?? location.directory),
           workspaceID:
-            input.location.workspace === undefined
-              ? location.workspaceID
-              : WorkspaceV2.ID.make(input.location.workspace),
+            input.location.workspace === undefined ? location.workspaceID : Workspace.ID.make(input.location.workspace),
         })
   const isCurrentLocation = (ref: Location.Ref) =>
     ref.directory === location.directory && ref.workspaceID === location.workspaceID
@@ -61,9 +61,28 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
     effect.pipe(Effect.map((data) => ({ location: locationInfo(), data })))
 
   return {
+    app,
     options: {},
     agent: {
-      get: (id) => agents.get(AgentV2.ID.make(id)),
+      get: (input) => {
+        const ref = locationRef(input)
+        const output =
+          ref && !isCurrentLocation(ref)
+            ? runtime.location.agent.list(ref).pipe(
+                Effect.map((result) => ({
+                  ...result,
+                  data: result.data.find((agent) => agent.id === input.agentID),
+                })),
+              )
+            : response(agents.get(input.agentID))
+        return output.pipe(
+          Effect.flatMap((result) =>
+            result.data
+              ? Effect.succeed({ ...result, data: result.data })
+              : Effect.fail(new Error(`Agent not found: ${input.agentID}`)),
+          ),
+        )
+      },
       list: (input) => {
         const ref = locationRef(input)
         if (ref && !isCurrentLocation(ref)) return runtime.location.agent.list(ref)
@@ -74,10 +93,10 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         agents.transform((draft) => {
           callback({
             list: () => mutable(draft.list()),
-            get: (id) => mutable(draft.get(AgentV2.ID.make(id))),
-            default: (id) => draft.default(id === undefined ? undefined : AgentV2.ID.make(id)),
-            update: (id, update) => draft.update(AgentV2.ID.make(id), update),
-            remove: (id) => draft.remove(AgentV2.ID.make(id)),
+            get: (id) => mutable(draft.get(Agent.ID.make(id))),
+            default: (id) => draft.default(id === undefined ? undefined : Agent.ID.make(id)),
+            update: (id, update) => draft.update(Agent.ID.make(id), update),
+            remove: (id) => draft.remove(Agent.ID.make(id)),
           })
         }),
     },
@@ -114,7 +133,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         list: () => response(catalog.provider.available()),
         get: (input) =>
           catalog.provider
-            .get(ProviderV2.ID.make(input.providerID))
+            .get(Provider.ID.make(input.providerID))
             .pipe(
               Effect.flatMap((provider) =>
                 provider === undefined
@@ -124,8 +143,6 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             ),
       },
       model: {
-        get: (providerID, modelID) =>
-          catalog.model.get(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
         list: () => response(catalog.model.available()),
         default: () => response(catalog.model.default()),
       },
@@ -135,21 +152,20 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
           callback({
             provider: {
               list: () => mutable(draft.provider.list()),
-              get: (id) => mutable(draft.provider.get(ProviderV2.ID.make(id))),
-              update: (id, update) => draft.provider.update(ProviderV2.ID.make(id), update),
-              remove: (id) => draft.provider.remove(ProviderV2.ID.make(id)),
+              get: (id) => mutable(draft.provider.get(Provider.ID.make(id))),
+              update: (id, update) => draft.provider.update(Provider.ID.make(id), update),
+              remove: (id) => draft.provider.remove(Provider.ID.make(id)),
             },
             model: {
               get: (providerID, modelID) =>
-                mutable(draft.model.get(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID))),
+                mutable(draft.model.get(Provider.ID.make(providerID), Model.ID.make(modelID))),
               update: (providerID, modelID, update) =>
-                draft.model.update(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID), update),
-              remove: (providerID, modelID) =>
-                draft.model.remove(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
+                draft.model.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
+              remove: (providerID, modelID) => draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
               default: {
                 get: draft.model.default.get,
                 set: (providerID, modelID) =>
-                  draft.model.default.set(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
+                  draft.model.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
               },
             },
           })
@@ -164,7 +180,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         }),
     },
     event: {
-      subscribe: () => events.subscribe().pipe(Stream.filter(EventManifest.isServer)),
+      subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)),
     },
     integration: {
       list: () => response(integration.list()),
@@ -174,6 +190,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
           integration.connection.key({
             integrationID: Integration.ID.make(input.integrationID),
             key: input.key,
+            answer: input.answer,
             label: input.label,
           }),
       },
@@ -183,7 +200,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             integration.oauth.connect({
               integrationID: Integration.ID.make(input.integrationID),
               methodID: Integration.MethodID.make(input.methodID),
-              inputs: input.inputs,
+              answer: input.answer,
               label: input.label,
             }),
           ),
@@ -244,80 +261,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             update: (id, update) => draft.update(Integration.ID.make(id), update),
             remove: (id) => draft.remove(Integration.ID.make(id)),
             method: {
-              list: (id) => mutable(draft.method.list(Integration.ID.make(id))),
-              update: (input) => {
-                if ("authorize" in input) {
-                  const methodID = Integration.MethodID.make(input.method.id)
-                  const refresh = input.refresh
-                  draft.method.update({
-                    integrationID: Integration.ID.make(input.integrationID),
-                    method: { ...input.method, id: methodID },
-                    authorize: (inputs) =>
-                      input.authorize(inputs).pipe(
-                        Effect.map((authorization) => {
-                          if (authorization.mode === "auto") {
-                            return {
-                              ...authorization,
-                              callback: authorization.callback.pipe(
-                                Effect.map((credential) =>
-                                  Credential.OAuth.make({
-                                    ...credential,
-                                    methodID: Integration.MethodID.make(credential.methodID),
-                                  }),
-                                ),
-                              ),
-                            }
-                          }
-                          return {
-                            ...authorization,
-                            callback: (code: string) =>
-                              authorization.callback(code).pipe(
-                                Effect.map((credential) =>
-                                  Credential.OAuth.make({
-                                    ...credential,
-                                    methodID: Integration.MethodID.make(credential.methodID),
-                                  }),
-                                ),
-                              ),
-                          }
-                        }),
-                      ),
-                    ...(refresh
-                      ? {
-                          refresh: (value: Credential.OAuth) =>
-                            refresh(value).pipe(
-                              Effect.map((next) =>
-                                Credential.OAuth.make({
-                                  ...next,
-                                  methodID: Integration.MethodID.make(next.methodID),
-                                }),
-                              ),
-                            ),
-                        }
-                      : {}),
-                    ...(input.label ? { label: input.label } : {}),
-                  })
-                  return
-                }
-                if (input.method.type === "env") {
-                  draft.method.update({
-                    integrationID: Integration.ID.make(input.integrationID),
-                    method: { type: "env", names: input.method.names },
-                  })
-                  return
-                }
-                if (input.method.type === "command") {
-                  draft.method.update({
-                    integrationID: Integration.ID.make(input.integrationID),
-                    method: Schema.decodeUnknownSync(Integration.CommandMethod)(input.method),
-                  })
-                  return
-                }
-                draft.method.update({
-                  integrationID: Integration.ID.make(input.integrationID),
-                  method: { type: "key", label: input.method.label },
-                })
-              },
+              list: (id) => draft.method.list(Integration.ID.make(id)),
+              update: (input) => draft.method.update(methodImplementation(input)),
               remove: (id, method) =>
                 draft.method.remove(Integration.ID.make(id), Schema.decodeUnknownSync(Integration.Method)(method)),
             },
@@ -345,78 +290,62 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       transform: (callback) =>
         skill.transform((draft) => {
           callback({
-            source: (source) => draft.source(Schema.decodeUnknownSync(SkillV2.Source)(source)),
-            list: draft.list,
+            list: () => mutable(draft.list()),
+            add: (value) => draft.add(Schema.decodeUnknownSync(Skill.Info)(value)),
+            update: draft.update,
+            remove: draft.remove,
           })
         }),
     },
+    shell: {
+      hook: (name, callback) => hooks.register("shell", name, callback),
+    },
     tool: {
       transform: (callback) =>
-        Effect.gen(function* () {
-          const registrations: Array<{
-            readonly name: string
-            readonly tool: Tool.AnyTool
-            readonly options?: Tool.RegisterOptions
-          }> = []
-          yield* Effect.sync(() =>
+        tools
+          .transform((draft) =>
             callback({
-              add: (name, tool, options) => {
-                registrations.push({ name, tool, ...(options ? { options } : {}) })
-              },
+              add: (tool) => draft.add(tool),
             }),
           )
-          yield* Effect.forEach(
-            registrations,
-            (registration) => tools.register({ [registration.name]: registration.tool }, registration.options),
-            { discard: true },
-          ).pipe(Effect.orDie)
-          return { dispose: Effect.void }
-        }),
-      hook: (name, callback) => {
-        if (name === "execute.before") {
-          return toolHooks.hook.before((event) => {
-            const output = {
-              tool: event.tool,
-              sessionID: event.sessionID,
-              agent: event.agent,
-              messageID: event.messageID,
-              callID: event.callID,
-              input: event.input,
-            }
-            return Reflect.apply(callback, undefined, [output]).pipe(
-              Effect.tap(() => Effect.sync(() => (event.input = output.input))),
-            )
-          })
-        }
-        return toolHooks.hook.after((event) => {
-          const output = {
-            tool: event.tool,
-            sessionID: event.sessionID,
-            agent: event.agent,
-            messageID: event.messageID,
-            callID: event.callID,
-            input: event.input,
-            result: event.result,
-            output: event.output,
-            outputPaths: event.outputPaths,
-          }
-          return Reflect.apply(callback, undefined, [output]).pipe(
-            Effect.tap(() =>
-              Effect.sync(() => {
-                event.result = output.result
-                event.output = output.output
-                event.outputPaths = output.outputPaths
+          .pipe(Effect.orDie, Effect.as({ dispose: Effect.void })),
+      hook: (name, callback) => hooks.register("tool", name, callback),
+    },
+    websearch: {
+      providers: () => response(websearch.providers()),
+      query: (input) =>
+        response(
+          websearch.query({
+            query: input.query,
+            providerID: input.providerID === undefined ? undefined : WebSearch.ID.make(input.providerID),
+          }),
+        ),
+      reload: websearch.reload,
+      transform: (callback) =>
+        websearch.transform((draft) => {
+          callback({
+            add: (definition) =>
+              draft.add({
+                id: WebSearch.ID.make(definition.id),
+                name: definition.name,
+                execute: definition.execute,
               }),
-            ),
-          )
-        })
-      },
+            default: {
+              get: draft.default.get,
+              set: (selection) =>
+                draft.default.set(
+                  selection === false || selection === "random" ? selection : WebSearch.ID.make(selection),
+                ),
+            },
+          })
+        }),
     },
     session: {
       hook: (name, callback) => hooks.register("session", name, callback),
       create: (input) =>
         runtime.session.create({
           id: input?.id,
+          title: input?.title,
           agent: input?.agent,
           model: input?.model,
           location:
@@ -426,8 +355,57 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       prompt: runtime.session.prompt,
       generate: (input) => runtime.session.generate(input).pipe(Effect.map((text) => ({ text }))),
       command: runtime.session.command,
+      rename: runtime.session.rename,
       synthetic: runtime.session.synthetic,
       interrupt: (input) => runtime.session.interrupt(input.sessionID),
+      wait: (input) => runtime.session.wait(input.sessionID),
     },
   } satisfies Plugin.Context
 })
+
+function methodImplementation(input: IntegrationMethodRegistration): Integration.Implementation {
+  if ("authorize" in input) {
+    const refresh = input.refresh
+    return {
+      integrationID: Integration.ID.make(input.integrationID),
+      method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
+      authorize: (answer) =>
+        input.authorize(answer).pipe(
+          Effect.map((authorization) => {
+            if (authorization.mode === "auto") {
+              return {
+                ...authorization,
+                callback: authorization.callback.pipe(Effect.map(credential)),
+              }
+            }
+            return {
+              ...authorization,
+              callback: (code: string) => authorization.callback(code).pipe(Effect.map(credential)),
+            }
+          }),
+        ),
+      ...(refresh ? { refresh: (value: Credential.OAuth) => refresh(value).pipe(Effect.map(credential)) } : {}),
+      ...(input.label ? { label: input.label } : {}),
+    }
+  }
+  if (input.method.type === "env") {
+    return {
+      integrationID: Integration.ID.make(input.integrationID),
+      method: input.method,
+    }
+  }
+  if (input.method.type === "command") {
+    return {
+      integrationID: Integration.ID.make(input.integrationID),
+      method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
+    }
+  }
+  return {
+    integrationID: Integration.ID.make(input.integrationID),
+    method: input.method,
+  }
+}
+
+function credential(value: CredentialOAuth) {
+  return Credential.OAuth.make({ ...value, methodID: Integration.MethodID.make(value.methodID) })
+}

@@ -1,18 +1,15 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import { AgentV2 } from "@opencode-ai/core/agent"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { SessionV2 } from "@opencode-ai/core/session"
-import { Agent } from "@opencode-ai/schema/agent"
+import { Agent } from "@opencode-ai/core/agent"
+import { Session } from "@opencode-ai/core/session"
 import { Location } from "@opencode-ai/schema/location"
 import { Model } from "@opencode-ai/schema/model"
 import { Provider } from "@opencode-ai/schema/provider"
 import { Project } from "@opencode-ai/schema/project"
-import { ProjectDirectories } from "@opencode-ai/schema/project-directories"
+import { Worktree } from "@opencode-ai/schema/worktree"
 import { PermissionV1 } from "@opencode-ai/schema/permission-v1"
 import { Prompt } from "@opencode-ai/schema/prompt"
-import { Session } from "@opencode-ai/schema/session"
-import { SessionPending } from "@opencode-ai/schema/session-pending"
+import { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Workspace } from "@opencode-ai/schema/workspace"
 import { Command } from "@opencode-ai/schema/command"
@@ -20,15 +17,17 @@ import { Connection } from "@opencode-ai/schema/connection"
 import { Credential } from "@opencode-ai/schema/credential"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Integration } from "@opencode-ai/schema/integration"
+import { AI } from "@opencode-ai/schema/ai"
 import { LLM } from "@opencode-ai/schema/llm"
 import { Permission } from "@opencode-ai/schema/permission"
 import { Pty } from "@opencode-ai/schema/pty"
 import { Reference } from "@opencode-ai/schema/reference"
 import { Skill } from "@opencode-ai/schema/skill"
 import { AbsolutePath, DateTimeUtcFromMillis, optional, statics } from "@opencode-ai/schema/schema"
-import { ProviderV2 } from "@opencode-ai/core/provider"
 
 test("Core reuses the canonical shared schemas", async () => {
+  const schemaAgent = await import("@opencode-ai/schema/agent")
+  const schemaSession = await import("@opencode-ai/schema/session")
   const [
     coreCommand,
     coreConnection,
@@ -36,17 +35,18 @@ test("Core reuses the canonical shared schemas", async () => {
     coreFileSystem,
     coreIntegration,
     coreLocation,
-    coreLLM,
+    coreAI,
+    coreModel,
     corePermission,
     corePermissionV1,
-    coreProjectCopy,
+    coreWorktree,
     corePty,
     coreProject,
+    coreProvider,
     coreReference,
-    coreSessionPending,
+    coreSessionInbox,
     coreSessionMessage,
     coreSkill,
-    coreV2Schema,
     coreSchema,
     coreWorkspace,
   ] = await Promise.all([
@@ -57,25 +57,26 @@ test("Core reuses the canonical shared schemas", async () => {
     import("@opencode-ai/core/integration"),
     import("@opencode-ai/core/location"),
     import("@opencode-ai/ai"),
+    import("@opencode-ai/core/model"),
     import("@opencode-ai/core/permission"),
     import("@opencode-ai/core/v1/permission"),
-    import("@opencode-ai/core/project/copy"),
+    import("@opencode-ai/core/worktree"),
     import("@opencode-ai/core/pty"),
     import("@opencode-ai/core/project/schema"),
+    import("@opencode-ai/core/provider"),
     import("@opencode-ai/core/reference"),
-    import("@opencode-ai/core/session/pending"),
+    import("@opencode-ai/core/session/inbox"),
     import("@opencode-ai/core/session/message"),
     import("@opencode-ai/core/skill"),
-    import("@opencode-ai/core/v2-schema"),
     import("@opencode-ai/core/schema"),
     import("@opencode-ai/core/workspace"),
   ])
 
   const schemas = [
-    [AgentV2.ID, Agent.ID],
-    [AgentV2.Name, Agent.Name],
-    [AgentV2.Color, Agent.Color],
-    [AgentV2.Info, Agent.Info],
+    [Agent.ID, schemaAgent.Agent.ID],
+    [Agent.Name, schemaAgent.Agent.Name],
+    [Agent.Color, schemaAgent.Agent.Color],
+    [Agent.Info, schemaAgent.Agent.Info],
     [coreCommand.Info, Command.Info],
     [coreConnection.CredentialInfo, Connection.CredentialInfo],
     [coreConnection.EnvInfo, Connection.EnvInfo],
@@ -89,58 +90,53 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreFileSystem.Match, FileSystem.Match],
     [coreIntegration.ID, Integration.ID],
     [coreIntegration.MethodID, Integration.MethodID],
-    [coreIntegration.When, Integration.When],
-    [coreIntegration.TextPrompt, Integration.TextPrompt],
-    [coreIntegration.SelectPrompt, Integration.SelectPrompt],
-    [coreIntegration.Prompt, Integration.Prompt],
     [coreIntegration.OAuthMethod, Integration.OAuthMethod],
     [coreIntegration.KeyMethod, Integration.KeyMethod],
     [coreIntegration.EnvMethod, Integration.EnvMethod],
     [coreIntegration.Method, Integration.Method],
-    [coreIntegration.Inputs, Integration.Inputs],
     [coreIntegration.Ref, Integration.Ref],
     [coreLocation.Ref, Location.Ref],
-    [coreLLM.ProviderMetadata, LLM.ProviderMetadata],
-    [coreLLM.FinishReason, LLM.FinishReason],
-    [coreLLM.ToolTextContent, LLM.ToolTextContent],
-    [coreLLM.ToolFileContent, LLM.ToolFileContent],
-    [coreLLM.ToolContent, LLM.ToolContent],
-    [ModelV2.ID, Model.ID],
-    [ModelV2.VariantID, Model.VariantID],
-    [ModelV2.Ref, Model.Ref],
-    [ModelV2.Family, Model.Family],
-    [ModelV2.Capabilities, Model.Capabilities],
-    [ModelV2.Cost, Model.Cost],
-    [ModelV2.Info, Model.Info],
-    [ProviderV2.ID, Provider.ID],
-    [ProviderV2.Request, Provider.Request],
-    [ProviderV2.Info, Provider.Info],
+    [coreAI.ProviderMetadata, AI.ProviderMetadata],
+    [coreAI.FinishReason, LLM.FinishReason],
+    [coreModel.ID, Model.ID],
+    [coreModel.VariantID, Model.VariantID],
+    [coreModel.Ref, Model.Ref],
+    [coreModel.Family, Model.Family],
+    [coreModel.Capabilities, Model.Capabilities],
+    [coreModel.Cost, Model.Cost],
+    [coreModel.Info, Model.Info],
+    [coreProvider.ID, Provider.ID],
+    [coreProvider.Request, Provider.Request],
+    [coreProvider.Info, Provider.Info],
     [corePermission.Effect, Permission.Effect],
     [corePermission.Rule, Permission.Rule],
     [corePermission.Ruleset, Permission.Ruleset],
     [corePermissionV1.Event, PermissionV1.Event],
-    [coreProjectCopy.Event, ProjectDirectories.Event],
+    [coreWorktree.CreateInput, Worktree.CreateInput],
+    [coreWorktree.RemoveInput, Worktree.RemoveInput],
+    [coreWorktree.Info, Worktree.Info],
+    [coreWorktree.ListInput, Worktree.ListInput],
+    [coreWorktree.List, Worktree.List],
+    [coreWorktree.Event, Worktree.Event],
     [corePty.Info, Pty.Info],
     [corePty.Event, Pty.Event],
     [coreProject.ID, Project.ID],
     [coreProject.Current, Project.Current],
-    [coreProject.Directory, Project.Directory],
-    [coreProject.DirectoriesInput, Project.DirectoriesInput],
-    [coreProject.Directories, Project.Directories],
     [coreReference.LocalSource, Reference.LocalSource],
     [coreReference.GitSource, Reference.GitSource],
     [coreReference.Source, Reference.Source],
-    [SessionV2.ID, Session.ID],
-    [SessionV2.Info, Session.Info],
-    [SessionV2.ListAnchor, Session.ListAnchor],
-    [coreSessionPending.Delivery, SessionPending.Delivery],
-    [coreSessionPending.Message, SessionPending.Message],
-    [coreSessionPending.User, SessionPending.User],
-    [coreSessionPending.Synthetic, SessionPending.Synthetic],
+    [Session.ID, schemaSession.Session.ID],
+    [Session.Info, schemaSession.Session.Info],
+    [Session.ListAnchor, schemaSession.Session.ListAnchor],
+    [coreSessionInbox.Delivery, SessionInbox.Delivery],
+    [coreSessionInbox.Item, SessionInbox.Item],
+    [coreSessionInbox.User, SessionInbox.User],
+    [coreSessionInbox.Synthetic, SessionInbox.Synthetic],
     [coreSessionMessage.ID, SessionMessage.ID],
     [coreSessionMessage.AssistantRetry, SessionMessage.AssistantRetry],
     [coreSessionMessage.AgentSelected, SessionMessage.AgentSelected],
     [coreSessionMessage.ModelSelected, SessionMessage.ModelSelected],
+    [coreSessionMessage.LocationSwitched, SessionMessage.LocationSwitched],
     [coreSessionMessage.User, SessionMessage.User],
     [coreSessionMessage.Synthetic, SessionMessage.Synthetic],
     [coreSessionMessage.System, SessionMessage.System],
@@ -162,18 +158,17 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreSkill.EmbeddedSource, Skill.EmbeddedSource],
     [coreSkill.Source, Skill.Source],
     [coreSkill.Info, Skill.Info],
-    [coreV2Schema.DateTimeUtcFromMillis, DateTimeUtcFromMillis],
     [coreSchema.optional, optional],
     [coreSchema.statics, statics],
     [coreWorkspace.ID, Workspace.ID],
   ]
   for (const [core, shared] of schemas) expect(core).toBe(shared)
 
-  expect(Agent.Info.empty(Agent.ID.make("test"))).toEqual(AgentV2.Info.empty(AgentV2.ID.make("test")))
-  expect(Model.Info.empty(Provider.ID.make("test"), Model.ID.make("model"))).toEqual(
-    ModelV2.Info.empty(ProviderV2.ID.make("test"), ModelV2.ID.make("model")),
+  expect(Agent.Info.default(Agent.ID.make("test"))).toEqual(Agent.Info.default(Agent.ID.make("test")))
+  expect(coreModel.Info.default(coreProvider.ID.make("test"), coreModel.ID.make("model"))).toEqual(
+    Model.Info.default(Provider.ID.make("test"), Model.ID.make("model")),
   )
-  expect(Provider.Info.empty(Provider.ID.make("test"))).toEqual(ProviderV2.Info.empty(ProviderV2.ID.make("test")))
+  expect(coreProvider.Info.empty(coreProvider.ID.make("test"))).toEqual(Provider.Info.empty(Provider.ID.make("test")))
   expect(Skill.Source.key(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make("/tmp") }))).toBe(
     "directory:/tmp",
   )

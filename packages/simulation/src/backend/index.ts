@@ -1,5 +1,7 @@
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
+import { SdkPlugins } from "@opencode-ai/core/plugin/sdk"
 import { Config, Effect, Layer } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { DriveManifest } from "../manifest"
@@ -10,7 +12,7 @@ import { SimulatedProvider } from "./simulated-provider"
 /**
  * Layer replacements applied when the server is built in simulation mode.
  *
- * The server merges these into the app node build when `OPENCODE_SIMULATE`
+ * The server merges these into the app node build when simulation is enabled
  * is enabled, via a dynamic import so this module is never loaded eagerly.
  *
  * - Network: all outbound HTTP resolves against the simulated route table;
@@ -19,10 +21,12 @@ import { SimulatedProvider } from "./simulated-provider"
  *
  */
 
-export const simulationReplacements = Effect.fn("Simulation.replacements")(function* () {
+export const simulationReplacements = Effect.fn("Simulation.replacements")(function* (app: {
+  readonly version: string
+}) {
   // ModelsDev dies when its catalog fetch fails, so simulation answers it with
   // an empty catalog; providers come from seeded config instead.
-  const models = SimulationNetwork.json("GET", "https://models.dev/api.json", {})
+  const models = SimulationNetwork.json("GET", "https://models.opencode.ai/api.json", {})
   const drive = yield* Config.string("OPENCODE_DRIVE").pipe(Config.withDefault(undefined))
   if (!drive) return [[httpClient, SimulationNetwork.layer([models])]] satisfies LayerNode.Replacements
 
@@ -38,10 +42,16 @@ export const simulationReplacements = Effect.fn("Simulation.replacements")(funct
     Layer.provide(
       SimulatedProvider.layerDrive({
         endpoint: manifest.endpoints.backend,
+        version: app.version,
       }),
     ),
   )
-  return [[httpClient, networkLayer]] satisfies LayerNode.Replacements
+  const networkNode = makeGlobalNode({
+    service: HttpClient.HttpClient,
+    layer: networkLayer,
+    deps: [SdkPlugins.node],
+  })
+  return [[httpClient, networkNode]] satisfies LayerNode.Replacements
 })
 
 export * as Simulation from "./index"

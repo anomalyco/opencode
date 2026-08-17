@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Option, Schema } from "effect"
-import { Instructions } from "@opencode-ai/core/instructions"
+import { Instructions } from "@opencode-ai/core/instructions/index"
 import { it } from "../lib/effect"
 
 const key = (value: string) => Instructions.Key.make(value)
@@ -125,9 +125,6 @@ describe("Instructions", () => {
       expect(
         Instructions.renderUpdate(instructions, { "api/value": "previous" }, { "api/value": Option.some(null) }),
       ).toBe("null")
-      expect(Instructions.applyDelta({ "api/value": "previous" }, { "api/value": Option.some(null) })).toEqual({
-        "api/value": null,
-      })
     }),
   )
 

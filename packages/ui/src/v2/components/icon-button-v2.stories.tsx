@@ -1,3 +1,4 @@
+import { For } from "solid-js"
 import { IconButtonV2 } from "./icon-button-v2"
 
 const docs = `### Overview
@@ -82,23 +83,27 @@ export const AllStates = {
 
     return (
       <div style={{ display: "grid", gap: "12px" }}>
-        {variants.map((variant) => (
-          <div style={{ display: "grid", gap: "8px" }}>
-            <div style={{ "font-size": "12px", color: "var(--text-weak)", "text-transform": "capitalize" }}>
-              {variant}
+        <For each={variants}>
+          {(variant) => (
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ "font-size": "12px", color: "var(--text-weak)", "text-transform": "capitalize" }}>
+                {variant}
+              </div>
+              <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
+                <For each={states}>
+                  {(state) => (
+                    <IconButtonV2
+                      icon="plus"
+                      variant={variant}
+                      data-state={state === "default" ? undefined : state}
+                      disabled={state === "disabled"}
+                    />
+                  )}
+                </For>
+              </div>
             </div>
-            <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
-              {states.map((state) => (
-                <IconButtonV2
-                  icon="plus"
-                  variant={variant}
-                  data-state={state === "default" ? undefined : state}
-                  disabled={state === "disabled"}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+          )}
+        </For>
       </div>
     )
   },

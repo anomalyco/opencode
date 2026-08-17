@@ -1,84 +1,84 @@
-export * as Catalog from "./catalog"
+export * as Catalog from "./catalog.js"
 
-import { makeLocationNode } from "./effect/app-node"
-import { Array, Context, Effect, Layer, Option, Order, pipe } from "effect"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { Array, Context, Effect, Layer, Order, pipe } from "effect"
 import { Catalog } from "@opencode-ai/schema/catalog"
-import { ModelV2 } from "./model"
-import { ProviderV2 } from "./provider"
-import { EventV2 } from "./event"
-import { State } from "./state"
-import { Integration } from "./integration"
+import { Model } from "./model.js"
+import { Provider } from "./provider.js"
+import { Bus } from "./bus.js"
+import { State } from "./state.js"
+import { Integration } from "./integration.js"
 
 export type ProviderRecord = {
-  provider: ProviderV2.MutableInfo
-  models: Map<ModelV2.ID, ModelV2.MutableInfo>
+  provider: Provider.MutableInfo
+  models: Map<Model.ID, Model.MutableInfo>
 }
 
-export type DefaultModel = { providerID: ProviderV2.ID; modelID: ModelV2.ID }
+export type DefaultModel = { providerID: Provider.ID; modelID: Model.ID }
 
-export const Event = Catalog.Event
+export { Event } from "@opencode-ai/schema/catalog"
 
 type Data = {
-  providers: Map<ProviderV2.ID, ProviderRecord>
+  providers: Map<Provider.ID, ProviderRecord>
   defaultModel?: DefaultModel
 }
 
 export type Draft = {
   provider: {
     list: () => readonly ProviderRecord[]
-    get: (providerID: ProviderV2.ID) => ProviderRecord | undefined
-    update: (providerID: ProviderV2.ID, fn: (provider: ProviderV2.MutableInfo) => void) => void
-    remove: (providerID: ProviderV2.ID) => void
+    get: (providerID: Provider.ID) => ProviderRecord | undefined
+    update: (providerID: Provider.ID, fn: (provider: Provider.MutableInfo) => void) => void
+    remove: (providerID: Provider.ID) => void
   }
   model: {
-    get: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => ModelV2.Info | undefined
-    update: (providerID: ProviderV2.ID, modelID: ModelV2.ID, fn: (model: ModelV2.MutableInfo) => void) => void
-    remove: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => void
+    get: (providerID: Provider.ID, modelID: Model.ID) => Model.Info | undefined
+    update: (providerID: Provider.ID, modelID: Model.ID, fn: (model: Model.MutableInfo) => void) => void
+    remove: (providerID: Provider.ID, modelID: Model.ID) => void
     default: {
       get: () => DefaultModel | undefined
-      set: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => void
+      set: (providerID: Provider.ID, modelID: Model.ID) => void
     }
   }
 }
 
 export interface Interface extends State.Transformable<Draft> {
   readonly provider: {
-    readonly get: (providerID: ProviderV2.ID) => Effect.Effect<ProviderV2.Info | undefined>
-    readonly all: () => Effect.Effect<ProviderV2.Info[]>
-    readonly available: () => Effect.Effect<ProviderV2.Info[]>
+    readonly get: (providerID: Provider.ID) => Effect.Effect<Provider.Info | undefined>
+    readonly all: () => Effect.Effect<Provider.Info[]>
+    readonly available: () => Effect.Effect<Provider.Info[]>
   }
   readonly model: {
-    readonly get: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<ModelV2.Info | undefined>
-    readonly all: () => Effect.Effect<ModelV2.Info[]>
-    readonly available: () => Effect.Effect<ModelV2.Info[]>
-    readonly default: () => Effect.Effect<ModelV2.Info | undefined>
-    readonly small: (providerID: ProviderV2.ID) => Effect.Effect<ModelV2.Info | undefined>
+    readonly get: (providerID: Provider.ID, modelID: Model.ID) => Effect.Effect<Model.Info | undefined>
+    readonly all: () => Effect.Effect<Model.Info[]>
+    readonly available: () => Effect.Effect<Model.Info[]>
+    readonly default: () => Effect.Effect<Model.Info | undefined>
+    readonly small: (providerID: Provider.ID) => Effect.Effect<Model.Info | undefined>
   }
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Catalog") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Catalog") {}
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const integrations = yield* Integration.Service
 
-    const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined) => {
-      if (provider.disabled) return false
-      if (typeof provider.settings?.apiKey === "string") return true
+    const available = (provider: Provider.Info, integration: Integration.Info | undefined) => {
+      if (provider.activation === "disabled") return false
+      if (provider.activation === "enabled") return true
       if (integration?.connections.length) return true
       return provider.integrationID === undefined && !integration
     }
 
-    const projectModel = (model: ModelV2.Info, provider: ProviderV2.Info) => {
+    const projectModel = (model: Model.Info, provider: Provider.Info) => {
       return {
         ...model,
         package: model.package ?? provider.package,
-        settings: ProviderV2.mergeOverlay(provider.settings, model.settings),
-        headers: ProviderV2.mergeHeaders(provider.headers, model.headers),
-        body: ProviderV2.mergeOverlay(provider.body, model.body),
-      } satisfies ModelV2.Info
+        settings: Provider.mergeOverlay(provider.settings, model.settings),
+        headers: Provider.mergeHeaders(provider.headers, model.headers),
+        body: Provider.mergeOverlay(provider.body, model.body),
+      } satisfies Model.Info
     }
 
     const state = State.create<Data, Draft>({
@@ -93,8 +93,8 @@ const layer = Layer.effect(
               let current = draft.providers.get(providerID)
               if (!current) {
                 current = {
-                  provider: ProviderV2.Info.empty(providerID) as ProviderV2.MutableInfo,
-                  models: new Map<ModelV2.ID, ModelV2.MutableInfo>(),
+                  provider: Provider.Info.empty(providerID) as Provider.MutableInfo,
+                  models: new Map<Model.ID, Model.MutableInfo>(),
                 }
                 draft.providers.set(providerID, current)
               }
@@ -110,13 +110,12 @@ const layer = Layer.effect(
               let record = draft.providers.get(providerID)
               if (!record) {
                 record = {
-                  provider: ProviderV2.Info.empty(providerID) as ProviderV2.MutableInfo,
-                  models: new Map<ModelV2.ID, ModelV2.MutableInfo>(),
+                  provider: Provider.Info.empty(providerID) as Provider.MutableInfo,
+                  models: new Map<Model.ID, Model.MutableInfo>(),
                 }
                 draft.providers.set(providerID, record)
               }
-              const model =
-                record.models.get(modelID) ?? (ModelV2.Info.empty(providerID, modelID) as ModelV2.MutableInfo)
+              const model = record.models.get(modelID) ?? (Model.Info.default(providerID, modelID) as Model.MutableInfo)
               if (!record.models.has(modelID)) record.models.set(modelID, model)
               fn(model)
               model.id = modelID
@@ -135,8 +134,8 @@ const layer = Layer.effect(
         }
         return result
       },
-      finalize: Effect.fn("CatalogV2.finalize")(function* (catalog) {
-        yield* events.publish(Event.Updated, {})
+      finalize: Effect.fn("Catalog.finalize")(function* (catalog) {
+        yield* bus.publish(Catalog.Event.Updated, {})
       }),
     })
     const result: Interface = {
@@ -144,15 +143,15 @@ const layer = Layer.effect(
       reload: state.reload,
 
       provider: {
-        get: Effect.fn("CatalogV2.provider.get")(function* (providerID) {
+        get: Effect.fn("Catalog.provider.get")(function* (providerID) {
           return state.get().providers.get(providerID)?.provider
         }),
 
-        all: Effect.fn("CatalogV2.provider.all")(function* () {
+        all: Effect.fn("Catalog.provider.all")(function* () {
           return Array.fromIterable(state.get().providers.values()).map((record) => record.provider)
         }),
 
-        available: Effect.fn("CatalogV2.provider.available")(function* () {
+        available: Effect.fn("Catalog.provider.available")(function* () {
           const active = new Map((yield* integrations.list()).map((integration) => [integration.id, integration]))
           return (yield* result.provider.all()).filter((provider) =>
             available(provider, active.get(provider.integrationID ?? Integration.ID.make(provider.id))),
@@ -161,14 +160,14 @@ const layer = Layer.effect(
       },
 
       model: {
-        get: Effect.fn("CatalogV2.model.get")(function* (providerID, modelID) {
+        get: Effect.fn("Catalog.model.get")(function* (providerID, modelID) {
           const record = state.get().providers.get(providerID)
           if (!record) return
           const model = record.models.get(modelID)
           return model && projectModel(model, record.provider)
         }),
 
-        all: Effect.fn("CatalogV2.model.all")(function* () {
+        all: Effect.fn("Catalog.model.all")(function* () {
           return pipe(
             Array.fromIterable(state.get().providers.values()),
             Array.flatMap((record) => {
@@ -178,9 +177,9 @@ const layer = Layer.effect(
           )
         }),
 
-        available: Effect.fn("CatalogV2.model.available")(function* () {
+        available: Effect.fn("Catalog.model.available")(function* () {
           const providers = new Set((yield* result.provider.available()).map((provider) => provider.id))
-          const models: ModelV2.Info[] = []
+          const models: Model.Info[] = []
           for (const record of state.get().providers.values()) {
             if (!providers.has(record.provider.id)) continue
             for (const model of record.models.values()) {
@@ -194,7 +193,7 @@ const layer = Layer.effect(
           )
         }),
 
-        default: Effect.fn("CatalogV2.model.default")(function* () {
+        default: Effect.fn("Catalog.model.default")(function* () {
           const defaultModel = state.get().defaultModel
           if (defaultModel) {
             const provider = yield* result.provider.get(defaultModel.providerID)
@@ -207,18 +206,18 @@ const layer = Layer.effect(
           return (yield* result.model.available())[0]
         }),
 
-        small: Effect.fn("CatalogV2.model.small")(function* (providerID) {
+        small: Effect.fn("Catalog.model.small")(function* (providerID) {
           const record = state.get().providers.get(providerID)
           if (!record) return
           const provider = record.provider
 
           // TODO: Remove these provider-specific assumptions once model syncing reliably reports available deployments.
-          if (providerID === ProviderV2.ID.azure || providerID === ProviderV2.ID.make("azure-cognitive-services")) {
+          if (providerID === Provider.ID.azure) {
             return
           }
 
-          if (providerID === ProviderV2.ID.opencode) {
-            const gpt5Nano = record.models.get(ModelV2.ID.make("gpt-5-nano"))
+          if (providerID === Provider.ID.opencode) {
+            const gpt5Nano = record.models.get(Model.ID.make("gpt-5-nano"))
             if (gpt5Nano?.enabled && gpt5Nano.status === "active") return projectModel(gpt5Nano, provider)
           }
 
@@ -242,23 +241,21 @@ const layer = Layer.effect(
           )
 
           const pick = (items: typeof candidates) => {
+            if (!Array.isReadonlyArrayNonEmpty(items)) return
             const maxCost = Math.max(...items.map((item) => item.cost), 0.01)
             const maxAge = Math.max(...items.map((item) => item.age), 0.01)
-            return pipe(
+            const selected = Array.min(
               items,
-              Array.sortWith((item) => (item.cost / maxCost) * 0.8 + (item.age / maxAge) * 0.2, Order.Number),
-              Array.map((item) => projectModel(item.model, provider)),
-              Array.head,
+              Order.mapInput(
+                Order.Number,
+                (item: (typeof candidates)[number]) => (item.cost / maxCost) * 0.8 + (item.age / maxAge) * 0.2,
+              ),
             )
+            return projectModel(selected.model, provider)
           }
 
-          return Option.getOrUndefined(
-            pipe(
-              candidates,
-              Array.filter((item) => item.small),
-              (items) => (items.length > 0 ? pick(items) : pick(candidates)),
-            ),
-          )
+          const small = candidates.filter((item) => item.small)
+          return pick(small.length > 0 ? small : candidates)
         }),
       },
     }
@@ -269,4 +266,4 @@ const layer = Layer.effect(
 
 const SMALL_MODEL_RE = /\b(nano|flash|lite|mini|haiku|small|fast)\b/
 
-export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Integration.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node, Integration.node] })

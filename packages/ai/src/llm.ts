@@ -1,44 +1,36 @@
 import { Effect, JsonSchema, Schema } from "effect"
-import { LLMClient } from "./route/client"
+import { LLMClient, Service } from "./route/client.js"
 import {
   GenerationOptions,
   HttpOptions,
   InvalidProviderOutputReason,
-  LLMError,
+  AIError,
   LLMEvent,
   LLMRequest,
   LLMResponse,
   Message,
-  type ModelInput as SchemaModelInput,
+  LanguageModel,
   SystemPart,
   ToolChoice,
   ToolDefinition,
   type ContentPart,
-  ToolResultPart,
-} from "./schema"
-import { make as makeTool, toDefinitions, type ToolSchema } from "./tool"
-
-export type ModelInput = SchemaModelInput
-
-export type MessageInput = Message.Input
-
-export type ToolChoiceInput = ToolChoice.Input
-export type ToolChoiceMode = ToolChoice.Mode
-
-export type ToolResultInput = Parameters<typeof ToolResultPart.make>[0]
+  type LanguageModelProviderOptions,
+} from "./schema/index.js"
+import { make as makeTool, toDefinitions, type ToolSchema } from "./tool.js"
 
 /** Input accepted by `LLM.request`, normalized into the canonical `LLMRequest` class. */
-export type RequestInput = Omit<
+export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<
   ConstructorParameters<typeof LLMRequest>[0],
-  "system" | "messages" | "tools" | "toolChoice" | "generation" | "http" | "providerOptions"
+  "model" | "system" | "messages" | "tools" | "toolChoice" | "generation" | "http" | "providerOptions"
 > & {
+  readonly model: SelectedLanguageModel
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
   readonly prompt?: string | ContentPart | ReadonlyArray<ContentPart>
-  readonly messages?: ReadonlyArray<Message | MessageInput>
+  readonly messages?: ReadonlyArray<Message | Message.Input>
   readonly tools?: ReadonlyArray<ToolDefinition.Input>
-  readonly toolChoice?: ToolChoiceInput
+  readonly toolChoice?: ToolChoice.Input
   readonly generation?: GenerationOptions.Input
-  readonly providerOptions?: ConstructorParameters<typeof LLMRequest>[0]["providerOptions"]
+  readonly providerOptions?: NoInfer<LanguageModelProviderOptions<SelectedLanguageModel>>
   readonly http?: HttpOptions.Input
 }
 
@@ -46,11 +38,9 @@ export const generate = LLMClient.generate
 
 export const stream = LLMClient.stream
 
-export const requestInput = (input: LLMRequest): RequestInput => ({
-  ...LLMRequest.input(input),
-})
-
-export const request = (input: RequestInput) => {
+export const request = <const SelectedLanguageModel extends LanguageModel>(
+  input: RequestInput<SelectedLanguageModel>,
+) => {
   const {
     system: requestSystem,
     prompt,
@@ -74,14 +64,14 @@ export const request = (input: RequestInput) => {
   })
 }
 
-export const updateRequest = (input: LLMRequest, patch: Partial<RequestInput>) =>
-  request({ ...requestInput(input), ...patch })
-
 const GENERATE_OBJECT_TOOL_NAME = "generate_object"
 
 const GENERATE_OBJECT_TOOL_DESCRIPTION = "Return the structured result by calling this tool."
 
-type GenerateObjectBase = Omit<RequestInput, "tools" | "toolChoice" | "responseFormat">
+type GenerateObjectBase<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<
+  RequestInput<SelectedLanguageModel>,
+  "tools" | "toolChoice"
+>
 
 export class GenerateObjectResponse<T> {
   constructor(
@@ -98,11 +88,15 @@ export class GenerateObjectResponse<T> {
   }
 }
 
-export interface GenerateObjectOptions<S extends ToolSchema<any>> extends GenerateObjectBase {
+export interface GenerateObjectOptions<
+  S extends ToolSchema<any>,
+  SelectedLanguageModel extends LanguageModel = LanguageModel,
+> extends GenerateObjectBase<SelectedLanguageModel> {
   readonly schema: S
 }
 
-export interface GenerateObjectDynamicOptions extends GenerateObjectBase {
+export interface GenerateObjectDynamicOptions<SelectedLanguageModel extends LanguageModel = LanguageModel>
+  extends GenerateObjectBase<SelectedLanguageModel> {
   /** Raw JSON Schema object describing the expected output shape. */
   readonly jsonSchema: JsonSchema.JsonSchema
 }
@@ -121,7 +115,7 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
     (event) => LLMEvent.is.toolCall(event) && event.name === GENERATE_OBJECT_TOOL_NAME,
   )
   if (!call || !LLMEvent.is.toolCall(call))
-    return yield* new LLMError({
+    return yield* new AIError({
       module: "LLM",
       method: "generateObject",
       reason: new InvalidProviderOutputReason({
@@ -131,7 +125,7 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
   const object = yield* tool._decode(call.input).pipe(
     Effect.mapError(
       (error) =>
-        new LLMError({
+        new AIError({
           module: "LLM",
           method: "generateObject",
           reason: new InvalidProviderOutputReason({
@@ -151,16 +145,16 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
  * Two input modes:
  *
  * 1. `schema: EffectSchema<T>` — `.object` is decoded and typed as `T`.
- *    Decode failures surface as `LLMError`.
+ *    Decode failures surface as `AIError`.
  * 2. `jsonSchema: JsonSchema.JsonSchema` — `.object` is `unknown`. Use when
  *    the schema is only available at runtime (MCP, plugin manifests). Caller validates.
  */
-export function generateObject<S extends ToolSchema<any>>(
-  options: GenerateObjectOptions<S>,
-): Effect.Effect<GenerateObjectResponse<Schema.Schema.Type<S>>, LLMError>
-export function generateObject(
-  options: GenerateObjectDynamicOptions,
-): Effect.Effect<GenerateObjectResponse<unknown>, LLMError>
+export function generateObject<const SelectedLanguageModel extends LanguageModel, S extends ToolSchema<any>>(
+  options: GenerateObjectOptions<S, SelectedLanguageModel>,
+): Effect.Effect<GenerateObjectResponse<Schema.Schema.Type<S>>, AIError, Service>
+export function generateObject<const SelectedLanguageModel extends LanguageModel>(
+  options: GenerateObjectDynamicOptions<SelectedLanguageModel>,
+): Effect.Effect<GenerateObjectResponse<unknown>, AIError, Service>
 export function generateObject(options: GenerateObjectOptions<ToolSchema<any>> | GenerateObjectDynamicOptions) {
   if ("schema" in options) {
     const { schema, ...rest } = options

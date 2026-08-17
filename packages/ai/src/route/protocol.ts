@@ -1,5 +1,5 @@
 import { Schema, type Effect } from "effect"
-import type { LLMError, LLMEvent, LLMRequest, ProtocolID } from "../schema"
+import type { AIError, LLMEvent, LLMRequest, ProtocolID } from "../schema/index.js"
 
 /**
  * The semantic API contract of one model server family.
@@ -12,7 +12,8 @@ import type { LLMError, LLMEvent, LLMRequest, ProtocolID } from "../schema"
  * Examples:
  *
  * - `OpenAIChat.protocol` — chat completions style
- * - `OpenAIResponses.protocol` — responses API
+ * - `OpenResponses.protocol` — provider-neutral Responses API baseline
+ * - `OpenAIResponses.protocol` — OpenAI extensions to that baseline
  * - `AnthropicMessages.protocol` — messages API with content blocks
  * - `Gemini.protocol` — generateContent
  * - `BedrockConverse.protocol` — Converse with binary event-stream framing
@@ -46,7 +47,7 @@ export interface ProtocolBody<Body> {
   /** Schema for the validated provider-native body sent as the JSON request. */
   readonly schema: Schema.Codec<Body, unknown>
   /** Build the provider-native body from a common `LLMRequest`. */
-  readonly from: (request: LLMRequest) => Effect.Effect<Body, LLMError>
+  readonly from: (request: LLMRequest) => Effect.Effect<Body, AIError>
 }
 
 export interface ProtocolStream<Frame, Event, State> {
@@ -55,7 +56,7 @@ export interface ProtocolStream<Frame, Event, State> {
   /** Initial parser state. Called once per response with the resolved request. */
   readonly initial: (request: LLMRequest) => State
   /** Translate one event into emitted `LLMEvent`s plus the next state. */
-  readonly step: (state: State, event: Event) => Effect.Effect<readonly [State, ReadonlyArray<LLMEvent>], LLMError>
+  readonly step: (state: State, event: Event) => Effect.Effect<readonly [State, ReadonlyArray<LLMEvent>], AIError>
   /** Optional request-completion signal for transports that do not end naturally. */
   readonly terminal?: (event: Event) => boolean
   /** Optional flush emitted when the framed stream ends. */
@@ -81,4 +82,4 @@ export const make = <Body, Frame, Event, State>(
 
 export const jsonEvent = <const S extends Schema.Top>(schema: S) => Schema.fromJsonString(schema)
 
-export * as Protocol from "./protocol"
+export * as Protocol from "./protocol.js"

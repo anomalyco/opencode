@@ -3,7 +3,7 @@ import {
   AuthenticationReason,
   ContentPolicyReason,
   InvalidRequestReason,
-  LLMError,
+  AIError,
   ProviderErrorEvent,
   ProviderInternalReason,
   QuotaExceededReason,
@@ -12,36 +12,48 @@ import {
   type HttpContext,
   type HttpRateLimitDetails,
   type ProviderMetadata,
-} from "./schema"
+} from "./schema/index.js"
 
 const patterns = [
   /prompt is too long/i,
   /input is too long for requested model/i,
   /exceeds the context window/i,
+  /exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\))/i,
   /input token count.*exceeds the maximum/i,
   /tokens in request more than max tokens allowed/i,
   /maximum prompt length is \d+/i,
   /reduce the length of the messages/i,
   /maximum context length is \d+ tokens/i,
+  /exceeds (?:the )?maximum allowed input length of [\d,]+ tokens?/i,
+  /input \(\d+ tokens\) is longer than the model'?s context length \(\d+ tokens\)/i,
   /exceeds the limit of \d+/i,
   /exceeds the available context size/i,
   /greater than the context length/i,
   /context window exceeds limit/i,
   /exceeded model token limit/i,
   /context[_ ]length[_ ]exceeded/i,
-  /request entity too large/i,
   /context length is only \d+ tokens/i,
   /input length.*exceeds.*context length/i,
   /prompt too long; exceeded (?:max )?context length/i,
   /too large for model with \d+ maximum context length/i,
+  /prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?/i,
   /model_context_window_exceeded/i,
+  /too many tokens/i,
+  /token limit exceeded/i,
 ]
 
+const payloadPatterns = [/request_too_large/i, /request entity too large/i, /payload too large/i, /request too large/i]
+
+const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, /too many requests/i]
+
 export const isContextOverflow = (message: string) =>
-  patterns.some((pattern) => pattern.test(message)) || /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message)
+  !exclusions.some((pattern) => pattern.test(message)) &&
+  (patterns.some((pattern) => pattern.test(message)) || /^400\s*(status code)?\s*\(no body\)/i.test(message))
+
+export const isPayloadTooLarge = (message: string) => payloadPatterns.some((pattern) => pattern.test(message))
 
 export const isContextOverflowFailure = (failure: unknown) =>
-  failure instanceof LLMError
+  failure instanceof AIError
     ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
     : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
 
@@ -55,6 +67,7 @@ const SERVER_CODES = new Set([
   "overloaded_error",
   "server_error",
   "server_is_overloaded",
+  "slow_down",
   "serviceunavailableexception",
 ])
 const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error", "validationexception"])
@@ -74,7 +87,7 @@ export interface ProviderFailure {
 
 // Keep HTTP failures and provider-reported stream failures on one typed path so
 // session retry policy never needs provider-specific string matching.
-export function classifyProviderFailure(input: ProviderFailure): LLMError["reason"] {
+export function classifyProviderFailure(input: ProviderFailure): AIError["reason"] {
   const body = input.http?.body ?? ""
   const codes = [input.code, ...providerCodes(body), ...providerCodes(input.message)]
     .filter((code): code is string => code !== undefined)
@@ -90,6 +103,8 @@ export function classifyProviderFailure(input: ProviderFailure): LLMError["reaso
       isContextOverflow(text))
   )
     return new InvalidRequestReason({ ...common, classification: "context-overflow" })
+  if (input.status === 413 || isPayloadTooLarge(text))
+    return new InvalidRequestReason({ ...common, classification: "payload-too-large" })
   if (CONTENT_POLICY_TEXT.test(text)) return new ContentPolicyReason(common)
   if (codes.some((code) => QUOTA_CODES.has(code)) || (input.status === 429 && QUOTA_TEXT.test(text)))
     return new QuotaExceededReason(common)
@@ -125,20 +140,14 @@ export function classifyProviderFailure(input: ProviderFailure): LLMError["reaso
       rateLimit: input.rateLimit,
     })
   }
-  if (input.status !== undefined && input.status >= 500)
+  if (input.status === 408 || input.status === 409 || (input.status !== undefined && input.status >= 500))
     return new ProviderInternalReason({
       ...common,
       status: input.status,
       retryAfterMs: input.retryAfterMs,
     })
   if (codes.some((code) => INVALID_REQUEST_CODES.has(code))) return new InvalidRequestReason(common)
-  if (
-    input.status === 400 ||
-    input.status === 404 ||
-    input.status === 409 ||
-    input.status === 413 ||
-    input.status === 422
-  )
+  if (input.status === 400 || input.status === 404 || input.status === 413 || input.status === 422)
     return new InvalidRequestReason(common)
   return new UnknownProviderReason({ ...common, status: input.status })
 }

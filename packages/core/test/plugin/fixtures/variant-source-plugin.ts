@@ -1,5 +1,6 @@
-import { Plugin } from "@opencode-ai/plugin/v2/effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Plugin } from "@opencode-ai/plugin/effect"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { Effect } from "effect"
 
 export default Plugin.define({
@@ -8,14 +9,14 @@ export default Plugin.define({
     ctx.catalog
       .transform((catalog) => {
         catalog.provider.update("configured", (provider) => {
-          provider.package = ProviderV2.aisdk("@ai-sdk/openai-compatible")
+          provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
         })
         catalog.model.update("configured", "glm-5.2", (model) => {
-          model.modelID = "glm-5.2"
-          model.package = ProviderV2.aisdk("@ai-sdk/openai-compatible")
+          model.modelID = Model.ID.make("glm-5.2")
+          model.package = Provider.aisdk("@ai-sdk/openai-compatible")
           model.variants = [
             {
-              id: "high",
+              id: Model.VariantID.make("high"),
               settings: {},
               headers: { custom: "true" },
               body: {},

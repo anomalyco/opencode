@@ -1,6 +1,8 @@
 import { parse } from "acorn"
 import { Cause, Effect, Scope } from "effect"
-import { DiagnosticCategory, ModuleKind, ScriptTarget, flattenDiagnosticMessageText, transpileModule } from "typescript"
+// #transpile: conditional import — full typescript on node/bun, an identity
+// pass-through on workerd (the compiler is ~11 MiB and can't init there).
+import { transpile } from "#transpile"
 import type { DataValue, Diagnostic, ExecuteOptions, ResolvedExecutionLimits, Result } from "../codemode.js"
 import { copyIn, copyOut, ToolRuntime, type Services } from "../tool-runtime.js"
 import type { Tools } from "../tools.js"
@@ -45,14 +47,14 @@ export const executeWithLimits = <const Provided extends Record<string, unknown>
           const program = parseProgram(options.code)
           const promises = new PromiseRuntime<Services<Provided>>(scope)
           const interpreter = new Interpreter<Services<Provided>>(
-            tools.invoke,
+            tools.execute,
             tools.search,
             tools.keys,
             promises,
             logs,
           )
           const value = yield* interpreter.run(program)
-          const result = copyOut(copyIn(value, "Execution result"), true) as DataValue
+          const result = copyOut(copyIn(value, "Execution result"), "nullify") as DataValue
           returned = { value: result, promises }
           const warnings = yield* promises.interrupt()
           return {
@@ -119,21 +121,10 @@ export const executeWithLimits = <const Provided extends Record<string, unknown>
 }
 
 const parseProgram = (code: string): ProgramNode => {
-  const transpiled = transpileModule(`async function __codemode__() {\n${code}\n}`, {
-    reportDiagnostics: true,
-    compilerOptions: {
-      target: ScriptTarget.ESNext,
-      module: ModuleKind.ESNext,
-    },
-  })
-  const diagnostic = transpiled.diagnostics?.find((item) => item.category === DiagnosticCategory.Error)
+  const transpiled = transpile(`async function __codemode__() {\n${code}\n}`)
 
-  if (diagnostic) {
-    throw new InterpreterRuntimeError(
-      `Failed to parse TypeScript: ${flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`,
-      undefined,
-      "ParseError",
-    )
+  if (transpiled.error !== undefined) {
+    throw new InterpreterRuntimeError(`Failed to parse TypeScript: ${transpiled.error}`, undefined, "ParseError")
   }
 
   const bodyStart = transpiled.outputText.indexOf("{") + 1

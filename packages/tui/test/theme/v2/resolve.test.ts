@@ -1,12 +1,62 @@
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
-import { DEFAULT_THEME } from "../../../src/theme/v2/defaults"
-import type { ThemeDefinition } from "../../../src/theme/v2"
-import { resolveTheme, resolveThemeFile } from "../../../src/theme/v2/resolve"
-import { selectTheme } from "../../../src/theme/v2/select"
+import {
+  DEFAULT_THEME,
+  generateSyntax,
+  resolveTheme,
+  resolveThemeDocument,
+  selectTheme,
+  type Mode,
+  type ThemeDefinition,
+} from "@opencode-ai/theme/tui"
+import { parseTheme, type ThemeDocumentSource } from "../../../src/theme"
 
 const light = selectTheme(DEFAULT_THEME, "light")
 const dark = selectTheme(DEFAULT_THEME, "dark")
+
+function resolveSource(source: ThemeDocumentSource, mode?: Mode, name?: string) {
+  return resolveThemeDocument(parseTheme(source, name), mode)
+}
+
+test("resolves one-mode documents with defaults for the available mode", () => {
+  const resolvedLight = resolveSource({ version: 2, light: {} }, "dark")
+  const resolvedDark = resolveSource({ version: 2, dark: {} }, "light")
+
+  expect(resolvedLight.background.default.equals(resolveTheme(light).background.default)).toBeTrue()
+  expect(resolvedDark.background.default.equals(resolveTheme(dark).background.default)).toBeTrue()
+  expect(resolvedLight.categorical.length).toBeGreaterThan(0)
+  expect(resolvedDark.categorical.length).toBeGreaterThan(0)
+})
+
+test("rejects theme documents without a mode", () => {
+  expect(() => resolveSource({ version: 2 })).toThrow("Invalid theme")
+})
+
+test("validates and resolves categorical hues in configured order", () => {
+  const theme = resolveSource({ version: 2, light: { categorical: ["accent", "red", "interactive"] } }, "light")
+
+  expect(theme.categorical[0]).toBe(theme.hue.accent)
+  expect(theme.categorical[1]).toBe(theme.hue.red)
+  expect(theme.categorical[2]).toBe(theme.hue.interactive)
+  expect(theme.contextual.elevated.categorical).toBe(theme.categorical)
+  expect(() => resolveSource({ version: 2, light: { categorical: [] } }, "light")).toThrow("Invalid theme")
+  expect(() => resolveSource({ version: 2, light: { categorical: ["magenta"] } }, "light")).toThrow("Invalid theme")
+})
+
+test("generates syntax with one categorical hue", () => {
+  const theme = resolveSource({ version: 2, light: { categorical: ["red"] } }, "light")
+  const syntax = generateSyntax(theme, "light")
+
+  expect(syntax.getStyleId("extmark.skill")).not.toBeNull()
+  syntax.destroy()
+})
+
+test("uses the default categorical order for direct definitions", () => {
+  const theme = resolveTheme({ ...light, categorical: undefined })
+
+  expect(theme.categorical[0]).toBe(theme.hue.blue)
+  expect(theme.categorical[1]).toBe(theme.hue.purple)
+})
 
 test("resolves independent definitions and hue aliases", () => {
   const lightTheme = resolveTheme(light)
@@ -18,46 +68,29 @@ test("resolves independent definitions and hue aliases", () => {
   expect(lightTheme.hue.interactive[500].equals(lightTheme.hue.blue[500])).toBeTrue()
   expect(lightTheme.hue.neutral).not.toBe(lightTheme.hue.gray)
   expect(lightTheme.hue.neutral[500].equals(lightTheme.hue.gray[500])).toBeTrue()
+  expect(lightTheme.categorical[0]).toBe(lightTheme.hue.blue)
   expect(lightTheme.source(lightTheme.hue.blue[500])).toEqual({ hue: "blue", step: 500 })
   expect(lightTheme.source(lightTheme.hue.neutral[200])).toEqual({ hue: "neutral", step: 200 })
-  expect(lightTheme.source(lightTheme.background.surface.offset)).toEqual({ hue: "neutral", step: 200 })
+  expect(lightTheme.source(lightTheme.background.surface.offset)).toEqual({ hue: "neutral", step: 300 })
   expect(lightTheme.increase(lightTheme.hue.red[100])).toBe(lightTheme.hue.red[200])
   expect(lightTheme.decrease(lightTheme.hue.red[200])).toBe(lightTheme.hue.red[100])
-  expect(lightTheme.contexts["@context:elevated"]?.increase(lightTheme.hue.red[100])).toBe(
-    lightTheme.hue.red[200],
-  )
+  expect(lightTheme.contextual.elevated.increase(lightTheme.hue.red[100])).toBe(lightTheme.hue.red[200])
   expect(lightTheme.text.default).toBeInstanceOf(RGBA)
   expect(darkTheme.background.default).toBeInstanceOf(RGBA)
-  expect(lightTheme.background.surface.offset).toBe(lightTheme.hue.neutral[200])
-  expect(lightTheme.background.surface.overlay).toBe(lightTheme.hue.neutral[300])
+  expect(lightTheme.background.surface.offset).toBe(lightTheme.hue.neutral[300])
+  expect(lightTheme.background.surface.overlay).toBe(lightTheme.hue.neutral[400])
   expect(lightTheme.syntax.keyword).toBeInstanceOf(RGBA)
-  expect(lightTheme.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
-  expect(lightTheme.contexts["@context:elevated"]?.background.action.primary.default).toBe(
-    lightTheme.hue.interactive[500],
-  )
-  expect(lightTheme.contexts["@context:elevated"]?.background.default).toBe(lightTheme.background.surface.offset)
-  expect(lightTheme.contexts["@context:elevated"]?.text.action.primary.default).toBe(
-    lightTheme.hue.neutral[100],
-  )
-  expect(lightTheme.contexts["@context:overlay"]?.background.action.primary.default).toBe(
-    lightTheme.hue.interactive[500],
-  )
-  expect(lightTheme.contexts["@context:overlay"]?.background.default).toBe(lightTheme.background.surface.overlay)
-  expect(lightTheme.contexts["@context:overlay"]?.text.action.primary.default).toBe(
-    lightTheme.hue.neutral[100],
-  )
-  expect(darkTheme.contexts["@context:elevated"]?.background.action.primary.default).toBe(
-    darkTheme.hue.interactive[400],
-  )
-  expect(darkTheme.contexts["@context:elevated"]?.text.action.primary.default).toBe(
-    darkTheme.hue.neutral[100],
-  )
-  expect(darkTheme.contexts["@context:overlay"]?.background.action.primary.default).toBe(
-    darkTheme.hue.interactive[400],
-  )
-  expect(darkTheme.contexts["@context:overlay"]?.text.action.primary.default).toBe(
-    darkTheme.hue.neutral[900],
-  )
+  expect(lightTheme.text.action.primary.default).toBe(lightTheme.hue.neutral[200])
+  expect(lightTheme.contextual.elevated.background.action.primary.default).toBe(lightTheme.hue.interactive[500])
+  expect(lightTheme.contextual.elevated.background.default).toBe(lightTheme.background.surface.offset)
+  expect(lightTheme.contextual.elevated.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
+  expect(lightTheme.contextual.overlay.background.action.primary.default).toBe(lightTheme.hue.interactive[500])
+  expect(lightTheme.contextual.overlay.background.default).toBe(lightTheme.background.surface.overlay)
+  expect(lightTheme.contextual.overlay.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
+  expect(darkTheme.contextual.elevated.background.action.primary.default).toBe(darkTheme.hue.interactive[400])
+  expect(darkTheme.contextual.elevated.text.action.primary.default).toBe(darkTheme.hue.neutral[200])
+  expect(darkTheme.contextual.overlay.background.action.primary.default).toBe(darkTheme.hue.interactive[400])
+  expect(darkTheme.contextual.overlay.text.action.primary.default).toBe(darkTheme.hue.neutral[200])
 })
 
 test("resolves base hue aliases and rejects circular hue aliases", () => {
@@ -65,10 +98,7 @@ test("resolves base hue aliases and rejects circular hue aliases", () => {
     ...light,
     hue: { ...light.hue, blue: "$hue.red", purple: "$hue.blue" },
   })
-  const overridden = resolveThemeFile(
-    { version: 2, light: { hue: { blue: "$hue.red" } }, dark: {} },
-    "light",
-  )
+  const overridden = resolveSource({ version: 2, light: { hue: { blue: "$hue.red" } }, dark: {} }, "light")
 
   expect(aliased.hue.blue).not.toBe(aliased.hue.red)
   expect(aliased.hue.blue[500].equals(aliased.hue.red[500])).toBeTrue()
@@ -106,8 +136,8 @@ test("steps by hue source when adjacent colors have equal values", () => {
   expect(theme.increase(theme.hue.neutral[300])).toBe(theme.hue.neutral[400])
 })
 
-test("merges partial files with the selected OpenCode defaults", () => {
-  const theme = resolveThemeFile(
+test("merges partial documents with the selected OpenCode defaults", () => {
+  const theme = resolveSource(
     {
       version: 2,
       light: {
@@ -125,7 +155,7 @@ test("merges partial files with the selected OpenCode defaults", () => {
 })
 
 test("expands user structural fallbacks before merging defaults", () => {
-  const expanded = resolveThemeFile(
+  const expanded = resolveSource(
     {
       version: 2,
       light: {
@@ -136,7 +166,7 @@ test("expands user structural fallbacks before merging defaults", () => {
     },
     "light",
   )
-  const isolatedState = resolveThemeFile(
+  const isolatedState = resolveSource(
     {
       version: 2,
       light: {
@@ -156,9 +186,9 @@ test("expands user structural fallbacks before merging defaults", () => {
 })
 
 test("standalone themes skip OpenCode defaults and use the red core fallback", () => {
-  const file = { version: 2, standalone: true, light: { hue: light.hue }, dark: { hue: dark.hue } } as const
-  const lightTheme = resolveThemeFile(file, "light")
-  const darkTheme = resolveThemeFile(file, "dark")
+  const document = { version: 2, standalone: true, light: { hue: light.hue }, dark: { hue: dark.hue } } as const
+  const lightTheme = resolveSource(document, "light")
+  const darkTheme = resolveSource(document, "dark")
 
   expect(lightTheme.text.default.toInts()).toEqual([255, 0, 0, 255])
   expect(lightTheme.background.default.toInts()).toEqual([255, 0, 0, 255])
@@ -167,8 +197,15 @@ test("standalone themes skip OpenCode defaults and use the red core fallback", (
 })
 
 test("uses defaults for the selected mode when it merges the other mode", () => {
-  const theme = resolveThemeFile({ version: 2, light: { hue: light.hue }, dark: { mergeMode: true } }, "dark")
-  expect(theme.background.default.toInts()).toEqual(resolveTheme(dark).background.default.toInts())
+  const theme = resolveSource(
+    {
+      version: 2,
+      light: { hue: light.hue, background: { default: "#123456" } },
+      dark: { mergeMode: true },
+    },
+    "dark",
+  )
+  expect(theme.background.default.toInts()).toEqual([18, 52, 86, 255])
 })
 
 test("resolves matched action variants and states", () => {
@@ -185,7 +222,7 @@ test("resolves matched action variants and states", () => {
 })
 
 test("resolves elevated hover surfaces from direct colors", () => {
-  const theme = resolveThemeFile(
+  const theme = resolveSource(
     {
       version: 2,
       light: { background: { surface: { offset: "#123456", overlay: "#234567" } } },
@@ -194,14 +231,12 @@ test("resolves elevated hover surfaces from direct colors", () => {
     "light",
   )
 
-  expect(theme.contexts["@context:elevated"]?.background.default.toInts()).toEqual([18, 52, 86, 255])
-  expect(theme.contexts["@context:elevated"]?.background.action.primary.hovered.toInts()).toEqual([
-    35, 69, 103, 255,
-  ])
+  expect(theme.contextual.elevated.background.default.toInts()).toEqual([18, 52, 86, 255])
+  expect(theme.contextual.elevated.background.action.primary.hovered.toInts()).toEqual([35, 69, 103, 255])
 })
 
 test("resolves transparent colors", () => {
-  const theme = resolveThemeFile({
+  const theme = resolveSource({
     version: 2,
     light: { background: { formfield: { default: "transparent" } } },
     dark: { background: { formfield: { default: "transparent" } } },
@@ -211,7 +246,7 @@ test("resolves transparent colors", () => {
 
 test("reports theme decoding failures as native errors", () => {
   expect(() =>
-    resolveThemeFile(
+    resolveSource(
       {
         version: 2,
         light: { text: { default: "opaque" } },
@@ -239,7 +274,7 @@ test("context overrides rewire semantic references and apply state precedence", 
     },
   })
   const theme = resolveTheme(definition)
-  const overlay = theme.contexts["@context:elevated"]!
+  const overlay = theme.contextual.elevated
 
   expect(overlay.text.default.toInts()).toEqual([51, 51, 51, 255])
   expect(overlay.text.action.primary.pressed.toInts()).toEqual([68, 68, 68, 255])
@@ -268,12 +303,10 @@ test("rejects missing, base, and contextual reference cycles", () => {
 
 test("validates complete hues, resolved groups, and hue-only syntax", () => {
   expect(() =>
-    resolveTheme(
-      {
-        ...light,
-        hue: { ...light.hue, accent: "$hue.missing" },
-      } as unknown as ThemeDefinition,
-    ),
+    resolveTheme({
+      ...light,
+      hue: { ...light.hue, accent: "$hue.missing" },
+    } as unknown as ThemeDefinition),
   ).toThrow("$hue.missing")
   expect(() =>
     resolveTheme({

@@ -1,4 +1,4 @@
-export * as ConfigMarkdown from "./markdown"
+export * as ConfigMarkdown from "./markdown.js"
 
 import matter from "gray-matter"
 export function parse(content: string) {

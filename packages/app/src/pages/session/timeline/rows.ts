@@ -1,7 +1,10 @@
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
-import { AssistantMessage, Part, SessionStatus, SnapshotFileDiff, UserMessage } from "@opencode-ai/sdk/v2"
+import type { SessionMessageInfo, SessionStatus } from "@opencode-ai/client/promise"
+import type { AssistantMessage, Part, UserMessage } from "@/types"
 import { groupParts, renderable, type PartGroup } from "@opencode-ai/session-ui/message-part"
 import { TimelineRow, type SummaryDiff } from "./timeline-row"
+import { uniqueSummaryDiffs } from "./summary-diffs"
+import { compareMessages } from "@/utils/session-message"
 
 export { TimelineRow, type SummaryDiff } from "./timeline-row"
 
@@ -14,6 +17,7 @@ export type TimelineRowMap = {
     userMessageID: string
     anchor: boolean
   }
+  Notice: { userMessageID: string; messageID: string }
   TurnDivider: {
     userMessageID: string
     label: "compaction" | "interrupted"
@@ -30,10 +34,102 @@ export type TimelineRowMap = {
 }
 
 export namespace Timeline {
+  export function constructSessionMessageRows(
+    messages: SessionMessageInfo[],
+    getMessage: (messageID: string) => UserMessage | AssistantMessage | undefined,
+    getMessageParts: (messageID: string) => Part[],
+    showReasoning: boolean,
+    status: SessionStatus["type"],
+    inlineComments: boolean,
+    projectedUserMessages: UserMessage[],
+  ) {
+    type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" }>
+    type Entry = { type: "assistant"; message: AssistantMessage } | { type: "notice"; message: Notice }
+    const turns: { user: UserMessage; entries: Entry[] }[] = []
+    const turnByUserID = new Map<string, (typeof turns)[number]>()
+    const leading: Notice[] = []
+    let current: (typeof turns)[number] | undefined
+    messages.forEach((message) => {
+      if (isNotice(message)) {
+        if (current) current.entries.push({ type: "notice", message })
+        if (!current) leading.push(message)
+        return
+      }
+      const projected = getMessage(message.id)
+      if (message.type === "shell" && projected?.role === "user") {
+        const assistant = getMessage(`${message.id}:assistant`)
+        const turn = {
+          user: projected,
+          entries: assistant?.role === "assistant" ? [{ type: "assistant" as const, message: assistant }] : [],
+        }
+        turns.push(turn)
+        turnByUserID.set(projected.id, turn)
+        current = turn
+        return
+      }
+      if (projected?.role === "user") {
+        if (turnByUserID.has(projected.id)) return
+        const turn = { user: projected, entries: [] }
+        turns.push(turn)
+        turnByUserID.set(projected.id, turn)
+        current = turn
+        return
+      }
+      if (projected?.role !== "assistant") return
+      const existing = current ?? turnByUserID.get(projected.parentID)
+      if (existing) {
+        existing.entries.push({ type: "assistant", message: projected })
+        current = existing
+        return
+      }
+      const user = getMessage(projected.parentID)
+      if (user?.role !== "user") return
+      const turn = { user, entries: [{ type: "assistant" as const, message: projected }] }
+      turns.push(turn)
+      turnByUserID.set(user.id, turn)
+      current = turn
+    })
+    const notices = new Set(messages.filter(isNotice).map((message) => message.id))
+    projectedUserMessages.forEach((user) => {
+      if (notices.has(user.id)) return
+      if (turnByUserID.has(user.id)) return
+      const turn = { user, entries: [] }
+      const index = turns.findIndex((item) => compareMessages(user, item.user) < 0)
+      if (index < 0) turns.push(turn)
+      if (index >= 0) turns.splice(index, 0, turn)
+      turnByUserID.set(user.id, turn)
+    })
+    const activeMessageID = turns.at(-1)?.user.id
+    return {
+      activeMessageID,
+      rows: [
+        ...leading.map(
+          (message) =>
+            new TimelineRow.Notice({ userMessageID: turns[0]?.user.id ?? message.id, messageID: message.id }),
+        ),
+        ...turns.flatMap((turn, index) =>
+          constructMessageRows(
+            turn.user,
+            getMessageParts,
+            turn.entries,
+            index,
+            showReasoning,
+            status,
+            turn.user.id === activeMessageID,
+            inlineComments,
+          ),
+        ),
+      ],
+    }
+  }
+
   export function constructMessageRows(
     userMessage: UserMessage,
     getMessageParts: (messageID: string) => Part[],
-    assistantMessages: AssistantMessage[],
+    entries: Array<
+      | { type: "assistant"; message: AssistantMessage }
+      | { type: "notice"; message: Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" }> }
+    >,
     index: number,
     showReasoning: boolean,
     status: SessionStatus["type"],
@@ -42,38 +138,22 @@ export namespace Timeline {
     inlineComments: boolean,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
+    const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
 
     const previousUserMessage = index > 0
     const userParts = getMessageParts(userMessage.id)
     const comments = userParts.flatMap((p) => MessageComment.fromPart(p) ?? [])
-    const compaction = userParts.some((p) => p.type === "compaction")
-    const interruptedMessageIndex = assistantMessages.findIndex((m) => m.error?.name === "MessageAbortedError")
-    const interrupted = interruptedMessageIndex !== -1
-    const error = assistantMessages.find((m) => m.error && m.error.name !== "MessageAbortedError")?.error
+    const compaction =
+      userParts.some((p) => p.type === "compaction") &&
+      !entries.some((entry) => entry.type === "notice" && entry.message.type === "compaction")
+    const latestError = assistantMessages.at(-1)?.error
+    const error = latestError?.name === "MessageAbortedError" ? undefined : latestError
 
     const assistantPartRefs = assistantMessages.flatMap((message, messageIndex) =>
       getMessageParts(message.id)
         .filter((part) => renderable(part, showReasoning))
         .map((part) => ({ messageID: message.id, messageIndex, part })),
     )
-    const assistantItems =
-      interrupted && !compaction
-        ? [
-            ...groupParts(assistantPartRefs.filter((ref) => ref.messageIndex <= interruptedMessageIndex)).map(
-              (group) => ({
-                type: "part" as const,
-                group,
-              }),
-            ),
-            { type: "interrupted" as const },
-            ...groupParts(assistantPartRefs.filter((ref) => ref.messageIndex > interruptedMessageIndex)).map(
-              (group) => ({
-                type: "part" as const,
-                group,
-              }),
-            ),
-          ]
-        : groupParts(assistantPartRefs).map((group) => ({ type: "part" as const, group }))
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: userMessage.id }))
 
     if (comments.length > 0 && !inlineComments)
@@ -100,26 +180,41 @@ export namespace Timeline {
     }
 
     let assistantGroupIndex = 0
-    assistantItems.forEach((item) => {
-      if (item.type === "interrupted") {
-        rows.push(
-          new TimelineRow.TurnDivider({
-            userMessageID: userMessage.id,
-            label: "interrupted",
-          }),
-        )
+    const appendAssistants = (messages: AssistantMessage[]) => {
+      const ids = new Set(messages.map((message) => message.id))
+      const refs = assistantPartRefs.filter((ref) => ids.has(ref.messageID))
+      const interruptedAt = messages.findIndex((message) => message.error?.name === "MessageAbortedError")
+      const interruptedID = messages[interruptedAt]?.id
+      const interruptedIndex = assistantMessages.findIndex((message) => message.id === interruptedID)
+      const before = interruptedID ? refs.filter((ref) => ref.messageIndex <= interruptedIndex) : refs
+      const after = interruptedID ? refs.filter((ref) => ref.messageIndex > interruptedIndex) : []
+      const appendGroups = (items: typeof refs) =>
+        groupParts(items).forEach((group) => {
+          rows.push(
+            new TimelineRow.AssistantPart({
+              userMessageID: userMessage.id,
+              group,
+              previousAssistantPart: assistantGroupIndex > 0,
+            }),
+          )
+          assistantGroupIndex += 1
+        })
+      appendGroups(before)
+      if (interruptedAt >= 0 && !compaction)
+        rows.push(new TimelineRow.TurnDivider({ userMessageID: userMessage.id, label: "interrupted" }))
+      appendGroups(after)
+    }
+    let assistantSegment: AssistantMessage[] = []
+    entries.forEach((entry) => {
+      if (entry.type === "assistant") {
+        assistantSegment.push(entry.message)
         return
       }
-
-      rows.push(
-        new TimelineRow.AssistantPart({
-          userMessageID: userMessage.id,
-          group: item.group,
-          previousAssistantPart: assistantGroupIndex > 0,
-        }),
-      )
-      assistantGroupIndex += 1
+      appendAssistants(assistantSegment)
+      assistantSegment = []
+      rows.push(new TimelineRow.Notice({ userMessageID: userMessage.id, messageID: entry.message.id }))
     })
+    appendAssistants(assistantSegment)
 
     if (isActive && status === "busy" && !error && (showReasoning ? assistantPartRefs.length === 0 : true)) {
       const heading = assistantMessages
@@ -137,14 +232,7 @@ export namespace Timeline {
 
     if (isActive && status === "retry") rows.push(new TimelineRow.Retry({ userMessageID: userMessage.id }))
 
-    const diffs = (userMessage.summary?.diffs ?? [])
-      .reduceRight<SummaryDiff[]>((result, diff) => {
-        if (!isSummaryDiff(diff)) return result
-        if (result.some((item) => item.file === diff.file)) return result
-        result.push(diff)
-        return result
-      }, [])
-      .reverse()
+    const diffs = uniqueSummaryDiffs(userMessage.summary?.diffs)
     if (diffs.length > 0 && (status === "idle" || !isActive)) {
       rows.push(
         new TimelineRow.DiffSummary({
@@ -155,7 +243,7 @@ export namespace Timeline {
     }
 
     if (error) {
-      const data = error.data?.message
+      const data = error.data && "message" in error.data ? error.data.message : undefined
       rows.push(
         new TimelineRow.Error({
           userMessageID: userMessage.id,
@@ -167,10 +255,6 @@ export namespace Timeline {
     }
 
     return rows
-  }
-
-  function isSummaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
-    return typeof value.file === "string"
   }
 
   function reasoningHeading(text: string) {
@@ -257,6 +341,14 @@ export namespace Timeline {
 
   function record(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === "object" && !Array.isArray(value)
+  }
+
+  function isNotice(
+    message: SessionMessageInfo,
+  ): message is Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" }> {
+    if (message.type === "user" || message.type === "assistant" || message.type === "shell") return false
+    if (message.type !== "synthetic") return true
+    return !!message.description?.trim()
   }
 }
 

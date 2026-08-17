@@ -11,10 +11,10 @@ import { matchKeybind, parseKeybind } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
-import { useServerSDK } from "@/context/server-sdk"
 import { terminalFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
+import { terminalConnectToken } from "@/utils/terminal-connect-token"
 import { terminalWriter } from "@/utils/terminal-writer"
 import { terminalWebSocketURL } from "@/utils/terminal-websocket-url"
 
@@ -175,16 +175,9 @@ export const Terminal = (props: TerminalProps) => {
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
-  // Terminal captures its connection for the PTY lifetime, so callers must key it per server/session.
-  const connection = useServerSDK()().server
+  // Intentional mount-time capture: the imperative xterm/WebSocket lifecycle needs stable values, and Terminal remounts when the SDK scope changes.
   const directory = sdk().directory
-  const client = sdk().client
   const url = sdk().url
-  const auth = connection.http
-  const username = auth?.username ?? "opencode"
-  const password = auth?.password ?? ""
-  const authToken = connection.type === "http" ? connection.authToken : false
-  const sameOrigin = new URL(url, location.href).origin === location.origin
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, [
     "pty",
@@ -241,10 +234,11 @@ export const Terminal = (props: TerminalProps) => {
     }
   }
 
-  const pushSize = (cols: number, rows: number) => {
-    return client.pty
-      .update({
+  const pushSize = async (cols: number, rows: number) => {
+    return sdk()
+      .api.pty.update({
         ptyID: id,
+        location: { directory },
         size: { cols, rows },
       })
       .catch((err) => {
@@ -292,7 +286,12 @@ export const Terminal = (props: TerminalProps) => {
 
   const scheduleSize = (cols: number, rows: number) => {
     if (disposed) return
-    if (lastSize?.cols === cols && lastSize?.rows === rows) return
+    if (lastSize?.cols === cols && lastSize?.rows === rows) {
+      pendingSize = undefined
+      if (sizeTimer !== undefined) clearTimeout(sizeTimer)
+      sizeTimer = undefined
+      return
+    }
 
     pendingSize = { cols, rows }
 
@@ -317,8 +316,10 @@ export const Terminal = (props: TerminalProps) => {
 
   createEffect(() => {
     const colors = terminalColors()
+    const mode = theme.mode() === "dark" ? "dark" : "light"
     if (!term) return
     setOptionIfSupported(term, "theme", colors)
+    setOptionIfSupported(term, "colorScheme", mode)
   })
 
   createEffect(() => {
@@ -365,7 +366,11 @@ export const Terminal = (props: TerminalProps) => {
 
     event.preventDefault()
     event.stopImmediatePropagation()
-    platform.openLink(text)
+    if (URL.canParse(text) && new URL(text).protocol === "file:" && platform.openLocalFile) {
+      platform.openLocalFile(text)
+      return
+    }
+    platform.openExternal(text)
   }
 
   onMount(() => {
@@ -396,6 +401,7 @@ export const Terminal = (props: TerminalProps) => {
       }
       _ghostty = g
       term = t
+      setOptionIfSupported(t, "colorScheme", theme.mode() === "dark" ? "dark" : "light")
       output = terminalWriter((data, done) =>
         t.write(data, () => {
           done?.()
@@ -514,34 +520,23 @@ export const Terminal = (props: TerminalProps) => {
         local.onConnectError?.(err)
       }
 
-      const gone = () =>
-        client.pty
-          .get({ ptyID: id }, { throwOnError: false })
-          .then((result) => result.response.status === 404)
+      const gone = async () => {
+        return sdk()
+          .api.pty.get({ ptyID: id, location: { directory } })
+          .then((result) => result.data.status === "exited")
           .catch((err) => {
+            if (err && typeof err === "object" && "_tag" in err && err._tag === "PtyNotFoundError") return true
             debugTerminal("failed to inspect terminal session", err)
             return false
           })
+      }
 
       const connectToken = async () => {
-        const result = await client.pty
-          .connectToken(
-            { ptyID: id, directory },
-            {
-              throwOnError: false,
-              headers: { "x-opencode-ticket": "1" },
-            },
-          )
-          .catch((err: unknown) => {
-            if (err instanceof Error && err.message.includes("Request is not supported")) return
-            throw err
-          })
-        if (!result) return
-        if (result.response.status === 200 && result.data?.ticket) return result.data.ticket
-        if (result.response.status === 404 || result.response.status === 405) return
-        if (result.response.status === 403)
-          throw new Error("PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.")
-        throw new Error(`PTY connect ticket failed with ${result.response.status}`)
+        const result = await terminalConnectToken({ url, id, directory })
+        if (result.ticket) return result.ticket
+        if (result.status === 404 || result.status === 405) return
+        if (result.status === 403) throw new Error(language.t("terminal.connectTicket.csrfError"))
+        throw new Error(language.t("terminal.connectTicket.statusError", { status: result.status }))
       }
 
       const retry = (err: unknown) => {
@@ -581,10 +576,6 @@ export const Terminal = (props: TerminalProps) => {
             directory,
             cursor: seek,
             ticket,
-            sameOrigin,
-            username,
-            password,
-            authToken,
           }),
         )
         socket.binaryType = "arraybuffer"
@@ -595,6 +586,7 @@ export const Terminal = (props: TerminalProps) => {
           tries = 0
           local.onConnect?.()
           scheduleSize(t.cols, t.rows)
+          if (t.getMode(2031)) t.write("\x1b[?996n")
         }
 
         const handleMessage = (event: MessageEvent) => {
@@ -696,6 +688,7 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
+      dir="ltr"
       data-prevent-autofocus
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}

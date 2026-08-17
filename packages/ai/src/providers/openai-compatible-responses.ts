@@ -1,9 +1,11 @@
-import type { ProviderPackage } from "../provider-package"
-import { OpenAICompatibleResponses } from "../protocols/openai-compatible-responses"
-import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
-import type { RouteDefaultsInput } from "../route/client"
-import { ProviderID, type ModelID } from "../schema"
-import type { OpenAIProviderOptionsInput } from "./openai-options"
+import type { ProviderPackage } from "../provider-package.js"
+import { OpenAICompatibleResponses } from "../protocols/openai-compatible-responses.js"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import type { RouteDefaultsInput } from "../route/client.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
+import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+
+export type { OpenResponsesOptionsInput, OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
 export const id = ProviderID.make("openai-compatible")
 
@@ -11,13 +13,14 @@ export type Config = RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
     readonly provider?: string
     readonly baseURL: string
+    readonly providerOptions?: OpenResponsesProviderOptionsInput
   }
 
 export interface Settings extends ProviderPackage.Settings {
   readonly apiKey?: string
   readonly baseURL: string
   readonly provider?: string
-  readonly providerOptions?: OpenAIProviderOptionsInput
+  readonly providerOptions?: OpenResponsesProviderOptionsInput
 }
 
 export const routes = [OpenAICompatibleResponses.route]
@@ -33,7 +36,7 @@ export const configure = (input: Config) => {
   })
   return {
     id: ProviderID.make(provider),
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => route.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     configure,
   }
 }
@@ -43,7 +46,10 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Definition<Settings, OpenResponsesProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) =>
   configure({
     apiKey: settings.apiKey,
     baseURL: settings.baseURL,

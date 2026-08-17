@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import * as OpenAIChat from "../src/protocols/openai-chat"
-import { Auth } from "../src/route"
+import * as OpenAIChat from "../src/protocols/openai-chat.js"
+import { Auth } from "../src/route.js"
 
 describe("Route.with", () => {
   test("merges endpoint query and header defaults while replacing auth and id", () => {

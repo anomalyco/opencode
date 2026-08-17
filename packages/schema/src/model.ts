@@ -41,6 +41,24 @@ export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
 
+export type ReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
+export const ReasoningField: Schema.Codec<ReasoningField> = Schema.Union([
+  Schema.Literals(["reasoning", "reasoning_content", "reasoning_text"]),
+  Schema.String,
+]).annotate({ identifier: "Model.ReasoningField" })
+
+export const MaxTokensField = Schema.Literals(["max_completion_tokens", "max_tokens"]).annotate({
+  identifier: "Model.MaxTokensField",
+})
+export type MaxTokensField = typeof MaxTokensField.Type
+
+export interface Compatibility extends Schema.Schema.Type<typeof Compatibility> {}
+export const Compatibility = Schema.Struct({
+  reasoningField: ReasoningField.pipe(optional),
+  maxTokensField: MaxTokensField.pipe(optional),
+  requireFinishReason: Schema.Boolean.pipe(optional),
+}).annotate({ identifier: "Model.Compatibility" })
+
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
@@ -75,6 +93,7 @@ export const Info = Schema.Struct({
   providerID: Provider.ID,
   family: Family.pipe(optional),
   name: Schema.String,
+  compatibility: Compatibility.pipe(optional),
   package: Provider.Package.pipe(optional),
   ...Provider.Overlays,
   capabilities: Capabilities,
@@ -94,13 +113,13 @@ export const Info = Schema.Struct({
   .annotate({ identifier: "Model.Info" })
   .pipe(
     statics(() => ({
-      empty: (providerID: Provider.ID, id: ID) =>
+      default: (providerID: Provider.ID, id: ID) =>
         ({
           id,
           modelID: id,
           providerID,
           name: id,
-          capabilities: { tools: false, input: [], output: [] },
+          capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
           variants: [],
           time: { released: 0 },
           cost: [],

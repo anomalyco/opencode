@@ -131,7 +131,7 @@ function toolPart(
 ): MessagePart {
   const metadata =
     metadataOverride ??
-    (tool === "patch"
+    (tool === "apply_patch"
       ? { files: [patchFile(index, "update"), patchFile(index + 1, index % 2 === 0 ? "add" : "delete")] }
       : tool === "edit" || tool === "write"
         ? {
@@ -219,7 +219,7 @@ function turn(index: number): Message[] {
       ? [toolPart(index, 7, "write", { filePath: `src/generated/write-${index}.ts`, content: code(index, 28) }, 560)]
       : []),
     ...(index % 8 === 0
-      ? [toolPart(index, 8, "patch", { files: [`src/generated/patch-${index}.ts`] }, 620)]
+      ? [toolPart(index, 8, "apply_patch", { files: [`src/generated/patch-${index}.ts`] }, 620)]
       : []),
     ...(index % 7 === 0
       ? [toolPart(index, 4, "bash", { command: "bun typecheck", description: "Verify generated output" }, 620)]
@@ -267,15 +267,17 @@ const childMessages = Array.from({ length: 4 }, (_, index) => [
   userMessage(childID, index + 2000, 120),
   assistantMessage(childID, index + 2000, id("msg_user", index + 2000), [textPart(index + 2000, 0, 240)]),
 ]).flat()
-
-function renderable(part: MessagePart) {
-  if (part.type === "text") return !!part.text.trim()
-  if (part.type === "reasoning") return !!part.text.trim()
-  return part.type !== "step-start" && part.type !== "step-finish" && part.type !== "patch"
+const messages: Record<string, Message[]> = {
+  [sourceID]: sourceMessages,
+  [targetID]: targetMessages,
+  [childID]: childMessages,
 }
 
-function orderedParts(message: Message) {
-  return message.parts.slice().sort((a, b) => a.id.localeCompare(b.id))
+function renderable(part: MessagePart) {
+  if (part.type === "tool" && part.tool === "todowrite") return false
+  if (part.type === "text") return !!part.text?.trim()
+  if (part.type === "reasoning") return !!part.text?.trim()
+  return part.type !== "step-start" && part.type !== "step-finish" && part.type !== "patch"
 }
 
 export const fixture = {
@@ -332,7 +334,7 @@ export const fixture = {
   sourceID,
   targetID,
   childID,
-  messages: { [sourceID]: sourceMessages, [targetID]: targetMessages, [childID]: childMessages },
+  messages,
   expected: {
     sourceTitle: "Uncommitted changes inquiry",
     targetTitle: "Example Game: sample jump movement & sample physics analysis",
@@ -344,16 +346,12 @@ export const fixture = {
       .filter((message) => message.info.role === "user")
       .map((message) => message.info.id),
     childMessageIDs: childMessages.filter((message) => message.info.role === "user").map((message) => message.info.id),
-    targetPartIDs: targetMessages.flatMap((message) =>
-      orderedParts(message)
-        .filter(renderable)
-        .map((part) => part.id),
-    ),
+    targetPartIDs: targetMessages.flatMap((message) => message.parts.filter(renderable).map((part) => part.id)),
   },
 }
 
 export function pageMessages(sessionID: string, limit: number, before?: string) {
-  const messages = fixture.messages[sessionID as keyof typeof fixture.messages] ?? []
+  const messages = fixture.messages[sessionID] ?? []
   const end = before
     ? Math.max(
         0,
@@ -363,6 +361,6 @@ export function pageMessages(sessionID: string, limit: number, before?: string) 
   const start = Math.max(0, end - limit)
   return {
     items: messages.slice(start, end),
-    cursor: start > 0 ? messages[start]!.info.id : undefined,
+    cursor: start > 0 ? messages[start].info.id : undefined,
   }
 }

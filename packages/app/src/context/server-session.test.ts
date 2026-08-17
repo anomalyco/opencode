@@ -1,15 +1,28 @@
 import { describe, expect, test } from "bun:test"
 import type { retry } from "@opencode-ai/core/util/retry"
-import type { Message, OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client"
+import type {
+  FormInfo,
+  OpenCodeEvent,
+  SessionApi,
+  SessionInboxInfo,
+  SessionInfo,
+  SessionMessageAssistant,
+  SessionMessageAssistantTool,
+  SessionMessageInfo,
+} from "@opencode-ai/client/promise"
+import type { Message, Part } from "@/types"
 import { createServerSession } from "./server-session"
+import type { ServerApi } from "@/utils/server"
 
-const session = (id: string, parentID?: string): Session => ({
+type MessageApi = ServerApi["message"]
+
+const session = (id: string, parentID?: string): SessionInfo => ({
   id,
-  slug: id,
   projectID: "project",
-  directory: "/repo",
+  location: { directory: "/repo" },
   title: id,
-  version: "1",
+  cost: 0,
+  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   parentID,
   time: { created: 1, updated: 1 },
 })
@@ -17,11 +30,122 @@ const session = (id: string, parentID?: string): Session => ({
 type UserMessage = Extract<Message, { role: "user" }>
 type AssistantMessage = Extract<Message, { role: "assistant" }>
 type TextPart = Extract<Part, { type: "text" }>
+type CurrentToolObject = Extract<SessionMessageAssistantTool["state"], { status: "running" }>["input"]
 type MessageResponse = {
   data: { info: Message; parts: Part[] }[]
   response: { headers: Headers }
 }
 type SingleMessageResponse = { data: MessageResponse["data"][number] }
+
+function sessionInfo(value: SessionInfo): SessionInfo {
+  return value
+}
+
+function currentMessages(data: MessageResponse["data"]): SessionMessageInfo[] {
+  return data.flatMap((item): SessionMessageInfo[] => {
+    if (item.info.role === "user") {
+      return [
+        {
+          id: `${item.info.id}:agent`,
+          type: "agent-switched",
+          agent: item.info.agent,
+          time: item.info.time,
+        },
+        {
+          id: `${item.info.id}:model`,
+          type: "model-switched",
+          model: {
+            id: item.info.model.modelID,
+            providerID: item.info.model.providerID,
+            variant: item.info.model.variant,
+          },
+          time: item.info.time,
+        },
+        {
+          id: item.info.id,
+          type: "user",
+          text: item.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
+          time: item.info.time,
+        },
+      ]
+    }
+    return [
+      {
+        id: item.info.id,
+        type: "assistant",
+        agent: item.info.agent,
+        model: { id: item.info.modelID, providerID: item.info.providerID, variant: item.info.variant },
+        content: item.parts.flatMap((part): SessionMessageAssistant["content"] => {
+          if (part.type === "text") return [{ type: "text", text: part.text }]
+          if (part.type === "reasoning")
+            return [
+              {
+                type: "reasoning",
+                text: part.text,
+                time: part.time ? { created: part.time.start, completed: part.time.end } : undefined,
+              },
+            ]
+          if (part.type !== "tool") return []
+          const state: SessionMessageAssistantTool["state"] = (() => {
+            if (part.state.status === "pending")
+              return { status: "streaming" as const, input: JSON.stringify(part.state.input) }
+            if (part.state.status === "running")
+              return {
+                status: "running" as const,
+                input: part.state.input as CurrentToolObject,
+                metadata: (part.state.metadata ?? {}) as CurrentToolObject,
+              }
+            if (part.state.status === "error")
+              return {
+                status: "error" as const,
+                input: part.state.input as CurrentToolObject,
+                error: { type: "tool_error", message: part.state.error },
+                metadata: part.state.metadata as CurrentToolObject | undefined,
+              }
+            return {
+              status: "completed" as const,
+              input: part.state.input as CurrentToolObject,
+              content: [{ type: "text" as const, text: part.state.output }],
+              metadata: part.state.metadata as CurrentToolObject,
+            }
+          })()
+          return [
+            {
+              id: part.id,
+              type: "tool" as const,
+              name: part.tool,
+              state,
+              time: {
+                created: part.state.status === "pending" ? item.info.time.created : part.state.time.start,
+                ran: part.state.status === "pending" ? undefined : part.state.time.start,
+                completed:
+                  part.state.status === "completed" || part.state.status === "error" ? part.state.time.end : undefined,
+              },
+            },
+          ]
+        }),
+        time: item.info.time,
+        cost: item.info.cost,
+        tokens: item.info.tokens,
+        finish: item.info.finish as
+          | "stop"
+          | "length"
+          | "tool-calls"
+          | "content-filter"
+          | "error"
+          | "unknown"
+          | undefined,
+      },
+    ]
+  })
+}
+
+function currentPage(value: MessageResponse) {
+  return {
+    data: currentMessages(value.data).toReversed(),
+    cursor: { next: value.response.headers.get("x-next-cursor") ?? undefined },
+  }
+}
 
 const userMessage = (id: string, input: Partial<UserMessage> = {}): UserMessage => ({
   id,
@@ -29,7 +153,7 @@ const userMessage = (id: string, input: Partial<UserMessage> = {}): UserMessage 
   role: "user",
   time: { created: 1 },
   agent: "build",
-  model: { providerID: "provider", modelID: "model" },
+  model: { providerID: "provider", modelID: "model", variant: undefined },
   ...input,
 })
 
@@ -41,21 +165,34 @@ const assistantMessage = (id: string, parentID: string, input: Partial<Assistant
   parentID,
   modelID: "model",
   providerID: "provider",
+  variant: undefined,
   mode: "build",
   agent: "build",
-  path: { cwd: "/repo", root: "/repo" },
+  path: { cwd: "", root: "" },
   cost: 0,
   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  error: undefined,
+  finish: undefined,
   ...input,
 })
 
 const textPart = (messageID: string, input: Partial<TextPart> = {}): TextPart => ({
-  id: "part",
   sessionID: "child",
   messageID,
   type: "text",
   text: "text",
   ...input,
+  id: `${messageID}:text:${input.id === "pending" ? 1 : 0}`,
+})
+
+const promptEcho = (messageID: string, text = "hello") => ({
+  sessionID: "child",
+  messageID,
+  text,
+  displayText: text,
+  agent: "build",
+  model: { providerID: "provider", modelID: "model" },
+  comments: [],
 })
 
 const response = (data: MessageResponse["data"] = [], cursor?: string): MessageResponse => ({
@@ -69,19 +206,27 @@ const deferredResponse = () => Promise.withResolvers<MessageResponse>()
 
 function messageClient(...responses: Array<MessageResponse | Promise<MessageResponse>>) {
   let index = 0
+  const pages = responses.map((value) =>
+    value instanceof Promise ? value.then(currentPage) : Promise.resolve(currentPage(value)),
+  )
   const requests: unknown[] = []
   const waiting = new Map<number, () => void>()
   const client = {
     session: {
-      get: async () => ({ data: session("child", "root") }),
-      messages: (input: unknown) => {
+      get: async () => sessionInfo(session("child", "root")),
+      message: async () => {
+        throw new Error("Unexpected single message request")
+      },
+    },
+    message: {
+      list: async (input: unknown) => {
         requests.push(input)
         waiting.get(requests.length)?.()
         waiting.delete(requests.length)
-        return responses[index++]
+        return pages[index++]!
       },
     },
-  } as unknown as OpencodeClient
+  } as unknown as { session: SessionApi; message: MessageApi }
   return Object.assign(client, {
     requests,
     requested(count: number) {
@@ -102,19 +247,22 @@ function rootMessageClient(
   const rootWaiting = new Map<number, () => void>()
   const client = {
     session: {
-      get: async () => ({ data: session("child", "root") }),
-      messages: (input: unknown) => {
-        requests.push(input)
-        return pages[pageIndex++]
-      },
-      message: (input: unknown) => {
+      get: async () => sessionInfo(session("child", "root")),
+      message: async (input: unknown) => {
         rootRequests.push(input)
         rootWaiting.get(rootRequests.length)?.()
         rootWaiting.delete(rootRequests.length)
-        return roots[rootIndex++]
+        const value = await roots[rootIndex++]!
+        return currentMessages([value.data]).find((message) => message.id === value.data.info.id)!
       },
     },
-  } as unknown as OpencodeClient
+    message: {
+      list: async (input: unknown) => {
+        requests.push(input)
+        return currentPage(await pages[pageIndex++]!)
+      },
+    },
+  } as unknown as { session: SessionApi; message: MessageApi }
   return Object.assign(client, {
     requests,
     rootRequests,
@@ -136,7 +284,7 @@ const retryImmediately: typeof retry = async (task, options = {}) => {
   }
 }
 
-function setup(sessions: Record<string, Session>) {
+function setup(sessions: Record<string, SessionInfo>) {
   const get: unknown[] = []
   const messages: unknown[] = []
   const client = {
@@ -144,19 +292,299 @@ function setup(sessions: Record<string, Session>) {
       get: async (input: unknown) => {
         get.push(input)
         const id = (input as { sessionID: string }).sessionID
-        return { data: sessions[id] }
+        return sessionInfo(sessions[id]!)
       },
-      messages: async (input: unknown) => {
-        messages.push(input)
-        return response()
+      message: async () => {
+        throw new Error("Unexpected single message request")
       },
-      diff: async () => ({ data: [] }),
     },
-  } as unknown as OpencodeClient
+    message: {
+      list: async (input: unknown) => {
+        messages.push(input)
+        return currentPage(response())
+      },
+    },
+  } as unknown as { session: SessionApi; message: MessageApi }
   return { get, messages, store: createServerSession(client) }
 }
 
 describe("server session", () => {
+  test("hydrates session info after a native session.created event", async () => {
+    const ctx = setup({ created: session("created") })
+
+    ctx.store.apply({
+      type: "session.created",
+      properties: {
+        sessionID: "created",
+        projectID: "project",
+        location: { directory: "/repo" },
+        slug: "created",
+        version: "test",
+      },
+    })
+
+    expect(ctx.store.get("created")).toBeUndefined()
+    await ctx.store.resolve("created")
+    expect(ctx.store.get("created")?.location.directory).toBe("/repo")
+    expect(ctx.get).toEqual([{ sessionID: "created" }])
+  })
+
+  test("projects V2 session events into current and legacy message state", () => {
+    const ctx = setup({ child: session("child") })
+    ctx.store.remember(session("child"))
+    ctx.store.set("session_message", "child", [
+      {
+        id: "msg_1_user",
+        type: "user",
+        text: "hello",
+        time: { created: 1 },
+      },
+    ])
+    const apply = (input: object) => ctx.store.applyV2(input as OpenCodeEvent)
+
+    apply({
+      id: "evt_step",
+      created: 2,
+      type: "session.step.started",
+      durable: { aggregateID: "child", seq: 1, version: 1 },
+      location: { directory: "/repo" },
+      data: {
+        sessionID: "child",
+        assistantMessageID: "msg_2_assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+      },
+    })
+    apply({
+      id: "evt_text_start",
+      created: 3,
+      type: "session.text.started",
+      durable: { aggregateID: "child", seq: 2, version: 1 },
+      location: { directory: "/repo" },
+      data: { sessionID: "child", assistantMessageID: "msg_2_assistant", ordinal: 0 },
+    })
+    apply({
+      id: "evt_text_delta",
+      created: 4,
+      type: "session.text.delta",
+      location: { directory: "/repo" },
+      data: { sessionID: "child", assistantMessageID: "msg_2_assistant", ordinal: 0, delta: "world" },
+    })
+    apply({
+      id: "evt_tool_z",
+      created: 5,
+      type: "session.tool.input.started",
+      durable: { aggregateID: "child", seq: 3, version: 1 },
+      location: { directory: "/repo" },
+      data: { sessionID: "child", assistantMessageID: "msg_2_assistant", id: "call_z", name: "shell" },
+    })
+    apply({
+      id: "evt_tool_a",
+      created: 6,
+      type: "session.tool.input.started",
+      durable: { aggregateID: "child", seq: 4, version: 1 },
+      location: { directory: "/repo" },
+      data: { sessionID: "child", assistantMessageID: "msg_2_assistant", id: "call_a", name: "shell" },
+    })
+
+    expect(ctx.store.data.session_message.child?.at(-1)).toMatchObject({
+      id: "msg_2_assistant",
+      type: "assistant",
+      content: [
+        { type: "text", text: "world" },
+        { type: "tool", id: "call_z" },
+        { type: "tool", id: "call_a" },
+      ],
+    })
+    expect(ctx.store.data.message.child?.map((message) => message.id)).toEqual(["msg_1_user", "msg_2_assistant"])
+    expect(ctx.store.data.part.msg_2_assistant?.map((part) => part.id)).toEqual([
+      "msg_2_assistant:text:0",
+      "call_z",
+      "call_a",
+    ])
+  })
+
+  test("projects V2 pending inputs and forms", () => {
+    const ctx = setup({ child: session("child") })
+    const apply = (input: object) => ctx.store.applyV2(input as OpenCodeEvent)
+
+    apply({
+      id: "evt_admitted",
+      created: 1,
+      type: "session.inbox.enqueued",
+      data: {
+        sessionID: "child",
+        inboxID: "msg_input",
+        item: { type: "user", delivery: "steer", payload: { text: "hello" } },
+      },
+    })
+    apply({
+      id: "evt_form",
+      created: 2,
+      type: "form.created",
+      data: { form: { id: "frm_1", sessionID: "child", title: "Choose", fields: [] } },
+    })
+
+    expect(ctx.store.data.pending.child).toMatchObject([{ id: "msg_input", delivery: "steer" }])
+    expect(ctx.store.data.input.child).toEqual(["msg_input"])
+    expect(ctx.store.data.form.child).toMatchObject([{ id: "frm_1", title: "Choose" }])
+    expect(ctx.store.data.message.child).toMatchObject([{ id: "msg_input" }])
+
+    apply({
+      id: "evt_cancelled",
+      created: 3,
+      type: "session.inbox.cancelled",
+      data: { sessionID: "child", inboxID: "msg_input" },
+    })
+    apply({
+      id: "evt_form_done",
+      created: 4,
+      type: "form.cancelled",
+      data: { sessionID: "child", id: "frm_1" },
+    })
+
+    expect(ctx.store.data.pending.child).toEqual([])
+    expect(ctx.store.data.input.child).toEqual([])
+    expect(ctx.store.data.form.child).toEqual([])
+    expect(ctx.store.data.message.child).toEqual([])
+  })
+
+  test("does not let transient hydration overwrite newer events", async () => {
+    const ctx = setup({ child: session("child") })
+    const response = Promise.withResolvers<{ pending: SessionInboxInfo[]; forms: FormInfo[] }>()
+    const form: FormInfo = {
+      id: "frm_1",
+      sessionID: "child",
+      title: "Choose",
+      fields: [{ key: "choice", type: "string" as const, title: "Choice" }],
+    }
+    let loads = 0
+    const hydration = ctx.store.hydrateTransient("child", () => {
+      loads += 1
+      if (loads === 1) return response.promise
+      return Promise.resolve({ pending: ctx.store.data.pending.child ?? [], forms: [form] })
+    })
+
+    ctx.store.applyV2({
+      id: "evt_admitted",
+      created: 1,
+      type: "session.inbox.enqueued",
+      data: {
+        sessionID: "child",
+        inboxID: "msg_input",
+        item: { type: "user", delivery: "queue", payload: { text: "new" } },
+      },
+    } as OpenCodeEvent)
+    response.resolve({
+      pending: [],
+      forms: [form],
+    })
+    await hydration
+
+    expect(ctx.store.data.pending.child).toMatchObject([{ id: "msg_input" }])
+    expect(ctx.store.data.form.child).toMatchObject([{ id: "frm_1" }])
+    expect(loads).toBe(2)
+  })
+
+  test("removes only the compaction input named by the start event", () => {
+    const ctx = setup({ child: session("child") })
+    const apply = (input: object) => ctx.store.applyV2(input as OpenCodeEvent)
+    apply({
+      id: "evt_compaction_inbox",
+      created: 1,
+      type: "session.inbox.enqueued",
+      data: {
+        sessionID: "child",
+        inboxID: "msg_compaction",
+        item: { type: "compaction", delivery: "queue", payload: { reason: "manual" } },
+      },
+    })
+
+    expect(ctx.store.data.input.child).toBeUndefined()
+    expect(ctx.store.data.pending.child).toHaveLength(1)
+
+    apply({
+      id: "evt_compaction_inbox_2",
+      created: 2,
+      type: "session.inbox.enqueued",
+      data: {
+        sessionID: "child",
+        inboxID: "msg_compaction_2",
+        item: { type: "compaction", delivery: "queue", payload: { reason: "manual" } },
+      },
+    })
+    apply({
+      id: "evt_compaction_ended",
+      created: 3,
+      type: "session.compaction.ended",
+      data: { sessionID: "child", reason: "manual", text: "summary", recent: "recent" },
+    })
+
+    expect(ctx.store.data.pending.child).toHaveLength(2)
+
+    apply({
+      id: "evt_compaction_started",
+      created: 4,
+      type: "session.compaction.started",
+      data: { sessionID: "child", inputID: "msg_compaction", reason: "manual" },
+    })
+
+    expect(ctx.store.data.pending.child?.map((item) => item.id)).toEqual(["msg_compaction_2"])
+  })
+
+  test("projects committed revert before server reconciliation", () => {
+    const ctx = setup({ child: session("child") })
+    ctx.store.remember({ ...session("child"), revert: { messageID: "msg_2", partID: "prt_1" } })
+    ctx.store.set("input", "child", ["msg_1", "msg_2"])
+    ctx.store.set("session_message", "child", [
+      { id: "msg_1", type: "user", text: "keep", time: { created: 1 } },
+      { id: "msg_2", type: "user", text: "remove", time: { created: 2 } },
+    ])
+
+    ctx.store.applyV2({
+      id: "evt_revert",
+      created: 3,
+      type: "session.revert.committed",
+      data: { sessionID: "child", to: "msg_2" },
+    } as OpenCodeEvent)
+
+    expect(ctx.store.data.info.child?.revert).toBeUndefined()
+    expect(ctx.store.data.input.child).toEqual(["msg_1"])
+    expect(ctx.store.data.session_message.child?.map((message) => message.id)).toEqual(["msg_1"])
+  })
+
+  test("does not restore a message hydrated before a committed revert", async () => {
+    const response = Promise.withResolvers<SessionMessageInfo>()
+    const store = createServerSession({
+      session: {
+        get: async () => session("child"),
+        message: () => response.promise,
+      } as unknown as SessionApi,
+      message: {
+        list: async () => currentPage({ data: [], response: { headers: new Headers() } }),
+      } as unknown as MessageApi,
+    })
+    store.remember(session("child"))
+
+    store.applyV2({
+      id: "evt_delivered",
+      created: 1,
+      type: "session.inbox.delivered",
+      data: { sessionID: "child", inboxID: "msg_2" },
+    } as OpenCodeEvent)
+    store.applyV2({
+      id: "evt_revert",
+      created: 2,
+      type: "session.revert.committed",
+      data: { sessionID: "child", to: "msg_2" },
+    } as OpenCodeEvent)
+    response.resolve({ id: "msg_2", type: "user", text: "stale", time: { created: 1 } })
+    await response.promise
+    await Bun.sleep(0)
+
+    expect(store.data.session_message.child ?? []).toEqual([])
+  })
+
   test("resolves lineage by session ID without directory", async () => {
     const ctx = setup({ child: session("child", "root"), root: session("root") })
 
@@ -167,246 +595,427 @@ describe("server session", () => {
     expect(ctx.store.lineage.peek("child")).toEqual(result)
   })
 
+  test("applies moved session locations without evicting cached state", () => {
+    const current = { ...session("child"), location: { directory: "/repo/worktree" } }
+    const ctx = setup({ child: current })
+    ctx.store.remember(current)
+
+    ctx.store.applyV2({
+      id: "evt_moved",
+      created: 2,
+      type: "session.moved",
+      durable: { aggregateID: "child", seq: 1, version: 1 },
+      location: current.location,
+      data: { sessionID: "child", location: { directory: "/repo" }, projectID: "project", subpath: "packages/app" },
+    } satisfies Extract<OpenCodeEvent, { type: "session.moved" }>)
+
+    expect(ctx.store.get("child")).toMatchObject({ location: { directory: "/repo" }, subpath: "packages/app" })
+  })
+
   test("loads session content through the server client", async () => {
     const ctx = setup({ root: session("root") })
 
     await ctx.store.sync("root")
 
     expect(ctx.get).toEqual([{ sessionID: "root" }])
-    expect(ctx.messages).toEqual([{ sessionID: "root", limit: 20, before: undefined }])
+    expect(ctx.messages).toEqual([{ sessionID: "root", limit: 200, order: "desc" }])
     expect(ctx.store.data.message.root).toEqual([])
   })
 
-  test("backfills an assistant-only initial page through its user root", async () => {
-    const user = userMessage("message-1")
-    const assistants = [assistantMessage("message-2", user.id), assistantMessage("message-3", user.id)]
-    const client = rootMessageClient(
-      [
-        response(
-          assistants.map((info) => ({ info, parts: [] })),
-          "older",
-        ),
-      ],
-      [singleResponse(user)],
-    )
-    const store = createServerSession(client)
+  test("reloads cached sessions after reconnect invalidation", async () => {
+    const ctx = setup({ root: session("root") })
+    await ctx.store.sync("root")
 
-    await store.sync("child")
+    ctx.store.invalidate()
+    await ctx.store.sync("root")
 
-    expect(client.requests).toEqual([{ sessionID: "child", limit: 20, before: undefined }])
-    expect(client.rootRequests).toEqual([{ sessionID: "child", messageID: user.id }])
-    expect(store.data.message.child).toEqual([user, ...assistants])
-    expect(store.history.more("child")).toBe(true)
+    expect(ctx.store.data.message.root).toEqual([])
+    expect(ctx.get).toHaveLength(2)
+    expect(ctx.messages).toEqual([
+      { sessionID: "root", limit: 200, order: "desc" },
+      { sessionID: "root", limit: 200, order: "desc" },
+    ])
   })
 
-  test("does not let an optimistic user suppress initial root backfill", async () => {
-    const user = userMessage("message-1")
-    const part = textPart(user.id)
-    const assistants = [assistantMessage("message-2", user.id), assistantMessage("message-3", user.id)]
-    const client = rootMessageClient(
-      [
-        response(
-          assistants.map((info) => ({ info, parts: [] })),
-          "older",
-        ),
-      ],
-      [singleResponse(user)],
-    )
-    const store = createServerSession(client)
-    store.optimistic.add({ sessionID: "child", message: user, parts: [part] })
-
-    await store.sync("child")
-    store.optimistic.remove({ sessionID: "child", messageID: user.id })
-
-    expect(client.requests).toHaveLength(1)
-    expect(client.rootRequests).toHaveLength(1)
-    expect(store.data.message.child).toEqual([user, ...assistants])
-  })
-
-  test("backfills the parent of fetched assistants when another user is cached", async () => {
-    const unrelated = userMessage("message-0", { time: { created: 0 } })
-    const user = userMessage("message-1")
-    const assistants = [assistantMessage("message-2", user.id), assistantMessage("message-3", user.id)]
-    const client = rootMessageClient(
-      [
-        response([{ info: unrelated, parts: [] }]),
-        response(
-          assistants.map((info) => ({ info, parts: [] })),
-          "older",
-        ),
-      ],
-      [singleResponse(user)],
-    )
+  test("keeps a fixed page size after the local message cache exceeds the API limit", async () => {
+    const client = messageClient(response(), response())
     const store = createServerSession(client)
     await store.sync("child")
+    Array.from({ length: 428 }, (_, index) =>
+      store.apply({
+        type: "message.updated",
+        properties: { info: userMessage(`message-${index}`, { time: { created: index } }) },
+      }),
+    )
 
+    expect(store.data.message.child).toHaveLength(428)
     await store.sync("child", { force: true })
 
-    expect(client.requests).toHaveLength(2)
-    expect(client.rootRequests).toHaveLength(1)
-    expect(store.data.message.child).toEqual([unrelated, user, ...assistants])
+    expect(client.requests).toEqual([
+      { sessionID: "child", limit: 200, order: "desc" },
+      { sessionID: "child", limit: 200, order: "desc" },
+    ])
   })
 
-  test("preserves cached history between an injected parent and the page boundary", async () => {
-    const user = userMessage("message-1")
-    const cached = userMessage("message-3", { time: { created: 3 } })
-    const assistant = assistantMessage("message-4", user.id)
-    const client = rootMessageClient(
-      [response([{ info: cached, parts: [] }]), response([{ info: assistant, parts: [] }], "older")],
-      [singleResponse(user)],
+  test("loads current session content through the current message API", async () => {
+    const requests: unknown[] = []
+    const user = { id: "msg_z_user", type: "user", text: "hello", time: { created: 1 } }
+    const assistant = {
+      id: "msg_a_assistant",
+      type: "assistant",
+      agent: "build",
+      model: { id: "model", providerID: "provider" },
+      content: [{ type: "text", text: "hi" }],
+      time: { created: 2, completed: 3 },
+    }
+    const messageApi = {
+      list: async (input: unknown) => {
+        requests.push(input)
+        return { data: [assistant, user], cursor: { previous: null, next: null } }
+      },
+    } as unknown as MessageApi
+    const store = createServerSession({} as SessionApi, messageApi)
+    store.remember(session("root"))
+
+    await store.sync("root")
+
+    expect(requests).toEqual([{ sessionID: "root", limit: 200, order: "desc" }])
+    expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
+    expect(store.data.message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
+  })
+
+  test("preserves assistant content order from message history", async () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "inspect it", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [
+          { type: "text", text: "I will inspect it." },
+          {
+            type: "tool",
+            id: "call_z",
+            name: "shell",
+            state: { status: "streaming", input: "" },
+            time: { created: 2 },
+          },
+          {
+            type: "tool",
+            id: "call_a",
+            name: "shell",
+            state: { status: "streaming", input: "" },
+            time: { created: 3 },
+          },
+        ],
+        time: { created: 2 },
+      },
+    ] satisfies SessionMessageInfo[]
+    const messageApi = {
+      list: async () => ({ data: source.toReversed(), cursor: { previous: null, next: null } }),
+    } as unknown as MessageApi
+    const store = createServerSession({} as SessionApi, messageApi)
+    store.remember(session("root"))
+
+    await store.sync("root")
+
+    expect(store.data.part.msg_assistant?.map((part) => part.id)).toEqual(["msg_assistant:text:0", "call_z", "call_a"])
+  })
+
+  test("extends a current page to include the user for split assistant turns", async () => {
+    const user = { id: "msg_1_user", type: "user", text: "hello", time: { created: 1 } } as const
+    const assistant = (id: string, created: number) => ({
+      id,
+      type: "assistant" as const,
+      agent: "build",
+      model: { id: "model", providerID: "provider" },
+      content: [{ type: "text" as const, text: id }],
+      time: { created, completed: created },
+    })
+    const assistants = [
+      assistant("msg_2_assistant", 2),
+      assistant("msg_3_assistant", 3),
+      assistant("msg_4_assistant", 4),
+    ]
+    const pages = [
+      { data: assistants.slice(1).toReversed(), cursor: { previous: null, next: "older" } },
+      { data: [assistants[0], user], cursor: { previous: null, next: null } },
+    ]
+    const requests: unknown[] = []
+    const messageApi = {
+      list: async (input: unknown) => {
+        requests.push(input)
+        return pages.shift()!
+      },
+    } as unknown as MessageApi
+    const store = createServerSession({} as SessionApi, messageApi)
+    store.remember(session("root"))
+
+    await store.sync("root")
+
+    expect(requests).toEqual([
+      { sessionID: "root", limit: 200, order: "desc" },
+      { sessionID: "root", limit: 200, cursor: "older" },
+    ])
+    expect(store.data.message.root.map((message) => message.id)).toEqual([
+      user.id,
+      ...assistants.map((item) => item.id),
+    ])
+    expect(assistants.map((item) => store.data.part[item.id]?.[0]?.type)).toEqual(["text", "text", "text"])
+  })
+
+  test("loads older messages by cursor with the fixed page size", async () => {
+    const older = userMessage("message-1")
+    const latest = userMessage("message-2", { time: { created: 2 } })
+    const client = messageClient(
+      response([{ info: latest, parts: [] }], "older"),
+      response([{ info: older, parts: [] }]),
     )
     const store = createServerSession(client)
     await store.sync("child")
 
-    await store.sync("child", { force: true })
+    await store.history.loadMore("child")
 
-    expect(store.data.message.child).toEqual([user, cached, assistant])
+    expect(client.requests).toEqual([
+      { sessionID: "child", limit: 200, order: "desc" },
+      { sessionID: "child", limit: 200, cursor: "older" },
+    ])
+    expect(store.data.message.child).toEqual([older, latest])
+    expect(store.history.more("child")).toBe(false)
   })
 
-  test("refreshes a cached parent omitted by an assistant-only replacement page", async () => {
-    const stale = userMessage("message-1", { summary: { title: "stale", diffs: [] } })
-    const fresh = { ...stale, summary: { title: "fresh", diffs: [] } }
-    const stalePart = textPart(stale.id, { text: "stale" })
-    const freshPart = { ...stalePart, text: "fresh" }
-    const assistant = assistantMessage("message-2", stale.id)
-    const client = rootMessageClient(
-      [response([{ info: stale, parts: [stalePart] }]), response([{ info: assistant, parts: [] }], "older")],
-      [singleResponse(fresh, [freshPart])],
-    )
-    const store = createServerSession(client)
-    await store.sync("child")
+  // V2 messages are ordered projections and do not expose V1 assistant parent IDs.
+  describe.skip("V1 assistant parent projections", () => {
+    test("backfills an assistant-only initial page through its user root", async () => {
+      const user = userMessage("message-1")
+      const assistants = [assistantMessage("message-2", user.id), assistantMessage("message-3", user.id)]
+      const client = rootMessageClient(
+        [response(assistants.map((info) => ({ info, parts: [] })))],
+        [singleResponse(user)],
+      )
+      const store = createServerSession(client)
 
-    await store.sync("child", { force: true })
+      await store.sync("child")
 
-    expect(client.rootRequests).toEqual([{ sessionID: "child", messageID: stale.id }])
-    expect(store.data.message.child).toEqual([fresh, assistant])
-    expect(store.data.part[stale.id]).toEqual([freshPart])
-  })
+      expect(client.requests).toEqual([{ sessionID: "child", limit: 200, order: "desc" }])
+      expect(client.rootRequests).toEqual([{ sessionID: "child", messageID: user.id }])
+      expect(store.data.message.child).toEqual([user, ...assistants])
+      expect(store.history.more("child")).toBe(false)
+    })
 
-  test("refreshes a confirmed optimistic parent while preserving pending parts", async () => {
-    const stale = userMessage("message-1", { summary: { title: "stale", diffs: [] } })
-    const fresh = { ...stale, summary: { title: "fresh", diffs: [] } }
-    const confirmed = textPart(stale.id, { id: "confirmed", text: "stale" })
-    const refreshed = { ...confirmed, text: "fresh" }
-    const pending = textPart(stale.id, { id: "pending", text: "pending" })
-    const assistant = assistantMessage("message-2", stale.id)
-    const client = rootMessageClient(
-      [response([{ info: stale, parts: [confirmed] }]), response([{ info: assistant, parts: [] }], "older")],
-      [singleResponse(fresh, [refreshed])],
-    )
-    const store = createServerSession(client)
-    store.optimistic.add({ sessionID: "child", message: stale, parts: [confirmed, pending] })
-    await store.sync("child")
+    test("keeps assistant history when its deleted parent cannot be backfilled", async () => {
+      const missing = Promise.withResolvers<SingleMessageResponse>()
+      const assistant = assistantMessage("message-2", "message-missing")
+      const client = rootMessageClient([response([{ info: assistant, parts: [] }])], [missing.promise])
+      const store = createServerSession(client)
+      const loading = store.sync("child")
+      await client.rootRequested(1)
 
-    await store.sync("child", { force: true })
+      missing.reject(new Error("Message not found: message-missing", { cause: { status: 404 } }))
+      await loading
 
-    expect(client.rootRequests).toEqual([{ sessionID: "child", messageID: stale.id }])
-    expect(store.data.message.child).toEqual([fresh, assistant])
-    expect(store.data.part[stale.id]).toEqual([refreshed, pending])
-  })
+      expect(client.rootRequests).toEqual([{ sessionID: "child", messageID: "message-missing" }])
+      expect(store.data.message.child).toEqual([assistant])
+      expect(store.history.more("child")).toBe(false)
+    })
 
-  test("uses a parent received by SSE during the replacement load", async () => {
-    const pending = deferredResponse()
-    const user = userMessage("message-1")
-    const assistant = assistantMessage("message-2", user.id)
-    const client = rootMessageClient([pending.promise], [])
-    const store = createServerSession(client)
-    const loading = store.sync("child")
+    test("drops a cached parent when a forced refresh confirms it was deleted", async () => {
+      const missing = Promise.withResolvers<SingleMessageResponse>()
+      const parent = userMessage("message-1")
+      const part = textPart(parent.id)
+      const assistant = assistantMessage("message-2", parent.id)
+      const client = rootMessageClient(
+        [
+          response([
+            { info: parent, parts: [part] },
+            { info: assistant, parts: [] },
+          ]),
+          response([{ info: assistant, parts: [] }]),
+        ],
+        [missing.promise],
+      )
+      const store = createServerSession(client)
+      await store.sync("child")
+      const loading = store.sync("child", { force: true })
+      await client.rootRequested(1)
 
-    store.apply({ type: "message.updated", properties: { info: user } })
-    pending.resolve(response([{ info: assistant, parts: [] }], "older"))
-    await loading
+      missing.reject(new Error(`Message not found: ${parent.id}`, { cause: { status: 404 } }))
+      await loading
 
-    expect(client.rootRequests).toEqual([])
-    expect(store.data.message.child).toEqual([user, assistant])
-  })
+      expect(store.data.message.child).toEqual([assistant])
+      expect(store.data.part[parent.id]).toBeUndefined()
+    })
 
-  test("uses a successful retry over events received by a failed backfill attempt", async () => {
-    const failed = deferredResponse()
-    const user = userMessage("message-1")
-    const live = { ...user, agent: "stale" }
-    const assistants = [assistantMessage("message-2", user.id), assistantMessage("message-3", user.id)]
-    const client = rootMessageClient(
-      [
-        response(
-          assistants.map((info) => ({ info, parts: [] })),
-          "older",
-        ),
-      ],
-      [failed.promise.then((result) => ({ data: result.data[0]! })), singleResponse(user)],
-    )
-    const store = createServerSession(client, { retry: retryImmediately })
-    const loading = store.sync("child")
-    await client.rootRequested(1)
+    test("does not let an admitted user suppress initial root backfill", async () => {
+      const user = userMessage("message-1")
+      const assistants = [assistantMessage("message-2", user.id), assistantMessage("message-3", user.id)]
+      const client = rootMessageClient(
+        [response(assistants.map((info) => ({ info, parts: [] })))],
+        [singleResponse(user)],
+      )
+      const store = createServerSession(client)
+      store.inbox.echo(promptEcho(user.id, "text"))
 
-    store.apply({ type: "message.updated", properties: { info: live } })
-    failed.reject(new Error("retry"))
-    await loading
+      await store.sync("child")
 
-    expect(client.requests).toHaveLength(1)
-    expect(client.rootRequests).toHaveLength(2)
-    expect(store.data.message.child).toEqual([user, ...assistants])
-  })
+      expect(client.requests).toHaveLength(1)
+      expect(client.rootRequests).toHaveLength(1)
+      expect(store.data.message.child).toEqual([user, ...assistants])
+    })
 
-  test("preserves newer-page events across a failed parent retry", async () => {
-    const failed = deferredResponse()
-    const user = userMessage("message-1")
-    const assistant = assistantMessage("message-2", user.id)
-    const live = { ...assistant, cost: 1 }
-    const client = rootMessageClient(
-      [response([{ info: assistant, parts: [] }], "older")],
-      [failed.promise.then((result) => ({ data: result.data[0]! })), singleResponse(user)],
-    )
-    const store = createServerSession(client, { retry: retryImmediately })
-    const loading = store.sync("child")
-    await client.rootRequested(1)
+    test("backfills the parent of fetched assistants when another user is cached", async () => {
+      const unrelated = userMessage("message-0", { time: { created: 0 } })
+      const user = userMessage("message-1")
+      const assistants = [assistantMessage("message-2", user.id), assistantMessage("message-3", user.id)]
+      const client = rootMessageClient(
+        [response([{ info: unrelated, parts: [] }]), response(assistants.map((info) => ({ info, parts: [] })))],
+        [singleResponse(user)],
+      )
+      const store = createServerSession(client)
+      await store.sync("child")
 
-    store.apply({ type: "message.updated", properties: { info: live } })
-    failed.reject(new Error("retry"))
-    await loading
+      await store.sync("child", { force: true })
 
-    expect(store.data.message.child).toEqual([user, live])
-  })
+      expect(client.requests).toHaveLength(2)
+      expect(client.rootRequests).toHaveLength(1)
+      expect(store.data.message.child).toEqual([unrelated, user, ...assistants])
+    })
 
-  test("preserves unrelated message events across a failed parent retry", async () => {
-    const failed = deferredResponse()
-    const user = userMessage("message-1")
-    const assistant = assistantMessage("message-2", user.id)
-    const live = userMessage("message-4", { time: { created: 4 } })
-    const client = rootMessageClient(
-      [response([{ info: assistant, parts: [] }], "older")],
-      [failed.promise.then((result) => ({ data: result.data[0]! })), singleResponse(user)],
-    )
-    const store = createServerSession(client, { retry: retryImmediately })
-    const loading = store.sync("child")
-    await client.rootRequested(1)
+    test("preserves cached history between an injected parent and the page boundary", async () => {
+      const user = userMessage("message-1")
+      const cached = userMessage("message-3", { time: { created: 3 } })
+      const assistant = assistantMessage("message-4", user.id)
+      const client = rootMessageClient(
+        [response([{ info: cached, parts: [] }]), response([{ info: assistant, parts: [] }])],
+        [singleResponse(user)],
+      )
+      const store = createServerSession(client)
+      await store.sync("child")
 
-    store.apply({ type: "message.updated", properties: { info: live } })
-    failed.reject(new Error("retry"))
-    await loading
+      await store.sync("child", { force: true })
 
-    expect(store.data.message.child).toEqual([user, assistant, live])
-  })
+      expect(store.data.message.child).toEqual([user, cached, assistant])
+    })
 
-  test("preserves newer-page part events across a failed parent retry", async () => {
-    const failed = deferredResponse()
-    const user = userMessage("message-1")
-    const assistant = assistantMessage("message-2", user.id)
-    const stale = textPart(assistant.id, { text: "stale" })
-    const live = { ...stale, text: "live" }
-    const client = rootMessageClient(
-      [response([{ info: assistant, parts: [stale] }], "older")],
-      [failed.promise.then((result) => ({ data: result.data[0]! })), singleResponse(user)],
-    )
-    const store = createServerSession(client, { retry: retryImmediately })
-    const loading = store.sync("child")
-    await client.rootRequested(1)
+    test("refreshes a cached parent omitted by an assistant-only replacement page", async () => {
+      const stale = userMessage("message-1", { summary: { title: "stale", diffs: [] } })
+      const fresh = { ...stale, summary: { title: "fresh", diffs: [] } }
+      const stalePart = textPart(stale.id, { text: "stale" })
+      const freshPart = { ...stalePart, text: "fresh" }
+      const assistant = assistantMessage("message-2", stale.id)
+      const client = rootMessageClient(
+        [response([{ info: stale, parts: [stalePart] }]), response([{ info: assistant, parts: [] }])],
+        [singleResponse(fresh, [freshPart])],
+      )
+      const store = createServerSession(client)
+      await store.sync("child")
 
-    store.apply({ type: "message.part.updated", properties: { sessionID: "child", part: live, time: 2 } })
-    failed.reject(new Error("retry"))
-    await loading
+      await store.sync("child", { force: true })
 
-    expect(store.data.part[assistant.id]).toEqual([live])
+      expect(client.rootRequests).toEqual([{ sessionID: "child", messageID: stale.id }])
+      expect(store.data.message.child).toEqual([fresh, assistant])
+      expect(store.data.part[stale.id]).toEqual([freshPart])
+    })
+
+    test("uses a parent received by SSE during the replacement load", async () => {
+      const pending = deferredResponse()
+      const user = userMessage("message-1")
+      const assistant = assistantMessage("message-2", user.id)
+      const client = rootMessageClient([pending.promise], [])
+      const store = createServerSession(client)
+      const loading = store.sync("child")
+
+      store.apply({ type: "message.updated", properties: { info: user } })
+      pending.resolve(response([{ info: assistant, parts: [] }]))
+      await loading
+
+      expect(client.rootRequests).toEqual([])
+      expect(store.data.message.child).toEqual([user, assistant])
+    })
+
+    test("uses a successful retry over events received by a failed backfill attempt", async () => {
+      const failed = deferredResponse()
+      const user = userMessage("message-1")
+      const live = { ...user, agent: "stale" }
+      const assistants = [assistantMessage("message-2", user.id), assistantMessage("message-3", user.id)]
+      const client = rootMessageClient(
+        [response(assistants.map((info) => ({ info, parts: [] })))],
+        [failed.promise.then((result) => ({ data: result.data[0]! })), singleResponse(user)],
+      )
+      const store = createServerSession(client, { retry: retryImmediately })
+      const loading = store.sync("child")
+      await client.rootRequested(1)
+
+      store.apply({ type: "message.updated", properties: { info: live } })
+      failed.reject(new Error("retry"))
+      await loading
+
+      expect(client.requests).toHaveLength(1)
+      expect(client.rootRequests).toHaveLength(2)
+      expect(store.data.message.child).toEqual([user, ...assistants])
+    })
+
+    test("preserves newer-page events across a failed parent retry", async () => {
+      const failed = deferredResponse()
+      const user = userMessage("message-1")
+      const assistant = assistantMessage("message-2", user.id)
+      const live = { ...assistant, cost: 1 }
+      const client = rootMessageClient(
+        [response([{ info: assistant, parts: [] }])],
+        [failed.promise.then((result) => ({ data: result.data[0]! })), singleResponse(user)],
+      )
+      const store = createServerSession(client, { retry: retryImmediately })
+      const loading = store.sync("child")
+      await client.rootRequested(1)
+
+      store.apply({ type: "message.updated", properties: { info: live } })
+      failed.reject(new Error("retry"))
+      await loading
+
+      expect(store.data.message.child).toEqual([user, live])
+    })
+
+    test("preserves unrelated message events across a failed parent retry", async () => {
+      const failed = deferredResponse()
+      const user = userMessage("message-1")
+      const assistant = assistantMessage("message-2", user.id)
+      const live = userMessage("message-4", { time: { created: 4 } })
+      const client = rootMessageClient(
+        [response([{ info: assistant, parts: [] }])],
+        [failed.promise.then((result) => ({ data: result.data[0]! })), singleResponse(user)],
+      )
+      const store = createServerSession(client, { retry: retryImmediately })
+      const loading = store.sync("child")
+      await client.rootRequested(1)
+
+      store.apply({ type: "message.updated", properties: { info: live } })
+      failed.reject(new Error("retry"))
+      await loading
+
+      expect(store.data.message.child).toEqual([user, assistant, live])
+    })
+
+    test("preserves newer-page part events across a failed parent retry", async () => {
+      const failed = deferredResponse()
+      const user = userMessage("message-1")
+      const assistant = assistantMessage("message-2", user.id)
+      const stale = textPart(assistant.id, { text: "stale" })
+      const live = { ...stale, text: "live" }
+      const client = rootMessageClient(
+        [response([{ info: assistant, parts: [stale] }])],
+        [failed.promise.then((result) => ({ data: result.data[0]! })), singleResponse(user)],
+      )
+      const store = createServerSession(client, { retry: retryImmediately })
+      const loading = store.sync("child")
+      await client.rootRequested(1)
+
+      store.apply({ type: "message.part.updated", properties: { sessionID: "child", part: live, time: 2 } })
+      failed.reject(new Error("retry"))
+      await loading
+
+      expect(store.data.part[assistant.id]).toEqual([live])
+    })
   })
 
   test("merges live events into the initial page", async () => {
@@ -544,30 +1153,6 @@ describe("server session", () => {
     expect(store.data.part[message.id]).toBeUndefined()
   })
 
-  test("preserves optimistic parts re-added after removal during a refresh", async () => {
-    const pending = deferredResponse()
-    const message = userMessage("message")
-    const stale = textPart(message.id, { id: "stale", text: "stale" })
-    const part = textPart(message.id, { id: "optimistic", text: "optimistic" })
-    const store = createServerSession(
-      messageClient(response([{ info: message, parts: [] }]), pending.promise, response()),
-    )
-    await store.sync("child")
-    const refreshing = store.sync("child", { force: true })
-
-    store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: message.id } })
-    store.optimistic.add({ sessionID: "child", message, parts: [part] })
-    pending.resolve(response([{ info: message, parts: [stale] }]))
-    await refreshing
-
-    expect(store.data.message.child).toEqual([message])
-    expect(store.data.part[message.id]).toEqual([part])
-
-    await store.sync("child", { force: true })
-    expect(store.data.message.child).toEqual([message])
-    expect(store.data.part[message.id]).toEqual([part])
-  })
-
   test("drops stale event content omitted by a complete initial page", async () => {
     const stale = userMessage("stale")
     const store = createServerSession(messageClient(response()))
@@ -589,160 +1174,309 @@ describe("server session", () => {
     expect(store.data.message.child).toEqual([live, fetched])
   })
 
-  test("does not restore removed optimistic content on refresh", async () => {
-    const message = userMessage("message")
-    const part = textPart(message.id, { text: "removed" })
-    const kept = { ...message, id: "kept" }
-    const keptPart = { ...part, id: "kept-part", messageID: kept.id }
-    const store = createServerSession(messageClient(response([{ info: kept, parts: [] }])))
-    store.optimistic.add({ sessionID: "child", message, parts: [part] })
-    store.optimistic.add({ sessionID: "child", message: kept, parts: [keptPart] })
+  test("echoes a prompt without changing durable message order", () => {
+    const store = setup({ child: session("child") }).store
 
-    store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: message.id } })
-    store.apply({
-      type: "message.part.removed",
-      properties: { sessionID: "child", messageID: kept.id, partID: keptPart.id },
+    store.inbox.echo({
+      ...promptEcho("msg_prompt"),
+      text: "hello\nThe user made the following comment regarding line 4 of src/foo.ts: check this",
+      files: [{ uri: "file:///repo/src/foo.ts", mime: "text/plain", name: "foo.ts" }],
+      agents: [{ name: "explore" }],
+      comments: [
+        {
+          path: "src/foo.ts",
+          selection: { startLine: 4, startChar: 1, endLine: 4, endChar: 5 },
+          comment: "check this",
+          preview: "const value = 1",
+          origin: "review",
+        },
+      ],
     })
-    await store.sync("child", { force: true })
 
-    expect(store.data.message.child).toEqual([kept])
-    expect(store.data.part[message.id]).toBeUndefined()
-    expect(store.data.part[kept.id]).toBeUndefined()
+    expect(store.data.pending.child).toMatchObject([{ id: "msg_prompt", type: "user", delivery: "steer" }])
+    expect(store.data.input.child).toEqual(["msg_prompt"])
+    expect(store.data.session_message.child).toBeUndefined()
+    expect(store.data.message.child?.map((message) => message.id)).toEqual(["msg_prompt"])
+    expect(store.data.part.msg_prompt).toMatchObject([
+      { id: "msg_prompt:text:0", type: "text", text: "hello" },
+      { id: "msg_prompt:file:0", type: "file", filename: "foo.ts" },
+      { id: "msg_prompt:agent:0", type: "agent", name: "explore" },
+      {
+        id: "msg_prompt:comment:0",
+        type: "text",
+        synthetic: true,
+        metadata: {
+          opencodeComment: {
+            path: "src/foo.ts",
+            selection: { startLine: 4, startChar: 1, endLine: 4, endChar: 5 },
+            comment: "check this",
+            preview: "const value = 1",
+            origin: "review",
+          },
+        },
+      },
+    ])
+
+    store.applyV2({
+      id: "evt_prompt",
+      created: 2,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "child", seq: 1, version: 1 },
+      data: {
+        sessionID: "child",
+        inboxID: "msg_prompt",
+        item: {
+          type: "user",
+          delivery: "steer",
+          payload: {
+            text: "hello\nThe user made the following comment regarding line 4 of src/foo.ts: check this",
+          },
+        },
+      },
+    } as OpenCodeEvent)
+
+    expect(store.data.part.msg_prompt).toMatchObject([
+      { id: "msg_prompt:text:0", type: "text", text: "hello" },
+      { id: "msg_prompt:comment:0", type: "text", synthetic: true },
+    ])
   })
 
-  test("replaces confirmed optimistic content with the initial page", async () => {
-    const optimistic = userMessage("message")
-    const fetched = { ...optimistic, time: { created: 2 } }
-    const store = createServerSession(messageClient(response([{ info: fetched, parts: [] }])))
-    store.optimistic.add({ sessionID: "child", message: optimistic, parts: [] })
+  test("preserves a local echo while message history omits pending input", async () => {
+    const store = createServerSession(messageClient(response()))
+    store.inbox.echo(promptEcho("msg_prompt"))
+    store.inbox.confirm({
+      id: "msg_prompt",
+      sessionID: "child",
+      timeCreated: 1,
+      type: "user",
+      delivery: "steer",
+      payload: { text: "hello" },
+    })
 
     await store.sync("child")
 
-    expect(store.data.message.child).toEqual([fetched])
+    expect(store.data.message.child?.map((message) => message.id)).toEqual(["msg_prompt"])
+    expect(store.data.part.msg_prompt).toMatchObject([{ type: "text", text: "hello" }])
   })
 
-  test("replaces a confirmed optimistic part with fetched content", async () => {
-    const pending = deferredResponse()
-    const message = userMessage("message")
-    const optimistic = textPart(message.id, { text: "optimistic" })
-    const fetched = { ...optimistic, text: "fetched" }
-    const store = createServerSession(messageClient(pending.promise))
-    const loading = store.sync("child")
-
-    store.optimistic.add({ sessionID: "child", message, parts: [optimistic] })
-    pending.resolve(response([{ info: message, parts: [fetched] }]))
-    await loading
-
-    expect(store.data.part[message.id]).toEqual([fetched])
-  })
-
-  test("rolls back only unconfirmed optimistic parts", async () => {
-    const pending = deferredResponse()
-    const message = userMessage("message")
-    const confirmed = textPart(message.id, { id: "confirmed", text: "confirmed" })
-    const pendingPart = textPart(message.id, { id: "pending", text: "pending" })
-    const store = createServerSession(messageClient(pending.promise))
-    const loading = store.sync("child")
-    store.optimistic.add({ sessionID: "child", message, parts: [confirmed, pendingPart] })
-
-    pending.resolve(response([{ info: message, parts: [confirmed] }]))
-    await loading
-    store.optimistic.remove({ sessionID: "child", messageID: message.id })
-
-    expect(store.data.message.child).toEqual([message])
-    expect(store.data.part[message.id]).toEqual([confirmed])
-  })
-
-  test("updates confirmed optimistic parts from later pages", async () => {
-    const message = userMessage("message")
-    const confirmed = textPart(message.id, { id: "confirmed", text: "first" })
-    const updated = { ...confirmed, text: "updated" }
-    const pendingPart = textPart(message.id, { id: "pending", text: "pending" })
+  test("preserves local comment presentation through message refresh", async () => {
+    const note = "The user made the following comment regarding line 4 of src/foo.ts: check this"
+    const message = userMessage("msg_prompt")
     const store = createServerSession(
-      messageClient(response([{ info: message, parts: [confirmed] }]), response([{ info: message, parts: [updated] }])),
+      messageClient(response([{ info: message, parts: [textPart(message.id, { text: note })] }])),
     )
-    store.optimistic.add({ sessionID: "child", message, parts: [confirmed, pendingPart] })
-    await store.sync("child")
-
-    await store.sync("child", { force: true })
-    store.optimistic.remove({ sessionID: "child", messageID: message.id })
-
-    expect(store.data.part[message.id]).toEqual([updated])
-  })
-
-  test("does not restore a confirmed optimistic part after its removal event", async () => {
-    const message = userMessage("message")
-    const confirmed = textPart(message.id, { id: "confirmed", text: "confirmed" })
-    const pendingPart = textPart(message.id, { id: "pending", text: "pending" })
-    const store = createServerSession(
-      messageClient(response([{ info: message, parts: [confirmed] }]), response([{ info: message, parts: [] }])),
-    )
-    store.optimistic.add({ sessionID: "child", message, parts: [confirmed, pendingPart] })
-    await store.sync("child")
-    store.apply({
-      type: "message.part.removed",
-      properties: { sessionID: "child", messageID: message.id, partID: confirmed.id },
+    store.inbox.echo({
+      ...promptEcho(message.id),
+      text: `hello\n${note}`,
+      comments: [
+        {
+          path: "src/foo.ts",
+          selection: { startLine: 4, startChar: 1, endLine: 4, endChar: 5 },
+          comment: "check this",
+          origin: "review",
+        },
+      ],
     })
 
-    await store.sync("child", { force: true })
+    await store.sync("child")
 
-    expect(store.data.part[message.id]).toEqual([pendingPart])
+    expect(store.data.part.msg_prompt).toMatchObject([
+      { id: "msg_prompt:text:0", type: "text", text: "hello" },
+      { id: "msg_prompt:comment:0", type: "text", synthetic: true },
+    ])
   })
 
-  test("clears delta buffers when removing optimistic content", () => {
-    const message = userMessage("message")
-    const part = textPart(message.id, { text: "optimistic" })
-    const store = setup({ child: session("child") }).store
-    store.optimistic.add({ sessionID: "child", message, parts: [part] })
-    store.apply({
-      type: "message.part.delta",
-      properties: { sessionID: "child", messageID: message.id, partID: part.id, field: "text", delta: " delta" },
+  test("retires an admitted echo absent from authoritative reconnect state", async () => {
+    const store = createServerSession(messageClient(response()))
+    store.inbox.echo(promptEcho("msg_prompt"))
+    store.inbox.confirm({
+      id: "msg_prompt",
+      sessionID: "child",
+      timeCreated: 1,
+      type: "user",
+      delivery: "steer",
+      payload: { text: "hello" },
     })
 
-    store.optimistic.remove({ sessionID: "child", messageID: message.id })
+    await Promise.all([store.sync("child"), store.hydrateTransient("child", async () => ({ pending: [], forms: [] }))])
+    store.inbox.reconcile("child")
 
-    expect(store.data.part[message.id]).toBeUndefined()
-    expect(store.data.part_text_accum_delta[part.id]).toBeUndefined()
+    expect(store.data.pending.child).toEqual([])
+    expect(store.data.message.child).toEqual([])
+    expect(store.data.part.msg_prompt).toBeUndefined()
   })
 
-  test("does not remove content confirmed by a message event", () => {
-    const message = userMessage("message")
-    const part = textPart(message.id)
-    const store = setup({ child: session("child") }).store
-    store.optimistic.add({ sessionID: "child", message, parts: [part] })
-    store.apply({ type: "message.updated", properties: { sessionID: "child", info: message } })
+  test("retires a stale enqueued message when inbox hydration finishes after history", async () => {
+    const store = createServerSession(messageClient(response()))
+    store.applyV2({
+      id: "evt_prompt",
+      created: 1,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "child", seq: 1, version: 1 },
+      data: {
+        sessionID: "child",
+        inboxID: "msg_prompt",
+        item: { type: "user", delivery: "steer", payload: { text: "hello" } },
+      },
+    } as OpenCodeEvent)
 
-    store.optimistic.remove({ sessionID: "child", messageID: message.id })
+    await store.sync("child")
+    await store.hydrateTransient("child", async () => ({ pending: [], forms: [] }))
+    store.inbox.reconcile("child")
 
-    expect(store.data.message.child).toEqual([message])
-    expect(store.data.part[message.id]).toBeUndefined()
+    expect(store.data.pending.child).toEqual([])
+    expect(store.data.session_message.child).toEqual([])
+    expect(store.data.message.child).toEqual([])
+    expect(store.data.part.msg_prompt).toBeUndefined()
   })
 
-  test("does not remove parts confirmed by part events", () => {
-    const message = userMessage("message")
-    const part = textPart(message.id)
+  test("deduplicates the durable admission event against its local echo", () => {
     const store = setup({ child: session("child") }).store
-    store.optimistic.add({ sessionID: "child", message, parts: [part] })
-    store.apply({ type: "message.updated", properties: { sessionID: "child", info: message } })
-    store.apply({ type: "message.part.updated", properties: { sessionID: "child", part, time: 2 } })
+    store.inbox.echo(promptEcho("msg_prompt"))
 
-    store.optimistic.remove({ sessionID: "child", messageID: message.id })
+    store.applyV2({
+      id: "evt_prompt",
+      created: 2,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "child", seq: 1, version: 1 },
+      data: {
+        sessionID: "child",
+        inboxID: "msg_prompt",
+        item: { type: "user", delivery: "steer", payload: { text: "hello" } },
+      },
+    } as OpenCodeEvent)
 
-    expect(store.data.message.child).toEqual([message])
-    expect(store.data.part[message.id]).toEqual([part])
+    expect(store.data.pending.child).toHaveLength(1)
+    expect(store.data.input.child).toEqual(["msg_prompt"])
+    expect(store.data.session_message.child?.filter((message) => message.id === "msg_prompt")).toHaveLength(1)
+    expect(store.data.message.child?.filter((message) => message.id === "msg_prompt")).toHaveLength(1)
+    expect(store.data.part.msg_prompt).toMatchObject([{ type: "text", text: "hello" }])
   })
 
-  test("treats a part event as confirmation when it precedes the message event", () => {
-    const message = userMessage("message")
-    const part = textPart(message.id)
+  test("uses the prompt response when the admission event was missed", () => {
     const store = setup({ child: session("child") }).store
-    store.optimistic.add({ sessionID: "child", message, parts: [part] })
-    store.apply({ type: "message.part.updated", properties: { sessionID: "child", part, time: 2 } })
+    store.inbox.echo(promptEcho("msg_prompt"))
+    store.inbox.confirm({
+      id: "msg_prompt",
+      sessionID: "child",
+      timeCreated: 2,
+      type: "user",
+      delivery: "steer",
+      payload: { text: "hello" },
+    })
 
-    store.optimistic.remove({ sessionID: "child", messageID: message.id })
+    store.applyV2({
+      id: "evt_delivered",
+      created: Date.now() + 1,
+      type: "session.inbox.delivered",
+      durable: { aggregateID: "child", seq: 2, version: 1 },
+      data: { sessionID: "child", inboxID: "msg_prompt" },
+    } as OpenCodeEvent)
 
-    expect(store.data.message.child).toEqual([message])
-    expect(store.data.part[message.id]).toEqual([part])
+    expect(store.data.pending.child).toEqual([])
+    expect(store.data.input.child).toEqual([])
+    expect(store.data.session_message.child).toMatchObject([{ id: "msg_prompt", type: "user", text: "hello" }])
+    expect(store.data.message.child?.filter((message) => message.id === "msg_prompt")).toHaveLength(1)
+    expect(store.data.part.msg_prompt).toMatchObject([{ type: "text", text: "hello" }])
+  })
+
+  test("keeps a durable admission when the HTTP request later fails", () => {
+    const store = setup({ child: session("child") }).store
+    store.inbox.echo(promptEcho("msg_prompt"))
+    store.applyV2({
+      id: "evt_prompt",
+      created: 2,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "child", seq: 1, version: 1 },
+      data: {
+        sessionID: "child",
+        inboxID: "msg_prompt",
+        item: { type: "user", delivery: "steer", payload: { text: "hello" } },
+      },
+    } as OpenCodeEvent)
+
+    expect(store.inbox.clearEcho({ sessionID: "child", messageID: "msg_prompt" })).toBe(false)
+    expect(store.data.pending.child).toHaveLength(1)
+    expect(store.data.message.child?.map((message) => message.id)).toEqual(["msg_prompt"])
+  })
+
+  test("places durable admission after delayed selection events", () => {
+    const store = setup({ child: session("child") }).store
+    store.remember(session("child"))
+    store.inbox.echo(promptEcho("msg_prompt"))
+    store.applyV2({
+      id: "evt_agent",
+      created: 1,
+      type: "session.agent.selected",
+      durable: { aggregateID: "child", seq: 1, version: 1 },
+      data: { sessionID: "child", agent: "review" },
+    } as OpenCodeEvent)
+    store.applyV2({
+      id: "evt_model",
+      created: 2,
+      type: "session.model.selected",
+      durable: { aggregateID: "child", seq: 2, version: 1 },
+      data: { sessionID: "child", model: { id: "new-model", providerID: "new-provider" } },
+    } as OpenCodeEvent)
+    store.applyV2({
+      id: "evt_prompt",
+      created: 3,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "child", seq: 3, version: 1 },
+      data: {
+        sessionID: "child",
+        inboxID: "msg_prompt",
+        item: { type: "user", delivery: "steer", payload: { text: "hello" } },
+      },
+    } as OpenCodeEvent)
+
+    expect(store.data.session_message.child?.map((message) => message.type)).toEqual([
+      "agent-switched",
+      "model-switched",
+      "user",
+    ])
+    expect(store.data.message.child?.find((message) => message.id === "msg_prompt")).toMatchObject({
+      agent: "review",
+      model: { providerID: "new-provider", modelID: "new-model" },
+    })
+  })
+
+  test("removes an echoed prompt when submission fails", () => {
+    const store = setup({ child: session("child") }).store
+    store.inbox.echo(promptEcho("msg_prompt"))
+
+    expect(store.inbox.clearEcho({ sessionID: "child", messageID: "msg_prompt" })).toBe(true)
+
+    expect(store.data.pending.child).toEqual([])
+    expect(store.data.input.child).toEqual([])
+    expect(store.data.session_message.child).toBeUndefined()
+    expect(store.data.message.child).toEqual([])
+    expect(store.data.part.msg_prompt).toBeUndefined()
+  })
+
+  test("removes a response-confirmed echo when the server cancels it", () => {
+    const store = setup({ child: session("child") }).store
+    store.inbox.echo(promptEcho("msg_prompt"))
+    store.inbox.confirm({
+      id: "msg_prompt",
+      sessionID: "child",
+      timeCreated: 1,
+      type: "user",
+      delivery: "steer",
+      payload: { text: "hello" },
+    })
+
+    store.applyV2({
+      id: "evt_cancelled",
+      created: 2,
+      type: "session.inbox.cancelled",
+      durable: { aggregateID: "child", seq: 2, version: 1 },
+      data: { sessionID: "child", inboxID: "msg_prompt" },
+    } as OpenCodeEvent)
+
+    expect(store.data.pending.child).toEqual([])
+    expect(store.data.message.child).toEqual([])
+    expect(store.data.part.msg_prompt).toBeUndefined()
   })
 
   test("clears stale parts when the initial page has none", async () => {
@@ -963,28 +1697,6 @@ describe("server session", () => {
     expect(store.data.part[message.id]).toBeUndefined()
   })
 
-  test("preserves optimistic re-adds across message retries", async () => {
-    const failed = Promise.withResolvers<MessageResponse>()
-    const retried = Promise.withResolvers<MessageResponse>()
-    const message = userMessage("message")
-    const stale = textPart(message.id, { id: "stale", text: "stale" })
-    const optimistic = textPart(message.id, { id: "optimistic", text: "optimistic" })
-    const client = messageClient(response([{ info: message, parts: [stale] }]), failed.promise, retried.promise)
-    const store = createServerSession(client, { retry: retryImmediately })
-    await store.sync("child")
-    const loading = store.sync("child", { force: true })
-
-    store.apply({ type: "message.removed", properties: { sessionID: "child", messageID: message.id } })
-    store.optimistic.add({ sessionID: "child", message, parts: [optimistic] })
-    failed.reject(new Error("failed to fetch"))
-    await client.requested(3)
-    retried.resolve(response([{ info: message, parts: [stale] }]))
-    await loading
-
-    expect(store.data.message.child).toEqual([message])
-    expect(store.data.part[message.id]).toEqual([optimistic])
-  })
-
   test("accepts part omission from a successful retry after an earlier delta", async () => {
     const failed = Promise.withResolvers<MessageResponse>()
     const retried = Promise.withResolvers<MessageResponse>()
@@ -1148,33 +1860,6 @@ describe("server session", () => {
     expect(store.data.part[message.id]).toBeUndefined()
   })
 
-  test("does not cache skipped optimistic parts", () => {
-    const message = userMessage("message")
-    const part = { id: "part", sessionID: "child", messageID: message.id, type: "step-start" as const }
-    const store = setup({ child: session("child") }).store
-
-    store.optimistic.add({ sessionID: "child", message, parts: [part] })
-
-    expect(store.data.part[message.id]).toEqual([])
-  })
-
-  test("clears stale delta buffers when replacing optimistic parts", () => {
-    const message = userMessage("message")
-    const stale = textPart(message.id, { id: "stale", text: "stale" })
-    const optimistic = textPart(message.id, { id: "optimistic", text: "optimistic" })
-    const store = setup({ child: session("child") }).store
-    store.optimistic.add({ sessionID: "child", message, parts: [stale] })
-    store.apply({
-      type: "message.part.delta",
-      properties: { sessionID: "child", messageID: message.id, partID: stale.id, field: "text", delta: " delta" },
-    })
-
-    store.optimistic.add({ sessionID: "child", message, parts: [optimistic] })
-
-    expect(store.data.part_text_accum_delta[stale.id]).toBeUndefined()
-    expect(store.data.part_text_accum_delta[optimistic.id]).toBeUndefined()
-  })
-
   test("preserves removals during history prepend", async () => {
     const pending = deferredResponse()
     const latest = userMessage("message-2", { time: { created: 2 } })
@@ -1207,6 +1892,7 @@ describe("server session", () => {
 
     await store.history.loadMore("child")
 
+    guard.active = false
     expect(store.data.message.child).toEqual([older, latest])
   })
 
@@ -1288,7 +1974,7 @@ describe("server session", () => {
 
     await store.sync("child", { force: true })
 
-    expect(store.data.message.child).toEqual([boundary, older])
+    expect(store.data.message.child).toEqual([older, boundary])
   })
 
   test("preserves a part update for a message being loaded from history", async () => {
@@ -1391,7 +2077,7 @@ describe("server session", () => {
     ctx.store.apply({ type: "session.created", properties: { sessionID: "root", info: session("root") } })
     ctx.store.apply({ type: "session.status", properties: { sessionID: "root", status: { type: "busy" } } })
 
-    expect(ctx.store.get("root")?.directory).toBe("/repo")
+    expect(ctx.store.get("root")?.location.directory).toBe("/repo")
     expect(ctx.store.data.session_working("root")).toBe(true)
     expect(ctx.get).toEqual([])
   })
@@ -1399,24 +2085,7 @@ describe("server session", () => {
   test("preserves pinned session content under server-wide cache pressure", () => {
     const ctx = setup({})
     ctx.store.pin("active")
-    ctx.store.optimistic.add({
-      sessionID: "active",
-      message: {
-        id: "message",
-        sessionID: "active",
-        role: "assistant",
-        time: { created: 1 },
-        parentID: "parent",
-        modelID: "model",
-        providerID: "provider",
-        mode: "build",
-        agent: "agent",
-        path: { cwd: "/repo", root: "/repo" },
-        cost: 0,
-        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-      },
-      parts: [],
-    })
+    ctx.store.inbox.echo({ ...promptEcho("message", "keep"), sessionID: "active" })
 
     for (let index = 0; index < 50; index++) {
       ctx.store.remember(session(`session-${index}`))

@@ -4,18 +4,14 @@ import { Effect, Layer, Logger } from "effect"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { fileLogger } from "../../src/observability/logging"
-import { resource } from "../../src/observability/otlp"
+import { fileLogger } from "@opencode-ai/util/observability/logging"
+import { resource } from "@opencode-ai/util/observability/otlp"
 
 const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
-const opencodeClient = process.env.OPENCODE_CLIENT
 
 afterEach(() => {
   if (otelResourceAttributes === undefined) delete process.env.OTEL_RESOURCE_ATTRIBUTES
   else process.env.OTEL_RESOURCE_ATTRIBUTES = otelResourceAttributes
-
-  if (opencodeClient === undefined) delete process.env.OPENCODE_CLIENT
-  else process.env.OPENCODE_CLIENT = opencodeClient
 })
 
 describe("resource", () => {
@@ -39,16 +35,16 @@ describe("resource", () => {
   })
 
   test("keeps built-in attributes when env values conflict", () => {
-    process.env.OPENCODE_CLIENT = "cli"
     process.env.OTEL_RESOURCE_ATTRIBUTES =
       "opencode.client=web,service.instance.id=override,service.namespace=anomalyco"
 
-    expect(resource().attributes).toMatchObject({
+    const app = { client: "cli", version: "1.2.3", channel: "beta" }
+    expect(resource(app).attributes).toMatchObject({
       "opencode.client": "cli",
       "service.namespace": "anomalyco",
     })
-    expect(resource().attributes["service.instance.id"]).not.toBe("override")
-    expect(resource().attributes["opencode.run"]).toMatch(/^[0-9a-f]{8}$/)
+    expect(resource(app).attributes["service.instance.id"]).not.toBe("override")
+    expect(resource(app).attributes["opencode.run"]).toMatch(/^[0-9a-f]{8}$/)
   })
 })
 
@@ -65,8 +61,8 @@ test("falls back to local logging when OTLP initialization fails", async () => {
       "--eval",
       `
         import { Effect } from "effect"
-        import { Observability } from "./src/observability.ts"
-        await Effect.void.pipe(Effect.provide(Observability.layer), Effect.scoped, Effect.runPromise)
+        import { Observability } from "@opencode-ai/util/observability"
+        await Effect.void.pipe(Effect.provide(Observability.layer()), Effect.scoped, Effect.runPromise)
       `,
     ],
     {

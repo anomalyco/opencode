@@ -1,8 +1,7 @@
 import { Schema } from "effect"
-import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, RouteID, ToolCallID } from "./ids"
-import { ModelSchema } from "./options"
-import { Message, ToolCallPart, ToolOutput, ToolResultPart, ToolResultValue, type ContentPart } from "./messages"
-import { ProviderFailureClassification } from "./errors"
+import { ContentBlockID, FinishReason, ProviderMetadata, ToolCallID } from "./ids.js"
+import { Message, ToolCallPart, ToolOutput, ToolResultPart, ToolResultValue, type ContentPart } from "./messages.js"
+import { ProviderFailureClassification } from "./errors.js"
 
 /**
  * Token usage reported by an LLM provider.
@@ -34,21 +33,22 @@ import { ProviderFailureClassification } from "./errors"
  *
  * **Semantics by provider**:
  *
- * - OpenAI Chat / Responses / Gemini / Bedrock: provider reports inclusive
+ * - OpenAI Chat / Responses / Gemini: provider reports inclusive
  *   `inputTokens` and an inclusive `outputTokens`; mapper subtracts to
  *   derive the breakdown.
- * - Anthropic: provider reports the breakdown natively (`input_tokens` is
- *   non-cached only); mapper sums to derive the inclusive `inputTokens`.
- *   Anthropic does *not* break extended-thinking out of `output_tokens`, so
- *   `reasoningTokens` is `undefined` and `outputTokens` carries the
- *   combined total — a documented limitation of the Anthropic API.
+ * - Anthropic and Bedrock report the input breakdown natively: Anthropic's
+ *   `input_tokens` and Bedrock's `inputTokens` are non-cached only. Their
+ *   mappers sum the breakdown to derive the inclusive `inputTokens`.
+ *   Anthropic's `outputTokens` includes extended thinking. Newer responses
+ *   expose that subset as `output_tokens_details.thinking_tokens`, which maps
+ *   to `reasoningTokens`; older responses leave it undefined.
  *
  * `providerMetadata` always carries the provider's raw usage payload —
  * keyed by provider name (`{ openai: ... }`, `{ anthropic: ... }`, etc.)
  * — for fields we don't normalize and for billing-level audit trails.
  * Matches the same escape-hatch field on `LLMEvent`.
  */
-export class Usage extends Schema.Class<Usage>("LLM.Usage")({
+export class Usage extends Schema.Class<Usage>("AI.Usage")({
   inputTokens: Schema.optional(Schema.Number),
   outputTokens: Schema.optional(Schema.Number),
   nonCachedInputTokens: Schema.optional(Schema.Number),
@@ -129,6 +129,7 @@ export const ToolInputStart = Schema.Struct({
   type: Schema.tag("tool-input-start"),
   id: ToolCallID,
   name: Schema.String,
+  providerExecuted: Schema.optional(Schema.Boolean),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolInputStart" })
 export type ToolInputStart = Schema.Schema.Type<typeof ToolInputStart>
@@ -148,6 +149,15 @@ export const ToolInputEnd = Schema.Struct({
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolInputEnd" })
 export type ToolInputEnd = Schema.Schema.Type<typeof ToolInputEnd>
+
+/** A local tool call whose final input could not be decoded. */
+export const ToolInputError = Schema.Struct({
+  type: Schema.tag("tool-input-error"),
+  id: ToolCallID,
+  name: Schema.String,
+  raw: Schema.String,
+}).annotate({ identifier: "LLM.Event.ToolInputError" })
+export type ToolInputError = Schema.Schema.Type<typeof ToolInputError>
 
 export const ToolCall = Schema.Struct({
   type: Schema.tag("tool-call"),
@@ -180,10 +190,16 @@ export const ToolError = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.ToolError" })
 export type ToolError = Schema.Schema.Type<typeof ToolError>
 
+export const FinishReasonDetails = Schema.Struct({
+  normalized: FinishReason,
+  raw: Schema.optional(Schema.String),
+}).annotate({ identifier: "LLM.FinishReasonDetails" })
+export type FinishReasonDetails = Schema.Schema.Type<typeof FinishReasonDetails>
+
 export const StepFinish = Schema.Struct({
   type: Schema.tag("step-finish"),
   index: Schema.Number,
-  reason: FinishReason,
+  reason: FinishReasonDetails,
   usage: Schema.optional(Usage),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.StepFinish" })
@@ -191,7 +207,7 @@ export type StepFinish = Schema.Schema.Type<typeof StepFinish>
 
 export const Finish = Schema.Struct({
   type: Schema.tag("finish"),
-  reason: FinishReason,
+  reason: FinishReasonDetails,
   usage: Schema.optional(Usage),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.Finish" })
@@ -216,6 +232,7 @@ const llmEventTagged = Schema.Union([
   ToolInputStart,
   ToolInputDelta,
   ToolInputEnd,
+  ToolInputError,
   ToolCall,
   ToolResult,
   ToolError,
@@ -253,6 +270,8 @@ export const LLMEvent = Object.assign(llmEventTagged, {
   toolInputDelta: (input: WithID<ToolInputDelta, ToolCallID>) =>
     ToolInputDelta.make({ ...input, id: toolCallID(input.id) }),
   toolInputEnd: (input: WithID<ToolInputEnd, ToolCallID>) => ToolInputEnd.make({ ...input, id: toolCallID(input.id) }),
+  toolInputError: (input: WithID<ToolInputError, ToolCallID>) =>
+    ToolInputError.make({ ...input, id: toolCallID(input.id) }),
   toolCall: (input: WithID<ToolCall, ToolCallID>) => ToolCall.make({ ...input, id: toolCallID(input.id) }),
   toolResult: (input: WithID<ToolResult, ToolCallID>) =>
     ToolResult.make({
@@ -283,6 +302,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     toolInputStart: llmEventTagged.guards["tool-input-start"],
     toolInputDelta: llmEventTagged.guards["tool-input-delta"],
     toolInputEnd: llmEventTagged.guards["tool-input-end"],
+    toolInputError: llmEventTagged.guards["tool-input-error"],
     toolCall: llmEventTagged.guards["tool-call"],
     toolResult: llmEventTagged.guards["tool-result"],
     toolError: llmEventTagged.guards["tool-error"],
@@ -292,29 +312,6 @@ export const LLMEvent = Object.assign(llmEventTagged, {
   },
 })
 export type LLMEvent = Schema.Schema.Type<typeof llmEventTagged>
-
-export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.PreparedRequest")({
-  id: Schema.String,
-  route: RouteID,
-  protocol: ProtocolID,
-  model: ModelSchema,
-  body: Schema.Unknown,
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}) {}
-
-/**
- * A `PreparedRequest` whose `body` is typed as `Body`. Use with the generic
- * on `LLMClient.prepare<Body>(...)` when the caller knows which route their
- * request will resolve to and wants its native shape statically exposed
- * (debug UIs, request previews, plan rendering).
- *
- * The runtime body is identical — the route still emits `body: unknown` — so
- * this is a type-level assertion the caller makes about what they expect to
- * find. The prepare runtime does not validate the assertion.
- */
-export type PreparedRequestOf<Body> = Omit<PreparedRequest, "body"> & {
-  readonly body: Body
-}
 
 const responseText = (events: ReadonlyArray<LLMEvent>) =>
   events
@@ -350,7 +347,7 @@ interface ResponseState {
   readonly events: ReadonlyArray<LLMEvent>
   readonly message: Message
   readonly usage?: Usage
-  readonly finishReason?: FinishReason
+  readonly finishReason?: FinishReasonDetails
   readonly textParts: Readonly<Record<string, ContentAssembly>>
   readonly reasoningParts: Readonly<Record<string, ContentAssembly>>
   readonly toolInputs: Readonly<Record<string, ToolInputAssembly>>
@@ -378,7 +375,7 @@ const appendEvent = (state: ResponseState, event: LLMEvent): ResponseState => {
     return {
       ...state,
       events,
-      finishReason: state.finishReason ?? "error",
+      finishReason: state.finishReason ?? { normalized: "error" },
     }
   }
   return {
@@ -548,6 +545,10 @@ const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseSta
       return reduceToolInputDelta(next, event)
     case "tool-input-end":
       return reduceToolInputEnd(next, event)
+    case "tool-input-error": {
+      const { [event.id]: _finished, ...toolInputs } = next.toolInputs
+      return { ...next, toolInputs }
+    }
     case "tool-call":
       return reduceToolCall(next, event)
     case "tool-result":
@@ -561,7 +562,7 @@ export class LLMResponse extends Schema.Class<LLMResponse>("LLM.Response")({
   message: Message,
   events: Schema.Array(LLMEvent),
   usage: Schema.optional(Usage),
-  finishReason: FinishReason,
+  finishReason: FinishReasonDetails,
 }) {
   /** Concatenated assistant text assembled from streamed `text-delta` events. */
   get text() {

@@ -29,6 +29,11 @@
  * - test/built-ins/Array/prototype/splice/S15.4.4.12_A1.1_T1.js
  * - test/built-ins/Array/prototype/splice/S15.4.4.12_A1.2_T1.js
  * - test/built-ins/Array/prototype/splice/called_with_one_argument.js
+ * - test/built-ins/Array/prototype/toSpliced/holes-not-preserved.js
+ * - test/built-ins/Array/prototype/toSpliced/immutable.js
+ * - test/built-ins/Array/prototype/toSpliced/start-and-deleteCount-undefineds.js
+ * - test/built-ins/Array/prototype/toSpliced/start-and-deleteCount-missing.js
+ * - test/built-ins/Array/prototype/toSpliced/start-undefined-and-deleteCount-missing.js
  * - test/built-ins/Array/prototype/fill/fill-values.js
  * - test/built-ins/Array/prototype/fill/fill-values-custom-start-and-end.js
  * - test/built-ins/Array/prototype/fill/return-this.js
@@ -59,6 +64,8 @@
  * Copyright 2015 Microsoft Corporation. All rights reserved.
  * Copyright 2016 The V8 project authors. All rights reserved.
  * Test262 portions are governed by the BSD license in LICENSE.test262.
+ * The toSpliced hole case omits the source test's inherited Array.prototype element because CodeMode does not expose
+ * prototype mutation; it retains the source test's hole-densification assertions.
  */
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
@@ -226,6 +233,31 @@ const cases = [
     path: "test/built-ins/Array/prototype/splice/called_with_one_argument.js",
     code: `const input = ["first", "second", "third"]; const removed = input.splice(1); return [input, removed]`,
     expected: [["first"], ["second", "third"]],
+  },
+  {
+    path: "test/built-ins/Array/prototype/toSpliced/immutable.js",
+    code: `const input = [2, 0, 1]; const inserted = input.toSpliced(0, 0, -1); const replaced = input.toSpliced(0, 1, -1); return [input, inserted, replaced, inserted !== input, replaced !== input]`,
+    expected: [[2, 0, 1], [-1, 2, 0, 1], [-1, 0, 1], true, true],
+  },
+  {
+    path: "test/built-ins/Array/prototype/toSpliced/start-and-deleteCount-missing.js",
+    code: `const input = ["first", "second", "third"]; const result = input.toSpliced(); return [result, result !== input]`,
+    expected: [["first", "second", "third"], true],
+  },
+  {
+    path: "test/built-ins/Array/prototype/toSpliced/start-undefined-and-deleteCount-missing.js",
+    code: `return ["first", "second", "third"].toSpliced(undefined)`,
+    expected: [],
+  },
+  {
+    path: "test/built-ins/Array/prototype/toSpliced/start-and-deleteCount-undefineds.js",
+    code: `const input = ["first", "second", "third"]; const result = input.toSpliced(undefined, undefined); return [result, result !== input]`,
+    expected: [["first", "second", "third"], true],
+  },
+  {
+    path: "test/built-ins/Array/prototype/toSpliced/holes-not-preserved.js",
+    code: `const input = [0, , 2, , 4]; const result = input.toSpliced(0, 0, -1); return [result, 2 in result, 4 in result]`,
+    expected: [[-1, 0, null, 2, null, 4], true, true],
   },
   {
     path: "test/built-ins/Array/prototype/fill/fill-values-custom-start-and-end.js",

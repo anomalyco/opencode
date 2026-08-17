@@ -16,10 +16,7 @@ export type ID = typeof ID.Type
 export const Name = Schema.String.pipe(Schema.brand("Agent.Name"))
 export type Name = typeof Name.Type
 
-export const Color = Schema.Union([
-  Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
-  Schema.Literals(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
-]).annotate({ identifier: "Agent.Color" })
+export const Color = Schema.String.annotate({ identifier: "Agent.Color" })
 export type Color = typeof Color.Type
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
@@ -39,16 +36,19 @@ export const Info = Schema.Struct({
   .annotate({ identifier: "Agent.Info" })
   .pipe(
     statics(() => ({
-      empty: (id: ID) =>
+      default: (id: ID) =>
         ({
           id,
           name: Name.make(id),
           request: { settings: {}, headers: {}, body: {} },
-          mode: "all",
+          mode: "primary",
           hidden: false,
           permissions: [
             { action: "*", resource: "*", effect: "allow" },
             { action: "external_directory", resource: "*", effect: "ask" },
+            { action: "read", resource: "*.env", effect: "ask" },
+            { action: "read", resource: "*.env.*", effect: "ask" },
+            { action: "read", resource: "*.env.example", effect: "allow" },
           ],
         }) satisfies Info,
     })),

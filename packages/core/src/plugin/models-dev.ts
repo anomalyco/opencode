@@ -1,14 +1,16 @@
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Integration } from "@opencode-ai/schema/integration"
 import { Effect, Stream } from "effect"
-import { EventV2 } from "../event"
-import { ModelsDev } from "../models-dev"
+import { Bus } from "../bus.js"
+import { ModelsDev } from "../models-dev.js"
+import { Provider } from "../provider.js"
 
 export const ModelsDevPlugin = define({
   id: "opencode.models-dev",
   effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
-    const events = yield* EventV2.Service
-    const loaded = { data: structuredClone(yield* modelsDev.get()) }
+    const bus = yield* Bus.Service
+    const loaded = { data: snapshots(yield* modelsDev.get()) }
     yield* ctx.integration.transform((integrations) => {
       for (const provider of loaded.data) {
         if (provider.environment.length === 0) continue
@@ -20,7 +22,10 @@ export const ModelsDevPlugin = define({
         })
         integrations.method.update({
           integrationID,
-          method: { type: "env", names: [...provider.environment] },
+          method: {
+            type: "env",
+            names: environmentNames(provider),
+          },
         })
       }
     })
@@ -28,17 +33,18 @@ export const ModelsDevPlugin = define({
       for (const provider of loaded.data) {
         catalog.provider.update(provider.info.id, (draft) => {
           Object.assign(draft, provider.info)
-          draft.integrationID = provider.info.id
+          draft.integrationID = Integration.ID.make(provider.info.id)
         })
         for (const model of provider.models) {
+          if (model.status === "deprecated") continue
           catalog.model.update(provider.info.id, model.id, (draft) => Object.assign(draft, model))
         }
       }
     })
-    yield* events.subscribe(ModelsDev.Event.Refreshed).pipe(
+    yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
       Stream.runForEach(() =>
         modelsDev.get().pipe(
-          Effect.tap((data) => Effect.sync(() => (loaded.data = structuredClone(data)))),
+          Effect.tap((data) => Effect.sync(() => (loaded.data = snapshots(data)))),
           Effect.andThen(ctx.integration.reload()),
           Effect.andThen(ctx.catalog.reload()),
         ),
@@ -47,3 +53,15 @@ export const ModelsDevPlugin = define({
     )
   }),
 })
+
+function environmentNames(provider: ModelsDev.Snapshot) {
+  if (provider.info.id !== Provider.ID.azure) return [...provider.environment]
+  return [...provider.environment.filter((name) => name.endsWith("_API_KEY")), "AZURE_COGNITIVE_SERVICES_API_KEY"]
+}
+
+function snapshots(data: readonly ModelsDev.Snapshot[]) {
+  return structuredClone(data).filter(
+    // These deprecated aliases are replaced by the canonical Azure and Google Vertex providers.
+    (provider) => provider.info.id !== "azure-cognitive-services" && provider.info.id !== "google-vertex-anthropic",
+  )
+}

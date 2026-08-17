@@ -1,5 +1,3 @@
-import { tmpdir } from "node:os"
-import { extname, join, resolve } from "node:path"
 import type { CliRenderer, Renderable } from "@opentui/core"
 import {
   createMockKeys,
@@ -9,9 +7,10 @@ import {
   type MockInput,
   type MockMouse,
 } from "@opentui/core/testing"
-import { Config, Effect, FileSystem } from "effect"
-import type { SimulationProtocol } from "../protocol"
+import { Effect, Schema } from "effect"
+import { SimulationProtocol } from "../protocol"
 import { SimulationRenderer } from "./renderer"
+import { SimulationSemantics } from "./semantics"
 
 export type Action = SimulationProtocol.Frontend.Action
 export type Element = SimulationProtocol.Frontend.Element
@@ -60,7 +59,8 @@ function hit(renderer: CliRenderer, renderable: Renderable) {
   if (renderable.width <= 0 || renderable.height <= 0) return false
   const x = Math.floor(renderable.screenX + renderable.width / 2)
   const y = Math.floor(renderable.screenY + renderable.height / 2)
-  return renderer.hitTest(x, y) === renderable.num
+  const target = renderer.hitTest(x, y)
+  return all(renderable).some((item) => item.num === target)
 }
 
 /**
@@ -113,13 +113,33 @@ export function elements(renderer: CliRenderer): Element[] {
 }
 
 export function state(harness: Harness) {
+  const renderable = harness.renderer.currentFocusedRenderable?.num
   return {
     focused: {
-      renderable: harness.renderer.currentFocusedRenderable?.num,
+      ...(renderable === undefined ? {} : { renderable }),
       editor: Boolean(harness.renderer.currentFocusedEditor),
     },
     elements: elements(harness.renderer),
   }
+}
+
+export function snapshot(harness: Harness): SimulationProtocol.Frontend.SemanticSnapshot {
+  const ids = new Set<string>()
+  const visit = (renderable: Renderable, parent?: string): SimulationProtocol.Frontend.SemanticNode[] => {
+    if (!renderable.visible || renderable.isDestroyed) return []
+    const definition = SimulationSemantics.read(renderable)?.()
+    if (definition && ids.has(renderable.id)) throw new Error(`duplicate semantic UI id: ${renderable.id}`)
+    if (definition) ids.add(renderable.id)
+    const node = definition
+      ? [{ id: renderable.id, ...definition, ...(parent === undefined ? {} : { parent }), element: renderable.num }]
+      : []
+    const ancestor = definition ? renderable.id : parent
+    return [...node, ...children(renderable).flatMap((child) => visit(child, ancestor))]
+  }
+  return Schema.decodeUnknownSync(SimulationProtocol.Frontend.SemanticSnapshot)({
+    format: "opencode-ui-snapshot-v1",
+    nodes: visit(harness.renderer.root),
+  })
 }
 
 export function matches(harness: Pick<Harness, "screen">, text: string) {
@@ -145,25 +165,6 @@ export const capture = Effect.fn("SimulationActions.capture")(function* (harness
   } satisfies SimulationProtocol.Frontend.CapturedFrame
 })
 
-export const screenshot = Effect.fn("SimulationActions.screenshot")(function* (harness: Harness, name?: string) {
-  const filename = name ?? `screenshot-${crypto.randomUUID()}`
-  if (!filename || filename.includes("/") || filename.includes("\\") || extname(filename))
-    return yield* Effect.fail(new Error("screenshot name must not contain a path or extension"))
-  yield* Effect.tryPromise(() => harness.renderOnce())
-  const { SimulationPng } = yield* Effect.promise(() => import("./png"))
-  const image = SimulationPng.screenshot(harness.renderer)
-  const directory = resolve(
-    yield* Config.string("OPENCODE_DRIVE_MEDIA_DIR").pipe(
-      Config.withDefault(join(tmpdir(), "opencode-drive", "output")),
-    ),
-  )
-  const fs = yield* FileSystem.FileSystem
-  yield* fs.makeDirectory(directory, { recursive: true })
-  const path = join(directory, `${filename}.png`)
-  yield* fs.writeFile(path, image.data)
-  return path
-})
-
 export const execute = Effect.fn("SimulationActions.execute")(function* (harness: Harness, action: Action) {
   switch (action.type) {
     case "ui.type":
@@ -183,9 +184,31 @@ export const execute = Effect.fn("SimulationActions.execute")(function* (harness
         .find((item) => item.num === action.target)
         ?.focus()
       break
-    case "ui.click":
-      yield* Effect.tryPromise(() => harness.mockMouse.click(action.x, action.y))
+    case "ui.click": {
+      const target = all(harness.renderer.root).find((item) => item.num === action.target)
+      if (!target || !target.visible || target.isDestroyed)
+        return yield* Effect.fail(new Error(`click target is stale or unavailable: ${action.target}`))
+      if (action.semantic) {
+        const current = snapshot(harness).nodes.find((node) => node.element === action.target)
+        if (
+          current?.id !== action.semantic.id ||
+          current.instance !== action.semantic.instance ||
+          current.element !== action.semantic.element
+        )
+          return yield* Effect.fail(new Error(`semantic click target is stale or unavailable: ${action.semantic.id}`))
+      }
+      if (
+        !Number.isFinite(action.x) ||
+        action.x < 0 ||
+        action.x >= target.width ||
+        !Number.isFinite(action.y) ||
+        action.y < 0 ||
+        action.y >= target.height
+      )
+        return yield* Effect.fail(new Error("click position must be within the target element"))
+      yield* Effect.tryPromise(() => harness.mockMouse.click(target.screenX + action.x, target.screenY + action.y))
       break
+    }
     case "ui.resize":
       if (
         !Number.isSafeInteger(action.cols) ||

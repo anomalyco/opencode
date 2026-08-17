@@ -1,13 +1,13 @@
-export * as SessionGenerate from "./generate"
+export * as SessionGenerate from "./generate.js"
 
-import type { LLMError } from "@opencode-ai/ai"
+import type { AIError } from "@opencode-ai/ai"
 import { Context, type Effect } from "effect"
-import type { Instructions } from "../instructions"
-import type { AgentNotFoundError } from "./error"
-import type { SessionRunnerModel } from "./runner/model"
-import type { SessionSchema } from "./schema"
+import type { Instructions } from "../instructions/index.js"
+import type { AgentNotFoundError } from "./error.js"
+import type { SessionRunnerModel } from "./runner/model.js"
+import type { SessionSchema } from "./schema.js"
 
-export type Error = AgentNotFoundError | Instructions.InitializationBlocked | SessionRunnerModel.Error | LLMError
+export type Error = AgentNotFoundError | Instructions.InitializationBlocked | SessionRunnerModel.Error | AIError
 
 export interface Interface {
   /** Generates text from current Session context without mutating the Session. */
@@ -18,4 +18,4 @@ export interface Interface {
 }
 
 /** Location-scoped transient generation from Session context. */
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionGenerate") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionGenerate") {}

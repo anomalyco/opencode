@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM } from "../src"
-import * as OpenAIChat from "../src/protocols/openai-chat"
-import { Auth } from "../src/route"
-import { Tool, toDefinitions } from "../src/tool"
-import { it } from "./lib/effect"
-import { dynamicResponse } from "./lib/http"
-import { finishChunk, toolCallChunk } from "./lib/openai-chunks"
-import { sseEvents } from "./lib/sse"
+import { LLM } from "../src/index.js"
+import * as OpenAIChat from "../src/protocols/openai-chat.js"
+import { Auth } from "../src/route.js"
+import { Tool, toDefinitions } from "../src/tool.js"
+import { it } from "./lib/effect.js"
+import { dynamicResponse } from "./lib/http.js"
+import { finishChunk, toolCallChunk } from "./lib/openai-chunks.js"
+import { sseEvents } from "./lib/sse.js"
 
 type OpenAIChatBody = {
   readonly tool_choice?: unknown

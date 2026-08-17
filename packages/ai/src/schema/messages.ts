@@ -1,8 +1,15 @@
 import { Schema } from "effect"
-import { ToolContent, ToolFileContent, ToolTextContent } from "@opencode-ai/schema/llm"
-import { JsonSchema, MessageRole, ProviderMetadata } from "./ids"
-import { CacheHint, CachePolicy, GenerationOptions, HttpOptions, ModelSchema, ProviderOptions } from "./options"
-import { isRecord } from "../utils/record"
+import { Tool } from "@opencode-ai/schema/tool"
+import { JsonSchema, MessageRole, ProviderMetadata } from "./ids.js"
+import {
+  CacheHint,
+  CachePolicy,
+  GenerationOptions,
+  HttpOptions,
+  LanguageModelSchema,
+  ProviderOptions,
+} from "./options.js"
+import { isRecord } from "../utils/record.js"
 
 const systemPartSchema = Schema.Struct({
   type: Schema.Literal("text"),
@@ -40,55 +47,52 @@ export const MediaPart = Schema.Struct({
 }).annotate({ identifier: "LLM.Content.Media" })
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
 
-export { ToolContent, ToolFileContent, ToolTextContent }
-
 const isToolResultValue = (value: unknown): value is ToolResultValue =>
   isRecord(value) &&
   (value.type === "text" || value.type === "json" || value.type === "error" || value.type === "content") &&
   "value" in value
 
-export const ToolResultValue = Object.assign(
-  Schema.Union([
-    Schema.Struct({
-      type: Schema.Literal("json"),
-      value: Schema.Unknown,
-    }),
-    Schema.Struct({
-      type: Schema.Literal("text"),
-      value: Schema.Unknown,
-    }),
-    Schema.Struct({
-      type: Schema.Literal("error"),
-      value: Schema.Unknown,
-    }),
-    Schema.Struct({
-      type: Schema.Literal("content"),
-      value: Schema.Array(ToolContent),
-    }),
-  ]).annotate({ identifier: "LLM.ToolResult" }),
-  {
-    is: isToolResultValue,
-    make: (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
-      if (isToolResultValue(value)) return value
-      if (type === "content") return { type, value: Array.isArray(value) ? value : [] }
-      return { type, value }
-    },
+const toolResultValueSchema = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("json"),
+    value: Schema.Unknown,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("text"),
+    value: Schema.Unknown,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("error"),
+    value: Schema.Unknown,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("content"),
+    value: Schema.Array(Tool.Content),
+  }),
+]).annotate({ identifier: "LLM.ToolResult" })
+export type ToolResultValue = Schema.Schema.Type<typeof toolResultValueSchema>
+
+export const ToolResultValue = Object.assign(toolResultValueSchema, {
+  is: isToolResultValue,
+  make: (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
+    if (isToolResultValue(value)) return value
+    if (type === "content") return { type, value: Array.isArray(value) ? value : [] }
+    return { type, value }
   },
-)
-export type ToolResultValue = Schema.Schema.Type<typeof ToolResultValue>
+})
 
 export interface ToolOutput {
   readonly structured: unknown
-  readonly content: ReadonlyArray<ToolContent>
+  readonly content: ReadonlyArray<Tool.Content>
 }
 
 export const ToolOutput = Object.assign(
   Schema.Struct({
     structured: Schema.Unknown,
-    content: Schema.Array(ToolContent),
+    content: Schema.Array(Tool.Content),
   }).annotate({ identifier: "LLM.ToolOutput" }),
   {
-    make: (structured: unknown, content: ReadonlyArray<ToolContent> = []): ToolOutput => ({ structured, content }),
+    make: (structured: unknown, content: ReadonlyArray<Tool.Content> = []): ToolOutput => ({ structured, content }),
     fromResultValue: (result: ToolResultValue): ToolOutput | undefined => {
       switch (result.type) {
         case "json":
@@ -126,6 +130,7 @@ export const ToolCallPart = Object.assign(
     name: Schema.String,
     input: Schema.Unknown,
     providerExecuted: Schema.optional(Schema.Boolean),
+    cache: Schema.optional(CacheHint),
     metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
     providerMetadata: Schema.optional(ProviderMetadata),
   }).annotate({ identifier: "LLM.Content.ToolCall" }),
@@ -170,6 +175,7 @@ export const ReasoningPart = Schema.Struct({
   type: Schema.Literal("reasoning"),
   text: Schema.String,
   encrypted: Schema.optional(Schema.String),
+  cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Content.Reasoning" })
@@ -261,16 +267,9 @@ export namespace ToolChoice {
   }
 }
 
-export const ResponseFormat = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("text") }),
-  Schema.Struct({ type: Schema.Literal("json"), schema: JsonSchema }),
-  Schema.Struct({ type: Schema.Literal("tool"), tool: ToolDefinition }),
-]).pipe(Schema.toTaggedUnion("type"))
-export type ResponseFormat = Schema.Schema.Type<typeof ResponseFormat>
-
 export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
   id: Schema.optional(Schema.String),
-  model: ModelSchema,
+  model: LanguageModelSchema,
   system: Schema.Array(SystemPart),
   messages: Schema.Array(Message),
   tools: Schema.Array(ToolDefinition),
@@ -278,8 +277,9 @@ export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
   generation: Schema.optional(GenerationOptions),
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
-  responseFormat: Schema.optional(ResponseFormat),
   cache: Schema.optional(CachePolicy),
+  // Stable cache affinity for protocols that support provider-managed prompt caching.
+  promptCacheKey: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
@@ -296,8 +296,8 @@ export namespace LLMRequest {
     generation: request.generation,
     providerOptions: request.providerOptions,
     http: request.http,
-    responseFormat: request.responseFormat,
     cache: request.cache,
+    promptCacheKey: request.promptCacheKey,
     metadata: request.metadata,
   })
 

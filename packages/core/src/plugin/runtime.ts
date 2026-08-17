@@ -1,24 +1,34 @@
-export * as PluginRuntime from "./runtime"
+export * as PluginRuntime from "./runtime.js"
 
 import { Context, Effect, Layer } from "effect"
-import { AgentV2 } from "../agent"
-import { makeGlobalNode } from "../effect/app-node"
-import { Job } from "../job"
-import { Location } from "../location"
-import { LocationServiceMap } from "../location-service-map"
-import { SessionV2 } from "../session"
+import { Agent } from "../agent.js"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { Job } from "../job.js"
+import { Location } from "../location.js"
+import { LocationServiceMap } from "../location-service-map.js"
+import { Session } from "../session.js"
 
 export interface Interface {
   readonly session: Pick<
-    SessionV2.Interface,
-    "get" | "create" | "messages" | "prompt" | "generate" | "command" | "resume" | "interrupt" | "synthetic"
+    Session.Interface,
+    | "get"
+    | "create"
+    | "messages"
+    | "prompt"
+    | "generate"
+    | "command"
+    | "rename"
+    | "resume"
+    | "interrupt"
+    | "synthetic"
+    | "wait"
   >
   readonly job: Pick<Job.Interface, "start" | "wait" | "block" | "background" | "cancel">
   readonly location: {
     readonly agent: {
       readonly list: (
         ref: Location.Ref,
-      ) => Effect.Effect<{ readonly location: Location.Info; readonly data: AgentV2.Info[] }>
+      ) => Effect.Effect<{ readonly location: Location.Info; readonly data: Agent.Info[] }>
     }
   }
 }
@@ -52,9 +62,11 @@ export const layerWithCell = (cell: Cell) =>
         prompt: (input) => require(cell, (runtime) => runtime.session.prompt(input)),
         generate: (input) => require(cell, (runtime) => runtime.session.generate(input)),
         command: (input) => require(cell, (runtime) => runtime.session.command(input)),
+        rename: (input) => require(cell, (runtime) => runtime.session.rename(input)),
         resume: (sessionID) => require(cell, (runtime) => runtime.session.resume(sessionID)),
         interrupt: (sessionID) => require(cell, (runtime) => runtime.session.interrupt(sessionID)),
         synthetic: (input) => require(cell, (runtime) => runtime.session.synthetic(input)),
+        wait: (sessionID) => require(cell, (runtime) => runtime.session.wait(sessionID)),
       },
       job: {
         start: (input) => require(cell, (runtime) => runtime.job.start(input)),
@@ -74,7 +86,7 @@ export const layerWithCell = (cell: Cell) =>
 export const providerLayerWithCell = (cell: Cell) =>
   Layer.effectDiscard(
     Effect.gen(function* () {
-      const sessions = yield* SessionV2.Service
+      const sessions = yield* Session.Service
       const jobs = yield* Job.Service
       const locations = yield* LocationServiceMap.Service
       const runtime: Interface = {
@@ -85,7 +97,7 @@ export const providerLayerWithCell = (cell: Cell) =>
             list: (ref) =>
               Effect.gen(function* () {
                 const location = yield* Location.Service
-                const agents = yield* AgentV2.Service
+                const agents = yield* Agent.Service
                 return {
                   location: new Location.Info({
                     directory: location.directory,
@@ -108,7 +120,6 @@ export const providerLayerWithCell = (cell: Cell) =>
   )
 
 export const layer = layerWithCell(defaultCell)
-export const providerLayer = providerLayerWithCell(defaultCell)
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [] })
 
@@ -118,7 +129,7 @@ export const providerNodeWithCell = (cell: Cell) =>
   makeGlobalNode({
     name: "plugin-runtime-provider",
     layer: providerLayerWithCell(cell),
-    deps: [node, SessionV2.node, Job.node, LocationServiceMap.node],
+    deps: [node, Session.node, Job.node, LocationServiceMap.node],
   })
 
 export const providerNode = providerNodeWithCell(defaultCell)

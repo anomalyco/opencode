@@ -5,13 +5,21 @@ export class CodeModePromise {
 }
 
 export class CodeModeDate {
-  constructor(readonly time: number) {}
+  constructor(public time: number) {}
 }
 
 export class CodeModeRegExp {
   readonly regex: RegExp
   constructor(pattern: string, flags: string) {
     this.regex = new RegExp(pattern, flags)
+  }
+
+  get lastIndex(): unknown {
+    return Reflect.get(this.regex, "lastIndex")
+  }
+
+  set lastIndex(value: unknown) {
+    Reflect.set(this.regex, "lastIndex", value)
   }
 }
 

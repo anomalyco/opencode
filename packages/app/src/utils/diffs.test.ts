@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { FileDiffInfo } from "@opencode-ai/sdk/v2"
-import type { Message } from "@opencode-ai/sdk/v2/client"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
+import type { Message } from "@/types"
 import { diffs, message } from "./diffs"
 
 const item = {

@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 
-import { $ } from "bun"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -100,9 +99,14 @@ async function drizzle(temporary: string, output: string, name?: string) {
 export default { ...config, out: ${JSON.stringify(output)} }
 `,
   )
-  await $`bun drizzle-kit generate --config ${config} ${name ? ["--name", name] : []}`.cwd(
-    path.join(root, "packages/core"),
-  )
+  const child = Bun.spawn(["bun", "drizzle-kit", "generate", "--config", config, ...(name ? ["--name", name] : [])], {
+    cwd: path.join(root, "packages/core"),
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  })
+  const exit = await child.exited
+  if (exit !== 0) throw new Error(`Drizzle generation failed with exit code ${exit}.`)
 }
 
 async function generatedMigrations(directory: string) {
@@ -126,30 +130,34 @@ async function typescriptMigrations() {
 
 function renderMigration(name: string, sql: string) {
   return `import { Effect } from "effect"
-import type { DatabaseMigration } from "../migration"
+import type { DatabaseMigration } from "../migration.js"
 
-export default {
+const migration: DatabaseMigration.Migration = {
   id: ${JSON.stringify(name)},
   up(tx) {
     return Effect.gen(function* () {
 ${renderStatements(sql)}
     })
   },
-} satisfies DatabaseMigration.Migration
+}
+
+export default migration
 `
 }
 
 function renderSchema(sql: string) {
   return `import { Effect } from "effect"
-import type { DatabaseMigration } from "./migration"
+import type { DatabaseMigration } from "./migration.js"
 
-export default {
+const schema: Omit<DatabaseMigration.Migration, "id"> = {
   up(tx) {
     return Effect.gen(function* () {
 ${renderStatements(sql)}
     })
   },
-} satisfies Omit<DatabaseMigration.Migration, "id">
+}
+
+export default schema
 `
 }
 
@@ -185,12 +193,11 @@ async function formatTypescript(input: string) {
 }
 
 function renderRegistry(names: string[]) {
-  return `import type { DatabaseMigration } from "./migration"
+  return `import type { DatabaseMigration } from "./migration.js"
+${names.map((name, index) => `import m${index.toString().padStart(2, "0")} from "./migration/${name}.js"`).join("\n")}
 
-export const migrations = (
-  await Promise.all([
-${names.map((name) => `    import("./migration/${name}"),`).join("\n")}
-  ])
-).map((module) => module.default) satisfies DatabaseMigration.Migration[]
+export const migrations = [
+${names.map((_, index) => `  m${index.toString().padStart(2, "0")},`).join("\n")}
+] satisfies DatabaseMigration.Migration[]
 `
 }

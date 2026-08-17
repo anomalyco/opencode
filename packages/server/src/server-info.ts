@@ -1,12 +1,14 @@
 import { Context, Layer } from "effect"
 import { networkInterfaces } from "node:os"
+import type { ServerOptions } from "./options"
 
-export class Service extends Context.Service<Service, { readonly urls: () => ReadonlyArray<string> }>()(
-  "@opencode-ai/server/ServerInfo",
-) {}
+export class Service extends Context.Service<
+  Service,
+  { readonly urls: () => ReadonlyArray<string>; readonly app: NonNullable<ServerOptions["app"]> }
+>()("@opencode-ai/server/ServerInfo") {}
 
-export function layer(urls: () => ReadonlyArray<string>) {
-  return Layer.succeed(Service, Service.of({ urls }))
+export function layer(urls: () => ReadonlyArray<string>, app: ServerOptions["app"] = {}) {
+  return Layer.succeed(Service, Service.of({ urls, app }))
 }
 
 export function connectionURLs(value: string, requestedHostname?: string) {

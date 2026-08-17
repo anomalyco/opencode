@@ -1,8 +1,8 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { Effect, Stream } from "effect"
-import { Framing } from "../route/framing"
-import { ProviderShared } from "./shared"
+import { Framing } from "../route/framing.js"
+import { ProviderShared } from "./shared.js"
 
 // Bedrock streams responses using the AWS event stream binary protocol — each
 // frame is `[length:4][headers-length:4][prelude-crc:4][headers][payload][crc:4]`.
@@ -53,8 +53,22 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
       })
       cursor = { buffer: cursor.buffer, offset: cursor.offset + totalLength }
 
-      if (decoded.headers[":message-type"]?.value !== "event") continue
-      const eventType = decoded.headers[":event-type"]?.value
+      const messageType = decoded.headers[":message-type"]?.value
+      if (messageType === "error") {
+        const code = decoded.headers[":error-code"]?.value
+        const message = decoded.headers[":error-message"]?.value
+        return yield* ProviderShared.eventError(
+          route,
+          [code, message].filter((value): value is string => typeof value === "string").join(": ") ||
+            "Bedrock Converse event-stream error",
+        )
+      }
+      const eventType =
+        messageType === "event"
+          ? decoded.headers[":event-type"]?.value
+          : messageType === "exception"
+            ? decoded.headers[":exception-type"]?.value
+            : undefined
       if (typeof eventType !== "string") continue
       const payload = utf8.decode(decoded.body)
       if (!payload) continue
@@ -84,4 +98,4 @@ export const framing = (route: string): Framing.Definition<object> => ({
   frame: (bytes) => bytes.pipe(Stream.mapAccumEffect(() => initialFrameBuffer, consumeFrames(route))),
 })
 
-export * as BedrockEventStream from "./bedrock-event-stream"
+export * as BedrockEventStream from "./bedrock-event-stream.js"

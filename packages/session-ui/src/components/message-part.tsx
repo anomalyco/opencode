@@ -23,14 +23,14 @@ import {
   Message as MessageType,
   Part as PartType,
   ReasoningPart,
-  Session,
   TextPart,
   ToolPart,
   UserMessage,
+  Todo,
   QuestionAnswer,
   QuestionInfo,
 } from "@opencode-ai/sdk/v2"
-import { useData } from "../context"
+import { type SessionSummary, useData } from "../context"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { type UiI18n, useI18n } from "@opencode-ai/ui/context/i18n"
@@ -41,6 +41,7 @@ import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ToolErrorCard } from "./tool-error-card"
+import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
@@ -59,8 +60,8 @@ import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { patchFiles } from "./apply-patch-file"
+import { partDefaultOpen } from "./part-default-open"
 import { animate } from "motion"
-import { useLocation } from "@solidjs/router"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
@@ -106,7 +107,7 @@ function ShellSubmessage(props: { text: string; animate?: boolean }) {
   })
 
   return (
-    <span data-component="shell-submessage">
+    <span data-component="shell-submessage" dir="ltr">
       <span ref={widthRef} data-slot="shell-submessage-width" style={{ width: props.animate ? "0px" : undefined }}>
         <span data-slot="basic-tool-tool-subtitle">
           <span
@@ -458,10 +459,30 @@ function newLayout() {
   return typeof document !== "undefined" && document.body.hasAttribute("data-new-layout")
 }
 
-function webSearchProviderLabel(provider: unknown) {
-  if (provider === "parallel") return "Parallel Web Search"
-  if (provider === "exa") return "Exa Web Search"
-  return "Web Search"
+function webSearchProviderLabel(provider: unknown, i18n: ReturnType<typeof useI18n>) {
+  const name =
+    provider === "parallel"
+      ? "Parallel"
+      : provider === "exa"
+        ? "Exa"
+        : provider === "firecrawl"
+          ? "Firecrawl"
+          : provider === "tavily"
+            ? "Tavily"
+            : undefined
+  if (name) return i18n.t("ui.tool.websearch.provider", { provider: name })
+  return i18n.t("ui.tool.websearch")
+}
+
+function readToolPath(input: Record<string, unknown>) {
+  if (typeof input.path === "string") return input.path
+  if (typeof input.filePath === "string") return input.filePath
+}
+
+function skillToolName(input: Record<string, unknown>, metadata?: Record<string, unknown>) {
+  if (typeof metadata?.name === "string") return metadata.name
+  if (typeof input.id === "string") return input.id
+  if (typeof input.name === "string") return input.name
 }
 
 export function getToolInfo(
@@ -471,12 +492,14 @@ export function getToolInfo(
 ): ToolInfo {
   const i18n = useI18n()
   switch (tool) {
-    case "read":
+    case "read": {
+      const path = readToolPath(input)
       return {
         icon: "glasses",
         title: i18n.t("ui.tool.read"),
-        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+        subtitle: path ? getFilename(path) : undefined,
       }
+    }
     case "list":
       return {
         icon: "bullet-list",
@@ -504,14 +527,13 @@ export function getToolInfo(
     case "websearch":
       return {
         icon: "window-cursor",
-        title: webSearchProviderLabel(metadata?.provider),
+        title: webSearchProviderLabel(metadata?.provider, i18n),
         subtitle: input.query,
       }
-    case "task": {
-      const type =
-        typeof input.subagent_type === "string" && input.subagent_type
-          ? input.subagent_type[0]!.toUpperCase() + input.subagent_type.slice(1)
-          : undefined
+    case "task":
+    case "subagent": {
+      const raw = input.agent ?? input.subagent_type
+      const type = typeof raw === "string" && raw ? raw[0]!.toUpperCase() + raw.slice(1) : undefined
       return {
         icon: "task",
         title: agentTitle(i18n, type),
@@ -519,6 +541,7 @@ export function getToolInfo(
       }
     }
     case "bash":
+    case "shell":
       return {
         icon: "console",
         title: i18n.t("ui.tool.shell"),
@@ -542,8 +565,13 @@ export function getToolInfo(
         icon: "code-lines",
         title: i18n.t("ui.tool.patch"),
         subtitle: input.files?.length
-          ? `${input.files.length} ${i18n.t(input.files.length > 1 ? "ui.common.file.other" : "ui.common.file.one")}`
+          ? `${input.files.length} ${i18n.plural("ui.common.file", input.files.length)}`
           : undefined,
+      }
+    case "todowrite":
+      return {
+        icon: "checklist",
+        title: i18n.t("ui.tool.todos"),
       }
     case "question":
       return {
@@ -553,7 +581,7 @@ export function getToolInfo(
     case "skill":
       return {
         icon: "brain",
-        title: input.name || i18n.t("ui.tool.skill"),
+        title: skillToolName(input, metadata) || i18n.t("ui.tool.skill"),
       }
     default:
       return {
@@ -575,39 +603,23 @@ function urls(text: string | undefined) {
     })
 }
 
-function sessionLink(id: string | undefined, path: string, href?: (id: string) => string | undefined) {
-  if (!id) return
-
-  const direct = href?.(id)
-  if (direct) return direct
-
-  const idx = path.indexOf("/session")
-  if (idx === -1) return
-  return `${path.slice(0, idx)}/session/${id}`
+function sessionLink(id: string | undefined, href?: (id: string) => string | undefined) {
+  if (!id) return undefined
+  return href?.(id)
 }
 
-function currentSession(path: string) {
-  return path.match(/\/session\/([^/?#]+)/)?.[1]
-}
-
-function taskSession(
-  input: Record<string, any>,
-  path: string,
-  sessions: Session[] | undefined,
-  agents?: readonly { name: string; color?: string }[],
-) {
-  const parentID = currentSession(path)
+function taskSession(input: Record<string, any>, parentID: string | undefined, sessions: SessionSummary[] | undefined) {
   if (!parentID) return
   const description = typeof input.description === "string" ? input.description : ""
-  const agent = taskAgent(input.subagent_type, agents).name
   return (sessions ?? [])
     .filter((session) => session.parentID === parentID && !session.time?.archived)
-    .filter((session) => (description ? session.title.startsWith(description) : true))
-    .filter((session) => (agent ? session.title.includes(`@${agent}`) : true))
+    .filter((session) => (description ? session.title?.startsWith(description) : true))
     .sort((a, b) => (b.time.created ?? 0) - (a.time.created ?? 0))[0]?.id
 }
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
+const HIDDEN_TOOLS = new Set(["todowrite"])
+
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
   if (Array.isArray(value)) return value
   return fallback
@@ -711,6 +723,7 @@ function index<T extends { id: string }>(items: readonly T[]) {
 
 export function renderable(part: PartType, showReasoningSummaries = true) {
   if (part.type === "tool") {
+    if (HIDDEN_TOOLS.has(part.tool)) return false
     if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
     return true
   }
@@ -719,15 +732,7 @@ export function renderable(part: PartType, showReasoningSummaries = true) {
   return !!PART_MAPPING[part.type]
 }
 
-function toolDefaultOpen(tool: string, shell = false, edit = false) {
-  if (tool === "bash") return shell
-  if (tool === "edit" || tool === "write" || tool === "patch" || tool === "apply_patch") return edit
-}
-
-export function partDefaultOpen(part: PartType, shell = false, edit = false) {
-  if (part.type !== "tool") return
-  return toolDefaultOpen(part.tool, shell, edit)
-}
+export { partDefaultOpen } from "./part-default-open"
 
 export function AssistantParts(props: {
   messages: AssistantMessage[]
@@ -855,7 +860,7 @@ function contextToolDetail(part: ToolPart): string | undefined {
 function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
   const input = (part.state.input ?? {}) as Record<string, unknown>
   const path = typeof input.path === "string" ? input.path : "/"
-  const filePath = typeof input.filePath === "string" ? input.filePath : undefined
+  const filePath = readToolPath(input)
   const pattern = typeof input.pattern === "string" ? input.pattern : undefined
   const include = typeof input.include === "string" ? input.include : undefined
   const offset = typeof input.offset === "number" ? input.offset : undefined
@@ -935,10 +940,6 @@ function ExaOutput(props: { output?: string }) {
       </div>
     </Show>
   )
-}
-
-export function registerPartComponent(type: string, component: PartComponent) {
-  PART_MAPPING[type] = component
 }
 
 export function Message(props: MessageProps) {
@@ -1081,11 +1082,7 @@ export function ContextToolGroup(props: {
         <div data-component="context-tool-group-trigger">
           <span
             data-slot="context-tool-group-title"
-            class="min-w-0 flex items-center gap-2 text-14-medium"
-            classList={{
-              "text-text-strong": pending(),
-              "text-text-weak": !pending(),
-            }}
+            class="min-w-0 flex items-center gap-2 text-14-medium text-text-strong"
           >
             <span data-slot="context-tool-group-label" class="shrink-0">
               <ToolStatusTitle
@@ -1097,31 +1094,21 @@ export function ContextToolGroup(props: {
             </span>
             <span
               data-slot="context-tool-group-summary"
-              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal"
-              classList={{
-                "text-text-base": pending(),
-                "text-text-weak": !pending(),
-              }}
+              class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-text-base"
             >
               <AnimatedCountList
                 items={[
                   {
-                    key: "read",
+                    key: "ui.messagePart.context.read",
                     count: summary().read,
-                    one: i18n.t("ui.messagePart.context.read.one"),
-                    other: i18n.t("ui.messagePart.context.read.other"),
                   },
                   {
-                    key: "search",
+                    key: "ui.messagePart.context.search",
                     count: summary().search,
-                    one: i18n.t("ui.messagePart.context.search.one"),
-                    other: i18n.t("ui.messagePart.context.search.other"),
                   },
                   {
-                    key: "list",
+                    key: "ui.messagePart.context.list",
                     count: summary().list,
-                    one: i18n.t("ui.messagePart.context.list.one"),
-                    other: i18n.t("ui.messagePart.context.list.other"),
                   },
                 ]}
                 fallback=""
@@ -1139,6 +1126,9 @@ export function ContextToolGroup(props: {
               const running = createMemo(
                 () => partAccessor().state.status === "pending" || partAccessor().state.status === "running",
               )
+              const showDetails = createMemo(
+                () => !running() || partAccessor().tool === "glob" || partAccessor().tool === "grep",
+              )
               return (
                 <div data-slot="context-tool-group-item">
                   <div data-component="tool-trigger">
@@ -1149,10 +1139,10 @@ export function ContextToolGroup(props: {
                             <span data-slot="basic-tool-tool-title">
                               <TextShimmer text={trigger().title} active={running()} />
                             </span>
-                            <Show when={!running() && trigger().subtitle}>
+                            <Show when={trigger().subtitle}>
                               <span data-slot="basic-tool-tool-subtitle">{trigger().subtitle}</span>
                             </Show>
-                            <Show when={!running() && trigger().args?.length}>
+                            <Show when={trigger().args?.length}>
                               <For each={trigger().args}>
                                 {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
                               </For>
@@ -1324,7 +1314,7 @@ export function UserMessageDisplay(props: {
                   clickable={!!props.actions?.openAttachment}
                   onClick={() => props.actions?.openAttachment?.(file)}
                 >
-                  {typeLabel(name, file.mime)}
+                  {typeLabel(name, file.mime, i18n.t("ui.common.file"))}
                 </AttachmentCardV2>
               </Show>
             )
@@ -1346,7 +1336,11 @@ export function UserMessageDisplay(props: {
         }
       >
         <div data-slot="user-message-body">
-          <div data-slot="user-message-text" data-comments={messageComments().length > 0 ? "true" : undefined}>
+          <div
+            data-slot="user-message-text"
+            dir="auto"
+            data-comments={messageComments().length > 0 ? "true" : undefined}
+          >
             <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
             <Show when={messageComments().length > 0}>
               <UserMessageComments comments={messageComments()} bounded />
@@ -1505,7 +1499,7 @@ export function registerTool(input: { name: string; render?: ToolComponent }) {
 }
 
 export function getTool(name: string) {
-  return state[name === "apply_patch" ? "patch" : name]?.render
+  return state[name === "apply_patch" ? "patch" : name === "bash" ? "shell" : name]?.render
 }
 
 export const ToolRegistry = {
@@ -1553,6 +1547,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
   const part = () => props.part as ToolPart
+  if (part().tool === "todowrite") return null
+
   const hideQuestion = createMemo(
     () => part().tool === "question" && (part().state.status === "pending" || part().state.status === "running"),
   )
@@ -1564,16 +1560,16 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   // @ts-expect-error
   const partMetadata = () => part().state?.metadata ?? emptyMetadata
   const taskId = createMemo(() => {
-    if (part().tool !== "task") return
-    const value = partMetadata().sessionId
+    if (part().tool !== "task" && part().tool !== "subagent") return
+    const value = partMetadata().sessionID ?? partMetadata().sessionId
     if (typeof value === "string" && value) return value
   })
   const taskHref = createMemo(() => {
-    if (part().tool !== "task") return
-    return sessionLink(taskId(), useLocation().pathname, data.sessionHref)
+    if (part().tool !== "task" && part().tool !== "subagent") return
+    return sessionLink(taskId(), data.sessionHref)
   })
   const taskSubtitle = createMemo(() => {
-    if (part().tool !== "task") return undefined
+    if (part().tool !== "task" && part().tool !== "subagent") return undefined
     const value = input().description
     if (typeof value === "string" && value) return value
     return taskId()
@@ -1603,12 +1599,22 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                 <ToolErrorCard
                   tool={part().tool}
                   error={error()}
-                  title={part().tool === "websearch" ? webSearchProviderLabel(partMetadata().provider) : undefined}
+                  title={
+                    part().tool === "websearch" ? webSearchProviderLabel(partMetadata().provider, i18n) : undefined
+                  }
                   defaultOpen={props.defaultOpen}
                   open={controlledOpen()}
                   onOpenChange={props.onToolOpenChange ? handleToolOpenChange : undefined}
                   subtitle={taskSubtitle()}
                   href={taskHref()}
+                  onSubtitleClick={(event) => {
+                    if (!data.navigateToSession) return
+                    if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+                    const id = taskId()
+                    if (!id) return
+                    event.preventDefault()
+                    data.navigateToSession(id)
+                  }}
                 />
               )
             }}
@@ -1738,9 +1744,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     <Show when={text()}>
       <div data-component="text-part" data-timeline-part-id={part().id}>
         <div data-slot="text-part-body">
-          <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
-            <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
-          </Show>
+          <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
@@ -1775,9 +1779,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   return (
     <Show when={text()}>
       <div data-component="reasoning-part" data-timeline-part-id={part().id}>
-        <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
-          <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
-        </Show>
+        <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
       </div>
     </Show>
   )
@@ -1804,7 +1806,7 @@ ToolRegistry.register({
           icon="glasses"
           trigger={{
             title: i18n.t("ui.tool.read"),
-            subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
+            subtitle: getFilename(readToolPath(props.input) ?? ""),
             args,
           }}
         />
@@ -1961,12 +1963,13 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "websearch",
   render(props) {
+    const i18n = useI18n()
     const query = createMemo(() => {
       const value = props.input.query
       if (typeof value !== "string") return ""
       return value
     })
-    const title = createMemo(() => webSearchProviderLabel(props.metadata.provider))
+    const title = createMemo(() => webSearchProviderLabel(props.metadata.provider, i18n))
 
     return (
       <BasicTool
@@ -1983,45 +1986,47 @@ ToolRegistry.register({
     )
   },
 })
-
 ToolRegistry.register({
   name: "task",
   render(props) {
     const data = useData()
     const i18n = useI18n()
-    const location = useLocation()
     const childSessionId = createMemo(() => {
-      const value = props.metadata.sessionId
+      const value = props.metadata.sessionID ?? props.metadata.sessionId
       if (typeof value === "string" && value) return value
-      return taskSession(props.input, location.pathname, data.store.session, data.store.agent)
+      return taskSession(props.input, data.sessionID, data.store.session)
     })
-    const agent = createMemo(() => taskAgent(props.input.subagent_type, data.store.agent))
+    const agent = createMemo(() => taskAgent(props.input.agent ?? props.input.subagent_type, data.store.agent))
     const title = createMemo(() => agent().name ?? i18n.t("ui.tool.agent.default"))
     const tone = createMemo(() => agent().color)
     const v2Tone = createMemo(() => agent().v2Color)
+    const background = createMemo(() => {
+      if (props.tool === "task") return props.metadata.background === true
+      return props.status === "completed" && props.metadata.status === "running"
+    })
     const subtitle = createMemo(() => {
       const value =
         typeof props.input.description === "string" && props.input.description
           ? props.input.description
           : childSessionId()
       if (!value) return value
-      if (props.metadata.background === true) return `${value} (background)`
+      if (background()) return `${value} (background)`
       return value
     })
-    const running = createMemo(() => props.status === "pending" || props.status === "running")
+    const running = createMemo(() => {
+      if (props.status === "pending" || props.status === "running") return true
+      const id = childSessionId()
+      if (!id) return false
+      return (data.store.session_status[id]?.type ?? "idle") !== "idle"
+    })
 
-    const href = createMemo(() => sessionLink(childSessionId(), location.pathname, data.sessionHref))
+    const href = createMemo(() => sessionLink(childSessionId(), data.sessionHref))
     const clickable = createMemo(() => !!(childSessionId() && (data.navigateToSession || href())))
 
     const open = () => {
       const id = childSessionId()
       if (!id) return
-      if (data.navigateToSession) {
-        data.navigateToSession(id)
-        return
-      }
-      const value = href()
-      if (value) window.location.assign(value)
+      data.navigateToSession?.(id)
     }
 
     const navigate = (event: MouseEvent) => {
@@ -2097,11 +2102,14 @@ ToolRegistry.register({
   },
 })
 
+ToolRegistry.register({ name: "subagent", render: ToolRegistry.render("task") })
+
 ToolRegistry.register({
-  name: "bash",
+  name: "shell",
   render(props) {
     const i18n = useI18n()
-    const pending = () => props.status === "pending" || props.status === "running"
+    const pending = () =>
+      props.status === "pending" || props.status === "running" || props.metadata.status === "running"
     const sawPending = pending()
     const text = createMemo(() => {
       const cmd = props.input.command ?? props.metadata.command ?? ""
@@ -2123,20 +2131,21 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="console"
+        allowOpenWhilePending
         trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
               </span>
-              <Show when={!pending() && !open() && props.input.command}>
+              <Show when={!open() && props.input.command}>
                 <ShellSubmessage text={props.input.command} animate={sawPending} />
               </Show>
             </div>
           </div>
         )}
       >
-        <div data-component="bash-output">
+        <div data-component="bash-output" dir="ltr">
           <div data-slot="bash-copy">
             <TooltipV2 value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")} placement="top">
               <IconButtonV2
@@ -2358,7 +2367,7 @@ ToolRegistry.register({
     const subtitle = createMemo(() => {
       const count = files().length
       if (count === 0) return ""
-      return `${count} ${i18n.t(count > 1 ? "ui.common.file.other" : "ui.common.file.one")}`
+      return `${count} ${i18n.plural("ui.common.file", count)}`
     })
 
     return (
@@ -2537,6 +2546,57 @@ ToolRegistry.register({
 })
 
 ToolRegistry.register({
+  name: "todowrite",
+  render(props) {
+    const i18n = useI18n()
+    const todos = createMemo(() => {
+      const meta = props.metadata?.todos
+      if (Array.isArray(meta)) return meta
+
+      const input = props.input.todos
+      if (Array.isArray(input)) return input
+
+      return []
+    })
+
+    const subtitle = createMemo(() => {
+      const list = todos()
+      if (list.length === 0) return ""
+      return `${list.filter((t: Todo) => t.status === "completed").length}/${list.length}`
+    })
+
+    return (
+      <BasicTool
+        {...props}
+        defaultOpen
+        icon="checklist"
+        trigger={{
+          title: i18n.t("ui.tool.todos"),
+          subtitle: subtitle(),
+        }}
+      >
+        <Show when={todos().length}>
+          <div data-component="todos">
+            <For each={todos()}>
+              {(todo: Todo) => (
+                <Checkbox readOnly checked={todo.status === "completed"}>
+                  <span
+                    data-slot="message-part-todo-content"
+                    data-completed={todo.status === "completed" ? "completed" : undefined}
+                  >
+                    {todo.content}
+                  </span>
+                </Checkbox>
+              )}
+            </For>
+          </div>
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
   name: "question",
   render(props) {
     const i18n = useI18n()
@@ -2548,7 +2608,7 @@ ToolRegistry.register({
       const count = questions().length
       if (count === 0) return ""
       if (completed()) return i18n.t("ui.question.subtitle.answered", { count })
-      return `${count} ${i18n.t(count > 1 ? "ui.common.question.other" : "ui.common.question.one")}`
+      return `${count} ${i18n.plural("ui.common.question", count)}`
     })
 
     return (
@@ -2585,21 +2645,36 @@ ToolRegistry.register({
   name: "skill",
   render(props) {
     const i18n = useI18n()
-    const title = createMemo(() => props.input.name || i18n.t("ui.tool.skill"))
+    const name = createMemo(() => skillToolName(props.input, props.metadata))
     const running = createMemo(() => props.status === "pending" || props.status === "running")
 
-    const titleContent = () => <TextShimmer text={title()} active={running()} />
-
     const trigger = () => (
-      <div data-slot="basic-tool-tool-info-structured">
-        <div data-slot="basic-tool-tool-info-main">
-          <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
-            {titleContent()}
-          </span>
-        </div>
+      <div data-slot="skill-tool-trigger" class="flex min-w-0 items-center gap-1.5">
+        <Icon name="post-skill" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+        <span
+          data-slot="skill-tool-label"
+          class="shrink-0 text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
+        >
+          {i18n.t("ui.tool.skill")}
+        </span>
+        <Show when={name()}>
+          {(name) => (
+            <>
+              <span data-slot="skill-tool-separator" aria-hidden="true" class="shrink-0 text-v2-text-text-muted">
+                ·
+              </span>
+              <TextShimmer
+                as="bdi"
+                text={name()}
+                active={running()}
+                class="min-w-0 truncate text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
+              />
+            </>
+          )}
+        </Show>
       </div>
     )
 
-    return <BasicTool icon="brain" status={props.status} trigger={trigger()} hideDetails />
+    return <BasicTool icon="post-skill" status={props.status} trigger={trigger()} hideDetails />
   },
 })

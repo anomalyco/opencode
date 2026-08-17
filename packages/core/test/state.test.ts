@@ -36,6 +36,25 @@ describe("State", () => {
     }),
   )
 
+  it.effect("commits rebuilt state before finalize runs", () =>
+    Effect.gen(function* () {
+      const observed: string[][] = []
+      const state: State.Interface<{ values: string[] }, { add: (item: string) => void }> = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (item: string) => draft.values.push(item) }),
+        finalize: () => Effect.sync(() => observed.push([...state.get().values])),
+      })
+
+      yield* state.transform((draft) => {
+        draft.add("value")
+      })
+
+      // Update events publish from finalize, so consumers reading on the event
+      // must observe the rebuilt state, not the previous one.
+      expect(observed).toEqual([["value"]])
+    }),
+  )
+
   it.effect("runs transforms during every reload", () =>
     Effect.gen(function* () {
       let value = "first"

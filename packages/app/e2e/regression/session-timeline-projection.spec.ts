@@ -35,6 +35,7 @@ test.describe("session timeline projection", () => {
       editPart("prt_edit"),
       toolPart("prt_write", "write", "completed", { filePath: "src/new.ts", content: "export const stable = true\n" }),
       patchPart("prt_patch"),
+      toolPart("prt_todo", "todowrite", "completed", { todos: [{ content: "Hidden", status: "pending" }] }),
       toolPart(
         "prt_question",
         "question",
@@ -64,6 +65,7 @@ test.describe("session timeline projection", () => {
     ]) {
       await expect(page.locator(`[data-timeline-part-id="${id}"]`).first(), id).toBeVisible()
     }
+    await expect(page.locator('[data-timeline-part-id="prt_todo"]')).toHaveCount(0)
   })
 
   test("projects gaps, dividers, assistant parts, and errors together", async ({ page }) => {
@@ -84,16 +86,10 @@ test.describe("session timeline projection", () => {
       ],
       { summary: { diffs: Array.from({ length: 11 }, (_, index) => summaryDiff(index)) } },
     )
-    const aborted = assistantMessage(
-      [
-        { id: "prt_before_abort", type: "text", text: "Before interruption" },
-        { id: "prt_compaction", type: "compaction", auto: true },
-      ],
-      {
-        id: "msg_1001_assistant_aborted",
-        error: { name: "MessageAbortedError", data: { message: "Stopped" } },
-      },
-    )
+    const aborted = assistantMessage([{ id: "prt_before_abort", type: "text", text: "Before interruption" }], {
+      id: "msg_1001_assistant_aborted",
+      error: { name: "MessageAbortedError", data: { message: "Stopped" } },
+    })
     const failed = assistantMessage([{ id: "prt_after_abort", type: "text", text: "After interruption" }], {
       id: "msg_1002_assistant_failed",
       error: {
@@ -120,13 +116,13 @@ test.describe("session timeline projection", () => {
     await scroller.evaluate((element) => (element.scrollTop = 0))
 
     await expect(page.locator('[data-timeline-row="TurnDivider"]')).toHaveCount(1)
-    await expect(page.getByText("Session compacted", { exact: true })).toBeVisible()
+    await expect(page.getByText("Before interruption", { exact: true })).toBeVisible()
     await expect(page.getByText("Visible provider failure")).toBeVisible()
     await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight))
     await expect(page.locator('[data-timeline-row="TurnGap"]')).toBeVisible()
   })
 
-  test("renders comment strips and historical diff summary overflow", async ({ page }) => {
+  test("renders legacy synthetic comments as ordinary V2 user text", async ({ page }) => {
     const user = userMessage(
       [
         userText("The user made the following comment regarding lines 4 through 8 of src/a.ts: Keep this stable", {
@@ -157,10 +153,14 @@ test.describe("session timeline projection", () => {
     const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
     await scroller.evaluate((element) => (element.scrollTop = 0))
 
-    await expect(page.locator('[data-timeline-row="CommentStrip"]')).toBeVisible()
-    await expect(page.getByText("Keep this stable", { exact: true })).toBeVisible()
-    await expect(page.locator('[data-timeline-row="DiffSummary"]')).toBeVisible()
-    await expect(page.getByText(/show all/i)).toBeVisible()
+    await expect(
+      page.getByText(
+        "The user made the following comment regarding lines 4 through 8 of src/a.ts: Keep this stable Continue after the comment",
+        { exact: true },
+      ),
+    ).toBeVisible()
+    await expect(page.locator('[data-timeline-row="CommentStrip"]')).toHaveCount(0)
+    await expect(page.locator('[data-timeline-row="DiffSummary"]')).toHaveCount(0)
   })
 
   test("renders interruption independently when the turn is not compacted", async ({ page }) => {
@@ -247,7 +247,7 @@ function editPart(id: string) {
 function patchPart(id: string) {
   return toolPart(
     id,
-    "patch",
+    "apply_patch",
     "completed",
     { files: ["src/a.ts", "src/b.ts"] },
     {
@@ -280,6 +280,7 @@ function summaryDiff(index: number) {
     file: `src/diff-${index}.ts`,
     additions: 1,
     deletions: 1,
+    status: "modified" as const,
     patch: `@@ -1 +1 @@\n-export const value = ${index}\n+export const value = ${index + 1}`,
   }
 }

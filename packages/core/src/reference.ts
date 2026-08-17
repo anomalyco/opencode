@@ -1,14 +1,14 @@
-export * as Reference from "./reference"
+export * as Reference from "./reference.js"
 
-import { makeLocationNode } from "./effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Scope, Types } from "effect"
 import { Reference } from "@opencode-ai/schema/reference"
-import { Global } from "./global"
-import { EventV2 } from "./event"
-import { Repository } from "./repository"
-import { RepositoryCache } from "./repository-cache"
-import { AbsolutePath } from "./schema"
-import { State } from "./state"
+import { Global } from "@opencode-ai/util/global"
+import { Bus } from "./bus.js"
+import { Repository } from "./repository.js"
+import { RepositoryCache } from "./repository-cache.js"
+import { AbsolutePath } from "./schema.js"
+import { State } from "./state.js"
 
 export const LocalSource = Reference.LocalSource
 export type LocalSource = Reference.LocalSource
@@ -19,7 +19,7 @@ export type GitSource = Reference.GitSource
 export const Source = Reference.Source
 export type Source = Reference.Source
 
-export const Event = Reference.Event
+export { Event } from "@opencode-ai/schema/reference"
 
 export const Info = Reference.Info
 export type Info = Reference.Info
@@ -38,13 +38,13 @@ export interface Interface extends State.Transformable<Draft> {
   readonly list: () => Effect.Effect<Info[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Reference") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Reference") {}
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const global = yield* Global.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const cache = yield* RepositoryCache.Service
     const scope = yield* Scope.Scope
     const materialized = new Map<string, Info>()
@@ -59,7 +59,6 @@ const layer = Layer.effect(
       finalize: (draft) =>
         Effect.gen(function* () {
           materialized.clear()
-          const seen = new Map<string, string | undefined>()
           for (const [name, source] of draft.list()) {
             if (source.type === "local") {
               materialized.set(
@@ -83,14 +82,11 @@ const layer = Layer.effect(
                 continue
               }
             }
-            const target = Repository.cachePath(global.repos, repository)
-            if (seen.has(target) && seen.get(target) !== source.branch) continue
-            seen.set(target, source.branch)
             materialized.set(
               name,
               Info.make({
                 name,
-                path: AbsolutePath.make(target),
+                path: AbsolutePath.make(Repository.cachePath(global.repos, repository, source.branch)),
                 ...(source.description === undefined ? {} : { description: source.description }),
                 ...(source.hidden === undefined ? {} : { hidden: source.hidden }),
                 source,
@@ -107,7 +103,7 @@ const layer = Layer.effect(
               Effect.forkIn(scope),
             )
           }
-          yield* events.publish(Event.Updated, {})
+          yield* bus.publish(Reference.Event.Updated, {})
         }),
     })
 
@@ -124,5 +120,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Global.node, EventV2.node, RepositoryCache.node],
+  deps: [Global.node, Bus.node, RepositoryCache.node],
 })

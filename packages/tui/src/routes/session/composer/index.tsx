@@ -22,6 +22,7 @@ interface Tab {
 const ComposerContext = createContext<{
   register: (tab: Tab) => () => void
   active: (id: string) => boolean
+  close: () => void
 }>()
 
 export function useComposerTab() {
@@ -38,7 +39,7 @@ export type ComposerProps = {
 }
 
 export function Composer(props: ComposerProps) {
-  const { themeV2 } = useTheme().contextual("elevated")
+  const theme = useTheme("elevated")
 
   const [store, setStore] = createStore({
     tabs: {} as Record<string, Tab>,
@@ -73,6 +74,7 @@ export function Composer(props: ComposerProps) {
     active(id: string) {
       return props.open && store.active === id
     },
+    close,
   }
 
   const keymap = Keymap.use()
@@ -92,16 +94,11 @@ export function Composer(props: ComposerProps) {
   Keymap.createLayer(() => ({
     mode: "composer",
     enabled: () => props.open,
+    priority: 1,
     commands: [
       { bind: "left", title: "Previous tab", group: "Composer", run: () => switchTab(-1) },
       { bind: "right", title: "Next tab", group: "Composer", run: () => switchTab(1) },
       { bind: "escape", title: "Close composer", group: "Composer", run: close },
-      {
-        bind: "<leader>down",
-        title: "Toggle composer",
-        group: "Composer",
-        run: close,
-      },
     ],
   }))
 
@@ -111,8 +108,8 @@ export function Composer(props: ComposerProps) {
         <box
           {...SplitBorder}
           border={["left"]}
-          borderColor={themeV2.border()}
-          backgroundColor={themeV2.background()}
+          borderColor={theme.border.default}
+          backgroundColor={theme.background.default}
           paddingLeft={1}
           paddingRight={2}
           paddingTop={1}
@@ -123,7 +120,7 @@ export function Composer(props: ComposerProps) {
               <Show
                 when={tabList().length > 1}
                 fallback={
-                  <text fg={themeV2.text()} attributes={TextAttributes.BOLD}>
+                  <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
                     {tabList()[0]?.label ?? ""}
                   </text>
                 }
@@ -134,7 +131,7 @@ export function Composer(props: ComposerProps) {
                       const isActive = createMemo(() => store.active === t.id)
                       return (
                         <text
-                          fg={isActive() ? themeV2.text() : themeV2.text.subdued()}
+                          fg={isActive() ? theme.text.default : theme.text.subdued}
                           attributes={isActive() ? TextAttributes.BOLD : undefined}
                         >
                           {t.label}
@@ -144,7 +141,7 @@ export function Composer(props: ComposerProps) {
                   </For>
                 </box>
               </Show>
-              <text fg={themeV2.text.subdued()} onMouseUp={close}>
+              <text fg={theme.text.subdued} onMouseUp={close}>
                 esc
               </text>
             </box>
@@ -154,19 +151,19 @@ export function Composer(props: ComposerProps) {
               <For each={footerHints()}>
                 {(hint) => (
                   <text>
-                    <span style={{ fg: themeV2.text() }}>
+                    <span style={{ fg: theme.text.default }}>
                       <b>{hint.label}</b>{" "}
                     </span>
-                    <span style={{ fg: themeV2.text.subdued() }}>{hint.shortcut}</span>
+                    <span style={{ fg: theme.text.subdued }}>{hint.shortcut}</span>
                   </text>
                 )}
               </For>
               <Show when={tabList().length > 1}>
                 <text>
-                  <span style={{ fg: themeV2.text() }}>
+                  <span style={{ fg: theme.text.default }}>
                     <b>tabs</b>{" "}
                   </span>
-                  <span style={{ fg: themeV2.text.subdued() }}>←/→</span>
+                  <span style={{ fg: theme.text.subdued }}>←/→</span>
                 </text>
               </Show>
             </box>

@@ -1,8 +1,8 @@
 import { Effect, Schema } from "effect"
-import { LLM, LLMRequest, ToolRuntime, toDefinitions } from "../src"
-import * as OpenAIChat from "../src/protocols/openai-chat"
-import { Auth } from "../src/route"
-import { Tool } from "../src/tool"
+import { LLM, LLMRequest, ToolRuntime, toDefinitions } from "../src/index.js"
+import * as OpenAIChat from "../src/protocols/openai-chat.js"
+import { Auth } from "../src/route.js"
+import { Tool } from "../src/tool.js"
 
 const request = LLM.request({
   model: OpenAIChat.route.with({ auth: Auth.bearer("fixture") }).model({ id: "gpt-4o-mini" }),
@@ -27,8 +27,8 @@ Tool.make({
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ forecast: Schema.NumberFromString }),
   execute: () => Effect.succeed({ forecast: 1 }),
-  toModelOutput: ({ callID, parameters, output }) => [
-    { type: "text", text: `${callID}:${parameters.city}:${output.forecast}` },
+  toModelOutput: ({ id, parameters, output }) => [
+    { type: "text", text: `${id}:${parameters.city}:${output.forecast}` },
   ],
 })
 

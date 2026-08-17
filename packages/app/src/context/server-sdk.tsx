@@ -1,74 +1,79 @@
-import type { Event } from "@opencode-ai/sdk/v2/client"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import type { OpenCodeEvent } from "@opencode-ai/client/promise"
+import type { Event } from "@/types"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { type Accessor, batch, createMemo, onCleanup, onMount } from "solid-js"
-import { createSdkForServer } from "@/utils/server"
-import { useLanguage } from "./language"
+import { type Accessor, batch, onCleanup, onMount } from "solid-js"
+import { createStore } from "solid-js/store"
+import { createApiForServer, type ServerApi } from "@/utils/server"
 import { usePlatform } from "./platform"
-import { ServerConnection, useServer } from "./server"
+import { ServerConnection } from "./servers"
 import { createRefCountMap } from "@/utils/refcount"
-import { useGlobal } from "./global"
 import { ServerScope } from "@/utils/server-scope"
+import { useServer } from "./server"
 
-const isAbortError = (error: unknown) =>
-  error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
+export type ServerEvent = Event & { id?: string; current?: OpenCodeEvent }
+type ServerEventMap = { [Type in ServerEvent["type"]]: Extract<ServerEvent, { type: Type }> }
+type CurrentDelta = Extract<
+  OpenCodeEvent,
+  { type: "session.text.delta" | "session.reasoning.delta" | "session.tool.input.delta" | "session.compaction.delta" }
+>
 
-const isStreamClosed = (error: unknown, signal?: AbortSignal) => isAbortError(error) || signal?.aborted === true
-type QueuedServerEvent = { directory: string; payload: Event }
-
-const coalescedKey = (event: QueuedServerEvent) => {
-  if (event.payload.type === "lsp.updated") return `lsp.updated:${event.directory}`
-  if (event.payload.type === "message.part.updated") {
-    const part = event.payload.properties.part
-    return `message.part.updated:${event.directory}:${part.messageID}:${part.id}`
-  }
-  return undefined
+export function adaptServerEvent(event: OpenCodeEvent): ServerEvent {
+  return { id: event.id, type: event.type, properties: event.data, current: event } as ServerEvent
 }
 
-export function enqueueServerEvent(queue: QueuedServerEvent[], event: QueuedServerEvent) {
-  const key = coalescedKey(event)
-  const previous = queue[queue.length - 1]
-  if (key && previous && coalescedKey(previous) === key) {
-    queue[queue.length - 1] = event
-    return false
-  }
-  queue.push(event)
-  return true
-}
-
-export function coalesceServerEvents(events: QueuedServerEvent[]) {
-  const output: QueuedServerEvent[] = []
+export function coalesceServerEvents(events: ServerEvent[]) {
+  const output: ServerEvent[] = []
   events.forEach((event) => {
-    if (event.payload.type !== "message.part.delta") {
+    const current = currentDelta(event.current)
+    if (current) {
+      const previous = output[output.length - 1]
+      const prior = currentDelta(previous?.current)
+      if (
+        previous &&
+        prior &&
+        prior.location?.directory === current.location?.directory &&
+        currentDeltaKey(prior) === currentDeltaKey(current)
+      ) {
+        const fragment = currentDeltaFragment(prior) + currentDeltaFragment(current)
+        const data =
+          current.type === "session.compaction.delta"
+            ? { ...current.data, text: fragment }
+            : { ...current.data, delta: fragment }
+        output[output.length - 1] = {
+          ...event,
+          properties: data,
+          current: { ...current, data } as CurrentDelta,
+        } as ServerEvent
+        return
+      }
       output.push(event)
       return
     }
-    const props = event.payload.properties
-    const previous = output[output.length - 1]
-    if (
-      !previous ||
-      previous.payload.type !== "message.part.delta" ||
-      previous.directory !== event.directory ||
-      previous.payload.properties.messageID !== props.messageID ||
-      previous.payload.properties.partID !== props.partID ||
-      previous.payload.properties.field !== props.field
-    ) {
-      output.push({
-        directory: event.directory,
-        payload: { ...event.payload, properties: { ...props } },
-      })
-      return
-    }
-    output[output.length - 1] = {
-      directory: event.directory,
-      payload: {
-        ...event.payload,
-        properties: { ...props, delta: previous.payload.properties.delta + props.delta },
-      },
-    }
+    output.push(event)
   })
   return output
+}
+
+function currentDelta(event: OpenCodeEvent | undefined): CurrentDelta | undefined {
+  if (
+    event?.type === "session.text.delta" ||
+    event?.type === "session.reasoning.delta" ||
+    event?.type === "session.tool.input.delta" ||
+    event?.type === "session.compaction.delta"
+  )
+    return event
+}
+
+function currentDeltaKey(event: CurrentDelta) {
+  if (event.type === "session.tool.input.delta")
+    return `${event.type}:${event.data.sessionID}:${event.data.assistantMessageID}:${event.data.id}`
+  if (event.type === "session.compaction.delta") return `${event.type}:${event.data.sessionID}`
+  return `${event.type}:${event.data.sessionID}:${event.data.assistantMessageID}:${event.data.ordinal}`
+}
+
+function currentDeltaFragment(event: CurrentDelta) {
+  return event.type === "session.compaction.delta" ? event.data.text : event.data.delta
 }
 
 export function resumeStreamAfterPageShow(event: PageTransitionEvent, start: () => unknown) {
@@ -76,7 +81,29 @@ export function resumeStreamAfterPageShow(event: PageTransitionEvent, start: () 
   start()
 }
 
-function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope) {
+type ServerEventEmitter = ReturnType<typeof createGlobalEmitter<ServerEventMap>>
+type ServerLocationEventEmitter = ReturnType<typeof createGlobalEmitter<{ [directory: string]: ServerEvent }>>
+export type ServerConnectionStatus = "connecting" | "connected" | "reconnecting"
+type ServerSDKBase = {
+  server: ServerConnection.Any
+  scope: ServerScope
+  url: string
+  api: ServerApi
+  connection: {
+    status: Accessor<ServerConnectionStatus>
+    attempt: Accessor<number>
+    error: Accessor<string | undefined>
+  }
+  event: {
+    on: ServerEventEmitter["on"]
+    listen: ServerEventEmitter["listen"]
+    location: {
+      on: ServerLocationEventEmitter["on"]
+    }
+  }
+}
+
+function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope): ServerSDKBase {
   const platform = usePlatform()
   const abort = new AbortController()
 
@@ -91,26 +118,21 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     }
   })()
 
-  const eventSdk = createSdkForServer({
-    signal: abort.signal,
-    fetch: eventFetch,
-    server: server.http,
-  })
-  const emitter = createGlobalEmitter<{
-    [key: string]: Event
-  }>()
+  const eventApi = createApiForServer({ server: server.http, fetch: eventFetch })
+  const emitter = createGlobalEmitter<ServerEventMap>()
+  const locations = createGlobalEmitter<{ [directory: string]: ServerEvent }>()
 
-  type Queued = QueuedServerEvent
   const FLUSH_FRAME_MS = 16
   const STREAM_YIELD_MS = 8
-  const RECONNECT_DELAY_MS = 250
+  const CONNECT_TIMEOUT_MS = 2_000
+  const RECONNECT_DELAY_MS = 1_000
 
-  let queue: Queued[] = []
-  let buffer: Queued[] = []
+  let queue: ServerEvent[] = []
+  let buffer: ServerEvent[] = []
   let timer: ReturnType<typeof setTimeout> | undefined
   let last = 0
 
-  const flush = () => {
+  function flush() {
     if (timer) clearTimeout(timer)
     timer = undefined
 
@@ -124,102 +146,142 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     last = Date.now()
     const output = coalesceServerEvents(events)
     batch(() => {
-      output.forEach((event) => emitter.emit(event.directory, event.payload))
+      output.forEach((event) => {
+        emitter.emit(event.type, event)
+        const directory = event.current?.location?.directory
+        if (directory) locations.emit(directory, event)
+      })
     })
 
     buffer.length = 0
   }
 
-  const schedule = () => {
+  function schedule() {
     if (timer) return
     const elapsed = Date.now() - last
     timer = setTimeout(flush, Math.max(0, FLUSH_FRAME_MS - elapsed))
   }
 
-  let streamErrorLogged = false
-  const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+  function publish(event: OpenCodeEvent) {
+    queue.push(adaptServerEvent(event))
+    schedule()
+  }
+
+  function wait(delay: number, signal: AbortSignal) {
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(done, delay)
+      signal.addEventListener("abort", done, { once: true })
+      function done() {
+        clearTimeout(timer)
+        signal.removeEventListener("abort", done)
+        resolve()
+      }
+    })
+  }
   let attempt: AbortController | undefined
   let run: Promise<void> | undefined
   let started = false
   let generation = 0
-  const HEARTBEAT_TIMEOUT_MS = 15_000
-  let lastEventAt = Date.now()
-  let heartbeat: ReturnType<typeof setTimeout> | undefined
-  const resetHeartbeat = () => {
-    lastEventAt = Date.now()
-    if (heartbeat) clearTimeout(heartbeat)
-    heartbeat = setTimeout(() => {
-      attempt?.abort()
-    }, HEARTBEAT_TIMEOUT_MS)
-  }
-  const clearHeartbeat = () => {
-    if (!heartbeat) return
-    clearTimeout(heartbeat)
-    heartbeat = undefined
+  const [connection, setConnection] = createStore<{
+    status: ServerConnectionStatus
+    attempt: number
+    error?: string
+  }>({ status: "connecting", attempt: 0 })
+
+  async function connect(signal: AbortSignal): Promise<{ error: unknown; connectedAt: number | undefined }> {
+    let connectedAt: number | undefined
+
+    // Bound the initial handshake and tie this request to the stream lifetime.
+    const request = new AbortController()
+    const cancel = () => request.abort(signal.reason)
+    const timeout = setTimeout(() => request.abort(new Error("Timed out connecting to server")), CONNECT_TIMEOUT_MS)
+    signal.addEventListener("abort", cancel, { once: true })
+
+    try {
+      // Open the event stream and validate its initial handshake.
+      const iterator = eventApi.event.subscribe({ signal: request.signal })[Symbol.asyncIterator]()
+      const first = await iterator.next()
+
+      if (signal.aborted) return { error: undefined, connectedAt }
+      if (first.done) {
+        const error =
+          request.signal.reason instanceof Error ? request.signal.reason : new Error("Event stream disconnected")
+        return { error, connectedAt }
+      }
+      if (first.value.type !== "server.connected")
+        return { error: new Error("Event stream did not start with server.connected"), connectedAt }
+
+      // Publish the connected state before forwarding live events.
+      clearTimeout(timeout)
+      publish(first.value)
+      connectedAt = Date.now()
+      setConnection({ status: "connected", attempt: 0, error: undefined })
+
+      // Forward events until the stream closes or this connection is cancelled.
+      let yielded = Date.now()
+      while (!signal.aborted) {
+        const event = await iterator.next()
+        if (signal.aborted) return { error: undefined, connectedAt }
+        if (event.done) return { error: new Error("Event stream disconnected"), connectedAt }
+        publish(event.value)
+        if (Date.now() - yielded < STREAM_YIELD_MS) continue
+        yielded = Date.now()
+        await wait(0, signal)
+      }
+      return { error: undefined, connectedAt }
+    } catch (error) {
+      return { error, connectedAt }
+    } finally {
+      request.abort()
+      clearTimeout(timeout)
+      signal.removeEventListener("abort", cancel)
+    }
   }
 
-  const start = () => {
+  async function runStream(active: number) {
+    let retries = 0
+    // oxlint-disable-next-line no-unmodified-loop-condition -- stop() changes the lifecycle flags and aborts the active request
+    while (!abort.signal.aborted && started && generation === active) {
+      setConnection({ status: retries === 0 ? "connecting" : "reconnecting", attempt: retries, error: undefined })
+      const controller = new AbortController()
+      attempt = controller
+      const onAbort = () => controller.abort()
+      abort.signal.addEventListener("abort", onAbort)
+      const result = await connect(controller.signal)
+      abort.signal.removeEventListener("abort", onAbort)
+
+      if (abort.signal.aborted || !started || generation !== active) {
+        if (attempt === controller) attempt = undefined
+        return
+      }
+      if (result.connectedAt !== undefined && Date.now() - result.connectedAt >= 1_000) retries = 0
+      retries += 1
+      const message =
+        result.error === undefined
+          ? undefined
+          : result.error instanceof Error
+            ? result.error.message
+            : String(result.error)
+      console.info("[global-sdk] event stream disconnected", {
+        url: server.http.url,
+        fetch: eventFetch ? "platform" : "webview",
+        attempt: retries,
+        error: message,
+      })
+      setConnection({ status: "reconnecting", attempt: retries, error: message })
+      await wait(RECONNECT_DELAY_MS, controller.signal)
+      if (attempt === controller) attempt = undefined
+    }
+  }
+
+  function start() {
     if (started) return run
     started = true
     const active = ++generation
     const previous = run
     const current = (async () => {
       if (previous) await previous
-      // oxlint-disable-next-line no-unmodified-loop-condition -- `started` is set to false by stop() which also aborts; both flags are checked to allow graceful exit
-      while (!abort.signal.aborted && started && generation === active) {
-        attempt = new AbortController()
-        lastEventAt = Date.now()
-        const onAbort = () => {
-          attempt?.abort()
-        }
-        abort.signal.addEventListener("abort", onAbort)
-        try {
-          const events = await eventSdk.global.event({
-            signal: attempt.signal,
-            onSseError: (error) => {
-              if (isStreamClosed(error, attempt?.signal)) return
-              if (streamErrorLogged) return
-              streamErrorLogged = true
-              console.error("[global-sdk] event stream error", {
-                url: server.http.url,
-                fetch: eventFetch ? "platform" : "webview",
-                error,
-              })
-            },
-          })
-          let yielded = Date.now()
-          resetHeartbeat()
-          for await (const event of events.stream) {
-            resetHeartbeat()
-            streamErrorLogged = false
-            if (event.payload.type !== "sync") {
-              const directory = event.directory ?? "global"
-              const payload = event.payload as Event
-              if (enqueueServerEvent(queue, { directory, payload })) schedule()
-            }
-
-            if (Date.now() - yielded < STREAM_YIELD_MS) continue
-            yielded = Date.now()
-            await wait(0)
-          }
-        } catch (error) {
-          if (!isStreamClosed(error, attempt?.signal) && !streamErrorLogged) {
-            streamErrorLogged = true
-            console.error("[global-sdk] event stream failed", {
-              url: server.http.url,
-              fetch: eventFetch ? "platform" : "webview",
-              error,
-            })
-          }
-        } finally {
-          abort.signal.removeEventListener("abort", onAbort)
-          attempt = undefined
-          clearHeartbeat()
-        }
-
-        if (abort.signal.aborted || !started || generation !== active) return
-        await wait(RECONNECT_DELAY_MS)
-      }
+      await runStream(active)
     })().finally(() => {
       if (run !== current) return
       run = undefined
@@ -229,57 +291,51 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     return run
   }
 
-  const stop = () => {
+  function stop() {
     started = false
     generation++
     attempt?.abort()
-    clearHeartbeat()
   }
 
   onMount(() => {
     makeEventListener(window, "pagehide", stop)
     makeEventListener(window, "pageshow", (event) => resumeStreamAfterPageShow(event, start))
-    makeEventListener(document, "visibilitychange", () => {
-      if (document.visibilityState !== "visible") return
-      if (!started) return
-      if (Date.now() - lastEventAt < HEARTBEAT_TIMEOUT_MS) return
-      attempt?.abort()
-    })
+    void start()
   })
 
   onCleanup(() => {
     stop()
     abort.abort()
-    flush()
+    if (timer) clearTimeout(timer)
+    timer = undefined
+    queue = []
+    buffer = []
+    emitter.clear()
+    locations.clear()
   })
 
-  const sdk = createSdkForServer({
-    server: server.http,
-    fetch: platform.fetch,
-    throwOnError: true,
-  })
+  const api = createApiForServer({ server: server.http, fetch: platform.fetch })
 
   return {
     server,
     scope,
     url: server.http.url,
-    client: sdk,
+    api,
+    connection: {
+      status: () => connection.status,
+      attempt: () => connection.attempt,
+      error: () => connection.error,
+    },
     event: {
       on: emitter.on.bind(emitter),
       listen: emitter.listen.bind(emitter),
-      start,
-    },
-    createClient(opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">) {
-      return createSdkForServer({
-        server: server.http,
-        fetch: platform.fetch,
-        ...opts,
-      })
+      location: {
+        on: locations.on.bind(locations),
+      },
     },
   }
 }
 
-type ServerSDKBase = ReturnType<typeof createServerSdkContextBase>
 export type ServerSDK = ServerSDKBase & {
   ensureDirSdkContext: (directory: string) => ReturnType<typeof createDirSdkContext>
 }
@@ -291,36 +347,27 @@ export function createServerSdkContext(server: ServerConnection.Any, scope: Serv
   })
 }
 
-export const { use: useServerSDK, provider: ServerSDKProvider } = createSimpleContext({
-  name: "ServerSDK",
-  // Returns an accessor so the resolved server can change reactively (e.g. a
-  // /new-session draft retargeting its server) without re-instantiating the subtree.
-  init: (props: { server?: Accessor<ServerConnection.Any | undefined> }) => {
-    const global = useGlobal()
-    const language = useLanguage()
-    const server = useServer()
-
-    return createMemo<ServerSDK>(() => {
-      const conn = props.server?.() ?? server.current
-      if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
-      return global.ensureServerCtx(conn).sdk
-    })
-  },
-})
-
-type SDKEventMap = {
-  [key in Event["type"]]: Extract<Event, { type: key }>
+export const useServerSDK = () => {
+  const server = useServer()
+  return server.ctx.sdk
 }
 
-function createDirSdkContext(directory: string, serverSDK: ServerSDKBase) {
-  const client = serverSDK.createClient({
-    directory,
-    throwOnError: true,
-  })
+type SDKEventMap = {
+  [key in Event["type"]]: Extract<ServerEvent, { type: key }>
+}
 
+export type DirectorySDK = {
+  scope: ServerScope
+  directory: string
+  api: ServerApi
+  event: ReturnType<typeof createGlobalEmitter<SDKEventMap>>
+  readonly url: string
+}
+
+function createDirSdkContext(directory: string, serverSDK: ServerSDKBase): DirectorySDK {
   const emitter = createGlobalEmitter<SDKEventMap>()
 
-  const unsub = serverSDK.event.on(directory, (event) => {
+  const unsub = serverSDK.event.location.on(directory, (event) => {
     emitter.emit(event.type, event)
   })
   onCleanup(unsub)
@@ -328,13 +375,10 @@ function createDirSdkContext(directory: string, serverSDK: ServerSDKBase) {
   return {
     scope: serverSDK.scope,
     directory,
-    client,
+    api: serverSDK.api,
     event: emitter,
     get url() {
       return serverSDK.url
-    },
-    createClient(opts: Parameters<typeof serverSDK.createClient>[0]) {
-      return serverSDK.createClient(opts)
     },
   }
 }

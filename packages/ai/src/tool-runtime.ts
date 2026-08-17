@@ -7,8 +7,8 @@ import {
   ToolResultValue,
   type ToolOutput as ToolOutputType,
   type ToolResultValue as ToolResultValueType,
-} from "./schema"
-import { type AnyTool, type Tools } from "./tool"
+} from "./schema/index.js"
+import { type AnyTool, type Tools } from "./tool.js"
 
 export interface ToolSettlement {
   readonly result: ToolResultValueType
@@ -28,7 +28,7 @@ export const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<Dispat
 
   return decodeAndExecute(tool, call).pipe(
     Effect.map((value) => result(call, value)),
-    Effect.catchTag("LLM.ToolFailure", (failure) =>
+    Effect.catchTag("Tool.Error", (failure) =>
       Effect.succeed(result(call, { type: "error", value: failure.message }, failure.error)),
     ),
   )
@@ -68,10 +68,29 @@ const result = (call: ToolCallPart, value: ToolResultValueType | ToolSettlement,
     events:
       settlement.result.type === "error"
         ? [
-            LLMEvent.toolError({ id: call.id, name: call.name, message: String(settlement.result.value), error }),
-            LLMEvent.toolResult({ id: call.id, name: call.name, result: settlement.result }),
+            LLMEvent.toolError({
+              id: call.id,
+              name: call.name,
+              message: String(settlement.result.value),
+              error,
+              providerMetadata: call.providerMetadata,
+            }),
+            LLMEvent.toolResult({
+              id: call.id,
+              name: call.name,
+              result: settlement.result,
+              providerMetadata: call.providerMetadata,
+            }),
           ]
-        : [LLMEvent.toolResult({ id: call.id, name: call.name, result: settlement.result, output: settlement.output })],
+        : [
+            LLMEvent.toolResult({
+              id: call.id,
+              name: call.name,
+              result: settlement.result,
+              output: settlement.output,
+              providerMetadata: call.providerMetadata,
+            }),
+          ],
   }
 }
 

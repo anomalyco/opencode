@@ -1,5 +1,6 @@
 import { getFilename } from "@opencode-ai/core/util/path"
-import type { GlobalSession, Project } from "@opencode-ai/sdk/v2/client"
+import type { Project } from "@/types"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { createMemo, onCleanup } from "solid-js"
 import { commandPaletteOptions, useCommand, type CommandOption } from "@/context/command"
@@ -7,12 +8,13 @@ import { useFile } from "@/context/file"
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { useLayout, type LocalProject } from "@/context/layout"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { useServerSDK } from "@/context/server-sdk"
 import { useTabs } from "@/context/tabs"
 import { displayName, projectForSession } from "@/pages/layout/helpers"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { useServer } from "@/context/server"
 
 export type CommandPaletteEntry = {
   id: string
@@ -82,7 +84,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
   const language = useLanguage()
   const file = useFile()
   const dialog = useDialog()
-  const serverSDK = useServerSDK()()
+  const serverSDK = useServerSDK()
   const serverCtx = global.ensureServerCtx(serverSDK.server)
   const appTabs = useTabs()
   const { tabs: sessionTabs } = useSessionLayout()
@@ -144,8 +146,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     server: ServerConnection.key(serverSDK.server),
     opened: serverCtx.projects.list,
     stored: () => serverCtx.sync.data.project,
-    load: (search, signal) =>
-      serverSDK.client.experimental.session.list({ roots: true, search, limit: 50 }, { signal }),
+    load: (search, signal) => serverSDK.api.session.list({ parentID: null, search, limit: 50 }, { signal }),
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
   })
@@ -219,7 +220,7 @@ export function createServerSessionEntries(props: {
   server: ServerConnection.Key
   opened: () => LocalProject[]
   stored: () => Project[]
-  load: (search: string, signal: AbortSignal) => Promise<{ data?: GlobalSession[] }>
+  load: (search: string, signal: AbortSignal) => Promise<{ data: SessionInfo[] }>
   untitled: () => string
   category: () => string
 }) {
@@ -255,7 +256,7 @@ export function createServerSessionEntries(props: {
     return props
       .load(search, current.signal)
       .then((result) =>
-        (result.data ?? [])
+        result.data
           .filter((session) => !session.time.archived)
           .map((session) => {
             const project =
@@ -264,9 +265,9 @@ export function createServerSessionEntries(props: {
               id: `session:${props.server}:${session.id}`,
               type: "session" as const,
               title: session.title || props.untitled(),
-              description: project ? displayName(project) : session.project?.name || getFilename(session.directory),
+              description: project ? displayName(project) : getFilename(session.location.directory),
               category: props.category(),
-              directory: session.directory,
+              directory: session.location.directory,
               sessionID: session.id,
               server: props.server,
               project,

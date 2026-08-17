@@ -1,9 +1,13 @@
-import type { ProviderPackage } from "../provider-package"
-import { AnthropicMessages } from "../protocols/anthropic-messages"
-import { Auth } from "../route/auth"
-import type { ProviderAuthOption } from "../route/auth-options"
-import type { RouteDefaultsInput } from "../route/client"
-import { ProviderID, type ModelID } from "../schema"
+import type { ProviderPackage } from "../provider-package.js"
+import { AnthropicMessages } from "../protocols/anthropic-messages.js"
+import { Auth } from "../route/auth.js"
+import type { ProviderAuthOption } from "../route/auth-options.js"
+import type { RouteDefaultsInput } from "../route/client.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
+
+export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
+export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInput
+export type AnthropicThinkingInput = AnthropicMessages.ThinkingInput
 
 export const id = ProviderID.make("anthropic-compatible")
 
@@ -11,6 +15,7 @@ export type Config = RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
     readonly provider?: string
     readonly baseURL: string
+    readonly providerOptions?: AnthropicMessages.ProviderOptionsInput
   }
 
 export type Settings = ProviderPackage.Settings &
@@ -20,6 +25,7 @@ export type Settings = ProviderPackage.Settings &
   ) & {
     readonly baseURL: string
     readonly provider?: string
+    readonly providerOptions?: AnthropicMessages.ProviderOptionsInput
   }
 
 export const routes = [AnthropicMessages.route]
@@ -41,7 +47,7 @@ export const configure = (input: Config) => {
   })
   return {
     id: ProviderID.make(provider),
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => route.model<AnthropicMessages.ProviderOptionsInput>({ id: modelID }),
     configure,
   }
 }
@@ -51,7 +57,10 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
+export const model: ProviderPackage.Definition<Settings, AnthropicMessages.ProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) => {
   if (settings.apiKey !== undefined && settings.authToken !== undefined)
     throw new Error("Anthropic-compatible apiKey cannot be combined with authToken")
   return configure({
@@ -61,7 +70,8 @@ export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, se
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
     limits: settings.limits,
     provider: settings.provider,
+    providerOptions: settings.providerOptions,
   }).model(modelID)
 }
 
-export * as AnthropicCompatible from "./anthropic-compatible"
+export * as AnthropicCompatible from "./anthropic-compatible.js"

@@ -13,3 +13,12 @@ export function promptPlaceholder(input: PromptPlaceholderInput) {
   if (!input.suggest) return input.t("prompt.placeholder.simple")
   return input.t("prompt.placeholder.normal", { example: input.example })
 }
+
+export function promptDesignPlaceholder(
+  mode: PromptPlaceholderInput["mode"],
+  placeholder: string,
+  t: PromptPlaceholderInput["t"],
+) {
+  if (mode === "shell") return placeholder
+  return t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" })
+}

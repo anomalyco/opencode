@@ -1,22 +1,10 @@
-import type { ProviderOptions, ReasoningEffort, TextVerbosity } from "../schema"
-import { mergeProviderOptions } from "../schema"
-import type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/utils/openai-options"
+import type { ProviderOptions } from "../schema/index.js"
+import { mergeProviderOptions } from "../schema/index.js"
+import type { OpenResponsesOptionsInput } from "./open-responses-options.js"
 
-export type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/utils/openai-options"
+export type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/utils/openai-options.js"
 
-export interface OpenAIOptionsInput {
-  readonly [key: string]: unknown
-  readonly store?: boolean
-  readonly promptCacheKey?: string
-  readonly reasoningEffort?: ReasoningEffort
-  readonly reasoningSummary?: "auto"
-  // OpenAI Responses `include` wire field. Mirrors the official SDK's
-  // `ResponseIncludable[]` union exactly so AI SDK callers and direct
-  // native-SDK callers share one shape and no translation is required.
-  readonly include?: ReadonlyArray<OpenAIResponseIncludable>
-  readonly textVerbosity?: TextVerbosity
-  readonly serviceTier?: OpenAIServiceTier
-}
+export type OpenAIOptionsInput = OpenResponsesOptionsInput
 
 export type OpenAIProviderOptionsInput = ProviderOptions & {
   readonly openai?: OpenAIOptionsInput
@@ -29,7 +17,6 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
   const openai = Object.fromEntries(
     definedEntries({
       store: options?.store,
-      promptCacheKey: options?.promptCacheKey,
       reasoningEffort: options?.reasoningEffort,
       reasoningSummary: options?.reasoningSummary,
       include: options?.include,
@@ -80,4 +67,4 @@ export const withOpenAIOptions = <Options extends { readonly providerOptions?: O
   }
 }
 
-export * as OpenAIProviderOptions from "./openai-options"
+export * as OpenAIProviderOptions from "./openai-options.js"

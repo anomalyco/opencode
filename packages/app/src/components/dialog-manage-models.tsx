@@ -31,7 +31,7 @@ export const DialogManageModels: Component = () => {
   const directory = () => decode64(local.slug())
 
   const handleConnectProvider = () => {
-    void dialog.show(() => <DialogConnectProvider directory={directory} />)
+    void dialog.show(() => <DialogConnectProvider directory={directory()} />)
   }
   const providerRank = (id: string) => popularProviders.indexOf(id)
   const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)
@@ -123,7 +123,7 @@ export const DialogManageModelsV2: Component = () => {
   const directory = () => decode64(local.slug())
 
   const handleConnectProvider = () => {
-    void dialog.show(() => <DialogConnectProvider directory={directory} />)
+    void dialog.show(() => <DialogConnectProvider directory={directory()} />)
   }
   const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)
   const providerVisible = (providerID: string) =>

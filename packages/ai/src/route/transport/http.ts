@@ -1,11 +1,12 @@
-import { Effect, Stream } from "effect"
+import { Effect } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { Auth } from "../auth"
-import { render as renderEndpoint } from "../endpoint"
-import { Framing } from "../framing"
-import type { Transport, TransportPrepareInput } from "./index"
-import * as ProviderShared from "../../protocols/shared"
-import { mergeJsonRecords, type LLMRequest } from "../../schema"
+import { Auth } from "../auth.js"
+import { render as renderEndpoint } from "../endpoint.js"
+import { Framing } from "../framing.js"
+import type { HttpMiddleware, Transport, TransportPrepareInput } from "./index.js"
+import * as ProviderShared from "../../protocols/shared.js"
+import { mergeJsonRecords, type LLMRequest } from "../../schema/index.js"
+import { RequestExecutor } from "../executor.js"
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
 
@@ -19,6 +20,7 @@ export interface JsonRequestParts<Body = unknown> {
 export interface HttpPrepared<Frame> {
   readonly request: HttpClientRequest.HttpClientRequest
   readonly framing: Framing.Definition<Frame>
+  readonly middleware?: HttpMiddleware
 }
 
 const applyQuery = (url: string, query: Record<string, string> | undefined) => {
@@ -28,57 +30,9 @@ const applyQuery = (url: string, query: Record<string, string> | undefined) => {
   return next.toString()
 }
 
-const PROTOCOL_BODY_OVERLAY_DENYLIST = new Set([
-  "anthropic_version",
-  "content",
-  "contents",
-  "frequencyPenalty",
-  "frequency_penalty",
-  "generationConfig",
-  "inferenceConfig",
-  "input",
-  "maxTokens",
-  "max_tokens",
-  "messages",
-  "model",
-  "presencePenalty",
-  "presence_penalty",
-  "responseFormat",
-  "response_format",
-  "seed",
-  "stop",
-  "stopSequences",
-  "stop_sequences",
-  "stream",
-  "streamOptions",
-  "stream_options",
-  "system",
-  "systemInstruction",
-  "system_instruction",
-  "temperature",
-  "thinking",
-  "toolChoice",
-  "toolConfig",
-  "tool_choice",
-  "tool_config",
-  "tools",
-  "topK",
-  "topP",
-  "top_k",
-  "top_p",
-])
-
-const forbiddenBodyOverlayKeys = (body: Record<string, unknown>) =>
-  Object.keys(body).filter((key) => PROTOCOL_BODY_OVERLAY_DENYLIST.has(key))
-
 const bodyWithOverlay = <Body>(body: Body, request: LLMRequest, encodeBody: (body: Body) => string) =>
   Effect.gen(function* () {
     if (request.http?.body === undefined) return { jsonBody: body, bodyText: encodeBody(body) }
-    const forbiddenKeys = forbiddenBodyOverlayKeys(request.http.body)
-    if (forbiddenKeys.length > 0)
-      return yield* ProviderShared.invalidRequest(
-        `http.body cannot overlay protocol-owned field(s): ${forbiddenKeys.join(", ")}`,
-      )
     if (ProviderShared.isRecord(body)) {
       const overlaid = mergeJsonRecords(body, request.http.body) ?? {}
       return { jsonBody: overlaid, bodyText: ProviderShared.encodeJson(overlaid) }
@@ -120,34 +74,23 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
   id: "http-json",
   with: (patch) => httpJson({ ...input, ...patch }),
   prepare: (prepareInput) =>
-    jsonRequestParts({
-      ...prepareInput,
-    }).pipe(
-      Effect.map((parts) => ({
-        request: ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),
+    Effect.gen(function* () {
+      const parts = yield* jsonRequestParts({ ...prepareInput })
+      const request = ProviderShared.jsonPost({
+        url: parts.url,
+        body: parts.bodyText,
+        headers: parts.headers,
+      })
+      return {
+        request,
         framing: input.framing,
-      })),
-    ),
-  frames: (prepared, request, runtime) =>
-    Stream.unwrap(
-      runtime.http
-        .execute(prepared.request)
-        .pipe(
-          Effect.map((response) =>
-            prepared.framing.frame(
-              response.stream.pipe(
-                Stream.mapError((error) =>
-                  ProviderShared.eventError(
-                    `${request.model.provider}/${request.model.route.id}`,
-                    `Failed to read ${request.model.provider}/${request.model.route.id} stream`,
-                    ProviderShared.errorText(error),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-    ),
+        middleware: prepareInput.middleware,
+      }
+    }),
+  execute: (prepared, _request, runtime) =>
+    Effect.succeed({
+      frames: prepared.framing.frame(RequestExecutor.stream(runtime.http, prepared.request, prepared.middleware)),
+    }),
 })
 
 export const sseJson = {

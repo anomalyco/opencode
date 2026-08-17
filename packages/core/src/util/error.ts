@@ -22,7 +22,7 @@ export abstract class NamedError extends Error {
     return NamedError.createSchemaClass(name, Schema.isSchema(data) ? data : Schema.Struct(data))
   }
 
-  private static createSchemaClass<Name extends string, DataSchema extends Schema.Top>(name: Name, data: DataSchema) {
+  public static createSchemaClass<Name extends string, DataSchema extends Schema.Top>(name: Name, data: DataSchema) {
     const schema = Schema.Struct({
       name: Schema.Literal(name),
       data,

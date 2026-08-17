@@ -35,7 +35,7 @@ test("preserves nested patch file state through outer collapse and reopen", asyn
       assistantMessage([
         toolPart(
           patchID,
-          "patch",
+          "apply_patch",
           "completed",
           { files: files.map((file) => file.filePath) },
           { metadata: { files } },

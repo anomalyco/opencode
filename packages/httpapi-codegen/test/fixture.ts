@@ -27,6 +27,18 @@ export const Api = HttpApi.make("fixture")
           params: { sessionID: Schema.String },
           success: HttpApiSchema.NoContent,
         }),
+      )
+      .add(
+        HttpApiEndpoint.post("configure", "/session/:sessionID/configure", {
+          params: { sessionID: Schema.String },
+          query: { dryRun: Schema.optional(Schema.Boolean) },
+          headers: { traceID: Schema.String },
+          payload: Schema.Union([
+            Schema.Struct({ type: Schema.Literal("local"), command: Schema.Array(Schema.String) }),
+            Schema.Struct({ type: Schema.Literal("remote"), url: Schema.String }),
+          ]),
+          success: Schema.String,
+        }),
       ),
   )
   .add(

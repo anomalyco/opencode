@@ -1,22 +1,13 @@
+import type { Agent, Config, LspStatus, Message, Part, Path, Todo, VcsInfo } from "@/types"
 import type {
-  Agent,
-  Command,
-  Config,
-  LspStatus,
-  McpResource,
-  McpStatus,
-  Message,
-  Part,
-  Path,
-  PermissionRequest,
-  QuestionRequest,
-  ReferenceInfo,
-  Session,
-  SessionStatus,
   FileDiffInfo,
-  VcsInfo,
-} from "@opencode-ai/sdk/v2/client"
+  PermissionRequest,
+  ReferenceInfo,
+  SessionInfo,
+  SessionStatus,
+} from "@opencode-ai/client/promise"
 import { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
+import type { CommandInfo, McpResource, McpServer, SessionMessageInfo } from "@opencode-ai/client/promise"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
@@ -34,7 +25,7 @@ export type ProjectMeta = {
 export type State = {
   status: "loading" | "partial" | "complete"
   agent: Agent[]
-  command: Command[]
+  command: CommandInfo[]
   reference: ReferenceInfo[]
   project: string
   projectMeta: ProjectMeta | undefined
@@ -43,7 +34,7 @@ export type State = {
   provider: NormalizedProviderListResponse
   config: Config
   path: Path
-  session: Session[]
+  session: SessionInfo[]
   sessionTotal: number
   session_status: {
     [sessionID: string]: SessionStatus
@@ -52,15 +43,15 @@ export type State = {
   session_diff: {
     [sessionID: string]: FileDiffInfo[]
   }
+  todo: {
+    [sessionID: string]: Todo[]
+  }
   permission: {
     [sessionID: string]: PermissionRequest[]
   }
-  question: {
-    [sessionID: string]: QuestionRequest[]
-  }
   mcp_ready: boolean
   mcp: {
-    [name: string]: McpStatus
+    [name: string]: McpServer["status"]
   }
   mcp_resource: {
     [key: string]: McpResource
@@ -71,6 +62,9 @@ export type State = {
   limit: number
   message: {
     [sessionID: string]: Message[]
+  }
+  session_message: {
+    [sessionID: string]: SessionMessageInfo[]
   }
   part: {
     [messageID: string]: Part[]
@@ -122,18 +116,6 @@ export type DisposeCheck = {
   pinned: boolean
   booting: boolean
   loadingSessions: boolean
-}
-
-export type RootLoadArgs = {
-  directory: string
-  limit: number
-  list: (query: { directory: string; roots: true; limit?: number }) => Promise<{ data?: Session[] }>
-}
-
-export type RootLoadResult = {
-  data?: Session[]
-  limit: number
-  limited: boolean
 }
 
 export const MAX_DIR_STORES = 30

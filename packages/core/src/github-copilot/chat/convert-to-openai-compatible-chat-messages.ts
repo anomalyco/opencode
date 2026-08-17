@@ -3,7 +3,7 @@ import {
   type SharedV3ProviderOptions,
   UnsupportedFunctionalityError,
 } from "@ai-sdk/provider"
-import type { OpenAICompatibleChatPrompt } from "./openai-compatible-api-types"
+import type { OpenAICompatibleChatPrompt } from "./openai-compatible-api-types.js"
 import { convertToBase64 } from "@ai-sdk/provider-utils"
 
 function getOpenAIMetadata(message: { providerOptions?: SharedV3ProviderOptions }) {

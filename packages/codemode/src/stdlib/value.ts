@@ -61,10 +61,19 @@ export const coerceToString = (value: unknown): string => {
 export const coerceToNumber = (value: unknown): number => {
   if (value instanceof CodeModeDate) return value.time
   if (isCodeModeValue(value)) return Number.NaN
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? Number.NaN : Number(value)
+  // Arrays coerce through our own string coercion: host Number(array) joins with host
+  // ToPrimitive, which throws on the null-prototype objects the interpreter produces.
+  if (Array.isArray(value)) return Number(coerceToString(value))
+  return value !== null && typeof value === "object" ? Number.NaN : Number(value)
 }
 
 export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node: AstNode): unknown => {
+  // Native: Number() is 0 and String() is "", unlike their undefined-argument forms; the
+  // other coercers match native through the undefined-argument path below.
+  if (args.length === 0) {
+    if (ref.name === "Number") return 0
+    if (ref.name === "String") return ""
+  }
   const raw = args[0]
   // Error values are plain SafeObjects; the boundedData path below would strip their brand.
   if (ref.name === "String" && errorBrandName(raw) !== undefined) return coerceToString(raw)
@@ -72,12 +81,16 @@ export const invokeCoercion = (ref: CoercionFunction, args: Array<unknown>, node
     if (ref.name === "Boolean") return true
     if (ref.name === "Number") return coerceToNumber(raw)
     if (ref.name === "String") return coerceToString(raw)
+    if (ref.name === "isFinite") return Number.isFinite(coerceToNumber(raw))
+    if (ref.name === "isNaN") return Number.isNaN(coerceToNumber(raw))
     if (ref.name === "parseInt") return parseInt(coerceToString(raw))
     return parseFloat(coerceToString(raw))
   }
   const value = boundedData(raw, `${ref.name} input`)
   if (ref.name === "Number") return coerceToNumber(value)
   if (ref.name === "Boolean") return Boolean(value)
+  if (ref.name === "isFinite") return Number.isFinite(coerceToNumber(value))
+  if (ref.name === "isNaN") return Number.isNaN(coerceToNumber(value))
   if (ref.name === "parseInt") {
     const radix = args[1]
     if (radix !== undefined && typeof radix !== "number") {

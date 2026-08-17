@@ -8,7 +8,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { showToast } from "@/utils/toast"
 import { extractPromptFromParts } from "@/utils/prompt"
-import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
+import type { TextPart as SDKTextPart } from "@/types"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLanguage } from "@/context/language"
 
@@ -69,15 +69,11 @@ export const DialogFork: Component = () => {
     const dir = base64Encode(sdk().directory)
 
     sdk()
-      .client.session.fork({ sessionID, messageID: item.id })
+      .api.session.fork({ sessionID, boundary: { type: "before", messageID: item.id } })
       .then((forked) => {
-        if (!forked.data) {
-          showToast({ title: language.t("common.requestFailed") })
-          return
-        }
         dialog.close()
-        prompt.set(restored, undefined, { dir, id: forked.data.id })
-        navigate(`/${dir}/session/${forked.data.id}`)
+        prompt.set(restored, undefined, { dir, id: forked.id })
+        navigate(`/${dir}/session/${forked.id}`)
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)

@@ -1,12 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMResponse } from "../src"
-import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route"
-import { Model } from "../src/schema"
-import { testEffect } from "./lib/effect"
-import { dynamicResponse } from "./lib/http"
+import { LLM, LLMRequest, LLMResponse } from "../src/index.js"
+import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route.js"
+import { compileRequest } from "../src/route/client.js"
+import { LanguageModel } from "../src/schema/index.js"
+import { testEffect } from "./lib/effect.js"
+import { dynamicResponse } from "./lib/http.js"
 
-const updateModel = (model: Model, patch: Partial<Model.Input>) => Model.update(model, patch)
+const updateModel = (model: LanguageModel, patch: Partial<LanguageModel.Input>) => LanguageModel.update(model, patch)
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(Json)
@@ -40,7 +41,7 @@ const fakeFraming: FramingDef<FakeEvent> = {
 
 const raiseEvent = (event: FakeEvent): import("../src/schema").LLMEvent =>
   event.type === "finish"
-    ? { type: "finish", reason: event.reason }
+    ? { type: "finish", reason: { normalized: event.reason } }
     : { type: "text-delta", id: "text-0", text: event.text }
 
 const fakeProtocol = Protocol.make<FakeBody, FakeEvent, FakeEvent, void>({
@@ -85,7 +86,7 @@ const configuredGemini = gemini.with({ endpoint: { baseURL: "https://fake.local"
 
 const request = LLM.request({
   id: "req_1",
-  model: Model.make({
+  model: LanguageModel.make({
     id: "fake-model",
     provider: "fake-provider",
     route: configuredFake,
@@ -132,16 +133,15 @@ describe("llm route", () => {
     Effect.gen(function* () {
       const error = yield* (yield* LLMClient.Service).stream(request).pipe(Stream.runDrain, Effect.flip)
 
-      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
-      expect(error.message).toContain("Provider stream ended without a terminal finish event")
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
+      expect(error.message).toContain("The provider response ended unexpectedly.")
     }),
   )
 
   it.effect("selects routes by model route value", () =>
     Effect.gen(function* () {
-      const llm = yield* LLMClient.Service
-      const prepared = yield* llm.prepare(
-        LLM.updateRequest(request, { model: updateModel(request.model, { route: configuredGemini }) }),
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, { model: updateModel(request.model, { route: configuredGemini }) }),
       )
 
       expect(prepared.route).toBe("gemini-fake")
@@ -173,8 +173,8 @@ describe("llm route", () => {
         framing: fakeFraming,
       })
 
-      const prepared = yield* (yield* LLMClient.Service).prepare(
-        LLM.updateRequest(request, { model: updateModel(request.model, { route: duplicate }) }),
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, { model: updateModel(request.model, { route: duplicate }) }),
       )
 
       expect(prepared.body).toEqual({ body: "late-default" })

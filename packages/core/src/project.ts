@@ -1,20 +1,21 @@
-export * as ProjectV2 from "./project"
-export * as Project from "./project"
+export * as Project from "./project.js"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { asc, desc } from "drizzle-orm"
+import { and, asc, desc, eq } from "drizzle-orm"
 import path from "path"
-import { AbsolutePath } from "./schema"
-import { Database } from "./database/database"
-import { FSUtil } from "./fs-util"
-import { Git } from "./git"
-import { AppProcess } from "./process"
-import { makeGlobalNode } from "./effect/app-node"
-import { Hash } from "./util/hash"
-import { ProjectDirectories } from "./project/directories"
-import { ProjectSchema } from "./project/schema"
-import { ProjectTable } from "./project/sql"
+import { AbsolutePath } from "./schema.js"
+import { Bus } from "./bus.js"
+import { Database } from "./database/database.js"
+import { Worktree } from "@opencode-ai/schema/worktree"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Git } from "./git.js"
+import { AppProcess } from "@opencode-ai/util/process"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { Hash } from "@opencode-ai/util/hash"
+import { ProjectSchema } from "./project/schema.js"
+import { ProjectTable, upsertProject } from "./project/sql.js"
+import { WorktreeTable } from "./worktree/sql.js"
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID
@@ -25,53 +26,31 @@ export type Vcs = ProjectSchema.Vcs
 export const Current = ProjectSchema.Current
 export type Current = ProjectSchema.Current
 
-export const Directory = ProjectSchema.Directory
-export type Directory = ProjectSchema.Directory
-
 export const Info = ProjectSchema.Info
 export interface Info extends Schema.Schema.Type<typeof Info> {}
-
-export const DirectoriesInput = ProjectSchema.DirectoriesInput
-export type DirectoriesInput = typeof DirectoriesInput.Type
-
-export const Directories = ProjectSchema.Directories
-export type Directories = typeof Directories.Type
 
 export interface Resolved {
   readonly previous?: ID
   readonly id: ID
   readonly directory: AbsolutePath
+  readonly canonical: AbsolutePath
   readonly vcs?: Vcs
 }
 
 // Keep this filesystem-only; permission checks use it and should not execute VCS commands.
-export const root = Effect.fn("Project.root")(function* (
-  fs: FSUtil.Interface,
-  input: AbsolutePath,
-) {
-  return yield* fs.up({ targets: [".git", ".hg"], start: input }).pipe(
-    Effect.map((matches) => matches[0] ? AbsolutePath.make(path.dirname(matches[0])) : undefined),
+export const root = Effect.fn("Project.root")(function* (fs: FSUtil.Interface, input: AbsolutePath) {
+  return yield* fs.up({ targets: [".git", ".hg"], start: input, mode: "first" }).pipe(
+    Effect.map((matches) => (matches[0] ? AbsolutePath.make(path.dirname(matches[0])) : undefined)),
     Effect.catch(() => Effect.succeed(undefined)),
   )
 })
 
 export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
-  readonly directories: (input: DirectoriesInput) => Effect.Effect<Directories>
   readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>
-  /**
-   * Temporary bridge method for writing the resolved project ID to the repo-local cache.
-   *
-   * This exists while the old opencode project service and this core project
-   * service work together: core resolves the ID, while the old service still owns
-   * database migration and persistence. The old service should call this after it
-   * finishes migrating from `resolve().previous` to `resolve().id`; once project
-   * persistence moves into core, this separate bridge method can go away.
-   */
-  readonly commit: (input: { store: AbsolutePath; id: ID }) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ProjectV2") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Project") {}
 
 function fromRow(row: typeof ProjectTable.$inferSelect): Info {
   const icon =
@@ -84,7 +63,7 @@ function fromRow(row: typeof ProjectTable.$inferSelect): Info {
       : undefined
   return {
     id: row.id,
-    worktree: row.worktree,
+    canonical: row.worktree,
     vcs: row.vcs ?? undefined,
     name: row.name ?? undefined,
     icon,
@@ -104,8 +83,57 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
     const proc = yield* AppProcess.Service
+    const bus = yield* Bus.Service
     const db = (yield* Database.Service).db
-    const projectDirectories = yield* ProjectDirectories.Service
+
+    const announcing = new Set<string>()
+    const persist = Effect.fnUntraced(function* (project: Resolved) {
+      yield* upsertProject(db, project).pipe(Effect.orDie)
+      if (!project.vcs) return project
+      const directories: Array<{ projectID: ID; directory: AbsolutePath; strategy?: string }> = [
+        { projectID: project.id, directory: project.canonical },
+      ]
+      if (project.directory !== project.canonical)
+        directories.push({
+          projectID: project.id,
+          directory: project.directory,
+          strategy: project.vcs.type === "git" ? "git" : undefined,
+        })
+      // A missing directory row means this directory's resolution is a new durable
+      // fact (copy.ts registers copy directories directly; those never strand
+      // sessions and never announce). The row insert commits atomically with the
+      // event, so a crash between checks retries on the next resolve instead of
+      // stranding the announcement. The in-flight set keeps concurrent resolves
+      // from publishing the same fact twice.
+      for (const item of directories) {
+        const key = item.projectID + "\u0000" + item.directory
+        if (announcing.has(key)) continue
+        announcing.add(key)
+        yield* Effect.gen(function* () {
+          const stored = yield* db
+            .select({ directory: WorktreeTable.directory })
+            .from(WorktreeTable)
+            .where(and(eq(WorktreeTable.project_id, item.projectID), eq(WorktreeTable.directory, item.directory)))
+            .get()
+            .pipe(Effect.orDie)
+          if (stored) return
+          yield* bus.publish(
+            Worktree.Event.Resolved,
+            { projectID: item.projectID, directory: item.directory, previous: project.previous ?? ID.global },
+            {
+              commit: () =>
+                db
+                  .insert(WorktreeTable)
+                  .values({ project_id: item.projectID, directory: item.directory, strategy: item.strategy })
+                  .onConflictDoNothing()
+                  .run()
+                  .pipe(Effect.orDie, Effect.asVoid),
+            },
+          )
+        }).pipe(Effect.ensuring(Effect.sync(() => announcing.delete(key))))
+      }
+      return project
+    })
 
     const list = Effect.fn("Project.list")(function* () {
       const rows = yield* db
@@ -115,10 +143,6 @@ const layer = Layer.effect(
         .all()
         .pipe(Effect.orDie)
       return rows.map(fromRow)
-    })
-
-    const directories = Effect.fn("Project.directories")(function* (input: DirectoriesInput) {
-      return yield* projectDirectories.list(input.projectID)
     })
 
     const cached = Effect.fnUntraced(function* (dir: string) {
@@ -190,7 +214,7 @@ const layer = Layer.effect(
     })
 
     const hgDiscover = Effect.fnUntraced(function* (input: AbsolutePath) {
-      const dotHg = yield* fs.up({ targets: [".hg"], start: input }).pipe(
+      const dotHg = yield* fs.up({ targets: [".hg"], start: input, mode: "first" }).pipe(
         Effect.map((matches) => matches[0]),
         Effect.catch(() => Effect.succeed(undefined)),
       )
@@ -212,29 +236,34 @@ const layer = Layer.effect(
       if (repo) {
         const previous = yield* cached(repo.commonDirectory)
         const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
-        return {
+        const canonical =
+          repo.gitDirectory === repo.commonDirectory
+            ? repo.worktree
+            : yield* git.worktree.list(repo).pipe(
+                Effect.map((items) => items.find((item) => item.kind === "main")?.directory ?? repo.worktree),
+                Effect.catch(() => Effect.succeed(repo.worktree)),
+              )
+        return yield* persist({
           previous,
           id: id ?? ID.global,
           directory: repo.worktree,
+          canonical,
           vcs: { type: "git" as const, store: repo.commonDirectory },
-        }
+        })
       }
 
       const hg = yield* hgDiscover(input)
-      if (hg) return hg
-      return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+      if (hg) return yield* persist({ ...hg, canonical: hg.directory })
+      const directory = AbsolutePath.make(path.parse(input).root)
+      return yield* persist({ id: ID.global, directory, canonical: directory, vcs: undefined })
     })
 
-    const commit = Effect.fn("Project.commit")(function* (input: { store: AbsolutePath; id: ID }) {
-      yield* fs.writeFileString(path.join(input.store, "opencode"), input.id).pipe(Effect.ignore)
-    })
-
-    return Service.of({ list, directories, resolve, commit })
+    return Service.of({ list, resolve })
   }),
 )
 
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [Database.node, FSUtil.node, Git.node, AppProcess.node, ProjectDirectories.node],
+  deps: [Bus.node, Database.node, FSUtil.node, Git.node, AppProcess.node],
 })

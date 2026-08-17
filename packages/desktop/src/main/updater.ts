@@ -1,50 +1,20 @@
-import { app, dialog } from "electron"
-import pkg from "electron-updater"
+import { app, dialog, ipcMain } from "electron"
 import { UPDATER_ENABLED } from "./constants"
-import { createUpdaterController, type UpdaterReadyRecord } from "./updater-controller"
+import { createUpdaterController, type UpdaterController, type UpdaterReadyRecord } from "./updater-controller"
 import { getLogger } from "./logging"
 import { getStore } from "./store"
-import { setAppQuitting } from "./windows"
+import { nativeT } from "./native-translations"
+import { createUpdaterPlatform } from "./updater-platform"
 
-const { autoUpdater } = pkg
 const key = "ready"
 
-export function setupAutoUpdater(stop: () => Promise<void>) {
+export function setupAutoUpdater(prepareToRestart: () => Promise<void>) {
   const logger = getLogger()
-  autoUpdater.logger = logger
-  autoUpdater.channel = "latest"
-  autoUpdater.allowPrerelease = false
-  autoUpdater.allowDowngrade = true
-  autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = false
-  logger.log("auto updater configured", {
-    channel: autoUpdater.channel,
-    allowPrerelease: autoUpdater.allowPrerelease,
-    allowDowngrade: autoUpdater.allowDowngrade,
-    currentVersion: app.getVersion(),
-  })
-
   const store = getStore("opencode.updater")
   return createUpdaterController({
-    enabled: UPDATER_ENABLED,
     currentVersion: app.getVersion(),
-    backend: {
-      checkForUpdates: () => autoUpdater.checkForUpdates(),
-      downloadUpdate: () => autoUpdater.downloadUpdate(),
-      quitAndInstall: () => {
-        // quitAndInstall closes all windows before emitting before-quit, so
-        // flag the quit first to keep window ids persisted for restore.
-        setAppQuitting()
-        try {
-          autoUpdater.quitAndInstall()
-        } catch (error) {
-          // The install failed and the app keeps running; clear the flag so
-          // deliberate window closes prune ids again.
-          setAppQuitting(false)
-          throw error
-        }
-      },
-    },
+    platform: UPDATER_ENABLED ? createUpdaterPlatform(logger) : undefined,
+    lifecycle: { prepareToRestart },
     persistence: {
       get() {
         const value = store.get(key)
@@ -54,30 +24,60 @@ export function setupAutoUpdater(stop: () => Promise<void>) {
       set: (value) => store.set(key, value),
       clear: () => store.delete(key),
     },
-    stop,
     log: (message, data) => logger.log(message, data),
   })
 }
 
-export async function showUpdaterDialog(controller: ReturnType<typeof setupAutoUpdater>, alertOnFail: boolean) {
+export function registerUpdaterIpc(controller: UpdaterController) {
+  const subscriptions = new Map<number, () => void>()
+  const unsubscribe = (id: number) => {
+    subscriptions.get(id)?.()
+    subscriptions.delete(id)
+  }
+  app.once("will-quit", () => subscriptions.forEach((dispose) => dispose()))
+
+  ipcMain.handle("updater-subscribe", (event) => {
+    const id = event.sender.id
+    subscriptions.get(id)?.() // a reloaded renderer replaces its previous subscription
+    subscriptions.set(
+      id,
+      controller.subscribe((state) => {
+        if (event.sender.isDestroyed()) return unsubscribe(id)
+        event.sender.send("updater-state", state)
+      }),
+    )
+    event.sender.once("destroyed", () => unsubscribe(id))
+  })
+  ipcMain.handle("updater-unsubscribe", (event) => unsubscribe(event.sender.id))
+  ipcMain.handle("updater-check", () => controller.check())
+  ipcMain.handle("updater-install", () => controller.install())
+}
+
+export async function showUpdaterDialog(controller: UpdaterController) {
   const state = await controller.check()
   if (state.status === "error") {
-    if (!alertOnFail) return
-    await dialog.showMessageBox({ type: "error", message: "Update check failed.", title: "Update Error" })
+    await dialog.showMessageBox({
+      type: "error",
+      message: nativeT("desktop.updater.dialog.checkFailed.message"),
+      title: nativeT("desktop.updater.dialog.checkFailed.title"),
+    })
     return
   }
   if (state.status === "up-to-date") {
-    if (!alertOnFail) return
-    await dialog.showMessageBox({ type: "info", message: "You're up to date.", title: "No Updates" })
+    await dialog.showMessageBox({
+      type: "info",
+      message: nativeT("desktop.updater.dialog.upToDate.message"),
+      title: nativeT("desktop.updater.dialog.upToDate.title"),
+    })
     return
   }
   if (state.status !== "ready") return
 
   const response = await dialog.showMessageBox({
     type: "info",
-    message: `Update ${state.version} downloaded. Restart now?`,
-    title: "Update Ready",
-    buttons: ["Restart", "Later"],
+    message: nativeT("desktop.updater.dialog.ready.message", { version: state.version }),
+    title: nativeT("desktop.updater.dialog.ready.title"),
+    buttons: [nativeT("desktop.updater.dialog.restart"), nativeT("desktop.updater.dialog.later")],
     defaultId: 0,
     cancelId: 1,
   })

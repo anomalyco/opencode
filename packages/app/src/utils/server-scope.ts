@@ -1,4 +1,4 @@
-import type { ServerConnection } from "@/context/server"
+import type { ServerConnection } from "@/context/servers"
 
 export type ServerScope = string & { readonly __brand: "ServerScope" }
 export type SessionRouteKey = string & { readonly __brand: "SessionRouteKey" }

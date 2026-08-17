@@ -8,17 +8,20 @@ export type {
   AppApi,
   CatalogApi,
   CommandApi,
+  ConfigApi,
   EventApi,
   IntegrationApi,
   ModelApi,
   PluginApi,
   ProviderApi,
   ReferenceApi,
+  WebSearchApi,
   SessionApi,
   SkillApi,
 } from "./api.js"
 export { Agent } from "@opencode-ai/schema/agent"
 export { Command } from "@opencode-ai/schema/command"
+export { Config } from "@opencode-ai/schema/config"
 export { Credential } from "@opencode-ai/schema/credential"
 export { Event } from "@opencode-ai/schema/event"
 export { EventLog } from "@opencode-ai/schema/event-log"
@@ -30,14 +33,15 @@ export { Model } from "@opencode-ai/schema/model"
 export { Permission } from "@opencode-ai/schema/permission"
 export { PermissionSaved } from "@opencode-ai/schema/permission-saved"
 export { Project } from "@opencode-ai/schema/project"
-export { ProjectCopy } from "@opencode-ai/schema/project-copy"
+export { Worktree } from "@opencode-ai/schema/worktree"
 export { Provider } from "@opencode-ai/schema/provider"
 export { Pty } from "@opencode-ai/schema/pty"
 export { Question } from "@opencode-ai/schema/question"
 export { Reference } from "@opencode-ai/schema/reference"
+export { WebSearch } from "@opencode-ai/schema/websearch"
 export { AbsolutePath, RelativePath } from "@opencode-ai/schema/schema"
 export { Session } from "@opencode-ai/schema/session"
-export { SessionPending } from "@opencode-ai/schema/session-pending"
+export { SessionInbox } from "@opencode-ai/schema/session-inbox"
 export { SessionMessage } from "@opencode-ai/schema/session-message"
 export { Skill } from "@opencode-ai/schema/skill"
 export { Prompt } from "@opencode-ai/schema/prompt"

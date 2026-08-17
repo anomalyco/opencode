@@ -27,8 +27,8 @@ test("legacy page key aliases compile as page keys", async () => {
     <ConfigProvider
       config={createTuiResolvedConfig({
         keybinds: {
-          messages_page_up: "pgup",
-          messages_page_down: "pgdown",
+          "session.page.up": "pgup",
+          "session.page.down": "pgdown",
         },
       })}
     >
@@ -46,7 +46,7 @@ test("legacy page key aliases compile as page keys", async () => {
 
 test("formats navigation keys as arrows", async () => {
   let read = () => ({}) as Record<string, string>
-  const commands = ["session.parent", "session.child.first", "session.child.previous", "session.child.next"]
+  const commands = ["session.parent", "session.child.first"]
 
   function Harness() {
     const shortcuts = Keymap.useShortcuts()
@@ -68,9 +68,33 @@ test("formats navigation keys as arrows", async () => {
     expect(read()).toEqual({
       "session.parent": "↑",
       "session.child.first": "↓",
-      "session.child.previous": "←",
-      "session.child.next": "→",
     })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("returns every formatted command shortcut", async () => {
+  let read = () => [] as readonly string[]
+
+  function Harness() {
+    const shortcuts = Keymap.useShortcuts()
+    Keymap.createLayer(() => ({
+      commands: [{ id: "demo.command", bind: "x,y", run() {} }],
+    }))
+    read = () => shortcuts.list("demo.command")
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <ConfigProvider config={createTuiResolvedConfig()}>
+      <Keymap.Provider>
+        <Harness />
+      </Keymap.Provider>
+    </ConfigProvider>
+  ))
+  try {
+    expect(read()).toEqual(["x", "y"])
   } finally {
     app.renderer.destroy()
   }

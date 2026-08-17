@@ -1,11 +1,13 @@
 import path from "node:path"
 
+const entrypoint = process.argv[1] ? path.resolve(process.argv[1]) : undefined
+
 export function selfCommand() {
   const runtime = path.basename(process.execPath, path.extname(process.execPath)).toLowerCase()
   if (runtime !== "bun" && runtime !== "node" && runtime !== "nodejs") return [process.execPath]
-  if (!process.argv[1]) throw new Error("Failed to resolve CLI entrypoint")
-  if (runtime === "node" || runtime === "nodejs") return [process.execPath, ...nodeFlags(), process.argv[1]]
-  return [process.execPath, process.argv[1]]
+  if (!entrypoint) throw new Error("Failed to resolve CLI entrypoint")
+  if (runtime === "node" || runtime === "nodejs") return [process.execPath, ...nodeFlags(), entrypoint]
+  return [process.execPath, entrypoint]
 }
 
 function nodeFlags() {

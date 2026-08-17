@@ -32,6 +32,23 @@ for (const expanded of [false, true]) {
   })
 }
 
+test("shows and expands a running shell command without shimmering it", async ({ page }) => {
+  const id = "prt_shell_running_command"
+  const command = "sleep 10 && echo done"
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([shell(id, "running", "still running", command)], { completed: false })],
+    settings: { shellToolPartsExpanded: false },
+  })
+
+  const tool = page.locator(`[data-timeline-part-id="${id}"]`)
+  await expect(tool.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
+  await expect(tool.locator('[data-component="shell-submessage"]')).toHaveText(command)
+  await expect(tool.locator('[data-component="shell-submessage"] [data-component="text-shimmer"]')).toHaveCount(0)
+  await tool.locator('[data-slot="collapsible-trigger"]').click()
+  await expect(tool.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
+  await expect(tool.locator('[data-slot="bash-pre"]')).toContainText("still running")
+})
+
 test("transitions thinking and hidden reasoning through busy to idle", async ({ page }) => {
   const reasoningID = "prt_reasoning_hidden"
   const assistant = assistantMessage([reasoningPart(reasoningID, "## Inspecting stability")], { completed: false })
@@ -65,6 +82,7 @@ test("moves busy through retry and recovery to final idle content", async ({ pag
               file: "src/retry.ts",
               additions: 1,
               deletions: 1,
+              status: "modified",
               patch: "@@ -1 +1 @@\n-export const retry = false\n+export const retry = true",
             },
           ],
@@ -86,7 +104,7 @@ test("moves busy through retry and recovery to final idle content", async ({ pag
   await timeline.send(status("idle"), 350)
   await expect(page.locator('[data-timeline-row="Retry"]')).toHaveCount(0)
   await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-  await expect(page.locator('[data-timeline-row="DiffSummary"]')).toBeVisible()
+  await expect(page.locator('[data-timeline-part-id="prt_recovered"]')).toContainText("Recovered response")
 })
 
 function lines(count: number) {

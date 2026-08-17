@@ -1,6 +1,5 @@
 export const dict = {
   "desktop.menu.checkForUpdates": "Check for Updates...",
-  "desktop.menu.installCli": "Install CLI...",
   "desktop.menu.reloadWebview": "Reload Webview",
   "desktop.menu.restart": "Restart",
 
@@ -20,8 +19,6 @@ export const dict = {
   "desktop.updater.installFailed.title": "Update Failed",
   "desktop.updater.installFailed.message": "Failed to install update",
 
-  "desktop.cli.installed.title": "CLI Installed",
-  "desktop.cli.installed.message": "CLI installed to {{path}}\n\nRestart your terminal to use the 'opencode' command.",
-  "desktop.cli.failed.title": "Installation Failed",
-  "desktop.cli.failed.message": "Failed to install CLI: {{error}}",
+  "desktop.error.dev.rootNotFound":
+    "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
 }

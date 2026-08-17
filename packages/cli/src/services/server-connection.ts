@@ -1,6 +1,6 @@
 import { Service, type Endpoint, type EnsureOptions } from "@opencode-ai/client/effect/service"
 import { ClientError, isUnauthorizedError, OpenCode } from "@opencode-ai/client/promise"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { OPENCODE_VERSION } from "../version"
 import { Effect, Redacted } from "effect"
 import { Env } from "../env"
 import { ServiceConfig } from "./service-config"
@@ -32,9 +32,9 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
       try: () => client.health.get({ signal: AbortSignal.timeout(5_000) }),
       catch: (cause) => connectError(endpoint, cause),
     })
-    if (health.version !== InstallationVersion)
+    if (health.version !== OPENCODE_VERSION)
       process.stderr.write(
-        `Warning: Server at ${endpoint.url} has version ${health.version}; this client is ${InstallationVersion}. Continuing anyway.\n`,
+        `Warning: Server at ${endpoint.url} has version ${health.version}; this client is ${OPENCODE_VERSION}. Continuing anyway.\n`,
       )
     return { endpoint } satisfies Resolved
   }
@@ -42,9 +42,10 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
     return { endpoint: yield* Standalone.start() } satisfies Resolved
   }
 
-  const options = yield* ServiceConfig.options()
+  const mismatch = args.mismatch ?? "ignore"
+  const options = yield* ServiceConfig.options({ checkVersion: mismatch !== "ignore" })
   return {
-    endpoint: yield* resolveManaged({ ...options, onStart: args.onStart }, args.mismatch ?? "replace"),
+    endpoint: yield* resolveManaged({ ...options, onStart: args.onStart }, mismatch),
     service: managedService(options),
   } satisfies Resolved
 })
@@ -56,15 +57,12 @@ function managedService(options: EnsureOptions) {
     restart: () =>
       Effect.gen(function* () {
         yield* Service.stop(options)
-        yield* Service.ensure(options)
+        yield* Service.ensure(reconnectOptions)
       }),
   }
 }
 
-const resolveManaged = Effect.fnUntraced(function* (
-  options: EnsureOptions,
-  mismatch: NonNullable<Args["mismatch"]>,
-) {
+const resolveManaged = Effect.fnUntraced(function* (options: EnsureOptions, mismatch: NonNullable<Args["mismatch"]>) {
   if (mismatch === "replace") return yield* Service.ensure(options)
   if (mismatch === "ignore") return yield* Service.ensure({ ...options, version: undefined })
 

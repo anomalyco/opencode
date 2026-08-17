@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { For } from "solid-js"
 import { testRender, type JSX } from "@opentui/solid"
 import {
-  formatSubagentRetry,
   InlineToolRow,
+  executeCallSummary,
   isBackgroundSubagent,
   parseApplyPatchFiles,
   parseDiagnostics,
@@ -183,6 +183,22 @@ describe("TUI inline tool wrapping", () => {
     expect(parseQuestionAnswers({})).toBeUndefined()
   })
 
+  test("summarizes execute calls on one line", () => {
+    expect(
+      executeCallSummary({
+        tool: "session.prompt",
+        status: "completed",
+        input: { sessionID: "ses_example", notify: true },
+      }),
+    ).toBe("↳ session.prompt [sessionID=ses_example, notify=true]")
+    expect(executeCallSummary({ tool: "session.get", status: "error", input: { nested: { hidden: true } } })).toBe(
+      "↳ session.get (failed)",
+    )
+    expect(
+      executeCallSummary({ tool: "session.prompt", status: "completed", input: { text: "first line\nsecond line" } }),
+    ).toBe("↳ session.prompt [text=first line second line]")
+  })
+
   test("ignores diagnostics with malformed nested ranges", () => {
     expect(
       parseDiagnostics(
@@ -196,10 +212,6 @@ describe("TUI inline tool wrapping", () => {
         "a.ts",
       ),
     ).toEqual([{ message: "valid", range: { start: { line: 2, character: 3 } } }])
-  })
-
-  test("keeps retry status ahead of wrapping messages", () => {
-    expect(formatSubagentRetry(2, "Rate limited by provider")).toBe("Retrying (attempt 2) · Rate limited by provider")
   })
 
   test("labels only detached or async subagents as background", () => {

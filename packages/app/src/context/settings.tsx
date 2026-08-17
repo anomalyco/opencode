@@ -1,8 +1,11 @@
 import { createStore, reconcile } from "solid-js/store"
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { createEffect, createMemo } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { persisted } from "@/utils/persist"
-import { usePlatform } from "@/context/platform"
+import { ScopedKey, type ServerScope } from "@/utils/server-scope"
+
+export type WorkspaceDefaultDestination = "last-used" | "local" | "new"
+export type WorkspaceLastUsed = "local" | "workspace"
 
 export interface NotificationSettings {
   agent: boolean
@@ -34,10 +37,6 @@ export interface Settings {
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
     mobileTitlebarPosition: "top" | "bottom"
-    newLayoutDesigns?: boolean
-    layoutTransitionEligible?: boolean
-    newInterfaceNoticeDismissed?: boolean
-    shouldDisplayTabsToast?: boolean
   }
   appearance: {
     fontSize: number
@@ -49,6 +48,10 @@ export interface Settings {
   permissions: {
     autoApprove: boolean
   }
+  workspaces: {
+    defaultDestination: WorkspaceDefaultDestination
+    lastUsed: Record<string, WorkspaceLastUsed>
+  }
   notifications: NotificationSettings
   sounds: SoundSettings
 }
@@ -56,71 +59,6 @@ export interface Settings {
 export const monoDefault = "System Mono"
 export const sansDefault = "System Sans"
 export const terminalDefault = "JetBrainsMono Nerd Font Mono"
-const legacyNewLayoutDesignsDefault = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
-export const newLayoutDesignsDefault = true
-// Existing users can switch layouts until local midnight on this date. Set new Date(YYYY, M-1, D) to show.
-export const oldInterfaceSunset = new Date(2026, 8, 14)
-const newLayoutDesignsUpgradeCutoff = "1.17.19"
-
-function compareVersions(a: string, b: string) {
-  const parse = (version: string) => {
-    const match = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/i.exec(version.trim())
-    if (!match) return
-    return match.slice(1).map(Number)
-  }
-  const left = parse(a)
-  const right = parse(b)
-  if (!left || !right) return
-  const index = left.findIndex((part, index) => part !== right[index])
-  return index === -1 ? 0 : left[index]! - right[index]!
-}
-
-export function isAppUpgrade(previous: string | undefined, current: string | undefined) {
-  if (!previous || !current) return false
-  const comparison = compareVersions(current, previous)
-  return comparison !== undefined && comparison > 0
-}
-
-export function shouldDisplayTabsToast(
-  previous: string | undefined,
-  current: string | undefined,
-  existingInstall: boolean,
-) {
-  return isAppUpgrade(previous, current) || (!previous && existingInstall)
-}
-
-export function shouldEnableNewLayout(previous: string | undefined, current: string | undefined) {
-  if (!current) return false
-  const currentComparison = compareVersions(current, newLayoutDesignsUpgradeCutoff)
-  if (!previous) return currentComparison !== undefined && currentComparison > 0
-  if (!isAppUpgrade(previous, current)) return false
-  const previousComparison = compareVersions(previous, newLayoutDesignsUpgradeCutoff)
-  return (
-    previousComparison !== undefined &&
-    currentComparison !== undefined &&
-    previousComparison <= 0 &&
-    currentComparison > 0
-  )
-}
-
-export function layoutTransitionState(scheduled: boolean, eligible: boolean, retired: boolean, dismissed: boolean) {
-  return {
-    available: scheduled && eligible && !retired,
-    notice: scheduled && eligible && retired && !dismissed,
-  }
-}
-
-export const maximumSunsetTimeout = 2_147_483_647
-
-export function nextSunsetCheckDelay(sunset: number, now: number) {
-  return Math.min(Math.max(0, sunset - now), maximumSunsetTimeout)
-}
-
-export function resolveNewLayoutDesigns(retired: boolean, preference: boolean | undefined, fallback = true) {
-  if (retired) return true
-  return preference ?? fallback
-}
-
 const monoFallback =
   'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 const sansFallback = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
@@ -196,6 +134,10 @@ const defaultSettings: Settings = {
   permissions: {
     autoApprove: false,
   },
+  workspaces: {
+    defaultDestination: "last-used",
+    lastUsed: {},
+  },
   notifications: {
     agent: true,
     permissions: true,
@@ -219,17 +161,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   name: "Settings",
   gate: false,
   init: () => {
-    const platform = usePlatform()
-    const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
-    const [launch, setLaunch, , launchReady] = persisted(
-      "app-version.v1",
-      createStore<{ version?: string }>({ version: undefined }),
-    )
-    const [launchState, setLaunchState] = createStore({
-      classified: false,
-      migrationApplied: false,
-      previous: undefined as string | undefined,
-    })
+    const [store, setStore, , ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
     const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
@@ -237,87 +169,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
     )
-    const sunset = oldInterfaceSunset
-    const [oldInterfaceRetired, setOldInterfaceRetired] = createSignal(sunset ? Date.now() >= sunset.getTime() : false)
-    const layoutTransitionClassified = createMemo(() => typeof store.general?.layoutTransitionEligible === "boolean")
-    const layoutTransitionEligible = withFallback(() => store.general?.layoutTransitionEligible, false)
-    const newInterfaceNoticeDismissed = withFallback(() => store.general?.newInterfaceNoticeDismissed, false)
-    const layoutUpgrade = createMemo(() =>
-      launchState.classified && !launchState.migrationApplied
-        ? shouldEnableNewLayout(launchState.previous, platform.version)
-        : false,
-    )
-    const layoutTransition = createMemo(() =>
-      layoutTransitionState(!!sunset, layoutTransitionEligible(), oldInterfaceRetired(), newInterfaceNoticeDismissed()),
-    )
-    const newLayoutDesigns = createMemo(() => {
-      if (layoutUpgrade()) return true
-      if (!ready() && !oldInterfaceRetired()) return legacyNewLayoutDesignsDefault
-      if (!layoutTransitionClassified()) {
-        return resolveNewLayoutDesigns(
-          oldInterfaceRetired(),
-          store.general?.newLayoutDesigns,
-          legacyNewLayoutDesignsDefault,
-        )
-      }
-      return resolveNewLayoutDesigns(
-        oldInterfaceRetired(),
-        store.general?.newLayoutDesigns,
-        layoutTransitionEligible() ? legacyNewLayoutDesignsDefault : newLayoutDesignsDefault,
-      )
-    })
-    const visible = (preference: () => boolean) => createMemo(() => !newLayoutDesigns() || preference())
-
-    if (sunset && !oldInterfaceRetired()) {
-      const timeout = { current: undefined as ReturnType<typeof setTimeout> | undefined }
-      const checkSunset = () => {
-        if (Date.now() >= sunset.getTime()) {
-          setOldInterfaceRetired(true)
-          return
-        }
-        timeout.current = setTimeout(checkSunset, nextSunsetCheckDelay(sunset.getTime(), Date.now()))
-      }
-      checkSunset()
-      onCleanup(() => {
-        if (timeout.current !== undefined) clearTimeout(timeout.current)
-      })
-    }
-
-    createEffect(() => {
-      if (!launchReady() || launchState.classified) return
-      setLaunchState({
-        classified: true,
-        previous: launch.version,
-      })
-      if (!platform.version || launch.version === platform.version) return
-      setLaunch("version", platform.version)
-    })
-
-    createEffect(() => {
-      if (!ready() || !launchState.classified || launchState.migrationApplied) return
-      if (layoutUpgrade() && store.general?.newLayoutDesigns !== true) {
-        setStore("general", "newLayoutDesigns", true)
-      }
-      setLaunchState("migrationApplied", true)
-    })
-
-    createEffect(() => {
-      if (!ready() || !launchState.classified) return
-      if (typeof store.general?.shouldDisplayTabsToast === "boolean") return
-      if (!launchState.previous && !layoutTransitionClassified()) return
-      setStore(
-        "general",
-        "shouldDisplayTabsToast",
-        shouldDisplayTabsToast(launchState.previous, platform.version, layoutTransitionEligible()),
-      )
-    })
-
-    createEffect(() => {
-      if (!ready() || !oldInterfaceRetired()) return
-      if (store.general?.newLayoutDesigns === true) return
-      setStore("general", "newLayoutDesigns", true)
-    })
-
     createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
@@ -403,34 +254,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setMobileTitlebarPosition(value: "top" | "bottom") {
           setStore("general", "mobileTitlebarPosition", value)
         },
-        newLayoutDesigns,
-        setNewLayoutDesigns(value: boolean) {
-          const next = oldInterfaceRetired() ? true : value
-          if (newLayoutDesigns() === next) return
-          setStore("general", "newLayoutDesigns", next)
-          if (typeof window !== "undefined") setTimeout(() => window.location.reload())
-        },
-        layoutTransitionClassified,
-        setOldLayoutEligible(eligible: boolean) {
-          const current = store.general?.layoutTransitionEligible
-          if (typeof current === "boolean") return
-          setStore("general", "layoutTransitionEligible", eligible)
-        },
-        layoutTransitionAvailable: createMemo(() => ready() && layoutTransition().available),
-        newInterfaceNoticeVisible: createMemo(() => ready() && layoutTransition().notice),
-        dismissNewInterfaceNotice() {
-          setStore("general", "newInterfaceNoticeDismissed", true)
-        },
-        shouldDisplayTabsToast: withFallback(() => store.general?.shouldDisplayTabsToast, false),
-        dismissTabsToast() {
-          setStore("general", "shouldDisplayTabsToast", false)
-        },
+        newLayoutDesigns: () => true,
       },
       visibility: {
-        fileTree: visible(showFileTree),
-        search: visible(showSearch),
-        status: visible(showStatus),
-        customAgents: visible(showCustomAgents),
+        fileTree: showFileTree,
+        search: showSearch,
+        status: showStatus,
+        customAgents: showCustomAgents,
       },
       appearance: {
         fontSize: withFallback(() => store.appearance?.fontSize, defaultSettings.appearance.fontSize),
@@ -471,6 +301,29 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         autoApprove: withFallback(() => store.permissions?.autoApprove, defaultSettings.permissions.autoApprove),
         setAutoApprove(value: boolean) {
           setStore("permissions", "autoApprove", value)
+        },
+      },
+      workspaces: {
+        defaultDestination: withFallback(
+          () => store.workspaces?.defaultDestination,
+          defaultSettings.workspaces.defaultDestination,
+        ),
+        setDefaultDestination(value: WorkspaceDefaultDestination) {
+          setStore("workspaces", (current) => ({
+            ...defaultSettings.workspaces,
+            ...current,
+            defaultDestination: value,
+          }))
+        },
+        lastUsed(scope: ServerScope, projectID: string) {
+          return store.workspaces?.lastUsed?.[ScopedKey.from(scope, projectID)]
+        },
+        setLastUsed(scope: ServerScope, projectID: string, value: WorkspaceLastUsed) {
+          setStore("workspaces", (current) => ({
+            ...defaultSettings.workspaces,
+            ...current,
+            lastUsed: { ...current?.lastUsed, [ScopedKey.from(scope, projectID)]: value },
+          }))
         },
       },
       notifications: {
