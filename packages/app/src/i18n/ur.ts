@@ -179,6 +179,8 @@ export const dict = {
   "command.session.redo": "دوبارہ کریں۔",
   "command.session.redo.description": "آخری کالعدم پیغام کو دوبارہ کریں۔",
   "command.session.compact": "سیشن مختصر کریں",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "سیاق و سباق کے سائز کو کم کرنے کے لیے سیشن کا خلاصہ کریں۔",
   "command.session.fork": "پیغام سے نئی شاخ بنائیں",
   "command.session.fork.description": "پچھلے پیغام سے ایک نیا سیشن بنائیں",

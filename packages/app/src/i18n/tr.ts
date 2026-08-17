@@ -189,6 +189,8 @@ export const dict = {
   "command.session.redo": "Yinele",
   "command.session.redo.description": "Son geri alınan mesajı yinele",
   "command.session.compact": "Oturumu sıkıştır",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Bağlam boyutunu azaltmak için oturumu özetle",
   "command.session.fork": "Mesajdan dallandır",
   "command.session.fork.description": "Önceki bir mesajdan yeni oturum oluştur",

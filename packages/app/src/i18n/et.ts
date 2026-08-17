@@ -171,6 +171,8 @@ export const dict = {
   "command.session.redo": "Tee uuesti",
   "command.session.redo.description": "Korrake viimane tühistatud sõnum",
   "command.session.compact": "Kompaktne seanss",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Konteksti suuruse vähendamiseks tehke seansist kokkuvõte",
   "command.session.fork": "Sõnumi kahvel",
   "command.session.fork.description": "Looge eelmisest sõnumist uus seanss",

@@ -178,6 +178,7 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Täze sessiýa şahalandyr",
   "ui.message.revertMessage": "Habary yzyna öwürmek",
   "ui.message.copyResponse": "Jogap göçüriň",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Göçürildi",
   "ui.message.duration.seconds": "{{count}}",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",

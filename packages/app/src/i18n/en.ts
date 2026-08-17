@@ -88,6 +88,8 @@ export const dict = {
   "command.session.redo": "Redo",
   "command.session.redo.description": "Redo the last undone message",
   "command.session.compact": "Compact session",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Summarize the session to reduce context size",
   "command.session.fork": "Fork from message",
   "command.session.fork.description": "Create a new session from a previous message",

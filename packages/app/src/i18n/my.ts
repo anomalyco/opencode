@@ -173,6 +173,8 @@ export const dict = {
   "command.session.redo": "ပြန်လုပ်ပါ။",
   "command.session.redo.description": "နောက်ဆုံးမပြီးသော မက်ဆေ့ဂျ်ကို ပြန်လုပ်ပါ။",
   "command.session.compact": "ကျစ်လစ်သိပ်သည်းသော စက်ရှင်",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "အကြောင်းအရာအရွယ်အစားကို လျှော့ချရန် စက်ရှင်ကို အကျဉ်းချုံ့ပါ။",
   "command.session.fork": "မက်ဆေ့ဂျ်မှ ခက်ရင်း",
   "command.session.fork.description": "ယခင်မက်ဆေ့ဂျ်မှ ဆက်ရှင်အသစ်တစ်ခု ဖန်တီးပါ။",

@@ -182,6 +182,7 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Atzarot jaunā sesijā",
   "ui.message.revertMessage": "Atjaunot ziņu",
   "ui.message.copyResponse": "Kopēt atbildi",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "Nokopēts",
   "ui.message.duration.seconds": "{{count}} s",
   "ui.message.duration.minutesSeconds": "{{minutes}} m {{seconds}} s",

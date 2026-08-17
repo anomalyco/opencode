@@ -202,6 +202,7 @@ export const dict = {
   "ui.message.forkMessage": "تشعب إلى جلسة جديدة",
   "ui.message.revertMessage": "التراجع عن الرسالة",
   "ui.message.copyResponse": "نسخ الرد",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "تم النسخ!",
   "ui.message.interrupted": "تمت المقاطعة",
   "ui.message.queued": "في قائمة الانتظار",

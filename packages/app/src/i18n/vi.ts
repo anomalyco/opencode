@@ -178,6 +178,8 @@ export const dict = {
   "command.session.redo": "Làm lại",
   "command.session.redo.description": "Làm lại tin nhắn đã hoàn tác gần đây nhất",
   "command.session.compact": "Nén phiên",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Tóm tắt phiên để giảm kích thước ngữ cảnh",
   "command.session.fork": "Tách nhánh từ tin nhắn",
   "command.session.fork.description": "Tạo phiên mới từ tin nhắn trước đó",

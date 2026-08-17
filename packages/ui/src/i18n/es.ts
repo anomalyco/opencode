@@ -190,6 +190,7 @@ export const dict = {
   "ui.message.forkMessage": "Bifurcar a nueva sesión",
   "ui.message.revertMessage": "Restablecer a este punto",
   "ui.message.copyResponse": "Copiar respuesta",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "¡Copiado!",
   "ui.message.interrupted": "Interrumpido",
   "ui.message.queued": "En cola",

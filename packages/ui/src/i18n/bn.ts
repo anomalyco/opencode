@@ -180,6 +180,7 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "নতুন অধিবেশনে কাঁটাচামচ",
   "ui.message.revertMessage": "বার্তা প্রত্যাবর্তন করুন",
   "ui.message.copyResponse": "কপি প্রতিক্রিয়া",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "কপি করা হয়েছে",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}মি {{seconds}}সেকেন্ড",

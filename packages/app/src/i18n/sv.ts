@@ -172,6 +172,8 @@ export const dict = {
   "command.session.redo": "Gör om",
   "command.session.redo.description": "Gör om det senaste ångrade meddelandet",
   "command.session.compact": "Komprimera session",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Sammanfatta sessionen för att minska kontextstorleken",
   "command.session.fork": "Förgrena från meddelande",
   "command.session.fork.description": "Skapa en ny session från ett tidigare meddelande",

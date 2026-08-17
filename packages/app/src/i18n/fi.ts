@@ -78,6 +78,8 @@ export const dict = {
   "command.session.redo": "Toista",
   "command.session.redo.description": "Toista viimeisin kumottu viesti",
   "command.session.compact": "Tiivistä istunto",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Tee yhteenveto istunnosta pienentääksesi kontekstin kokoa",
   "command.session.fork": "Haarauta viestistä",
   "command.session.fork.description": "Luo uusi istunto edellisestä viestistä",

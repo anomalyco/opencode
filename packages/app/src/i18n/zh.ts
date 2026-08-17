@@ -210,6 +210,8 @@ export const dict = {
   "command.session.redo": "重做",
   "command.session.redo.description": "重做上一条撤销的消息",
   "command.session.compact": "压缩会话",
+  "command.session.record-notes": "保存笔记学习",
+  "command.session.record-notes.description": "将本次会话的学习内容保存到项目笔记本",
   "command.session.compact.description": "总结会话以减少上下文大小",
   "command.session.fork": "从消息创建新会话",
   "command.session.fork.description": "从之前的消息创建新会话",

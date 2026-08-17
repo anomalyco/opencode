@@ -175,6 +175,8 @@ export const dict = {
   "command.session.redo": "Endurtaka",
   "command.session.redo.description": "Endurtaktu síðustu afturkölluðu skilaboðin",
   "command.session.compact": "Þjappa setu",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "Draga setuna saman til að minnka samhengi",
   "command.session.fork": "Kvíslast frá skilaboðum",
   "command.session.fork.description": "Stofna nýja setu út frá fyrri skilaboðum",

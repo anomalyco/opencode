@@ -174,6 +174,8 @@ export const dict: Record<string, string> = {
   "command.session.redo": "ཡང་བསྐྱར་འབད།",
   "command.session.redo.description": "མཐའ་མཇུག་གི་འབད་བཤོལ་འབད་ཡོད་པའི་འཕྲིན་དོན་འདི་ལོག་འབད།",
   "command.session.compact": "ལཱ་ཡུན་བསྡུ་སྒྲིག་འབད་ནི།",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "སྐབས་དོན་གྱི་ཚད་མར་ཕབ་འབད་ནིའི་དོན་ལུ་ ལཱ་ཡུན་བཅུད་བསྡུས།",
   "command.session.fork": "འཕྲིན་དོན་ལས་ཕོརཀ།",
   "command.session.fork.description": "ཧེ་མའི་འཕྲིན་དོན་ལས་ ལཱ་ཡུན་གསརཔ་ཅིག་གསར་བསྐྲུན་འབད།",

@@ -74,6 +74,8 @@ export const dict = {
   "command.session.redo": "다시 실행",
   "command.session.redo.description": "마지막 실행 취소된 메시지 다시 실행",
   "command.session.compact": "세션 압축",
+  "command.session.record-notes": "Save notebook learnings",
+  "command.session.record-notes.description": "Persist this session's learnings to the project notebook",
   "command.session.compact.description": "컨텍스트 크기를 줄이기 위해 세션 요약",
   "command.session.fork": "메시지에서 분기",
   "command.session.fork.description": "이전 메시지에서 새 세션 생성",

@@ -179,6 +179,7 @@ export const dict = {
   "ui.message.forkMessage": "စက်ရှင်အသစ်သို့ ဖြတ်လိုက်ပါ။",
   "ui.message.revertMessage": "မက်ဆေ့ဂျ်ကို ပြန်ပြောင်းပါ။",
   "ui.message.copyResponse": "တုံ့ပြန်မှုကို ကူးယူပါ။",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "ကူးယူထားသည်။",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",

@@ -179,6 +179,7 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "އާ ސެޝަނަށް ފޯކް ކޮށްލާށެވެ",
   "ui.message.revertMessage": "ރިވަރޓް މެސެޖް",
   "ui.message.copyResponse": "ކޮޕީ ޖަވާބު",
+  "ui.message.saveLearnings": "Save learnings",
   "ui.message.copied": "ކޮޕީކޮށްފައި",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
