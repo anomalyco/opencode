@@ -55,6 +55,7 @@
     "@opentui/core": "catalog:",
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
+    "@mariozechner/clipboard": "0.3.9",
     "clipboardy": "4.0.0",
     "diff": "catalog:",
     "effect": "catalog:",
