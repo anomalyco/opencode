@@ -24,11 +24,11 @@ export function normalizeNewSessionWorktree(value: string, directory: string, pr
 
 export function resolveNewSessionBranch(input: {
   worktree: string
-  local?: string
+  directory: string
   worktreeBranch: (worktree: string) => string | undefined
 }) {
-  if (input.worktree === "main" || input.worktree === "create") return input.local
-  return input.worktreeBranch(input.worktree) ?? input.local
+  if (input.worktree === "main" || input.worktree === "create") return input.worktreeBranch(input.directory)
+  return input.worktreeBranch(input.worktree) ?? input.worktreeBranch(input.directory)
 }
 
 export function createNewSessionWorkspaceController() {
@@ -46,11 +46,10 @@ export function createNewSessionWorkspaceController() {
     }),
   )
   const projectRoot = createMemo(() => sync().project?.worktree ?? sdk().directory)
-  const localBranch = createMemo(() => serverSync().child(projectRoot())[0].vcs?.branch)
   const branch = createMemo(() =>
     resolveNewSessionBranch({
       worktree: value(),
-      local: localBranch(),
+      directory: sdk().directory,
       worktreeBranch: (worktree) => serverSync().child(worktree)[0].vcs?.branch,
     }),
   )
