@@ -255,7 +255,7 @@ describe("v2 session reducer", () => {
         type: "system",
         text: "Changed instructions",
         description: "Instructions updated: agents",
-        metadata: undefined,
+        metadata: { notice: "instructions", instructionSources: ["agents"] },
         time: { created: 1 },
       },
     ])

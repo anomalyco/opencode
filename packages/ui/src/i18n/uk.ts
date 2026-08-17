@@ -223,4 +223,9 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Виберіть усі відповідні варіанти",
   "ui.question.singleHint": "Виберіть одну відповідь",
   "ui.question.custom.placeholder": "Введіть свою відповідь...",
+  "ui.messagePart.context.match.one": "({{count}} збіг)",
+  "ui.messagePart.context.match.other": "({{count}} збігу)",
+  "ui.tool.execute": "Виконати",
+  "ui.messagePart.context.match.few": "({{count}} збіги)",
+  "ui.messagePart.context.match.many": "({{count}} збігів)",
 }

@@ -219,4 +219,9 @@ export const dict = {
   "ui.toolErrorCard.copyError": "Скопировать ошибку",
   "ui.message.duration.seconds": "{{count}} с",
   "ui.message.duration.minutesSeconds": "{{minutes}} мин {{seconds}} с",
+  "ui.messagePart.context.match.one": "({{count}} совпадение)",
+  "ui.messagePart.context.match.other": "({{count}} совпадения)",
+  "ui.tool.execute": "Выполнить",
+  "ui.messagePart.context.match.few": "({{count}} совпадения)",
+  "ui.messagePart.context.match.many": "({{count}} совпадений)",
 }

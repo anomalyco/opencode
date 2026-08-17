@@ -84,6 +84,7 @@ export const layer = (options?: Options) =>
           sessionID,
           text: CONTINUE_AFTER_SERVER_RESTART,
           description: "Continuing after restart",
+          metadata: { notice: "restart" },
         })
         // Forked into the service scope so boot never waits on resumed turns;
         // resuming an already-live Session joins its execution. Drain failures

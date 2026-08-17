@@ -13,27 +13,14 @@ export function SessionBackgroundDock(props: {
   const language = useLanguage()
   const command = useCommand()
   const [store, setStore] = createStore({ collapsed: true })
-  const describe = (shells: number, subagents: number) => {
-    const shell = shells ? language.plural("session.background.shell", shells, { count: shells }) : undefined
-    const subagent = subagents
-      ? language.plural("session.background.subagent", subagents, { count: subagents })
-      : undefined
-    if (shell && subagent) return language.t("session.background.combine", { first: shell, second: subagent })
-    return shell ?? subagent ?? ""
-  }
-  const summary = createMemo(() => {
-    const shells = props.tasks.filter((task) => task.type === "shell").length
-    return describe(shells, props.tasks.length - shells)
-  })
   const moving = createMemo(() => {
     const shells = props.blocking.filter((task) => task.type === "shell").length
-    const subagents = props.blocking.length - shells
-    const tasks = describe(shells, subagents)
-    return tasks ? language.t("session.background.moveTasks", { tasks }) : ""
+    return language.backgroundTasks(shells, props.blocking.length - shells, "move")
   })
-  const background = createMemo(() =>
-    summary() ? language.t("session.background.inBackground", { tasks: summary() }) : "",
-  )
+  const background = createMemo(() => {
+    const shells = props.tasks.filter((task) => task.type === "shell").length
+    return language.backgroundTasks(shells, props.tasks.length - shells, "running")
+  })
   const blocking = () => props.blocking.length > 0
   const toggle = () => {
     if (blocking()) {

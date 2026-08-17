@@ -107,6 +107,8 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.search.other": "{{count}} pencarian",
   "ui.messagePart.context.list.one": "{{count}} daftar",
   "ui.messagePart.context.list.other": "{{count}} daftar",
+  "ui.messagePart.context.match.one": "({{count}} kecocokan)",
+  "ui.messagePart.context.match.other": "({{count}} kecocokan)",
 
   "ui.list.loading": "Memuat",
   "ui.list.empty": "Tidak ada hasil",
@@ -157,6 +159,7 @@ export const dict: Record<string, string> = {
   "ui.tool.websearch": "Pencarian Web",
   "ui.tool.websearch.provider": "{{provider}} Pencarian Web",
   "ui.tool.shell": "Shell",
+  "ui.tool.execute": "Jalankan",
   "ui.tool.patch": "Patch",
   "ui.tool.questions": "Pertanyaan",
   "ui.tool.questions.numbered": "Pertanyaan {{number}}",

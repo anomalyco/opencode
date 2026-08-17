@@ -216,4 +216,8 @@ export const dict = {
   "ui.promptInput.send": "Senden",
   "ui.promptInput.stop": "Stoppen",
   "ui.tabs.close": "Tab schließen",
+
+  "ui.messagePart.context.match.one": "({{count}}-Übereinstimmung)",
+  "ui.messagePart.context.match.other": "({{count}} Übereinstimmungen)",
+  "ui.tool.execute": "Ausführen",
 } satisfies Partial<Record<Keys, string>>

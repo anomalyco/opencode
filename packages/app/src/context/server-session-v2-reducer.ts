@@ -146,7 +146,7 @@ export function createV2SessionReducer() {
           type: "system",
           text: event.data.text,
           description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
-          metadata: event.metadata,
+          metadata: { ...event.metadata, notice: "instructions", instructionSources: Object.keys(event.data.delta) },
           time: { created: event.created },
         })
       case "session.synthetic":

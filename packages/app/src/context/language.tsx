@@ -220,6 +220,14 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     }
     const plural = (key: PluralKey, count: number, params?: Record<string, string | number | boolean>) =>
       pluralForm(key, pluralCategory(intl(), count), { ...params, count })
+    const backgroundTasks = (shells: number, subagents: number, mode: "move" | "running") => {
+      const shell = shells ? plural("session.background.shell", shells, { count: shells }) : undefined
+      const subagent = subagents ? plural("session.background.subagent", subagents, { count: subagents }) : undefined
+      const tasks =
+        shell && subagent ? t("session.background.combine", { first: shell, second: subagent }) : (shell ?? subagent)
+      if (!tasks) return ""
+      return t(mode === "move" ? "session.background.moveTasks" : "session.background.inBackground", { tasks })
+    }
 
     const label = (value: Locale) => DESKTOP_NATIVE_LABELS[value]
 
@@ -251,6 +259,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       t,
       plural,
       pluralForm,
+      backgroundTasks,
       setLocale(next: Locale) {
         setStore("locale", normalizeLocale(next))
       },

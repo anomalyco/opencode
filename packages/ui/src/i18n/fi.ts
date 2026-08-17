@@ -192,4 +192,8 @@ export const dict: Record<string, string> = {
   "ui.promptInput.send": "Lähetä",
   "ui.promptInput.stop": "Pysäytä",
   "ui.tabs.close": "Sulje välilehti",
+
+  "ui.messagePart.context.match.one": "({{count}} osuma)",
+  "ui.messagePart.context.match.other": "({{count}} osumia)",
+  "ui.tool.execute": "Suorita",
 }

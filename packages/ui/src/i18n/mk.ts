@@ -192,4 +192,7 @@ export const dict = {
   "ui.question.multiHint": "Изберете ги сите одговори што важат",
   "ui.question.singleHint": "Изберете еден одговор",
   "ui.question.custom.placeholder": "Напишете го вашиот одговор...",
+  "ui.messagePart.context.match.one": "({{count}} совпаѓање)",
+  "ui.messagePart.context.match.other": "({{count}} совпаѓања)",
+  "ui.tool.execute": "Изврши",
 }

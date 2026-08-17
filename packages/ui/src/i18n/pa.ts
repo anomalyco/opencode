@@ -193,4 +193,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "لاگو ہون آلے سارے جواباں نوں چنو",
   "ui.question.singleHint": "اک جواب چنو",
   "ui.question.custom.placeholder": "اپنا جواب ٹائپ کرو...",
+  "ui.messagePart.context.match.one": "({{count}} میل)",
+  "ui.messagePart.context.match.other": "({{count}} میل)",
+  "ui.tool.execute": "چلاؤ",
 }

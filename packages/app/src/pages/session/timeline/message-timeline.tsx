@@ -470,10 +470,17 @@ function MessageTimelineView(
     if (message.type === "location-switched")
       return { label: language.t("ui.patch.action.moved"), data: message.location.directory }
     if (message.type === "skill") return { label: language.t("ui.tool.skill"), data: message.name }
-    if (message.type === "system") return { label: message.description ?? message.text }
+    if (message.type === "system") {
+      const sources = Array.isArray(message.metadata?.instructionSources)
+        ? message.metadata.instructionSources.filter((item): item is string => typeof item === "string").join(", ")
+        : undefined
+      if (message.metadata?.notice === "instructions" && sources)
+        return { label: language.t("session.timeline.notice.instructionsUpdated", { sources }) }
+      return { label: message.description ?? message.text }
+    }
     if (message.type === "compaction") return { label: language.t("ui.messagePart.compaction"), data: message.status }
     if (message.type !== "synthetic") return
-    if (message.description === "Continuing after restart") return { label: message.description }
+    if (message.metadata?.notice === "restart") return { label: language.t("session.timeline.notice.restart") }
     const source = typeof message.metadata?.source === "string" ? message.metadata.source : undefined
     const state = typeof message.metadata?.state === "string" ? message.metadata.state : undefined
     if (source === "subagent" || source === "shell") {

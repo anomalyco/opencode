@@ -197,4 +197,9 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Seleziona tutte le risposte pertinenti",
   "ui.question.singleHint": "Seleziona una risposta",
   "ui.question.custom.placeholder": "Digita la tua risposta...",
+
+  "ui.messagePart.context.match.one": "(corrispondenza {{count}})",
+  "ui.messagePart.context.match.other": "(corrispondenze {{count}})",
+  "ui.tool.execute": "Eseguire",
+  "ui.messagePart.context.match.many": "({{count}} corrispondenze)",
 }

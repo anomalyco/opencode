@@ -195,4 +195,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Barcha tegishli javoblarni tanlang",
   "ui.question.singleHint": "Bitta javobni tanlang",
   "ui.question.custom.placeholder": "Javobingizni yozing...",
+  "ui.messagePart.context.match.one": "({{count}} moslik)",
+  "ui.messagePart.context.match.other": "({{count}} moslik)",
+  "ui.tool.execute": "Bajarish",
 }

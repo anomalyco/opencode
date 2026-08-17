@@ -193,4 +193,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "އެކަމާ ގުޅޭ ހުރިހާ ޖަވާބެއް ހޮވާށެވެ",
   "ui.question.singleHint": "އެއް ޖަވާބެއް ހޮވާށެވެ",
   "ui.question.custom.placeholder": "ޖަވާބު ޓައިޕް ކުރާށެވެ...",
+  "ui.messagePart.context.match.one": "({{count}} މެޗެއް)",
+  "ui.messagePart.context.match.other": "({{count}} މެޗްތައް)",
+  "ui.tool.execute": "ހިންގާށެވެ",
 }

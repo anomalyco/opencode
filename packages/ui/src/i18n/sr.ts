@@ -197,4 +197,8 @@ export const dict = {
   "ui.question.multiHint": "Изаберите све одговоре који се примењују",
   "ui.question.singleHint": "Изаберите један одговор",
   "ui.question.custom.placeholder": "Унесите свој одговор...",
+  "ui.messagePart.context.match.one": "({{count}} подударање)",
+  "ui.messagePart.context.match.other": "({{count}} подударања)",
+  "ui.tool.execute": "Изврши",
+  "ui.messagePart.context.match.few": "({{count}} подударања)",
 }

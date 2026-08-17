@@ -196,4 +196,8 @@ export const dict = {
   "ui.messagePart.context.read.two": "{{count}} קריאות",
   "ui.messagePart.context.search.two": "{{count}} חיפושים",
   "ui.messagePart.context.list.two": "{{count}} הצגות",
+  "ui.messagePart.context.match.one": "({{count}} התאמה)",
+  "ui.messagePart.context.match.two": "({{count}} התאמות)",
+  "ui.messagePart.context.match.other": "({{count}} התאמות)",
+  "ui.tool.execute": "הפעל",
 }

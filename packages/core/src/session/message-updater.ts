@@ -126,7 +126,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             type: "system",
             text: event.data.text,
             description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
-            metadata: event.metadata,
+            metadata: { ...event.metadata, notice: "instructions", instructionSources: Object.keys(event.data.delta) },
             time: { created },
           }),
         )

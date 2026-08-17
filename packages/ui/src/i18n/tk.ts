@@ -192,4 +192,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Appliceshli jogaplary saýlaň",
   "ui.question.singleHint": "Bir jogap saýlaň",
   "ui.question.custom.placeholder": "Jogabyňyzy ýazyň ...",
+  "ui.messagePart.context.match.one": "({{count}} gabat gelme)",
+  "ui.messagePart.context.match.other": "({{count}} gabat gelme)",
+  "ui.tool.execute": "Ýerine ýetir",
 }

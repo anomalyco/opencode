@@ -192,4 +192,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "අදාළ සියලු පිළිතුරු තෝරන්න",
   "ui.question.singleHint": "එක් පිළිතුරක් තෝරන්න",
   "ui.question.custom.placeholder": "ඔබේ පිළිතුර ටයිප් කරන්න...",
+  "ui.messagePart.context.match.one": "(ගැළපීම {{count}}ක්)",
+  "ui.messagePart.context.match.other": "(ගැළපීම් {{count}}ක්)",
+  "ui.tool.execute": "ක්‍රියාත්මක කරන්න",
 }
