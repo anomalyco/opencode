@@ -5,11 +5,17 @@ import { DiffRenderable, type Renderable, ScrollBoxRenderable } from "@opentui/c
 import { testRender, useRenderer } from "@opentui/solid"
 import type { TuiPluginApi, TuiPluginMeta, TuiRouteCurrent, TuiRouteDefinition } from "@opencode-ai/plugin/tui"
 import type { Session } from "@opencode-ai/sdk/v2"
+import { onCleanup } from "solid-js"
 import { KVProvider } from "../../../src/context/kv"
 import { ThemeProvider } from "../../../src/context/theme"
 import { TuiConfigProvider } from "../../../src/config"
 import { TuiKeybind } from "../../../src/config/keybind"
-import { OpencodeKeymapProvider } from "../../../src/keymap"
+import {
+  OpencodeKeymapProvider,
+  getOpencodeModeStack,
+  registerOpencodeKeymap,
+  type OpenTuiKeymap,
+} from "../../../src/keymap"
 import diffViewerPlugin from "../../../src/feature-plugins/system/diff-viewer"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
@@ -107,10 +113,17 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
   let renderDiff: TuiRouteDefinition["render"] | undefined
   let vcsDiffInput: unknown
   let sessionDiffInput: unknown
+  let keymapRef: OpenTuiKeymap | undefined
   const config = createTuiResolvedConfig()
   function Harness() {
     const renderer = useRenderer()
     const keymap = createDefaultOpenTuiKeymap(renderer)
+    keymapRef = keymap
+    const offKeymap = registerOpencodeKeymap(keymap, renderer, {
+      keybinds: config.keybinds,
+      leader_timeout: config.leader_timeout,
+    })
+    onCleanup(() => offKeymap())
     const registerLayer = keymap.registerLayer.bind(keymap)
     keymap.registerLayer = (layer) => {
       layer.commands?.forEach((command) => commands.set(command.name, command))
@@ -180,6 +193,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
     current: () => current,
     vcsDiffInput: () => vcsDiffInput,
     sessionDiffInput: () => sessionDiffInput,
+    keymap: () => keymapRef!,
   }
 }
 
@@ -237,6 +251,55 @@ test("last-turn diff source requests session diff", async () => {
     })
     expect(viewer.sessionDiffInput()).toEqual({ sessionID: "session-1", messageID: "message-1" })
     expect(viewer.vcsDiffInput()).toBeUndefined()
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("diff viewer key bindings are inactive while a dialog is open", async () => {
+  const viewer = await renderDiffViewer([])
+  try {
+    const keymap = viewer.keymap()
+    const modeStack = getOpencodeModeStack(keymap)
+    const diffCommands = [
+      "diff.down",
+      "diff.up",
+      "diff.page.down",
+      "diff.page.up",
+      "diff.next_hunk",
+      "diff.previous_hunk",
+      "diff.next_file",
+      "diff.previous_file",
+      "diff.toggle_view",
+      "diff.mark_reviewed",
+      "diff.switch_focus",
+    ]
+
+    const activeCounts = () =>
+      Object.fromEntries(
+        Array.from(
+          keymap.getCommandBindings({
+            visibility: "active",
+            commands: diffCommands,
+          }),
+          ([command, bindings]) => [command, bindings.length],
+        ),
+      )
+
+    const baseCounts = activeCounts()
+    for (const [command, count] of Object.entries(baseCounts)) {
+      expect(count).toBeGreaterThan(0)
+    }
+
+    const popModal = modeStack.push("modal")
+    const modalCounts = activeCounts()
+    for (const [command, count] of Object.entries(modalCounts)) {
+      expect(count).toBe(0)
+    }
+
+    popModal()
+    const restoredCounts = activeCounts()
+    expect(restoredCounts).toEqual(baseCounts)
   } finally {
     viewer.app.renderer.destroy()
   }
