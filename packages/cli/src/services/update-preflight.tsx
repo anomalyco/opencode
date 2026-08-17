@@ -3,7 +3,7 @@
 // version-mismatched background service before the TUI attaches.
 import { createCliRenderer, RGBA, TextAttributes, type CliRenderer, type ThemeMode } from "@opentui/core"
 import { render, useTerminalDimensions } from "@opentui/solid"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { OPENCODE_VERSION } from "../version"
 import { registerOpencodeSpinner } from "@opencode-ai/tui/component/register-spinner"
 import { SPINNER_FRAMES } from "@opencode-ai/tui/component/spinner"
 import { go } from "@opencode-ai/tui/logo"
@@ -356,12 +356,12 @@ function UpdateFooter(props: {
           ] as const)
         : []),
       ["to", colors.muted],
-      [InstallationVersion, colors.accent],
+      [OPENCODE_VERSION, colors.accent],
     )
   const completedHeader = phrase(
     ["OpenCode", colors.muted, true],
     ["updated to", colors.muted],
-    [InstallationVersion, colors.accent],
+    [OPENCODE_VERSION, colors.accent],
   )
   const pausedHeader = phrase(["OpenCode", colors.muted, true], ["update paused", colors.muted])
   const outcomeStatus = () =>
@@ -413,9 +413,7 @@ function UpdateFooter(props: {
     const completion = smoothstep(headerFade.progress())
     return Array.from({ length: width }, (_, index) => {
       const color =
-        index >= filled
-          ? colors.muted
-          : shade(railRamp, Math.max(0, 1 - Math.abs(index - center) / glowRadius) ** 2)
+        index >= filled ? colors.muted : shade(railRamp, Math.max(0, 1 - Math.abs(index - center) / glowRadius) ** 2)
       return {
         char: success || index < filled ? "━" : "·",
         color: success ? blend(color, colors.accent, completion) : color,
@@ -449,7 +447,7 @@ function UpdateFooter(props: {
   })
 
   return (
-    <box width="100%" height={4} flexDirection="row" gap={1} live={props.animating()}>
+    <box width="100%" height={4} flexDirection="row" gap={1} paddingLeft={1} live={props.animating()}>
       <Monogram ink={monogramInk} />
       <box flexDirection="column" flexGrow={1} overflow="hidden">
         <CellLine cells={header()} />

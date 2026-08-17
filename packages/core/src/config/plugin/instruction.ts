@@ -1,0 +1,124 @@
+export * as ConfigInstructionPlugin from "./instruction.js"
+
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Global } from "@opencode-ai/util/global"
+import { dirname, join } from "path"
+import { Effect, PubSub, Semaphore, Stream } from "effect"
+import { Watcher } from "../../filesystem/watcher.js"
+import { InstructionDiscovery } from "../../instruction-discovery.js"
+import { Instructions } from "../../instructions/index.js"
+import { Location } from "../../location.js"
+import { AbsolutePath } from "../../schema.js"
+
+type Loaded =
+  | { readonly type: "available"; readonly files: InstructionDiscovery.File[] }
+  | { readonly type: "unavailable" }
+
+export const Plugin = define({
+  id: "opencode.config.instruction",
+  effect: Effect.fn(function* () {
+    const discovery = yield* InstructionDiscovery.Service
+    yield* Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const global = yield* Global.Service
+      const location = yield* Location.Service
+      const watcher = yield* Watcher.Service
+      const changes = yield* PubSub.sliding<string>(1)
+      const lock = Semaphore.makeUnsafe(1)
+      const start = yield* fs.resolve(location.directory)
+      const root = yield* fs.resolve(location.project.directory)
+      const home = yield* fs.resolve(global.home)
+      const project = discovery.project && FSUtil.contains(root, start)
+      const stop = FSUtil.contains(home, start) ? home : root
+      const globalFile = yield* fs.resolve(join(global.config, "AGENTS.md"))
+      const loaded: { current: Loaded } = { current: { type: "available", files: [] } }
+
+      const publish = (update: Watcher.Update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid)
+      const candidates = [
+        globalFile,
+        ...(project ? ancestorDirectories(start, stop).map((directory) => join(directory, "AGENTS.md")) : []),
+      ]
+      for (const path of new Set(candidates)) {
+        const updates = yield* watcher.subscribe({ path, type: "file" })
+        yield* updates.pipe(Stream.runForEach(publish), Effect.forkScoped({ startImmediately: true }))
+      }
+
+      const read = Effect.fn("ConfigInstructionPlugin.read")(function* (path: string) {
+        const content = yield* fs.readFileStringSafe(path)
+        if (content !== undefined) return new InstructionDiscovery.File({ path: AbsolutePath.make(path), content })
+        yield* Effect.logDebug("instruction file skipped", { path, reason: "unavailable" })
+      })
+
+      const globalSource = Effect.fn("ConfigInstructionPlugin.globalSource")(function* () {
+        const file = yield* read(globalFile)
+        return file ? [file] : []
+      })
+
+      const projectSource = Effect.fn("ConfigInstructionPlugin.projectSource")(function* () {
+        if (!project) return []
+        const discovered = new Set(
+          yield* Effect.forEach(yield* fs.up({ targets: ["AGENTS.md"], start, stop }), fs.resolve),
+        )
+        const files = yield* Effect.forEach(discovered, read, { concurrency: "unbounded" })
+        if (files.some((file) => file === undefined)) return Instructions.unavailable
+        return files.filter((file): file is InstructionDiscovery.File => file !== undefined)
+      })
+
+      const isolate = <A, E, R>(source: string, effect: Effect.Effect<A, E, R>) =>
+        effect.pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("failed to load instruction source", { source, cause }).pipe(
+              Effect.as(Instructions.unavailable),
+            ),
+          ),
+        )
+
+      const refresh = Effect.fn("ConfigInstructionPlugin.refresh")(function* (file?: string) {
+        yield* lock.withPermit(
+          Effect.gen(function* () {
+            const sources = yield* Effect.all({
+              global: isolate("global", globalSource()),
+              project: isolate("project", projectSource()),
+            })
+            loaded.current =
+              Array.isArray(sources.global) && Array.isArray(sources.project)
+                ? { type: "available", files: [...sources.global, ...sources.project] }
+                : { type: "unavailable" }
+            if (!file) return
+            yield* Effect.logDebug("instructions rescanned", {
+              file,
+              instructions:
+                loaded.current.type === "available" ? loaded.current.files.map((item) => item.path) : "unavailable",
+            })
+          }),
+        )
+      })
+
+      yield* Stream.fromPubSub(changes).pipe(
+        Stream.runForEach((file) => refresh(file).pipe(Effect.andThen(discovery.reload()))),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* refresh()
+      yield* discovery.transform((draft) => {
+        if (loaded.current.type === "unavailable") {
+          draft.unavailable()
+          return
+        }
+        for (const file of loaded.current.files) draft.add(file)
+      })
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("failed to activate instruction source", { cause }).pipe(
+          Effect.andThen(discovery.transform((draft) => draft.unavailable())),
+          Effect.asVoid,
+        ),
+      ),
+    )
+  }),
+})
+
+function ancestorDirectories(start: string, stop: string): string[] {
+  if (start === stop) return [start]
+  return [start, ...ancestorDirectories(dirname(start), stop)]
+}

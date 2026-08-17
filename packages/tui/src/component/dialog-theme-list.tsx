@@ -1,11 +1,11 @@
 import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
-import { useTheme } from "../context/theme"
+import { useThemes } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { onCleanup } from "solid-js"
 
 export function DialogThemeList() {
-  const theme = useTheme()
-  const options = Object.keys(theme.all())
+  const themes = useThemes()
+  const options = Object.keys(themes.all())
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
     .map((value) => ({
       title: value,
@@ -14,10 +14,10 @@ export function DialogThemeList() {
   const dialog = useDialog()
   let confirmed = false
   let ref: DialogSelectRef<string>
-  const initial = theme.selected
+  const initial = themes.selected
 
   onCleanup(() => {
-    if (!confirmed) theme.set(initial)
+    if (!confirmed) themes.set(initial)
   })
 
   return (
@@ -26,10 +26,10 @@ export function DialogThemeList() {
       options={options}
       current={initial}
       onMove={(opt) => {
-        theme.set(opt.value)
+        themes.set(opt.value)
       }}
       onSelect={(opt) => {
-        theme.set(opt.value)
+        themes.set(opt.value)
         confirmed = true
         dialog.clear()
       }}
@@ -38,12 +38,12 @@ export function DialogThemeList() {
       }}
       onFilter={(query) => {
         if (query.length === 0) {
-          theme.set(initial)
+          themes.set(initial)
           return
         }
 
         const first = ref.filtered[0]
-        if (first) theme.set(first.value)
+        if (first) themes.set(first.value)
       }}
     />
   )

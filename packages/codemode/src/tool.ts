@@ -29,29 +29,29 @@ export type JsonSchema = {
 /** Either a validating Effect Schema or a render-only JSON Schema document. */
 export type SchemaType = Schema.Decoder<unknown> | JsonSchema
 
-/** Schema-backed tool definition exposed through CodeMode's `tools` object. */
-export type Definition<R = never> = {
+/** Executable tool exposed through CodeMode's `tools` object. */
+export type Tool<R = never> = {
   readonly _tag: "CodeModeTool"
   readonly description: string
   readonly input: SchemaType
   readonly output: SchemaType | undefined
-  readonly run: (input: unknown) => Effect.Effect<unknown, unknown, R>
+  readonly execute: (input: unknown) => Effect.Effect<unknown, unknown, R>
 }
 
 type InputType<S> = S extends Schema.Decoder<unknown> ? S["Type"] : unknown
 
-type ResultType<S> = S extends Schema.Decoder<unknown> ? S["Encoded"] : unknown
+type ResultType<S> = S extends undefined ? void : S extends Schema.Decoder<unknown> ? S["Encoded"] : unknown
 
-/** Options for defining one CodeMode tool. */
+/** Options for declaring one CodeMode tool. */
 export type Options<I extends SchemaType, O extends SchemaType | undefined, R = never> = {
   readonly description: string
   readonly input: I
   readonly output?: O
-  readonly run: (input: InputType<I>) => Effect.Effect<ResultType<O>, unknown, R>
+  readonly execute: (input: InputType<I>) => Effect.Effect<ResultType<O>, unknown, R>
 }
 
-// Object.hasOwn: an inherited _tag must not classify a namespace as a Definition.
-export const isDefinition = <R = never>(value: unknown): value is Definition<R> =>
+// Object.hasOwn: an inherited _tag must not classify a namespace as a Tool.
+export const isTool = <R = never>(value: unknown): value is Tool<R> =>
   typeof value === "object" &&
   value !== null &&
   "_tag" in value &&
@@ -59,18 +59,18 @@ export const isDefinition = <R = never>(value: unknown): value is Definition<R> 
   value._tag === "CodeModeTool"
 
 /**
- * Defines one schema-described tool available to a CodeMode program through `tools.*`.
+ * Declares one schema-described tool available to a CodeMode program through `tools.*`.
  *
  * Effect Schemas validate values; JSON Schemas only shape the model-visible signature.
- * Without `output`, results are exposed as `unknown`. Hosts remain responsible for authorization
+ * Without `output`, results are exposed as `void`. Hosts remain responsible for authorization
  * and durable side effects.
  */
 export const make = <I extends SchemaType, const O extends SchemaType | undefined = undefined, R = never>(
   options: Options<I, O, R>,
-): Definition<R> => ({
+): Tool<R> => ({
   _tag: "CodeModeTool",
   description: options.description,
   input: options.input,
   output: options.output,
-  run: (input) => options.run(input as InputType<I>),
+  execute: (input) => options.execute(input as InputType<I>),
 })

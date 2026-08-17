@@ -1,12 +1,19 @@
+/**
+ * Local tracking checkouts for remote Git references, one per remote and
+ * branch. Each checkout permanently tracks a single ref: the requested branch
+ * when the cache key has one, otherwise the remote default branch. Content
+ * follows "newest wins": refresh fetches and hard-resets, so readers may
+ * observe the checkout move underneath them.
+ */
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
-import { FSUtil } from "./fs-util"
-import { Git } from "./git"
-import { Global } from "./global"
-import { Repository } from "./repository"
-import { AbsolutePath } from "./schema"
-import { makeGlobalNode } from "./effect/app-node"
-import { EffectFlock } from "./util/effect-flock"
+import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Git } from "./git.js"
+import { Global } from "@opencode-ai/util/global"
+import { Repository } from "./repository.js"
+import { AbsolutePath } from "./schema.js"
+import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { EffectFlock } from "@opencode-ai/util/effect-flock"
 
 export type Result = {
   readonly repository: string
@@ -23,14 +30,6 @@ export type EnsureInput = {
   readonly refresh?: boolean
   readonly branch?: string
 }
-
-export class InvalidRepositoryError extends Schema.TaggedErrorClass<InvalidRepositoryError>()(
-  "RepositoryCacheInvalidRepositoryError",
-  {
-    repository: Schema.String,
-    message: Schema.String,
-  },
-) {}
 
 export class InvalidBranchError extends Schema.TaggedErrorClass<InvalidBranchError>()(
   "RepositoryCacheInvalidBranchError",
@@ -79,7 +78,6 @@ export class CacheOperationError extends Schema.TaggedErrorClass<CacheOperationE
 ) {}
 
 export type Error =
-  | InvalidRepositoryError
   | InvalidBranchError
   | CloneFailedError
   | FetchFailedError
@@ -96,7 +94,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Re
 
 export function isError(error: unknown): error is Error {
   return (
-    error instanceof InvalidRepositoryError ||
     error instanceof InvalidBranchError ||
     error instanceof CloneFailedError ||
     error instanceof FetchFailedError ||
@@ -106,13 +103,6 @@ export function isError(error: unknown): error is Error {
     error instanceof CacheOperationError
   )
 }
-
-export const parseRemote = Effect.fn("RepositoryCache.parseRemote")(function* (repository: string) {
-  return yield* Effect.try({
-    try: () => Repository.parseRemote(repository),
-    catch: (error) => new InvalidRepositoryError({ repository, message: errorMessage(error) }),
-  })
-})
 
 export const validateBranch = Effect.fn("RepositoryCache.validateBranch")(function* (branch: string) {
   return yield* Effect.try({
@@ -135,7 +125,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
           if (input.branch) yield* validateBranch(input.branch)
 
           const repository = input.reference.label
-          const localPath = Repository.cachePath(global.repos, input.reference)
+          const localPath = Repository.cachePath(global.repos, input.reference, input.branch)
           const cloneTarget = Repository.parse(input.reference.remote) ?? input.reference
 
           return yield* flock
@@ -143,21 +133,28 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
               Effect.gen(function* () {
                 yield* cacheOperation(fs.ensureDir(path.dirname(localPath)), "ensure cache directory", localPath)
 
-                const exists = yield* fs.existsSafe(localPath)
                 const existing = yield* git.repo.discover(AbsolutePath.make(localPath))
                 const origin = existing ? yield* git.remote.get(existing) : undefined
                 const originReference = origin ? Repository.parse(origin) : undefined
-                const reuse = Boolean(existing && originReference && Repository.same(originReference, cloneTarget))
-                if (exists && !reuse) {
+                // Discovery walks upward, so an enclosing repository with a
+                // matching origin could masquerade as the cache entry; reuse
+                // requires the checkout to live exactly at the cache path.
+                const worktree = existing ? yield* fs.resolve(localPath) : undefined
+                const reuse = Boolean(
+                  existing &&
+                    existing.worktree === worktree &&
+                    originReference &&
+                    Repository.same(originReference, cloneTarget),
+                )
+                if (!reuse && (yield* fs.existsSafe(localPath))) {
                   yield* cacheOperation(fs.remove(localPath, { recursive: true }), "remove stale cache", localPath)
                 }
 
-                const currentBranch = reuse && existing ? yield* git.history.branch(existing) : undefined
-                const status = statusForRepository({
-                  reuse,
-                  refresh: input.refresh,
-                  branchMatches: input.branch ? currentBranch === input.branch : undefined,
-                })
+                const status = !reuse
+                  ? ("cloned" as const)
+                  : input.refresh
+                    ? ("refreshed" as const)
+                    : ("cached" as const)
 
                 if (status === "cloned") {
                   yield* git.repo
@@ -177,25 +174,28 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | EffectFl
                     .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: error.message })))
 
                   if (input.branch) {
-                    const requestedBranch = input.branch
                     yield* git.sync
-                      .fetchBranch(existing, { branch: requestedBranch })
+                      .fetchBranch(existing, { branch: input.branch })
                       .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: error.message })))
-
-                    yield* git.sync.checkoutRemoteBranch(existing, { branch: requestedBranch }).pipe(
-                      Effect.mapError(
-                        (error) =>
-                          new CheckoutFailedError({
-                            repository,
-                            branch: requestedBranch,
-                            message: error.message,
-                          }),
-                      ),
-                    )
                   }
 
+                  // Checking out the tracked ref before resetting keeps the
+                  // checkout self-healing even if it was left on another
+                  // branch.
+                  const branch = input.branch ?? (yield* git.history.defaultRemoteBranch(existing))
+                  if (branch) {
+                    yield* git.sync
+                      .checkoutRemoteBranch(existing, { branch })
+                      .pipe(
+                        Effect.mapError(
+                          (error) => new CheckoutFailedError({ repository, branch, message: error.message }),
+                        ),
+                      )
+                  }
+
+                  const target = branch ?? (yield* git.history.branch(existing))
                   yield* git.sync
-                    .resetHard(existing, yield* resetTarget(git, existing, input.branch))
+                    .resetHard(existing, target ? `origin/${target}` : "HEAD")
                     .pipe(Effect.mapError((error) => new ResetFailedError({ repository, message: error.message })))
                 }
 
@@ -229,12 +229,6 @@ export const node = makeGlobalNode({
   deps: [EffectFlock.node, FSUtil.node, Git.node, Global.node],
 })
 
-function statusForRepository(input: { reuse: boolean; refresh?: boolean; branchMatches?: boolean }) {
-  if (!input.reuse) return "cloned" as const
-  if (input.branchMatches === false || input.refresh) return "refreshed" as const
-  return "cached" as const
-}
-
 function errorMessage(error: unknown) {
   return error instanceof globalThis.Error ? error.message : String(error)
 }
@@ -245,17 +239,4 @@ function cacheOperation<A, E, R>(effect: Effect.Effect<A, E, R>, operation: stri
   )
 }
 
-const resetTarget = Effect.fnUntraced(function* (
-  git: Git.Interface,
-  repository: Git.Repository,
-  requestedBranch?: string,
-) {
-  if (requestedBranch) return `origin/${requestedBranch}`
-  const remoteHead = yield* git.history.defaultRemoteBranch(repository)
-  if (remoteHead) return `origin/${remoteHead}`
-  const currentBranch = yield* git.history.branch(repository)
-  if (currentBranch) return `origin/${currentBranch}`
-  return "HEAD"
-})
-
-export * as RepositoryCache from "./repository-cache"
+export * as RepositoryCache from "./repository-cache.js"

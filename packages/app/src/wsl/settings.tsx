@@ -7,17 +7,15 @@ import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { useMutation } from "@tanstack/solid-query"
 import fuzzysort from "fuzzysort"
 import { type Accessor, For, Show, createMemo } from "solid-js"
-import type { useServerManagementController } from "@/components/dialog-select-server"
+import type { ServerCollectionController } from "@/components/server/server-management-controller"
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { ServerConnection } from "@/context/server"
+import { ServerConnection } from "@/context/servers"
 import { showToast } from "@/utils/toast"
 import { DialogAddWslServer } from "./dialog-add-server"
 import { useWslServers } from "./context"
 import { wslOpencodeAction, wslRuntimeRetryable } from "./settings-model"
-
-type Controller = ReturnType<typeof useServerManagementController>
 
 export function isWslServer(server: ServerConnection.Any) {
   return server.type === "sidecar" && server.variant === "wsl"
@@ -28,7 +26,7 @@ export function AddServerMenu(props: { onAddServer: () => void }) {
   const dialog = useDialog()
   const language = useLanguage()
   const openAddWsl = () => {
-    dialog.push(() => <DialogAddWslServer />)
+    void dialog.push(() => <DialogAddWslServer />)
   }
   return (
     <Show
@@ -67,7 +65,7 @@ export function useFilteredWslServers(filter: Accessor<string>) {
 }
 
 export function WslServerSettings(props: {
-  controller: Controller
+  domain: Pick<ServerCollectionController, "collection" | "defaults" | "connection">
   servers: ReturnType<typeof useFilteredWslServers>
 }) {
   const platform = usePlatform()
@@ -86,7 +84,7 @@ export function WslServerSettings(props: {
   }))
 
   const remove = (key: ServerConnection.Key) => {
-    request.mutate(() => props.controller.handleRemove(key))
+    request.mutate(() => props.domain.connection.remove(key))
   }
 
   return (
@@ -100,7 +98,7 @@ export function WslServerSettings(props: {
           return (
             <div class="settings-v2-servers-row">
               <div class="settings-v2-servers-lead">
-                <ServerHealthIndicator health={props.controller.status()[key]} />
+                <ServerHealthIndicator health={props.domain.collection.health()[key]} />
                 <div class="settings-v2-servers-copy">
                   <span class="flex min-w-0 items-center gap-1">
                     <span class="settings-v2-servers-name">{item.config.distro}</span>
@@ -114,7 +112,7 @@ export function WslServerSettings(props: {
                 </div>
               </div>
               <div class="settings-v2-servers-actions">
-                <Show when={props.controller.canDefault() && props.controller.defaultKey() === key}>
+                <Show when={props.domain.defaults.available() && props.domain.defaults.key() === key}>
                   <Tag>{language.t("dialog.server.status.default")}</Tag>
                 </Show>
                 <Show when={opencodeAction()}>
@@ -124,7 +122,7 @@ export function WslServerSettings(props: {
                       disabled={busy() || request.isPending}
                       onClick={() => api && request.mutate(() => api.installOpencode(item.config.distro))}
                     >
-                      {busy() ? language.t("wsl.server.updating") : label()}
+                      {busy() ? language.t("wsl.server.updating") : language.t(label())}
                     </ButtonV2>
                   )}
                 </Show>
@@ -145,13 +143,13 @@ export function WslServerSettings(props: {
                             {language.t("wsl.server.retryStart")}
                           </MenuV2.Item>
                         </Show>
-                        <Show when={props.controller.canDefault() && props.controller.defaultKey() !== key}>
-                          <MenuV2.Item onSelect={() => props.controller.setDefault(key)}>
+                        <Show when={props.domain.defaults.available() && props.domain.defaults.key() !== key}>
+                          <MenuV2.Item onSelect={() => props.domain.defaults.set(key)}>
                             {language.t("dialog.server.menu.default")}
                           </MenuV2.Item>
                         </Show>
-                        <Show when={props.controller.canDefault() && props.controller.defaultKey() === key}>
-                          <MenuV2.Item onSelect={() => props.controller.setDefault(null)}>
+                        <Show when={props.domain.defaults.available() && props.domain.defaults.key() === key}>
+                          <MenuV2.Item onSelect={() => props.domain.defaults.set(null)}>
                             {language.t("dialog.server.menu.defaultRemove")}
                           </MenuV2.Item>
                         </Show>

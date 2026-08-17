@@ -1,0 +1,159 @@
+---
+title: "Providers"
+---
+
+OpenCode includes a built-in catalog of providers and models from [models.dev](https://models.dev). You can also add a
+custom provider to your configuration.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "name": "Acme",
+      "env": ["ACME_API_KEY"],
+      "package": "@opencode-ai/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {
+          "name": "Qwen 3 Coder",
+        },
+      },
+    },
+  },
+}
+```
+
+The `providers` object is keyed by provider ID. Each provider accepts these fields:
+
+| Field      | Purpose                                                         |
+| ---------- | --------------------------------------------------------------- |
+| `name`     | Display name.                                                   |
+| `env`      | Ordered environment variable names that provide a connection.   |
+| `package`  | Runtime provider package.                                       |
+| `settings` | JSON settings passed to the runtime package, such as `baseURL`. |
+| `headers`  | String-valued HTTP headers added to requests.                   |
+| `body`     | JSON fields merged into request bodies.                         |
+| `models`   | Models to add or override, keyed by catalog model ID.           |
+
+## Endpoint
+
+Override `settings.baseURL` to send an existing provider through a proxy or compatible endpoint. Its existing package,
+models, and connection continue to apply:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+    },
+  },
+}
+```
+
+`settings` is package-specific. A field only has an effect when the selected package supports it.
+
+## Headers and body
+
+Use `headers` to add HTTP headers to provider requests. Use `body` to merge additional JSON fields into each request
+body:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+      "body": {
+        "metadata": {
+          "application": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+## Package
+
+The `package` field selects the runtime used to communicate with a provider. For an OpenAI-compatible API, use the
+built-in compatible package:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "package": "@opencode-ai/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {
+          "name": "Qwen 3 Coder",
+        },
+      },
+    },
+  },
+}
+```
+
+Native package options:
+
+- `@opencode-ai/ai/providers/openai`
+- `@opencode-ai/ai/providers/openai/chat`
+- `@opencode-ai/ai/providers/openai/responses`
+- `@opencode-ai/ai/providers/openai-compatible`
+- `@opencode-ai/ai/providers/openai-compatible/responses`
+- `@opencode-ai/ai/providers/anthropic`
+- `@opencode-ai/ai/providers/anthropic-compatible`
+- `@opencode-ai/ai/providers/google`
+- `@opencode-ai/ai/providers/google-vertex`
+- `@opencode-ai/ai/providers/google-vertex/gemini`
+- `@opencode-ai/ai/providers/google-vertex/chat`
+- `@opencode-ai/ai/providers/google-vertex/responses`
+- `@opencode-ai/ai/providers/google-vertex/messages`
+- `@opencode-ai/ai/providers/azure`
+- `@opencode-ai/ai/providers/azure/chat`
+- `@opencode-ai/ai/providers/azure/responses`
+- `@opencode-ai/ai/providers/amazon-bedrock`
+- `@opencode-ai/ai/providers/amazon-bedrock/mantle`
+- `@opencode-ai/ai/providers/amazon-bedrock/mantle/chat`
+- `@opencode-ai/ai/providers/amazon-bedrock/mantle/responses`
+- `@opencode-ai/ai/providers/openrouter`
+- `@opencode-ai/ai/providers/xai`
+
+You can also use an npm package such as `@acme/opencode-provider` or an absolute `file://` URL for a local package.
+
+Use `settings` for options supported by the selected package.
+
+## Models
+
+Add a model under a provider's `models` map. The object key is the model ID used in OpenCode; `modelID` is the ID sent to
+the provider:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding": {
+          "modelID": "gpt-5.2",
+          "name": "GPT-5.2 Coding",
+        },
+      },
+    },
+  },
+}
+```
+
+See [Models](/models) for model selection, defaults, capabilities, limits, costs, and variants.

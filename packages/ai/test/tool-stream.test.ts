@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLMError } from "../src/schema"
-import { ToolStream } from "../src/protocols/utils/tool-stream"
-import { it } from "./lib/effect"
+import { AIError } from "../src/schema/index.js"
+import { ToolStream } from "../src/protocols/utils/tool-stream.js"
+import { it } from "./lib/effect.js"
 
 const ADAPTER = "test-route"
 
@@ -36,11 +36,38 @@ describe("ToolStream", () => {
     }),
   )
 
+  it.effect("keeps accumulated identity when later deltas contain empty strings", () =>
+    Effect.gen(function* () {
+      const first = ToolStream.appendOrStart(
+        ADAPTER,
+        ToolStream.empty<number>(),
+        0,
+        { id: "call_1", name: "lookup", text: '{"query"' },
+        "missing tool",
+      )
+      if (ToolStream.isError(first)) return yield* first
+      const second = ToolStream.appendOrStart(
+        ADAPTER,
+        first.tools,
+        0,
+        { id: "", name: "", text: ':"weather"}' },
+        "missing tool",
+      )
+      if (ToolStream.isError(second)) return yield* second
+      const finished = yield* ToolStream.finish(ADAPTER, second.tools, 0)
+
+      expect(finished.events).toEqual([
+        { type: "tool-input-end", id: "call_1", name: "lookup" },
+        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+      ])
+    }),
+  )
+
   it.effect("fails appendExisting when the provider skipped the tool start", () =>
     Effect.gen(function* () {
       const error = ToolStream.appendExisting(ADAPTER, ToolStream.empty<number>(), 0, "{}", "missing tool")
 
-      expect(error).toBeInstanceOf(LLMError)
+      expect(error).toBeInstanceOf(AIError)
       if (ToolStream.isError(error)) expect(error.reason.message).toBe("missing tool")
     }),
   )
@@ -61,6 +88,73 @@ describe("ToolStream", () => {
           { type: "tool-call", id: "call_1", name: "lookup", input: { query: "final" } },
         ],
       })
+    }),
+  )
+
+  it.effect("finalizes malformed local input as a non-executable tool error", () =>
+    Effect.gen(function* () {
+      const tools = ToolStream.start(ToolStream.empty<string>(), "item_1", {
+        id: "call_1",
+        name: "lookup",
+        input: '{"query":"partial',
+      })
+      const finished = yield* ToolStream.finish(ADAPTER, tools, "item_1")
+
+      expect(finished).toEqual({
+        tools: {},
+        events: [
+          {
+            type: "tool-input-error",
+            id: "call_1",
+            name: "lookup",
+            raw: '{"query":"partial',
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("preserves valid siblings when one parallel input is malformed", () =>
+    Effect.gen(function* () {
+      const valid = ToolStream.start(ToolStream.empty<number>(), 0, {
+        id: "call_valid",
+        name: "lookup",
+        input: '{"query":"weather"}',
+      })
+      const tools = ToolStream.start(valid, 1, {
+        id: "call_invalid",
+        name: "lookup",
+        input: '{"query":"partial',
+      })
+      const finished = yield* ToolStream.finishAll(ADAPTER, tools)
+
+      expect(finished).toEqual({
+        tools: {},
+        events: [
+          { type: "tool-input-end", id: "call_valid", name: "lookup" },
+          { type: "tool-call", id: "call_valid", name: "lookup", input: { query: "weather" } },
+          {
+            type: "tool-input-error",
+            id: "call_invalid",
+            name: "lookup",
+            raw: '{"query":"partial',
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("keeps malformed provider-executed input terminal", () =>
+    Effect.gen(function* () {
+      const tools = ToolStream.start(ToolStream.empty<string>(), "item_1", {
+        id: "call_1",
+        name: "web_search",
+        input: '{"query":"partial',
+        providerExecuted: true,
+      })
+      const result = yield* Effect.exit(ToolStream.finish(ADAPTER, tools, "item_1"))
+
+      expect(result._tag).toBe("Failure")
     }),
   )
 

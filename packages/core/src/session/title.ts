@@ -1,48 +1,66 @@
-export * as SessionTitle from "./title"
+export * as SessionTitle from "./title.js"
 
-import { LLM, LLMClient, LLMError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
-import { Context, Effect, Layer, Stream } from "effect"
-import { AgentV2 } from "../agent"
-import { Database } from "../database/database"
-import { EventV2 } from "../event"
-import { makeLocationNode } from "../effect/app-node"
-import { llmClient } from "../effect/app-node-platform"
-import { SessionEvent } from "./event"
-import { SessionHistory } from "./history"
-import { SessionModelHeaders } from "./model-headers"
-import { SessionRunnerModel } from "./runner/model"
-import { SessionSchema } from "./schema"
-import { SessionUsage } from "./usage"
+import { LLM, LLMClient, AIError, LLMEvent, Message, type LLMRequest } from "@opencode-ai/ai"
+import type { StreamOptions } from "@opencode-ai/ai/route"
+import { Context, DateTime, Effect, Layer, Stream } from "effect"
+import { Agent } from "../agent.js"
+import { Database } from "../database/database.js"
+import { Bus } from "../bus.js"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { isExactRootFallback } from "@opencode-ai/util/session-title-fallback"
+import { App } from "../app.js"
+import { llmClient } from "../effect/app-node-platform.js"
+import { PluginHooks } from "../plugin/hooks.js"
+import { SessionEvent } from "./event.js"
+import { SessionHistory } from "./history.js"
+import { SessionModelHeaders } from "./model-headers.js"
+import { SessionModelHttp } from "./model-http.js"
+import { SessionRunnerModel } from "./runner/model.js"
+import { SessionSchema } from "./schema.js"
+import { SessionUsage } from "./usage.js"
+import { SessionStore } from "./store.js"
 
 const MAX_LENGTH = 100
+const titleChanged = Symbol("Session title changed")
 
 type Dependencies = {
-  readonly events: EventV2.Interface
+  readonly app: App.Info
+  readonly bus: Bus.Interface
   readonly llm: {
-    readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
+    readonly stream: (request: LLMRequest, options?: StreamOptions) => Stream.Stream<LLMEvent, AIError>
   }
-  readonly agents: AgentV2.Interface
+  readonly agents: Agent.Interface
   readonly models: SessionRunnerModel.Interface
+  readonly store: SessionStore.Interface
+  readonly hooks: PluginHooks.Interface
 }
 
 export interface Interface {
-  /** Generates a title from the session's first user message and renames the session. Runs at most once per session. */
-  readonly generateForFirstPrompt: (session: SessionSchema.Info) => Effect.Effect<void>
+  /** Generates a title from the session's first user message when the session remains untitled. */
+  readonly generateForFirstPrompt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionTitle") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTitle") {}
 
 const truncate = (value: string) => (value.length <= MAX_LENGTH ? value : `${value.slice(0, MAX_LENGTH - 3)}...`)
+const isUntitled = (session: SessionSchema.Info) =>
+  isExactRootFallback({
+    title: session.title,
+    time: { created: DateTime.toEpochMillis(session.time.created) },
+  })
 
 const make = (dependencies: Dependencies) => {
   const generateForFirstPrompt = Effect.fn("SessionTitle.generateForFirstPrompt")(function* (
     db: Database.Interface["db"],
-    session: SessionSchema.Info,
+    sessionID: SessionSchema.ID,
   ) {
+    const session = yield* dependencies.store.get(sessionID)
+    if (!session) return
     if (session.parentID) return
-    const firstUser = yield* SessionHistory.firstUserMessageIfOnly(db, session.id)
+    if (!isUntitled(session)) return
+    const firstUser = yield* SessionHistory.firstUserMessage(db, session.id)
     if (!firstUser) return
-    const agent = yield* dependencies.agents.get(AgentV2.ID.make("title"))
+    const agent = yield* dependencies.agents.get(Agent.ID.make("title"))
     if (!agent) return
     const resolved = yield* (
       agent.model
@@ -55,7 +73,7 @@ const make = (dependencies: Dependencies) => {
     let usage: SessionUsage.Recorded | undefined
     const recordUsage = Effect.suspend(() =>
       usage
-        ? dependencies.events.publish(SessionEvent.UsageRecorded, {
+        ? dependencies.bus.publish(SessionEvent.UsageRecorded, {
             sessionID: session.id,
             source: "title",
             ...usage,
@@ -66,11 +84,18 @@ const make = (dependencies: Dependencies) => {
       .stream(
         LLM.request({
           model: resolved.model,
-          http: { headers: SessionModelHeaders.make(session) },
+          http: { headers: SessionModelHeaders.make(session, dependencies.app) },
           system: agent.system,
           messages: [Message.user(firstUser.text)],
           tools: [],
         }),
+        {
+          http: SessionModelHttp.middleware(dependencies.hooks, {
+            sessionID: session.id,
+            agent: agent.id,
+            model: resolved.ref,
+          }),
+        },
       )
       .pipe(
         Stream.runForEach((event) => {
@@ -83,7 +108,7 @@ const make = (dependencies: Dependencies) => {
           return Effect.void
         }),
         Effect.as(true),
-        Effect.catchTag("LLM.Error", () => Effect.succeed(false)),
+        Effect.catchTag("AI.Error", () => Effect.succeed(false)),
         Effect.onInterrupt(() => recordUsage.pipe(Effect.asVoid)),
       )
     yield* recordUsage
@@ -94,10 +119,19 @@ const make = (dependencies: Dependencies) => {
       .map((line) => line.trim())
       .find((line) => line.length > 0)
     if (!title) return
-    yield* dependencies.events.publish(SessionEvent.Renamed, {
-      sessionID: session.id,
-      title: truncate(title),
-    })
+    const expectedSequence = (yield* Bus.latestSequence(db, sessionID)) + 1
+    const current = yield* dependencies.store.get(sessionID)
+    if (!current || !isUntitled(current)) return
+    yield* dependencies.bus
+      .publish(
+        SessionEvent.Renamed,
+        {
+          sessionID: session.id,
+          title: truncate(title),
+        },
+        { commit: (sequence) => (sequence === expectedSequence ? Effect.void : Effect.die(titleChanged)) },
+      )
+      .pipe(Effect.catchDefect((defect) => (defect === titleChanged ? Effect.void : Effect.die(defect))))
   })
   return { generateForFirstPrompt }
 }
@@ -105,14 +139,17 @@ const make = (dependencies: Dependencies) => {
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const llm = yield* LLMClient.Service
-    const agents = yield* AgentV2.Service
+    const agents = yield* Agent.Service
     const models = yield* SessionRunnerModel.Service
+    const store = yield* SessionStore.Service
     const database = yield* Database.Service
-    const title = make({ events, llm, agents, models })
+    const app = yield* App.Metadata
+    const hooks = yield* PluginHooks.Service
+    const title = make({ bus, llm, agents, models, store, app, hooks })
     return Service.of({
-      generateForFirstPrompt: (session) => title.generateForFirstPrompt(database.db, session),
+      generateForFirstPrompt: (sessionID) => title.generateForFirstPrompt(database.db, sessionID),
     })
   }),
 )
@@ -120,5 +157,14 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [EventV2.node, llmClient, AgentV2.node, SessionRunnerModel.node, Database.node],
+  deps: [
+    Bus.node,
+    llmClient,
+    Agent.node,
+    SessionRunnerModel.node,
+    SessionStore.node,
+    Database.node,
+    App.node,
+    PluginHooks.node,
+  ],
 })

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Context, Effect, Layer, LayerMap, Option } from "effect"
-import { Node } from "@opencode-ai/core/effect/app-node"
+import { Node } from "@opencode-ai/util/effect/app-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import type { LocationError, LocationServices } from "@opencode-ai/core/location-services"
@@ -56,7 +56,7 @@ describe("node build", () => {
               Location.Service.of({
                 directory: ref.directory,
                 workspaceID: ref.workspaceID,
-                project: { id: Project.ID.global, directory: service.directory },
+                project: { id: Project.ID.global, directory: service.directory, canonical: service.directory },
               }),
             ),
           { idleTimeToLive: "1 minute" },
@@ -78,9 +78,7 @@ describe("node build", () => {
         acquisitions++
         return Project.Service.of({
           list: () => Effect.succeed([]),
-          directories: () => Effect.succeed([]),
-          resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory }),
-          commit: () => Effect.void,
+          resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
         })
       }),
     )

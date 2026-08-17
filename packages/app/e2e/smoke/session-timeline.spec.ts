@@ -33,6 +33,7 @@ test.describe("smoke: session timeline", () => {
   test("keeps the visible message fixed while prepending history", async ({ page }) => {
     const requests: { before?: string; phase: "start" | "end"; at: number }[] = []
     await mockOpenCodeServer(page, {
+      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -91,6 +92,7 @@ test.describe("smoke: session timeline", () => {
 
   test("preserves the timeline gap above the composer", async ({ page }) => {
     await mockOpenCodeServer(page, {
+      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -117,28 +119,28 @@ test.describe("smoke: session timeline", () => {
 
   test("paints cached session tabs at the latest message", async ({ page }) => {
     await mockOpenCodeServer(page, {
+      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
       project: fixture.project,
-      pageMessages: (sessionID) => ({ items: fixture.messages[sessionID as keyof typeof fixture.messages] ?? [] }),
+      pageMessages: (sessionID) => ({ items: fixture.messages[sessionID] ?? [] }),
     })
     await configureSmokePage(page, fixture.directory)
     await page.addInitScript(
-      ({ dirBase64, sourceID, targetID }) => {
+      ({ server, sourceID, targetID }) => {
         localStorage.setItem(
           "opencode.window.browser.dat:tabs",
           JSON.stringify(
             [sourceID, targetID].map((sessionId) => ({
               type: "session",
-              server: "http://127.0.0.1:4096",
-              dirBase64,
+              server,
               sessionId,
             })),
           ),
         )
       },
-      { dirBase64: base64Encode(fixture.directory), sourceID: fixture.sourceID, targetID: fixture.targetID },
+      { server: fixture.serverKey, sourceID: fixture.sourceID, targetID: fixture.targetID },
     )
 
     await page.goto(`/${base64Encode(fixture.directory)}/session/${fixture.targetID}`)
@@ -186,8 +188,17 @@ test.describe("smoke: session timeline", () => {
               const bottom = root
                 .querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')
                 ?.getBoundingClientRect()
-              samples.push({ ids: visible, last: visible.includes(last), bottomError: bottom?.bottom - view.bottom })
-              if (!firstPaint && visible.includes(last) && Math.abs((bottom?.bottom ?? Infinity) - view.bottom) <= 1) {
+              samples.push({
+                ids: visible,
+                last: visible.includes(last),
+                bottomError: bottom ? bottom.bottom - view.bottom : undefined,
+              })
+              if (
+                !firstPaint &&
+                visible.includes(last) &&
+                Math.abs((bottom?.bottom ?? Infinity) - view.bottom) <= 1 &&
+                !root.querySelector('[data-markdown-key="initial"]')
+              ) {
                 firstPaint = true
                 root.querySelectorAll<HTMLElement>("[data-timeline-key]").forEach((row) => {
                   const rect = row.getBoundingClientRect()
@@ -202,10 +213,16 @@ test.describe("smoke: session timeline", () => {
         }
         ;(
           window as Window & {
-            __sessionTabPaint?: { samples: typeof samples; removed: () => number; stop: () => void }
+            __sessionTabPaint?: {
+              samples: typeof samples
+              painted: () => boolean
+              removed: () => number
+              stop: () => void
+            }
           }
         ).__sessionTabPaint = {
           samples,
+          painted: () => firstPaint,
           removed: () => removedFirstPaintNodes,
           stop: () => {
             running = false
@@ -217,17 +234,19 @@ test.describe("smoke: session timeline", () => {
     )
 
     await switchTitlebarSession(page, fixture.targetID, fixture.expected.targetTitle)
-    await page.waitForFunction(() =>
-      (
-        window as Window & { __sessionTabPaint?: { samples: Array<{ ids: string[] }> } }
-      ).__sessionTabPaint?.samples.some((sample) => sample.ids.length > 0),
-    )
+    await page.waitForFunction(() => {
+      const probe = (
+        window as Window & { __sessionTabPaint?: { samples: Array<{ ids: string[] }>; painted: () => boolean } }
+      ).__sessionTabPaint
+      return probe?.painted() && probe.samples.some((sample) => sample.ids.length > 0)
+    })
     await page.waitForTimeout(200)
     const first = await page.evaluate(() => {
       const probe = (
         window as Window & {
           __sessionTabPaint?: {
             samples: Array<{ ids: string[]; last: boolean; bottomError?: number }>
+            painted: () => boolean
             removed: () => number
             stop: () => void
           }
@@ -243,28 +262,28 @@ test.describe("smoke: session timeline", () => {
 
   test("paints a cold session tab at the latest message", async ({ page }) => {
     await mockOpenCodeServer(page, {
+      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
       project: fixture.project,
-      pageMessages: (sessionID) => ({ items: fixture.messages[sessionID as keyof typeof fixture.messages] ?? [] }),
+      pageMessages: (sessionID) => ({ items: fixture.messages[sessionID] ?? [] }),
     })
     await configureSmokePage(page, fixture.directory)
     await page.addInitScript(
-      ({ dirBase64, sourceID, targetID }) => {
+      ({ server, sourceID, targetID }) => {
         localStorage.setItem(
           "opencode.window.browser.dat:tabs",
           JSON.stringify(
             [sourceID, targetID].map((sessionId) => ({
               type: "session",
-              server: "http://127.0.0.1:4096",
-              dirBase64,
+              server,
               sessionId,
             })),
           ),
         )
       },
-      { dirBase64: base64Encode(fixture.directory), sourceID: fixture.sourceID, targetID: fixture.targetID },
+      { server: fixture.serverKey, sourceID: fixture.sourceID, targetID: fixture.targetID },
     )
     await page.goto(`/${base64Encode(fixture.directory)}/session/${fixture.sourceID}`)
     await expectSessionTitle(page, fixture.expected.sourceTitle)
@@ -322,6 +341,7 @@ test.describe("smoke: session timeline", () => {
   test("renders seeded timeline in order while paging through history", async ({ page }) => {
     const errors = trackPageErrors(page)
     await mockOpenCodeServer(page, {
+      protocol: "v2",
       sessions: fixture.sessions,
       provider: fixture.provider,
       directory: fixture.directory,
@@ -707,7 +727,7 @@ function expectCompleteScroll(
   ).toEqual([])
   expect(new Set(expectedPartIDs).size).toBe(expectedPartIDs.length)
   expect(new Set(expectedMessageIDs).size).toBe(expectedMessageIDs.length)
-  expect(expectedPartIDs.length).toBe(331)
+  expect(expectedPartIDs.length).toBe(465)
 }
 
 async function selectHomeProject(page: Page, projectName: string) {
@@ -736,5 +756,5 @@ async function switchTitlebarSession(page: Page, sessionID: string, title: strin
 }
 
 async function expectSessionReady(page: Page) {
-  await expectAppVisible(page.getByRole("textbox", { name: /Ask anything/i }))
+  await expectAppVisible(page.getByRole("textbox", { name: "Prompt" }))
 }

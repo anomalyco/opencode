@@ -1,5 +1,5 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
-import type { ServerConnection } from "@/context/server"
+import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
+import type { ServerConnection } from "@/context/servers"
 import { decode64 } from "@/utils/base64"
 
 export function authTokenFromCredentials(input: { username?: string; password: string }) {
@@ -17,25 +17,22 @@ export function authFromToken(token: string | null) {
   }
 }
 
-export function createSdkForServer({
-  server,
-  ...config
-}: Omit<NonNullable<Parameters<typeof createOpencodeClient>[0]>, "baseUrl"> & {
+export function createApiForServer(input: {
   server: ServerConnection.HttpBase
-}) {
-  const auth = (() => {
-    if (!server.password) return
-    return {
-      Authorization: `Basic ${authTokenFromCredentials({ username: server.username, password: server.password })}`,
-    }
-  })()
-
-  return createOpencodeClient({
-    ...config,
-    headers: {
-      ...(config.headers instanceof Headers ? Object.fromEntries(config.headers.entries()) : config.headers),
-      ...auth,
-    },
-    baseUrl: server.url,
+  fetch?: typeof globalThis.fetch
+}): OpenCodeClient {
+  return OpenCode.make({
+    baseUrl: input.server.url,
+    fetch: input.fetch,
+    headers: input.server.password
+      ? {
+          Authorization: `Basic ${authTokenFromCredentials({
+            username: input.server.username,
+            password: input.server.password,
+          })}`,
+        }
+      : undefined,
   })
 }
+
+export type ServerApi = OpenCodeClient

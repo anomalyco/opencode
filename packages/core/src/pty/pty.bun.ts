@@ -1,7 +1,7 @@
 import { spawn } from "bun-pty"
-import type { Opts, Proc } from "./pty"
+import type { Opts, Proc } from "./pty.js"
 
-export type { Disp, Exit, Opts, Proc } from "./pty"
+export type { Disp, Exit, Opts, Proc } from "./pty.js"
 
 function spawnPty(file: string, args: string[], opts: Opts): Proc {
   const pty = spawn(file, args, opts)

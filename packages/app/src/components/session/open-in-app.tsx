@@ -2,9 +2,9 @@ import { createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useServer } from "@/context/server"
 import { Persist, persisted } from "@/utils/persist"
 import { showToast } from "@/utils/toast"
+import { useServer } from "@/context/server"
 
 export const OPEN_APPS = [
   "vscode",
@@ -169,7 +169,7 @@ export function useOpenInApp(input: { directory: () => string }) {
     app: undefined as OpenApp | undefined,
   })
 
-  const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
+  const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal)
   const current = createMemo(
     () =>
       options().find((o) => o.id === prefs.app) ??

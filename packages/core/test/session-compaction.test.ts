@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LLMEvent, Model, type LLMRequest } from "@opencode-ai/ai"
+import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode-ai/ai"
 import { OpenAIChat } from "@opencode-ai/ai/protocols"
 import { Config } from "@opencode-ai/core/config"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Bus } from "@opencode-ai/core/bus"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
 import { SessionEvent } from "@opencode-ai/core/session/event"
@@ -15,19 +15,20 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { App } from "@opencode-ai/core/app"
+import { Agent } from "@opencode-ai/core/agent"
+import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Money } from "@opencode-ai/schema/money"
-import { DateTime, Effect, Fiber, Layer, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
-const model = Model.make({
+const model = LanguageModel.make({
   id: "summary-model",
   provider: "test",
   route: OpenAIChat.route.with({ limits: { context: 10_000, output: 1_000 } }),
@@ -43,14 +44,13 @@ const cost = [
   },
 ]
 const client = Layer.mock(LLMClient.Service)({
-  prepare: () => Effect.die("unused"),
   stream: (request: LLMRequest) => {
     requests.push(request)
     return Stream.make(
       LLMEvent.textDelta({ id: "summary", text: "manual summary" }),
       LLMEvent.stepFinish({
         index: 0,
-        reason: "stop",
+        reason: { normalized: "stop" },
         usage: {
           inputTokens: 15,
           outputTokens: 6,
@@ -61,7 +61,7 @@ const client = Layer.mock(LLMClient.Service)({
         },
       }),
       LLMEvent.finish({
-        reason: "stop",
+        reason: { normalized: "stop" },
       }),
     )
   },
@@ -69,12 +69,19 @@ const client = Layer.mock(LLMClient.Service)({
 })
 const config = Layer.mock(Config.Service)({ entries: () => Effect.succeed([]) })
 const models = Layer.mock(SessionRunnerModel.Service)({
-  resolve: () => Effect.succeed(SessionRunnerModel.resolved(model, undefined, cost)),
+  resolve: () =>
+    Effect.succeed(
+      SessionRunnerModel.resolved(model, {
+        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        cost,
+      }),
+    ),
 })
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionCompaction.node]),
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, SessionCompaction.node]),
     [
+      [Bus.node, Bus.configured({ persist: true })],
       [llmClient, client],
       [Config.node, config],
       [SessionRunnerModel.node, models],
@@ -126,15 +133,61 @@ test("compaction prompt requires the checkpoint headings in order", () => {
   expect(prompt).toContain("Keep every section, even when empty.")
 })
 
+it.effect("auto compaction reserves a buffer below the prompt ceiling", () =>
+  Effect.gen(function* () {
+    const compaction = yield* SessionCompaction.Service
+    const session = Session.Info.make({
+      id: Session.ID.make("ses_input_limit"),
+      projectID: Project.ID.global,
+      cost: Money.USD.zero,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+      location: Location.Ref.make({ directory: AbsolutePath.make("/tmp") }),
+    })
+    const input = (tokens: number, limits: { context: number; input?: number; output: number }) => ({
+      session,
+      model: LanguageModel.make({
+        id: "test-model",
+        provider: "test-provider",
+        route: OpenAIChat.route.with({ limits }),
+      }),
+      cost: [],
+      messages: [
+        Schema.decodeUnknownSync(SessionMessage.Assistant)({
+          id: SessionMessage.ID.make("msg_assistant"),
+          type: "assistant",
+          agent: Agent.defaultID,
+          model: { id: "test-model", providerID: "test-provider" },
+          content: [],
+          tokens: { input: tokens, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, completed: 0 },
+        }),
+      ],
+    })
+
+    const inputLimited = { context: 400_000, input: 272_000, output: 128_000 }
+    expect(compaction.required(input(251_999, inputLimited))).toBe(false)
+    expect(compaction.required(input(252_000, inputLimited))).toBe(true)
+
+    const contextLimited = { context: 100_000, output: 10_000 }
+    expect(compaction.required(input(79_999, contextLimited))).toBe(false)
+    expect(compaction.required(input(80_000, contextLimited))).toBe(true)
+
+    const outputLimited = { context: 100_000, output: 30_000 }
+    expect(compaction.required(input(69_999, outputLimited))).toBe(false)
+    expect(compaction.required(input(70_000, outputLimited))).toBe(true)
+  }),
+)
+
 it.effect("manual compaction summarizes short context instead of no-op", () =>
   Effect.gen(function* () {
     requests = []
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
-    const events = yield* EventV2.Service
+    const bus = yield* Bus.Service
     const store = yield* SessionStore.Service
-    const sessionID = SessionV2.ID.make("ses_manual_compaction")
-    const parentID = SessionV2.ID.make("ses_manual_compaction_parent")
+    const sessionID = Session.ID.make("ses_manual_compaction")
+    const parentID = Session.ID.make("ses_manual_compaction_parent")
     const userMessage = {
       id: SessionMessage.ID.create(),
       type: "user" as const,
@@ -169,7 +222,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
         ),
       )
 
-    const delta = yield* events
+    const delta = yield* bus
       .subscribe(SessionEvent.Compaction.Delta)
       .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
     yield* Effect.yieldNow
@@ -183,14 +236,15 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     expect(Array.from(yield* Fiber.join(delta)).map((event) => event.data.text)).toEqual(["manual summary"])
 
     expect(requests).toHaveLength(1)
+    expect(requests[0]?.promptCacheKey).toBe(sessionID)
     expect(requests[0]?.http?.headers).toEqual({
       "x-session-affinity": sessionID,
       "X-Session-Id": sessionID,
       "x-parent-session-id": parentID,
-      "User-Agent": `opencode/${InstallationVersion}`,
+      "User-Agent": App.useragent(App.make()),
       "x-opencode-project": Project.ID.global,
       "x-opencode-session": sessionID,
-      "x-opencode-client": Flag.OPENCODE_CLIENT,
+      "x-opencode-client": "opencode",
     })
     expect(requests[0]?.generation).toBeUndefined()
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
@@ -210,9 +264,9 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
         .all()
         .pipe(Effect.orDie),
     ).toEqual([
-      { type: EventV2.versionedType(SessionEvent.Compaction.Started.type, 1) },
-      { type: EventV2.versionedType(SessionEvent.UsageRecorded.type, 1) },
-      { type: EventV2.versionedType(SessionEvent.Compaction.Ended.type, 1) },
+      { type: Bus.versionedType(SessionEvent.Compaction.Started.type, 1) },
+      { type: Bus.versionedType(SessionEvent.UsageRecorded.type, 1) },
+      { type: Bus.versionedType(SessionEvent.Compaction.Ended.type, 1) },
     ])
   }),
 )

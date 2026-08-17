@@ -24,6 +24,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@standard-schema/spec": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {

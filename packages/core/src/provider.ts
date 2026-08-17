@@ -1,11 +1,11 @@
-export * as ProviderV2 from "./provider"
+export * as Provider from "./provider.js"
 
 import { Effect, Schema } from "effect"
 import { Provider } from "@opencode-ai/schema/provider"
 import type { ProviderPackageDefinition } from "@opencode-ai/ai"
-import { Npm } from "./npm"
-import type { DeepMutable } from "./schema"
-import { importModule, resolveModule } from "#runtime-import"
+import { Npm } from "@opencode-ai/util/npm"
+import type { DeepMutable } from "./schema.js"
+import { importModule, resolveModule } from "@opencode-ai/util/runtime-import"
 
 export const ID = Provider.ID
 export type ID = typeof ID.Type
@@ -25,7 +25,7 @@ type Json = Schema.Schema.Type<typeof Schema.Json>
 const JsonRecord = Schema.Record(Schema.String, Schema.Json)
 const decodeJsonRecord = Schema.decodeUnknownSync(JsonRecord)
 
-export class LoadError extends Schema.TaggedErrorClass<LoadError>()("ProviderV2.LoadError", {
+export class LoadError extends Schema.TaggedErrorClass<LoadError>()("Provider.LoadError", {
   package: Schema.String,
   cause: Schema.Defect(),
 }) {}
@@ -34,6 +34,15 @@ export type ProviderPackage = ProviderPackageDefinition
 const packages = new Map<string, Promise<unknown>>()
 const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode-ai/ai/providers/amazon-bedrock", () => import("@opencode-ai/ai/providers/amazon-bedrock")],
+  ["@opencode-ai/ai/providers/amazon-bedrock/mantle", () => import("@opencode-ai/ai/providers/amazon-bedrock/mantle")],
+  [
+    "@opencode-ai/ai/providers/amazon-bedrock/mantle/chat",
+    () => import("@opencode-ai/ai/providers/amazon-bedrock/mantle/chat"),
+  ],
+  [
+    "@opencode-ai/ai/providers/amazon-bedrock/mantle/responses",
+    () => import("@opencode-ai/ai/providers/amazon-bedrock/mantle/responses"),
+  ],
   ["@opencode-ai/ai/providers/anthropic", () => import("@opencode-ai/ai/providers/anthropic")],
   ["@opencode-ai/ai/providers/azure", () => import("@opencode-ai/ai/providers/azure")],
   ["@opencode-ai/ai/providers/azure/chat", () => import("@opencode-ai/ai/providers/azure/chat")],
@@ -47,7 +56,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode-ai/ai/providers/xai", () => import("@opencode-ai/ai/providers/xai")],
 ])
 
-export const loadPackage = Effect.fn("ProviderV2.loadPackage")(function* (specifier: string, npm?: Npm.Interface) {
+export const loadPackage = Effect.fn("Provider.loadPackage")(function* (specifier: string, npm?: Npm.Interface) {
   const builtin = builtins.get(specifier)
   if (builtin) return yield* importPackage(specifier, specifier, builtin)
   const resolved = yield* Effect.sync(() => {
@@ -133,7 +142,7 @@ export type Info = Provider.Info
 
 export type MutableInfo = DeepMutable<Info>
 
-const importPackage = Effect.fn("ProviderV2.importPackage")(function* (
+const importPackage = Effect.fn("Provider.importPackage")(function* (
   specifier: string,
   entrypoint: string,
   load = () => importModule(entrypoint),

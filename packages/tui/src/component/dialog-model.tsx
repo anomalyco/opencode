@@ -7,16 +7,22 @@ import { DialogVariant } from "./dialog-variant"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useData } from "../context/data"
+import { modelPreferenceKey } from "../model-preference"
+import { useLocation } from "../context/location"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const data = useData()
   const dialog = useDialog()
+  const location = useLocation()
   const [query, setQuery] = createSignal("")
+  const favoritePriority = new Set(local.model.favorite().map(modelPreferenceKey))
 
   const connected = useConnected()
-  const providers = createMemo(() => new Map((data.location.provider.list() ?? []).map((item) => [item.id, item])))
-  const models = createMemo(() => data.location.model.list() ?? [])
+  const providers = createMemo(
+    () => new Map((data.location.provider.list(location.ref) ?? []).map((item) => [item.id, item])),
+  )
+  const models = createMemo(() => data.location.model.list(location.ref) ?? [])
 
   const showExtra = createMemo(() => connected() && !props.providerID)
 
@@ -63,15 +69,15 @@ export function DialogModel(props: { providerID?: string }) {
         .filter((model) => (props.providerID ? model.providerID === props.providerID : true))
         .map((model) => {
           const provider = providers().get(model.providerID)
+          const key = modelPreferenceKey({ providerID: model.providerID, modelID: model.id })
+          const favorite = favorites.some((item) => modelPreferenceKey(item) === key)
           return {
             value: { providerID: model.providerID, modelID: model.id },
             providerID: model.providerID,
             providerName: provider?.name ?? model.providerID,
             title: model.name,
             releaseDate: model.time.released,
-            description: favorites.some((item) => item.providerID === model.providerID && item.modelID === model.id)
-              ? "(Favorite)"
-              : undefined,
+            description: favorite ? "(Favorite)" : undefined,
             category: connected() ? (provider?.name ?? model.providerID) : undefined,
             footer: free(model) ? "Free" : undefined,
             onSelect() {
@@ -96,7 +102,10 @@ export function DialogModel(props: { providerID?: string }) {
     )
 
     if (needle) {
-      return fuzzysort.go(needle, modelOptions, { keys: ["title", "category"] }).map((item) => item.obj)
+      return prioritizeFavorites(
+        fuzzysort.go(needle, modelOptions, { keys: ["title", "category"] }).map((item) => item.obj),
+        favoritePriority,
+      )
     }
 
     return [...favoriteOptions, ...recentOptions, ...modelOptions]
@@ -131,7 +140,7 @@ export function DialogModel(props: { providerID?: string }) {
       actions={[
         {
           command: "model.dialog.provider",
-          title: connected() ? "Connect integration" : "View all integrations",
+          title: connected() ? "Connect an integration" : "View all integrations",
           selection: "none",
           onTrigger() {
             dialog.replace(() => (
@@ -157,6 +166,15 @@ export function DialogModel(props: { providerID?: string }) {
       current={local.model.current()}
       focusCurrent={false}
     />
+  )
+}
+
+export function prioritizeFavorites<T extends { value: { providerID: string; modelID: string } }>(
+  options: T[],
+  favorites: Set<string>,
+) {
+  return options.toSorted(
+    (a, b) => Number(favorites.has(modelPreferenceKey(b.value))) - Number(favorites.has(modelPreferenceKey(a.value))),
   )
 }
 

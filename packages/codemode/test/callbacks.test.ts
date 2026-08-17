@@ -27,7 +27,7 @@ const echo = Tool.make({
   description: "Echo the input",
   input: Schema.Struct({ id: Schema.Number }),
   output: Schema.Number,
-  run: (input: { id: number }) => Effect.succeed(input.id),
+  execute: (input: { id: number }) => Effect.succeed(input.id),
 })
 const withTool = (code: string) => Effect.runPromise(CodeMode.make({ tools: { host: { echo } } }).execute(code))
 const toolError = async (code: string) => {
@@ -131,10 +131,6 @@ describe("constructors callable without new, like JS", () => {
     expect((await error(`try { Array(-1) } catch (e) { throw Error(e.name) }`)).message).toContain("RangeError")
   })
 
-  test("sort densifies trailing holes into undefined (documented divergence)", async () => {
-    expect(await value(`return Array(2).sort().map(() => 1)`)).toEqual([1, 1])
-  })
-
   test("returned sparse arrays normalize holes to null at the host boundary", async () => {
     expect(await value(`return Array(3)`)).toEqual([null, null, null])
   })
@@ -153,6 +149,57 @@ describe("constructors callable without new, like JS", () => {
 })
 
 describe("sort accepts the unified callback set", () => {
+  test("sort preserves trailing holes while toSorted densifies them", async () => {
+    expect(
+      await value(`
+        const defaultSorted = [2, , 1]
+        const compared = [2, , 1]
+        const copied = defaultSorted.toSorted()
+        defaultSorted.sort()
+        compared.sort((a, b) => a - b)
+        return [
+          Object.hasOwn(defaultSorted, 2),
+          Object.hasOwn(compared, 2),
+          Object.hasOwn(copied, 2),
+        ]
+      `),
+    ).toEqual([false, false, true])
+
+    expect(await value(`const values = [2, undefined, 1]; values.sort(); return Object.hasOwn(values, 2)`)).toBe(true)
+  })
+
+  test("sort writes its snapshot without discarding comparator length mutations", async () => {
+    expect(
+      await value(`
+        const values = [3, 2, 1]
+        let first = true
+        values.sort((a, b) => {
+          if (first) {
+            first = false
+            values.push("kept")
+          }
+          return a - b
+        })
+        return values
+      `),
+    ).toEqual([1, 2, 3, "kept"])
+
+    expect(
+      await value(`
+        const values = [3, , 1, , 2]
+        let first = true
+        values.sort((a, b) => {
+          if (first) {
+            first = false
+            values.splice(0)
+          }
+          return a - b
+        })
+        return { values, owns: values.map((_, index) => Object.hasOwn(values, index)) }
+      `),
+    ).toEqual({ values: [1, 2, 3], owns: [true, true, true] })
+  })
+
   test("sort and toSorted take built-in comparators", async () => {
     expect(await value(`return [0, 1, 0].sort(Boolean)`)).toEqual([0, 0, 1])
     expect(await value(`return [0, 1, 0].toSorted(Boolean)`)).toEqual([0, 0, 1])
@@ -238,21 +285,21 @@ describe("still-rejected callables get the wrap hint", () => {
     expect(diagnostic.message).toContain("wrap it in an arrow function")
   })
 
-  test("callable JSON.stringify replacers are rejected, never silently ignored", async () => {
-    expect((await error(`return JSON.stringify({ a: 1 }, Math.abs)`)).message).toContain(
-      "JSON.stringify replacers are not supported",
-    )
+  test("JSON callbacks use the unified callback gate", async () => {
+    expect(
+      await value(`return JSON.stringify({ a: -1 }, (key, item) => typeof item === "number" ? Math.abs(item) : item)`),
+    ).toBe('{"a":1}')
     expect((await toolError(`return JSON.stringify({ a: 1 }, tools.host.echo)`)).message).toContain(
-      "JSON.stringify replacers are not supported",
+      "wrap it in an arrow function",
+    )
+    expect((await toolError(`return JSON.parse('{"a":1}', tools.host.echo)`)).message).toContain(
+      "wrap it in an arrow function",
     )
   })
 
-  test("callable JSON.parse revivers are rejected, never silently ignored", async () => {
-    expect((await error(`return JSON.parse('{"a":1}', (key, v) => 99)`)).message).toContain(
-      "JSON.parse revivers are not supported",
-    )
+  test("non-callable JSON callback arguments are ignored", async () => {
     expect(await value(`return JSON.parse('{"a":1}', undefined)`)).toEqual({ a: 1 })
-    // A non-callable reviver is silently ignored, matching JS's IsCallable check.
     expect(await value(`return JSON.parse('{"a":1}', 42)`)).toEqual({ a: 1 })
+    expect(await value(`return JSON.stringify({ a: 1 }, 42)`)).toBe('{"a":1}')
   })
 })

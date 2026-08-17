@@ -4,7 +4,7 @@ import {
   ContentPolicyReason,
   InvalidProviderOutputReason,
   InvalidRequestReason,
-  LLMError,
+  AIError,
   NoRouteReason,
   ModelID,
   ProviderID,
@@ -14,16 +14,22 @@ import {
   TransportReason,
   UnknownProviderReason,
   ToolFailure,
+  HttpContext,
+  HttpRequestDetails,
+  HttpResponseDetails,
 } from "@opencode-ai/ai"
-import { PermissionV2 } from "@opencode-ai/core/permission"
-import { Tool } from "@opencode-ai/plugin/v2/effect/tool"
+import { Permission } from "@opencode-ai/core/permission"
+import { ID } from "@opencode-ai/core/model"
+import { ModelResolver } from "@opencode-ai/core/model-resolver"
+import { Provider } from "@opencode-ai/core/provider"
+import { Tool } from "@opencode-ai/schema/tool"
 import { toSessionError } from "@opencode-ai/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode-ai/core/session/runner/retry"
 
-const llm = (reason: LLMError["reason"]) => new LLMError({ module: "test", method: "stream", reason })
+const llm = (reason: AIError["reason"]) => new AIError({ module: "test", method: "stream", reason })
 
 describe("toSessionError", () => {
-  test("maps every LLM reason to the open wire type", () => {
+  test("maps every AI error reason to the open wire type", () => {
     expect(toSessionError(llm(new RateLimitReason({ message: "rate", retryAfterMs: 123 })))).toEqual({
       type: "provider.rate-limit",
       message: "rate",
@@ -33,7 +39,9 @@ describe("toSessionError", () => {
     )
     expect(toSessionError(llm(new QuotaExceededReason({ message: "quota" }))).type).toBe("provider.quota")
     expect(toSessionError(llm(new ContentPolicyReason({ message: "blocked" }))).type).toBe("provider.content-filter")
-    expect(toSessionError(llm(new TransportReason({ message: "transport" }))).type).toBe("provider.transport")
+    expect(
+      toSessionError(llm(new TransportReason({ message: "transport", transport: "http", operation: "request" }))).type,
+    ).toBe("provider.transport")
     expect(toSessionError(llm(new ProviderInternalReason({ message: "internal", status: 500 }))).type).toBe(
       "provider.internal",
     )
@@ -56,7 +64,7 @@ describe("toSessionError", () => {
   })
 
   test("preserves the permission rejection type without exposing internal fields", () => {
-    const blocked = new PermissionV2.BlockedError({ rules: [], permission: "external_directory", resources: [] })
+    const blocked = new Permission.BlockedError({ rules: [], permission: "external_directory", resources: [] })
     expect(toSessionError(blocked)).toEqual({
       type: "permission.rejected",
       message: "Permission denied: external_directory",
@@ -65,9 +73,39 @@ describe("toSessionError", () => {
       type: "permission.rejected",
       message: "Permission denied: external_directory",
     })
-    expect(toSessionError(new Tool.Failure({ message: "failed" }))).toEqual({
+    expect(toSessionError(new Tool.Error({ message: "failed" }))).toEqual({
       type: "tool.execution",
       message: "failed",
+    })
+  })
+
+  test("preserves provider HTTP status", () => {
+    const http = new HttpContext({
+      request: new HttpRequestDetails({ method: "POST", url: "https://example.com", headers: {} }),
+      response: new HttpResponseDetails({ status: 413, headers: {} }),
+    })
+    expect(toSessionError(llm(new InvalidRequestReason({ message: "too large", http })))).toEqual({
+      type: "provider.invalid-request",
+      message: "too large",
+      status: 413,
+    })
+    expect(toSessionError(llm(new ProviderInternalReason({ message: "bad gateway", status: 502 })))).toEqual({
+      type: "provider.internal",
+      message: "bad gateway",
+      status: 502,
+    })
+  })
+
+  test("preserves unresolved provider endpoint errors", () => {
+    const error = new ModelResolver.UnresolvedProviderVariablesError({
+      providerID: Provider.ID.make("cloudflare-workers-ai"),
+      modelID: ID.make("model"),
+      variables: ["CLOUDFLARE_ACCOUNT_ID"],
+    })
+    expect(toSessionError(error)).toEqual({
+      type: "provider.no-route",
+      message:
+        "Cannot initialize cloudflare-workers-ai/model: CLOUDFLARE_ACCOUNT_ID is required to resolve the provider endpoint",
     })
   })
 
@@ -75,7 +113,7 @@ describe("toSessionError", () => {
     const eligible = [
       llm(new RateLimitReason({ message: "rate" })),
       llm(new ProviderInternalReason({ message: "internal", status: 500 })),
-      llm(new TransportReason({ message: "transport" })),
+      llm(new TransportReason({ message: "transport", transport: "http", operation: "request" })),
     ]
     const ineligible = [
       llm(new AuthenticationReason({ message: "auth", kind: "invalid" })),
@@ -89,5 +127,53 @@ describe("toSessionError", () => {
 
     expect(eligible.map(SessionRunnerRetry.isRetryable)).toEqual([true, true, true])
     expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false, false, false, false, false])
+  })
+
+  test("retries transport failures only when delivery is absent or not sent", () => {
+    const retryable = [
+      llm(new TransportReason({ message: "http transport", transport: "http", operation: "request" })),
+      llm(
+        new TransportReason({
+          message: "connect failed",
+          transport: "websocket",
+          operation: "request",
+          delivery: "not-sent",
+          phase: "connect",
+        }),
+      ),
+    ]
+    const ineligible = [
+      llm(
+        new TransportReason({
+          message: "send uncertain",
+          transport: "websocket",
+          operation: "write",
+          delivery: "ambiguous",
+          phase: "send",
+        }),
+      ),
+      llm(
+        new TransportReason({
+          message: "response interrupted",
+          transport: "websocket",
+          operation: "read",
+          delivery: "accepted",
+          phase: "receive",
+        }),
+      ),
+      llm(
+        new TransportReason({
+          message: "continuation rejected",
+          transport: "websocket",
+          operation: "read",
+          delivery: "rejected",
+          recovery: "retry-full",
+          phase: "receive",
+        }),
+      ),
+    ]
+
+    expect(retryable.map(SessionRunnerRetry.isRetryable)).toEqual([true, true])
+    expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false])
   })
 })

@@ -186,6 +186,26 @@ export function createAutoScroll(options: AutoScrollOptions) {
     },
   )
 
+  createEffect(() => {
+    const el = store.scrollRef
+    if (!el) return
+    const root = el.closest("main")
+    if (!root) return
+    let connected = el.isConnected
+    const contains = (node: Node) => node === el || (node instanceof Element && node.contains(el))
+    const observer = new MutationObserver((records) => {
+      records.forEach((record) => {
+        if ([...record.removedNodes].some(contains)) connected = false
+        if (!record.addedNodes.length || ![...record.addedNodes].some(contains)) return
+        const reattached = !connected
+        connected = true
+        if (reattached) scrollToBottom(false)
+      })
+    })
+    observer.observe(root, { childList: true })
+    onCleanup(() => observer.disconnect())
+  })
+
   createEffect(
     on(options.working, (working: boolean) => {
       settling = false

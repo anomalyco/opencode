@@ -62,6 +62,15 @@ export class ProviderNotFoundError extends Schema.TaggedErrorClass<ProviderNotFo
   { httpApiStatus: 404 },
 ) {}
 
+export class AgentNotFoundError extends Schema.TaggedErrorClass<AgentNotFoundError>()(
+  "AgentNotFoundError",
+  {
+    agentID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
 export class SessionNotFoundError extends Schema.TaggedErrorClass<SessionNotFoundError>()(
   "SessionNotFoundError",
   {
@@ -85,6 +94,15 @@ export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundErr
   "SkillNotFoundError",
   {
     skill: Skill.ID,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class McpServerNotFoundError extends Schema.TaggedErrorClass<McpServerNotFoundError>()(
+  "McpServerNotFoundError",
+  {
+    server: Schema.String,
     message: Schema.String,
   },
   { httpApiStatus: 404 },
@@ -116,15 +134,6 @@ export class InvalidCursorError extends Schema.TaggedErrorClass<InvalidCursorErr
 
 export class PermissionNotFoundError extends Schema.TaggedErrorClass<PermissionNotFoundError>()(
   "PermissionNotFoundError",
-  {
-    requestID: Schema.String,
-    message: Schema.String,
-  },
-  { httpApiStatus: 404 },
-) {}
-
-export class QuestionNotFoundError extends Schema.TaggedErrorClass<QuestionNotFoundError>()(
-  "QuestionNotFoundError",
   {
     requestID: Schema.String,
     message: Schema.String,

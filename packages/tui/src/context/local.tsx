@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createMemo, onCleanup } from "solid-js"
 import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
@@ -9,21 +9,20 @@ import { useArgs } from "./args"
 import { useClient } from "./client"
 import { RGBA } from "@opentui/core"
 import { readJson, writeJsonAtomic } from "../util/persistence"
-import { useTheme } from "./theme"
+import {
+  createModelPreferenceRepository,
+  cycleModelVariant,
+  modelPreferenceKey,
+  normalizeModelVariant,
+  type ModelPreference,
+  type ModelPreferenceModel,
+} from "../model-preference"
+import { useTheme, useThemes } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { useData } from "./data"
 import { usePermission } from "./permission"
-
-export type LocalTheme = {
-  secondary: RGBA
-  accent: RGBA
-  success: RGBA
-  warning: RGBA
-  primary: RGBA
-  error: RGBA
-  info: RGBA
-}
+import { useLocation } from "./location"
 
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
@@ -33,14 +32,11 @@ export function parseModel(model: string) {
   }
 }
 
-export function recentModels(
-  model: { providerID: string; modelID: string },
-  recent: { providerID: string; modelID: string }[],
-) {
+export function recentModels(model: ModelPreferenceModel, recent: ModelPreferenceModel[]) {
   const seen = new Set<string>()
   return [model, ...recent]
     .filter((item) => {
-      const key = `${item.providerID}/${item.modelID}`
+      const key = modelPreferenceKey(item)
       if (seen.has(key)) return false
       seen.add(key)
       return true
@@ -55,46 +51,43 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const data = useData()
     const client = useClient()
     const toast = useToast()
-    const { theme, themeV2, mode } = useTheme()
+    const theme = useTheme()
+    const { mode } = useThemes()
     const route = useRoute()
     const paths = useTuiPaths()
     const args = useArgs()
     const event = useEvent()
     const permission = usePermission()
+    const location = useLocation()
 
-    function isModelValid(model: { providerID: string; modelID: string }) {
-      return !!data.location.model
-        .list()
-        ?.some((item) => item.providerID === model.providerID && item.id === model.modelID)
+    const models = () => data.location.model.list(location.ref)
+    const providers = () => data.location.provider.list(location.ref)
+
+    function isModelValid(model: ModelPreferenceModel) {
+      return !!models()?.some((item) => item.providerID === model.providerID && item.id === model.modelID)
     }
 
-    function getFirstValidModel(...modelFns: (() => { providerID: string; modelID: string } | undefined)[]) {
+    function getFirstValidModel(...modelFns: (() => ModelPreferenceModel | undefined)[]) {
       for (const modelFn of modelFns) {
         const model = modelFn()
-        if (!model) continue
-        if (isModelValid(model)) return model
+        if (model && isModelValid(model)) return model
       }
     }
 
     function createAgent() {
       const agents = createMemo(() =>
-        (data.location.agent.list() ?? []).filter((agent) => agent.mode !== "subagent" && !agent.hidden),
+        (data.location.agent.list(location.ref) ?? []).filter((agent) => agent.mode !== "subagent" && !agent.hidden),
       )
-      const visibleAgents = createMemo(() => (data.location.agent.list() ?? []).filter((agent) => !agent.hidden))
+      const visibleAgents = createMemo(() =>
+        (data.location.agent.list(location.ref) ?? []).filter((agent) => !agent.hidden),
+      )
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
       })
       const colors = createMemo(() => {
         const step = mode() === "light" ? 800 : 200
         return dedupeWith(
-          [
-            themeV2.hue.blue(step),
-            themeV2.hue.purple(step),
-            themeV2.hue.green(step),
-            themeV2.hue.orange(step),
-            themeV2.hue.red(step),
-            themeV2.hue.cyan(step),
-          ],
+          theme.categorical.map((scale) => scale[step]),
           (first, second) => first.equals(second),
         )
       })
@@ -130,12 +123,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (index === -1) return colors()[0]
           const agent = visibleAgents()[index]
 
-          if (agent?.color) {
-            const color = agent.color
-            if (color.startsWith("#")) return RGBA.fromHex(color)
-            // already validated by config, just satisfying TS here
-            return theme[color as keyof typeof theme] as RGBA
-          }
+          if (agent?.color) return RGBA.fromHex(agent.color)
           return colors()[index % colors().length]
         },
       }
@@ -144,63 +132,55 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const agent = createAgent()
 
     function createModel() {
-      const [modelStore, setModelStore] = createStore<{
-        ready: boolean
-        model: Record<
-          string,
-          {
-            providerID: string
-            modelID: string
-          }
-        >
-        recent: {
-          providerID: string
-          modelID: string
-        }[]
-        favorite: {
-          providerID: string
-          modelID: string
-        }[]
-        variant: Record<string, string | undefined>
-      }>({
+      type ModelSelection = ModelPreferenceModel & { variant?: string }
+      const [preferences, setPreferences] = createStore<ModelPreference & { ready: boolean }>({
         ready: false,
-        model: {},
         recent: [],
         favorite: [],
         variant: {},
       })
+      const [selectionState, setSelectionState] = createStore<{
+        newSessionModelByLocationAgent: Record<string, ModelPreferenceModel | undefined>
+        draftBySession: Record<string, ModelSelection | undefined>
+      }>({
+        newSessionModelByLocationAgent: {},
+        draftBySession: {},
+      })
 
-      const filePath = path.join(paths.state, "model.json")
-      const state = {
+      const repository = createModelPreferenceRepository(path.join(paths.state, "model.json"))
+      const pendingSelectionCommits = new Map<string, string>()
+      const selectionKey = (value: ModelSelection) =>
+        `${modelPreferenceKey(value)}:${normalizeModelVariant(value.variant) ?? "default"}`
+      const saveState = {
         pending: false,
       }
 
-      function save() {
-        if (!modelStore.ready) {
-          state.pending = true
+      function savePreferences() {
+        if (!preferences.ready) {
+          saveState.pending = true
           return
         }
-        state.pending = false
-        void writeJsonAtomic(filePath, {
-          recent: modelStore.recent,
-          favorite: modelStore.favorite,
-          variant: modelStore.variant,
-        })
+        saveState.pending = false
+        void repository
+          .patch({
+            recent: preferences.recent,
+            favorite: preferences.favorite,
+            variant: preferences.variant,
+          })
+          .catch(() => undefined)
       }
 
-      readJson<unknown>(filePath)
-        .then((x) => {
-          if (!x || typeof x !== "object") return
-          const value = x as Record<string, unknown>
-          if (Array.isArray(value.recent)) setModelStore("recent", value.recent)
-          if (Array.isArray(value.favorite)) setModelStore("favorite", value.favorite)
-          if (typeof value.variant === "object" && value.variant !== null)
-            setModelStore("variant", value.variant as Record<string, string | undefined>)
+      repository
+        .load()
+        .then((value) => {
+          setPreferences("recent", value.recent)
+          setPreferences("favorite", value.favorite)
+          setPreferences("variant", value.variant)
         })
         .catch(() => {})
         .finally(() => {
-          setModelStore("ready", true)
-          if (state.pending) save()
+          setPreferences("ready", true)
+          if (saveState.pending) savePreferences()
         })
 
       const fallbackModel = createMemo(() => {
@@ -214,13 +194,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        for (const item of modelStore.recent) {
+        for (const item of preferences.recent) {
           if (isModelValid(item)) {
             return item
           }
         }
 
-        const model = data.location.model.list()?.[0]
+        const model = models()?.[0]
         if (!model) return undefined
         return {
           providerID: model.providerID,
@@ -228,30 +208,134 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
       })
 
-      const currentModel = createMemo(() => {
+      const newSessionModel = createMemo(() => {
         const a = agent.current()
-        return (
-          getFirstValidModel(
-            () => a && modelStore.model[a.id],
-            () => a?.model && { providerID: a.model.providerID, modelID: a.model.id },
-            fallbackModel,
-          ) ?? undefined
+        return getFirstValidModel(
+          () => a && selectionState.newSessionModelByLocationAgent[locationAgentKey(a.id)],
+          () => a?.model && { providerID: a.model.providerID, modelID: a.model.id },
+          fallbackModel,
         )
       })
 
+      const currentSelection = createMemo<ModelSelection | undefined>(() => {
+        if (route.data.type === "session") return sessionSelection(route.data.sessionID)
+        const model = newSessionModel()
+        if (!model) return
+        return { ...model, variant: normalizeModelVariant(preferences.variant[modelPreferenceKey(model)]) }
+      })
+
+      const currentModel = createMemo(() => {
+        const selection = currentSelection()
+        if (!selection) return
+        return { providerID: selection.providerID, modelID: selection.modelID }
+      })
+
+      function locationAgentKey(agentID: string) {
+        const ref = location.ref ?? data.location.default()
+        return `${JSON.stringify([ref.directory, ref.workspaceID])}:${agentID}`
+      }
+
+      function durableSelection(sessionID: string): ModelSelection | undefined {
+        const model = data.session.get(sessionID)?.model
+        if (!model) return
+        return {
+          providerID: model.providerID,
+          modelID: model.id,
+          variant: normalizeModelVariant(model.variant),
+        }
+      }
+
+      function sessionSelection(sessionID: string) {
+        return selectionState.draftBySession[sessionID] ?? durableSelection(sessionID)
+      }
+
+      function setSessionDraft(sessionID: string, selection: ModelSelection) {
+        const durable = durableSelection(sessionID)
+        setSelectionState(
+          "draftBySession",
+          sessionID,
+          durable && selectionKey(durable) === selectionKey(selection) ? undefined : selection,
+        )
+      }
+
+      function selectModel(model: ModelPreferenceModel) {
+        if (route.data.type === "session") {
+          const sessionID = route.data.sessionID
+          const current = sessionSelection(sessionID)
+          const preferred = normalizeModelVariant(
+            current?.providerID === model.providerID && current.modelID === model.modelID
+              ? current.variant
+              : preferences.variant[modelPreferenceKey(model)],
+          )
+          const info = models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
+          const variant = preferred && info?.variants?.some((item) => item.id === preferred) ? preferred : undefined
+          setSessionDraft(sessionID, { ...model, variant })
+          return true
+        }
+        const current = agent.current()
+        if (!current) return false
+        setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id), model)
+        return true
+      }
+
+      onCleanup(
+        event.on("session.model.selected", (evt) => {
+          const expected = pendingSelectionCommits.get(evt.data.sessionID)
+          if (!expected) return
+          const committed = selectionKey({
+            providerID: evt.data.model.providerID,
+            modelID: evt.data.model.id,
+            variant: evt.data.model.variant,
+          })
+          if (committed !== expected) return
+          pendingSelectionCommits.delete(evt.data.sessionID)
+          const draft = selectionState.draftBySession[evt.data.sessionID]
+          if (draft && selectionKey(draft) === committed)
+            setSelectionState("draftBySession", evt.data.sessionID, undefined)
+        }),
+      )
+
+      onCleanup(
+        event.on("session.deleted", (evt) => {
+          pendingSelectionCommits.delete(evt.data.sessionID)
+          setSelectionState("draftBySession", evt.data.sessionID, undefined)
+        }),
+      )
+
       return {
         current: currentModel,
+        selection: currentSelection,
+        available(model = currentModel()) {
+          return model ? isModelValid(model) : false
+        },
+        trackSessionCommit(
+          sessionID: string,
+          value: {
+            providerID: string
+            id: string
+            variant?: string
+          },
+        ) {
+          const committed = selectionKey({ providerID: value.providerID, modelID: value.id, variant: value.variant })
+          pendingSelectionCommits.set(sessionID, committed)
+          return () => {
+            if (pendingSelectionCommits.get(sessionID) === committed) pendingSelectionCommits.delete(sessionID)
+          }
+        },
         get ready() {
-          return modelStore.ready
+          return preferences.ready
+        },
+        get catalogReady() {
+          return models() !== undefined
         },
         recent() {
-          return modelStore.recent
+          return preferences.recent
         },
         favorite() {
-          return modelStore.favorite
+          return preferences.favorite
         },
         parsed: createMemo(() => {
-          const value = currentModel()
+          const value = currentSelection()
           if (!value) {
             return {
               provider: "Connect a provider",
@@ -259,33 +343,28 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               reasoning: false,
             }
           }
-          const provider = data.location.provider.list()?.find((item) => item.id === value.providerID)
-          const info = data.location.model
-            .list()
-            ?.find((item) => item.providerID === value.providerID && item.id === value.modelID)
+          const provider = providers()?.find((item) => item.id === value.providerID)
+          const info = models()?.find((item) => item.providerID === value.providerID && item.id === value.modelID)
           return {
             provider: provider?.name ?? value.providerID,
-            model: info?.name ?? value.modelID,
+            model: info?.name ?? `${value.modelID} (unavailable)`,
             reasoning: (info?.variants?.length ?? 0) !== 0,
           }
         }),
         cycle(direction: 1 | -1) {
-          const current = currentModel()
+          const current = currentSelection()
           if (!current) return
-          const recent = modelStore.recent
+          const recent = recentModels(current, preferences.recent).filter(isModelValid)
           const index = recent.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
-          if (index === -1) return
-          let next = index + direction
+          let next = index === -1 ? (direction === 1 ? 0 : recent.length - 1) : index + direction
           if (next < 0) next = recent.length - 1
           if (next >= recent.length) next = 0
           const val = recent[next]
           if (!val) return
-          const a = agent.current()
-          if (!a) return
-          setModelStore("model", a.id, { ...val })
+          selectModel({ ...val })
         },
         cycleFavorite(direction: 1 | -1) {
-          const favorites = modelStore.favorite.filter((item) => isModelValid(item))
+          const favorites = preferences.favorite.filter((item) => isModelValid(item))
           if (!favorites.length) {
             toast.show({
               variant: "info",
@@ -294,7 +373,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             })
             return
           }
-          const current = currentModel()
+          const current = currentSelection()
           let index = -1
           if (current) {
             index = favorites.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
@@ -308,96 +387,64 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
           const next = favorites[index]
           if (!next) return
-          const a = agent.current()
-          if (!a) return
-          setModelStore("model", a.id, { ...next })
-          setModelStore("recent", recentModels(next, modelStore.recent))
-          save()
+          if (!selectModel({ ...next })) return
+          setPreferences("recent", recentModels(next, preferences.recent))
+          savePreferences()
         },
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
           batch(() => {
-            if (!isModelValid(model)) {
-              toast.show({
-                message: `Model ${model.providerID}/${model.modelID} is not valid`,
-                variant: "warning",
-                duration: 3000,
-              })
-              return
-            }
-            const a = agent.current()
-            if (!a) return
-            setModelStore("model", a.id, model)
+            if (!isModelValid(model)) return
+            if (!selectModel(model)) return
             if (options?.recent) {
-              setModelStore("recent", recentModels(model, modelStore.recent))
-              save()
+              setPreferences("recent", recentModels(model, preferences.recent))
+              savePreferences()
             }
           })
         },
         toggleFavorite(model: { providerID: string; modelID: string }) {
           batch(() => {
-            if (!isModelValid(model)) {
-              toast.show({
-                message: `Model ${model.providerID}/${model.modelID} is not valid`,
-                variant: "warning",
-                duration: 3000,
-              })
-              return
-            }
-            const exists = modelStore.favorite.some(
+            if (!isModelValid(model)) return
+            const exists = preferences.favorite.some(
               (x) => x.providerID === model.providerID && x.modelID === model.modelID,
             )
             const next = exists
-              ? modelStore.favorite.filter((x) => x.providerID !== model.providerID || x.modelID !== model.modelID)
-              : [model, ...modelStore.favorite]
-            setModelStore(
+              ? preferences.favorite.filter((x) => x.providerID !== model.providerID || x.modelID !== model.modelID)
+              : [model, ...preferences.favorite]
+            setPreferences(
               "favorite",
               next.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
             )
-            save()
+            savePreferences()
           })
         },
         variant: {
           selected() {
-            const m = currentModel()
-            if (!m) return undefined
-            const key = `${m.providerID}/${m.modelID}`
-            return modelStore.variant[key] ?? "default"
+            return currentSelection()?.variant
           },
           current() {
             const v = this.selected()
-            if (!v) return undefined
-            if (v !== "default" && this.list().includes(v)) return v
-            return "default"
+            if (v && this.list().includes(v)) return v
+            return undefined
           },
           list() {
-            const m = currentModel()
+            const m = currentSelection()
             if (!m) return []
-            const info = data.location.model
-              .list()
-              ?.find((item) => item.providerID === m.providerID && item.id === m.modelID)
+            const info = models()?.find((item) => item.providerID === m.providerID && item.id === m.modelID)
             return info?.variants?.map((variant) => variant.id) ?? []
           },
           set(value: string | undefined) {
-            const m = currentModel()
+            const m = currentSelection()
             if (!m) return
-            const key = `${m.providerID}/${m.modelID}`
-            setModelStore("variant", key, value ?? "default")
-            save()
+            if (route.data.type === "session") {
+              setSessionDraft(route.data.sessionID, { ...m, variant: normalizeModelVariant(value) })
+            }
+            setPreferences("variant", modelPreferenceKey(m), normalizeModelVariant(value))
+            savePreferences()
           },
           cycle() {
             const variants = this.list()
             if (variants.length === 0) return
-            const current = this.current()
-            if (!current) {
-              this.set(variants[0])
-              return
-            }
-            const index = variants.indexOf(current)
-            if (index === -1 || index === variants.length - 1) {
-              this.set(variants[0])
-              return
-            }
-            this.set(variants[index + 1])
+            this.set(cycleModelVariant(this.current(), variants))
           },
         },
       }
@@ -503,17 +550,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const session = createSession()
-
-    createEffect(() => {
-      const value = agent.current()
-      if (!value?.model) return
-      if (isModelValid({ providerID: value.model.providerID, modelID: value.model.id })) return
-      toast.show({
-        variant: "warning",
-        message: `Agent ${value.id}'s configured model ${value.model.providerID}/${value.model.id} is not valid`,
-        duration: 3000,
-      })
-    })
 
     const result = {
       model,

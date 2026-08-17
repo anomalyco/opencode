@@ -9,7 +9,7 @@ import { useI18n } from "@opencode-ai/ui/context/i18n"
 
 installLineCommentStyles()
 
-export type LineCommentVariant = "default" | "editor" | "add"
+export type LineCommentVariant = "default" | "editor"
 
 function InlineGlyph(props: { icon: "comment" | "plus" }) {
   return (
@@ -156,25 +156,6 @@ export const LineComment = (props: LineCommentProps) => {
   )
 }
 
-export type LineCommentAddProps = Omit<LineCommentAnchorProps, "children" | "variant" | "open" | "icon"> & {
-  label?: string
-}
-
-export const LineCommentAdd = (props: LineCommentAddProps) => {
-  const [split, rest] = splitProps(props, ["label"])
-  const i18n = useI18n()
-
-  return (
-    <LineCommentAnchor
-      {...rest}
-      open={false}
-      variant="add"
-      icon="plus"
-      buttonLabel={split.label ?? i18n.t("ui.lineComment.submit")}
-    />
-  )
-}
-
 export type LineCommentEditorProps = Omit<LineCommentAnchorProps, "children" | "open" | "variant" | "onClick"> & {
   value: string
   selection: JSX.Element
@@ -315,9 +296,11 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
             refs.textarea = el
           }}
           data-slot="line-comment-textarea"
+          dir="auto"
           rows={split.rows ?? 3}
           placeholder={split.placeholder ?? i18n.t("ui.lineComment.placeholder")}
           value={split.value}
+          style={{ "unicode-bidi": "plaintext", "text-align": "start" }}
           on:input={(e) => {
             const value = (e.currentTarget as HTMLTextAreaElement).value
             split.onInput(value)

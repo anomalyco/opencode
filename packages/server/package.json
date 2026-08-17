@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/server",
-  "version": "1.18.3",
+  "version": "1.18.4",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -10,13 +10,16 @@
   },
   "scripts": {
     "test": "bun test --only-failures",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo -b",
+    "probe:workerd": "bun run script/workerd-probe.ts"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/protocol": "workspace:*",
+    "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/simulation": "workspace:*",
+    "@opencode-ai/util": "workspace:*",
     "drizzle-orm": "catalog:",
     "effect": "catalog:"
   },

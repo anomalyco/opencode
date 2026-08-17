@@ -1,36 +1,28 @@
 /** @jsxImportSource @opentui/solid */
 import { describe, expect, test } from "bun:test"
-import { RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import type { JSX } from "solid-js"
 import { onMount, type ParentProps } from "solid-js"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
-import { ThemeProvider } from "../../../src/context/theme"
+import { emptyThemeSource } from "../../fixture/fixture"
+import { ThemeProvider, useThemes } from "../../../src/context/theme"
+import type { Plugin } from "@opencode-ai/plugin/tui"
 import { ConfigProvider } from "../../../src/config"
-import { DiffViewerFileTree } from "../../../src/feature-plugins/system/diff-viewer-file-tree"
+import {
+  DiffViewerFileTree,
+  type DiffViewerFileTreeProps,
+} from "../../../src/feature-plugins/system/diff-viewer-file-tree"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
 } from "../../../src/feature-plugins/system/diff-viewer-file-tree-utils"
 
-const theme = {
-  background: RGBA.fromHex("#000000"),
-  backgroundPanel: RGBA.fromHex("#111111"),
-  backgroundElement: RGBA.fromHex("#333333"),
-  primary: RGBA.fromHex("#00ffff"),
-  secondary: RGBA.fromHex("#0088ff"),
-  selectedListItemText: RGBA.fromHex("#ffffff"),
-  text: RGBA.fromHex("#ffffff"),
-  textMuted: RGBA.fromHex("#888888"),
-  error: RGBA.fromHex("#ff0000"),
-}
-
 describe("DiffViewerFileTree", () => {
   test.skip("renders sorted hierarchical file rows", async () => {
     const lines = visibleLines(
       await renderFrame(() => (
-        <DiffViewerFileTree
+        <ThemedDiffViewerFileTree
           width={32}
           files={[
             { file: "z-file.ts" },
@@ -41,7 +33,6 @@ describe("DiffViewerFileTree", () => {
           ]}
           loading={false}
           error={undefined}
-          theme={theme}
           focused={true}
         />
       )),
@@ -59,13 +50,13 @@ describe("DiffViewerFileTree", () => {
 
   test("keeps loading and error quiet while rendering an empty settled state", async () => {
     const loading = await renderFrame(() => (
-      <DiffViewerFileTree width={32} files={[]} loading={true} error={undefined} theme={theme} />
+      <ThemedDiffViewerFileTree width={32} files={[]} loading={true} error={undefined} />
     ))
     const failed = await renderFrame(() => (
-      <DiffViewerFileTree width={32} files={[]} loading={false} error={new Error("nope")} theme={theme} />
+      <ThemedDiffViewerFileTree width={32} files={[]} loading={false} error={new Error("nope")} />
     ))
     const empty = await renderFrame(() => (
-      <DiffViewerFileTree width={32} files={[]} loading={false} error={undefined} theme={theme} />
+      <ThemedDiffViewerFileTree width={32} files={[]} loading={false} error={undefined} />
     ))
 
     expect(loading).not.toContain("Loading diff...")
@@ -81,21 +72,18 @@ describe("DiffViewerFileTree", () => {
 
     const focused = visibleLines(
       await renderFrame(() => (
-        <DiffViewerFileTree
+        <ThemedDiffViewerFileTree
           width={32}
           files={files}
           loading={false}
           error={undefined}
-          theme={theme}
           focused
           highlightedNode={src.id}
         />
       )),
     )
     const unfocused = visibleLines(
-      await renderFrame(() => (
-        <DiffViewerFileTree width={32} files={files} loading={false} error={undefined} theme={theme} />
-      )),
+      await renderFrame(() => <ThemedDiffViewerFileTree width={32} files={files} loading={false} error={undefined} />),
     )
 
     expect(focused).toContain("▾ src/config")
@@ -114,12 +102,11 @@ describe("DiffViewerFileTree", () => {
     expect(
       visibleLines(
         await renderFrame(() => (
-          <DiffViewerFileTree
+          <ThemedDiffViewerFileTree
             width={32}
             files={files}
             loading={false}
             error={undefined}
-            theme={theme}
             expandedNodes={collapsed}
           />
         )),
@@ -129,12 +116,11 @@ describe("DiffViewerFileTree", () => {
     expect(
       visibleLines(
         await renderFrame(() => (
-          <DiffViewerFileTree
+          <ThemedDiffViewerFileTree
             files={files}
             width={32}
             loading={false}
             error={undefined}
-            theme={theme}
             expandedNodes={allExpandedFileTreeDirectories(tree)}
           />
         )),
@@ -142,6 +128,10 @@ describe("DiffViewerFileTree", () => {
     ).toEqual(["▾ src/config", "│  └─ tui.ts                 ?"])
   })
 })
+
+function ThemedDiffViewerFileTree(props: Omit<DiffViewerFileTreeProps, "context">) {
+  return <DiffViewerFileTree {...props} context={{ theme: useThemes().currentTokens() } as Plugin.Context} />
+}
 
 async function renderFrame(component: () => JSX.Element) {
   const mounted = Promise.withResolvers<void>()
@@ -160,7 +150,7 @@ function withTheme(component: () => JSX.Element, onReady = () => {}) {
   return (
     <TestTuiContexts>
       <ConfigProvider config={createTuiResolvedConfig()}>
-        <ThemeProvider mode="dark">
+        <ThemeProvider mode="dark" source={emptyThemeSource}>
           <Ready onReady={onReady}>{component()}</Ready>
         </ThemeProvider>
       </ConfigProvider>

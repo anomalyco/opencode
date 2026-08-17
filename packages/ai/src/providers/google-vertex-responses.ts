@@ -1,8 +1,9 @@
-import type { ProviderPackage } from "../provider-package"
-import { OpenAICompatibleResponses } from "../protocols/openai-compatible-responses"
-import type { RouteDefaultsInput } from "../route/client"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
-import { GoogleVertexShared } from "./google-vertex-shared"
+import type { ProviderPackage } from "../provider-package.js"
+import { OpenAICompatibleResponses } from "../protocols/openai-compatible-responses.js"
+import type { RouteDefaultsInput } from "../route/client.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
+import { GoogleVertexShared } from "./google-vertex-shared.js"
+import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
 export const id = ProviderID.make("google-vertex")
 
@@ -11,6 +12,7 @@ export type Config = RouteDefaultsInput &
     readonly baseURL?: string
     readonly location?: string
     readonly project?: string
+    readonly providerOptions?: OpenResponsesProviderOptionsInput
   }
 
 export interface Settings extends ProviderPackage.Settings {
@@ -19,12 +21,13 @@ export interface Settings extends ProviderPackage.Settings {
   readonly baseURL?: string
   readonly location?: string
   readonly project?: string
-  readonly providerOptions?: ProviderOptions
+  readonly providerOptions?: OpenResponsesProviderOptionsInput
 }
 
 const route = OpenAICompatibleResponses.route.with({
   id: "google-vertex-responses",
   provider: id,
+  providerOptions: { openresponses: { store: false } },
 })
 
 export const routes = [route]
@@ -57,7 +60,7 @@ export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
   return {
     id,
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) => route.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     configure,
   }
 }
@@ -67,7 +70,10 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
+export const model: ProviderPackage.Definition<Settings, OpenResponsesProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) => {
   if (settings.apiKey !== undefined) throw new Error("Google Vertex Responses does not support API keys")
   return configure({
     accessToken: settings.accessToken,

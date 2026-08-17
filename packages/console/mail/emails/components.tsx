@@ -19,10 +19,6 @@ export function Span({ children, ...props }: SpanProps) {
   return React.createElement("span", props, children)
 }
 
-export function Wbr({ children, ...props }: WbrProps) {
-  return React.createElement("wbr", props, children)
-}
-
 export function Fonts({ assetsUrl }: { assetsUrl: string }) {
   return (
     <>
@@ -58,15 +54,4 @@ export function Fonts({ assetsUrl }: { assetsUrl: string }) {
       />
     </>
   )
-}
-
-export function SplitString({ text, split }: { text: string; split: number }) {
-  const segments: JSX.Element[] = []
-  for (let i = 0; i < text.length; i += split) {
-    segments.push(<>{text.slice(i, i + split)}</>)
-    if (i + split < text.length) {
-      segments.push(<Wbr key={`${i}wbr`} />)
-    }
-  }
-  return <>{segments}</>
 }

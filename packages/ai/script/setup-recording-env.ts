@@ -162,6 +162,18 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     validate: (env) => validateBearer("https://api.together.xyz/v1/models", Redacted.make(env.TOGETHER_AI_API_KEY)),
   },
   {
+    id: "minimax",
+    label: "MiniMax",
+    tier: "compatible",
+    note: "Anthropic-compatible Messages text/tool recorded tests",
+    vars: [{ name: "MINIMAX_API_KEY" }],
+    validate: (env) =>
+      HttpClientRequest.get("https://api.minimax.io/anthropic/v1/models").pipe(
+        HttpClientRequest.setHeader("x-api-key", Redacted.value(Redacted.make(env.MINIMAX_API_KEY))),
+        executeRequest,
+      ),
+  },
+  {
     id: "mistral",
     label: "Mistral",
     tier: "optional",

@@ -2,7 +2,7 @@
   "name": "@opencode-ai/web",
   "type": "module",
   "license": "MIT",
-  "version": "1.18.3",
+  "version": "1.18.15",
   "scripts": {
     "dev": "astro dev",
     "dev:remote": "VITE_API_URL=https://api.opencode.ai astro dev",
@@ -20,7 +20,6 @@
     "@shikijs/transformers": "3.20.0",
     "@solid-primitives/resize-observer": "2.1.5",
     "@types/luxon": "catalog:",
-    "ai": "catalog:",
     "astro": "5.7.13",
     "diff": "catalog:",
     "js-base64": "3.7.7",
@@ -36,7 +35,6 @@
     "vscode-languageserver-types": "3.17.5"
   },
   "devDependencies": {
-    "opencode": "workspace:*",
     "@types/node": "catalog:",
     "@astrojs/check": "0.9.6",
     "typescript": "catalog:"

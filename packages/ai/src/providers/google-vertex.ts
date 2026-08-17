@@ -1,11 +1,14 @@
-import type { ProviderPackage } from "../provider-package"
-import { Gemini } from "../protocols/gemini"
-import { Auth } from "../route/auth"
-import { Route, type RouteDefaultsInput } from "../route/client"
-import { Endpoint } from "../route/endpoint"
-import { Framing } from "../route/framing"
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
-import { GoogleVertexShared } from "./google-vertex-shared"
+import type { ProviderPackage } from "../provider-package.js"
+import { Gemini } from "../protocols/gemini.js"
+import { Auth } from "../route/auth.js"
+import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
+import { Framing } from "../route/framing.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
+import { GoogleVertexShared } from "./google-vertex-shared.js"
+
+export type GeminiOptionsInput = Gemini.OptionsInput
+export type GeminiProviderOptionsInput = Gemini.ProviderOptionsInput
 
 export const id = ProviderID.make("google-vertex")
 
@@ -14,6 +17,7 @@ export type Config = RouteDefaultsInput &
     readonly baseURL?: string
     readonly location?: string
     readonly project?: string
+    readonly providerOptions?: Gemini.ProviderOptionsInput
   }
 
 export type Settings = ProviderPackage.Settings &
@@ -24,7 +28,7 @@ export type Settings = ProviderPackage.Settings &
     readonly baseURL?: string
     readonly location?: string
     readonly project?: string
-    readonly providerOptions?: ProviderOptions
+    readonly providerOptions?: Gemini.ProviderOptionsInput
   }
 
 const route = Route.make({
@@ -73,7 +77,8 @@ const configuredRoute = (input: Config, modelID: string | ModelID) => {
 export const configure = (input: Config = {}) => {
   return {
     id,
-    model: (modelID: string | ModelID) => configuredRoute(input, modelID).model({ id: modelID }),
+    model: (modelID: string | ModelID) =>
+      configuredRoute(input, modelID).model<Gemini.ProviderOptionsInput>({ id: modelID }),
     configure,
   }
 }
@@ -82,7 +87,10 @@ export const provider = {
   id,
   configure,
 }
-export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, settings) => {
+export const model: ProviderPackage.Definition<Settings, Gemini.ProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) => {
   if (settings.apiKey !== undefined && settings.accessToken !== undefined)
     throw new Error("Google Vertex apiKey cannot be combined with accessToken or auth")
   return configure({

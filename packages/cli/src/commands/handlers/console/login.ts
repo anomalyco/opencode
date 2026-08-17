@@ -1,7 +1,7 @@
 import { Cause, Effect, Exit, Option } from "effect"
 import { Service } from "@opencode-ai/client/effect/service"
 import { OpenCode, type OpenCodeClient } from "@opencode-ai/client/promise"
-import { AppProcess } from "@opencode-ai/core/process"
+import { AppProcess } from "@opencode-ai/util/process"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { ServiceConfig } from "../../../services/service-config"
@@ -50,7 +50,7 @@ const login = Effect.fn("cli.console.login.run")(function* (timeline: TimelineHo
       {
         integrationID,
         methodID: method.id,
-        inputs: server ? { server } : {},
+        ...(server ? { answer: { server } } : {}),
         location,
       },
       { signal },

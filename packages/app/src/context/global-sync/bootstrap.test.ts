@@ -1,175 +1,178 @@
 import { describe, expect, test } from "bun:test"
-import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
-import type { Config, OpencodeClient, Project, Session } from "@opencode-ai/sdk/v2/client"
+import type { AgentApi, CatalogApi, CommandApi, ReferenceApi } from "@opencode-ai/client/promise"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
-import { bootstrapDirectory, loadPathQuery, loadProvidersQuery } from "./bootstrap"
-import type { State, VcsCache } from "./types"
-import { createServerSession } from "../server-session"
+import {
+  loadAgentsQuery,
+  loadCommands,
+  loadPathQuery,
+  loadProjectsQuery,
+  loadProvidersQuery,
+  loadReferencesQuery,
+} from "./bootstrap"
 import { ServerScope } from "@/utils/server-scope"
+import type { ServerApi } from "@/utils/server"
 
-const provider = { all: new Map(), connected: [], default: {} } satisfies NormalizedProviderListResponse
-
-function directoryState() {
-  return createStore<State>({
-    status: "loading",
-    agent: [],
-    command: [],
-    reference: [],
-    project: "",
-    projectMeta: undefined,
-    icon: undefined,
-    provider_ready: true,
-    provider,
-    config: {},
-    path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
-    session: [],
-    sessionTotal: 0,
-    session_status: {},
-    session_working(id: string) {
-      return this.session_status[id]?.type !== "idle"
-    },
-    session_diff: {},
-    permission: {},
-    question: {},
-    mcp_ready: true,
-    mcp: {},
-    mcp_resource: {},
-    lsp_ready: true,
-    lsp: [],
-    vcs: undefined,
-    limit: 5,
-    message: {},
-    part: {},
-    part_text_accum_delta: {},
-  })
-}
-
-describe("bootstrapDirectory", () => {
-  test("marks a loading directory partial during bootstrap and complete after success", async () => {
-    const mcpReads: string[] = []
-    const [store, setStore] = directoryState()
-
-    await bootstrapDirectory({
-      directory: "/project",
-      scope: ServerScope.local,
-      mcp: false,
-      global: {
-        config: {} satisfies Config,
-        path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
-        project: [{ id: "project", worktree: "/project" } as Project],
-        provider,
-      },
-      sdk: {
-        app: { agents: async () => ({ data: [{ name: "build", mode: "primary" }] }) },
-        config: { get: async () => ({ data: {} }) },
-        session: { status: async () => ({ data: {} }) },
-        vcs: { get: async () => ({ data: undefined }) },
-        command: {
-          list: async () => {
-            mcpReads.push("command")
-            return { data: [] }
-          },
-        },
-        permission: { list: async () => ({ data: [] }) },
-        question: { list: async () => ({ data: [] }) },
-        v2: { reference: { list: async () => ({ data: { data: [] } }) } },
-        mcp: {
-          status: async () => {
-            mcpReads.push("status")
-            return { data: {} }
-          },
-        },
-        provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
-      } as unknown as OpencodeClient,
-      store,
-      setStore,
-      vcsCache: { setStore() {} } as unknown as VcsCache,
-      loadSessions() {},
-      translate: (key) => key,
-      queryClient: new QueryClient(),
-    })
-
-    expect(store.status).toBe("partial")
-
-    await new Promise((resolve) => setTimeout(resolve, 80))
-
-    expect(store.status).toBe("complete")
-    expect(mcpReads).toEqual([])
-  })
-
-  test("seeds session status even while warming session info stalls", async () => {
-    const [store, setStore] = directoryState()
-    const stalled = Promise.withResolvers<never>()
-    const client = {
-      app: { agents: async () => ({ data: [{ name: "build", mode: "primary" }] }) },
-      config: { get: async () => ({ data: {} }) },
-      session: {
-        status: async () => ({ data: { ses_busy: { type: "busy" } } }),
-        get: () => stalled.promise,
-      },
-      vcs: { get: async () => ({ data: undefined }) },
-      command: { list: async () => ({ data: [] }) },
-      permission: { list: async () => ({ data: [] }) },
-      question: { list: async () => ({ data: [] }) },
-      v2: { reference: { list: async () => ({ data: { data: [] } }) } },
-      mcp: { status: async () => ({ data: {} }) },
-      provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
-    } as unknown as OpencodeClient
-    const session = createServerSession(client)
-    const stale: Session = {
-      id: "ses_stale",
-      slug: "ses_stale",
-      projectID: "project",
-      directory: "/project",
-      title: "stale",
-      version: "1",
-      time: { created: 1, updated: 1 },
-    }
-    session.remember(stale)
-    session.set("session_status", stale.id, { type: "busy" })
-
-    await bootstrapDirectory({
-      directory: "/project",
-      scope: ServerScope.local,
-      mcp: false,
-      global: {
-        config: {} satisfies Config,
-        path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
-        project: [{ id: "project", worktree: "/project" } as Project],
-        provider,
-      },
-      sdk: client,
-      store,
-      setStore,
-      vcsCache: { setStore() {} } as unknown as VcsCache,
-      loadSessions() {},
-      translate: (key) => key,
-      queryClient: new QueryClient(),
-      session,
-    })
-
-    const deadline = Date.now() + 500
-    while (!session.data.session_working("ses_busy") && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 10))
-    }
-
-    expect(session.data.session_status["ses_busy"]?.type).toBe("busy")
-    expect(session.data.session_status[stale.id]).toBeUndefined()
-  })
-})
+type ProjectApi = ServerApi["project"]
+type WorktreeApi = ServerApi["worktree"]
 
 describe("query keys", () => {
   test("partitions identical directories by server scope", () => {
-    const client = {} as OpencodeClient
+    const api = {} as CatalogApi
+    const location = {} as ServerApi["location"]
     const remote = "https://debian.example" as typeof ServerScope.local
 
-    expect([...loadPathQuery(ServerScope.local, "/repo", client).queryKey]).toEqual(["local", "/repo", "path"])
-    expect([...loadPathQuery(remote, "/repo", client).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
-    expect([...loadProvidersQuery(remote, null, client).queryKey]).toEqual([
-      "https://debian.example",
-      null,
-      "providers",
+    expect([...loadPathQuery(ServerScope.local, "/repo", location).queryKey]).toEqual(["local", "/repo", "path"])
+    expect([...loadPathQuery(remote, "/repo", location).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
+    expect([...loadProvidersQuery(remote, null, api).queryKey]).toEqual(["https://debian.example", null, "providers"])
+  })
+
+  test("loads the current provider and model catalog", async () => {
+    const calls: unknown[] = []
+    const api = {
+      provider: {
+        list: async (input: unknown) => {
+          calls.push(["provider", input])
+          return { location: {}, data: [{ id: "openai", name: "OpenAI", package: "@ai-sdk/openai" }] }
+        },
+      },
+      model: {
+        list: async (input: unknown) => {
+          calls.push(["model", input])
+          return { location: {}, data: [] }
+        },
+        default: async (input: unknown) => {
+          calls.push(["default", input])
+          return { location: {}, data: null }
+        },
+      },
+    } as unknown as CatalogApi
+
+    const result = await new QueryClient().fetchQuery(loadProvidersQuery(ServerScope.local, "/repo", api))
+
+    expect(calls).toEqual([
+      ["provider", { location: { directory: "/repo" } }],
+      ["model", { location: { directory: "/repo" } }],
+      ["default", { location: { directory: "/repo" } }],
     ])
+    expect(result.connected).toEqual(["openai"])
+  })
+
+  test("loads current location metadata", async () => {
+    const calls: unknown[] = []
+    const api = {
+      get: async (input: unknown) => {
+        calls.push(input)
+        return { directory: "/repo/subpath", project: { id: "project", directory: "/repo" } }
+      },
+    } as ServerApi["location"]
+
+    const result = await new QueryClient().fetchQuery(loadPathQuery(ServerScope.local, "/repo/subpath", api))
+
+    expect(calls).toEqual([{ location: { directory: "/repo/subpath" } }])
+    expect(result).toMatchObject({ directory: "/repo/subpath", worktree: "/repo" })
+  })
+
+  test("loads agents from the current location-scoped endpoint", async () => {
+    const calls: unknown[] = []
+    const api = {
+      list: async (input: unknown) => {
+        calls.push(input)
+        return { location: {}, data: [] }
+      },
+    } as unknown as AgentApi
+
+    const result = await new QueryClient().fetchQuery(loadAgentsQuery(ServerScope.local, "/repo", api))
+
+    expect(calls).toEqual([{ location: { directory: "/repo" } }])
+    expect(result).toEqual([])
+  })
+
+  test("loads commands from the current location-scoped endpoint", async () => {
+    const calls: unknown[] = []
+    const api = {
+      list: async (input: unknown) => {
+        calls.push(input)
+        return {
+          location: {},
+          data: [{ name: "review", template: "Review files" /* source: "command" as const */ }],
+        }
+      },
+    } as unknown as CommandApi
+
+    const result = await loadCommands("/repo", api)
+
+    expect(calls).toEqual([{ location: { directory: "/repo" } }])
+    expect(result).toEqual([{ name: "review", template: "Review files" /* source: "command" */ }])
+  })
+
+  test("loads projects from the current endpoint", async () => {
+    const calls: string[] = []
+    const projects = {
+      list: async () => [
+        { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
+        { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
+      ],
+    } as unknown as ProjectApi
+    const worktrees = {
+      list: async ({ projectID }: { projectID: string }) => {
+        calls.push(projectID)
+        return [
+          { directory: `/${projectID}` },
+          { directory: `/${projectID}/clone` },
+          { directory: `/${projectID}/copy`, strategy: "git" },
+        ]
+      },
+    } as unknown as WorktreeApi
+
+    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, projects, worktrees))
+
+    expect(result.map((project) => project.id)).toEqual(["a", "b"])
+    expect(result.map((project) => project.sandboxes)).toEqual([
+      ["/a/clone", "/a/copy"],
+      ["/b/clone", "/b/copy"],
+    ])
+    expect(result.map((project) => project.worktrees)).toEqual([
+      [{ directory: "/a" }, { directory: "/a/clone" }, { directory: "/a/copy", strategy: "git" }],
+      [{ directory: "/b" }, { directory: "/b/clone" }, { directory: "/b/copy", strategy: "git" }],
+    ])
+    expect(calls.toSorted()).toEqual(["a", "b"])
+  })
+
+  test("keeps projects whose directory inventory cannot load", async () => {
+    const projects = {
+      list: async () => [
+        { id: "a", canonical: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
+        { id: "b", canonical: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
+      ],
+    } as unknown as ProjectApi
+    const worktrees = {
+      list: async ({ projectID }: { projectID: string }) => {
+        if (projectID === "b") throw new Error("unavailable")
+        return [{ directory: "/a/copy", strategy: "git" as const }]
+      },
+    } as unknown as WorktreeApi
+
+    const result = await new QueryClient().fetchQuery(loadProjectsQuery(ServerScope.local, projects, worktrees))
+
+    expect(result.map((project) => ({ id: project.id, sandboxes: project.sandboxes }))).toEqual([
+      { id: "a", sandboxes: ["/a/copy"] },
+      { id: "b", sandboxes: [] },
+    ])
+  })
+
+  test("loads references from the current location-scoped endpoint", async () => {
+    const calls: unknown[] = []
+    const api = {
+      list: async (input: unknown) => {
+        calls.push(input)
+        return { location: {}, data: [{ name: "AGENTS.md", path: "/repo/AGENTS.md", source: "instructions" }] }
+      },
+    } as unknown as ReferenceApi
+
+    const result = await new QueryClient().fetchQuery(loadReferencesQuery(ServerScope.local, "/repo", api))
+
+    expect(calls).toEqual([{ location: { directory: "/repo" } }])
+    expect(result).toHaveLength(1)
   })
 })

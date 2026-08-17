@@ -1,9 +1,9 @@
-export * as ReferenceInstructions from "./instructions"
+export * as ReferenceInstructions from "./instructions.js"
 
-import { makeLocationNode } from "../effect/app-node"
+import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
-import { Reference } from "../reference"
-import { Instructions } from "../instructions/index"
+import { Reference } from "../reference.js"
+import { Instructions } from "../instructions/index.js"
 
 const Summary = Schema.Struct({
   name: Schema.String,
@@ -54,10 +54,10 @@ const update = (previous: ReadonlyArray<typeof Summary.Type>, current: ReadonlyA
 }
 
 export interface Interface {
-  readonly load: () => Effect.Effect<Instructions.Instructions>
+  readonly load: () => Effect.Effect<Instructions.List>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ReferenceInstructions") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/ReferenceInstructions") {}
 
 const layer = Layer.effect(
   Service,

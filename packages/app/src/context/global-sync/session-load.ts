@@ -1,21 +1,17 @@
-import type { RootLoadArgs } from "./types"
+import type { SessionApi } from "@opencode-ai/client/promise"
 
-export async function loadRootSessionsWithFallback(input: RootLoadArgs) {
-  try {
-    const result = await input.list({ directory: input.directory, roots: true, limit: input.limit })
-    return {
-      data: result.data,
-      limit: input.limit,
-      limited: true,
-    } as const
-  } catch {
-    const result = await input.list({ directory: input.directory, roots: true })
-    return {
-      data: result.data,
-      limit: input.limit,
-      limited: false,
-    } as const
-  }
+export async function loadRootSessions(input: { api: Pick<SessionApi, "list">; directory: string; limit: number }) {
+  const result = await input.api.list({
+    directory: input.directory,
+    parentID: null,
+    limit: input.limit,
+    order: "desc",
+  })
+  return {
+    data: result.data,
+    limit: input.limit,
+    limited: true,
+  } as const
 }
 
 export function estimateRootSessionTotal(input: { count: number; limit: number; limited: boolean }) {

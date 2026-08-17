@@ -5,11 +5,10 @@ import type {
   TuiAttentionNotifyResult,
   TuiAttentionNotifySkipReason,
   TuiAttentionWhen,
-  TuiKV,
   TuiAttentionSoundName,
   TuiAttentionSoundPack,
   TuiAttentionSoundPackInfo,
-} from "@opencode-ai/plugin/tui"
+} from "@opencode-ai/plugin/v1/tui"
 import { AttentionSoundName, type Config } from "./config"
 import { Schema } from "effect"
 import stripAnsi from "strip-ansi"
@@ -115,8 +114,6 @@ export function createTuiAttention(input: {
   renderer: AttentionRenderer
   config: Pick<Config.Resolved, "attention">
   update?: Config.Interface["update"]
-  /** @deprecated Ignored. Sound-pack persistence uses CLI config. */
-  kv?: TuiKV
   audio?: Pick<typeof TuiAudio, "loadSoundFile" | "play">
 }): TuiAttentionHost {
   let focus: FocusState = "unknown"

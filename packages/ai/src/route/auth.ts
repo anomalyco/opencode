@@ -1,6 +1,6 @@
 import { Config, Effect, Redacted } from "effect"
 import { Headers } from "effect/unstable/http"
-import { AuthenticationReason, InvalidRequestReason, LLMError, type LLMRequest } from "../schema"
+import { AuthenticationReason, InvalidRequestReason, AIError, type HttpOptions } from "../schema/index.js"
 
 export class MissingCredentialError extends Error {
   readonly _tag = "MissingCredentialError"
@@ -11,11 +11,11 @@ export class MissingCredentialError extends Error {
 }
 
 export type CredentialError = MissingCredentialError | Config.ConfigError
-export type AuthError = CredentialError | LLMError
+export type AuthError = CredentialError | AIError
 type Secret = string | Redacted.Redacted | Config.Config<string | Redacted.Redacted>
 
 export interface AuthInput {
-  readonly request: LLMRequest
+  readonly request: { readonly http?: HttpOptions }
   readonly method: "POST" | "GET"
   readonly url: string
   readonly body: string
@@ -100,7 +100,7 @@ export const headers = (input: Headers.Input) =>
 
 export const remove = (name: string) => auth((input) => Effect.succeed(Headers.remove(input.headers, name)))
 
-export const custom = (apply: (input: AuthInput) => Effect.Effect<Headers.Headers, LLMError>) => auth(apply)
+export const custom = (apply: (input: AuthInput) => Effect.Effect<Headers.Headers, AIError>) => auth(apply)
 
 export const passthrough = none
 
@@ -134,9 +134,9 @@ export function bearerHeader(name: string, source?: Secret | Credential) {
   return render(source)
 }
 
-const toLLMError = (error: AuthError): LLMError => {
+const toAIError = (error: AuthError): AIError => {
   if (error instanceof MissingCredentialError || error instanceof Config.ConfigError) {
-    return new LLMError({
+    return new AIError({
       module: "Auth",
       method: "apply",
       reason:
@@ -150,7 +150,7 @@ const toLLMError = (error: AuthError): LLMError => {
 
 export const toEffect =
   (input: Definition) =>
-  (authInput: AuthInput): Effect.Effect<Headers.Headers, LLMError> =>
-    input.apply(authInput).pipe(Effect.mapError(toLLMError))
+  (authInput: AuthInput): Effect.Effect<Headers.Headers, AIError> =>
+    input.apply(authInput).pipe(Effect.mapError(toAIError))
 
-export * as Auth from "./auth"
+export * as Auth from "./auth.js"

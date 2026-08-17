@@ -8,7 +8,7 @@ import {
 } from "../performance/timeline-stability/fixture"
 
 test("renders every tool error outcome without leaking hidden tools", async ({ page }) => {
-  const ordinary = ["bash", "edit", "write", "patch", "webfetch", "websearch", "task", "skill", "mcp_probe"]
+  const ordinary = ["bash", "edit", "write", "apply_patch", "webfetch", "websearch", "task", "skill", "mcp_probe"]
   const parts = ordinary.map((tool, index) =>
     toolPart(`prt_error_${index}`, tool, "error", errorInput(tool), { error: `${tool} failed visibly` }),
   )
@@ -17,11 +17,13 @@ test("renders every tool error outcome without leaking hidden tools", async ({ p
       error: "The user dismissed this question",
     }),
     toolPart("prt_question_error", "question", "error", questionInput(), { error: "Question transport failed" }),
+    toolPart("prt_todo_error", "todowrite", "error", { todos: [] }, { error: "Hidden todo failure" }),
   )
   await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
 
   await expect(page.locator('[data-kind="tool-error-card"]')).toHaveCount(ordinary.length + 1)
   await expect(page.getByText(/dismissed/i)).toBeVisible()
+  await expect(page.locator('[data-timeline-part-id="prt_todo_error"]')).toHaveCount(0)
   for (let index = 0; index < ordinary.length; index++) {
     await expect(page.locator(`[data-timeline-part-id="prt_error_${index}"]`)).toBeVisible()
   }
@@ -81,6 +83,46 @@ test("labels all web search provider variants", async ({ page }) => {
   await expect(page.getByRole("button", { name: /^Web Search/ })).toBeVisible()
 })
 
+test("labels V2 read tools from their path input", async ({ page }) => {
+  const id = "prt_read_path"
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([toolPart(id, "read", "completed", { path: "src/a.ts" })])],
+  })
+
+  const group = page.locator(`[data-timeline-part-ids="${id}"]`)
+  await group.locator('[data-slot="collapsible-trigger"]').click()
+  await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("a.ts")
+})
+
+test("labels V2 skill tools from IDs and result metadata", async ({ page }) => {
+  const pending = "prt_skill_id"
+  const completed = "prt_skill_name"
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        toolPart(pending, "skill", "running", { id: "sample-skill" }),
+        toolPart(completed, "skill", "completed", { id: "opencode" }, { metadata: { name: "OpenCode" } }),
+      ]),
+    ],
+  })
+
+  await expect(page.locator(`[data-timeline-part-id="${pending}"] [data-component="text-shimmer"]`)).toHaveAttribute(
+    "aria-label",
+    "sample-skill",
+  )
+  await expect(page.locator(`[data-timeline-part-id="${completed}"] [data-component="text-shimmer"]`)).toHaveAttribute(
+    "aria-label",
+    "OpenCode",
+  )
+  for (const id of [pending, completed]) {
+    const skill = page.locator(`[data-timeline-part-id="${id}"]`)
+    await expect(skill.locator('[data-slot="skill-tool-label"]')).toHaveText("Skill")
+    await expect(skill.locator('[data-slot="skill-tool-separator"]')).toHaveText("·")
+    await expect(skill.locator('use[href="#opencode-icon-post-skill"]')).toBeVisible()
+  }
+})
+
 function questionInput() {
   return { questions: [{ header: "Stability", question: "Keep it stable?", options: [] }] }
 }
@@ -88,7 +130,7 @@ function questionInput() {
 function errorInput(tool: string) {
   if (tool === "bash") return { command: "exit 1" }
   if (["edit", "write"].includes(tool)) return { filePath: "src/error.ts", content: "" }
-  if (tool === "patch") return { files: ["src/error.ts"] }
+  if (tool === "apply_patch") return { files: ["src/error.ts"] }
   if (tool === "webfetch") return { url: "https://example.com" }
   if (tool === "websearch") return { query: "failure" }
   if (tool === "task") return { description: "Fail task", subagent_type: "explore" }

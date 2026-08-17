@@ -1,18 +1,23 @@
 import { describe, expect, test } from "bun:test"
 import { Message } from "@opencode-ai/ai"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { AgentAttachment, Base64, FileAttachment } from "@opencode-ai/schema/prompt"
+import { AgentAttachment, Base64, FileAttachment, SkillAttachment } from "@opencode-ai/schema/prompt"
+import { Skill } from "@opencode-ai/schema/skill"
 import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { Shell } from "@opencode-ai/schema/shell"
+import { Location } from "@opencode-ai/schema/location"
+import { AbsolutePath } from "@opencode-ai/schema/schema"
 import { DateTime } from "effect"
+import path from "path"
+import { pathToFileURL } from "url"
 
 const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
-const model = ModelV2.Ref.make({ id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") })
-const build = AgentV2.defaultID
+const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
+const build = Agent.defaultID
 
 describe("toLLMMessages", () => {
   test("omits empty assistant turns", () => {
@@ -21,7 +26,7 @@ describe("toLLMMessages", () => {
         id: id(value),
         type: "assistant",
         agent: build,
-        model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+        model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
         content,
         time: { created, completed: created },
       })
@@ -45,7 +50,7 @@ describe("toLLMMessages", () => {
     expect(messages.map((message) => message.id)).toEqual([id("text"), id("reasoning")])
   })
 
-  test("maps every top-level V2 Session message type", () => {
+  test("maps every top-level Session message type", () => {
     const file = FileAttachment.make({
       data: Base64.make("aGVsbG8="),
       mime: "image/png",
@@ -63,7 +68,16 @@ describe("toLLMMessages", () => {
         SessionMessage.ModelSelected.make({
           id: id("model"),
           type: "model-switched",
-          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+          time: { created },
+        }),
+        SessionMessage.LocationSwitched.make({
+          id: id("location"),
+          type: "location-switched",
+          location: Location.Ref.make({ directory: AbsolutePath.make("/destination") }),
+          previous: {
+            location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+          },
           time: { created },
         }),
         SessionMessage.System.make({
@@ -109,9 +123,16 @@ describe("toLLMMessages", () => {
       model,
     )
 
-    expect(messages.map((message) => message.role)).toEqual(["system", "user", "user", "user", "user"])
-    expect(messages[0]).toEqual(Message.system("Updated context\n\nOther context"))
-    expect(messages[1]).toEqual(
+    expect(messages.map((message) => message.role)).toEqual(["user", "system", "user", "user", "user", "user"])
+    expect(messages[0]).toEqual(
+      Message.make({
+        id: id("location"),
+        role: "user",
+        content: "The working directory has been changed to /destination.",
+      }),
+    )
+    expect(messages[1]).toEqual(Message.system("Updated context\n\nOther context"))
+    expect(messages[2]).toEqual(
       Message.make({
         id: id("user"),
         role: "user",
@@ -122,7 +143,7 @@ describe("toLLMMessages", () => {
         metadata: { agents: [{ name: "build" }] },
       }),
     )
-    expect(messages.slice(2).map((message) => message.content)).toEqual([
+    expect(messages.slice(3).map((message) => message.content)).toEqual([
       [{ type: "text", text: "Synthetic context" }],
       [
         {
@@ -184,6 +205,40 @@ Recent work
     })
   })
 
+  test("lowers selected skill instructions with the original user prompt", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-skill"),
+          type: "user",
+          text: "Design this API",
+          skills: [
+            SkillAttachment.make({
+              id: Skill.ID.make("api-design"),
+              name: Skill.Name.make("API design"),
+              text: "Start from the ideal call site.",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({
+      id: id("user-skill"),
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "Start from the ideal call site.",
+        },
+        { type: "text", text: "Design this API" },
+      ],
+    })
+  })
+
   test("decodes inline text attachment content", () => {
     const messages = toLLMMessages(
       [
@@ -214,12 +269,13 @@ Recent work
     ])
   })
 
-  test("lowers directory attachments as directory context", () => {
+  test("exposes admitted reference directory source paths in model context", () => {
+    const location = path.resolve("/references/harness-engineering")
     const directory = FileAttachment.make({
       data: Base64.make(Buffer.from("lib/\nindex.ts").toString("base64")),
       mime: "application/x-directory",
-      source: { type: "uri", uri: "file:///project/src" },
-      name: "src/",
+      source: { type: "uri", uri: pathToFileURL(location).href },
+      name: "harness-engineering",
     })
     const messages = toLLMMessages(
       [
@@ -242,14 +298,15 @@ Recent work
         { type: "text", text: "Review this directory" },
         {
           type: "text",
-          text: "\n\nAttached directory: src/\n\nlib/\nindex.ts",
-          metadata: { attachment: { source: directory.source, name: "src/" } },
+          text: `\n\nAttached directory: ${location}\n\nlib/\nindex.ts`,
+          metadata: { attachment: { source: directory.source, name: "harness-engineering" } },
         },
       ],
     })
   })
 
   test("preserves attachment order after the prompt", () => {
+    const directory = path.resolve("/project/src")
     const messages = toLLMMessages(
       [
         SessionMessage.User.make({
@@ -260,7 +317,7 @@ Recent work
             FileAttachment.make({
               data: Base64.make(Buffer.from("index.ts").toString("base64")),
               mime: "application/x-directory",
-              source: { type: "uri", uri: "file:///project/src" },
+              source: { type: "uri", uri: pathToFileURL(directory).href },
               name: "src/",
             }),
             FileAttachment.make({
@@ -279,12 +336,13 @@ Recent work
     expect(messages).toHaveLength(1)
     expect(messages[0]?.content.map((part) => (part.type === "text" ? part.text : part.type))).toEqual([
       "Review these attachments",
-      "\n\nAttached directory: src/\n\nindex.ts",
+      `\n\nAttached directory: ${directory}\n\nindex.ts`,
       "\n\nAttached file: main.ts\n\nexport const value = 1",
     ])
   })
 
   test("omits empty prompt text before an attachment", () => {
+    const directory = path.resolve("/project/src")
     const messages = toLLMMessages(
       [
         SessionMessage.User.make({
@@ -295,7 +353,7 @@ Recent work
             FileAttachment.make({
               data: Base64.make(Buffer.from("index.ts").toString("base64")),
               mime: "application/x-directory",
-              source: { type: "uri", uri: "file:///project/src" },
+              source: { type: "uri", uri: pathToFileURL(directory).href },
               name: "src/",
             }),
           ],
@@ -306,7 +364,9 @@ Recent work
     )
 
     expect(messages).toHaveLength(1)
-    expect(messages[0]?.content).toMatchObject([{ type: "text", text: "\n\nAttached directory: src/\n\nindex.ts" }])
+    expect(messages[0]?.content).toMatchObject([
+      { type: "text", text: `\n\nAttached directory: ${directory}\n\nindex.ts` },
+    ])
   })
 
   test("uses materialized image data as provider media and drops unsupported attachments", () => {
@@ -338,6 +398,205 @@ Recent work
     ])
   })
 
+  test("exposes admitted local image source paths before provider media", () => {
+    const data = Base64.make("AAECAw==")
+    const location = path.resolve("/project/IMG_3480.JPG")
+    const image = FileAttachment.make({
+      data,
+      mime: "image/png",
+      source: { type: "uri", uri: pathToFileURL(location).href },
+      name: "IMG_3480.JPG",
+    })
+
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-local-image-path"),
+          type: "user",
+          text: "Inspect this image",
+          files: [image],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Inspect this image" },
+      { type: "text", text: `Attached file: ${location}` },
+      { type: "media", mediaType: "image/png", data, filename: "IMG_3480.JPG" },
+    ])
+  })
+
+  test("falls back to attachment names for invalid local source paths", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-invalid-local-paths"),
+          type: "user",
+          text: "Inspect these attachments",
+          files: [
+            FileAttachment.make({
+              data: Base64.make(Buffer.from("index.ts").toString("base64")),
+              mime: "application/x-directory",
+              source: { type: "uri", uri: "file:///project/src%2Flib" },
+              name: "src/",
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "uri", uri: "file:///project/image%2Fpreview.png" },
+              name: "preview.png",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Inspect these attachments" },
+      {
+        type: "text",
+        text: "\n\nAttached directory: src/\n\nindex.ts",
+        metadata: {
+          attachment: {
+            source: { type: "uri", uri: "file:///project/src%2Flib" },
+            name: "src/",
+          },
+        },
+      },
+      { type: "media", mediaType: "image/png", data, filename: "preview.png" },
+    ])
+  })
+
+  test("does not add attachment location text for non-local provider media", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-remote-image"),
+          type: "user",
+          text: "Inspect this image",
+          files: [
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "uri", uri: "https://example.com/image.png" },
+              name: "image.png",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Inspect this image" },
+      { type: "media", mediaType: "image/png", data, filename: "image.png" },
+    ])
+  })
+
+  test("deduplicates provider media while preserving durable attachment references", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-duplicate-image"),
+          type: "user",
+          text: "[Image 1] [Image 1] [Image 2]",
+          files: [
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              mention: { start: 0, end: 9, text: "[Image 1]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              mention: { start: 10, end: 19, text: "[Image 1]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              description: "alternate use",
+              mention: { start: 20, end: 29, text: "[Image 2]" },
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "[Image 1] [Image 1] [Image 2]" },
+      { type: "media", mediaType: "image/png", data, filename: "image.png" },
+      {
+        type: "media",
+        mediaType: "image/png",
+        data,
+        filename: "image.png",
+        metadata: { description: "alternate use" },
+      },
+    ])
+  })
+
+  test("preserves provider media with distinct labels or URI sources", () => {
+    const data = Base64.make("AAECAw==")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-distinct-images"),
+          type: "user",
+          text: "[Image 1] [Image 2]",
+          files: [
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              mention: { start: 0, end: 9, text: "[Image 1]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+              mention: { start: 10, end: 19, text: "[Image 2]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "uri", uri: pathToFileURL(path.resolve("/project/image.png")).href },
+              name: "image.png",
+              mention: { start: 0, end: 9, text: "[Image 1]" },
+            }),
+            FileAttachment.make({
+              data,
+              mime: "image/png",
+              source: { type: "inline" },
+              name: "image.png",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content.filter((part) => part.type === "media")).toHaveLength(4)
+  })
+
   test("replays durable tool media into canonical tool messages without structured base64", () => {
     const messages = toLLMMessages(
       [
@@ -345,7 +604,7 @@ Recent work
           id: id("assistant"),
           type: "assistant",
           agent: build,
-          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
           content: [
             SessionMessage.AssistantText.make({ type: "text", text: "Checking" }),
             SessionMessage.AssistantReasoning.make({
@@ -367,8 +626,7 @@ Recent work
               state: SessionMessage.ToolStateRunning.make({
                 status: "running",
                 input: { path: "README.md" },
-                content: [],
-                structured: { type: "media", mime: "image/png" },
+                metadata: { type: "media", mime: "image/png" },
               }),
               time: { created },
             }),
@@ -388,7 +646,6 @@ Recent work
                     name: "hello.png",
                   },
                 ],
-                structured: {},
               }),
               time: { created, completed: created },
             }),
@@ -403,7 +660,6 @@ Recent work
                 status: "completed",
                 input: { query: "Effect" },
                 content: [{ type: "text", text: "Found it" }],
-                structured: {},
               }),
               time: { created, completed: created },
             }),
@@ -416,8 +672,6 @@ Recent work
               state: SessionMessage.ToolStateError.make({
                 status: "error",
                 input: { path: "README.md" },
-                content: [],
-                structured: {},
                 error: { type: "unknown", message: "Denied" },
               }),
               time: { created, completed: created },
@@ -473,7 +727,7 @@ Recent work
         providerMetadata: { provider: { continuation: "failed" } },
         result: {
           type: "error",
-          value: { error: { type: "unknown", message: "Denied" }, content: [], structured: {} },
+          value: { error: { type: "unknown", message: "Denied" }, content: [] },
         },
       },
     ])
@@ -500,7 +754,7 @@ Recent work
           id: id("assistant-openai-reasoning"),
           type: "assistant",
           agent: build,
-          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
@@ -524,7 +778,7 @@ Recent work
   })
 
   test("replays flat state under an OpenCode hosted model's route key", () => {
-    const opencode = ModelV2.Ref.make({ id: ModelV2.ID.make("claude-fable-5"), providerID: ProviderV2.ID.opencode })
+    const opencode = Model.Ref.make({ id: Model.ID.make("claude-fable-5"), providerID: Provider.ID.opencode })
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
@@ -558,12 +812,26 @@ Recent work
           id: id("assistant-failed"),
           type: "assistant",
           agent: build,
-          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
               text: "Partial thought",
               state: { itemId: "rs_failed", reasoningEncryptedContent: null },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "hosted-completed",
+              name: "web_search",
+              executed: true,
+              providerState: { itemId: "call_completed" },
+              providerResultState: { itemId: "result_completed" },
+              state: SessionMessage.ToolStateCompleted.make({
+                status: "completed",
+                input: { query: "Effect" },
+                content: [{ type: "text", text: '{"found":true}' }],
+              }),
+              time: { created, completed: created },
             }),
             SessionMessage.AssistantTool.make({
               type: "tool",
@@ -576,8 +844,6 @@ Recent work
                 status: "error",
                 input: { query: "Effect" },
                 error: { type: "unknown", message: "Step interrupted" },
-                content: [],
-                structured: {},
               }),
               time: { created, completed: created },
             }),
@@ -594,11 +860,29 @@ Recent work
       { type: "text", text: "Partial thought" },
       {
         type: "tool-call",
+        id: "hosted-completed",
+        name: "web_search",
+        input: { query: "Effect" },
+        providerExecuted: true,
+        providerMetadata: { provider: { itemId: "call_completed" } },
+      },
+      {
+        type: "tool-result",
+        id: "hosted-completed",
+        name: "web_search",
+        result: { type: "text", value: '{"found":true}' },
+        providerExecuted: true,
+        cache: undefined,
+        metadata: undefined,
+        providerMetadata: { provider: { itemId: "result_completed" } },
+      },
+      {
+        type: "tool-call",
         id: "hosted-failed",
         name: "web_search",
         input: { query: "Effect" },
         providerExecuted: true,
-        providerMetadata: undefined,
+        providerMetadata: { provider: { itemId: "call_failed" } },
       },
       {
         type: "tool-result",
@@ -609,25 +893,24 @@ Recent work
           value: {
             error: { type: "unknown", message: "Step interrupted" },
             content: [],
-            structured: {},
           },
         },
         providerExecuted: true,
         cache: undefined,
         metadata: undefined,
-        providerMetadata: undefined,
+        providerMetadata: { provider: { itemId: "result_failed" } },
       },
     ])
   })
 
-  test("drops provider-native continuation metadata after a model switch", () => {
+  test("drops model-scoped continuation metadata after a model switch but keeps hosted result payloads", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
           id: id("assistant-old-model"),
           type: "assistant",
           agent: build,
-          model: { id: ModelV2.ID.make("old-model"), providerID: ProviderV2.ID.make("provider") },
+          model: { id: Model.ID.make("old-model"), providerID: Provider.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
@@ -644,9 +927,7 @@ Recent work
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: { query: "Effect" },
-                content: [],
-                structured: {},
-                result: { type: "json", value: { status: "completed" } },
+                content: [{ type: "text", text: '{"status":"completed"}' }],
               }),
               time: { created, completed: created },
             }),
@@ -660,8 +941,7 @@ Recent work
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: { path: "README.md" },
-                content: [],
-                structured: { text: "Hello" },
+                content: [{ type: "text", text: "Hello" }],
               }),
               time: { created, completed: created },
             }),
@@ -686,11 +966,13 @@ Recent work
         type: "tool-result",
         id: "hosted-old-model",
         name: "web_search",
-        result: { type: "json", value: { status: "completed" } },
+        result: { type: "text", value: '{"status":"completed"}' },
         providerExecuted: true,
         cache: undefined,
         metadata: undefined,
-        providerMetadata: undefined,
+        // Hosted result payloads are provider-format state and must survive a
+        // model switch within the same provider for replay to stay valid.
+        providerMetadata: { provider: { itemId: "hosted-old-model" } },
       },
       {
         type: "tool-call",
@@ -706,7 +988,7 @@ Recent work
         type: "tool-result",
         id: "local-old-model",
         name: "read",
-        result: { type: "json", value: { text: "Hello" } },
+        result: { type: "text", value: "Hello" },
         providerExecuted: false,
         cache: undefined,
         metadata: undefined,
@@ -722,7 +1004,7 @@ Recent work
           id: id("assistant-alias"),
           type: "assistant",
           agent: build,
-          model: { id: ModelV2.ID.make("fast"), providerID: ProviderV2.ID.make("provider") },
+          model: { id: Model.ID.make("fast"), providerID: Provider.ID.make("provider") },
           content: [
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
@@ -733,7 +1015,7 @@ Recent work
           time: { created, completed: created },
         }),
       ],
-      ModelV2.Ref.make({ id: ModelV2.ID.make("fast"), providerID: ProviderV2.ID.make("provider") }),
+      Model.Ref.make({ id: Model.ID.make("fast"), providerID: Provider.ID.make("provider") }),
     )
 
     expect(messages[0]?.content).toEqual([
@@ -741,6 +1023,37 @@ Recent work
         type: "reasoning",
         text: "Visible thought",
         providerMetadata: { provider: { reasoningEncryptedContent: "encrypted" } },
+      },
+    ])
+  })
+
+  test("preserves assistant text provider state across same-provider model changes and failures", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-phase"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("old"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "Checking.",
+              state: { phase: "commentary" },
+            }),
+          ],
+          error: { type: "provider.unknown", message: "Interrupted after commentary" },
+          time: { created, completed: created },
+        }),
+      ],
+      Model.Ref.make({ id: Model.ID.make("new"), providerID: Provider.ID.make("provider") }),
+    )
+
+    expect(messages[0]?.content).toEqual([
+      {
+        type: "text",
+        text: "Checking.",
+        providerMetadata: { provider: { phase: "commentary" } },
       },
     ])
   })

@@ -5,7 +5,7 @@ import { ServerConnection } from "../../services/server-connection"
 
 export default Runtime.handler(Commands.commands.run, (input) =>
   Effect.gen(function* () {
-    const { runNonInteractive } = yield* Effect.promise(() => import("../../mini"))
+    const { runNonInteractive } = yield* Effect.promise(() => import("../../run/run"))
     const separator = process.argv.indexOf("--", 2)
     const server = yield* ServerConnection.resolve({
       server: Option.getOrUndefined(input.server),
@@ -24,7 +24,7 @@ export default Runtime.handler(Commands.commands.run, (input) =>
         file: [...input.file],
         title: Option.getOrUndefined(input.title),
         thinking: input.thinking,
-        auto: input.auto || input.yolo,
+        auto: input.auto || input.yolo || input.dangerouslySkipPermissions,
       }),
     )
   }),

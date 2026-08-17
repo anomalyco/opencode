@@ -1,7 +1,7 @@
 import { Toast as Kobalte, toaster } from "@kobalte/core/toast"
 import type { ToastRootProps, ToastCloseButtonProps, ToastTitleProps, ToastDescriptionProps } from "@kobalte/core/toast"
 import type { ComponentProps, JSX } from "solid-js"
-import { Show } from "solid-js"
+import { For, Show } from "solid-js"
 import { Portal } from "solid-js/web"
 import { useI18n } from "../context/i18n"
 import { Icon, type IconProps } from "./icon"
@@ -136,19 +136,21 @@ export function showToast(options: ToastOptions | string) {
         </Show>
         <Show when={opts.actions?.length}>
           <Toast.Actions>
-            {opts.actions!.map((action) => (
-              <button
-                data-slot="toast-action"
-                onClick={() => {
-                  if (typeof action.onClick === "function") {
-                    action.onClick()
-                  }
-                  toaster.dismiss(props.toastId)
-                }}
-              >
-                {action.label}
-              </button>
-            ))}
+            <For each={opts.actions}>
+              {(action) => (
+                <button
+                  data-slot="toast-action"
+                  onClick={() => {
+                    if (typeof action.onClick === "function") {
+                      action.onClick()
+                    }
+                    toaster.dismiss(props.toastId)
+                  }}
+                >
+                  {action.label}
+                </button>
+              )}
+            </For>
           </Toast.Actions>
         </Show>
       </Toast.Content>

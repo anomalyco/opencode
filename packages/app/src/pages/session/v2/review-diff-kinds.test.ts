@@ -4,8 +4,8 @@ import { filterReviewFiles, reviewDiffDirectory, reviewDiffKinds, reviewDiffNeed
 describe("reviewDiffKinds", () => {
   test("maps file and directory kinds", () => {
     const kinds = reviewDiffKinds([
-      { file: "src/a.ts", additions: 1, deletions: 0, status: "added" },
-      { file: "src/b.ts", additions: 0, deletions: 2, status: "deleted" },
+      { file: "src/a.ts", patch: "", additions: 1, deletions: 0, status: "added" },
+      { file: "src/b.ts", patch: "", additions: 0, deletions: 2, status: "deleted" },
     ])
 
     expect(kinds.get("src/a.ts")).toBe("add")
@@ -14,7 +14,9 @@ describe("reviewDiffKinds", () => {
   })
 
   test("normalizes file and directory paths", () => {
-    const kinds = reviewDiffKinds([{ file: "\\src//lib/a.ts/", additions: 1, deletions: 1, status: "modified" }])
+    const kinds = reviewDiffKinds([
+      { file: "\\src//lib/a.ts/", patch: "", additions: 1, deletions: 1, status: "modified" },
+    ])
 
     expect(kinds.get("src/lib/a.ts")).toBe("mix")
     expect(kinds.get("src/lib")).toBe("mix")
@@ -36,6 +38,7 @@ describe("reviewDiffNeedsLoad", () => {
         file: "src/a.ts",
         additions: 1,
         deletions: 0,
+        status: "modified",
         patch: "diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts",
       }),
     ).toBe(true)
@@ -47,10 +50,13 @@ describe("reviewDiffNeedsLoad", () => {
         file: "src/a.ts",
         additions: 1,
         deletions: 0,
+        status: "modified",
         patch: "@@ -0,0 +1 @@\n+value",
       }),
     ).toBe(false)
-    expect(reviewDiffNeedsLoad({ file: "empty.txt", additions: 0, deletions: 0 })).toBe(false)
+    expect(reviewDiffNeedsLoad({ file: "empty.txt", patch: "", additions: 0, deletions: 0, status: "modified" })).toBe(
+      false,
+    )
   })
 })
 

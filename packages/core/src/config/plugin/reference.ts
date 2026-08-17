@@ -1,14 +1,15 @@
-export * as ConfigReferencePlugin from "./reference"
+export * as ConfigReferencePlugin from "./reference.js"
 
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Document } from "@opencode-ai/schema/config"
+import { ConfigReference } from "@opencode-ai/schema/config/reference"
 import path from "path"
 import { Effect, Stream } from "effect"
-import { Config } from "../../config"
-import { ConfigReference } from "../reference"
-import { Reference } from "../../reference"
-import { AbsolutePath } from "../../schema"
-import { Global } from "../../global"
-import { Location } from "../../location"
+import { Config } from "../../config.js"
+import { Reference } from "../../reference.js"
+import { AbsolutePath } from "../../schema.js"
+import { Global } from "@opencode-ai/util/global"
+import { Location } from "../../location.js"
 
 export const Plugin = define({
   id: "opencode.config.reference",
@@ -19,7 +20,7 @@ export const Plugin = define({
     const loaded = { entries: yield* config.entries() }
     yield* ctx.reference.transform((draft) => {
       const entries = new Map<string, Reference.Source>()
-      for (const doc of loaded.entries.filter((entry): entry is Config.Document => entry.type === "document")) {
+      for (const doc of loaded.entries.filter((entry): entry is Document => entry.type === "document")) {
         const directory = doc.path ? path.dirname(doc.path) : location.directory
         for (const [name, entry] of Object.entries(doc.info.references ?? {})) {
           if (!validAlias(name)) continue

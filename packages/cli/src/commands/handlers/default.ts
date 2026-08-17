@@ -1,5 +1,5 @@
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Global } from "@opencode-ai/core/global"
+import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Global } from "@opencode-ai/util/global"
 import { run } from "@opencode-ai/tui"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
@@ -8,19 +8,19 @@ import { Context, Effect, FileSystem, Option } from "effect"
 import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
-import { Npm } from "@opencode-ai/core/npm"
+import { Npm } from "@opencode-ai/util/npm"
+import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
 
 export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
     if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
-    const updater = yield* Updater.Service
-    yield* updater.check().pipe(Effect.forkScoped)
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
     const server = yield* ServerConnection.resolve({
       server: Option.getOrUndefined(input.server),
       standalone: input.standalone,
+      mismatch: "replace",
       onStart: (reason, previousVersion) => {
         if (reason === "version-mismatch" && preflight.begin(previousVersion)) return
         process.stderr.write(
@@ -34,6 +34,8 @@ export default Runtime.handler(Commands, (input) =>
         Effect.promise(() => preflight.fail("OpenCode update could not start the new background service")),
       ),
     )
+    const updater = yield* Updater.Service
+    yield* updater.check().pipe(Effect.forkScoped)
     preflight.loading()
     const config = yield* Config.Service
     const npm = yield* Npm.Service
@@ -44,6 +46,11 @@ export default Runtime.handler(Commands, (input) =>
     const runPromise = Effect.runPromiseWith(context)
     const service = server.service
     yield* run({
+      app: {
+        name: process.env.OPENCODE_CLIENT ?? "cli",
+        version: OPENCODE_VERSION,
+        channel: process.env.OPENCODE_TUI_CHANNEL ?? OPENCODE_CHANNEL,
+      },
       server: {
         endpoint: server.endpoint,
         service: service
@@ -53,7 +60,12 @@ export default Runtime.handler(Commands, (input) =>
             }
           : undefined,
       },
-      args: { continue: input.continue, sessionID: Option.getOrUndefined(input.session) },
+      args: {
+        continue: input.continue,
+        sessionID: Option.getOrUndefined(input.session),
+        prompt: Option.getOrUndefined(input.prompt),
+        auto: input.auto || input.yolo || input.dangerouslySkipPermissions,
+      },
       config: {
         path: config.path,
         get: () => runPromise(config.get()),
@@ -75,6 +87,6 @@ export default Runtime.handler(Commands, (input) =>
                 : Effect.logInfo(message, tags)
         runFork(effect)
       },
-    }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)))
+    }).pipe(Effect.provide(LayerNode.compile(Global.node)))
   }),
 )

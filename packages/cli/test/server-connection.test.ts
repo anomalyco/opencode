@@ -1,7 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import type { EnsureReason } from "@opencode-ai/client/effect/service"
-import { Global } from "@opencode-ai/core/global"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Global } from "@opencode-ai/util/global"
+import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
 import { Effect, Exit, FileSystem, Scope } from "effect"
 import fs from "node:fs/promises"
@@ -68,7 +68,7 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
     fetch() {
       return Response.json({
         healthy: true,
-        version: InstallationVersion,
+        version: OPENCODE_VERSION,
         pid: process.pid,
       })
     },
@@ -84,7 +84,7 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
       registration,
       JSON.stringify({
         id,
-        version: InstallationVersion,
+        version: OPENCODE_VERSION,
         url: server.url.toString(),
         pid: process.pid,
       }),
@@ -103,6 +103,20 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
     expect(explicit.service).toBeUndefined()
   } finally {
     await server.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("service options only require a matching version when requested", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-options-"))
+  const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+  const runPromise = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem | Scope.Scope>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer), Effect.scoped))
+
+  try {
+    expect((await runPromise(ServiceConfig.options())).version).toBeUndefined()
+    expect((await runPromise(ServiceConfig.options({ checkVersion: true }))).version).toBe(OPENCODE_VERSION)
+  } finally {
     await fs.rm(root, { recursive: true, force: true })
   }
 })

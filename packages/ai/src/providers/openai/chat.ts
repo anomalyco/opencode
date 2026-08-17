@@ -1,2 +1,2 @@
-export { chatModel as model } from "../openai"
-export type { Settings } from "../openai"
+export { chatModel as model } from "../openai.js"
+export type { Settings } from "../openai.js"

@@ -27,6 +27,7 @@
   justify-content: center;
   align-items: center;
   padding: 0;
+  padding-inline: 4px;
   gap: 4px;
   min-width: 14px;
   height: 14px;
@@ -48,7 +49,6 @@
   flex-direction: row;
   justify-content: center;
   align-items: center;
-  min-width: 14px;
   height: 11px;
   padding: 0;
   flex: none;

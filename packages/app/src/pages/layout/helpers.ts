@@ -1,38 +1,30 @@
 import { getFilename } from "@opencode-ai/core/util/path"
-import { type Session } from "@opencode-ai/sdk/v2/client"
+import type { SessionInfo } from "@opencode-ai/client/promise"
 import { pathKey } from "@/utils/path-key"
-import type { ServerConnection } from "@/context/server"
+import type { ServerConnection } from "@/context/servers"
 import type { HomeProjectSelection } from "@/context/layout"
 
 type SessionStore = {
-  session?: Session[]
+  session?: SessionInfo[]
   path: { directory: string }
 }
 
-function sortSessions(now: number) {
-  const oneMinuteAgo = now - 60 * 1000
-  return (a: Session, b: Session) => {
-    const aUpdated = a.time.updated ?? a.time.created
-    const bUpdated = b.time.updated ?? b.time.created
-    const aRecent = aUpdated > oneMinuteAgo
-    const bRecent = bUpdated > oneMinuteAgo
-    if (aRecent && bRecent) return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-    if (aRecent && !bRecent) return -1
-    if (!aRecent && bRecent) return 1
-    return bUpdated - aUpdated
-  }
+export function compareSessionTime(a: SessionInfo, b: SessionInfo) {
+  const updated = (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created)
+  if (updated !== 0) return updated
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
-const isRootVisibleSession = (session: Session, directory: string) =>
-  pathKey(session.directory) === pathKey(directory) && !session.parentID && !session.time?.archived
+const isRootVisibleSession = (session: SessionInfo, directory: string) =>
+  pathKey(session.location.directory) === pathKey(directory) && !session.parentID && !session.time.archived
 
 export const roots = (store: SessionStore) =>
   (store.session ?? []).filter((session) => isRootVisibleSession(session, store.path.directory))
 
-export const sortedRootSessions = (store: SessionStore, now: number) => roots(store).sort(sortSessions(now))
+export const sortedRootSessions = (store: SessionStore, _now: number) => roots(store).sort(compareSessionTime)
 
-export const latestRootSession = (stores: SessionStore[], now: number) =>
-  stores.flatMap(roots).sort(sortSessions(now))[0]
+export const latestRootSession = (stores: SessionStore[], _now: number) =>
+  stores.flatMap(roots).sort(compareSessionTime)[0]
 
 export function hasProjectPermissions<T>(
   request: Record<string, T[] | undefined> | undefined,
@@ -41,7 +33,7 @@ export function hasProjectPermissions<T>(
   return Object.values(request ?? {}).some((list) => list?.some(include))
 }
 
-export const childSessionOnPath = (sessions: Session[] | undefined, rootID: string, activeID?: string) => {
+export const childSessionOnPath = (sessions: SessionInfo[] | undefined, rootID: string, activeID?: string) => {
   if (!activeID || activeID === rootID) return
   const map = new Map((sessions ?? []).map((session) => [session.id, session]))
   let id = activeID
@@ -102,13 +94,13 @@ export function getProjectAvatarSource(id?: string, icon?: { color?: string; url
 }
 
 export function projectForSession<T extends { id?: string; worktree: string; sandboxes?: string[] }>(
-  session: Session,
+  session: SessionInfo,
   projects: T[],
   byID: Map<string, T> = new Map(projects.flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
 ) {
   const direct = byID.get(session.projectID)
   if (direct) return direct
-  const directory = pathKey(session.directory)
+  const directory = pathKey(session.location.directory)
   return projects.find(
     (project) =>
       pathKey(project.worktree) === directory || project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),

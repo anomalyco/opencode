@@ -2,7 +2,6 @@ import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-j
 import { createStore } from "solid-js/store"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
 import { useData } from "../../../context/data"
-import { useLocation } from "../../../context/location"
 import { useClient } from "../../../context/client"
 import { useTheme } from "../../../context/theme"
 import { Keymap } from "../../../context/keymap"
@@ -10,14 +9,13 @@ import { useComposerTab } from "./index"
 
 export function ShellTab(props: { sessionID: string }) {
   const data = useData()
-  const location = useLocation()
   const client = useClient()
-  const { themeV2 } = useTheme()
+  const theme = useTheme()
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
 
   const entries = createMemo(() =>
-    data.shell.list().filter((shell) => shell.metadata.sessionID === props.sessionID && shell.status === "running"),
+    data.shell.listBySession(props.sessionID).filter((shell) => shell.status === "running"),
   )
 
   const [store, setStore] = createStore({ selected: 0 })
@@ -52,23 +50,24 @@ export function ShellTab(props: { sessionID: string }) {
   Keymap.createLayer(() => ({
     mode: "composer",
     enabled: () => composer.active("shell"),
+    priority: 1,
     commands: [
       {
         id: "composer.shell.up",
         title: "Previous shell",
         group: "Composer",
-        bind: "up",
         run() {
-          const list = entries()
-          if (list.length === 0) return
-          setStore("selected", (prev) => (prev - 1 + list.length) % list.length)
+          if (store.selected === 0) {
+            composer.close()
+            return
+          }
+          setStore("selected", (prev) => prev - 1)
         },
       },
       {
         id: "composer.shell.down",
         title: "Next shell",
         group: "Composer",
-        bind: "down",
         run() {
           const list = entries()
           if (list.length === 0) return
@@ -79,14 +78,12 @@ export function ShellTab(props: { sessionID: string }) {
         id: "composer.shell.kill",
         title: "Kill shell command",
         group: "Composer",
-        bind: "ctrl+d",
         run() {
           const entry = selectedEntry()
           if (!entry) return
-          const ref = location.current
           void client.api.shell.remove({
             id: entry.id,
-            location: ref ? { directory: ref.directory, workspace: ref.workspaceID } : undefined,
+            location: { directory: entry.location.directory, workspace: entry.location.workspaceID },
           })
         },
       },
@@ -96,7 +93,7 @@ export function ShellTab(props: { sessionID: string }) {
   return (
     <Show when={composer.active("shell")}>
       <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
-        <Show when={entries().length > 0} fallback={<text fg={themeV2.text.subdued()}> No shell commands</text>}>
+        <Show when={entries().length > 0} fallback={<text fg={theme.text.subdued}> No shell commands</text>}>
           <For each={entries()}>
             {(shell, index) => {
               const active = createMemo(() => index() === store.selected)
@@ -105,11 +102,13 @@ export function ShellTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={themeV2.background.action({ focused: active() })}
+                  backgroundColor={
+                    active() ? theme.background.action.primary.focused : theme.background.action.primary.default
+                  }
                   onMouseOver={() => setStore("selected", index())}
                 >
                   <text
-                    fg={themeV2.text.action({ focused: active() })}
+                    fg={active() ? theme.text.action.primary.focused : theme.text.action.primary.default}
                     attributes={active() ? TextAttributes.BOLD : undefined}
                     wrapMode="none"
                   >

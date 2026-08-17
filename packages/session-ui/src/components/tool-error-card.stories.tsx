@@ -1,11 +1,12 @@
 // @ts-nocheck
+import { For } from "solid-js"
 import { ToolErrorCard } from "./tool-error-card"
 
 const docs = `### Overview
 Tool call failure summary styled like a tool trigger.
 
 ### API
-- Required: \`tool\` (tool id, e.g. patch, bash)
+- Required: \`tool\` (tool id, e.g. apply_patch, bash)
 - Required: \`error\` (error string)
 
 ### Behavior
@@ -14,9 +15,9 @@ Tool call failure summary styled like a tool trigger.
 
 const samples = [
   {
-    tool: "patch",
+    tool: "apply_patch",
     error:
-      "patch verification failed: Failed to find expected lines in /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/session-turn.tsx",
+      "apply_patch verification failed: Failed to find expected lines in /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/session-turn.tsx",
   },
   {
     tool: "bash",
@@ -62,13 +63,13 @@ export default {
     },
   },
   args: {
-    tool: "patch",
+    tool: "apply_patch",
     error: samples[0].error,
   },
   argTypes: {
     tool: {
       control: "select",
-      options: ["patch", "bash", "read", "glob", "grep", "webfetch", "websearch", "question"],
+      options: ["apply_patch", "bash", "read", "glob", "grep", "webfetch", "websearch", "question"],
     },
     error: {
       control: "text",
@@ -83,9 +84,7 @@ export const All = {
   render: () => {
     return (
       <div style="display: flex; flex-direction: column; gap: 12px; max-width: 720px;">
-        {samples.map((item) => (
-          <ToolErrorCard tool={item.tool} error={item.error} />
-        ))}
+        <For each={samples}>{(item) => <ToolErrorCard tool={item.tool} error={item.error} />}</For>
       </div>
     )
   },

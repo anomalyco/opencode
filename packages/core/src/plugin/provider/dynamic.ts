@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import { pathToFileURL } from "url"
-import { define } from "@opencode-ai/plugin/v2/effect/plugin"
-import { Npm } from "../../npm"
-import { importModule } from "#runtime-import"
+import { define } from "@opencode-ai/plugin/effect/plugin"
+import { Npm } from "@opencode-ai/util/npm"
+import { importModule } from "@opencode-ai/util/runtime-import"
 
 export const DynamicProviderPlugin = define({
   id: "opencode.provider.dynamic",

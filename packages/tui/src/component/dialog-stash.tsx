@@ -4,7 +4,7 @@ import { createMemo, createSignal } from "solid-js"
 import { Locale } from "../util/locale"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import { usePromptStash, type StashEntry } from "./prompt/stash"
+import { usePromptStash, type StashEntry } from "../prompt/stash"
 
 function getRelativeTime(timestamp: number): string {
   const now = Date.now()
@@ -29,7 +29,7 @@ function getStashPreview(input: string, maxLength: number = 50): string {
 export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
   const dialog = useDialog()
   const stash = usePromptStash()
-  const { theme } = useTheme()
+  const theme = useTheme("elevated")
   const shortcuts = Keymap.useShortcuts()
 
   const [toDelete, setToDelete] = createSignal<number>()
@@ -45,7 +45,8 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
           title: isDeleting
             ? `Press ${shortcuts.get("stash.delete")} again to confirm`
             : getStashPreview(entry.prompt.text),
-          bg: isDeleting ? theme.error : undefined,
+          bg: isDeleting ? theme.background.action.destructive.focused : undefined,
+          fg: isDeleting ? theme.text.action.destructive.focused : undefined,
           value: index,
           description: getRelativeTime(entry.timestamp),
           footer: lineCount > 1 ? `~${lineCount} lines` : undefined,

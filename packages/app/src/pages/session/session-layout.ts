@@ -10,7 +10,7 @@ export const useSessionKey = () => {
   const params = useParams()
   const sdk = useSDK()
   const serverSDK = useServerSDK()
-  const scope = createMemo(() => serverSDK().scope)
+  const scope = createMemo(() => serverSDK.scope)
   const directory = createMemo(() => base64Encode(sdk().directory))
   const workspaceKey = createMemo(() => SessionStateKey.from(scope(), SessionRouteKey.fromRoute(directory())))
   const sessionKey = createMemo(() => SessionStateKey.from(scope(), SessionRouteKey.fromRoute(directory(), params.id)))

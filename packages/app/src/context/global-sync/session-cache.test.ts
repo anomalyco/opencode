@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import type {
-  Message,
-  Part,
-  PermissionRequest,
-  QuestionRequest,
-  SessionStatus,
-  FileDiffInfo,
-} from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, Todo } from "@/types"
+import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode-ai/client/promise"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import { dropSessionCaches, pickSessionCacheEvictions } from "./session-cache"
 
 const msg = (id: string, sessionID: string) =>
@@ -33,18 +28,22 @@ describe("app session cache", () => {
     const store: {
       session_status: Record<string, SessionStatus | undefined>
       session_diff: Record<string, FileDiffInfo[] | undefined>
+      todo: Record<string, Todo[] | undefined>
       message: Record<string, Message[] | undefined>
+      session_message: Record<string, never[] | undefined>
       part: Record<string, Part[] | undefined>
       permission: Record<string, PermissionRequest[] | undefined>
-      question: Record<string, QuestionRequest[] | undefined>
+      form: Record<string, FormInfo[] | undefined>
       part_text_accum_delta: Record<string, string | undefined>
     } = {
       session_status: { ses_1: { type: "busy" } as SessionStatus },
       session_diff: { ses_1: [] },
+      todo: { ses_1: [] as Todo[] },
       message: {},
+      session_message: {},
       part: { msg_1: [part("prt_1", "ses_1", "msg_1")] },
       permission: { ses_1: [] as PermissionRequest[] },
-      question: { ses_1: [] as QuestionRequest[] },
+      form: { ses_1: [] as FormInfo[] },
       part_text_accum_delta: { prt_1: "streamed text" },
     }
 
@@ -53,10 +52,11 @@ describe("app session cache", () => {
     expect(store.message.ses_1).toBeUndefined()
     expect(store.part.msg_1).toBeUndefined()
     expect(store.part_text_accum_delta.prt_1).toBeUndefined()
+    expect(store.todo.ses_1).toBeUndefined()
     expect(store.session_diff.ses_1).toBeUndefined()
     expect(store.session_status.ses_1).toBeUndefined()
     expect(store.permission.ses_1).toBeUndefined()
-    expect(store.question.ses_1).toBeUndefined()
+    expect(store.form.ses_1).toBeUndefined()
   })
 
   test("dropSessionCaches clears message-backed parts", () => {
@@ -64,18 +64,22 @@ describe("app session cache", () => {
     const store: {
       session_status: Record<string, SessionStatus | undefined>
       session_diff: Record<string, FileDiffInfo[] | undefined>
+      todo: Record<string, Todo[] | undefined>
       message: Record<string, Message[] | undefined>
+      session_message: Record<string, never[] | undefined>
       part: Record<string, Part[] | undefined>
       permission: Record<string, PermissionRequest[] | undefined>
-      question: Record<string, QuestionRequest[] | undefined>
+      form: Record<string, FormInfo[] | undefined>
       part_text_accum_delta: Record<string, string | undefined>
     } = {
       session_status: {},
       session_diff: {},
+      todo: {},
       message: { ses_1: [m] },
+      session_message: {},
       part: { [m.id]: [part("prt_1", "ses_1", m.id)] },
       permission: {},
-      question: {},
+      form: {},
       part_text_accum_delta: {},
     }
 

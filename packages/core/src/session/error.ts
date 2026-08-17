@@ -1,8 +1,22 @@
+export * as SessionErrors from "./error.js"
+
 import { Schema } from "effect"
 import { Agent } from "@opencode-ai/schema/agent"
-import { SessionMessage } from "./message"
-import { SessionSchema } from "./schema"
+import { SessionMessage } from "./message.js"
+import { SessionSchema } from "./schema.js"
 import { SessionError } from "@opencode-ai/schema/session-error"
+
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Session.NotFoundError", {
+  sessionID: SessionSchema.ID,
+}) {}
+
+export class ForkEmptyError extends Schema.TaggedErrorClass<ForkEmptyError>()("Session.ForkEmptyError", {
+  sessionID: SessionSchema.ID,
+}) {
+  override get message() {
+    return `Cannot fork empty session: ${this.sessionID}`
+  }
+}
 
 export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeError>()("Session.MessageDecodeError", {
   sessionID: SessionSchema.ID,

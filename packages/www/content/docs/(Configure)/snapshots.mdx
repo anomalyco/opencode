@@ -1,0 +1,63 @@
+---
+title: "Snapshots"
+---
+
+OpenCode snapshots let clients roll back conversation history and related file changes. They are a convenience for
+revising recent work, not a replacement for Git commits or backups.
+
+## Configuration
+
+Snapshots are enabled by default. Set `snapshots` to `false` in your [configuration](/config#snapshots) to stop capturing
+filesystem state:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshots": false,
+}
+```
+
+Filesystem snapshots require a Git repository. With snapshots disabled, unavailable, or missing, a client can still
+request a conversation rollback, but there is no captured file state to restore. Disabling snapshots does not delete
+snapshots that were already stored.
+
+## What is captured
+
+For each model step, OpenCode attempts to capture the worktree immediately before the model call and after a cleanly
+completed step. It records the paths changed between those two points on the assistant message.
+
+Snapshots use a separate internal Git object database in the OpenCode data directory. They do not create commits, move
+branches, or intentionally modify your repository's Git index. Capture is limited to the session's active directory, which
+may be a subdirectory of the repository.
+
+Within that directory, snapshots include tracked files and untracked files that are not ignored by Git. An individual
+untracked file larger than 2 MiB is excluded. Ignored files, files outside the active directory, and changes to Git
+metadata are not captured.
+
+## Restoration
+
+A restoration selects a conversation boundary and restores only paths attributed to cleanly completed assistant steps
+after it. Each affected path returns to its state before the first restored step, and a file created by those steps is
+removed when it did not exist in the earlier snapshot.
+
+Clients may stage a restoration before committing it so the previous conversation and filesystem state can still be
+recovered.
+
+## Limitations and safety
+
+- Capture is best effort. A failed capture is logged and the model step continues, so conversation rollback may have no
+  matching file rollback.
+- Interrupted or failed steps do not receive a completed end snapshot. File changes made before the failure may remain.
+- Shell commands can change databases, services, processes, network resources, Git state, ignored build output, or files
+  outside the active directory. Snapshot restoration does not reverse those side effects.
+- Restoring a snapshot overwrites the current contents of affected paths. Recovering the pre-restoration state can also
+  overwrite edits made after the restoration was staged.
+- Other processes can edit the worktree between capture and restore. The server rejects revert operations while the
+  session is actively running, but it cannot protect against external editors or commands.
+- Snapshot objects can contain complete contents of tracked and non-ignored untracked files. They are stored locally in
+  the OpenCode data directory; do not treat snapshots as secret-free metadata.
+- Snapshot restoration is not secure erasure. Committing a revert removes messages from the active projection, not from
+  durable session history or existing snapshot storage.
+
+Review the restored file summary and your Git diff before continuing. Commit or back up important work independently
+before restoring snapshots on a dirty worktree.

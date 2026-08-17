@@ -10,7 +10,9 @@
 
 ## Conventions
 
-Per-type constructors live on the type, not as top-level re-exports. Use `Message.system(...)`, `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `Model.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generate`, `LLM.stream`, `LLM.updateRequest`, and `LLM.generateObject`. Two ways to construct the same thing is one too many.
+Per-type constructors live on the type, not as top-level re-exports. Use `Message.system(...)`, `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `LanguageModel.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generate`, `LLM.stream`, and `LLM.generateObject`. Use `LLMRequest.update(...)` when deriving canonical request data; do not add a duplicate `LLM.updateRequest(...)` path. Two ways to construct the same thing is one too many.
+
+- Keep provider-defined string enums forward-compatible. Expose known values for autocomplete while accepting future values with `Known | (string & {})`; use `Schema.String` at runtime unless rejecting unknown values is required for correctness.
 
 ## Tests
 
@@ -21,14 +23,9 @@ Per-type constructors live on the type, not as top-level re-exports. Use `Messag
 
 This package is an Effect Schema-first LLM core. The Schema classes in `src/schema/` are the canonical runtime data model. Convenience functions in `src/llm.ts` are thin constructors that return those same Schema class instances; they should improve callsites without creating a second model.
 
-Primary in-repo integration point:
+Session integration lives in `packages/core/src/session`: `runner/llm.ts` owns orchestration, `model-request.ts` lowers Session state into `LLMRequest`, and `model-transport.ts` selects transport behavior.
 
-- `packages/opencode/src/session/llm.ts` is the session-owned orchestration layer that decides whether a request uses AI SDK or this package's native route runtime.
-- `packages/opencode/src/session/llm/native-request.ts` is the lowering adapter from opencode's session/AI SDK-shaped data into this package's `LLMRequest` model.
-- `packages/opencode/src/session/llm/native-runtime.ts` is the execution adapter that calls raw `LLMClient.stream(request)` and bridges one provider turn of opencode tool calls through this package's typed dispatcher.
-- `packages/opencode/src/session/llm/ai-sdk.ts` keeps the default AI SDK path compatible by converting AI SDK stream parts into this package's shared `LLMEvent`s.
-
-Keep this package independent of session concerns. Session auth, permissions, plugins, telemetry headers, and runtime selection belong in `packages/opencode/src/session/llm.ts` and its local adapters.
+Keep this package independent of Session concerns. Session auth, permissions, plugins, telemetry headers, and runtime selection belong in Core.
 
 ### Request Flow
 
@@ -46,7 +43,7 @@ const response = yield * LLMClient.generate(request)
 
 `LLM.request(...)` builds an `LLMRequest`. `LLMClient.generate(...)` reads the executable route carried by `request.model.route`, builds the provider-native body, asks the route's transport for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
 
-Use `LLMClient.stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.generate(request)` when callers want those same events collected into an `LLMResponse`. Use `LLMClient.prepare<Body>(request)` to compile a request through the route pipeline without sending it — the optional `Body` type argument narrows `.body` to the route's native shape (e.g. `prepare<OpenAIChatBody>(...)` returns a `PreparedRequestOf<OpenAIChatBody>`). The runtime body is identical; the generic is a type-level assertion.
+Use `LLMClient.stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.generate(request)` when callers want those same events collected into an `LLMResponse`.
 
 Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g. `events.filter(LLMEvent.is.toolCall)`). The kebab-case `LLMEvent.guards["tool-call"]` form also works but prefer `is.*` in new code.
 
@@ -54,7 +51,7 @@ Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g.
 
 A route is the registered, runnable composition of four orthogonal pieces:
 
-- **`Protocol`** (`src/route/protocol.ts`) — semantic API contract. Owns request body construction (`body.from`), the body schema (`body.schema`), the streaming-event schema (`stream.event`), and the event-to-`LLMEvent` state machine (`stream.step`). `Route.make(...)` validates and JSON-encodes the body from `body.schema` and decodes frames with `stream.event`. Examples: `OpenAIChat.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
+- **`Protocol`** (`src/route/protocol.ts`) — semantic API contract. Owns request body construction (`body.from`), the body schema (`body.schema`), the streaming-event schema (`stream.event`), and the event-to-`LLMEvent` state machine (`stream.step`). `Route.make(...)` validates and JSON-encodes the body from `body.schema` and decodes frames with `stream.event`. Examples: `OpenAIChat.protocol`, `OpenResponses.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
 - **`Endpoint`** (`src/route/endpoint.ts`) — URL construction. The host, path, and route query live on the endpoint. `Endpoint.path("/chat/completions", { baseURL })` is the common case; pass a function for paths that embed the model id or a body field (e.g. `Endpoint.path(({ body }) => `/model/${body.modelId}/converse-stream`)`).
 - **`Auth`** (`src/route/auth.ts`) — per-request transport authentication. Provider facades configure credentials onto the route before model selection, usually via `Auth.bearer(apiKey)` or `Auth.header(name, apiKey)`. Routes that need per-request signing (Bedrock SigV4, future Vertex IAM, Azure AAD) implement `Auth` as a function that signs the body and merges signed headers into the result.
 - **`Framing`** (`src/route/framing.ts`) — bytes → frames. SSE (`Framing.sse`) is shared; Bedrock keeps its AWS event-stream framing as a typed `Framing<object>` value alongside its protocol.
@@ -74,11 +71,11 @@ export const route = Route.make({
 })
 ```
 
-Route defaults are request-shaping defaults such as `headers`, `limits`, `generation`, `providerOptions`, and `http`. Endpoint host/query belongs on the route endpoint. Selected `Model` values carry only model id, provider id, and the configured route value. Model capability/catalog metadata lives outside this package; protocol support is enforced by request lowering and typed `LLMError`s.
+Route defaults are request-shaping defaults such as `headers`, `limits`, `generation`, `providerOptions`, and `http`. Endpoint host/query belongs on the route endpoint. Selected `LanguageModel` values carry only model id, provider id, and the configured route value. Model capability/catalog metadata lives outside this package; protocol support is enforced by request lowering and typed `AIError`s.
 
 The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Route.make(...)` call instead of a 300-400 line route clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
-When a provider ships a non-HTTP transport (OpenAI's WebSocket Responses backend, hypothetical bidirectional streaming APIs), the seam is `Transport` — `WebSocketTransport.jsonTransport.with(...)` constructs an IO template whose `prepare` receives the route endpoint/auth at compile time, builds a WebSocket URL and message, and whose `frames` yields decoded text from the socket. Same protocol and endpoint source, different transport.
+When a provider supports multiple physical transports, selection remains execution policy below its semantic route. `OpenResponsesChannel.transport(...)` owns the provider-neutral Responses WebSocket concept: it prepares one final request, executes HTTP by default, strips WebSocket-disallowed fields, and passes a generic channel exchange to a per-call `WebSocketChannelExecutor` when supplied. Provider-specific Responses routes opt in with handshake and connection-age policy. `Route.streamPrepared` owns decoding and acknowledges channel completion only after successful full consumption.
 
 ### URL Construction
 
@@ -104,7 +101,7 @@ const proxied = gateway.model("openai/gpt-4o-mini")
 Keep provider facades small and explicit:
 
 - Use branded `ProviderID.make(...)` and `ModelID.make(...)` where ids are constructed directly.
-- Use `model` for the default API path and named methods for provider-native alternatives such as OpenAI `responses`, `responsesWebSocket`, and `chat`.
+- Use `model` for the default API path and named methods for provider-native alternatives such as OpenAI `responses` and `chat`.
 - Put provider-specific setup on `.configure(...)`; do not add `model(id, overrides)` as a duplicate construction path.
 - Export lower-level `routes` arrays separately only when advanced internal wiring needs them.
 - Prefer `apiKey` as provider-specific sugar and `auth` as the explicit override; keep them mutually exclusive in provider option types with `ProviderAuthOption`.
@@ -122,11 +119,10 @@ import { model } from "@opencode-ai/ai/providers/openai/responses"
 
 const selected = model("gpt-5", {
   apiKey,
-  transport: "websocket",
 })
 ```
 
-Keep semantic APIs as separate entrypoints, such as OpenAI `chat` and `responses`. Keep transport choices inside the semantic entrypoint settings, so OpenAI Responses HTTP and WebSocket share one entrypoint. Provider facades may still expose named selectors such as `responsesWebSocket` for direct typed call sites; the package-like contract maps its settings to those selectors before returning an executable `Model`.
+Keep semantic APIs as separate entrypoints, such as OpenAI `chat` and `responses`. Transport is execution policy: OpenAI Responses uses HTTP by default and may receive a per-call WebSocket channel executor through `StreamOptions` without changing model or route identity.
 
 Do not expose `Route` in provider package settings. Route composition stays an implementation detail behind `model(...)`.
 
@@ -136,15 +132,15 @@ Do not expose `Route` in provider package settings. Route composition stays an i
 packages/ai/src/
   schema/                   canonical Schema model, split by concern
     ids.ts                  branded IDs, literal types, ProviderMetadata
-    options.ts              Generation/Provider/Http options, Limits, Model, cache policy
+    options.ts              Generation/Provider/Http options, Limits, LanguageModel, cache policy
     messages.ts             content parts, Message, ToolDefinition, LLMRequest
-    events.ts               Usage, individual events, LLMEvent, PreparedRequest, LLMResponse
-    errors.ts               error reasons, LLMError, ToolFailure
+    events.ts               Usage, individual events, LLMEvent, LLMResponse
+    errors.ts               error reasons, AIError, ToolFailure
     index.ts                barrel
   llm.ts                    request constructors and convenience helpers
   route/
     index.ts                @opencode-ai/ai/route advanced barrel
-    client.ts               Route.make + LLMClient.prepare/stream/generate
+    client.ts               Route.make + LLMClient.stream/generate
     executor.ts             RequestExecutor service + transport error mapping
     protocol.ts             Protocol type + Protocol.make
     endpoint.ts             Endpoint type + Endpoint.path
@@ -152,19 +148,22 @@ packages/ai/src/
     auth-options.ts         ProviderAuthOption shape, AuthOptions.bearer, AtLeastOne helper
     framing.ts              Framing type + Framing.sse
     transport/              transport implementations
-      index.ts              Transport type + HttpTransport / WebSocketTransport namespaces
+      index.ts              Transport execution types + HttpTransport / WebSocketTransport namespaces
+      websocket-channel.ts  generic sequential channel executor/driver contract
       http.ts               HttpTransport.httpJson — POST + framing
-      websocket.ts          WebSocketTransport.json + WebSocketExecutor service
+      websocket.ts          direct one-request channel executor + raw socket adapter
   protocols/
     shared.ts               ProviderShared toolkit used inside protocol impls
     openai-chat.ts          protocol + route (compose OpenAIChat.protocol)
-    openai-responses.ts
+    open-responses.ts         provider-neutral Responses protocol baseline
+    open-responses-channel.ts provider-neutral Responses WebSocket transport factory
+    openai-responses.ts       OpenAI tools/events and channel policy composed over OpenResponses
     anthropic-messages.ts
     gemini.ts
     bedrock-converse.ts
     bedrock-event-stream.ts framing for AWS event-stream binary frames
     openai-compatible-chat.ts route that reuses OpenAIChat.protocol, no canonical URL
-    openai-compatible-responses.ts route that reuses OpenAIResponses.protocol, no canonical URL
+    openai-compatible-responses.ts deployment adapter that reuses OpenResponses.protocol, no canonical URL
     utils/                  per-protocol helpers (auth, cache, media, tool-stream, ...)
   providers/
     openai-compatible.ts    generic Chat helper + family model helpers
@@ -175,7 +174,7 @@ packages/ai/src/
   tool-runtime.ts           narrow one-call typed tool dispatcher
 ```
 
-The dependency arrow points down: `providers/*.ts` files import protocol routes and auth-option utilities; protocol modules import `endpoint`, `auth`, `framing`, and transport pieces. Protocols do not import provider facades. Lower-level modules know nothing about provider catalog metadata.
+The dependency arrow points down: `providers/*.ts` files import protocol routes and auth-option utilities; protocol modules import `endpoint`, `auth`, `framing`, and transport pieces. Protocols do not import provider facades. Lower-level modules know nothing about provider catalog metadata. `OpenAIResponses` composes the provider-neutral `OpenResponses` protocol; the baseline never imports the OpenAI extension.
 
 ### Shared protocol helpers
 
@@ -240,7 +239,7 @@ const get_weather = tool({
 
 const tools = { get_weather, get_time, ... }
 const events = yield* LLM.stream(
-  LLM.updateRequest(request, { tools: Tool.toDefinitions(tools) }),
+  LLMRequest.update(request, { tools: Tool.toDefinitions(tools) }),
 ).pipe(Stream.runCollect)
 
 const call = Array.from(events).find(LLMEvent.is.toolCall)

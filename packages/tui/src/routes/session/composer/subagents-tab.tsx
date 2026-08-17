@@ -8,6 +8,7 @@ import { useTheme } from "../../../context/theme"
 import { Locale } from "../../../util/locale"
 import { Keymap } from "../../../context/keymap"
 import { useComposerTab } from "./index"
+import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
 
 interface SubagentEntry {
   sessionID: string
@@ -21,12 +22,13 @@ export function SubagentsTab(props: { sessionID: string }) {
   const route = useRouteData("session")
   const data = useData()
   const client = useClient()
-  const { themeV2 } = useTheme()
+  const theme = useTheme()
   const navigate = useRoute().navigate
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
 
   const session = createMemo(() => data.session.get(props.sessionID))
+  const [store, setStore] = createStore({ selected: 0, active: true })
 
   const entries = createMemo<SubagentEntry[]>(() => {
     const current = session()
@@ -37,13 +39,14 @@ export function SubagentsTab(props: { sessionID: string }) {
     if (current.parentID) {
       const siblings = data.session.list().filter((s) => s.parentID === current.parentID)
       for (const sibling of siblings) {
-        const agentMatch = sibling.title.match(/@(\w+) subagent/)
+        const title = withTimestampedFallback(sibling)
+        const agentMatch = title.match(/@(\w+) subagent/)
         const agent = sibling.agent
           ? Locale.titlecase(sibling.agent)
           : agentMatch
             ? Locale.titlecase(agentMatch[1])
             : "Subagent"
-        const name = agentMatch ? sibling.title.replace(agentMatch[0], "").trim() || sibling.title : sibling.title
+        const name = agentMatch ? title.replace(agentMatch[0], "").trim() || title : title
         result.push({
           sessionID: sibling.id,
           agent,
@@ -55,13 +58,14 @@ export function SubagentsTab(props: { sessionID: string }) {
     } else {
       const children = data.session.list().filter((s) => s.parentID === props.sessionID)
       for (const child of children) {
-        const agentMatch = child.title.match(/@(\w+) subagent/)
+        const title = withTimestampedFallback(child)
+        const agentMatch = title.match(/@(\w+) subagent/)
         const agent = child.agent
           ? Locale.titlecase(child.agent)
           : agentMatch
             ? Locale.titlecase(agentMatch[1])
             : "Subagent"
-        const name = agentMatch ? child.title.replace(agentMatch[0], "").trim() || child.title : child.title
+        const name = agentMatch ? title.replace(agentMatch[0], "").trim() || title : title
         result.push({
           sessionID: child.id,
           agent,
@@ -72,10 +76,9 @@ export function SubagentsTab(props: { sessionID: string }) {
       }
     }
 
-    return result
+    return result.filter((entry) => (store.active ? entry.status === "running" : entry.status !== "running"))
   })
 
-  const [store, setStore] = createStore({ selected: 0 })
   let selectedSessionID = ""
   let wasActive = false
   let scroll: ScrollBoxRenderable | undefined
@@ -90,7 +93,7 @@ export function SubagentsTab(props: { sessionID: string }) {
     if (!active) {
       if (wasActive) {
         selectedSessionID = ""
-        setStore("selected", 0)
+        setStore({ selected: 0, active: true })
       }
       wasActive = false
       return
@@ -103,7 +106,8 @@ export function SubagentsTab(props: { sessionID: string }) {
       setStore("selected", next)
       const scrollCurrentIntoView = () => scrollToIndex(next, true)
       scrollCurrentIntoView()
-      requestAnimationFrame(scrollCurrentIntoView)
+      // The remounted scrollbox finishes layout on the next frame and resets its scroll position.
+      requestAnimationFrame(() => requestAnimationFrame(scrollCurrentIntoView))
     }
     wasActive = true
     if (store.selected >= list.length) moveTo(Math.max(0, list.length - 1))
@@ -139,8 +143,15 @@ export function SubagentsTab(props: { sessionID: string }) {
       label: "Subagents",
       hints: () => {
         const entry = selectedEntry()
-        if (!entry || entry.status !== "running") return []
-        return [{ label: "interrupt", shortcut: shortcuts.get("composer.subagent.interrupt") ?? "" }]
+        return [
+          ...(entry?.status === "running"
+            ? [{ label: "interrupt", shortcut: shortcuts.get("composer.subagent.interrupt") ?? "" }]
+            : []),
+          {
+            label: `show ${store.active ? "inactive" : "active"}`,
+            shortcut: shortcuts.get("composer.subagent.toggle-activity") ?? "",
+          },
+        ]
       },
       onClose: () => {
         const parentID = session()?.parentID
@@ -153,23 +164,24 @@ export function SubagentsTab(props: { sessionID: string }) {
   Keymap.createLayer(() => ({
     mode: "composer",
     enabled: () => composer.active("subagents"),
+    priority: 1,
     commands: [
       {
         id: "composer.subagent.up",
         title: "Previous subagent",
         group: "Composer",
-        bind: "up",
         run() {
-          const list = entries()
-          if (list.length === 0) return
-          moveTo((store.selected - 1 + list.length) % list.length, true)
+          if (store.selected === 0) {
+            composer.close()
+            return
+          }
+          moveTo(store.selected - 1, true)
         },
       },
       {
         id: "composer.subagent.down",
         title: "Next subagent",
         group: "Composer",
-        bind: "down",
         run() {
           const list = entries()
           if (list.length === 0) return
@@ -180,17 +192,25 @@ export function SubagentsTab(props: { sessionID: string }) {
         id: "composer.subagent.select",
         title: "Navigate to subagent",
         group: "Composer",
-        bind: "return",
         run() {
           const entry = entries()[store.selected]
           if (entry) navigate({ type: "session", sessionID: entry.sessionID })
         },
       },
       {
+        id: "composer.subagent.toggle-activity",
+        title: "Toggle active subagents",
+        group: "Composer",
+        bind: "ctrl+a",
+        run() {
+          setStore({ selected: 0, active: !store.active })
+          scroll?.scrollTo(0)
+        },
+      },
+      {
         id: "composer.subagent.interrupt",
         title: "Interrupt subagent",
         group: "Composer",
-        bind: "ctrl+d",
         run() {
           const entry = selectedEntry()
           if (!entry || entry.status !== "running") return
@@ -203,7 +223,10 @@ export function SubagentsTab(props: { sessionID: string }) {
   return (
     <Show when={composer.active("subagents")}>
       <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
-        <Show when={entries().length > 0} fallback={<text fg={themeV2.text.subdued()}> No subagents</text>}>
+        <Show
+          when={entries().length > 0}
+          fallback={<text fg={theme.text.subdued}> No {store.active ? "active" : "inactive"} subagents</text>}
+        >
           <For each={entries()}>
             {(entry, index) => {
               const active = createMemo(() => index() === selected())
@@ -216,7 +239,13 @@ export function SubagentsTab(props: { sessionID: string }) {
                   flexDirection="row"
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={themeV2.background.action({ focused: active(), selected: entry.current })}
+                  backgroundColor={
+                    active()
+                      ? theme.background.action.primary.focused
+                      : entry.current
+                        ? theme.background.action.primary.selected
+                        : theme.background.action.primary.default
+                  }
                   onMouseOver={() => setStore("selected", index())}
                   onMouseUp={() => {
                     setStore("selected", index())
@@ -225,7 +254,13 @@ export function SubagentsTab(props: { sessionID: string }) {
                 >
                   <box flexGrow={1} minWidth={0} flexDirection="row">
                     <text
-                      fg={themeV2.text.action({ focused: active(), selected: entry.current })}
+                      fg={
+                        active()
+                          ? theme.text.action.primary.focused
+                          : entry.current
+                            ? theme.text.action.primary.selected
+                            : theme.text.action.primary.default
+                      }
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
                     >
@@ -233,14 +268,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                     </text>
                   </box>
                   <Show when={status()}>
-                    <text
-                      fg={
-                        active()
-                          ? themeV2.text.action({ focused: active(), selected: entry.current })
-                          : themeV2.text.subdued()
-                      }
-                      wrapMode="none"
-                    >
+                    <text fg={active() ? theme.text.action.primary.focused : theme.text.subdued} wrapMode="none">
                       {status()}
                     </text>
                   </Show>

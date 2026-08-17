@@ -1,10 +1,9 @@
-import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { Deferred, Effect } from "effect"
 import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
-import { OpenCode } from "@opencode-ai/client"
-import { Global } from "@opencode-ai/core/global"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { OpenCode, type SessionInfo } from "@opencode-ai/client"
+import { Global } from "@opencode-ai/util/global"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, useLog, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
@@ -16,6 +15,7 @@ import {
   MouseButton,
   type CliRenderer,
   type CliRendererConfig,
+  type MouseEvent,
   type ThemeMode,
 } from "@opentui/core"
 import { RouteProvider, useRoute } from "./context/route"
@@ -31,12 +31,17 @@ import {
   batch,
   Show,
 } from "solid-js"
+import { createStore } from "solid-js/store"
 import {
   TuiLifecycleProvider,
+  TuiAppProvider,
   TuiPathsProvider,
   TuiStartupProvider,
   TuiTerminalEnvironmentProvider,
+  useTuiApp,
+  useTuiPaths,
   useTuiStartup,
+  type TuiApp,
 } from "./context/runtime"
 import { DialogProvider, useDialog } from "./ui/dialog"
 import { DialogIntegration } from "./component/dialog-integration"
@@ -46,10 +51,11 @@ import { EditorContextProvider } from "./context/editor"
 import { useEvent } from "./context/event"
 import { ClientProvider, useClient } from "./context/client"
 import { StartupLoading } from "./component/startup-loading"
-import { DevToolsSidebar } from "./component/devtools-sidebar"
-import { DevTools } from "./devtools"
+import { DevToolsBar } from "./component/devtools-bar"
 import { Reconnecting } from "./component/reconnecting"
+import { MigrationOverlay } from "./component/migration-overlay"
 import { DataProvider, useData } from "./context/data"
+import { SessionTabsProvider, useSessionTabs } from "./context/session-tabs"
 import { LocationProvider, useLocation } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
 import { PermissionProvider } from "./context/permission"
@@ -64,21 +70,27 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
-import { ThemeProvider, useTheme } from "./context/theme"
+import { DialogOpen, DialogOpenKey, loadDialogOpen } from "./component/dialog-open"
+import { SessionTabs } from "./component/session-tabs"
+import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
+import { ThemeErrorToast } from "./component/theme-error-toast"
+import { createThemeSource, ThemeProvider, useTheme, useThemes } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
-import { PromptHistoryProvider } from "./component/prompt/history"
-import { FrecencyProvider } from "./component/prompt/frecency"
-import { PromptStashProvider } from "./component/prompt/stash"
+import { PromptHistoryProvider } from "./prompt/history"
+import { FrecencyProvider } from "./prompt/frecency"
+import { PromptStashProvider } from "./prompt/stash"
 import { Toast, ToastProvider, useToast } from "./ui/toast"
-import { isDefaultTitle } from "./util/session"
+import { isFallbackTitle } from "@opencode-ai/util/session-title-fallback"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
-import { createPluginRuntime, PluginRuntimeProvider, usePluginRuntime } from "./plugin/runtime"
-import { PluginProvider, PluginRoute, PluginSlot, usePlugin, type PackageResolver } from "./plugin/context"
+import { newSessionLocation } from "./config/new-session-location"
+import { PluginProvider, usePlugin, type PackageResolver } from "./plugin/context"
+import { tuiPluginDirectories } from "./plugin/discovery"
+import { PluginRoute, Slot } from "./plugin/render"
 import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
@@ -86,14 +98,34 @@ import { DialogVariant } from "./component/dialog-variant"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
-
-const themePerformance = DevTools.register({ id: "theme-performance", title: "Theme performance" })
+import { AttentionProvider } from "./context/attention"
+import { StorageProvider, useStorage } from "./context/storage"
+import { createTuiClipboard } from "./clipboard"
 
 registerOpencodeSpinner()
 
-const appGlobalBindingCommands = [
-  "session.list",
-  "session.new",
+const appGlobalBindingCommands = ["session.list", "session.new", "open.menu"] as const
+
+const sessionTabBindingCommands = [
+  "session.tab.next",
+  "session.tab.previous",
+  "session.tab.next_unread",
+  "session.tab.previous_unread",
+  "session.tab.close",
+  "session.tab.reopen",
+  "session.tab.select.1",
+  "session.tab.select.2",
+  "session.tab.select.3",
+  "session.tab.select.4",
+  "session.tab.select.5",
+  "session.tab.select.6",
+  "session.tab.select.7",
+  "session.tab.select.8",
+  "session.tab.select.9",
+  "session.tab.select.10",
+] as const
+
+const pinnedSessionBindingCommands = [
   "session.quick_switch.1",
   "session.quick_switch.2",
   "session.quick_switch.3",
@@ -119,6 +151,7 @@ const appBindingCommands = [
   "variant.cycle",
   "variant.list",
   "provider.connect",
+  "opencode.settings",
   "opencode.status",
   "server.pair",
   "service.restart",
@@ -137,9 +170,11 @@ const appBindingCommands = [
   "app.toggle.file_context",
   "app.toggle.diffwrap",
   "app.toggle.paste_summary",
+  "permission.mode",
 ] as const
 
 export type TuiInput = {
+  app: TuiApp
   server: {
     endpoint: Endpoint
     service?: {
@@ -161,21 +196,6 @@ export type TuiInput = {
   log?: LogSink
 }
 
-function errorMessage(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "data" in error &&
-    typeof error.data === "object" &&
-    error.data !== null &&
-    "message" in error.data &&
-    typeof error.data.message === "string"
-  ) {
-    return error.data.message
-  }
-  return error instanceof Error ? error.message : String(error)
-}
-
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const log = input.log ?? (() => {})
   const global = yield* Global.Service
@@ -184,10 +204,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
   const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint) }
   const api = OpenCode.make(options)
-  const directory = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
-    Effect.map((response) => response.location.directory),
-    Effect.catch(() => Effect.tryPromise(() => api.location.get()).pipe(Effect.map((response) => response.directory))),
+  const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
+    Effect.map((response) => response.location),
+    Effect.catch(() => Effect.tryPromise(() => api.location.get())),
   )
+  const directory = location.directory
+  const pluginDirectories = yield* Effect.promise(() => tuiPluginDirectories(process.cwd(), global.config))
   const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
   const managed = input.server.service
   const service = managed
@@ -211,7 +233,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         useKittyKeyboard: {},
         autoFocus: false,
         openConsoleOnError: false,
-        useMouse: !Flag.OPENCODE_DISABLE_MOUSE && config.mouse,
+        useMouse: config.mouse,
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
         },
@@ -225,7 +247,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         }
         if (process.env.OPENCODE_DRIVE) {
           const { Drive } = yield* Effect.promise(() => import("@opencode-ai/simulation/frontend"))
-          return yield* Drive.create(options)
+          return yield* Drive.create(options, input.app.version)
         }
         return yield* Effect.acquireRelease(
           Effect.tryPromise({
@@ -235,6 +257,13 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
           (renderer) => Effect.sync(() => destroyRenderer(renderer)),
         )
       })
+      const clipboard = yield* Effect.acquireRelease(
+        Effect.sync(() => createTuiClipboard(renderer)),
+        (clipboard) =>
+          Effect.tryPromise(() => clipboard.dispose()).pipe(
+            Effect.catch((error) => Effect.sync(() => log("error", "Failed to dispose TUI clipboard", { error }))),
+          ),
+      )
       win32DisableProcessedInput()
       const finalizers = new Set<() => Promise<void>>()
       yield* Effect.addFinalizer(() =>
@@ -252,15 +281,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         () => Effect.sync(() => process.off("SIGHUP", onSighup)),
       )
       renderer.once("destroy", () => Deferred.doneUnsafe(shutdown, Effect.void))
-      const pluginRuntime = createPluginRuntime()
-
       yield* Effect.tryPromise(async () => {
-        const appStarted = performance.now()
         // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
         void renderer.getPalette({ size: 16 }).catch(() => undefined)
-        const modeStarted = performance.now()
         const mode = handoff?.mode ?? (await renderer.waitForThemeMode(1000)) ?? "dark"
-        themePerformance.set("Detect light/dark mode", `${(performance.now() - modeStarted).toFixed(2)} ms`)
         if (renderer.isDestroyed) return
 
         await render(() => {
@@ -274,115 +298,140 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                 }}
               >
                 <EpilogueProvider set={(value) => (exit.epilogue = value)}>
-                  <ErrorBoundary
-                    fallback={(error, reset) => <ErrorComponent error={error} reset={reset} mode={mode} />}
-                  >
-                    <TuiPathsProvider
-                      value={{
-                        cwd: process.cwd(),
-                        home: global.home,
-                        state: global.state,
-                        worktree: global.data + "/worktree",
-                      }}
+                  <TuiAppProvider value={input.app}>
+                    <ErrorBoundary
+                      fallback={(error, reset) => (
+                        <ClipboardProvider value={clipboard}>
+                          <ErrorComponent error={error} reset={reset} mode={mode} />
+                        </ClipboardProvider>
+                      )}
                     >
-                      <TuiLifecycleProvider
+                      <TuiPathsProvider
                         value={{
-                          add(finalizer) {
-                            finalizers.add(finalizer)
-                            return () => finalizers.delete(finalizer)
-                          },
+                          cwd: process.cwd(),
+                          home: global.home,
+                          state: global.state,
+                          worktree: global.data + "/worktree",
                         }}
                       >
-                        <TuiTerminalEnvironmentProvider
-                          value={{
-                            platform: process.platform,
-                            multiplexer: process.env.TMUX ? "tmux" : process.env.STY ? "screen" : undefined,
-                            displayServer: process.env.WAYLAND_DISPLAY
-                              ? "wayland"
-                              : process.env.DISPLAY
-                                ? "x11"
-                                : undefined,
-                          }}
-                        >
-                          <TuiStartupProvider
+                        <StorageProvider>
+                          <TuiLifecycleProvider
                             value={{
-                              initialRoute: process.env.OPENCODE_SCRAP
-                                ? { type: "plugin", id: "scrap", name: "scrap" }
-                                : process.env.OPENCODE_ROUTE
-                                  ? JSON.parse(process.env.OPENCODE_ROUTE)
-                                  : undefined,
-                              skipInitialLoading: Boolean(process.env.OPENCODE_FAST_BOOT),
+                              add(finalizer) {
+                                finalizers.add(finalizer)
+                                return () => finalizers.delete(finalizer)
+                              },
                             }}
                           >
-                            <ClipboardProvider>
-                              <ArgsProvider {...input.args}>
-                                <ConfigProvider
-                                  config={config}
-                                  service={input.config}
-                                  options={{ terminalSuspend: process.platform !== "win32" }}
-                                >
-                                  <Keymap.Provider>
-                                    <ToastProvider>
-                                      <RouteProvider
-                                        initialRoute={
-                                          input.args.continue
-                                            ? {
-                                                type: "session",
-                                                sessionID: "dummy",
-                                              }
-                                            : undefined
-                                        }
-                                      >
-                                        <PluginRuntimeProvider value={pluginRuntime}>
-                                          <ClientProvider api={api} service={service}>
-                                            <PermissionProvider>
-                                              <DataProvider>
-                                                <LocationProvider>
-                                                  <ThemeProvider mode={mode}>
-                                                    <LocalProvider>
-                                                      <PromptStashProvider>
-                                                        <DialogProvider>
-                                                          <FrecencyProvider>
-                                                            <PromptHistoryProvider>
-                                                              <PromptRefProvider>
-                                                                <EditorContextProvider>
-                                                                  <PluginProvider packages={input.packages}>
-                                                                    <App
-                                                                      started={appStarted}
-                                                                      pair={
-                                                                        input.server.endpoint.auth
-                                                                          ? input.server.endpoint.auth
-                                                                          : {
-                                                                              username: "opencode",
-                                                                              password: "",
+                            <TuiTerminalEnvironmentProvider
+                              value={{
+                                platform: process.platform,
+                                multiplexer: process.env.TMUX ? "tmux" : process.env.STY ? "screen" : undefined,
+                                displayServer: process.env.WAYLAND_DISPLAY
+                                  ? "wayland"
+                                  : process.env.DISPLAY
+                                    ? "x11"
+                                    : undefined,
+                              }}
+                            >
+                              <TuiStartupProvider
+                                value={{
+                                  initialRoute: process.env.OPENCODE_STORY
+                                    ? {
+                                        type: "plugin",
+                                        id: "opencode.storybook",
+                                        name: "storybook",
+                                        // OPENCODE_STORY=1 opens the index; any other value opens that story.
+                                        data:
+                                          process.env.OPENCODE_STORY === "1"
+                                            ? undefined
+                                            : { story: process.env.OPENCODE_STORY },
+                                      }
+                                    : process.env.OPENCODE_ROUTE
+                                      ? JSON.parse(process.env.OPENCODE_ROUTE)
+                                      : undefined,
+                                  skipInitialLoading: Boolean(process.env.OPENCODE_FAST_BOOT),
+                                }}
+                              >
+                                <ClipboardProvider value={clipboard}>
+                                  <ArgsProvider {...input.args}>
+                                    <ConfigProvider
+                                      config={config}
+                                      service={input.config}
+                                      options={{ terminalSuspend: process.platform !== "win32" }}
+                                    >
+                                      <Keymap.Provider>
+                                        <ToastProvider>
+                                          <RouteProvider
+                                            initialRoute={
+                                              input.args.continue
+                                                ? {
+                                                    type: "session",
+                                                    sessionID: "dummy",
+                                                  }
+                                                : undefined
+                                            }
+                                          >
+                                            <ClientProvider api={api} service={service}>
+                                              <PermissionProvider>
+                                                <DataProvider>
+                                                  <LocationProvider>
+                                                    <SessionTabsProvider>
+                                                      <ThemeProvider
+                                                        mode={mode}
+                                                        source={createThemeSource(global.config)}
+                                                      >
+                                                        <ThemeErrorToast />
+                                                        <LocalProvider>
+                                                          <PromptStashProvider>
+                                                            <DialogProvider>
+                                                              <FrecencyProvider>
+                                                                <PromptHistoryProvider>
+                                                                  <PromptRefProvider>
+                                                                    <EditorContextProvider>
+                                                                      <AttentionProvider>
+                                                                        <PluginProvider
+                                                                          packages={input.packages}
+                                                                          directories={pluginDirectories}
+                                                                        >
+                                                                          <App
+                                                                            pair={
+                                                                              input.server.endpoint.auth
+                                                                                ? input.server.endpoint.auth
+                                                                                : {
+                                                                                    username: "opencode",
+                                                                                    password: "",
+                                                                                  }
                                                                             }
-                                                                      }
-                                                                    />
-                                                                  </PluginProvider>
-                                                                </EditorContextProvider>
-                                                              </PromptRefProvider>
-                                                            </PromptHistoryProvider>
-                                                          </FrecencyProvider>
-                                                        </DialogProvider>
-                                                      </PromptStashProvider>
-                                                    </LocalProvider>
-                                                  </ThemeProvider>
-                                                </LocationProvider>
-                                              </DataProvider>
-                                            </PermissionProvider>
-                                          </ClientProvider>
-                                        </PluginRuntimeProvider>
-                                      </RouteProvider>
-                                    </ToastProvider>
-                                  </Keymap.Provider>
-                                </ConfigProvider>
-                              </ArgsProvider>
-                            </ClipboardProvider>
-                          </TuiStartupProvider>
-                        </TuiTerminalEnvironmentProvider>
-                      </TuiLifecycleProvider>
-                    </TuiPathsProvider>
-                  </ErrorBoundary>
+                                                                          />
+                                                                        </PluginProvider>
+                                                                      </AttentionProvider>
+                                                                    </EditorContextProvider>
+                                                                  </PromptRefProvider>
+                                                                </PromptHistoryProvider>
+                                                              </FrecencyProvider>
+                                                            </DialogProvider>
+                                                          </PromptStashProvider>
+                                                        </LocalProvider>
+                                                      </ThemeProvider>
+                                                    </SessionTabsProvider>
+                                                  </LocationProvider>
+                                                </DataProvider>
+                                              </PermissionProvider>
+                                            </ClientProvider>
+                                          </RouteProvider>
+                                        </ToastProvider>
+                                      </Keymap.Provider>
+                                    </ConfigProvider>
+                                  </ArgsProvider>
+                                </ClipboardProvider>
+                              </TuiStartupProvider>
+                            </TuiTerminalEnvironmentProvider>
+                          </TuiLifecycleProvider>
+                        </StorageProvider>
+                      </TuiPathsProvider>
+                    </ErrorBoundary>
+                  </TuiAppProvider>
                 </EpilogueProvider>
               </ExitProvider>
             </LogProvider>
@@ -405,35 +454,68 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App(props: { pair?: DialogPairCredentials; started: number }) {
+function App(props: { pair?: DialogPairCredentials }) {
   const log = useLog({ component: "app" })
+  const app = useTuiApp()
   const startup = useTuiStartup()
+  const paths = useTuiPaths()
   const config = useConfig()
-  const devtools = createMemo(() => config.data.debug?.devtools ?? false)
+  const devtools = createMemo(() => config.data.debug?.devtools ?? app.channel === "local")
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
   const dialog = useDialog()
   const local = useLocal()
+  const sessionTabs = useSessionTabs()
   const keymap = Keymap.use()
   const event = useEvent()
   const client = useClient()
   const toast = useToast()
-  const themeState = useTheme()
-  const { themeV2, mode, setMode, locked, lock, unlock } = themeState
+  const theme = useTheme()
+  const tabsTheme = useTheme("elevated")
+  const { mode, supports, setMode, locked, lock, unlock } = useThemes()
   const data = useData()
   const location = useLocation()
   const exit = useExit()
   const promptRef = usePromptRef()
-  const pluginRuntime = usePluginRuntime()
   const plugins = usePlugin()
   const clipboard = useClipboard()
-
-  createEffect(() => {
-    if (!themeState.ready) return
-    themePerformance.set("Total", `${(performance.now() - props.started).toFixed(2)} ms`)
+  const [layout, updateLayout] = useStorage().store<{ verticalTabsWidth?: number }>("layout", {
+    initial: { verticalTabsWidth: SESSION_SIDEBAR_WIDTH },
   })
-
+  const [preferredTabsWidth, setPreferredTabsWidth] = createSignal(layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH)
+  const [tabsResizeHovered, setTabsResizeHovered] = createSignal(false)
+  const [tabsResizing, setTabsResizing] = createSignal(false)
+  let requestedTabsWidth = layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH
+  createEffect(() => {
+    if (tabsResizing()) return
+    requestedTabsWidth = layout.verticalTabsWidth ?? SESSION_SIDEBAR_WIDTH
+    setPreferredTabsWidth(requestedTabsWidth)
+  })
+  const verticalTabsWidth = () => clampSessionTabsWidth(preferredTabsWidth(), dimensions().width)
+  const resizeVerticalTabs = (width: number) => setPreferredTabsWidth(clampSessionTabsWidth(width, dimensions().width))
+  const commitVerticalTabsWidth = (width: number) => {
+    const next = clampSessionTabsWidth(width, dimensions().width)
+    setPreferredTabsWidth(next)
+    if (requestedTabsWidth === next) return
+    requestedTabsWidth = next
+    void updateLayout((draft) => {
+      draft.verticalTabsWidth = next
+    }).catch((error) => console.error("Failed to persist TUI layout", error))
+  }
+  let tabsResizeMoved = false
+  let lastTabsBoundaryClick = 0
+  const finishTabsResize = (event: MouseEvent) => {
+    if (!tabsResizing()) return
+    const next = tabsResizeMoved ? event.x + 1 : verticalTabsWidth()
+    setTabsResizing(false)
+    lastTabsBoundaryClick = tabsResizeMoved ? 0 : Date.now()
+    commitVerticalTabsWidth(next)
+    const width = clampSessionTabsWidth(next, dimensions().width)
+    setTabsResizeHovered(event.x >= width - 1 && event.x <= width)
+    event.stopPropagation()
+  }
+  let openingOpen: Promise<SessionInfo[]> | undefined
   // Toast once when an MCP server enters a failed or needs-auth state so the user knows to act,
   // without having to open the status panel. Tracking the last alerted status avoids re-toasting
   // the same problem on every refresh while still re-alerting if the state changes.
@@ -452,12 +534,14 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
           variant: "warning",
           title: "MCP server needs authentication",
           message: `Connect "${server.name}" to use its tools.`,
+          action: { label: "Open MCP servers", run: () => keymap.dispatch("mcp.list") },
         })
       else
         toast.show({
           variant: "error",
           title: `MCP server failed: ${server.name}`,
-          message: "Open MCP servers to view details.",
+          message: "Run /mcps to view details.",
+          action: { label: "Open MCP servers", run: () => keymap.dispatch("mcp.list") },
         })
     }
   })
@@ -466,7 +550,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
   const offSelectionKeys = keymap.intercept(
     "key",
     ({ event }) => {
-      if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+      if ((config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select") return
       Selection.handleSelectionKey(renderer, toast, event, clipboard)
     },
     { priority: 1 },
@@ -480,22 +564,32 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
     if (!text || text.length === 0) return
 
     await clipboard
-      .write?.(text)
+      .write(text)
       .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
       .catch(toast.error)
 
     renderer.clearSelection()
   }
   const terminalTitleEnabled = () => config.data.terminal?.title ?? true
+  const copyOnSelectEnabled = () =>
+    (config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select"
   const pasteSummaryEnabled = () => config.data.prompt?.paste !== "full"
+  const tabsVertical = () =>
+    config.data.tabs.layout === "vertical" && sessionTabsFitVertically(dimensions().width, preferredTabsWidth())
+  const tabsVisible = () =>
+    sessionTabs.enabled() && (sessionTabs.tabs().length > 0 || sessionTabs.newTab()) && route.data.type !== "plugin"
+  const verticalTabsVisible = () => tabsVisible() && tabsVertical()
 
   createEffect(() => {
-    renderer.useMouse = !Flag.OPENCODE_DISABLE_MOUSE && config.data.mouse
+    renderer.useMouse = config.data.mouse
   })
 
+  let active: { id: string; title?: string } | undefined
   // Update terminal window title based on current route and session
   createEffect(() => {
-    if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+    const session = route.data.type === "session" ? data.session.get(route.data.sessionID) : undefined
+    if (session) active = { id: session.id, title: session.title }
+    if (!terminalTitleEnabled()) return
 
     if (route.data.type === "home") {
       renderer.setTerminalTitle("OpenCode")
@@ -503,14 +597,13 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
     }
 
     if (route.data.type === "session") {
-      const session = data.session.get(route.data.sessionID)
-      if (!session || isDefaultTitle(session.title)) {
+      const title = session?.title
+      if (!title || isFallbackTitle(title)) {
         renderer.setTerminalTitle("OpenCode")
         return
       }
 
-      const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "..." : title}`)
       return
     }
 
@@ -520,6 +613,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
   })
 
   const args = useArgs()
+  const startupPrompt = args.prompt ? { text: args.prompt, files: [], agents: [], pasted: [] } : undefined
   onMount(() => {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
@@ -537,6 +631,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         route.navigate({
           type: "session",
           sessionID: args.sessionID,
+          prompt: startupPrompt,
         })
       }
     })
@@ -559,12 +654,12 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         const match = response.data[0]?.id
         if (!match) return
         if (!args.fork) {
-          route.navigate({ type: "session", sessionID: match })
+          route.navigate({ type: "session", sessionID: match, prompt: startupPrompt })
           return
         }
         void client.api.session
-          .fork({ sessionID: match })
-          .then((result) => route.navigate({ type: "session", sessionID: result.id }))
+          .fork({ sessionID: match, boundary: { type: "through" } })
+          .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
           .catch(toast.error)
       })
       .catch(toast.error)
@@ -576,8 +671,8 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
     if (forked || !args.sessionID || !args.fork) return
     forked = true
     void client.api.session
-      .fork({ sessionID: args.sessionID })
-      .then((result) => route.navigate({ type: "session", sessionID: result.id }))
+      .fork({ sessionID: args.sessionID, boundary: { type: "through" } })
+      .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
       .catch(toast.error)
   })
 
@@ -610,10 +705,35 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         category: "Session",
         slash: { name: "new", aliases: ["clear"] },
         run: () => {
+          const current =
+            route.data.type === "session"
+              ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
+              : undefined
           route.navigate({
             type: "home",
+            location: newSessionLocation(
+              config.data.session.new_location,
+              paths.cwd,
+              current,
+              location.error?.location,
+            ),
           })
           dialog.clear()
+        },
+      },
+      {
+        name: "open.menu",
+        title: "Open session or project",
+        category: "Session",
+        slash: { name: "open", aliases: ["projects", "project"] },
+        run: async () => {
+          if (dialog.key === DialogOpenKey || openingOpen) return
+          const previous = dialog.stack.at(-1)
+          openingOpen = loadDialogOpen(data, client)
+          const sessions = await openingOpen
+          openingOpen = undefined
+          if (dialog.stack.at(-1) !== previous) return
+          dialog.replace(() => <DialogOpen sessions={sessions} />, undefined, { key: DialogOpenKey, size: "large" })
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
@@ -621,9 +741,62 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         title: `Switch to session in quick slot ${i + 1}`,
         category: "Session",
         palette: undefined,
-        run: () => {
-          local.session.quickSwitch(i + 1)
-        },
+        enabled: () => !sessionTabs.enabled(),
+        run: () => local.session.quickSwitch(i + 1),
+      })),
+      {
+        name: "session.tab.next",
+        title: "Next tab",
+        category: "Session",
+        palette: undefined,
+        enabled: sessionTabs.enabled,
+        run: () => sessionTabs.cycle(1),
+      },
+      {
+        name: "session.tab.previous",
+        title: "Previous tab",
+        category: "Session",
+        palette: undefined,
+        enabled: sessionTabs.enabled,
+        run: () => sessionTabs.cycle(-1),
+      },
+      {
+        name: "session.tab.next_unread",
+        title: "Next unread tab",
+        category: "Session",
+        palette: undefined,
+        enabled: sessionTabs.enabled,
+        run: () => sessionTabs.cycleUnread(1),
+      },
+      {
+        name: "session.tab.previous_unread",
+        title: "Previous unread tab",
+        category: "Session",
+        palette: undefined,
+        enabled: sessionTabs.enabled,
+        run: () => sessionTabs.cycleUnread(-1),
+      },
+      {
+        name: "session.tab.close",
+        title: "Close tab",
+        category: "Session",
+        enabled: sessionTabs.enabled,
+        run: () => sessionTabs.close(),
+      },
+      {
+        name: "session.tab.reopen",
+        title: "Reopen closed tab",
+        category: "Session",
+        enabled: sessionTabs.enabled,
+        run: () => sessionTabs.reopen(),
+      },
+      ...Array.from({ length: 10 }, (_, i) => ({
+        name: `session.tab.select.${i + 1}`,
+        title: `Switch to tab ${i + 1}`,
+        category: "Session",
+        palette: undefined,
+        enabled: sessionTabs.enabled,
+        run: () => sessionTabs.selectIndex(i),
       })),
       {
         name: "model.list",
@@ -735,7 +908,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
       },
       {
         name: "provider.connect",
-        title: "Connect integration",
+        title: "Connect an integration",
         suggested: !connected(),
         slash: { name: "connect" },
         run: () => {
@@ -769,7 +942,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
       {
         name: "server.pair",
         title: "Pair device",
-        slash: { name: "pair" },
+        slash: { name: "pair", aliases: ["web"] },
         run: () => {
           dialog.replace(() => <DialogPair credentials={props.pair} />)
         },
@@ -818,6 +991,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "theme.switch_mode",
         title: mode() === "dark" ? "Switch to light mode" : "Switch to dark mode",
         palette: undefined,
+        enabled: () => supports(mode() === "dark" ? "light" : "dark"),
         run: () => {
           setMode(mode() === "dark" ? "light" : "dark")
           dialog.clear()
@@ -864,6 +1038,7 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
         name: "app.debug",
         title: "Toggle debug panel",
         category: "System",
+        palette: undefined,
         run: () => {
           renderer.toggleDebugOverlay()
           dialog.clear()
@@ -1002,6 +1177,18 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
   }))
 
   Keymap.createLayer(() => ({
+    mode: "global",
+    enabled: sessionTabs.enabled,
+    bindings: sessionTabBindingCommands,
+  }))
+
+  Keymap.createLayer(() => ({
+    mode: "global",
+    enabled: () => !sessionTabs.enabled(),
+    bindings: pinnedSessionBindingCommands,
+  }))
+
+  Keymap.createLayer(() => ({
     enabled: () => {
       const current = promptRef.current
       if (!current?.focused) return true
@@ -1035,25 +1222,13 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
 
   event.on("session.deleted", (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.data.sessionID) {
+      const title = active?.id === evt.data.sessionID ? active.title : undefined
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
-        message: "The current session was deleted",
+        message: title ? `Session "${title}" was deleted` : "The current session was deleted",
       })
     }
-  })
-
-  event.on("session.error", (evt, { workspace }) => {
-    if (workspace !== (location.current?.workspaceID ?? data.location.default().workspaceID)) return
-    const error = evt.data.error
-    if (error && typeof error === "object" && error.name === "MessageAbortedError") return
-    const message = errorMessage(error)
-
-    toast.show({
-      variant: "error",
-      message,
-      duration: 5000,
-    })
   })
 
   // Suppress the full-screen overlay for transient startup and event-stream retry states.
@@ -1087,35 +1262,48 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
       width={dimensions().width}
       height={dimensions().height}
       flexDirection="column"
-      backgroundColor={themeV2.background()}
+      backgroundColor={theme.background.default}
       onMouseDown={(evt) => {
-        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+        if (copyOnSelectEnabled()) return
         if (evt.button !== MouseButton.RIGHT) return
 
         if (!Selection.copy(renderer, toast, clipboard)) return
         evt.preventDefault()
         evt.stopPropagation()
       }}
-      onMouseUp={
-        !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
-          ? () => Selection.copy(renderer, toast, clipboard)
-          : undefined
-      }
+      onMouseUp={copyOnSelectEnabled() ? () => Selection.copy(renderer, toast, clipboard) : undefined}
     >
-      <Show when={Flag.OPENCODE_SHOW_TTFD}>
-        <TimeToFirstDraw />
-      </Show>
-      <box flexGrow={1} minHeight={0} flexDirection="row">
+      <box
+        flexGrow={1}
+        minHeight={0}
+        flexDirection="row"
+        position="relative"
+        onMouseDrag={(event) => {
+          if (!tabsResizing()) return
+          tabsResizeMoved = true
+          lastTabsBoundaryClick = 0
+          resizeVerticalTabs(event.x + 1)
+          event.stopPropagation()
+        }}
+        onMouseDragEnd={finishTabsResize}
+        onMouseUp={finishTabsResize}
+      >
+        <Show when={verticalTabsVisible()}>
+          <SessionTabs orientation="vertical" width={verticalTabsWidth()} />
+        </Show>
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
+              <Show when={tabsVisible() && !tabsVertical()}>
+                <SessionTabs />
+              </Show>
               <Switch>
                 <Match when={route.data.type === "home"}>
                   <Home />
                 </Match>
                 <Match when={route.data.type === "session"}>
                   <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
-                    {(_) => <Session />}
+                    {(_) => <Session verticalTabsWidth={verticalTabsVisible() ? verticalTabsWidth() : 0} />}
                   </Show>
                 </Match>
                 <Match when={route.data.type === "plugin"}>
@@ -1127,22 +1315,57 @@ function App(props: { pair?: DialogPairCredentials; started: number }) {
                 </Match>
               </Switch>
             </box>
-            <box flexShrink={0}>
-              <PluginSlot name="app.bottom" />
-            </box>
-            <PluginSlot name="app" />
+            <Slot path="app" />
           </Show>
         </box>
-        <Show when={devtools()}>
-          <DevToolsSidebar />
+        <Show when={verticalTabsVisible()}>
+          <box
+            position="absolute"
+            left={verticalTabsWidth() - 1}
+            top={0}
+            zIndex={10}
+            width={2}
+            height="100%"
+            onMouseOver={() => setTabsResizeHovered(true)}
+            onMouseOut={() => setTabsResizeHovered(false)}
+            onMouseDown={(event) => {
+              if (event.button !== MouseButton.LEFT) return
+              const now = Date.now()
+              if (now - lastTabsBoundaryClick < 300) {
+                lastTabsBoundaryClick = 0
+                setTabsResizing(false)
+                setTabsResizeHovered(false)
+                commitVerticalTabsWidth(SESSION_SIDEBAR_WIDTH)
+                event.preventDefault()
+                event.stopPropagation()
+                return
+              }
+              tabsResizeMoved = false
+              setTabsResizing(true)
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+          >
+            <box
+              width={1}
+              height="100%"
+              backgroundColor={
+                tabsResizeHovered() || tabsResizing() ? tabsTheme.background.action.primary.hovered : undefined
+              }
+            />
+          </box>
         </Show>
       </box>
+      <Show when={devtools()}>
+        <DevToolsBar />
+      </Show>
       <Show when={!startup.skipInitialLoading}>
         <StartupLoading ready={plugins.ready} />
       </Show>
       <Show when={showReconnecting()}>
         <Reconnecting />
       </Show>
+      <MigrationOverlay />
       <Toast />
     </box>
   )

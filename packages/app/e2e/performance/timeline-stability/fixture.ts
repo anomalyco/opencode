@@ -2,22 +2,13 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Event } from "@opencode-ai/schema/event"
 import { SessionStatusEvent } from "@opencode-ai/schema/session-status-event"
 import { SessionV1 } from "@opencode-ai/schema/session-v1"
-import type {
-  AssistantMessage,
-  GlobalEvent,
-  Message,
-  Part,
-  Session,
-  SessionStatus,
-  ToolPart,
-  ToolState,
-  UserMessage,
-} from "@opencode-ai/sdk/v2/client"
+import type { SessionInfo, SessionMessageInfo, SessionStatus } from "@opencode-ai/client/promise"
+import type { AssistantMessage, Message, Part, ToolPart, ToolState, UserMessage } from "../../../src/types"
 import { expect, type Page } from "@playwright/test"
 import { Schema } from "effect"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { installSseTransport } from "../../utils/sse-transport"
-import { expectSessionTitle } from "../../utils/waits"
+import { expectSessionReady } from "../../utils/waits"
 
 export const directory = "C:/OpenCode/TimelineStability"
 export const projectID = "proj_timeline_stability"
@@ -27,18 +18,29 @@ export const assistantID = "msg_1001_timeline_assistant"
 export const title = "Timeline visual stability"
 export const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
 
-type TimelinePayload = Extract<
-  GlobalEvent["payload"],
-  {
-    type:
-      | "message.updated"
-      | "message.removed"
-      | "message.part.updated"
-      | "message.part.removed"
-      | "message.part.delta"
-      | "session.status"
+type Session = SessionInfo
+type GlobalEvent = {
+  directory: string
+  project?: string
+  workspace?: string
+  payload: {
+    id: string
+    type: string
+    properties: Record<string, unknown>
   }
->
+}
+
+type TimelineProperties = {
+  "message.updated": { sessionID: string; info: Message }
+  "message.removed": { sessionID: string; messageID: string }
+  "message.part.updated": { sessionID: string; part: Part; time: number }
+  "message.part.removed": { sessionID: string; messageID: string; partID: string }
+  "message.part.delta": { sessionID: string; messageID: string; partID: string; field: string; delta: string }
+  "session.status": { sessionID: string; status: SessionStatus }
+}
+type TimelinePayload = {
+  [Type in keyof TimelineProperties]: { id: string; type: Type; properties: TimelineProperties[Type] }
+}[keyof TimelineProperties]
 
 type DeepReadonly<Value> = Value extends readonly unknown[]
   ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
@@ -88,6 +90,8 @@ export async function setupTimeline(
   page: Page,
   input: {
     messages?: TimelineMessage[]
+    currentMessages?: SessionMessageInfo[]
+    sessionStatus?: Record<string, SessionStatus>
     settings?: Record<string, boolean>
     sessions?: Session[]
     cpuRate?: number
@@ -100,25 +104,36 @@ export async function setupTimeline(
   } = {},
 ) {
   const sessions = input.sessions ?? [session()]
-  const messages = validateTimelineMessages([
-    ...(input.seedHistory ? historyMessages(18) : []),
-    ...(input.messages ?? [userMessage(), assistantMessage()]),
-  ])
-  const active = messages.findLast((message) => message.info.role === "assistant")
+  const messages =
+    input.currentMessages ??
+    validateTimelineMessages([
+      ...(input.seedHistory ? historyMessages(18) : []),
+      ...(input.messages ?? [userMessage(), assistantMessage()]),
+    ])
+  const active = messages.findLast((message) =>
+    "info" in message ? message.info.role === "assistant" : message.type === "assistant",
+  )
   const initialStatus = decodeStatus(
-    active?.info.role === "assistant" && active.info.time.completed === undefined ? { type: "busy" } : { type: "idle" },
+    active &&
+      ("info" in active
+        ? active.info.role === "assistant" && active.info.time.completed === undefined
+        : active.type === "assistant" && active.time.completed === undefined)
+      ? { type: "busy" }
+      : { type: "idle" },
     decodeOptions,
   )
+  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
   const transport = await installSseTransport<EventPayload>(page, {
-    server: `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`,
+    server,
     retry: input.eventRetry ?? 20,
   })
   await mockOpenCodeServer(page, {
+    protocol: "v2",
     directory,
     project: project(),
     provider: provider(),
     sessions,
-    sessionStatus: { [sessionID]: initialStatus },
+    sessionStatus: input.sessionStatus ?? { [sessionID]: initialStatus },
     pageMessages: () => ({
       items: messages,
     }),
@@ -158,8 +173,8 @@ export async function setupTimeline(
     })
   }
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await expectSessionReady(page, { server, sessionID, title })
   await transport.waitForConnection()
-  await expectSessionTitle(page, title)
   if (input.cpuRate && input.cpuRate > 1) {
     const devtools = await page.context().newCDPSession(page)
     await devtools.send("Emulation.setCPUThrottlingRate", { rate: input.cpuRate })
@@ -195,7 +210,9 @@ export async function setupTimeline(
       )
     },
     async waitForPart(partID: string) {
-      await expect(page.locator(`[data-timeline-part-id="${partID}"]`).first()).toBeVisible()
+      const part = page.locator(`[data-timeline-part-id="${partID}"]`)
+      await expect(part).toHaveCount(1)
+      await expect(part).toBeVisible()
     },
   }
 }
@@ -233,7 +250,7 @@ export function event(type: TimelinePayload["type"], properties: TimelinePayload
 }
 
 export function validateTimelineEvent(input: unknown): TimelineEvent {
-  return decodeEvent(input, decodeOptions)
+  return decodeEvent(input, decodeOptions) as TimelineEvent
 }
 
 export function validateTimelineMessages(input: readonly TimelineMessage[]): TimelineMessage[] {
@@ -458,7 +475,7 @@ export function toolPart(
   input: Record<string, unknown>,
   options: ToolOptions<ToolStatus> = {},
 ): Omit<ToolPart, "sessionID" | "messageID"> {
-  const base = { id, type: "tool" as const, callID: `call_${id}`, tool }
+  const base = { id, type: "tool" as const, callID: id, tool }
   if (state === "pending") return { ...base, state: { status: state, input, raw: "" } }
   if (state === "running")
     return {
@@ -527,11 +544,11 @@ export function project() {
 export function session(input: Partial<Session> = {}): Session {
   return {
     id: sessionID,
-    slug: "timeline-stability",
     projectID,
-    directory,
+    location: { directory },
     title,
-    version: "dev",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 1700000000000, updated: 1700000000000 },
     ...input,
   }

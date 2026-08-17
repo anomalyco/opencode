@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import type { PermissionRequest, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
-import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
+import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode-ai/client/promise"
+import { todoDockAtBoundary, todoState } from "./session-composer-state"
+import { sessionPermissionRequest, sessionQuestionForm } from "./session-request-tree"
 
 const session = (input: { id: string; parentID?: string }) =>
   ({
     id: input.id,
     parentID: input.parentID,
-  }) as Session
+  }) as SessionInfo
 
 const permission = (id: string, sessionID: string) =>
   ({
@@ -18,8 +19,10 @@ const question = (id: string, sessionID: string) =>
   ({
     id,
     sessionID,
-    questions: [],
-  }) as QuestionRequest
+    title: "Questions",
+    metadata: { kind: "question" },
+    fields: [{ key: "q0", type: "string" }],
+  }) as FormInfo
 
 describe("sessionPermissionRequest", () => {
   test("prefers the current session permission", () => {
@@ -79,7 +82,7 @@ describe("sessionPermissionRequest", () => {
   })
 })
 
-describe("sessionQuestionRequest", () => {
+describe("sessionQuestionForm", () => {
   test("prefers the current session question", () => {
     const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
     const questions = {
@@ -87,7 +90,7 @@ describe("sessionQuestionRequest", () => {
       child: [question("q-child", "child")],
     }
 
-    expect(sessionQuestionRequest(sessions, questions, "root")?.id).toBe("q-root")
+    expect(sessionQuestionForm(sessions, questions, "root")?.id).toBe("q-root")
   })
 
   test("returns a nested child question", () => {
@@ -100,6 +103,47 @@ describe("sessionQuestionRequest", () => {
       grand: [question("q-grand", "grand")],
     }
 
-    expect(sessionQuestionRequest(sessions, questions, "root")?.id).toBe("q-grand")
+    expect(sessionQuestionForm(sessions, questions, "root")?.id).toBe("q-grand")
+  })
+
+  test("skips forms that are not questions", () => {
+    const sessions = [session({ id: "root" })]
+    const forms = {
+      root: [{ ...question("form", "root"), metadata: { kind: "integration" } }],
+    }
+
+    expect(sessionQuestionForm(sessions, forms, "root")).toBeUndefined()
+  })
+})
+
+describe("todoState", () => {
+  test("hides when there are no todos", () => {
+    expect(todoState({ count: 0, done: false, live: true })).toBe("hide")
+  })
+
+  test("opens while the session is still working", () => {
+    expect(todoState({ count: 2, done: false, live: true })).toBe("open")
+  })
+
+  test("closes completed todos after a running turn", () => {
+    expect(todoState({ count: 2, done: true, live: true })).toBe("close")
+  })
+
+  test("clears stale todos when the turn ends", () => {
+    expect(todoState({ count: 2, done: false, live: false })).toBe("clear")
+  })
+
+  test("clears completed todos when the session is no longer live", () => {
+    expect(todoState({ count: 2, done: true, live: false })).toBe("clear")
+  })
+})
+
+describe("todoDockAtBoundary", () => {
+  test("shows active todos when entering a session", () => {
+    expect(todoDockAtBoundary("open")).toBe(true)
+  })
+
+  test("hides completed todos when entering a session", () => {
+    expect(todoDockAtBoundary("close")).toBe(false)
   })
 })

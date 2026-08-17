@@ -1,10 +1,20 @@
-import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { Effect } from "effect"
+import {
+  type AstNode,
+  AsyncIteratorSymbol,
+  InterpreterRuntimeError,
+  IteratorSymbol,
+  IteratorSymbols,
+} from "../interpreter/model.js"
 import { containsOpaqueReference } from "../interpreter/references.js"
 import { isBlockedMember } from "../tool-runtime.js"
-import { isCodeModeValue, CodeModeMap, CodeModePromise, CodeModeSet, CodeModeURLSearchParams } from "../values.js"
+import { isCodeModeValue, CodeModePromise } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"
+import { preserveConsumerError, type SyncIteratorRunner } from "../interpreter/iterator.js"
 
 export const objectMethodsPreservingIdentity = new Set(["assign", "values", "entries", "fromEntries"])
+
+export const objectStatics = new Set(["keys", "values", "entries", "hasOwn", "is", "assign", "fromEntries", "groupBy"])
 
 export const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   const requireObject = (): Record<string, unknown> => {
@@ -28,13 +38,8 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
     return input as Record<string, unknown>
   }
   const guardedSet = (out: Record<string, unknown>, key: string, item: unknown): void => {
-    if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available in CodeMode.`, node)
+    if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
     out[key] = item
-  }
-  const addEntry = (out: Record<string, unknown>, key: unknown, item: unknown): void => {
-    boundedData(key, "Object.fromEntries key")
-    boundedData(item, "Object.fromEntries value")
-    guardedSet(out, coerceToString(key), item)
   }
   switch (name) {
     case "keys":
@@ -44,10 +49,13 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
     case "entries":
       return Object.entries(requireObject()).map(([key, item]) => [key, item])
     case "hasOwn":
-      return Object.hasOwn(requireObject(), String(args[1]))
+      return Object.hasOwn(
+        requireObject(),
+        args[1] === AsyncIteratorSymbol || args[1] === IteratorSymbol ? args[1] : String(args[1]),
+      )
     case "is":
       if (containsOpaqueReference(args[0]) || containsOpaqueReference(args[1])) {
-        throw new InterpreterRuntimeError("Object.is requires data values in CodeMode.", node, "InvalidDataValue")
+        throw new InterpreterRuntimeError("Object.is requires data values.", node, "InvalidDataValue")
       }
       return Object.is(args[0], args[1])
     case "assign": {
@@ -62,35 +70,53 @@ export const invokeObjectMethod = (name: string, args: Array<unknown>, node: Ast
           throw new InterpreterRuntimeError("Object.assign expects data objects.", node)
         }
         for (const [key, item] of Object.entries(source)) guardedSet(out, key, item)
-      }
-      return out
-    }
-    case "fromEntries": {
-      if (args[0] instanceof CodeModeMap) {
-        const out: Record<string, unknown> = Object.create(null)
-        for (const [key, item] of args[0].map.entries()) addEntry(out, key, item)
-        return out
-      }
-      if (args[0] instanceof CodeModeURLSearchParams) {
-        const out: Record<string, unknown> = Object.create(null)
-        for (const [key, value] of args[0].params.entries()) guardedSet(out, key, value)
-        return out
-      }
-      const pairs = args[0] instanceof CodeModeSet ? Array.from(args[0].set.values()) : args[0]
-      if (!Array.isArray(pairs)) {
-        boundedData(args[0], "Object.fromEntries input")
-        throw new InterpreterRuntimeError("Object.fromEntries expects an array of [key, value] pairs.", node)
-      }
-      const out: Record<string, unknown> = Object.create(null)
-      for (const pair of pairs) {
-        const validated = boundedData(pair, "Object.fromEntries entry")
-        if (validated === null || typeof validated !== "object" || isCodeModeValue(validated))
-          throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] entry objects.", node)
-        const entry = pair as Record<string, unknown>
-        addEntry(out, entry[0], entry[1])
+        for (const symbol of IteratorSymbols) {
+          if (Object.hasOwn(source, symbol)) Reflect.set(out, symbol, Reflect.get(source, symbol))
+        }
       }
       return out
     }
   }
-  throw new InterpreterRuntimeError(`Object.${name} is not available in CodeMode.`, node)
+  throw new InterpreterRuntimeError(`Object.${name} is not available.`, node)
+}
+
+export const invokeObjectFromEntries = <R>(
+  runner: SyncIteratorRunner<R>,
+  source: unknown,
+  node: AstNode,
+): Effect.Effect<Record<string, unknown>, unknown, R> => {
+  const out: Record<string, unknown> = Object.create(null)
+  return Effect.gen(function* () {
+    const cursor = yield* runner.syncIterator(source, node)
+    if (cursor === undefined) {
+      throw new InterpreterRuntimeError("Object.fromEntries expects a synchronous iterable of entries.", node).as(
+        "TypeError",
+      )
+    }
+    while (true) {
+      const step = yield* cursor.next
+      if (step.done) return out
+      yield* preserveConsumerError(
+        cursor,
+        Effect.sync(() => {
+          if (
+            step.value === null ||
+            typeof step.value !== "object" ||
+            isCodeModeValue(step.value) ||
+            containsOpaqueReference(step.value)
+          ) {
+            throw new InterpreterRuntimeError("Object.fromEntries expects [key, value] entry objects.", node).as(
+              "TypeError",
+            )
+          }
+          const entry = step.value as Record<string, unknown>
+          boundedData(entry[0], "Object.fromEntries key")
+          boundedData(entry[1], "Object.fromEntries value")
+          const key = coerceToString(entry[0])
+          if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available.`, node)
+          out[key] = entry[1]
+        }),
+      )
+    }
+  })
 }

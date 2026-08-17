@@ -2,8 +2,10 @@ export * as Config from "."
 
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { Schema } from "effect"
-import { createContext, type JSX, useContext } from "solid-js"
+import { createContext, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
+import { watch } from "fs"
+import path from "path"
 import { TuiKeybind } from "./keybind"
 
 export interface Interface {
@@ -32,6 +34,15 @@ export const Plugin = Schema.Union([
     }),
   }),
 ])
+
+export const Cursor = Schema.Struct({
+  style: Schema.optional(Schema.Literals(["block", "underline", "line", "default"])).annotate({
+    description: "Cursor shape. Use 'default' to preserve the terminal setting",
+  }),
+  blinking: Schema.optional(Schema.Boolean).annotate({
+    description: "Whether the cursor blinks. Has no effect when style is 'default'",
+  }),
+}).annotate({ description: "Terminal cursor settings" })
 
 export const Info = Schema.Struct({
   theme: Schema.optional(
@@ -92,6 +103,9 @@ export const Info = Schema.Struct({
   terminal: Schema.optional(
     Schema.Struct({
       title: Schema.optional(Schema.Boolean).annotate({ description: "Update the terminal window title" }),
+      copy: Schema.optional(Schema.Literals(["manual", "select"])).annotate({
+        description: "Copy text manually or immediately after selecting it",
+      }),
     }),
   ).annotate({ description: "Terminal integration settings" }),
   prompt: Schema.optional(
@@ -101,6 +115,9 @@ export const Info = Schema.Struct({
       }),
       paste: Schema.optional(Schema.Literals(["compact", "full"])).annotate({
         description: "Display large pastes as compact placeholders or full text",
+      }),
+      image_preview: Schema.optional(Schema.Boolean).annotate({
+        description: "Show image attachment previews above the prompt input",
       }),
     }),
   ).annotate({ description: "Prompt input behavior" }),
@@ -116,27 +133,77 @@ export const Info = Schema.Struct({
       grouping: Schema.optional(Schema.Literals(["auto", "none"])).annotate({
         description: "Group related transcript items automatically or render each item separately",
       }),
+      image_preview: Schema.optional(Schema.Boolean).annotate({
+        description: "Show user attachment and tool-result images in the session transcript",
+      }),
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
       }),
+      new_location: Schema.optional(Schema.Literals(["launch", "inherit"])).annotate({
+        description: "Start new sessions in the TUI launch directory or inherit the active session location",
+      }),
     }),
   ).annotate({ description: "Session transcript presentation settings" }),
-  hints: Schema.optional(
+  tabs: Schema.optional(
     Schema.Struct({
-      onboarding: Schema.optional(Schema.Boolean).annotate({ description: "Show getting-started guidance" }),
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description: "Use a persistent tab strip instead of pinned quick-switch sessions",
+      }),
+      scope: Schema.optional(Schema.Literals(["global", "cwd"])).annotate({
+        description: "Share tabs globally or keep a separate set for each working directory",
+      }),
+      layout: Schema.optional(Schema.Literals(["horizontal", "vertical"])).annotate({
+        description: "Show tabs in a horizontal strip or vertical sidebar",
+      }),
     }),
-  ).annotate({ description: "In-product guidance settings" }),
+  ).annotate({ description: "Tab strip settings" }),
+  mini: Schema.optional(
+    Schema.Struct({
+      thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
+        description: "Show or hide model reasoning",
+      }),
+      shell_output: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
+        description: "Show or hide raw shell tool output",
+      }),
+      turn_summary: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
+        description: "Show or hide the agent, model, and duration summary in scrollback",
+      }),
+      footer: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
+        description: "Show or hide persistent activity, model, usage, and context details in the footer",
+      }),
+      splash: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
+        description: "Show or hide the entry and exit splash banners",
+      }),
+      mono: Schema.optional(Schema.Boolean).annotate({
+        description: "Use monochrome ASCII output",
+      }),
+      replay: Schema.optional(Schema.Boolean).annotate({
+        description: "Restore session history on resume and terminal resize",
+      }),
+      replay_limit: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))).annotate({
+        description: "Maximum number of newest messages restored during replay",
+      }),
+    }),
+  ).annotate({ description: "Mini transcript presentation settings" }),
   debug: Schema.optional(
     Schema.Struct({
-      devtools: Schema.optional(Schema.Boolean).annotate({ description: "Show the DevTools sidebar" }),
+      devtools: Schema.optional(Schema.Boolean).annotate({ description: "Show the DevTools debug bar" }),
+      timing: Schema.optional(Schema.Boolean).annotate({ description: "Show time-to-first-draw diagnostics" }),
+      turn_tokens: Schema.optional(Schema.Union([Schema.Boolean, Schema.Literal("verbose")])).annotate({
+        description: "Show per-turn token usage diagnostics, optionally with tool call inputs",
+      }),
     }),
   ).annotate({ description: "Debugging settings" }),
+  experimental: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
+    description: "Experimental features that may change or be removed at any time",
+  }),
   animations: Schema.optional(Schema.Boolean).annotate({ description: "Enable interface animations" }),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable terminal mouse capture" }),
+  cursor: Schema.optional(Cursor),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader" | "mouse"> & {
+export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader" | "mouse" | "session" | "tabs"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -148,15 +215,27 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader" | "mouse">
   keybinds: TuiKeybind.BindingLookupView
   leader: { timeout: number }
   mouse: boolean
+  cursor?: {
+    style: "block" | "underline" | "line" | "default"
+    blinking: boolean
+  }
+  session: Omit<NonNullable<Info["session"]>, "new_location"> & {
+    new_location: "launch" | "inherit"
+  }
+  tabs: {
+    enabled: boolean
+    scope: "global" | "cwd"
+    layout: "horizontal" | "vertical"
+  }
 }
 
 export function resolve(input: Info, options: { terminalSuspend: boolean }): Resolved {
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
   if (!options.terminalSuspend) {
-    keybinds.terminal_suspend = "none"
-    if (keybinds.input_undo === undefined) {
-      const inputUndo = TuiKeybind.defaultValue("input_undo")
-      keybinds.input_undo = ["ctrl+z", ...(typeof inputUndo === "string" ? inputUndo.split(",") : [])]
+    keybinds["terminal.suspend"] = "none"
+    if (keybinds["input.undo"] === undefined) {
+      const inputUndo = TuiKeybind.defaultValue("input.undo")
+      keybinds["input.undo"] = ["ctrl+z", ...(typeof inputUndo === "string" ? inputUndo.split(",") : [])]
         .filter((value, index, values) => values.indexOf(value) === index)
         .join(",")
     }
@@ -173,11 +252,26 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
       sounds: input.attention?.sounds ?? {},
     },
     keybinds: createBindingLookup(TuiKeybind.toBindingConfig(TuiKeybind.parse(keybinds)), {
-      commandMap: TuiKeybind.CommandMap,
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
     leader: { timeout: input.leader?.timeout ?? 2000 },
     mouse: input.mouse ?? true,
+    cursor: input.cursor
+      ? {
+          style: input.cursor.style ?? "block",
+          blinking: input.cursor.blinking ?? true,
+        }
+      : undefined,
+    session: {
+      ...input.session,
+      new_location: input.session?.new_location ?? "launch",
+    },
+    tabs: {
+      ...input.tabs,
+      enabled: input.tabs?.enabled ?? true,
+      scope: input.tabs?.scope ?? "cwd",
+      layout: input.tabs?.layout ?? "horizontal",
+    },
   }
 }
 
@@ -195,12 +289,23 @@ export function ConfigProvider(props: {
 }) {
   const [config, setConfig] = createStore(props.config)
   const host = props.service
+  const apply = (info: Info) => setConfig(reconcile(resolve(info, props.options ?? { terminalSuspend: true })))
   const update = async (update: (draft: any) => void) => {
     if (!host) throw new Error("Config updates are not available")
     const info = await host.update(update)
-    setConfig(reconcile(resolve(info, props.options ?? { terminalSuspend: true })))
+    apply(info)
     return info
   }
+  let reload = Promise.resolve()
+  const watcher = host?.path
+    ? watch(path.dirname(host.path), () => {
+        reload = reload
+          .then(() => host.get())
+          .then(apply)
+          .catch(() => {})
+      })
+    : undefined
+  onCleanup(() => watcher?.close())
   return (
     <ConfigContext.Provider value={{ data: config, path: host?.path, update }}>{props.children}</ConfigContext.Provider>
   )
@@ -210,8 +315,4 @@ export function useConfig() {
   const value = useContext(ConfigContext)
   if (!value) throw new Error("ConfigProvider is missing")
   return value
-}
-
-export function useConfigOptional() {
-  return useContext(ConfigContext)
 }

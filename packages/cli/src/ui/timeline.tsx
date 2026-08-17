@@ -141,7 +141,7 @@ export async function createTimelineHost(): Promise<TimelineHost> {
       if (closeTask) return closeTask
       closed = true
       closeTask = (async () => {
-        await active?.catch(() => { })
+        await active?.catch(() => {})
         signals.forEach((signal) => process.off(signal, cancel))
       })()
       return closeTask
@@ -211,7 +211,7 @@ export async function createTimelineHost(): Promise<TimelineHost> {
       if (closeTask) return closeTask
       closed = true
       closeTask = (async () => {
-        await active?.catch(() => { })
+        await active?.catch(() => {})
         try {
           await shutdown(activeRenderer)
           await bounded(renderTask)

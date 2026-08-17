@@ -1,43 +1,39 @@
 import { sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
 import { sql } from "drizzle-orm"
-import { directoryColumn, pathColumn } from "../database/path"
-import { ProjectTable } from "../project/sql"
-import type { SessionMessage } from "./message"
-import type { SessionPending } from "./pending"
+import { directoryColumn, pathColumn } from "../database/path.js"
+import { ProjectTable } from "../project/sql.js"
+import type { SessionMessage } from "./message.js"
+import type { SessionInbox } from "./inbox.js"
 import type { FileDiff } from "@opencode-ai/schema/file-diff"
-import { PermissionV1 } from "../v1/permission"
-import { ProjectV2 } from "../project"
-import type { SessionSchema } from "./schema"
-import type { MessageID, PartID, SessionV1 } from "../v1/session"
-import { WorkspaceV2 } from "../workspace"
-import { Timestamps } from "../database/schema.sql"
+import { PermissionV1 } from "../v1/permission.js"
+import { Project } from "../project.js"
+import type { SessionSchema } from "./schema.js"
+import { Workspace } from "../workspace.js"
+import { Timestamps } from "../database/schema.sql.js"
 import type { Instruction } from "@opencode-ai/schema/instruction"
 import type { Session } from "@opencode-ai/schema/session"
-import type { SyntheticData, UserData } from "@opencode-ai/schema/session-pending"
+import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } from "@opencode-ai/schema/session-inbox"
 import type { RevertV1 } from "@opencode-ai/schema/session-revert"
 import type { Schema } from "effect"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Info)["Encoded"], "type" | "id">
-type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
-type V1PartData = Omit<SessionV1.Part, "id" | "sessionID" | "messageID">
 
 export const SessionTable = sqliteTable(
-  "session",
+  "session_v2",
   {
     id: text().$type<SessionSchema.ID>().primaryKey(),
     project_id: text()
-      .$type<ProjectV2.ID>()
+      .$type<Project.ID>()
       .notNull()
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
-    workspace_id: text().$type<WorkspaceV2.ID>(),
+    workspace_id: text().$type<Workspace.ID>(),
     parent_id: text().$type<SessionSchema.ID>(),
     fork_session_id: text().$type<SessionSchema.ID>(),
-    fork_message_id: text().$type<SessionMessage.ID>(),
-    fork_seq: integer(),
+    fork_boundary: text({ mode: "json" }).$type<Session.ForkBoundary>(),
     slug: text().notNull(),
     directory: directoryColumn().notNull(),
     path: pathColumn(),
-    title: text().notNull(),
+    title: text(),
     version: text().notNull(),
     share_url: text(),
     summary_additions: integer(),
@@ -62,47 +58,17 @@ export const SessionTable = sqliteTable(
     ...Timestamps,
     time_compacting: integer(),
     time_archived: integer(),
+    /** The execution claim timestamp (historical column name; see SessionStore.claim). */
     time_suspended: integer(),
+    resume_attempts: integer().notNull().default(0),
   },
   (table) => [
-    index("session_project_idx").on(table.project_id),
-    index("session_workspace_idx").on(table.workspace_id),
-    index("session_parent_idx").on(table.parent_id),
-    index("session_time_suspended_idx")
+    index("session_v2_project_idx").on(table.project_id),
+    index("session_v2_workspace_idx").on(table.workspace_id),
+    index("session_v2_parent_idx").on(table.parent_id),
+    index("session_v2_time_suspended_idx")
       .on(table.time_suspended)
       .where(sql`${table.time_suspended} is not null`),
-  ],
-)
-
-export const MessageTable = sqliteTable(
-  "message",
-  {
-    id: text().$type<MessageID>().primaryKey(),
-    session_id: text()
-      .$type<SessionSchema.ID>()
-      .notNull()
-      .references(() => SessionTable.id, { onDelete: "cascade" }),
-    ...Timestamps,
-    data: text({ mode: "json" }).notNull().$type<V1MessageData>(),
-  },
-  (table) => [index("message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id)],
-)
-
-export const PartTable = sqliteTable(
-  "part",
-  {
-    id: text().$type<PartID>().primaryKey(),
-    message_id: text()
-      .$type<MessageID>()
-      .notNull()
-      .references(() => MessageTable.id, { onDelete: "cascade" }),
-    session_id: text().$type<SessionSchema.ID>().notNull(),
-    ...Timestamps,
-    data: text({ mode: "json" }).notNull().$type<V1PartData>(),
-  },
-  (table) => [
-    index("part_message_id_id_idx").on(table.message_id, table.id),
-    index("part_session_idx").on(table.session_id),
   ],
 )
 
@@ -135,9 +101,9 @@ export const SessionPendingTable = sqliteTable(
       .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    type: text().$type<SessionPending.Info["type"]>().notNull(),
-    data: text({ mode: "json" }).$type<UserData | SyntheticData | Record<string, never>>().notNull(),
-    delivery: text().$type<SessionPending.Delivery>(),
+    type: text().$type<SessionInbox.Info["type"]>().notNull(),
+    data: text({ mode: "json" }).$type<UserPayload | SyntheticPayload | Record<string, never>>().notNull(),
+    delivery: text().$type<SessionInbox.Delivery>(),
     admitted_seq: integer().notNull(),
     time_created: integer()
       .notNull()
@@ -149,6 +115,28 @@ export const SessionPendingTable = sqliteTable(
       .on(table.session_id)
       .where(sql`${table.type} = 'compaction'`),
     uniqueIndex("session_pending_session_admitted_seq_idx").on(table.session_id, table.admitted_seq),
+  ],
+)
+
+export const SessionInboxTable = sqliteTable(
+  "session_inbox",
+  {
+    id: text().$type<SessionMessage.ID>().primaryKey(),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    type: text().$type<SessionInbox.Info["type"]>().notNull(),
+    payload: text({ mode: "json" }).$type<UserPayload | SyntheticPayload | CompactionPayload | MovePayload>().notNull(),
+    delivery: text().$type<SessionInbox.Delivery>().notNull(),
+    enqueued_seq: integer().notNull(),
+    time_created: integer()
+      .notNull()
+      .$default(() => Date.now()),
+  },
+  (table) => [
+    index("session_inbox_session_delivery_seq_idx").on(table.session_id, table.delivery, table.enqueued_seq),
+    uniqueIndex("session_inbox_session_enqueued_seq_idx").on(table.session_id, table.enqueued_seq),
   ],
 )
 
