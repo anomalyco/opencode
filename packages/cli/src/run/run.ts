@@ -92,6 +92,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
       ? { providerID: explicit.model.providerID, id: explicit.model.modelID, variant: explicit.variant }
       : undefined,
     agent: input.agent,
+    environment: input.server.service ? Env.session() : undefined,
     prepare: async (next) => {
       const selected =
         next.model ??
@@ -117,8 +118,6 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     return undefined
   })
   if (!target) return
-  if (input.server.service && target.location.workspaceID === undefined)
-    await client.session.environment({ sessionID: target.session.id, variables: Env.session() })
   const model = target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined
   const variant = target.model?.variant
   if (!target.resume && input.title !== undefined) {
