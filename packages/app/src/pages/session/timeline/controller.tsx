@@ -66,7 +66,7 @@ export function createTimelineController(input: {
     return index < 0 ? projected : projected.slice(0, index)
   })
   const titleValue = createMemo(() => input.session.data.info()?.title)
-  const titleLabel = createMemo(() => sessionTitle(titleValue()))
+  const titleLabel = createMemo(() => sessionTitle(titleValue()) ?? language.t("command.session.new"))
   const shareUrl = (): string | undefined => undefined
   const shareEnabled = () => false
   const parentTranscript = createMemo(() => {

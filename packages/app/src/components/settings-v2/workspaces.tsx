@@ -16,6 +16,7 @@ import { useServerSDK } from "@/context/server-sdk"
 import { useData } from "@/context/server"
 import { showToast } from "@/utils/toast"
 import { getRelativeTime } from "@/utils/time"
+import { sessionLabel } from "@/utils/session-title"
 import { pathKey } from "@/utils/path-key"
 import { SettingsListV2 } from "./parts/list"
 import { InlineServerSelect } from "./parts/server-select"
@@ -387,7 +388,7 @@ export const SettingsWorkspacesV2: Component<{ activeDirectory?: string }> = (pr
                           <For each={linked()}>
                             {(session) => (
                               <div class="settings-v2-workspaces-session">
-                                <span>{session.title}</span>
+                                <span>{sessionLabel(session)}</span>
                                 <Show when={sessionTime(session)}>
                                   {(time) => <span class="settings-v2-workspaces-session-time">{time()}</span>}
                                 </Show>
