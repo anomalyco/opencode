@@ -20,10 +20,10 @@ export function primitiveInputSummary(input: Record<string, unknown>, omit: read
 }
 
 export function webSearchProviderLabel(provider: unknown) {
-  if (provider === "parallel") return "Parallel Web Search"
-  if (provider === "exa") return "Exa Web Search"
-  if (provider === "firecrawl") return "Firecrawl Web Search"
-  if (provider === "tavily") return "Tavily Web Search"
+  if (provider === "parallel") return "Web Search via Parallel"
+  if (provider === "exa") return "Web Search via Exa"
+  if (provider === "firecrawl") return "Web Search via Firecrawl"
+  if (provider === "tavily") return "Web Search via Tavily"
   return "Web Search"
 }
 

@@ -21,9 +21,9 @@ test("normalizes shared tool primitives", () => {
 
 describe("webSearchProviderLabel", () => {
   test("labels known providers", () => {
-    expect(webSearchProviderLabel("parallel")).toBe("Parallel Web Search")
-    expect(webSearchProviderLabel("exa")).toBe("Exa Web Search")
-    expect(webSearchProviderLabel("tavily")).toBe("Tavily Web Search")
+    expect(webSearchProviderLabel("parallel")).toBe("Web Search via Parallel")
+    expect(webSearchProviderLabel("exa")).toBe("Web Search via Exa")
+    expect(webSearchProviderLabel("tavily")).toBe("Web Search via Tavily")
   })
 
   for (const [name, provider] of [
