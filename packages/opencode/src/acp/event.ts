@@ -1,4 +1,4 @@
-import type { AgentSideConnection } from "@agentclientprotocol/sdk"
+import type { AgentSideConnection, SessionUpdate } from "@agentclientprotocol/sdk"
 import type {
   Event,
   EventMessagePartDelta,
@@ -29,6 +29,13 @@ type GlobalEventEnvelope = {
 type GlobalEventStream = {
   stream: AsyncIterable<GlobalEventEnvelope>
 }
+type ChildSession = {
+  id: string
+  parentID: string
+  rootID: string
+  depth: number
+  title?: string
+}
 
 export function start(input: { sdk: OpencodeClient; connection: Connection; session: ACPSession.Interface }) {
   const subscription = new Subscription(input)
@@ -42,6 +49,7 @@ export class Subscription {
   private readonly toolStarts = new Set<string>()
   private readonly connectionWaiters = new Set<() => void>()
   private readonly idleWaiters = new Map<string, Set<ReturnType<typeof signal>>>()
+  private readonly children = new Map<string, ChildSession>()
   private readonly permission: ACPPermission.Handler
   private connected = false
   private started = false
@@ -92,12 +100,30 @@ export class Subscription {
 
   async handle(event: Event) {
     switch (event.type) {
+      case "session.created":
+        await this.registerChild(event.properties.info)
+        return
+      case "session.deleted":
+        this.children.delete(event.properties.sessionID)
+        return
       case "session.status":
         if (event.properties.status.type === "idle") this.idle(event.properties.sessionID)
         return
-      case "permission.asked":
-        this.permission.handle(event)
+      case "permission.asked": {
+        const target = await this.resolveSession(event.properties.sessionID)
+        if (!target) return
+        this.permission.handle(event, {
+          sessionId: target.session.id,
+          cwd: target.session.cwd,
+          ...(target.child
+            ? {
+                toolCallPrefix: target.child.id,
+                titlePrefix: target.child.title,
+              }
+            : {}),
+        })
         return
+      }
       case "message.part.updated":
         return this.handlePartUpdated(event)
       case "message.part.delta":
@@ -112,7 +138,7 @@ export class Subscription {
     for (const part of message.parts) {
       await this.recordFetchedPart(message.info.sessionID, message, part)
       if (part.type === "tool") {
-        await this.handleToolPart(message.info.sessionID, part, cwd ?? process.cwd())
+        await this.handleToolPart(message.info.sessionID, message.info.sessionID, part, cwd ?? process.cwd())
         continue
       }
       await this.replayContentPart(message, part)
@@ -190,13 +216,13 @@ export class Subscription {
 
   private async handlePartUpdated(event: EventMessagePartUpdated) {
     const part = event.properties.part
-    const sessionId = part.sessionID || event.properties.sessionID
-    const session = await Effect.runPromise(this.input.session.tryGet(sessionId))
-    if (!session) return
+    const sourceSessionId = part.sessionID || event.properties.sessionID
+    const target = await this.resolveSession(sourceSessionId)
+    if (!target) return
 
     await Effect.runPromise(
       this.input.session.recordPartMetadata({
-        sessionId: session.id,
+        sessionId: target.session.id,
         messageId: part.messageID,
         partId: part.id,
         partType: part.type,
@@ -207,18 +233,18 @@ export class Subscription {
       }),
     )
     if (part.type === "tool") {
-      await this.handleToolPart(session.id, part, session.cwd)
+      await this.handleToolPart(target.session.id, sourceSessionId, part, target.session.cwd, target.child)
     }
   }
 
   private async handlePartDelta(event: EventMessagePartDelta) {
     const props = event.properties
-    const session = await Effect.runPromise(this.input.session.tryGet(props.sessionID))
-    if (!session) return
+    const target = await this.resolveSession(props.sessionID)
+    if (!target) return
 
     const known = await Effect.runPromise(
       this.input.session.tryGetPartMetadata({
-        sessionId: session.id,
+        sessionId: target.session.id,
         messageId: props.messageID,
         partId: props.partID,
       }),
@@ -226,12 +252,18 @@ export class Subscription {
     const metadata =
       known?.role && known.partType
         ? known
-        : await this.fetchPartMetadata(session.id, session.cwd, props.messageID, props.partID)
+        : await this.fetchPartMetadata(
+            props.sessionID,
+            target.session.id,
+            target.session.cwd,
+            props.messageID,
+            props.partID,
+          )
     if (metadata?.role !== "assistant") return
     if (metadata.partType === "text" && props.field === "text" && metadata.ignored !== true) {
-      await this.input.connection.sessionUpdate({
-        sessionId: session.id,
-        update: {
+      await this.update(
+        target.session.id,
+        {
           sessionUpdate: "agent_message_chunk",
           messageId: props.messageID,
           content: {
@@ -239,14 +271,15 @@ export class Subscription {
             text: props.delta,
           },
         },
-      })
+        target.child,
+      )
       return
     }
 
     if (metadata.partType === "reasoning" && props.field === "text") {
-      await this.input.connection.sessionUpdate({
-        sessionId: session.id,
-        update: {
+      await this.update(
+        target.session.id,
+        {
           sessionUpdate: "agent_thought_chunk",
           messageId: props.messageID,
           content: {
@@ -254,15 +287,22 @@ export class Subscription {
             text: props.delta,
           },
         },
-      })
+        target.child,
+      )
     }
   }
 
-  private async fetchPartMetadata(sessionId: string, cwd: string, messageId: string, partId: string) {
+  private async fetchPartMetadata(
+    sourceSessionId: string,
+    targetSessionId: string,
+    cwd: string,
+    messageId: string,
+    partId: string,
+  ) {
     const message = await this.input.sdk.session
       .message(
         {
-          sessionID: sessionId,
+          sessionID: sourceSessionId,
           messageID: messageId,
           directory: cwd,
         },
@@ -274,7 +314,7 @@ export class Subscription {
 
     const part = message.parts.find((item) => item.id === partId)
     if (!part) return
-    return await this.recordFetchedPart(sessionId, message, part)
+    return await this.recordFetchedPart(targetSessionId, message, part)
   }
 
   private async recordFetchedPart(sessionId: string, message: SessionMessageResponse, part: Part) {
@@ -292,23 +332,30 @@ export class Subscription {
     )
   }
 
-  private async handleToolPart(sessionId: string, part: ToolPart, cwd: string) {
-    await this.toolStart(sessionId, part, cwd)
+  private async handleToolPart(
+    sessionId: string,
+    sourceSessionId: string,
+    part: ToolPart,
+    cwd: string,
+    child?: ChildSession,
+  ) {
+    const key = toolKey(sourceSessionId, part.callID)
+    await this.toolStart(sessionId, key, part, cwd, child)
 
     switch (part.state.status) {
       case "pending":
-        this.shellSnapshots.delete(part.callID)
+        this.shellSnapshots.delete(key)
         return
 
       case "running":
-        await this.runningTool(sessionId, part, cwd)
+        await this.runningTool(sessionId, key, part, cwd, child)
         return
 
       case "completed":
-        this.clearTool(part.callID)
-        await this.input.connection.sessionUpdate({
+        this.clearTool(key)
+        await this.update(
           sessionId,
-          update: {
+          {
             sessionUpdate: "tool_call_update",
             ...completedToolUpdate({
               toolCallId: part.callID,
@@ -317,14 +364,15 @@ export class Subscription {
               cwd,
             }),
           },
-        })
+          child,
+        )
         return
 
       case "error":
-        this.clearTool(part.callID)
-        await this.input.connection.sessionUpdate({
+        this.clearTool(key)
+        await this.update(
           sessionId,
-          update: {
+          {
             sessionUpdate: "tool_call_update",
             ...errorToolUpdate({
               toolCallId: part.callID,
@@ -333,20 +381,21 @@ export class Subscription {
               cwd,
             }),
           },
-        })
+          child,
+        )
         return
     }
   }
 
-  private async runningTool(sessionId: string, part: ToolPart, cwd: string) {
+  private async runningTool(sessionId: string, key: string, part: ToolPart, cwd: string, child?: ChildSession) {
     if (part.state.status !== "running") return
 
     const output = part.tool === "bash" ? shellOutputSnapshot(part.state) : undefined
     if (output !== undefined) {
-      if (this.shellSnapshots.get(part.callID) === output) {
-        await this.input.connection.sessionUpdate({
+      if (this.shellSnapshots.get(key) === output) {
+        await this.update(
           sessionId,
-          update: {
+          {
             sessionUpdate: "tool_call_update",
             ...duplicateRunningToolUpdate({
               toolCallId: part.callID,
@@ -355,15 +404,16 @@ export class Subscription {
               cwd,
             }),
           },
-        })
+          child,
+        )
         return
       }
-      this.shellSnapshots.set(part.callID, output)
+      this.shellSnapshots.set(key, output)
     }
 
-    await this.input.connection.sessionUpdate({
+    await this.update(
       sessionId,
-      update: {
+      {
         sessionUpdate: "tool_call_update",
         ...runningToolUpdate({
           toolCallId: part.callID,
@@ -373,15 +423,16 @@ export class Subscription {
           cwd,
         }),
       },
-    })
+      child,
+    )
   }
 
-  private async toolStart(sessionId: string, part: ToolPart, cwd: string) {
-    if (this.toolStarts.has(part.callID)) return
-    this.toolStarts.add(part.callID)
-    await this.input.connection.sessionUpdate({
+  private async toolStart(sessionId: string, key: string, part: ToolPart, cwd: string, child?: ChildSession) {
+    if (this.toolStarts.has(key)) return
+    this.toolStarts.add(key)
+    await this.update(
       sessionId,
-      update: {
+      {
         sessionUpdate: "tool_call",
         ...pendingToolCall({
           toolCallId: part.callID,
@@ -390,13 +441,67 @@ export class Subscription {
           cwd,
         }),
       },
+      child,
+    )
+  }
+
+  private clearTool(key: string) {
+    this.toolStarts.delete(key)
+    this.shellSnapshots.delete(key)
+  }
+
+  private async registerChild(info: Extract<Event, { type: "session.created" }>["properties"]["info"]) {
+    if (!info.parentID) return
+    const parent = this.children.get(info.parentID)
+    const rootID = parent?.rootID ?? (await Effect.runPromise(this.input.session.tryGet(info.parentID)))?.id
+    if (!rootID) return
+    this.children.set(info.id, {
+      id: info.id,
+      parentID: info.parentID,
+      rootID,
+      depth: (parent?.depth ?? 0) + 1,
+      title: info.title,
     })
   }
 
-  private clearTool(toolCallId: string) {
-    this.toolStarts.delete(toolCallId)
-    this.shellSnapshots.delete(toolCallId)
+  private async resolveSession(sessionId: string) {
+    const session = await Effect.runPromise(this.input.session.tryGet(sessionId))
+    if (session) return { session, child: undefined }
+    const child = this.children.get(sessionId)
+    if (!child) return
+    const root = await Effect.runPromise(this.input.session.tryGet(child.rootID))
+    if (!root) return
+    return { session: root, child }
   }
+
+  private update(sessionId: string, update: SessionUpdate, child?: ChildSession) {
+    return this.input.connection.sessionUpdate({
+      sessionId,
+      update: child ? projectChildUpdate(update, child) : update,
+    })
+  }
+}
+
+function toolKey(sessionId: string, toolCallId: string) {
+  return `${sessionId}:${toolCallId}`
+}
+
+function projectChildUpdate(update: SessionUpdate, child: ChildSession) {
+  const projected = { ...update }
+  projected._meta = {
+    ...projected._meta,
+    "opencode/child-session": {
+      id: child.id,
+      parentID: child.parentID,
+      depth: child.depth,
+      ...(child.title ? { title: child.title } : {}),
+    },
+  }
+  if (projected.sessionUpdate === "tool_call" || projected.sessionUpdate === "tool_call_update") {
+    projected.toolCallId = `${child.id}:${projected.toolCallId}`
+    if (projected.title && child.title) projected.title = `${child.title}: ${projected.title}`
+  }
+  return projected
 }
 
 function signal() {

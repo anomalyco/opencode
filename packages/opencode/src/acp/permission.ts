@@ -16,6 +16,12 @@ import { Effect } from "effect"
 type PermissionEvent = Extract<Event, { type: "permission.asked" }>
 type Reply = "once" | "always" | "reject"
 type Connection = Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
+export type Context = {
+  sessionId: string
+  cwd: string
+  toolCallPrefix?: string
+  titlePrefix?: string
+}
 
 const permissionOptions: PermissionOption[] = [
   { optionId: "once", kind: "allow_once", name: "Allow once" },
@@ -34,11 +40,11 @@ export class Handler {
     },
   ) {}
 
-  handle(event: PermissionEvent) {
+  handle(event: PermissionEvent, context?: Context) {
     const permission = event.properties
     const previous = this.queues.get(permission.sessionID) ?? Promise.resolve()
     const next = previous
-      .then(() => this.process(event))
+      .then(() => this.process(event, context))
       .catch(() => {})
       .finally(() => {
         if (this.queues.get(permission.sessionID) === next) {
@@ -48,28 +54,31 @@ export class Handler {
     this.queues.set(permission.sessionID, next)
   }
 
-  private async process(event: PermissionEvent) {
+  private async process(event: PermissionEvent, context?: Context) {
     const permission = event.properties
-    const session = await Effect.runPromise(this.input.session.tryGet(permission.sessionID))
-    if (!session) return
+    const registered = context ? undefined : await Effect.runPromise(this.input.session.tryGet(permission.sessionID))
+    const target = context ?? (registered ? { sessionId: registered.id, cwd: registered.cwd } : undefined)
+    if (!target) return
 
     if (!this.input.connection.requestPermission) {
-      await this.reply(permission.id, "reject", session.cwd)
+      await this.reply(permission.id, "reject", target.cwd)
       return
     }
 
+    const toolCallId = permission.tool?.callID ?? permission.id
     const result = await this.input.connection
       .requestPermission({
-        sessionId: permission.sessionID,
+        sessionId: target.sessionId,
         toolCall: await permissionToolCall({
-          toolCallId: permission.tool?.callID ?? permission.id,
+          toolCallId: target.toolCallPrefix ? `${target.toolCallPrefix}:${toolCallId}` : toolCallId,
           toolName: permission.permission,
           input: permission.metadata,
+          titlePrefix: target.titlePrefix,
         }),
         options: permissionOptions,
       })
       .catch(async () => {
-        await this.reply(permission.id, "reject", session.cwd)
+        await this.reply(permission.id, "reject", target.cwd)
         return undefined
       })
 
@@ -77,15 +86,15 @@ export class Handler {
 
     const reply = selectedReply(result)
     if (reply !== "once" && reply !== "always") {
-      await this.reply(permission.id, "reject", session.cwd)
+      await this.reply(permission.id, "reject", target.cwd)
       return
     }
 
     if (permission.permission === "edit") {
-      await this.writeProposedEdit(session.id, permission.metadata).catch(() => {})
+      await this.writeProposedEdit(target.sessionId, permission.metadata).catch(() => {})
     }
 
-    await this.reply(permission.id, reply, session.cwd)
+    await this.reply(permission.id, reply, target.cwd)
   }
 
   private async reply(requestID: string, reply: Reply, directory: string) {
@@ -119,6 +128,7 @@ async function permissionToolCall(input: {
   readonly toolCallId: string
   readonly toolName: string
   readonly input: ToolInput
+  readonly titlePrefix?: string
 }): Promise<ToolCallUpdate> {
   const toolCall = pendingToolCall({
     toolCallId: input.toolCallId,
@@ -131,9 +141,16 @@ async function permissionToolCall(input: {
   const content = await permissionContent(input.toolName, input.input)
   return {
     ...toolCall,
+    title: prefixedTitle(input.titlePrefix, toolCall.title),
     locations: permissionLocations(input.toolName, input.input),
     ...(content.length ? { content } : {}),
   }
+}
+
+function prefixedTitle(prefix: string | undefined, title: string | undefined) {
+  if (!prefix) return title
+  if (!title) return prefix
+  return `${prefix}: ${title}`
 }
 
 function permissionTitle(toolName: string, input: ToolInput) {
