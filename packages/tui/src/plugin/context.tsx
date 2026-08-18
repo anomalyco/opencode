@@ -1,3 +1,4 @@
+import type { PluginInfo } from "@opencode-ai/client"
 import type { Plugin } from "@opencode-ai/plugin/tui"
 import { createMarkdownCodeBlockRenderer, type MarkdownCodeBlockRenderer, type MarkdownOptions } from "@opentui/core"
 import {
@@ -5,6 +6,7 @@ import {
   createContext,
   createEffect,
   createMemo,
+  createSignal,
   on,
   onCleanup,
   onMount,
@@ -21,6 +23,8 @@ import { isDeepEqual } from "remeda"
 import "#runtime-plugin-support"
 import { useConfig } from "../config"
 import { useTuiLifecycle } from "../context/runtime"
+import { useClient } from "../context/client"
+import { useData } from "../context/data"
 import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
 import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, type SlotRender } from "./api"
@@ -28,7 +32,7 @@ import { createSourceWatcher } from "./watch"
 import { discoverTuiPlugins, freshSpecifier, localSource } from "./discovery"
 
 export interface PackageResolver {
-  readonly resolve: (spec: string) => Promise<string | undefined>
+  readonly resolve: (spec: string, install?: boolean) => Promise<string | undefined>
 }
 
 type State =
@@ -90,6 +94,13 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
   const host = usePluginHost()
   const config = useConfig()
   const lifecycle = useTuiLifecycle()
+  const client = useClient()
+  const data = useData()
+  const [serverPlugins, setServerPlugins] = createSignal<
+    ReadonlyArray<
+      Extract<PluginInfo, { readonly status: "active" }> & { readonly source: { readonly type: "package" } }
+    >
+  >([])
   const directory = config.path ? path.dirname(config.path) : process.cwd()
   const [store, setStore] = createStore({
     ready: false,
@@ -230,7 +241,11 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
   const npmFailures = new Map<string, string>()
   const reconcile = async () => {
     await Promise.all(props.directories.map(watcher.wait))
-    const entries = [...(await discoverTuiPlugins(props.directories)), ...(config.data.plugins ?? [])]
+    const entries = [
+      ...(await discoverTuiPlugins(props.directories)).map((entry) => ({ entry, install: true, server: false })),
+      ...serverPlugins().map((plugin) => ({ entry: plugin.source.package, install: false, server: true })),
+      ...(config.data.plugins ?? []).map((entry) => ({ entry, install: true, server: false })),
+    ]
 
     // Resolve: fold entries into one desired generation. A source that fails
     // to import keeps its running previous version and only reports failure.
@@ -238,7 +253,8 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
     for (const plugin of builtins)
       desired.set(plugin.id, { plugin, source: "builtin", version: "builtin", enabled: true })
     const failures: State[] = []
-    for (const entry of entries) {
+    for (const source of entries) {
+      const entry = source.entry
       const target = typeof entry === "string" ? entry : entry.package
       if (target.startsWith("-")) {
         for (const item of desired.values()) if (matches(target.slice(1), item.plugin.id)) item.enabled = false
@@ -259,11 +275,12 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       const memo = local ? undefined : npmFailures.get(target)
       const resolved = memo
         ? { status: "failed" as const, error: memo }
-        : await resolvePlugin(target, local, options, previous, props.packages).catch((error) => ({
+        : await resolvePlugin(target, local, options, previous, props.packages, source.install).catch((error) => ({
             status: "failed" as const,
             error: errorMessage(error),
           }))
       if (resolved.status === "unsupported") {
+        if (source.server) continue
         failures.push({ target, status: "unsupported" })
         continue
       }
@@ -439,7 +456,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
   const resolved = createMemo(() => resolveSlots({ paths: new Set(Object.keys(mounted)), claims: claims() }))
   createEffect(
     on(
-      () => JSON.stringify(config.data.plugins ?? []),
+      () => JSON.stringify([serverPlugins(), config.data.plugins ?? []]),
       () => {
         npmFailures.clear()
         void enqueue(reconcile).then(
@@ -449,6 +466,29 @@ export function PluginProvider(props: ParentProps<{ packages: PackageResolver; d
       },
     ),
   )
+  const syncServerPlugins = () =>
+    client.api.plugin
+      .list({ location: data.location.default() })
+      .then((response) =>
+        setServerPlugins(
+          response.data.filter(
+            (
+              plugin,
+            ): plugin is Extract<PluginInfo, { readonly status: "active" }> & {
+              readonly source: { readonly type: "package" }
+            } => plugin.status === "active" && plugin.tui && plugin.source.type === "package",
+          ),
+        ),
+      )
+      .catch(() => undefined)
+  createEffect(
+    on(
+      () => JSON.stringify(data.location.default()),
+      () => void syncServerPlugins(),
+    ),
+  )
+  onCleanup(client.event.on("plugin.updated", syncServerPlugins))
+  onCleanup(client.event.on("server.connected", syncServerPlugins))
   onMount(() => {
     let disposing: Promise<void> | undefined
     const dispose = () => {
@@ -523,12 +563,13 @@ async function resolvePlugin(
   options: Readonly<Record<string, any>> | undefined,
   previous: Registration | undefined,
   packages: PackageResolver,
+  install: boolean,
 ) {
   // Package entrypoints never change within a session, so a loaded previous
   // version needs no re-resolution (which could otherwise hit npm).
   if (!local && previous && sameOptions(previous.options, options))
     return { status: "unchanged" as const, plugin: previous.plugin, version: previous.version }
-  const entrypoint = local ? await resolveLocal(local) : await packages.resolve(spec)
+  const entrypoint = local ? await resolveLocal(local) : await packages.resolve(spec, install)
   if (!entrypoint) return { status: "unsupported" as const }
   // The cache-busted specifier doubles as the version: unique per entrypoint
   // and mtime, so equal versions mean an identical module.

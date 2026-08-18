@@ -99,6 +99,32 @@ an isolated cache. Package installation does not run lifecycle scripts.
 Published packages should expose their plugin entrypoint and include every
 runtime import in `dependencies`.
 
+Install a package plugin globally with the CLI:
+
+```sh
+opencode2 plugin add opencode-acme-plugin@1.2.0
+```
+
+This installs and inspects the package before changing configuration. Packages
+with a server entrypoint are added to global `opencode.json(c)`. Packages that
+only expose `./tui` are added to global `cli.json` instead.
+
+The command accepts npm registry package names with an optional version,
+dist-tag, or semver range. Configure local paths directly instead; Git, tarball,
+and npm alias targets are not accepted by `plugin add`.
+
+List configured and active plugins, or remove a package from both global server
+and TUI configuration:
+
+```sh
+opencode2 plugin list
+opencode2 plugin list --builtin
+opencode2 plugin remove opencode-acme-plugin@1.2.0
+```
+
+Built-in server plugins are hidden from the default list. Removing a plugin
+keeps its package cache available for later reuse.
+
 Local files and local package directories are imported directly. OpenCode does
 **not** install their dependencies. Install dependencies in a `package.json`
 visible from the plugin file, for example:
@@ -397,12 +423,20 @@ manifest is:
   "name": "opencode-acme-plugin",
   "version": "1.0.0",
   "type": "module",
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
+  },
   "dependencies": {
     "@opencode-ai/plugin": "beta"
   }
 }
 ```
+
+Packages with a TUI entrypoint should set `tui: true` on their server plugin
+definition. A locally connected TUI loads the package's `./tui` export from the
+existing OpenCode package cache. A TUI connected to a remote server skips it
+when that package is not installed locally.
 
 Use versions compatible with the OpenCode release you target and test the
 installed package, not only a workspace-linked copy. Because the plugin API is
