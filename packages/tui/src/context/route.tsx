@@ -1,4 +1,4 @@
-import { createStore, reconcile } from "solid-js/store"
+import { createSignal } from "solid-js"
 import { createSimpleContext } from "./helper"
 import type { PromptInfo } from "../prompt/history"
 import { useTuiStartup } from "./runtime"
@@ -12,6 +12,7 @@ export type SessionRoute = {
   type: "session"
   sessionID: string
   prompt?: PromptInfo
+  autoSubmit?: boolean
 }
 
 export type PluginRoute = {
@@ -26,16 +27,16 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
   init: (props: { initialRoute?: Route }) => {
     const startup = useTuiStartup()
-    const [store, setStore] = createStore<Route>(
+    const [data, setData] = createSignal<Route>(
       props.initialRoute ?? initialRoute(startup.initialRoute) ?? { type: "home" },
     )
 
     return {
       get data() {
-        return store
+        return data()
       },
       navigate(route: Route) {
-        setStore(reconcile(route))
+        setData(route)
       },
     }
   },
