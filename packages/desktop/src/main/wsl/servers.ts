@@ -15,6 +15,7 @@ import { WSL_SERVERS_KEY } from "../store-keys"
 import { getStore } from "../store"
 import { expectOpencodeVersion, pendingRestartAfterWslInstall, wslServerIdsToStartOnInitialize } from "./startup"
 import { clearWslDistroState, wslServerIdToRestart } from "./policy"
+import { nativeT } from "../native-translations"
 import {
   installWslDistro,
   installWslOpencode,
@@ -327,7 +328,7 @@ export function createWslServersController(
       await runJob({ kind: "install-wsl", startedAt: Date.now() }, async (abort) => {
         const result = await installWslRuntimeElevated({ signal: abort.signal })
         if (result.code !== 0) {
-          const message = summarize(result.stderr || result.stdout) || "WSL installation failed"
+          const message = summarize(result.stderr || result.stdout) || nativeT("desktop.wsl.error.installWsl")
           throw new Error(message)
         }
         const runtime = await probeWslRuntime({ signal: abort.signal })
@@ -339,7 +340,8 @@ export function createWslServersController(
       await runJob({ kind: "install-distro", distro: name, startedAt: Date.now() }, async (abort) => {
         const result = await installWslDistro(name, { signal: abort.signal })
         if (result.code !== 0) {
-          const message = summarize(result.stderr || result.stdout) || `Failed to install distro: ${name}`
+          const message =
+            summarize(result.stderr || result.stdout) || nativeT("desktop.wsl.error.installDistro", { distro: name })
           throw new Error(message)
         }
         const distros = await refreshDistroLists({ signal: abort.signal })
@@ -362,7 +364,7 @@ export function createWslServersController(
       await runJob({ kind: "install-opencode", distro: name, startedAt: Date.now() }, async (abort) => {
         const result = await installWslOpencode(appVersion, name, { signal: abort.signal })
         if (result.code !== 0) {
-          throw new Error(summarize(result.stderr || result.stdout) || "OpenCode installation failed")
+          throw new Error(summarize(result.stderr || result.stdout) || nativeT("desktop.wsl.error.installOpencode"))
         }
         await refreshOpencodeCheck(name, { signal: abort.signal })
         expectOpencodeVersion(state.opencodeChecks[name]?.version ?? null, appVersion, name)
@@ -378,7 +380,7 @@ export function createWslServersController(
     async addServer(distro: string): Promise<WslServerConfig> {
       const id = wslServerIdForDistro(distro)
       if (state.servers.some((item) => item.config.id === id)) {
-        throw new Error(`${distro} is already added`)
+        throw new Error(nativeT("desktop.wsl.error.alreadyAdded", { distro }))
       }
       const config: WslServerConfig = {
         id,
@@ -475,7 +477,7 @@ function opencodeCheck(
       version: null,
       expectedVersion,
       matchesDesktop: null,
-      error: "opencode is not installed in this distro",
+      error: nativeT("desktop.wsl.error.opencodeMissing"),
     }
   }
   if (!version) {
@@ -485,7 +487,7 @@ function opencodeCheck(
       version: null,
       expectedVersion,
       matchesDesktop: null,
-      error: "opencode is installed but could not run",
+      error: nativeT("desktop.wsl.error.opencodeCannotRun"),
     }
   }
   return {
@@ -503,7 +505,7 @@ function distroProbeReady(probe: WslDistroProbe | undefined) {
 }
 
 function startupFailure(code: number | null, signal: NodeJS.Signals | null) {
-  return `WSL server exited after startup (code=${code ?? "null"} signal=${signal ?? "null"})`
+  return nativeT("desktop.wsl.error.serverExited", { code: code ?? "null", signal: signal ?? "null" })
 }
 
 // Re-export types used by callers
