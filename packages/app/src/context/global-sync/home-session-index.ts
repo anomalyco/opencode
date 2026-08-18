@@ -4,8 +4,6 @@ import { SESSION_RECENT_LIMIT, SESSION_RECENT_WINDOW } from "./types"
 
 export const HOME_V2_SESSION_PAGE_LIMIT = 5_000
 
-export const homeSessionIndexKey = (server: string) => ["home", "session-index", server] as const
-
 export async function loadHomeSessionIndex(
   list: (
     input: { limit: number; order: "desc"; cursor?: string },
@@ -35,6 +33,12 @@ export async function loadHomeSessionIndex(
 // seeds createData from a full scan and derives its visible index there.
 export function parseHomeSessionIndex(sessions: SessionInfo[]) {
   return sessions.filter((session) => !session.parentID && typeof session.time.archived !== "number")
+}
+
+export function mergeHomeSessionIndex(fetched: SessionInfo[], known: SessionInfo[]) {
+  return parseHomeSessionIndex([
+    ...new Map([...fetched, ...known].map((session) => [session.id, session] as const)).values(),
+  ])
 }
 
 export function retainHomeSessions(sessions: SessionInfo[], limit: number, now: number) {

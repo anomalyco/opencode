@@ -5,9 +5,8 @@ import { DateTime } from "luxon"
 import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
 import { useCommand } from "@/context/command"
 import {
-  homeSessionIndexKey,
   loadHomeSessionIndex,
-  parseHomeSessionIndex,
+  mergeHomeSessionIndex,
   retainHomeSessions,
 } from "@/context/global-sync/home-session-index"
 import type { LocalProject } from "@/context/layout"
@@ -53,19 +52,10 @@ export function createHomeSessionsController(home: HomeController) {
     const ctx = home.server.focusedContext()
     const conn = home.server.focused()
     return {
-      queryKey: conn
-        ? homeSessionIndexKey(ServerConnection.key(conn))
-        : (["home", "session-index", "unselected"] as const),
+      queryKey: ["home-sessions", conn] as const,
       enabled: !!ctx && ctx.sdk.connection.status() === "connected",
       queryFn: ctx
-        ? async ({ signal }) => {
-            const index = await loadHomeSessionIndex(
-              (input, options) => ctx.sdk.api.session.list(input, options),
-              signal,
-            )
-            index.forEach(ctx.data.session.remember)
-            return Date.now()
-          }
+        ? ({ signal }) => loadHomeSessionIndex((input, options) => ctx.sdk.api.session.list(input, options), signal)
         : skipToken,
       retry: false,
       staleTime: 30_000,
@@ -76,7 +66,11 @@ export function createHomeSessionsController(home: HomeController) {
   const indexedSessions = createMemo(() => {
     const ctx = home.server.focusedContext()
     if (!ctx) return []
-    return retainHomeSessions(parseHomeSessionIndex(ctx.data.session.list()), HOME_SESSION_LIMIT, Date.now())
+    return retainHomeSessions(
+      mergeHomeSessionIndex(sessionLoad.data ?? [], ctx.data.session.list()),
+      HOME_SESSION_LIMIT,
+      Date.now(),
+    )
   })
   const allRecords = createMemo(() =>
     buildHomeSessionRecords({
