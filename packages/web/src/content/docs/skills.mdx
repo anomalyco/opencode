@@ -20,6 +20,8 @@ OpenCode searches these locations:
 - Project agent-compatible: `.agents/skills/<name>/SKILL.md`
 - Global agent-compatible: `~/.agents/skills/<name>/SKILL.md`
 
+When Claude Code's `CLAUDE_CONFIG_DIR` environment variable is set, the global Claude-compatible location is read from `$CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md` instead of `~/.claude/skills/<name>/SKILL.md`.
+
 ---
 
 ## Understand discovery

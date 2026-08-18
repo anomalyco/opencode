@@ -82,6 +82,8 @@ For users migrating from Claude Code, OpenCode supports Claude Code's file conve
 - **Global rules**: `~/.claude/CLAUDE.md` (used if no `~/.config/opencode/AGENTS.md` exists)
 - **Skills**: `~/.claude/skills/` — see [Agent Skills](/docs/skills/) for details
 
+If you use Claude Code's `CLAUDE_CONFIG_DIR` environment variable to relocate its config directory, OpenCode respects it and reads `CLAUDE.md` and `skills/` from there instead of `~/.claude`.
+
 To disable Claude Code compatibility, set one of these environment variables:
 
 ```bash

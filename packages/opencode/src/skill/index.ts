@@ -188,7 +188,9 @@ const discoverSkills = Effect.fnUntraced(function* (
     externalDirs.push(AGENTS_EXTERNAL_DIR)
 
     for (const dir of externalDirs) {
-      const root = path.join(global.home, dir)
+      // CLAUDE_CONFIG_DIR relocates the user-level .claude directory; project
+      // .claude/skills directories are unaffected (handled by the up-search below).
+      const root = dir === CLAUDE_EXTERNAL_DIR ? global.claudeConfigDir : path.join(global.home, dir)
       if (!(yield* fsys.isDir(root))) continue
       yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
     }
