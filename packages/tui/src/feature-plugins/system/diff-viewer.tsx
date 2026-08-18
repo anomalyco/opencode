@@ -8,11 +8,10 @@ import {
   type DiffRenderable,
   type ScrollBoxRenderable,
 } from "@opentui/core"
-import { LANGUAGE_EXTENSIONS } from "../../util/filetype"
+import { filetype } from "../../util/filetype"
 import { useBindings, useCommandShortcut } from "../../keymap"
 import { useTheme } from "../../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
-import path from "path"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
 import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
@@ -70,13 +69,6 @@ const normalizeDiffs = (diffs: readonly (VcsFileDiff | SnapshotFileDiff)[]): Dif
         ]
       : [],
   )
-
-function filetype(input?: string) {
-  if (!input) return "none"
-  const language = LANGUAGE_EXTENSIONS[path.extname(input)]
-  if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
-  return language
-}
 
 function storedView(value: unknown): DiffView | undefined {
   if (value === "split" || value === "unified") return value
