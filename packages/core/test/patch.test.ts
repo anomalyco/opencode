@@ -31,6 +31,26 @@ describe("Patch", () => {
     expect(Patch.joinBom(update.content, update.bom)).toBe("\uFEFFnew\n")
   })
 
+  test("anchors a pure insertion at the @@ context line", () => {
+    expect(
+      Patch.derive("update.txt", [{ oldLines: [], newLines: ["inserted"], changeContext: "line2" }], "line1\nline2\nline3\n")
+        .content,
+    ).toBe("line1\nline2\ninserted\nline3\n")
+  })
+
+  test("positions context-anchored insertions before later replacements", () => {
+    expect(
+      Patch.derive(
+        "update.txt",
+        [
+          { oldLines: [], newLines: ["A"], changeContext: "line1" },
+          { oldLines: ["line3"], newLines: ["L3"] },
+        ],
+        "line1\nline2\nline3\n",
+      ).content,
+    ).toBe("line1\nA\nline2\nL3\n")
+  })
+
   test("matches EOF-anchored chunks from the end", () => {
     expect(
       Patch.derive(

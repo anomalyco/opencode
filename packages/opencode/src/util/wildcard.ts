@@ -2,11 +2,15 @@ import { sortBy, pipe } from "remeda"
 
 export function match(str: string, pattern: string) {
   if (str) str = str.replaceAll("\\", "/")
-  if (pattern) pattern = pattern.replaceAll("\\", "/")
-  let escaped = pattern
+  // Escaped glob characters (\*, \?, \\) must match literally, so keep them
+  // aside before the remaining backslashes are normalized to path separators.
+  let escaped = (pattern ?? "")
+    .replace(/\\[*?\\]/g, (value) => (value === "\\*" ? "\u0001" : value === "\\?" ? "\u0002" : "\u0003"))
+    .replaceAll("\\", "/") // remaining backslashes are path separators
     .replace(/[.+^${}()|[\]\\]/g, "\\$&") // escape special regex chars
     .replace(/\*/g, ".*") // * becomes .*
     .replace(/\?/g, ".") // ? becomes .
+    .replace(/[\u0001\u0002\u0003]/g, (value) => (value === "\u0001" ? "\\*" : value === "\u0002" ? "\\?" : "/"))
 
   // If pattern ends with " *" (space + wildcard), make the trailing part optional
   // This allows "ls *" to match both "ls" and "ls -la"
