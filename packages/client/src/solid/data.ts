@@ -1125,7 +1125,7 @@ export function createData(config: CreateDataInput) {
           if (!cursor || store.session.messageLoading[sessionID]) return
           setStore("session", "messageLoading", sessionID, true)
           const response = await api()
-            .message.list({ sessionID, limit: 200, order: "desc", cursor })
+            .message.list({ sessionID, limit: 200, cursor })
             .finally(() => setStore("session", "messageLoading", sessionID, false))
           const older = response.data.toReversed()
           const existing = store.session.message[sessionID] ?? []
