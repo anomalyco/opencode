@@ -113,11 +113,14 @@ const layer = Layer.effect(
         reasoningMap: {},
       }
       let aborted = false
+      const cfg = yield* config.get()
+      const retry400RateLimit = cfg.provider?.[input.model.providerID]?.options?.retry400RateLimit === true
 
       const parse = (e: unknown) =>
         MessageV2.fromError(e, {
           providerID: input.model.providerID,
           aborted,
+          retry400RateLimit,
         })
 
       const settleToolCall = Effect.fn("SessionProcessor.settleToolCall")(function* (toolCallID: string) {

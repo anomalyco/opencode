@@ -488,6 +488,58 @@ describe("session.message-v2.fromError", () => {
     expect(result.data.isRetryable).toBe(true)
   })
 
+  test("marks provider 400 rate limit response bodies as retryable when enabled", () => {
+    const error = new APICallError({
+      message: "Bad request",
+      url: "https://example.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: JSON.stringify({
+        detail:
+          "Rate limit exceeded for end_user: test@example.com. Limit type: tokens. Current limit: 500000, Remaining: 0. Limit resets at: 2026-06-07 22:57:15 UTC",
+      }),
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID, retry400RateLimit: true })
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.statusCode).toBe(400)
+    expect(result.data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({ message: result.data.message })
+  })
+
+  test("keeps provider 400 rate limit response bodies non-retryable when disabled", () => {
+    const error = new APICallError({
+      message: "Bad request",
+      url: "https://example.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: JSON.stringify({ detail: "Rate limit exceeded" }),
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID })
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(false)
+    expect(SessionRetry.retryable(result, retryProvider)).toBeUndefined()
+  })
+
+  test("keeps generic provider 400 API call errors non-retryable", () => {
+    const error = new APICallError({
+      message: "Bad request",
+      url: "https://example.com/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: JSON.stringify({ detail: "Invalid request" }),
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID, retry400RateLimit: true })
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(false)
+    expect(SessionRetry.retryable(result, retryProvider)).toBeUndefined()
+  })
+
   test("converts OpenAI server_error stream chunks to retryable APIError", () => {
     const result = MessageV2.fromError(
       {

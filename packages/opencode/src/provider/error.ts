@@ -162,7 +162,7 @@ export type ParsedAPICallError =
       metadata?: Record<string, string>
     }
 
-export function parseAPICallError(input: { providerID: ProviderV2.ID; error: APICallError }): ParsedAPICallError {
+export function parseAPICallError(input: { providerID: ProviderV2.ID; retry400RateLimit?: boolean; error: APICallError }): ParsedAPICallError {
   const m = message(input.providerID, input.error)
   const body = json(input.error.responseBody)
   if (isContextOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded") {
@@ -174,11 +174,18 @@ export function parseAPICallError(input: { providerID: ProviderV2.ID; error: API
   }
 
   const metadata = input.error.url ? { url: input.error.url } : undefined
+  const rateLimitExceeded =
+    input.retry400RateLimit === true &&
+    input.error.statusCode === 400 &&
+    typeof body?.detail === "string" &&
+    body.detail.toLowerCase().includes("rate limit exceeded")
   return {
     type: "api_error",
     message: m,
     statusCode: input.error.statusCode,
-    isRetryable: input.providerID.startsWith("openai") ? isOpenAiErrorRetryable(input.error) : input.error.isRetryable,
+    isRetryable:
+      rateLimitExceeded ||
+      (input.providerID.startsWith("openai") ? isOpenAiErrorRetryable(input.error) : input.error.isRetryable),
     responseHeaders: input.error.responseHeaders,
     responseBody: input.error.responseBody,
     metadata,

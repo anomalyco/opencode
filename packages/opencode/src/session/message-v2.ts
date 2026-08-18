@@ -605,7 +605,7 @@ function isAfter(info: Info, other?: Info) {
 
 export function fromError(
   e: unknown,
-  ctx: { providerID: ProviderV2.ID; aborted?: boolean },
+  ctx: { providerID: ProviderV2.ID; aborted?: boolean; retry400RateLimit?: boolean },
 ): NonNullable<Assistant["error"]> {
   switch (true) {
     case e instanceof DOMException && e.name === "AbortError":
@@ -679,6 +679,7 @@ export function fromError(
     case APICallError.isInstance(e):
       const parsed = ProviderError.parseAPICallError({
         providerID: ctx.providerID,
+        retry400RateLimit: ctx.retry400RateLimit,
         error: e,
       })
       if (parsed.type === "context_overflow") {
