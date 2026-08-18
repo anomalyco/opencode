@@ -922,6 +922,7 @@ test("loads and reads MCP resources", async () => {
 })
 
 test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
+  const published: string[] = []
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -929,6 +930,7 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
           const service = yield* MCP.Service
 
           expect((yield* service.servers())[0]?.status).toEqual({ status: "disabled" })
+          expect(published).toContain(McpEvent.StatusChanged.type)
           expect(yield* service.connect("missing").pipe(Effect.flip)).toBeInstanceOf(MCP.NotFoundError)
           expect(yield* service.disconnect("missing").pipe(Effect.flip)).toBeInstanceOf(MCP.NotFoundError)
           yield* service.add(
@@ -982,32 +984,13 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
                 command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
                 disabled: true,
               }),
+              undefined,
+              undefined,
+              { published },
             ),
           ),
         )
       }),
-    ),
-  )
-})
-
-test("announces initially disabled MCP servers", async () => {
-  const published: string[] = []
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const service = yield* MCP.Service
-        expect(yield* service.servers()).toMatchObject([{ name: "resources", status: { status: "disabled" } }])
-        expect(published).toContain(McpEvent.StatusChanged.type)
-      }).pipe(
-        Effect.provide(
-          resourceMcpLayer(
-            new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }),
-            undefined,
-            undefined,
-            { published },
-          ),
-        ),
-      ),
     ),
   )
 })
