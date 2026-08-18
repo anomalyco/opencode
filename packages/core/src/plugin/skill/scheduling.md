@@ -15,8 +15,13 @@ Interval format: `5m`, `1h`, `2h30m`, `90s`. Minimum 1m, max 7d lifespan, max 50
 
 ## Listing
 
-Use `cron_list` to see all scheduled jobs.
+Use `cron_list` to see all scheduled jobs, in the following format: 
+
+| ID | Prompt | Interval | Run | Next |
+| :--- | :--- | :--- | :--- | :--- |
+| `e15f1b62...` | Write "Hello, World!" | 1m | 6 | ~1m |
 
 ## Cancelling
 
 `cron_delete(id: "id")` for one, `cron_delete(id: "all")` for all.
+
