@@ -117,7 +117,6 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         serviceOptions === undefined
           ? undefined
           : {
-              instanceID,
               onListen: (address, shutdown) =>
                 Effect.gen(function* () {
                   if (!config.password) yield* ServiceConfig.password(password)

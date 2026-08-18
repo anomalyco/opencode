@@ -191,22 +191,6 @@ test("integration connections optionally submit a form answer", async () => {
   expect(await requests[3].json()).toEqual({ methodID: "device" })
 })
 
-test("health.stop sends exact replacement identity", async () => {
-  let request: Request | undefined
-  const client = OpenCode.make({
-    baseUrl: "http://localhost:3000",
-    fetch: async (input, init) => {
-      request = input instanceof Request ? input : new Request(input, init)
-      return Response.json({ accepted: true })
-    },
-  })
-
-  expect(await client.health.stop({ instanceID: "instance" })).toEqual({ accepted: true })
-  expect(request?.method).toBe("POST")
-  expect(request?.url).toBe("http://localhost:3000/api/service/stop")
-  expect(await request?.json()).toEqual({ instanceID: "instance" })
-})
-
 test("MCP resource catalog uses the public HTTP contract", async () => {
   let request: Request | undefined
   const client = OpenCode.make({

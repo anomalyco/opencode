@@ -126,13 +126,12 @@ test("evicts an unresponsive registered service before starting its replacement"
   await waitForExit(replacement.pid)
 })
 
-test("requests graceful stop of the exact service instance", async () => {
+test("signals the registered service process", async () => {
   const registration = await setup("graceful")
-  const info = await Bun.file(registration).json()
 
   await Service.stop({ file: registration })
 
-  expect(await Bun.file(registration + ".stop").json()).toEqual({ instanceID: info.id })
+  expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
 })
 
 async function setup(mode: string) {

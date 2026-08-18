@@ -48,58 +48,6 @@
         "summary": "Check server health"
       }
     },
-    "/api/service/stop": {
-      "post": {
-        "tags": ["health"],
-        "operationId": "v2.health.stop",
-        "parameters": [],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "ServiceStopResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceStopResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Request graceful shutdown of one exact managed server instance.",
-        "summary": "Stop the managed server",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ServiceStopRequest"
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
     "/api/server": {
       "get": {
         "tags": ["server"],
@@ -9781,26 +9729,6 @@
           }
         },
         "required": ["_tag", "message"],
-        "additionalProperties": false
-      },
-      "ServiceStopRequest": {
-        "type": "object",
-        "properties": {
-          "instanceID": {
-            "type": "string"
-          }
-        },
-        "required": ["instanceID"],
-        "additionalProperties": false
-      },
-      "ServiceStopResponse": {
-        "type": "object",
-        "properties": {
-          "accepted": {
-            "type": "boolean"
-          }
-        },
-        "required": ["accepted"],
         "additionalProperties": false
       },
       "Union_1": {
