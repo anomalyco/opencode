@@ -1,10 +1,13 @@
 import type { SessionInfo } from "@opencode-ai/client/promise"
-import { createMemo, For, Show, Suspense } from "solid-js"
+import { createMemo, For, onCleanup, Show, Suspense } from "solid-js"
+import { createStore } from "solid-js/store"
+import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/servers"
@@ -22,6 +25,7 @@ import {
 const SHOW_HOME_SESSION_ARCHIVE = false
 const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
 const HOME_SESSION_SEARCH_RESULTS_ID = "home-session-search-results"
+const HOME_SESSION_LONG_PRESS_MS = 500
 
 // Middle-click or Cmd+click on macOS (Ctrl+click elsewhere) opens a session
 // tab in the background without navigating, matching browser conventions.
@@ -54,6 +58,9 @@ export type HomeSessionsViewProps = {
   onCreateSession: () => void
   onOpenSession: (session: SessionInfo, options?: OpenSessionOptions) => void
   onArchiveSession: (session: SessionInfo) => Promise<void>
+  onRenameSession: (server: ServerConnection.Key, session: SessionInfo, title: string) => Promise<boolean>
+  onExportSession: (server: ServerConnection.Key, session: SessionInfo) => Promise<void>
+  onDeleteSession: (server: ServerConnection.Key, session: SessionInfo) => void
   onSetHoverTarget: (element: HTMLElement) => void
   onSetThumbTrack: (element: HTMLDivElement) => void
   onSetContent: (element: HTMLDivElement) => void
@@ -415,42 +422,238 @@ function HomeSessionGroupHeader(props: {
 function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionRecord }) {
   const title = createMemo(() => sessionLabel(props.record.session))
   const showProjectName = () => props.showProjectName && props.record.projectName
+  const [state, setState] = createStore({
+    draft: "",
+    editing: false,
+    menuX: 0,
+    menuY: 0,
+    menuOpen: false,
+    pendingAction: undefined as "rename" | "export" | "delete" | undefined,
+    renaming: false,
+  })
+  let titleRef: HTMLInputElement | undefined
+  let rowRef: HTMLButtonElement | undefined
+  let longPressTimer: ReturnType<typeof setTimeout> | undefined
+  let longPressStart: { x: number; y: number } | undefined
+  let suppressClick = false
+
+  const clearLongPress = () => {
+    if (longPressTimer !== undefined) clearTimeout(longPressTimer)
+    longPressTimer = undefined
+    longPressStart = undefined
+  }
+  const finishLongPress = () => {
+    clearLongPress()
+    if (!suppressClick) return
+    setTimeout(() => {
+      suppressClick = false
+    })
+  }
+  onCleanup(clearLongPress)
+
+  const openMenu = (element: HTMLElement, clientX: number, clientY: number) => {
+    const bounds = element.getBoundingClientRect()
+    setState({ menuX: clientX - bounds.left, menuY: clientY - bounds.top, menuOpen: true })
+  }
+
+  const openEditor = () => {
+    setState({ draft: title(), editing: true })
+    requestAnimationFrame(() => {
+      titleRef?.focus()
+      titleRef?.select()
+    })
+  }
+  const closeEditor = () => {
+    if (state.renaming) return
+    setState("editing", false)
+  }
+  const saveEditor = async () => {
+    if (state.renaming) return
+    setState("renaming", true)
+    const saved = await props.onRenameSession(props.server, props.record.session, state.draft)
+    setState("renaming", false)
+    if (saved) setState("editing", false)
+  }
 
   return (
     <div
-      class="group/session relative flex h-10 min-w-0 items-center rounded-[6px]"
+      data-component="home-session-row-container"
+      data-session-id={props.record.session.id}
+      class="group/session relative flex h-10 min-w-0 items-center rounded-[6px] outline-none focus:outline-none focus-visible:outline-none"
       classList={{ group: !!showProjectName() }}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        if (state.editing) return
+        openMenu(event.currentTarget, event.clientX, event.clientY)
+      }}
     >
-      <button
-        type="button"
-        data-component="home-session-row"
-        class={`
-          flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center gap-2 rounded-[6px] border-0
-          bg-transparent py-3 pl-3 pr-10 text-left text-v2-text-text-muted [font-weight:530]
-          transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
-          hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
-        `}
-        onMouseDown={(event) => {
-          if (event.button === 1) event.preventDefault()
-        }}
-        onClick={(event) => props.onOpenSession(props.record.session, { background: isBackgroundOpen(event) })}
-        onAuxClick={(event) => {
-          if (!isBackgroundOpen(event)) return
-          event.preventDefault()
-          props.onOpenSession(props.record.session, { background: true })
-        }}
+      <Show
+        when={!state.editing}
+        fallback={
+          <div class="flex h-10 min-w-0 w-full flex-1 items-center gap-2 py-3 pl-3 pr-10">
+            <HomeSessionLeadingController
+              server={props.server}
+              isOpenTab={props.isOpenTab}
+              record={props.record}
+              revealProjectOnHover={false}
+            />
+            <InlineInput
+              ref={(element) => {
+                titleRef = element
+              }}
+              data-component="home-session-rename"
+              dir="auto"
+              value={state.draft}
+              disabled={state.renaming}
+              class={`
+                block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base
+                [font-weight:530] field-sizing-content outline-none focus:outline-none focus-visible:outline-none
+                ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}
+              `}
+              style={{ "--inline-input-shadow": "none", "text-align": "start" }}
+              onInput={(event) => setState("draft", event.currentTarget.value)}
+              onKeyDown={(event) => {
+                event.stopPropagation()
+                if (event.key === "Enter") {
+                  event.preventDefault()
+                  void saveEditor()
+                  return
+                }
+                if (event.key !== "Escape") return
+                event.preventDefault()
+                closeEditor()
+              }}
+              onBlur={closeEditor}
+            />
+            <Show when={showProjectName()}>
+              <HomeSessionProjectName name={props.record.projectName} />
+            </Show>
+          </div>
+        }
       >
-        <HomeSessionLeadingController
-          server={props.server}
-          isOpenTab={props.isOpenTab}
-          record={props.record}
-          revealProjectOnHover={!!showProjectName()}
+        <button
+          ref={(element) => {
+            rowRef = element
+          }}
+          type="button"
+          data-component="home-session-row"
+          aria-haspopup="menu"
+          aria-expanded={state.menuOpen}
+          class={`
+            flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center gap-2 rounded-[6px] border-0
+            bg-transparent py-3 pl-3 pr-10 text-left text-v2-text-text-muted [font-weight:530]
+            transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
+            hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
+          `}
+          onMouseDown={(event) => {
+            if (event.button === 1) event.preventDefault()
+          }}
+          onPointerDown={(event) => {
+            if (event.pointerType !== "touch") return
+            clearLongPress()
+            const element = event.currentTarget
+            const x = event.clientX
+            const y = event.clientY
+            longPressStart = { x, y }
+            longPressTimer = setTimeout(() => {
+              suppressClick = true
+              clearLongPress()
+              openMenu(element, x, y)
+            }, HOME_SESSION_LONG_PRESS_MS)
+          }}
+          onPointerMove={(event) => {
+            if (!longPressStart) return
+            if (Math.abs(event.clientX - longPressStart.x) <= 8 && Math.abs(event.clientY - longPressStart.y) <= 8)
+              return
+            clearLongPress()
+          }}
+          onPointerUp={finishLongPress}
+          onPointerCancel={() => {
+            clearLongPress()
+            suppressClick = false
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "ContextMenu" && (event.key !== "F10" || !event.shiftKey)) return
+            event.preventDefault()
+            const bounds = event.currentTarget.getBoundingClientRect()
+            openMenu(event.currentTarget, bounds.left + 12, bounds.bottom)
+          }}
+          onClick={(event) => {
+            if (suppressClick) {
+              suppressClick = false
+              event.preventDefault()
+              return
+            }
+            props.onOpenSession(props.record.session, { background: isBackgroundOpen(event) })
+          }}
+          onAuxClick={(event) => {
+            if (!isBackgroundOpen(event)) return
+            event.preventDefault()
+            props.onOpenSession(props.record.session, { background: true })
+          }}
+        >
+          <HomeSessionLeadingController
+            server={props.server}
+            isOpenTab={props.isOpenTab}
+            record={props.record}
+            revealProjectOnHover={!!showProjectName()}
+          />
+          <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
+          <Show when={showProjectName()}>
+            <HomeSessionProjectName name={props.record.projectName} />
+          </Show>
+        </button>
+      </Show>
+      <MenuV2
+        modal={false}
+        placement="bottom-start"
+        gutter={2}
+        open={state.menuOpen}
+        onOpenChange={(open) => setState("menuOpen", open)}
+      >
+        <MenuV2.Trigger
+          as="span"
+          aria-hidden="true"
+          tabIndex={-1}
+          class="pointer-events-none absolute size-px"
+          style={{ left: `${state.menuX}px`, top: `${state.menuY}px` }}
         />
-        <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
-        <Show when={showProjectName()}>
-          <HomeSessionProjectName name={props.record.projectName} />
-        </Show>
-      </button>
+        <MenuV2.Portal>
+          <MenuV2.Content
+            onCloseAutoFocus={(event) => {
+              event.preventDefault()
+              const action = state.pendingAction
+              if (!action) {
+                requestAnimationFrame(() => rowRef?.focus())
+                return
+              }
+              setState("pendingAction", undefined)
+              if (action === "rename") {
+                openEditor()
+                return
+              }
+              requestAnimationFrame(() => {
+                if (action === "export") {
+                  void props.onExportSession(props.server, props.record.session)
+                  return
+                }
+                props.onDeleteSession(props.server, props.record.session)
+              })
+            }}
+          >
+            <MenuV2.Item onSelect={() => setState({ pendingAction: "rename", menuOpen: false })}>
+              {props.language.t("common.rename")}
+            </MenuV2.Item>
+            <MenuV2.Item onSelect={() => setState({ pendingAction: "export", menuOpen: false })}>
+              {props.language.t("common.export")}...
+            </MenuV2.Item>
+            <MenuV2.Separator />
+            <MenuV2.Item onSelect={() => setState({ pendingAction: "delete", menuOpen: false })}>
+              {props.language.t("common.delete")}...
+            </MenuV2.Item>
+          </MenuV2.Content>
+        </MenuV2.Portal>
+      </MenuV2>
       <Show when={SHOW_HOME_SESSION_ARCHIVE}>
         <div
           class={`
@@ -481,6 +684,7 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
 function HomeSessionTitle(props: { title: string; showProjectName: boolean; search?: boolean }) {
   return (
     <span
+      data-component="home-session-title"
       class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base [font-weight:530]"
       classList={{
         "text-[13px] leading-4 tracking-[-0.04px]": !!props.search,

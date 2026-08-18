@@ -12,12 +12,13 @@ import { useSettings } from "@/context/settings"
 import { useWorkspaceLocation } from "@/context/location"
 import { useTabs } from "@/context/tabs"
 import type { SessionController } from "@/pages/session/session-controller"
+import { removedSessionIDs } from "@/pages/session/session-domain"
 import { useServerSDK } from "@/context/server-sdk"
 import { sessionHref } from "@/utils/session-route"
 import { sessionTitle } from "@/utils/session-title"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { showToast } from "@/utils/toast"
-import { timelineChildTitle, timelineRemovedSessionIDs, visibleTimelineMessages } from "./controller-projection"
+import { timelineChildTitle, visibleTimelineMessages } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
 import { useServer } from "@/context/server"
 
@@ -171,7 +172,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
         return false
       })
     if (!success) return false
-    const removed = timelineRemovedSessionIDs(data.session.list(), id)
+    const removed = removedSessionIDs(data.session.list(), id)
     void navigateAfterRemoval(id, session.parentID, next?.id)
     notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: [...removed] })
     return true

@@ -1,8 +1,12 @@
 import type { SessionInfo } from "@opencode-ai/client/promise"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { skipToken, useQuery } from "@tanstack/solid-query"
+import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
+import { DialogFooter, DialogHeader, DialogTitleGroup, DialogV2 } from "@opencode-ai/ui/v2/dialog-v2"
+import { skipToken, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { DateTime } from "luxon"
 import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
+import { createStore } from "solid-js/store"
+import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { useCommand } from "@/context/command"
 import {
   loadHomeSessionIndex,
@@ -15,7 +19,10 @@ import { ServerConnection } from "@/context/servers"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
 import { compareSessionTime, displayName, errorMessage, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
+import { removedSessionIDs } from "@/pages/session/session-domain"
 import { pathKey } from "@/utils/path-key"
+import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
+import { sessionLabel, sessionTitle } from "@/utils/session-title"
 import { showToast } from "@/utils/toast"
 import { archiveHomeSession } from "../home-session-archive"
 import type { HomeController } from "./home-controller"
@@ -40,6 +47,8 @@ export function createHomeSessionsController(home: HomeController) {
   const command = useCommand()
   const dialog = useDialog()
   const language = useLanguage()
+  const queryClient = useQueryClient()
+  const [removed, setRemoved] = createStore({ keys: [] as string[] })
   const projectDirectories = createMemo(() => {
     const project = home.project.selected()
     if (!project) return home.project.list().flatMap(directories)
@@ -65,9 +74,13 @@ export function createHomeSessionsController(home: HomeController) {
   })
   const indexedSessions = createMemo(() => {
     const ctx = home.server.focusedContext()
-    if (!ctx) return []
+    const conn = home.server.focused()
+    if (!ctx || !conn) return []
+    const server = ServerConnection.key(conn)
     return retainHomeSessions(
-      mergeHomeSessionIndex(sessionLoad.data ?? [], ctx.data.session.list()),
+      mergeHomeSessionIndex(sessionLoad.data ?? [], ctx.data.session.list()).filter(
+        (session) => !removed.keys.includes(`${server}\0${session.id}`),
+      ),
       HOME_SESSION_LIMIT,
       Date.now(),
     )
@@ -130,6 +143,112 @@ export function createHomeSessionsController(home: HomeController) {
     },
   ])
 
+  const rename = async (server: ServerConnection.Key, session: SessionInfo, title: string) => {
+    const conn = home.server.list().find((item) => ServerConnection.key(item) === server)
+    const ctx = conn ? home.server.context(conn) : undefined
+    if (!conn || !ctx) return false
+    const next = title.trim()
+    if (!next || next === sessionLabel(session)) return true
+    return ctx.sdk.api.session
+      .rename({ sessionID: session.id, title: next })
+      .then(() => {
+        ctx.data.session.remember({ ...(ctx.data.session.get(session.id) ?? session), title: next })
+        queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
+          current?.map((item) => (item.id === session.id ? { ...item, title: next } : item)),
+        )
+        return true
+      })
+      .catch((cause) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: errorMessage(cause, language.t("common.requestFailed")),
+        })
+        return false
+      })
+  }
+
+  const exportSession = async (server: ServerConnection.Key, session: SessionInfo) => {
+    const conn = home.server.list().find((item) => ServerConnection.key(item) === server)
+    const ctx = conn ? home.server.context(conn) : undefined
+    if (!ctx) return
+    try {
+      const data = await fetchSessionExport({ sessionID: session.id, api: ctx.sdk.api })
+      const filename = sessionExportFilename(data.info)
+      downloadSessionExport(filename, data)
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("toast.session.export.success.title"),
+        description: language.t("toast.session.export.success.description", { filename }),
+      })
+    } catch (cause) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.session.export.failed.title"),
+        description:
+          cause instanceof Error ? cause.message : language.t("toast.session.export.failed.description"),
+      })
+    }
+  }
+
+  const remove = async (server: ServerConnection.Key, session: SessionInfo) => {
+    const conn = home.server.list().find((item) => ServerConnection.key(item) === server)
+    const ctx = conn ? home.server.context(conn) : undefined
+    if (!conn || !ctx) return false
+    const ids = [...removedSessionIDs(ctx.data.session.list(), session.id)]
+    await queryClient.cancelQueries({ queryKey: ["home-sessions", conn], exact: true })
+    return ctx.sdk.api.session
+      .remove({ sessionID: session.id })
+      .then(() => {
+        const removedIDs = new Set(ids)
+        setRemoved("keys", (current) => [
+          ...new Set([...current, ...ids.map((id) => `${server}\0${id}`)]),
+        ])
+        queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
+          current?.filter((item) => !removedIDs.has(item.id)),
+        )
+        notifySessionTabsRemoved({
+          server: ServerConnection.key(conn),
+          directory: session.location.directory,
+          sessionIDs: ids,
+        })
+        return true
+      })
+      .catch((cause) => {
+        showToast({
+          title: language.t("session.delete.failed.title"),
+          description: errorMessage(cause, language.t("session.delete.failed.title")),
+        })
+        return false
+      })
+  }
+
+  function DeleteDialog(props: { server: ServerConnection.Key; session: SessionInfo }) {
+    const name = () => sessionTitle(props.session.title) ?? language.t("command.session.new")
+    const confirm = async () => {
+      await remove(props.server, props.session)
+      dialog.close()
+    }
+    return (
+      <DialogV2 fit>
+        <DialogHeader hideClose>
+          <DialogTitleGroup
+            title={language.t("session.delete.title")}
+            description={language.t("session.delete.confirm", { name: name() })}
+          />
+        </DialogHeader>
+        <DialogFooter>
+          <ButtonV2 variant="ghost" onClick={() => dialog.close()}>
+            {language.t("common.cancel")}
+          </ButtonV2>
+          <ButtonV2 variant="danger" onClick={confirm}>
+            {language.t("session.delete.button")}
+          </ButtonV2>
+        </DialogFooter>
+      </DialogV2>
+    )
+  }
+
   return {
     copy: {
       language,
@@ -190,6 +309,10 @@ export function createHomeSessionsController(home: HomeController) {
             }),
         })
       },
+      rename,
+      export: exportSession,
+      showDelete: (server: ServerConnection.Key, session: SessionInfo) =>
+        dialog.show(() => <DeleteDialog server={server} session={session} />),
     },
     tab: {
       isOpen: (record: HomeSessionRecord) =>
