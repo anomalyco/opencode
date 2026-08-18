@@ -702,6 +702,17 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
+    case e instanceof Error && e.message.toLowerCase().includes("unknown certificate verification error"):
+      return new APIError(
+        {
+          message: e.message,
+          isRetryable: true,
+          metadata: {
+            message: e.message,
+          },
+        },
+        { cause: e },
+      ).toObject()
     case e instanceof Error:
       return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
     default:
