@@ -52,6 +52,7 @@ import { createProviderBudgetTracker } from "./providerBudgetTracker"
 import { accumulateUsage, HOT_WORKSPACES } from "./usageBatcher"
 import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import { countryFromRequest } from "~/lib/request-country"
+import { withCorsHeaders } from "./modelsHandler"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
@@ -308,7 +309,7 @@ export async function handler(
     const resStatus = res.status === 404 ? 400 : res.status
 
     // Scrub response headers
-    const resHeaders = new Headers()
+    const resHeaders = withCorsHeaders()
     const keepHeaders = ["content-type", "cache-control"]
     for (const [k, v] of res.headers.entries()) {
       if (keepHeaders.includes(k.toLowerCase())) {
