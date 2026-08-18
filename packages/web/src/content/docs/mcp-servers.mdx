@@ -510,3 +510,51 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### SuperCompress
+
+Add the [SuperCompress](https://www.supercompress.dev) MCP server to compress bulky tool dumps, logs, diffs, and pasted context before they burn tokens. Compresses **context only** — never the user’s ask.
+
+One-shot install (detects OpenCode and writes this config for you):
+
+```bash
+npm install -g supercompress-proxy
+supercompress setup
+```
+
+Or add it manually:
+
+```jsonc title="opencode.jsonc" {4-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "supercompress": {
+      "type": "local",
+      "command": ["npx", "-y", "-p", "supercompress-proxy", "supercompress-mcp"],
+      "enabled": true,
+      "timeout": 60000,
+      "environment": {
+        "SUPERCOMPRESS_CONFIG_DIR": "{env:HOME}/.supercompress"
+      }
+    }
+  }
+}
+```
+
+Link your account once (`supercompress connect` or the MCP `connect_account` tool), then restart OpenCode so the server loads.
+
+Tools: `compress_context`, `connect_account`, `usage_summary`.
+
+```txt "use compress_context"
+Compress this tool dump for the current question. use compress_context
+```
+
+Optionally add guidance to [AGENTS.md](/docs/rules/):
+
+```md title="AGENTS.md"
+When tool dumps, logs, diffs, or pasted blobs are large, call SuperCompress `compress_context` with the dump as `context` and the user question as `query`. Prefer `~/.supercompress/inbox/latest.md` when it exists. Never compress the user’s ask.
+```
+
+Docs: [Coding agents](https://docs.supercompress.dev/coding-agents) · [Benchmarks](https://www.supercompress.dev/benchmarks)
