@@ -73,10 +73,10 @@ function LimitsGraph(props: { href: string }) {
     { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 1050, d: "150ms" },
     { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "210ms" },
-    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 3800, d: "270ms" },
     { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", req: 4100, baseReq: 2050, d: "290ms" },
     { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "300ms" },
     { id: "hy3", name: "Hy3", req: 4300, d: "320ms" },
+    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 7600, d: "330ms" },
     { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, edge: true, d: "340ms" },
   ]
 

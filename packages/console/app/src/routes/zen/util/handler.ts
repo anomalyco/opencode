@@ -247,7 +247,7 @@ export async function handler(
             headers.delete("host")
             headers.delete("content-length")
             headers.delete("x-opencode-request")
-            headers.delete("x-opencode-session")
+            if (!isNewInference) headers.delete("x-opencode-session")
             headers.delete("x-opencode-project")
             headers.delete("x-opencode-client")
             return headers
