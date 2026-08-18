@@ -10,6 +10,7 @@ import { TextAttributes } from "@opentui/core"
 import type { McpServer } from "@opencode-ai/client"
 import { useToast } from "../ui/toast"
 import { DialogErrorDetails } from "./dialog-error-details"
+import { DialogIntegration } from "./dialog-integration"
 
 function statusError(status: McpServer["status"]) {
   if (status.status === "failed") return status.error
@@ -90,18 +91,27 @@ export function DialogMcp() {
     return server ? statusError(server.status) : undefined
   })
 
-  const open = (name: string | undefined) => {
+  const select = (name: string | undefined) => {
     const server = servers().find((entry) => entry.name === name)
-    if (!server || !statusError(server.status)) return
+    if (!server) return
+    if (server.status.status === "needs_auth" && server.integrationID) {
+      dialog.replace(() => <DialogIntegration integrationID={server.integrationID} autoConnect />)
+      return
+    }
+    if (!statusError(server.status)) return
     setDetail(server)
   }
 
-  // Connected servers disconnect; everything else (disabled, failed, needs_auth) retries a
-  // connection. The mcp.status.changed event refreshes the list, so no manual sync is needed.
+  // Auth-gated servers enter the integration flow; other inactive states retry the connection.
+  // The mcp.status.changed event refreshes the list, so no manual sync is needed.
   const toggle = (name: string) => {
     if (loading() !== null) return
     const server = servers().find((entry) => entry.name === name)
     if (!server || server.status.status === "pending") return
+    if (server.status.status === "needs_auth" && server.integrationID) {
+      select(name)
+      return
+    }
     setLoading(name)
     const current = data.location.default()
     const input = { server: name, location: { directory: current.directory, workspace: current.workspaceID } }
@@ -119,7 +129,7 @@ export function DialogMcp() {
             options={options()}
             preserveSelection
             onMove={(option) => setFocused(option.value as string)}
-            onSelect={(option) => open(option.value as string)}
+            onSelect={(option) => select(option.value as string)}
             actions={[
               {
                 title: toggleTitle(),
