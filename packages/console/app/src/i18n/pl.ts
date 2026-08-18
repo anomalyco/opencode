@@ -101,10 +101,14 @@ export const dict = {
   "temp.logoDarkAlt": "ciemne logo opencode",
 
   "home.banner.badge": "Nowość",
-  "home.banner.text": "Aplikacja desktopowa dostępna w wersji beta",
-  "home.banner.platforms": "na macOS, Windows i Linux",
+  "home.banner.text": "Przedstawiamy karty w aplikacji desktopowej.",
+  "home.banner.platforms": "Dostępne na macOS, Windows i Linux",
   "home.banner.downloadNow": "Pobierz teraz",
   "home.banner.downloadBetaNow": "Pobierz betę wersji desktopowej",
+  "home.promo.title": "Przedstawiamy karty w aplikacji desktopowej",
+  "home.promo.body": "Organizuj swoją pracę i aktywne sesje za pomocą kart.",
+  "home.promo.cta": "Pobierz najnowszą wersję, aby rozpocząć.",
+  "home.promo.close": "Zamknij ogłoszenie o aplikacji desktopowej",
 
   "home.hero.title": "Open source'owy agent AI do kodowania",
   "home.hero.subtitle.a": "Darmowe modele w zestawie lub podłącz dowolny model od dowolnego dostawcy,",
@@ -252,7 +256,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Niskokosztowe modele do kodowania dla każdego",
   "go.meta.description":
-    "Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc, z hojnymi 5-godzinnymi limitami zapytań dla GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro i DeepSeek V4 Flash.",
+    "Go kosztuje $5 za pierwszy miesiąc, a następnie $10/miesiąc, oferując hojne limity użycia i niezawodny dostęp do wiodących modeli do kodowania.",
   "go.hero.title": "Niskokosztowe modele do kodowania dla każdego",
   "go.hero.body":
     "Go udostępnia programowanie z agentami programistom na całym świecie. Oferuje hojne limity i niezawodny dostęp do najzdolniejszych modeli open source, dzięki czemu możesz budować za pomocą potężnych agentów, nie martwiąc się o koszty czy dostępność.",
@@ -269,7 +273,6 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "Żądania na 5 godzin",
   "go.graph.usageLimits": "Limity użycia",
-  "go.graph.tick": "{{n}}x",
   "go.graph.aria": "Żądania na 5h: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
@@ -300,8 +303,7 @@ export const dict = {
   "go.problem.item1": "Niskokosztowa cena subskrypcji",
   "go.problem.item2": "Hojne limity i niezawodny dostęp",
   "go.problem.item3": "Stworzony dla jak największej liczby programistów",
-  "go.problem.item4":
-    "Zawiera GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro i DeepSeek V4 Flash",
+  "go.problem.item4": "Starannie dobrany zestaw modeli przetestowanych pod kątem kodowania z agentami",
   "go.how.title": "Jak działa Go",
   "go.how.body":
     "Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc. Możesz go używać z OpenCode lub dowolnym agentem.",
@@ -327,7 +329,7 @@ export const dict = {
   "go.faq.a2": "Go obejmuje poniższe modele z wysokimi limitami i niezawodnym dostępem.",
   "go.faq.q3": "Czy Go to to samo co Zen?",
   "go.faq.a3":
-    "Nie. Zen to model płatności za użycie, podczas gdy Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc, z hojnymi limitami i niezawodnym dostępem do modeli open source GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro i DeepSeek V4 Flash.",
+    "Nie. Zen działa w modelu płatności za użycie, natomiast Go kosztuje $5 za pierwszy miesiąc, a następnie $10/miesiąc, oferując hojne limity i niezawodny dostęp do starannie dobranego zestawu modeli.",
   "go.faq.q4": "Ile kosztuje Go?",
   "go.faq.a4.p1.beforePricing": "Go kosztuje",
   "go.faq.a4.p1.pricingLink": "$5 za pierwszy miesiąc",
@@ -336,8 +338,21 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "koncie",
   "go.faq.a4.p3": "Anuluj w dowolnym momencie.",
   "go.faq.q5": "A co z danymi i prywatnością?",
-  "go.faq.a5.body":
-    "Plan został zaprojektowany głównie dla użytkowników międzynarodowych, z modelami hostowanymi w USA, UE i Singapurze, aby zapewnić stabilny globalny dostęp. Nasi dostawcy stosują politykę zerowej retencji i nie używają Twoich danych do trenowania modeli.",
+  "go.faq.a5.model": "Model",
+  "go.faq.a5.training": "Trenowanie modelu",
+  "go.faq.a5.retention": "Retencja danych",
+  "go.faq.a5.retention30": "30 dni",
+  "go.faq.a5.retention0": "0 dni",
+  "go.faq.a5.used": "Wykorzystywane",
+  "go.faq.a5.notUsed": "Niewykorzystywane",
+  "go.faq.a5.noAgreement": "Brak umowy",
+  "go.faq.a5.grokRetention":
+    "ZDR wyłącza ważne funkcje API zależne od przechowywanych danych, w tym stanowy Responses API, Files and Collections oraz Batch API.",
+  "go.faq.a5.gptRetention":
+    "Dzienniki monitorowania nadużyć są generowane dla każdego użycia funkcji API i przechowywane przez maksymalnie 30 dni.",
+  "go.faq.a5.learnMore": "Dowiedz się więcej",
+  "go.faq.a5.deepseekRetention": "Umowa ZDR jest odnawiana co miesiąc. Obecna umowa obowiązuje do 31 sierpnia 2026 r.",
+
   "go.faq.a5.beforeExceptions":
     "Modele Go są hostowane w USA. Dostawcy stosują politykę zerowej retencji i nie używają Twoich danych do trenowania modeli, z",
   "go.faq.a5.exceptionsLink": "następującymi wyjątkami",
@@ -351,7 +366,7 @@ export const dict = {
 
   "go.faq.q9": "Jaka jest różnica między darmowymi modelami a Go?",
   "go.faq.a9":
-    "Darmowe modele obejmują Big Pickle oraz modele promocyjne dostępne w danym momencie, z limitem 200 zapytań/dzień. Go zawiera GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro i DeepSeek V4 Flash z wyższymi limitami zapytań egzekwowanymi w oknach kroczących (5-godzinnych, tygodniowych i miesięcznych), w przybliżeniu równoważnymi $12 na 5 godzin, $30 tygodniowo i $60 miesięcznie (rzeczywista liczba zapytań zależy od modelu i użycia).",
+    "Darmowe modele obejmują Big Pickle oraz modele promocyjne dostępne w danym momencie, z limitem 200 zapytań/dzień. Go oferuje starannie dobrany zestaw modeli z wyższymi limitami zapytań egzekwowanymi w oknach kroczących (5-godzinnych, tygodniowych i miesięcznych), odpowiadającymi w przybliżeniu $12 na 5 godzin, $30 tygodniowo i $60 miesięcznie (rzeczywista liczba zapytań zależy od modelu i użycia).",
 
   "zen.api.error.rateLimitExceeded": "Przekroczono limit zapytań. Spróbuj ponownie później.",
   "zen.api.error.modelNotSupported": "Model {{model}} nie jest obsługiwany",
@@ -360,6 +375,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "Dostawca {{provider}} nie jest obsługiwany",
   "zen.api.error.missingApiKey": "Brak klucza API.",
   "zen.api.error.invalidApiKey": "Nieprawidłowy klucz API.",
+  "zen.api.error.requestBlockedByUpstreamProvider": "Żądanie zablokowane przez dostawcę zewnętrznego.",
   "zen.api.error.subscriptionQuotaExceeded": "Przekroczono limit subskrypcji. Spróbuj ponownie za {{retryIn}}.",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "Osiągnięto 5-godzinny limit użycia. Resetuje się za {{retryIn}}. Aby nadal korzystać z tego modelu, włącz użycie z dostępnego salda: {{consoleGoUrl}}",
@@ -374,6 +390,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Osiągnąłeś swój miesięczny limit wydatków w wysokości ${{amount}}. Zarządzaj swoimi limitami tutaj: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Model jest wyłączony",
+  "zen.api.error.regionNotAllowed":
+    "Najnowsza wersja tego modelu jest dostępna wyłącznie jako usługa hostowana w Chinach i wymaga jawnej zgody użytkownika: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Bezpłatna promocja {{model}} dobiegła końca. Możesz dalej korzystać z modelu, subskrybując OpenCode Go - {{link}}",
 
@@ -653,6 +671,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Użyj dostępnego salda po osiągnięciu limitów użycia",
   "workspace.lite.subscription.selectProvider":
     'Wybierz "OpenCode Go" jako dostawcę w konfiguracji opencode, aby używać modeli Go.',
+  "workspace.lite.providers.title": "Dostawcy",
+  "workspace.lite.providers.description": "Kontroluj, którzy dostawcy są używani do routingu.",
+  "workspace.lite.providers.useChina": "Włącz modele hostowane w Chinach",
   "workspace.lite.black.message":
     "Obecnie subskrybujesz OpenCode Black lub jesteś na liście oczekujących. Jeśli chcesz przejść na Go, najpierw anuluj subskrypcję.",
   "workspace.lite.other.message":
@@ -662,19 +683,52 @@ export const dict = {
   "workspace.lite.promo.price": "$5 za pierwszy miesiąc",
   "workspace.lite.promo.modelsTitle": "Co zawiera",
   "workspace.lite.promo.footer":
-    "Plan został zaprojektowany głównie dla użytkowników międzynarodowych, z modelami hostowanymi w USA, UE i Singapurze, aby zapewnić stabilny globalny dostęp. Ceny i limity użycia mogą ulec zmianie w miarę analizy wczesnego użycia i zbierania opinii.",
+    "Plan został opracowany przede wszystkim z myślą o użytkownikach z całego świata i zapewnia stabilny globalny dostęp. Ceny i limity użycia mogą ulec zmianie w miarę zdobywania doświadczeń na podstawie początkowego korzystania z usługi i otrzymywanych opinii.",
   "workspace.lite.promo.subscribe": "Subskrybuj Go",
   "workspace.lite.promo.subscribing": "Przekierowywanie...",
   "workspace.lite.promo.otherMethods": "Inne metody płatności",
   "workspace.lite.promo.selectMethod": "Wybierz metodę płatności",
 
+  "workspace.referral.copyLink": "Kopiuj link",
+  "workspace.referral.copied": "Skopiowano",
+  "workspace.referral.overview.title": "Zaproś znajomych",
+  "workspace.referral.overview.subtitle": "Zdobądź $5, gdy znajomy się zasubskrybuje. On też dostanie $5.",
+  "workspace.referral.instructions.share": "Udostępnij swój link polecający",
+  "workspace.referral.instructions.subscribe": "Twój znajomy dołącza i subskrybuje Go",
+  "workspace.referral.instructions.claim": "Oboje otrzymujecie kredyt $5 do wykorzystania na limity użycia Go",
+  "workspace.referral.rewards.title": "Nagrody za polecenia",
+  "workspace.referral.rewards.description": "Wykorzystaj dostępne środki za polecenia na swoje użycie Go.",
+  "workspace.referral.rewards.subtitle": "Wykorzystano {{applied}} / {{total}} nagród.",
+  "workspace.referral.rewards.empty": "Brak nagród za polecenia.",
+  "workspace.referral.table.reward": "Nagroda",
+  "workspace.referral.table.referral": "Opis",
+  "workspace.referral.table.date": "Data",
+  "workspace.referral.reward.description.inviter": "Zaproszono {{email}}",
+  "workspace.referral.reward.description.invitee": "Zaproszony przez {{email}}",
+  "workspace.referral.reward.action.subscribeUnlock": "Subskrybuj, aby odblokować",
+  "workspace.referral.reward.action.view": "Zobacz nagrodę",
+  "workspace.referral.reward.action.applied": "Nagroda wykorzystana",
+  "workspace.referral.reward.source.pendingInviter": "Oczekiwanie na jego subskrypcję",
+  "workspace.referral.reward.source.pendingInvitee": "Subskrybuj, aby odblokować nagrodę",
+  "workspace.referral.reward.source.available": "Nagroda gotowa do wykorzystania",
+  "workspace.referral.reward.source.applied": "Nagroda wykorzystana",
+  "workspace.referral.reward.status.applied": "Nagroda wykorzystana",
+  "workspace.referral.reward.status.pendingInviter": "Subskrybuj, aby odblokować",
+  "workspace.referral.reward.status.pendingInvitee": "Subskrybuj, aby odblokować",
+  "workspace.referral.apply.noGo": "Subskrybuj, aby odblokować",
+  "workspace.referral.apply.preview": "Zobacz nagrodę",
+  "workspace.referral.apply.action": "Wykorzystaj",
+  "workspace.referral.apply.confirmTitle": "Wykorzystaj nagrodę",
+  "workspace.referral.apply.confirmBody": "Wykorzystaj {{amount}}, aby zmniejszyć aktualne użycie w tym workspace.",
+  "workspace.referral.apply.confirmAction": "Wykorzystaj",
+
   "download.title": "OpenCode | Pobierz",
   "download.meta.description": "Pobierz OpenCode na macOS, Windows i Linux",
-  "download.hero.title": "Pobierz OpenCode",
+  "download.hero.title": "Pobierz OpenCode Desktop",
   "download.hero.subtitle": "Dostępne w wersji Beta na macOS, Windows i Linux",
   "download.hero.button": "Pobierz na {{os}}",
   "download.section.terminal": "Terminal OpenCode",
-  "download.section.desktop": "Pulpit OpenCode (Beta)",
+  "download.section.desktop": "Pulpit OpenCode",
   "download.section.extensions": "Rozszerzenia OpenCode",
   "download.section.integrations": "Integracje OpenCode",
   "download.action.download": "Pobierz",

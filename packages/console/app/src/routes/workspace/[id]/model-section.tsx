@@ -10,6 +10,7 @@ import {
   IconAnthropic,
   IconArcee,
   IconGemini,
+  IconDeepSeek,
   IconMiniMax,
   IconMoonshotAI,
   IconNvidia,
@@ -27,6 +28,7 @@ const getModelLab = (modelId: string) => {
   if (modelId.startsWith("claude")) return "Anthropic"
   if (modelId.startsWith("gpt")) return "OpenAI"
   if (modelId.startsWith("gemini")) return "Google"
+  if (modelId.startsWith("deepseek")) return "DeepSeek"
   if (modelId.startsWith("kimi")) return "Moonshot AI"
   if (modelId.startsWith("glm")) return "Z.ai"
   if (modelId.startsWith("qwen")) return "Alibaba"
@@ -47,7 +49,19 @@ const getModelsInfo = query(async (workspaceID: string) => {
         .filter(([id, _model]) => !id.startsWith("alpha-"))
         .filter(([id, _model]) => !id.endsWith(":global"))
         .sort(([idA, modelA], [idB, modelB]) => {
-          const priority = ["big-pickle", "minimax", "grok", "claude", "gpt", "gemini"]
+          const priority = [
+            "big-pickle",
+            "claude",
+            "gpt",
+            "gemini",
+            "deepseek",
+            "glm",
+            "kimi",
+            "qwen",
+            "grok",
+            "minimax",
+            "mimo",
+          ]
           const getPriority = (id: string) => {
             const index = priority.findIndex((p) => id.startsWith(p))
             return index === -1 ? Infinity : index
@@ -136,6 +150,8 @@ export function ModelSection() {
                                   return <IconAnthropic width={16} height={16} />
                                 case "Google":
                                   return <IconGemini width={16} height={16} />
+                                case "DeepSeek":
+                                  return <IconDeepSeek width={16} height={16} />
                                 case "Moonshot AI":
                                   return <IconMoonshotAI width={16} height={16} />
                                 case "Z.ai":

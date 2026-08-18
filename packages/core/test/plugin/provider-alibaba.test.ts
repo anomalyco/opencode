@@ -1,21 +1,38 @@
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
 import { createAlibaba } from "@ai-sdk/alibaba"
 import { Effect } from "effect"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { AlibabaPlugin } from "@opencode-ai/core/plugin/provider/alibaba"
-import { it, model } from "./provider-helper"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { testEffect } from "../lib/effect"
+import { PluginTestLayer } from "./fixture"
+
+const it = testEffect(PluginTestLayer)
+
+const addPlugin = Effect.fn(function* () {
+  const plugin = yield* PluginV2.Service
+  const aisdk = yield* AISDK.Service
+  const host = yield* PluginHost.make(plugin)
+  yield* AlibabaPlugin.effect(host)
+})
 
 describe("AlibabaPlugin", () => {
   it.effect("creates an Alibaba SDK for @ai-sdk/alibaba", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(AlibabaPlugin)
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        { model: model("alibaba", "qwen"), package: "@ai-sdk/alibaba", options: { name: "alibaba" } },
-        {},
-      )
+      const aisdk = yield* AISDK.Service
+      yield* addPlugin()
+      const result = yield* aisdk.runSDK({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("qwen")),
+          api: { id: ModelV2.ID.make("qwen"), type: "aisdk", package: "test-provider" },
+        }),
+        package: "@ai-sdk/alibaba",
+        options: { name: "alibaba" },
+      })
       expect(result.sdk).toBeDefined()
     }),
   )
@@ -23,12 +40,16 @@ describe("AlibabaPlugin", () => {
   it.effect("ignores non-Alibaba SDK packages", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(AlibabaPlugin)
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        { model: model("alibaba", "qwen"), package: "@ai-sdk/openai-compatible", options: { name: "alibaba" } },
-        {},
-      )
+      const aisdk = yield* AISDK.Service
+      yield* addPlugin()
+      const result = yield* aisdk.runSDK({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("qwen")),
+          api: { id: ModelV2.ID.make("qwen"), type: "aisdk", package: "test-provider" },
+        }),
+        package: "@ai-sdk/openai-compatible",
+        options: { name: "alibaba" },
+      })
       expect(result.sdk).toBeUndefined()
     }),
   )
@@ -36,16 +57,16 @@ describe("AlibabaPlugin", () => {
   it.effect("matches the old bundled Alibaba SDK provider naming", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(AlibabaPlugin)
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: model("custom-alibaba", "qwen"),
-          package: "@ai-sdk/alibaba",
-          options: { name: "custom-alibaba", apiKey: "test" },
-        },
-        {},
-      )
+      const aisdk = yield* AISDK.Service
+      yield* addPlugin()
+      const result = yield* aisdk.runSDK({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("custom-alibaba"), ModelV2.ID.make("qwen")),
+          api: { id: ModelV2.ID.make("qwen"), type: "aisdk", package: "test-provider" },
+        }),
+        package: "@ai-sdk/alibaba",
+        options: { name: "custom-alibaba", apiKey: "test" },
+      })
       const expected = createAlibaba({ apiKey: "test", ...{ name: "custom-alibaba" } }).languageModel("qwen")
       const actual = result.sdk?.languageModel("qwen")
       expect(actual?.provider).toBe(expected.provider)
@@ -53,13 +74,17 @@ describe("AlibabaPlugin", () => {
     }),
   )
 
-  it.effect("uses the old default languageModel(apiID) behavior", () =>
+  it.effect("uses the old default languageModel(api.id) behavior", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(AlibabaPlugin)
-      const item = model("alibaba", "alias", { apiID: ModelV2.ID.make("qwen-plus") })
-      const result = yield* plugin.trigger("aisdk.sdk", { model: item, package: "@ai-sdk/alibaba", options: {} }, {})
-      const language = result.sdk?.languageModel(item.apiID)
+      const aisdk = yield* AISDK.Service
+      yield* addPlugin()
+      const item = ModelV2.Info.make({
+        ...ModelV2.Info.empty(ProviderV2.ID.make("alibaba"), ModelV2.ID.make("alias")),
+        api: { id: ModelV2.ID.make("qwen-plus"), type: "aisdk", package: "test-provider" },
+      })
+      const result = yield* aisdk.runSDK({ model: item, package: "@ai-sdk/alibaba", options: {} })
+      const language = result.sdk?.languageModel(item.api.id)
       expect(language?.modelId).toBe("qwen-plus")
       expect(language?.provider).toBe("alibaba.chat")
     }),

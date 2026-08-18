@@ -26,6 +26,7 @@ export const subjects = createSubjects({
   account: z.object({
     accountID: z.string(),
     email: z.string(),
+    newAccount: z.boolean().optional(),
   }),
   user: z.object({
     userID: z.string(),
@@ -142,6 +143,7 @@ export default {
         }
 
         // Get account
+        let newAccount = false
         const accountID = await (async () => {
           const matches = await Database.use(async (tx) =>
             tx
@@ -166,6 +168,7 @@ export default {
           if (!accountID) {
             console.log("creating account for", email)
             accountID = await Account.create({})
+            newAccount = true
           }
 
           await Database.use(async (tx) =>
@@ -215,7 +218,7 @@ export default {
             await Workspace.create({ name: "Default" })
           }
         })
-        return ctx.subject("account", accountID, { accountID, email })
+        return ctx.subject("account", accountID, { accountID, email, newAccount })
       },
     }).fetch(request, env, ctx)
     return result

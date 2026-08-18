@@ -358,28 +358,57 @@ How is auth handled in @packages/functions/src/api/index.ts?
 {
   "$schema": "https://opencode.ai/tui.json",
   "theme": "opencode",
+  "leader_timeout": 2000,
   "keybinds": {
-    "leader": "ctrl+x"
+    "leader": "ctrl+x",
+    "command_list": "ctrl+p"
   },
   "scroll_speed": 3,
   "scroll_acceleration": {
-    "enabled": true
+    "enabled": false
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "mouse": true,
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "error": "./sounds/error.mp3"
+    }
+  }
 }
 ```
 
 這與設定伺服器/執行時行為的 `opencode.json` 是分開的。
 
+`keybinds` 會與內建預設值合併，因此您只需要設定想要修改的快捷鍵。
+
 ### 選項
 
 - `theme` - 設定您的 UI 主題。[了解更多](/docs/themes)。
 - `keybinds` - 自訂鍵盤快速鍵。[了解更多](/docs/keybinds)。
+- `leader_timeout` - 控制按下 leader key 後 OpenCode 等待後續按鍵的時間。預設為 `2000`。
 - `scroll_acceleration.enabled` - 啟用 macOS 風格的捲動加速，實現平滑、自然的捲動體驗。啟用後，快速捲動時速度會增加，慢速移動時保持精確。**此設定優先於 `scroll_speed`，啟用時會覆蓋它。**
 - `scroll_speed` - 控制使用捲動指令時 TUI 的捲動速度（最小值：`0.001`，支援小數值）。預設為 `3`。**注意：如果 `scroll_acceleration.enabled` 設定為 `true`，則此設定會被忽略。**
 - `diff_style` - 控制差異呈現方式。`"auto"` 根據終端機寬度自適應，`"stacked"` 始終顯示單列。
+- `mouse` - 在 TUI 中啟用或停用滑鼠捕捉（預設：`true`）。停用後，會保留終端機原生的滑鼠選取和捲動行為。
+- `attention` - 設定 TUI 桌面通知和聲音。預設停用。
 
 使用 `OPENCODE_TUI_CONFIG` 載入自訂 TUI 設定路徑。
+
+### Attention
+
+當 OpenCode 需要你處理問題、核准權限請求、查看工作階段錯誤，或告知工作階段已完成時，TUI 可以透過聲音和桌面通知提醒你。設定 `attention.enabled` 後會啟用這些提醒；內建事件觸發時會播放聲音。桌面通知只會在終端機視窗未聚焦時傳送，且不會用於 subagent 事件。
+
+- `enabled` - 開啟 Attention 的所有通知和聲音。預設為 `false`。
+- `notifications` - 啟用 Attention 後，允許 TUI 透過終端機傳送桌面通知。預設為 `true`。
+- `sound` - 啟用 Attention 後，允許播放提示音。預設為 `true`。
+- `volume` - 預設提示音音量，範圍從 `0` 到 `1`。預設為 `0.4`。
+- `sound_pack` - 要使用的 sound pack ID。預設為 `opencode.default`。
+- `sounds` - 為 `default`、`question`、`permission`、`error`、`done` 或 `subagent_done` 指定自訂聲音檔案。路徑可以是絕對路徑、`file://` URL，或相對於 `tui.json` 的路徑。
 
 ---
 

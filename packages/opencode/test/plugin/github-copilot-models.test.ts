@@ -57,7 +57,7 @@ test("preserves temperature support from existing provider models", async () => 
     ),
   ) as unknown as typeof fetch
 
-  const models = await CopilotModels.get(
+  const result = await CopilotModels.get(
     "https://api.githubcopilot.com",
     {},
     {
@@ -112,9 +112,239 @@ test("preserves temperature support from existing provider models", async () => 
       },
     },
   )
+  const models = result.models
 
   expect(models["gpt-4o"].capabilities.temperature).toBe(true)
   expect(models["brand-new"].capabilities.temperature).toBe(true)
+})
+
+test("converts Copilot AIC token prices to USD per million tokens", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "gpt-5",
+              name: "GPT-5",
+              version: "gpt-5-2026-06-01",
+              billing: {
+                token_prices: {
+                  batch_size: 500000,
+                  default: {
+                    input_price: 500,
+                    output_price: 3000,
+                    cache_price: 50,
+                  },
+                },
+              },
+              capabilities: {
+                family: "gpt",
+                limits: {
+                  max_context_window_tokens: 200000,
+                  max_output_tokens: 16384,
+                  max_prompt_tokens: 200000,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+            {
+              model_picker_enabled: true,
+              id: "incomplete-internal-model",
+              name: "Incomplete Internal Model",
+              version: "incomplete-internal-model-2026-06-01",
+              capabilities: {
+                family: "internal",
+                supports: {},
+              },
+            },
+            {
+              model_picker_enabled: false,
+              id: "ignored-non-chat-record",
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const models = (await CopilotModels.get("https://api.githubcopilot.com")).models
+
+  expect(models["gpt-5"].cost).toEqual({
+    input: 10,
+    output: 60,
+    cache: {
+      read: 1,
+      write: 0,
+    },
+  })
+  expect(models["incomplete-internal-model"]).toBeUndefined()
+  expect(models["ignored-non-chat-record"]).toBeUndefined()
+})
+
+test("detects PDF input support when vision and media type are advertised", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "pdf-model",
+              name: "PDF Model",
+              version: "pdf-model-2026-06-01",
+              capabilities: {
+                family: "pdf-model",
+                limits: {
+                  max_context_window_tokens: 128000,
+                  max_output_tokens: 16384,
+                  max_prompt_tokens: 128000,
+                  vision: {
+                    max_prompt_image_size: 10000000,
+                    max_prompt_images: 10,
+                    supported_media_types: ["application/pdf"],
+                  },
+                },
+                supports: {
+                  streaming: true,
+                  vision: true,
+                  tool_calls: true,
+                },
+              },
+            },
+            {
+              model_picker_enabled: true,
+              id: "vision-only-model",
+              name: "Vision Only Model",
+              version: "vision-only-model-2026-06-01",
+              capabilities: {
+                family: "vision-only-model",
+                limits: {
+                  max_context_window_tokens: 128000,
+                  max_output_tokens: 16384,
+                  max_prompt_tokens: 128000,
+                  vision: {
+                    max_prompt_image_size: 10000000,
+                    max_prompt_images: 10,
+                    supported_media_types: ["image/png"],
+                  },
+                },
+                supports: {
+                  streaming: true,
+                  vision: true,
+                  tool_calls: true,
+                },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const models = (await CopilotModels.get("https://api.githubcopilot.com")).models
+  const model = models["pdf-model"]
+
+  expect(model.capabilities.input.pdf).toBe(true)
+  expect(models["vision-only-model"].capabilities.input.pdf).toBe(false)
+})
+
+test("uses zero cost when Copilot reports a zero billing batch size", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "mercury-alpha",
+              name: "Mercury Alpha",
+              version: "mercury-alpha-2026-07-09",
+              billing: {
+                token_prices: {
+                  batch_size: 0,
+                  default: {
+                    input_price: 0,
+                    output_price: 0,
+                    cache_price: 0,
+                  },
+                },
+              },
+              capabilities: {
+                family: "mercury",
+                limits: {
+                  max_context_window_tokens: 128000,
+                  max_output_tokens: 16384,
+                  max_prompt_tokens: 128000,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const model = (await CopilotModels.get("https://api.githubcopilot.com")).models["mercury-alpha"]
+
+  expect(model.cost).toEqual({
+    input: 0,
+    output: 0,
+    cache: {
+      read: 0,
+      write: 0,
+    },
+  })
+  expect(JSON.stringify(model)).not.toContain("null")
+})
+
+test("records Copilot advertised responses endpoint for non-GPT model IDs", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "mai-code-1-flash-picker",
+              name: "MAI-Code-1-Flash",
+              version: "mai-code-1-flash-picker",
+              supported_endpoints: ["/responses"],
+              capabilities: {
+                family: "oswe-vscode-modelD",
+                limits: {
+                  max_context_window_tokens: 256000,
+                  max_output_tokens: 128000,
+                  max_prompt_tokens: 128000,
+                },
+                supports: {
+                  streaming: true,
+                  structured_outputs: true,
+                  tool_calls: true,
+                },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const model = (await CopilotModels.get("https://api.githubcopilot.com")).models["mai-code-1-flash-picker"]
+
+  expect("endpoint" in model.api ? model.api.endpoint : undefined).toBe("responses")
 })
 
 test("clears existing variants so refreshed models calculate provider-specific variants", async () => {
@@ -150,7 +380,7 @@ test("clears existing variants so refreshed models calculate provider-specific v
     ),
   ) as unknown as typeof fetch
 
-  const models = await CopilotModels.get(
+  const result = await CopilotModels.get(
     "https://api.githubcopilot.com",
     {},
     {
@@ -210,6 +440,7 @@ test("clears existing variants so refreshed models calculate provider-specific v
       },
     },
   )
+  const models = result.models
 
   expect(models["claude-opus-4.7"].api.npm).toBe("@ai-sdk/anthropic")
   expect(models["claude-opus-4.7"].variants).toBeUndefined()

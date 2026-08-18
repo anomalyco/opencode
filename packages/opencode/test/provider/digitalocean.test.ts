@@ -1,11 +1,13 @@
 import { expect } from "bun:test"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Provider } from "../../src/provider/provider"
-import { ProviderID } from "../../src/provider/schema"
+
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
-const DIGITALOCEAN = ProviderID.make("digitalocean")
-const it = testEffect(Provider.defaultLayer)
+const DIGITALOCEAN = ProviderV2.ID.make("digitalocean")
+const it = testEffect(LayerNode.compile(Provider.node))
 
 const withEnv = <A, E, R>(values: Record<string, string>, effect: Effect.Effect<A, E, R>) =>
   Effect.acquireUseRelease(

@@ -5,16 +5,20 @@ import { checksum } from "@opencode-ai/core/util/encode"
 import { findLast } from "@opencode-ai/core/util/array"
 import { same } from "@/utils/same"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Button } from "@opencode-ai/ui/button"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
-import { File } from "@opencode-ai/ui/file"
-import { Markdown } from "@opencode-ai/ui/markdown"
+import { File } from "@opencode-ai/session-ui/file"
+import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
+import { showToast } from "@/utils/toast"
+import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
+import { useSDK } from "@/context/sdk"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { getSessionContextMetrics } from "./session-context-metrics"
+import { getSessionContext } from "./session-context-metrics"
 import { estimateSessionContextBreakdown, type SessionContextBreakdownKey } from "./session-context-breakdown"
 import { createSessionContextFormatter } from "./session-context-format"
 
@@ -93,16 +97,17 @@ const emptyUserMessages: UserMessage[] = []
 export function SessionContextTab() {
   const sync = useSync()
   const language = useLanguage()
-  const providers = useProviders()
+  const sdk = useSDK()
+  const providers = useProviders(() => sdk().directory)
   const { params, view } = useSessionLayout()
 
-  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
 
   const messages = createMemo(
     () => {
       const id = params.id
       if (!id) return emptyMessages
-      return (sync.data.message[id] ?? []) as Message[]
+      return (sync().data.message[id] ?? []) as Message[]
     },
     emptyMessages,
     { equals: same },
@@ -118,7 +123,8 @@ export function SessionContextTab() {
     () => {
       const revert = info()?.revert?.messageID
       if (!revert) return userMessages()
-      return userMessages().filter((m) => m.id < revert)
+      const boundary = userMessages().findIndex((message) => message.id === revert)
+      return boundary < 0 ? userMessages() : userMessages().slice(0, boundary)
     },
     emptyUserMessages,
     { equals: same },
@@ -132,12 +138,11 @@ export function SessionContextTab() {
       }),
   )
 
-  const metrics = createMemo(() => getSessionContextMetrics(messages(), providers.all()))
-  const ctx = createMemo(() => metrics().context)
+  const ctx = createMemo(() => getSessionContext(messages(), [...providers.all().values()]))
   const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
 
   const cost = createMemo(() => {
-    return usd().format(metrics().totalCost)
+    return usd().format(info()?.cost ?? 0)
   })
 
   const counts = createMemo(() => {
@@ -180,7 +185,7 @@ export function SessionContextTab() {
         if (!c?.input) return []
         return estimateSessionContextBreakdown({
           messages: messages(),
-          parts: sync.data.part as Record<string, Part[] | undefined>,
+          parts: sync().data.part as Record<string, Part[] | undefined>,
           input: c.input,
           systemPrompt: systemPrompt(),
         })
@@ -205,11 +210,12 @@ export function SessionContextTab() {
     { label: "context.stats.totalTokens", value: () => formatter().number(ctx()?.total) },
     { label: "context.stats.usage", value: () => formatter().percent(ctx()?.usage) },
     { label: "context.stats.inputTokens", value: () => formatter().number(ctx()?.input) },
-    { label: "context.stats.outputTokens", value: () => formatter().number(ctx()?.output) },
-    { label: "context.stats.reasoningTokens", value: () => formatter().number(ctx()?.reasoning) },
+    { label: "context.stats.outputTokens", value: () => formatter().number(ctx()?.message.tokens.output) },
+    { label: "context.stats.reasoningTokens", value: () => formatter().number(ctx()?.message.tokens.reasoning) },
     {
       label: "context.stats.cacheTokens",
-      value: () => `${formatter().number(ctx()?.cacheRead)} / ${formatter().number(ctx()?.cacheWrite)}`,
+      value: () =>
+        `${formatter().number(ctx()?.message.tokens.cache.read)} / ${formatter().number(ctx()?.message.tokens.cache.write)}`,
     },
     { label: "context.stats.userMessages", value: () => counts().user.toLocaleString(language.intl()) },
     { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.intl()) },
@@ -218,10 +224,35 @@ export function SessionContextTab() {
     { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },
   ] satisfies { label: string; value: () => JSX.Element }[]
 
+  const exportSession = async () => {
+    const sessionID = params.id
+    if (!sessionID) return
+    try {
+      const data = await fetchSessionExport({
+        sessionID,
+        client: sdk().client,
+      })
+      const filename = sessionExportFilename(data.info)
+      downloadSessionExport(filename, data)
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("toast.session.export.success.title"),
+        description: language.t("toast.session.export.success.description", { filename }),
+      })
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.session.export.failed.title"),
+        description: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
+      })
+    }
+  }
+
   let scroll: HTMLDivElement | undefined
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
-  const getParts = (id: string) => (sync.data.part[id] ?? []) as Part[]
+  const getParts = (id: string) => (sync().data.part[id] ?? []) as Part[]
 
   const restoreScroll = () => {
     const el = scroll
@@ -326,7 +357,18 @@ export function SessionContextTab() {
         </Show>
 
         <div class="flex flex-col gap-2">
-          <div class="text-12-regular text-text-weak">{language.t("context.rawMessages.title")}</div>
+          <div class="flex items-center justify-between">
+            <div class="text-12-regular text-text-weak">{language.t("context.rawMessages.title")}</div>
+            <Button
+              size="small"
+              variant="ghost"
+              class="gap-1.5 px-2 text-text-weak hover:text-text-base"
+              onClick={exportSession}
+            >
+              <Icon name="download" size="small" />
+              <span>{language.t("context.export.session")}</span>
+            </Button>
+          </div>
           <Accordion multiple>
             <For each={messages()}>
               {(message) => (

@@ -1,4 +1,4 @@
-// Shared type vocabulary for the direct interactive mode (`run --interactive`).
+// Shared type vocabulary for the direct interactive mode (`opencode --mini`).
 //
 // Direct mode uses a split-footer terminal layout: immutable scrollback for the
 // session transcript, and a mutable footer for prompt input, status, and
@@ -11,9 +11,8 @@
 //     → stream.ts bridges to footer API
 //       → footer.ts queues commits and patches the footer view
 //         → OpenTUI split-footer renderer writes to terminal
-import type { KeyEvent, Renderable } from "@opentui/core"
-import type { Binding } from "@opentui/keymap"
 import type { OpencodeClient, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import type { TuiConfig } from "@opencode-ai/tui/config"
 
 export type RunFilePart = {
   type: "file"
@@ -32,12 +31,21 @@ export type RunCommand = NonNullable<Awaited<ReturnType<OpencodeClient["command"
 export type RunProvider = NonNullable<Awaited<ReturnType<OpencodeClient["provider"]["list"]>>["data"]>["all"][number]
 
 export type RunPrompt = {
+  messageID?: string
+  partID?: string
   text: string
   parts: RunPromptPart[]
+  mode?: "shell"
   command?: {
     name: string
     arguments: string
   }
+}
+
+export type FooterQueuedPrompt = {
+  messageID: string
+  partID: string
+  prompt: RunPrompt
 }
 
 export type RunAgent = NonNullable<Awaited<ReturnType<OpencodeClient["app"]["agents"]>>["data"]>[number]
@@ -52,12 +60,15 @@ export type RunInput = {
   sessionID: string
   sessionTitle?: string
   resume?: boolean
+  replay?: boolean
+  replayLimit?: number
   agent: string | undefined
   model: PromptModel | undefined
   variant: string | undefined
   files: RunFilePart[]
   initialInput?: string
   thinking: boolean
+  backgroundSubagents: boolean
   demo?: boolean
 }
 
@@ -85,6 +96,12 @@ export type FooterState = {
 export type FooterPatch = Partial<FooterState>
 
 export type RunDiffStyle = "auto" | "stacked"
+
+export type TurnSummary = {
+  agent: string
+  model: string
+  duration: string
+}
 
 export type ScrollbackOptions = {
   diffStyle?: RunDiffStyle
@@ -160,8 +177,11 @@ export type FooterView =
 
 export type FooterPromptRoute =
   | { type: "composer" }
+  | { type: "queued-menu" }
+  | { type: "subagent-menu" }
   | { type: "subagent"; sessionID: string }
   | { type: "command" }
+  | { type: "skill" }
   | { type: "model" }
   | { type: "variant" }
 
@@ -171,7 +191,8 @@ export type FooterSubagentTab = {
   callID: string
   label: string
   description: string
-  status: "running" | "completed" | "error"
+  status: "running" | "completed" | "cancelled" | "error"
+  background?: boolean
   title?: string
   toolCalls?: number
   lastUpdatedAt: number
@@ -220,6 +241,10 @@ export type FooterEvent =
       queue: number
     }
   | {
+      type: "queued.prompts"
+      prompts: FooterQueuedPrompt[]
+    }
+  | {
       type: "first"
       first: boolean
     }
@@ -261,20 +286,7 @@ export type QuestionReply = Parameters<OpencodeClient["question"]["reply"]>[0]
 
 export type QuestionReject = Parameters<OpencodeClient["question"]["reject"]>[0]
 
-type FooterBinding = Binding<Renderable, KeyEvent>
-
-export type FooterKeybinds = {
-  leader: string
-  leaderTimeout: number
-  commandList: readonly FooterBinding[]
-  variantCycle: readonly FooterBinding[]
-  interrupt: readonly FooterBinding[]
-  historyPrevious: readonly FooterBinding[]
-  historyNext: readonly FooterBinding[]
-  inputClear: readonly FooterBinding[]
-  inputSubmit: readonly FooterBinding[]
-  inputNewline: readonly FooterBinding[]
-}
+export type RunTuiConfig = Pick<TuiConfig.Resolved, "keybinds" | "leader_timeout" | "diff_style">
 
 // Lifecycle phase of a scrollback entry. "start" opens the entry, "progress"
 // appends content (coalesced in the footer queue), "final" closes it.
@@ -293,6 +305,7 @@ export type StreamCommit = {
   text: string
   phase: StreamPhase
   source: StreamSource
+  summary?: TurnSummary
   messageID?: string
   partID?: string
   tool?: string
@@ -300,6 +313,25 @@ export type StreamCommit = {
   interrupted?: boolean
   toolState?: StreamToolState
   toolError?: string
+  shell?: {
+    callID: string
+    command: string
+  }
+}
+
+export type LocalReplayAnchor = {
+  kind: EntryKind
+  text: string
+  phase: StreamPhase
+  messageID?: string
+  partID?: string
+  toolState?: StreamToolState
+  visible?: string
+}
+
+export type LocalReplayRow = {
+  commit: StreamCommit
+  after?: LocalReplayAnchor
 }
 
 // The public contract between the stream transport / prompt queue and
@@ -308,6 +340,7 @@ export type StreamCommit = {
 export type FooterApi = {
   readonly isClosed: boolean
   onPrompt(fn: (input: RunPrompt) => void): () => void
+  onQueuedRemove(fn: (messageID: string) => boolean | Promise<boolean>): () => void
   onClose(fn: () => void): () => void
   event(next: FooterEvent): void
   append(commit: StreamCommit): void

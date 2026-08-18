@@ -35,7 +35,7 @@ import { webSearchProviderLabel, type WebSearchTool } from "@/tool/websearch"
 import type { WriteTool } from "@/tool/write"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import * as Locale from "@/util/locale"
-import type { RunDiffStyle, RunEntryBody, StreamCommit, ToolSnapshot } from "./types"
+import type { RunEntryBody, StreamCommit, ToolSnapshot } from "./types"
 
 export type ToolView = {
   output: boolean
@@ -623,16 +623,18 @@ function snapQuestion(p: ToolProps<typeof QuestionTool>): ToolSnapshot {
 
 function scrollBashStart(p: ToolProps<typeof BashTool>): string {
   const cmd = p.input.command ?? ""
-  const desc = p.input.description || "Shell"
   const wd = p.input.workdir ?? ""
-  const dir = wd && wd !== "." ? toolPath(wd) : ""
-  const title = dir && !desc.includes(dir) ? `${desc} in ${dir}` : desc
-
-  if (!cmd) {
-    return `# ${title}`
+  const formatted = wd && wd !== "." ? toolPath(wd) : ""
+  const dir = formatted === "." ? "" : formatted
+  if (cmd && !dir) {
+    return `$ ${cmd}`
   }
 
-  return `# ${title}\n$ ${cmd}`
+  if (!cmd) {
+    return dir ? `# Running in ${dir}` : ""
+  }
+
+  return `# Running in ${dir}\n$ ${cmd}`
 }
 
 function scrollBashProgress(p: ToolProps<typeof BashTool>): string {
@@ -964,11 +966,10 @@ function permList(p: ToolPermissionProps): ToolPermissionInfo {
 }
 
 function permBash(p: ToolPermissionProps<typeof BashTool>): ToolPermissionInfo {
-  const title = p.input.description || "Shell command"
   const cmd = p.input.command || ""
   return {
     icon: "#",
-    title,
+    title: "Shell command",
     lines: cmd ? [`$ ${cmd}`] : p.patterns.map((item) => `- ${item}`),
   }
 }
@@ -1248,7 +1249,7 @@ function frame(part: ToolPart): ToolFrame {
     raw: "",
     name: part.tool,
     input: dict(state.input),
-    meta: dict(state.metadata),
+    meta: "metadata" in part.state ? dict(part.state.metadata) : {},
     state,
     status: text(state.status),
     error: text(state.error),
@@ -1261,7 +1262,7 @@ export function toolFrame(commit: StreamCommit, raw: string): ToolFrame {
     raw,
     name: commit.tool || commit.part?.tool || "tool",
     input: dict(state.input),
-    meta: dict(state.metadata),
+    meta: commit.part?.state && "metadata" in commit.part.state ? dict(commit.part.state.metadata) : {},
     state,
     status: commit.toolState ?? text(state.status),
     error: (commit.toolError ?? "").trim(),
@@ -1403,7 +1404,32 @@ function structuredBody(commit: StreamCommit, raw: string): RunEntryBody | undef
   }
 }
 
+function shellOutput(command: string, raw: string): string | undefined {
+  const body = stripAnsi(raw).replace(/^\n+/, "").replace(/\n+$/, "")
+  if (!body) {
+    return undefined
+  }
+
+  if (!command) {
+    return body
+  }
+
+  return `\n${body}`
+}
+
 export function toolEntryBody(commit: StreamCommit, raw: string): RunEntryBody | undefined {
+  if (commit.shell) {
+    if (commit.phase === "start") {
+      return textBody(`$ ${commit.shell.command}`)
+    }
+
+    if (commit.phase === "progress") {
+      return textBody(shellOutput(commit.shell.command, raw) ?? "")
+    }
+
+    return undefined
+  }
+
   const ctx = toolFrame(commit, raw)
   const view = toolView(ctx.name)
 

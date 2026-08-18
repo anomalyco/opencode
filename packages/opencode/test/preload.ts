@@ -10,8 +10,9 @@ import { afterAll } from "bun:test"
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
 afterAll(async () => {
-  const { Database } = await import("../src/storage/db")
-  Database.close()
+  const { AppRuntime } = await import("../src/effect/app-runtime")
+  await AppRuntime.dispose()
+
   const busy = (error: unknown) =>
     typeof error === "object" && error !== null && "code" in error && error.code === "EBUSY"
   const rm = async (left: number): Promise<void> => {
@@ -19,7 +20,8 @@ afterAll(async () => {
     await sleep(100)
     return fs.rm(dir, { recursive: true, force: true }).catch((error) => {
       if (!busy(error)) throw error
-      if (left <= 1) throw error
+      if (left <= 1 && process.platform !== "win32") throw error
+      if (left <= 1) return
       return rm(left - 1)
     })
   }
@@ -75,18 +77,16 @@ delete process.env["CEREBRAS_API_KEY"]
 delete process.env["SAMBANOVA_API_KEY"]
 delete process.env["OPENCODE_SERVER_PASSWORD"]
 delete process.env["OPENCODE_SERVER_USERNAME"]
+delete process.env["OPENCODE_EXPERIMENTAL"]
+delete process.env["OPENCODE_ENABLE_EXPERIMENTAL_MODELS"]
+delete process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]
+delete process.env["OTEL_EXPORTER_OTLP_HEADERS"]
+delete process.env["OTEL_RESOURCE_ATTRIBUTES"]
 
 // Use in-memory sqlite
 process.env["OPENCODE_DB"] = ":memory:"
 
 // Now safe to import from src/
-const { Log } = await import("@opencode-ai/core/util/log")
 const { initProjectors } = await import("../src/server/projectors")
-
-void Log.init({
-  print: false,
-  dev: true,
-  level: "DEBUG",
-})
 
 initProjectors()

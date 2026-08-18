@@ -24,7 +24,7 @@ function todoText(item: { status: string; content: string }): string {
 }
 
 function todoColor(theme: RunTheme, status: string) {
-  return status === "in_progress" ? theme.footer.warning : theme.block.muted
+  return status === "in_progress" ? theme.block.warning : theme.block.muted
 }
 
 export function entryGroupKey(commit: StreamCommit): string | undefined {
@@ -322,7 +322,6 @@ export function entryWriter(input: {
 export function spacerWriter(): ScrollbackWriter {
   return (ctx: ScrollbackRenderContext) => ({
     root: new TextRenderable(ctx.renderContext, {
-      id: "run-scrollback-spacer",
       width: Math.max(1, Math.trunc(ctx.width)),
       height: 1,
       content: "",
@@ -332,4 +331,22 @@ export function spacerWriter(): ScrollbackWriter {
     startOnNewLine: true,
     trailingNewline: true,
   })
+}
+
+export function turnSummaryWriter(input: { agent: string; model: string; duration: string; theme: RunTheme }) {
+  return createScrollbackWriter(
+    () => (
+      <box width="100%" height={1}>
+        <text wrapMode="none" truncate>
+          <span style={{ fg: input.theme.block.highlight }}>▣ </span>
+          <span style={{ fg: input.theme.block.text }}>{input.agent}</span>
+          <span style={{ fg: input.theme.block.muted }}>
+            {" "}
+            · {input.model} · {input.duration}
+          </span>
+        </text>
+      </box>
+    ),
+    { startOnNewLine: true, trailingNewline: false },
+  )
 }

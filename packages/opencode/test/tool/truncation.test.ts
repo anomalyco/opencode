@@ -1,7 +1,9 @@
 import { describe, test, expect } from "bun:test"
-import { NodeFileSystem } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Effect, FileSystem, Layer } from "effect"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { filesystem } from "@opencode-ai/core/effect/app-node-platform"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Effect, FileSystem } from "effect"
 import { Truncate } from "@/tool/truncate"
 import { Config } from "@/config/config"
 import { Identifier } from "../../src/id/id"
@@ -14,23 +16,20 @@ import { TestConfig } from "../fixture/config"
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 const ROOT = path.resolve(import.meta.dir, "..", "..")
 
-const it = testEffect(Layer.mergeAll(Truncate.defaultLayer, NodeFileSystem.layer, AppFileSystem.defaultLayer))
+const it = testEffect(LayerNode.compile(LayerNode.group([Truncate.node, FSUtil.node, filesystem])))
 
-const configuredLayer = (cfg: Config.Info) =>
-  Layer.mergeAll(
-    Truncate.defaultLayer,
-    NodeFileSystem.layer,
-    AppFileSystem.defaultLayer,
-    TestConfig.layer({ get: () => Effect.succeed(cfg) }),
-  )
-const configuredIt = (cfg: Config.Info) => testEffect(configuredLayer(cfg))
+const configuredLayer = (cfg: ConfigV1.Info) =>
+  LayerNode.compile(LayerNode.group([Truncate.node, FSUtil.node, filesystem, Config.node]), [
+    [Config.node, TestConfig.layer({ get: () => Effect.succeed(cfg) })],
+  ])
+const configuredIt = (cfg: ConfigV1.Info) => testEffect(configuredLayer(cfg))
 
 describe("Truncate", () => {
   describe("output", () => {
     it.live("truncates large json file by bytes", () =>
       Effect.gen(function* () {
         const svc = yield* Truncate.Service
-        const fsys = yield* AppFileSystem.Service
+        const fsys = yield* FSUtil.Service
         const content = yield* fsys.readFileString(path.join(FIXTURES_DIR, "models-api.json"))
         const result = yield* svc.output(content)
 
@@ -164,7 +163,7 @@ describe("Truncate", () => {
     it.live("large single-line file truncates with byte message", () =>
       Effect.gen(function* () {
         const svc = yield* Truncate.Service
-        const fsys = yield* AppFileSystem.Service
+        const fsys = yield* FSUtil.Service
         const content = yield* fsys.readFileString(path.join(FIXTURES_DIR, "models-api.json"))
         const result = yield* svc.output(content)
 
@@ -187,7 +186,7 @@ describe("Truncate", () => {
         expect(result.outputPath).toBeDefined()
         expect(result.outputPath).toContain("tool_")
 
-        const fsys = yield* AppFileSystem.Service
+        const fsys = yield* FSUtil.Service
         const written = yield* fsys.readFileString(result.outputPath!)
         expect(written).toBe(lines)
       }),
@@ -243,18 +242,20 @@ describe("Truncate", () => {
   describe("cleanup", () => {
     const DAY_MS = 24 * 60 * 60 * 1000
 
-    it.live("deletes files older than 7 days and preserves recent files", () =>
+    it.live("uses file mtime when IDs wrap", () =>
       Effect.gen(function* () {
         const svc = yield* Truncate.Service
         const fs = yield* FileSystem.FileSystem
 
         yield* fs.makeDirectory(Truncate.DIR, { recursive: true })
 
-        const old = path.join(Truncate.DIR, Identifier.create("tool", "ascending", Date.now() - 10 * DAY_MS))
-        const recent = path.join(Truncate.DIR, Identifier.create("tool", "ascending", Date.now() - 3 * DAY_MS))
+        const old = path.join(Truncate.DIR, Identifier.create("tool", "ascending", 2 ** 36 - 1))
+        const recent = path.join(Truncate.DIR, Identifier.create("tool", "ascending", 2 ** 36 + 1))
 
         yield* writeFileStringScoped(old, "old content")
         yield* writeFileStringScoped(recent, "recent content")
+        yield* fs.utimes(old, new Date(), new Date(Date.now() - 10 * DAY_MS))
+        yield* fs.utimes(recent, new Date(), new Date(Date.now() - 3 * DAY_MS))
         yield* svc.cleanup()
 
         expect(yield* fs.exists(old)).toBe(false)

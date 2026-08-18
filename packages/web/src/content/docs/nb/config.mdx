@@ -491,14 +491,14 @@ Du kan styre kontekstkomprimering gjennom alternativet `compaction`.
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true,
+    "prune": false,
     "reserved": 10000
   }
 }
 ```
 
 - `auto` - Komprimer økten automatisk når konteksten er full (standard: `true`).
-- `prune` - Fjern gamle verktøyutdata for å spare tokens (standard: `true`).
+- `prune` - Fjern gamle verktøyutdata for å spare tokens (standard: `false`).
 - `reserved` - Token-buffer for komprimering. Etterlater nok vindu til å unngå overflyt under komprimering
 
 ---

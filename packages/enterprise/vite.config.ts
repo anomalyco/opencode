@@ -8,7 +8,7 @@ const nitroConfig: any = (() => {
   if (target === "cloudflare") {
     return {
       compatibilityDate: "2024-09-19",
-      preset: "cloudflare_module",
+      preset: "cloudflare-module",
       cloudflare: {
         nodeCompat: true,
       },
@@ -29,6 +29,7 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     allowedHosts: true,
+    port: 3002,
   },
   worker: {
     format: "es",

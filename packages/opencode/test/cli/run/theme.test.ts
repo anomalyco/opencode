@@ -74,11 +74,73 @@ test("returns syntax styles and indexed splash colors", async () => {
     expectIndexed(theme.splash.right)
     expectIndexed(theme.splash.leftShadow)
     expectIndexed(theme.splash.rightShadow)
+    expectIndexed(theme.block.highlight)
+    expectIndexed(theme.block.warning)
     expectRgba(theme.footer.highlight)
+    expectRgba(theme.footer.statusAccent)
     expectRgba(theme.footer.surface)
+    expect(expectRgba(theme.footer.statusAccent).toInts()).not.toEqual(expectRgba(theme.footer.status).toInts())
   } finally {
     theme.block.syntax?.destroy()
     theme.block.subtleSyntax?.destroy()
+  }
+})
+
+test("keeps footer surfaces exact while scrollback stays palette matched", async () => {
+  const colors = terminalColors({
+    defaultBackground: "#0f172a",
+    defaultForeground: "#e2e8f0",
+  })
+  const theme = await resolveRunTheme(renderer({ themeMode: "dark", colors }))
+  const exact = resolveTheme(generateSystem(colors, "dark"), "dark")
+
+  try {
+    expect(expectRgba(theme.footer.selected).toInts()).toEqual(expectRgba(exact.backgroundElement).toInts())
+    expect(expectRgba(theme.footer.border).toInts()).toEqual(expectRgba(exact.border).toInts())
+    expect(expectRgba(theme.footer.pane).toInts()).toEqual(expectRgba(exact.backgroundMenu).toInts())
+    expect(expectRgba(theme.footer.selected).intent).toBe("rgb")
+    expectIndexed(theme.block.highlight)
+    expectIndexed(theme.block.warning)
+  } finally {
+    theme.block.syntax?.destroy()
+    theme.block.subtleSyntax?.destroy()
+  }
+})
+
+test("uses refreshed background brightness when cached renderer mode is stale", async () => {
+  const colors = terminalColors({
+    defaultBackground: "#fbf1c7",
+    defaultForeground: "#3c3836",
+  })
+  const stale = await resolveRunTheme(renderer({ themeMode: "dark", colors }))
+  const light = await resolveRunTheme(renderer({ themeMode: "light", colors }))
+
+  try {
+    expect(expectRgba(stale.footer.surface).toInts()).toEqual(expectRgba(light.footer.surface).toInts())
+  } finally {
+    stale.block.syntax?.destroy()
+    stale.block.subtleSyntax?.destroy()
+    light.block.syntax?.destroy()
+    light.block.subtleSyntax?.destroy()
+  }
+})
+
+test("keeps renderer mode when refreshed default background is unavailable", async () => {
+  const colors = {
+    ...terminalColors(),
+    defaultBackground: null,
+    palette: ["#000000", ...terminalColors().palette.slice(1)],
+  }
+  const light = await resolveRunTheme(renderer({ themeMode: "light", colors }))
+  const dark = await resolveRunTheme(renderer({ themeMode: "dark", colors }))
+
+  try {
+    expect(expectRgba(light.footer.surface).toInts()).not.toEqual(expectRgba(dark.footer.surface).toInts())
+  } finally {
+    light.block.syntax?.destroy()
+    light.block.subtleSyntax?.destroy()
+    dark.block.syntax?.destroy()
+    dark.block.subtleSyntax?.destroy()
   }
 })
 

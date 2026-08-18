@@ -1,11 +1,9 @@
 import { describe, expect, test } from "bun:test"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import path from "path"
 import { Effect, FileSystem, Layer } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
-import { NodeFileSystem } from "@effect/platform-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import { Instruction } from "../../src/session/instruction"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -14,19 +12,32 @@ import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
+import { InstanceStore } from "@/project/instance-store"
+import { InstanceBootstrap } from "@/project/bootstrap"
+import { Config } from "@/config/config"
 
-const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([CrossSpawnSpawner.node, LayerNodePlatform.filesystem, InstanceStore.node]), [
+    [
+      InstanceBootstrap.node,
+      Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
+    ],
+  ]),
+)
 
-const configLayer = TestConfig.layer()
+const configLayer = Layer.succeed(Config.Service, TestConfig.make())
 
 const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<RuntimeFlags.Info> = {}) =>
-  Instruction.layer.pipe(
-    Layer.provide(configLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(Global.layerWith(global)),
-    Layer.provide(RuntimeFlags.layer(flags)),
-  )
+  AppNodeBuilder.build(Instruction.node, [
+    [Config.node, configLayer],
+    [Global.node, Global.layerWith(global)],
+    [RuntimeFlags.node, RuntimeFlags.layer(flags)],
+  ])
 
 const provideInstruction =
   (global: Partial<Global.Interface>, flags?: Partial<RuntimeFlags.Info>) =>
@@ -61,7 +72,7 @@ const tmpWithFiles = (files: Record<string, string>) =>
     return dir
   })
 
-function loaded(filepath: string): MessageV2.WithParts[] {
+function loaded(filepath: string): SessionV1.WithParts[] {
   const sessionID = SessionID.make("session-loaded-1")
   const messageID = MessageID.make("msg_message-loaded-1")
 
@@ -74,8 +85,8 @@ function loaded(filepath: string): MessageV2.WithParts[] {
         time: { created: 0 },
         agent: "build",
         model: {
-          providerID: ProviderID.make("anthropic"),
-          modelID: ModelID.make("claude-sonnet-4-20250514"),
+          providerID: ProviderV2.ID.make("anthropic"),
+          modelID: ModelV2.ID.make("claude-sonnet-4-20250514"),
         },
       },
       parts: [

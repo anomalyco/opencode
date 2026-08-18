@@ -1,10 +1,9 @@
-import { beforeEach, describe, expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir, withTestInstance } from "../fixture/fixture"
 import { LSPClient } from "@/lsp/client"
 import * as LSPServer from "@/lsp/server"
-import * as Log from "@opencode-ai/core/util/log"
 
 function spawnFakeServer() {
   const { spawn } = require("child_process")
@@ -17,10 +16,6 @@ function spawnFakeServer() {
 }
 
 describe("LSPClient interop", () => {
-  beforeEach(async () => {
-    await Log.init({ print: true })
-  })
-
   test("handles workspace/workspaceFolders request", async () => {
     const handle = spawnFakeServer() as any
 

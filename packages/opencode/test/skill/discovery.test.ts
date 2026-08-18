@@ -1,6 +1,7 @@
 import { describe, expect, beforeAll, afterAll } from "bun:test"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Effect, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Effect } from "effect"
 import { Discovery } from "../../src/skill/discovery"
 import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
@@ -11,10 +12,14 @@ import { testEffect } from "../lib/effect"
 let CLOUDFLARE_SKILLS_URL: string
 let server: ReturnType<typeof Bun.serve>
 let downloadCount = 0
+let mutableVersion = "1"
+let mutableContent = "# Old"
+let mutableDownloadCount = 0
+let mutableFiles = ["SKILL.md"]
 
 const fixturePath = path.join(import.meta.dir, "../fixture/skills")
 const cacheDir = path.join(Global.Path.cache, "skills")
-const it = testEffect(Layer.mergeAll(Discovery.defaultLayer, AppFileSystem.defaultLayer))
+const it = testEffect(LayerNode.compile(LayerNode.group([Discovery.node, FSUtil.node])))
 
 beforeAll(async () => {
   await rm(cacheDir, { recursive: true, force: true })
@@ -23,6 +28,15 @@ beforeAll(async () => {
     port: 0,
     async fetch(req) {
       const url = new URL(req.url)
+
+      if (url.pathname === "/mutable/index.json") {
+        return Response.json({ skills: [{ name: "mutable", version: mutableVersion, files: mutableFiles }] })
+      }
+      if (url.pathname === "/mutable/mutable/SKILL.md") {
+        mutableDownloadCount++
+        return new Response(mutableContent)
+      }
+      if (url.pathname === "/mutable/mutable/old.md") return new Response("old reference")
 
       // route /.well-known/skills/* to the fixture directory
       if (url.pathname.startsWith("/.well-known/skills/")) {
@@ -52,7 +66,7 @@ afterAll(async () => {
 describe("Discovery.pull", () => {
   it.live("downloads skills from cloudflare url", () =>
     Effect.gen(function* () {
-      const fsys = yield* AppFileSystem.Service
+      const fsys = yield* FSUtil.Service
       const discovery = yield* Discovery.Service
       const dirs = yield* discovery.pull(CLOUDFLARE_SKILLS_URL)
       expect(dirs.length).toBeGreaterThan(0)
@@ -66,7 +80,7 @@ describe("Discovery.pull", () => {
 
   it.live("url without trailing slash works", () =>
     Effect.gen(function* () {
-      const fsys = yield* AppFileSystem.Service
+      const fsys = yield* FSUtil.Service
       const discovery = yield* Discovery.Service
       const dirs = yield* discovery.pull(CLOUDFLARE_SKILLS_URL.replace(/\/$/, ""))
       expect(dirs.length).toBeGreaterThan(0)
@@ -96,7 +110,7 @@ describe("Discovery.pull", () => {
 
   it.live("downloads reference files alongside SKILL.md", () =>
     Effect.gen(function* () {
-      const fsys = yield* AppFileSystem.Service
+      const fsys = yield* FSUtil.Service
       const discovery = yield* Discovery.Service
       const dirs = yield* discovery.pull(CLOUDFLARE_SKILLS_URL)
       // find a skill dir that should have reference files (e.g. agents-sdk)
@@ -134,6 +148,39 @@ describe("Discovery.pull", () => {
 
       // second pull should NOT increment download count
       expect(downloadCount).toBe(firstCount)
+    }),
+  )
+
+  it.live("refreshes a remote skill when its version changes", () =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() => rm(cacheDir, { recursive: true, force: true }))
+      mutableVersion = "1"
+      mutableContent = "# Old"
+      mutableDownloadCount = 0
+      mutableFiles = ["SKILL.md", "old.md"]
+      const discovery = yield* Discovery.Service
+      const url = `http://localhost:${server.port}/mutable/`
+
+      const first = yield* discovery.pull(url)
+      expect(yield* Effect.promise(() => Bun.file(path.join(first[0], "SKILL.md")).text())).toBe("# Old")
+
+      mutableVersion = "2"
+      mutableContent = "# Partial"
+      mutableFiles = ["SKILL.md", "missing.md"]
+      const second = yield* discovery.pull(url)
+      expect(yield* Effect.promise(() => Bun.file(path.join(second[0], "SKILL.md")).text())).toBe("# Old")
+      expect(yield* Effect.promise(() => Bun.file(path.join(second[0], "old.md")).text())).toBe("old reference")
+
+      mutableVersion = "3"
+      mutableContent = "# New"
+      mutableFiles = ["SKILL.md"]
+      yield* discovery.pull(url)
+      expect(yield* Effect.promise(() => Bun.file(path.join(second[0], "SKILL.md")).text())).toBe("# New")
+      expect(yield* Effect.promise(() => Bun.file(path.join(second[0], "old.md")).exists())).toBe(false)
+      expect(mutableDownloadCount).toBe(3)
+
+      yield* discovery.pull(url)
+      expect(mutableDownloadCount).toBe(3)
     }),
   )
 })

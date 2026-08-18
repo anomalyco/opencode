@@ -1,14 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import net from "node:net"
+import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import * as Log from "@opencode-ai/core/util/log"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { withTimeout } from "../../src/util/timeout"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
-
-void Log.init({ print: false })
 
 const original = {
   OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
@@ -169,7 +168,7 @@ async function openPtySocket(listener: Awaited<ReturnType<typeof startListener>>
 
 describe("HttpApi Server.listen", () => {
   testPty("serves HTTP routes and upgrades PTY websocket through Server.listen", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const listener = await startListener()
     let stopped = false
     try {
@@ -303,6 +302,57 @@ describe("HttpApi Server.listen", () => {
     expect(output).not.toContain("Sent HTTP response")
   })
 
+  test("plugin client requests reuse the listening server instance", async () => {
+    await using tmp = await tmpdir({
+      init: async (directory) => {
+        const plugin = path.join(directory, "plugin.ts")
+        const initialized = path.join(directory, "initialized.txt")
+        const completed = path.join(directory, "completed.txt")
+        await Bun.write(
+          plugin,
+          [
+            "export default async function plugin(input) {",
+            `  await Bun.write(${JSON.stringify(initialized)}, (await Bun.file(${JSON.stringify(initialized)}).text().catch(() => "")) + "initialized\\n")`,
+            "  setTimeout(async () => {",
+            "    await input.client.config.get()",
+            `    await Bun.write(${JSON.stringify(completed)}, "completed")`,
+            "  }, 50)",
+            "  return {}",
+            "}",
+            "",
+          ].join("\n"),
+        )
+        await Bun.write(
+          path.join(directory, "opencode.json"),
+          JSON.stringify({ formatter: false, lsp: false, plugin: [pathToFileURL(plugin).href] }),
+        )
+        return { initialized, completed }
+      },
+    })
+    const previous = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+    process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
+    let listener: Awaited<ReturnType<typeof startListener>> | undefined
+    try {
+      listener = await startListener()
+      const response = await fetch(new URL("/config", listener.url), {
+        headers: { authorization: authorization(), "x-opencode-directory": tmp.path },
+      })
+      expect(response.status).toBe(200)
+      await withTimeout(
+        (async () => {
+          while (!(await Bun.file(tmp.extra.completed).exists())) await Bun.sleep(10)
+        })(),
+        5_000,
+        "timed out waiting for plugin client request",
+      )
+      expect(await Bun.file(tmp.extra.initialized).text()).toBe("initialized\n")
+    } finally {
+      if (listener) await stop(listener, "timed out cleaning up plugin client listener").catch(() => undefined)
+      if (previous === undefined) delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+      else process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = previous
+    }
+  })
+
   test("port 0 prefers 4096 when free", async () => {
     if (!(await isPortFree(4096))) return
     const listener = await startListener()
@@ -330,13 +380,36 @@ describe("HttpApi Server.listen", () => {
   })
 
   testPty("rejects unsafe PTY ticket mint and connect requests", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const listener = await startListener()
     try {
       const info = await createCat(listener, tmp.path)
 
       expect((await requestTicket(listener, info.id, tmp.path, { ticketHeader: false })).status).toBe(403)
       expect((await requestTicket(listener, info.id, tmp.path, { origin: "https://evil.example" })).status).toBe(403)
+
+      // Regression for #25698: minting without a directory uses the server cwd
+      // and cannot find a PTY registered in a project directory.
+      const ambiguous = await fetch(new URL(PtyPaths.connectToken.replace(":ptyID", info.id), listener.url), {
+        method: "POST",
+        headers: { authorization: authorization(), "x-opencode-ticket": "1" },
+      })
+      expect(ambiguous.status).toBe(404)
+
+      const directoryScoped = await fetch(
+        new URL(
+          `${PtyPaths.connectToken.replace(":ptyID", info.id)}?directory=${encodeURIComponent(tmp.path)}`,
+          listener.url,
+        ),
+        {
+          method: "POST",
+          headers: { authorization: authorization(), "x-opencode-ticket": "1" },
+        },
+      )
+      expect(directoryScoped.status).toBe(200)
+      const mint = (await directoryScoped.json()) as { ticket: string }
+      const scopedWs = await openSocket(socketURL(listener, info.id, tmp.path, mint.ticket))
+      scopedWs.close(1000)
 
       await expectSocketRejected(socketURL(listener, info.id, tmp.path, "not-a-ticket"))
 
@@ -358,51 +431,8 @@ describe("HttpApi Server.listen", () => {
     }
   })
 
-  // Regression for #25698 (Ope): the app's SDK call to
-  // `client.pty.connectToken({ ptyID })` originally omitted `directory`, so
-  // the server resolved the PTY in its own cwd context — where the project
-  // PTY isn't registered — and returned 404. The fix is to always pass
-  // `directory` from the app side; this test locks in two contracts:
-  //   1. Mint without directory cannot find a PTY registered in another dir.
-  //   2. Mint with the project directory succeeds; the resulting ticket
-  //      consumes cleanly when the WS upgrade carries the same directory.
-  testPty("PTY connect token requires matching directory across mint and connect", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const listener = await startListener()
-    try {
-      const info = await createCat(listener, tmp.path)
-
-      // Mint without directory — server uses its own cwd, can't find the PTY.
-      const ambiguous = await fetch(new URL(PtyPaths.connectToken.replace(":ptyID", info.id), listener.url), {
-        method: "POST",
-        headers: { authorization: authorization(), "x-opencode-ticket": "1" },
-      })
-      expect(ambiguous.status).toBe(404)
-
-      // Mint with the project directory — succeeds, ticket binds to that scope.
-      const scoped = await fetch(
-        new URL(
-          `${PtyPaths.connectToken.replace(":ptyID", info.id)}?directory=${encodeURIComponent(tmp.path)}`,
-          listener.url,
-        ),
-        {
-          method: "POST",
-          headers: { authorization: authorization(), "x-opencode-ticket": "1" },
-        },
-      )
-      expect(scoped.status).toBe(200)
-      const mint = (await scoped.json()) as { ticket: string }
-
-      // Same directory on the WS upgrade → consume succeeds.
-      const ws = await openSocket(socketURL(listener, info.id, tmp.path, mint.ticket))
-      ws.close(1000)
-    } finally {
-      await stop(listener, "timed out cleaning up directory-scope listener").catch(() => undefined)
-    }
-  })
-
   testPty("keeps PTY websocket tickets optional when server auth is disabled", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const listener = await startNoAuthListener()
     try {
       const info = await createCat(listener, tmp.path)

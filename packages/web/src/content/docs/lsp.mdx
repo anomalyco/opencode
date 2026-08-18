@@ -3,7 +3,7 @@ title: LSP Servers
 description: OpenCode integrates with your LSP servers.
 ---
 
-OpenCode can integrate with your Language Server Protocol (LSP) to help the LLM interact with your codebase. It uses diagnostics to provide feedback to the LLM.
+OpenCode can integrate with Language Server Protocol (LSP) servers to use diagnostics as feedback for the agent.
 
 ---
 
@@ -48,7 +48,7 @@ OpenCode comes with several built-in LSP servers for popular languages:
 | yaml-ls            | .yaml, .yml                                                         | Auto-installs Red Hat yaml-language-server                   |
 | zls                | .zig, .zon                                                          | `zig` command available                                      |
 
-When LSP is enabled, servers start when one of the above file extensions is detected and the requirements are met.
+LSP is disabled by default. When enabled, servers start when one of the above file extensions is detected and the requirements are met.
 
 :::note
 You can disable automatic LSP server downloads by setting the `OPENCODE_DISABLE_LSP_DOWNLOAD` environment variable to `true`.
@@ -62,6 +62,14 @@ When LSP is enabled and opencode opens a file, it:
 
 1. Checks the file extension against all enabled LSP servers.
 2. Starts the appropriate LSP server if not already running.
+
+---
+
+## Best Practices
+
+LSP can help the agent find and fix issues by providing diagnostics from language servers. This is useful in some projects, but it is not always a net positive.
+
+Language servers can get out of sync, use significant memory, vary by version or project, and slow down agent workflows. In many projects it is better to have the agent run lint, typecheck, or other diagnostic CLI tools directly, so errors are fed back into the agent loop without those tradeoffs. Document those commands in instruction files such as `AGENTS.md` or skills so the agent knows what to run. Enable LSP when your project benefits from additional language-server feedback.
 
 ---
 

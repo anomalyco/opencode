@@ -1,20 +1,20 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import type { Model } from "@opencode-ai/sdk/v2"
-import * as Log from "@opencode-ai/core/util/log"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
 import { createServer } from "http"
-
-const log = Log.create({ service: "plugin.digitalocean" })
+import open from "open"
 
 const DO_OAUTH_CLIENT_ID = "b1a6c5158156caac821fd1b30253ca8acb52454a48fa744420e41889cb589f82"
 const DO_AUTHORIZE_URL = "https://cloud.digitalocean.com/v1/oauth/authorize"
 const DO_API_BASE = "https://api.digitalocean.com"
+const DO_GENAI_API = `${DO_API_BASE}/v2/gen-ai`
 const DO_INFERENCE_BASE = "https://inference.do-ai.run/v1"
 const OAUTH_PORT = 1456
 const OAUTH_REDIRECT_PATH = "/auth/callback"
 const OAUTH_TOKEN_PATH = "/auth/token"
 const ROUTER_REFRESH_INTERVAL_MS = 5 * 60 * 1000
-const MAK_NAME_PREFIX = "opencode-oauth"
+const OAUTH_SCOPES = "genai:read inference:query"
 
 interface ImplicitTokenPayload {
   access_token: string
@@ -26,12 +26,6 @@ interface PendingOAuth {
   state: string
   resolve: (tokens: ImplicitTokenPayload) => void
   reject: (error: Error) => void
-}
-
-interface ApiKeyInfo {
-  uuid: string
-  name: string
-  secret_key: string
 }
 
 interface RouterEntry {
@@ -59,65 +53,11 @@ function buildAuthorizeUrl(state: string): string {
     response_type: "token",
     client_id: DO_OAUTH_CLIENT_ID,
     redirect_uri: redirectUri(),
-    scope: "genai:create genai:read",
+    scope: OAUTH_SCOPES,
     state,
   })
   return `${DO_AUTHORIZE_URL}?${params.toString()}`
 }
-
-const HTML_CALLBACK = `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>OpenCode - DigitalOcean Authorization</title>
-    <style>
-      body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0b1220; color: #e8eef9; }
-      .container { text-align: center; padding: 2rem; max-width: 32rem; }
-      h1 { color: #e8eef9; margin-bottom: 1rem; }
-      p { color: #9aa9c0; }
-      .error { color: #ff917b; font-family: monospace; margin-top: 1rem; padding: 1rem; background: #3c140d; border-radius: 0.5rem; }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1 id="title">Finishing sign-in...</h1>
-      <p id="msg">You can close this window once it says you're signed in.</p>
-    </div>
-    <script>
-      (async function() {
-        const params = new URLSearchParams((window.location.hash || "").slice(1))
-        const search = new URLSearchParams(window.location.search)
-        const error = params.get("error") || search.get("error")
-        const errorDescription = params.get("error_description") || search.get("error_description")
-        const titleEl = document.getElementById("title")
-        const msgEl = document.getElementById("msg")
-        try {
-          const body = error
-            ? { error, error_description: errorDescription || "" }
-            : { access_token: params.get("access_token") || "", expires_in: params.get("expires_in") || "0", state: params.get("state") || "" }
-          await fetch(${JSON.stringify(OAUTH_TOKEN_PATH)}, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          })
-          if (error) {
-            titleEl.textContent = "Authorization Failed"
-            msgEl.textContent = errorDescription || error
-            msgEl.className = "error"
-            return
-          }
-          titleEl.textContent = "Authorization Successful"
-          msgEl.textContent = "You can close this window and return to OpenCode."
-          setTimeout(function () { window.close() }, 2000)
-        } catch (e) {
-          titleEl.textContent = "Authorization Failed"
-          msgEl.textContent = String(e && e.message ? e.message : e)
-          msgEl.className = "error"
-        }
-      })()
-    </script>
-  </body>
-</html>`
 
 async function startOAuthServer(): Promise<void> {
   if (oauthServer) return
@@ -126,7 +66,7 @@ async function startOAuthServer(): Promise<void> {
 
     if (req.method === "GET" && url.pathname === OAUTH_REDIRECT_PATH) {
       res.writeHead(200, { "Content-Type": "text/html" })
-      res.end(HTML_CALLBACK)
+      res.end(OauthCallbackPage.bootstrap({ tokenPath: OAUTH_TOKEN_PATH, provider: "DigitalOcean" }))
       return
     }
 
@@ -187,7 +127,6 @@ async function startOAuthServer(): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     oauthServer!.listen(OAUTH_PORT, () => {
-      log.info("digitalocean oauth server started", { port: OAUTH_PORT })
       resolve()
     })
     oauthServer!.on("error", reject)
@@ -196,7 +135,7 @@ async function startOAuthServer(): Promise<void> {
 
 function stopOAuthServer() {
   if (!oauthServer) return
-  oauthServer.close(() => log.info("digitalocean oauth server stopped"))
+  oauthServer.close()
   oauthServer = undefined
 }
 
@@ -225,31 +164,10 @@ function waitForOAuthCallback(state: string): Promise<ImplicitTokenPayload> {
   })
 }
 
-async function createModelAccessKey(bearer: string): Promise<ApiKeyInfo> {
-  // Suffix-on-collision strategy keeps re-`/connect` non-destructive.
-  const name = `${MAK_NAME_PREFIX}-${Math.floor(Date.now() / 1000)}`
-  const res = await fetch(`${DO_API_BASE}/v2/gen-ai/models/api_keys`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${bearer}`,
-      "Content-Type": "application/json",
-      "User-Agent": `opencode/${InstallationVersion}`,
-    },
-    body: JSON.stringify({ name }),
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => "")
-    throw new Error(`Failed to create Model Access Key (${res.status}): ${body}`)
-  }
-  const data = (await res.json()) as { api_key_info?: ApiKeyInfo }
-  if (!data.api_key_info?.secret_key) throw new Error("Model Access Key response missing secret_key")
-  return data.api_key_info
-}
-
 async function listRouters(
   bearer: string,
 ): Promise<{ ok: true; routers: RouterEntry[] } | { ok: false; status: number }> {
-  const res = await fetch(`${DO_API_BASE}/v2/gen-ai/models/routers`, {
+  const res = await fetch(`${DO_GENAI_API}/models/routers`, {
     headers: {
       Authorization: `Bearer ${bearer}`,
       Accept: "application/json",
@@ -335,11 +253,9 @@ export async function DigitalOceanAuthPlugin(input: PluginInput): Promise<Hooks>
                 path: { id: "digitalocean" },
                 body: { type: "api", key: ctx.auth.key, metadata: updated },
               })
-              .catch((err) => log.warn("failed to persist refreshed routers", { error: err }))
+              .catch(() => {})
           } else if (result.status === 401 || result.status === 403) {
-            log.warn("digitalocean oauth bearer rejected; using cached routers", { status: result.status })
           } else if (result.status !== 0) {
-            log.warn("digitalocean router refresh failed", { status: result.status })
           }
         }
 
@@ -362,29 +278,28 @@ export async function DigitalOceanAuthPlugin(input: PluginInput): Promise<Hooks>
             await startOAuthServer()
             const state = generateState()
             const callbackPromise = waitForOAuthCallback(state)
+            const url = buildAuthorizeUrl(state)
+            await open(url).catch(() => undefined)
             return {
-              url: buildAuthorizeUrl(state),
+              url,
               instructions:
-                "Sign in to DigitalOcean in your browser. OpenCode will create a Model Access Key named opencode-oauth-* and load your Inference Routers. Re-run /connect to refresh routers later.",
+                "Sign in to DigitalOcean in your browser. OpenCode will use your DigitalOcean API token directly for inference and load your Inference Routers. Re-run /connect to refresh routers later.",
               method: "auto" as const,
               async callback() {
                 try {
                   const tokens = await callbackPromise
-                  const apiKeyInfo = await createModelAccessKey(tokens.access_token)
                   const routerResult = await listRouters(tokens.access_token)
                   const routers = routerResult.ok ? routerResult.routers : []
                   if (!routerResult.ok) {
-                    log.warn("digitalocean initial router fetch failed", { status: routerResult.status })
                   }
                   return {
                     type: "success" as const,
                     provider: "digitalocean",
-                    key: apiKeyInfo.secret_key,
+                    key: tokens.access_token,
                     metadata: {
-                      mak_uuid: apiKeyInfo.uuid,
-                      mak_name: apiKeyInfo.name,
                       oauth_access: tokens.access_token,
                       oauth_expires: String(Date.now() + tokens.expires_in * 1000),
+                      oauth_scopes: OAUTH_SCOPES,
                       routers: JSON.stringify(
                         routers.map((r) => ({ name: r.name, uuid: r.uuid, description: r.description })),
                       ),
@@ -392,7 +307,6 @@ export async function DigitalOceanAuthPlugin(input: PluginInput): Promise<Hooks>
                     },
                   }
                 } catch (err) {
-                  log.error("digitalocean oauth callback failed", { error: err })
                   return { type: "failed" as const }
                 } finally {
                   stopOAuthServer()

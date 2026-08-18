@@ -147,6 +147,12 @@ export namespace Share {
     }
   })
 
+  export const removeAdmin = fn(Info.pick({ id: true }), async (body) => {
+    const share = await get(body.id)
+    if (!share) throw new Errors.NotFound(body.id)
+    await remove({ id: share.id, secret: share.secret })
+  })
+
   export const sync = fn(
     z.object({
       share: Info.pick({ id: true, secret: true }),

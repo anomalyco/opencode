@@ -2,32 +2,39 @@
 
 import {
   ACCEPTED_FILE_EXTENSIONS,
-  ACCEPTED_FILE_TYPES,
   AppBaseProviders,
   AppInterface,
-  handleNotificationClick,
   loadLocaleDict,
   normalizeLocale,
   type Locale,
   type Platform,
   PlatformProvider,
+  createDraftStore,
   ServerConnection,
   useCommand,
+  useWslServers,
+  useLanguage,
 } from "@opencode-ai/app"
+import type { UpdaterState } from "@opencode-ai/app/updater"
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
-import { MemoryRouter } from "@solidjs/router"
-import { createEffect, createResource, onCleanup, onMount, Show } from "solid-js"
+import { createMemoryHistory, MemoryRouter, type BaseRouterProps } from "@solidjs/router"
+import { createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
-import { initI18n, t } from "./i18n"
-import { webviewZoom } from "./webview-zoom"
+import { t } from "./i18n"
+import { initializationData } from "./initialization"
+import { DesktopFirstLaunchOnboarding } from "./onboarding"
+import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
+import { windowFullscreen } from "./window-fullscreen"
+import { availableStartupServer, readyWslConnections } from "./wsl/connections"
 import "./styles.css"
-import { useTheme } from "@opencode-ai/ui/theme"
+import { Splash } from "@opencode-ai/ui/logo"
+import { useTheme } from "@opencode-ai/ui/theme/context"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
-  throw new Error(t("error.dev.rootNotFound"))
+  throw new Error(t("desktop.error.dev.rootNotFound"))
 }
 
 if (import.meta.env.VITE_SENTRY_DSN) {
@@ -53,9 +60,14 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   })
 }
 
-void initI18n()
+const [updaterState, setUpdaterState] = createSignal<UpdaterState>({ status: "disabled" })
+void window.api.updater.subscribe(setUpdaterState)
 
 const deepLinkEvent = "opencode:deep-link"
+
+type DesktopWindowState = {
+  id?: string
+}
 
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
@@ -70,7 +82,36 @@ const listenForDeepLinks = () => {
   return window.api.onDeepLink((urls) => emitDeepLinks(urls))
 }
 
-const createPlatform = (): Platform => {
+function windowLastActiveUrlKey(windowID: string) {
+  return `opencode.desktop.window.${windowID}.last-active-url`
+}
+
+function getLastActiveUrl(windowID: string) {
+  if (typeof localStorage !== "object") return "/"
+  try {
+    const value = localStorage.getItem(windowLastActiveUrlKey(windowID))
+    if (value?.startsWith("/") && !value.startsWith("//")) return value
+  } catch {}
+  return "/"
+}
+
+function setLastActiveUrl(windowID: string, value: string) {
+  if (typeof localStorage !== "object") return
+  try {
+    localStorage.setItem(windowLastActiveUrlKey(windowID), value)
+  } catch {}
+}
+
+function DesktopMemoryRouter(props: BaseRouterProps & { windowID: string }) {
+  const history = createMemoryHistory()
+  const initialUrl = getLastActiveUrl(props.windowID)
+  if (initialUrl !== "/") history.set({ value: initialUrl, replace: true, scroll: false })
+  onCleanup(history.listen((value) => setLastActiveUrl(props.windowID, value)))
+  return <MemoryRouter {...props} history={history} />
+}
+
+const createPlatform = (windowState: DesktopWindowState): Platform => {
+  const attachmentPaths = new WeakMap<File, string>()
   const os = (() => {
     const ua = navigator.userAgent
     if (ua.includes("Mac")) return "macos"
@@ -79,25 +120,20 @@ const createPlatform = (): Platform => {
     return undefined
   })()
 
-  const isWslEnabled = async () => {
-    if (os !== "windows") return false
-    return window.api
-      .getWslConfig()
-      .then((config) => config.enabled)
-      .catch(() => false)
-  }
-
-  const wslHome = async () => {
-    if (!(await isWslEnabled())) return undefined
-    return window.api.wslPath("~", "windows").catch(() => undefined)
-  }
-
-  const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
-    if (!result || !(await isWslEnabled())) return result
-    if (Array.isArray(result)) {
-      return Promise.all(result.map((path) => window.api.wslPath(path, "linux").catch(() => path))) as any
+  const runDesktopMenuAction: Platform["runDesktopMenuAction"] = (action) => {
+    switch (action) {
+      case "view.resetZoom":
+        resetZoom()
+        return
+      case "view.zoomIn":
+        zoomIn()
+        return
+      case "view.zoomOut":
+        zoomOut()
+        return
     }
-    return window.api.wslPath(result, "linux").catch(() => result) as any
+
+    return window.api.runDesktopMenuAction(action)
   }
 
   const storage = (() => {
@@ -127,85 +163,95 @@ const createPlatform = (): Platform => {
     }
   })()
 
+  const wslServersApi = os === "windows" ? window.api.wslServers : undefined
+
   return {
     platform: "desktop",
     os,
     version: pkg.version,
+    windowID: windowState.id,
 
     async openDirectoryPickerDialog(opts) {
-      const defaultPath = await wslHome()
-      const result = await window.api.openDirectoryPicker({
+      return window.api.openDirectoryPicker({
         multiple: opts?.multiple ?? false,
-        title: opts?.title ?? t("desktop.dialog.chooseFolder"),
-        defaultPath,
+        title: opts?.title,
       })
-      return await handleWslPicker(result)
     },
 
-    async openFilePickerDialog(opts) {
+    async openAttachmentPickerDialog(opts, onFile) {
       const result = await window.api.openFilePicker({
         multiple: opts?.multiple ?? false,
-        title: opts?.title ?? t("desktop.dialog.chooseFile"),
-        accept: opts?.accept ?? ACCEPTED_FILE_TYPES,
+        title: opts?.title,
+        defaultPath: opts?.defaultPath,
         extensions: opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS,
       })
-      return handleWslPicker(result)
+      if (!result) return
+      try {
+        for (const file of result.files) {
+          const selected = new File([await window.api.readPickedFile(result.token, file.path)], file.name)
+          attachmentPaths.set(selected, file.path)
+          await onFile(selected)
+        }
+      } finally {
+        await window.api.releasePickedFiles(result.token)
+      }
+    },
+
+    getPathForFile(file) {
+      return attachmentPaths.get(file) ?? window.api.getPathForFile(file)
     },
 
     async saveFilePickerDialog(opts) {
-      const result = await window.api.saveFilePicker({
-        title: opts?.title ?? t("desktop.dialog.saveFile"),
+      return window.api.saveFilePicker({
+        title: opts?.title,
         defaultPath: opts?.defaultPath,
       })
-      return handleWslPicker(result)
     },
 
-    openLink(url: string) {
-      window.api.openLink(url)
+    openExternal(url: string) {
+      window.api.openExternal(url)
+    },
+    openLocalFile(url: string) {
+      window.api.openLocalFile(url)
     },
     async openPath(path: string, app?: string) {
       if (os === "windows") {
         const resolvedApp = app ? await window.api.resolveAppPath(app).catch(() => null) : null
-        const resolvedPath = await (async () => {
-          if (await isWslEnabled()) {
-            const converted = await window.api.wslPath(path, "windows").catch(() => null)
-            if (converted) return converted
-          }
-          return path
-        })()
-        return window.api.openPath(resolvedPath, resolvedApp ?? undefined)
+        return window.api.openPath(path, resolvedApp ?? undefined)
       }
       return window.api.openPath(path, app)
     },
-
-    back() {
-      window.history.back()
-    },
-
-    forward() {
-      window.history.forward()
+    async revealPath(path: string) {
+      return window.api.revealPath(path)
     },
 
     storage,
+    draftStore: createDraftStore({
+      get: window.api.draftGet,
+      set: window.api.draftSet,
+      remove: window.api.draftDelete,
+      putBlob: (blob) => blob.arrayBuffer().then(window.api.draftBlobPut),
+      getBlob: (id) => window.api.draftBlobGet(id).then((data) => data && new Blob([data])),
+    }),
 
-    checkUpdate: async () => {
-      const config = await window.api.getWindowConfig().catch(() => ({ updaterEnabled: false }))
-      if (!config.updaterEnabled) return { updateAvailable: false }
-      return window.api.checkUpdate()
+    updater: {
+      state: updaterState,
+      check: () => window.api.updater.check(),
+      install: () => window.api.updater.install(),
     },
 
-    updateAndRestart: async () => {
-      const config = await window.api.getWindowConfig().catch(() => ({ updaterEnabled: false }))
-      if (!config.updaterEnabled) return
-      await window.api.installUpdate()
-    },
+    exportDebugLogs: () => window.api.exportDebugLogs(),
+
+    setForceFocus: (enabled) => window.api.setForceFocus(enabled),
+
+    recordFatalRendererError: (error) => window.api.recordFatalRendererError(error),
 
     restart: async () => {
       await window.api.killSidecar().catch(() => undefined)
       window.api.relaunch()
     },
 
-    notify: async (title, description, href) => {
+    notify: async (title, description, onClick) => {
       const focused = await window.api.getWindowFocused().catch(() => document.hasFocus())
       if (focused) return
 
@@ -216,7 +262,7 @@ const createPlatform = (): Platform => {
       notification.onclick = () => {
         void window.api.showWindow()
         void window.api.setWindowFocus()
-        handleNotificationClick(href)
+        onClick?.()
         notification.close()
       }
     },
@@ -224,12 +270,6 @@ const createPlatform = (): Platform => {
     fetch: (input, init) => {
       if (input instanceof Request) return fetch(input)
       return fetch(input, init)
-    },
-
-    getWslEnabled: () => isWslEnabled(),
-
-    setWslEnabled: async (enabled) => {
-      await window.api.setWslConfig({ enabled })
     },
 
     getDefaultServer: async () => {
@@ -242,6 +282,8 @@ const createPlatform = (): Platform => {
       await window.api.setDefaultServerUrl(url)
     },
 
+    wslServers: wslServersApi,
+
     getDisplayBackend: async () => {
       return window.api.getDisplayBackend().catch(() => null)
     },
@@ -250,9 +292,15 @@ const createPlatform = (): Platform => {
       await window.api.setDisplayBackend(backend)
     },
 
-    parseMarkdown: (markdown: string) => window.api.parseMarkdownCommand(markdown),
-
     webviewZoom,
+
+    windowFullscreen,
+
+    getPinchZoomEnabled: () => window.api.getPinchZoomEnabled(),
+
+    setPinchZoomEnabled,
+
+    runDesktopMenuAction,
 
     checkAppExists: async (appName: string) => {
       return window.api.checkAppExists(appName)
@@ -275,9 +323,16 @@ window.api.onMenuCommand((id) => {
 })
 listenForDeepLinks()
 
-render(() => {
-  const platform = createPlatform()
-  const [windowConfig] = createResource(() => window.api.getWindowConfig().catch(() => ({ updaterEnabled: false })))
+function LoadingSplash() {
+  return (
+    <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
+      <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+    </div>
+  )
+}
+
+function DesktopRoot(props: { windowState: DesktopWindowState }) {
+  const platform = createPlatform(props.windowState)
   const loadLocale = async () => {
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
@@ -290,41 +345,15 @@ render(() => {
     return next satisfies Locale
   }
 
-  const [windowCount] = createResource(() => window.api.getWindowCount())
-
   // Fetch sidecar credentials (available immediately, before health check)
-  const [sidecar] = createResource(() => window.api.awaitInitialization(() => undefined))
+  const [sidecar] = createResource(() => window.api.awaitInitialization())
 
-  const [defaultServer] = createResource(() =>
-    platform.getDefaultServer?.().then((url) => {
-      if (url) return ServerConnection.key({ type: "http", http: { url } })
-    }),
-  )
+  const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(loadLocale)
-
-  const servers = () => {
-    const data = sidecar()
-    if (!data) return []
-    const server: ServerConnection.Sidecar = {
-      displayName: "Local Server",
-      type: "sidecar",
-      variant: "base",
-      http: {
-        url: data.url,
-        username: data.username ?? undefined,
-        password: data.password ?? undefined,
-      },
-    }
-    return [server] as ServerConnection.Any[]
-  }
-
-  function handleClick(e: MouseEvent) {
-    const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
-    if (link?.href) {
-      e.preventDefault()
-      platform.openLink(link.href)
-    }
-  }
+  const router = (props: BaseRouterProps) => (
+    <DesktopMemoryRouter {...props} windowID={platform.windowID ?? "browser"} />
+  )
+  const onboarding = Promise.withResolvers<void>()
 
   function Inner() {
     const cmd = useCommand()
@@ -344,38 +373,80 @@ render(() => {
     return null
   }
 
-  onMount(() => {
-    document.addEventListener("click", handleClick)
-    onCleanup(() => {
-      document.removeEventListener("click", handleClick)
+  function App() {
+    const wslServers = useWslServers()
+    const language = useLanguage()
+    const ready = createMemo(
+      () => !defaultServer.loading && !sidecar.loading && !locale.loading && !wslServers.isLoading,
+    )
+    const servers = createMemo(() => {
+      const data = initializationData(sidecar)
+      const list: ServerConnection.Any[] = []
+      if (data) {
+        list.push({
+          displayName: language.t("desktop.server.local"),
+          type: "sidecar",
+          variant: "base",
+          http: {
+            url: data.url,
+            username: data.username ?? undefined,
+            password: data.password ?? undefined,
+          },
+        })
+      }
+      list.push(...readyWslConnections(wslServers.data, language.t("wsl.server.label")))
+      return list
     })
-  })
+    const effectiveDefaultServer = createMemo(() =>
+      ServerConnection.Key.make(availableStartupServer(defaultServer.latest, wslServers.data)),
+    )
+    return (
+      <Show when={ready()} fallback={<LoadingSplash />}>
+        <Show when={effectiveDefaultServer()} keyed>
+          {(key) => (
+            <AppInterface
+              defaultServer={key}
+              servers={servers()}
+              router={router}
+              startup={onboarding.promise}
+              serverScoped={
+                <DesktopFirstLaunchOnboarding
+                  initialUrl={getLastActiveUrl(platform.windowID ?? "browser")}
+                  onLoaded={onboarding.resolve}
+                />
+              }
+            >
+              <Inner />
+            </AppInterface>
+          )}
+        </Show>
+      </Show>
+    )
+  }
 
   return (
     <PlatformProvider value={platform}>
-      <AppBaseProviders locale={locale.latest}>
-        <Show
-          when={
-            !defaultServer.loading &&
-            !sidecar.loading &&
-            !windowConfig.loading &&
-            !windowCount.loading &&
-            !locale.loading
-          }
-        >
-          {(_) => {
-            return (
-              <AppInterface
-                defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
-                servers={servers()}
-                router={MemoryRouter}
-              >
-                <Inner />
-              </AppInterface>
-            )
-          }}
-        </Show>
+      <AppBaseProviders
+        locale={locale.latest}
+        onNativeTranslations={(bundle) => void window.api.setNativeTranslations(bundle).catch(() => undefined)}
+      >
+        <Show when={true}>{(_) => <App />}</Show>
       </AppBaseProviders>
     </PlatformProvider>
+  )
+}
+
+render(() => {
+  const [windowState] = createResource(async () => {
+    const api = window.api as typeof window.api & {
+      getWindowID?: () => Promise<string>
+    }
+    return { id: await api.getWindowID?.() }
+  })
+
+  return (
+    <Show when={windowState.latest} fallback={<LoadingSplash />} keyed>
+      {(state) => <DesktopRoot windowState={state} />}
+    </Show>
   )
 }, root!)

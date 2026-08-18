@@ -55,6 +55,61 @@
     @media (prefers-color-scheme: dark) {
       box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
     }
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-3) var(--space-4);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius-sm);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      font-size: var(--font-size-sm);
+      font-family: var(--font-sans);
+      font-weight: 500;
+      line-height: 1;
+      cursor: pointer;
+      transition: all 0.15s ease;
+
+      &:hover:not(:disabled) {
+        background-color: var(--color-surface-hover);
+        border-color: var(--color-accent);
+      }
+
+      &:active:not(:disabled) {
+        transform: translateY(1px);
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      &[data-color="primary"] {
+        background-color: var(--color-primary);
+        border-color: var(--color-primary);
+        color: var(--color-primary-text);
+
+        &:hover:not(:disabled) {
+          background-color: var(--color-primary-hover);
+          border-color: var(--color-primary-hover);
+        }
+      }
+
+      &[data-color="ghost"] {
+        background-color: transparent;
+        border-color: transparent;
+        color: var(--color-text-muted);
+
+        &:hover:not(:disabled) {
+          background-color: var(--color-surface-hover);
+          border-color: var(--color-border);
+          color: var(--color-text);
+        }
+      }
+    }
   }
 
   [data-slot="title"] {
@@ -63,5 +118,17 @@
     font-weight: 600;
     color: var(--color-text);
     text-align: center;
+  }
+
+  [data-slot="content"][data-variant="black"] {
+    background-color: #000;
+    border-color: rgba(255, 255, 255, 0.17);
+    color: rgba(255, 255, 255, 0.92);
+    font-family: var(--font-mono);
+
+    [data-slot="title"] {
+      color: rgba(255, 255, 255, 0.92);
+      font-family: var(--font-mono);
+    }
   }
 }

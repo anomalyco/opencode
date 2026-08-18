@@ -102,10 +102,14 @@ export const dict = {
   "temp.logoDarkAlt": "opencode koyu logo",
 
   "home.banner.badge": "Yeni",
-  "home.banner.text": "Masaüstü uygulaması beta olarak mevcut",
-  "home.banner.platforms": "macOS, Windows ve Linux'ta",
+  "home.banner.text": "Masaüstü uygulamasında sekmelerle tanışın.",
+  "home.banner.platforms": "macOS, Windows ve Linux'ta kullanılabilir",
   "home.banner.downloadNow": "Şimdi indir",
   "home.banner.downloadBetaNow": "Masaüstü betayı şimdi indir",
+  "home.promo.title": "Masaüstü uygulamasında sekmelerle tanışın",
+  "home.promo.body": "Çalışmalarınızı ve etkin oturumlarınızı sekmelerle düzenleyin.",
+  "home.promo.cta": "Başlamak için en son sürümü indirin.",
+  "home.promo.close": "Masaüstü uygulaması duyurusunu kapat",
 
   "home.hero.title": "Açık kaynaklı yapay zeka kodlama ajanı",
   "home.hero.subtitle.a": "Ücretsiz modeller dahil veya herhangi bir sağlayıcıdan herhangi bir modeli bağlayın,",
@@ -253,7 +257,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
   "go.meta.description":
-    "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro ve DeepSeek V4 Flash için cömert 5 saatlik istek limitleri sunar.",
+    "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
   "go.hero.body":
     "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
@@ -270,7 +274,6 @@ export const dict = {
   "go.graph.go": "Go",
   "go.graph.label": "5 saat başına istekler",
   "go.graph.usageLimits": "Kullanım limitleri",
-  "go.graph.tick": "{{n}}x",
   "go.graph.aria": "5 saatlik istekler: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
@@ -302,8 +305,7 @@ export const dict = {
   "go.problem.item1": "Düşük maliyetli abonelik fiyatlandırması",
   "go.problem.item2": "Cömert limitler ve güvenilir erişim",
   "go.problem.item3": "Mümkün olduğunca çok programcı için geliştirildi",
-  "go.problem.item4":
-    "GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro ve DeepSeek V4 Flash içerir",
+  "go.problem.item4": "Ajan tabanlı kodlama için test edilmiş, özenle seçilmiş model seçenekleri",
   "go.how.title": "Go nasıl çalışır?",
   "go.how.body":
     "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar. OpenCode veya herhangi bir ajanla kullanabilirsiniz.",
@@ -329,7 +331,7 @@ export const dict = {
   "go.faq.a2": "Go, aşağıda listelenen modelleri cömert limitler ve güvenilir erişimle sunar.",
   "go.faq.q3": "Go, Zen ile aynı mı?",
   "go.faq.a3":
-    "Hayır. Zen kullandıkça öde modelidir, Go ise ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro ve DeepSeek V4 Flash açık kaynak modellerine cömert limitler ve güvenilir erişim sunar.",
+    "Hayır. Zen kullandıkça öde modelidir; Go ise ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar ve özenle seçilmiş model seçeneklerine cömert limitlerle güvenilir erişim sunar.",
   "go.faq.q4": "Go ne kadar?",
   "go.faq.a4.p1.beforePricing": "Go'nun maliyeti",
   "go.faq.a4.p1.pricingLink": "İlk ay $5",
@@ -338,8 +340,22 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "hesabınızdan",
   "go.faq.a4.p3": "yönetebilirsiniz. İstediğiniz zaman iptal edin.",
   "go.faq.q5": "Veri ve gizlilik ne olacak?",
-  "go.faq.a5.body":
-    "Bu plan öncelikle uluslararası kullanıcılar için tasarlanmış olup, istikrarlı küresel erişim için modeller ABD, AB ve Singapur'da barındırılmaktadır. Sağlayıcılarımız sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz.",
+  "go.faq.a5.model": "Model",
+  "go.faq.a5.training": "Model eğitimi",
+  "go.faq.a5.retention": "Veri saklama",
+  "go.faq.a5.retention30": "30 gün",
+  "go.faq.a5.retention0": "0 gün",
+  "go.faq.a5.used": "Kullanılır",
+  "go.faq.a5.notUsed": "Kullanılmaz",
+  "go.faq.a5.noAgreement": "Anlaşma yok",
+  "go.faq.a5.grokRetention":
+    "ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır.",
+  "go.faq.a5.gptRetention":
+    "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
+  "go.faq.a5.learnMore": "Daha fazla bilgi",
+  "go.faq.a5.deepseekRetention":
+    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Ağustos 2026 tarihine kadar geçerlidir.",
+
   "go.faq.a5.beforeExceptions":
     "Go modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
   "go.faq.a5.exceptionsLink": "aşağıdaki istisnalar",
@@ -353,7 +369,7 @@ export const dict = {
 
   "go.faq.q9": "Ücretsiz modeller ve Go arasındaki fark nedir?",
   "go.faq.a9":
-    "Ücretsiz modeller, günlük 200 istek kotası ile Big Pickle ve o sırada mevcut olan promosyonel modelleri içerir. Go ise GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro ve DeepSeek V4 Flash modellerini; yuvarlanan pencereler (5 saatlik, haftalık ve aylık) üzerinden uygulanan daha yüksek istek kotalarıyla içerir. Bu kotalar kabaca her 5 saatte 12$, haftada 30$ ve ayda 60$ değerine eşdeğerdir (gerçek istek sayıları modele ve kullanıma göre değişir).",
+    "Ücretsiz modeller, günlük 200 istek kotasıyla Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında (5 saatlik, haftalık ve aylık) uygulanan daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar. Bu kotalar kabaca her 5 saatte 12$, haftada 30$ ve ayda 60$ değerine eşdeğerdir (gerçek istek sayıları modele ve kullanıma göre değişir).",
 
   "zen.api.error.rateLimitExceeded": "İstek limiti aşıldı. Lütfen daha sonra tekrar deneyin.",
   "zen.api.error.modelNotSupported": "{{model}} modeli desteklenmiyor",
@@ -362,6 +378,7 @@ export const dict = {
   "zen.api.error.providerNotSupported": "{{provider}} sağlayıcısı desteklenmiyor",
   "zen.api.error.missingApiKey": "API anahtarı eksik.",
   "zen.api.error.invalidApiKey": "Geçersiz API anahtarı.",
+  "zen.api.error.requestBlockedByUpstreamProvider": "İstek üst sağlayıcı tarafından engellendi.",
   "zen.api.error.subscriptionQuotaExceeded": "Abonelik kotası aşıldı. {{retryIn}} içinde tekrar deneyin.",
   "zen.api.error.goSubscriptionRollingLimitExceeded":
     "5 saatlik kullanım limitine ulaşıldı. {{retryIn}} içinde sıfırlanır. Bu modeli şimdi kullanmaya devam etmek için kullanılabilir bakiyenizden kullanımı etkinleştirin: {{consoleGoUrl}}",
@@ -376,6 +393,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Aylık ${{amount}} harcama limitinize ulaştınız. Limitlerinizi buradan yönetin: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Model devre dışı",
+  "zen.api.error.regionNotAllowed":
+    "Bu modelin en son sürümü yalnızca Çin'de barındırılıyor ve kullanabilmek için açıkça onay vermeniz gerekiyor: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "{{model}} için ücretsiz promosyon sona erdi. OpenCode Go'ya abone olarak modeli kullanmaya devam edebilirsiniz - {{link}}",
 
@@ -655,6 +674,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Kullanım limitlerine ulaştıktan sonra mevcut bakiyenizi kullanın",
   "workspace.lite.subscription.selectProvider":
     'Go modellerini kullanmak için opencode yapılandırmanızda "OpenCode Go"\'yu sağlayıcı olarak seçin.',
+  "workspace.lite.providers.title": "Sağlayıcılar",
+  "workspace.lite.providers.description": "Yönlendirme için hangi sağlayıcıların kullanılacağını kontrol edin.",
+  "workspace.lite.providers.useChina": "Çin'de barındırılan modelleri etkinleştir",
   "workspace.lite.black.message":
     "Şu anda OpenCode Black abonesisiniz veya bekleme listesindesiniz. Go'ya geçmek istiyorsanız lütfen önce aboneliğinizi iptal edin.",
   "workspace.lite.other.message":
@@ -664,19 +686,53 @@ export const dict = {
   "workspace.lite.promo.price": "İlk ay $5",
   "workspace.lite.promo.modelsTitle": "Neler Dahil",
   "workspace.lite.promo.footer":
-    "Plan öncelikle uluslararası kullanıcılar için tasarlanmıştır; modeller istikrarlı küresel erişim için ABD, AB ve Singapur'da barındırılmaktadır. Erken kullanımdan öğrendikçe ve geri bildirim topladıkça fiyatlandırma ve kullanım limitleri değişebilir.",
+    "Plan öncelikle uluslararası kullanıcılar için tasarlanmıştır ve istikrarlı küresel erişim sağlar. Erken kullanım ve geri bildirimlerden öğrendiklerimiz doğrultusunda fiyatlandırma ve kullanım limitleri değişebilir.",
   "workspace.lite.promo.subscribe": "Go'ya Abone Ol",
   "workspace.lite.promo.subscribing": "Yönlendiriliyor...",
   "workspace.lite.promo.otherMethods": "Diğer ödeme yöntemleri",
   "workspace.lite.promo.selectMethod": "Ödeme yöntemini seçin",
 
+  "workspace.referral.copyLink": "Bağlantıyı Kopyala",
+  "workspace.referral.copied": "Kopyalandı",
+  "workspace.referral.overview.title": "Arkadaşlarını davet et",
+  "workspace.referral.overview.subtitle": "Bir arkadaşın abone olduğunda $5 kazan. O da $5 alacak.",
+  "workspace.referral.instructions.share": "Referans bağlantını paylaş",
+  "workspace.referral.instructions.subscribe": "Arkadaşın katılır ve Go'ya abone olur",
+  "workspace.referral.instructions.claim":
+    "İkiniz de Go kullanım limitlerinize uygulamak için $5 kullanım kredisi alırsınız",
+  "workspace.referral.rewards.title": "Davet ödülleri",
+  "workspace.referral.rewards.description": "Mevcut davet kredilerini Go kullanımınıza uygulayın.",
+  "workspace.referral.rewards.subtitle": "{{applied}} / {{total}} ödül kullanıldı.",
+  "workspace.referral.rewards.empty": "Henüz davet ödülü yok.",
+  "workspace.referral.table.reward": "Ödül",
+  "workspace.referral.table.referral": "Açıklama",
+  "workspace.referral.table.date": "Tarih",
+  "workspace.referral.reward.description.inviter": "{{email}} davet edildi",
+  "workspace.referral.reward.description.invitee": "{{email}} tarafından davet edildi",
+  "workspace.referral.reward.action.subscribeUnlock": "Kilidi açmak için abone ol",
+  "workspace.referral.reward.action.view": "Ödülü Görüntüle",
+  "workspace.referral.reward.action.applied": "Ödül Kullanıldı",
+  "workspace.referral.reward.source.pendingInviter": "Abone olması bekleniyor",
+  "workspace.referral.reward.source.pendingInvitee": "Ödülün kilidini açmak için abone ol",
+  "workspace.referral.reward.source.available": "Ödül kullanıma hazır",
+  "workspace.referral.reward.source.applied": "Ödül kullanıldı",
+  "workspace.referral.reward.status.applied": "Ödül Kullanıldı",
+  "workspace.referral.reward.status.pendingInviter": "Kilidi açmak için abone ol",
+  "workspace.referral.reward.status.pendingInvitee": "Kilidi açmak için abone ol",
+  "workspace.referral.apply.noGo": "Kilidi açmak için abone ol",
+  "workspace.referral.apply.preview": "Ödülü Görüntüle",
+  "workspace.referral.apply.action": "Kullan",
+  "workspace.referral.apply.confirmTitle": "Ödülü kullan",
+  "workspace.referral.apply.confirmBody": "Bu workspace'in mevcut kullanımını azaltmak için {{amount}} kullan.",
+  "workspace.referral.apply.confirmAction": "Kullan",
+
   "download.title": "OpenCode | İndir",
   "download.meta.description": "OpenCode'u macOS, Windows ve Linux için indirin",
-  "download.hero.title": "OpenCode'u İndir",
+  "download.hero.title": "OpenCode Desktop'u İndir",
   "download.hero.subtitle": "macOS, Windows ve Linux için Beta olarak sunuluyor",
   "download.hero.button": "{{os}} için indir",
   "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Beta)",
+  "download.section.desktop": "OpenCode Desktop",
   "download.section.extensions": "OpenCode Eklentileri",
   "download.section.integrations": "OpenCode Entegrasyonları",
   "download.action.download": "İndir",

@@ -230,6 +230,7 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - `api.attention.notify(input)`
 - `api.keys.formatSequence(parts)`, `formatBindings(bindings)`
 - `api.keymap`
+- `api.mode.current()`, `api.mode.push(mode)`
 - `api.route.register(routes)` / `api.route.navigate(name, params?)` / `api.route.current`
 - `api.ui.Dialog`, `DialogAlert`, `DialogConfirm`, `DialogPrompt`, `DialogSelect`, `Slot`, `Prompt`, `ui.toast`, `ui.dialog`
 - `api.tuiConfig`
@@ -254,6 +255,68 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - Use `api.keymap.dispatchCommand(name)` for user-style execution semantics and `api.keymap.runCommand(name)` only for forced programmatic execution.
 - Disposers returned by `api.keymap` registrations and `acquireResource(...)` are automatically cleaned up when the plugin deactivates. You do not need to add those disposers to `api.lifecycle.onDispose(...)` yourself.
 - Built-in which-key shortcuts are resolved from flat `keybinds` command ids such as `which_key_toggle`, not plugin options.
+
+#### Mode-aware layers
+
+OpenCode registers a `mode` layer field on the host keymap. Plugins can use it to keep bindings active only in the relevant UI state.
+
+Built-in modes:
+
+- `base`: normal app, route, and prompt interaction.
+- `modal`: host dialog stack is open, including dialogs rendered through `api.ui.dialog` and `api.ui.Dialog*` components.
+- `autocomplete`: host prompt autocomplete is open.
+- `api.mode.current()` returns the active top mode, or `base` when no pushed mode is active.
+
+Example: register a command and shortcut that are active only in normal app mode:
+
+```tsx
+api.keymap.registerLayer({
+  mode: "base",
+  commands: [
+    {
+      name: "demo.open",
+      title: "Demo",
+      category: "Plugin",
+      namespace: "palette",
+      run() {
+        api.route.navigate("demo")
+      },
+    },
+  ],
+  bindings: [{ key: "ctrl+shift+m", cmd: "demo.open", desc: "Open demo" }],
+})
+```
+
+Layers without `mode` are not mode-gated and can remain active while dialogs or autocomplete are open. Use that only for intentionally global commands or low-level keymap extensions.
+
+Plugins that own a full-screen route or modal-like UI can temporarily push a plugin-specific mode with `api.mode.push(...)`. Use a plugin-scoped mode name. The returned disposer pops that specific stack entry and is idempotent, so popping an older mode while a newer mode is on top leaves the newer mode active.
+
+```tsx
+import { onCleanup } from "solid-js"
+
+api.route.register([
+  {
+    name: "demo",
+    render: () => {
+      const popMode = api.mode.push("acme.demo")
+      onCleanup(popMode)
+
+      return (
+        <box>
+          <text>demo</text>
+        </box>
+      )
+    },
+  },
+])
+
+api.keymap.registerLayer({
+  mode: "acme.demo",
+  bindings: [{ key: "escape", cmd: () => api.route.navigate("home"), desc: "Close demo" }],
+})
+```
+
+Mode pushes are automatically tracked by the plugin runtime. If a plugin is disabled, fails during activation, or the TUI shuts down before the plugin calls the disposer, OpenCode pops the plugin's pushed modes during plugin cleanup. Calling the disposer yourself is still recommended for component lifetimes; cleanup remains idempotent.
 
 ### Keys
 

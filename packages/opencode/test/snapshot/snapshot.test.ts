@@ -1,20 +1,34 @@
 import { afterEach, expect } from "bun:test"
 import { $ } from "bun"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Layer } from "effect"
 import { Snapshot } from "../../src/snapshot"
-import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import {
+  disposeAllInstances,
+  provideInstance,
+  testInstanceStoreLayer,
+  TestInstance,
+  tmpdirScoped,
+} from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(Snapshot.defaultLayer, AppFileSystem.defaultLayer))
+const it = testEffect(
+  Layer.mergeAll(LayerNode.compile(LayerNode.group([Snapshot.node, FSUtil.node])), testInstanceStoreLayer),
+)
+// Windows forbids both * and : in directory names.
+const nonWindowsIt = process.platform === "win32" ? it.live.skip : it.live
 
 // Git always outputs /-separated paths internally. Snapshot.patch() joins them
 // with path.join (which produces \ on Windows) then normalizes back to /.
 // This helper does the same for expected values so assertions match cross-platform.
 const fwd = (...parts: string[]) => path.join(...parts).replaceAll("\\", "/")
+const SNAPSHOT_BATCH_BOUNDARY = 100
+const OVER_BATCH_COUNT = SNAPSHOT_BATCH_BOUNDARY + 1
+const MIXED_BATCH_GROUP_COUNT = Math.ceil(OVER_BATCH_COUNT / 4)
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -28,12 +42,12 @@ const exec = (cwd: string, command: string[]) =>
   })
 
 const write = (file: string, content: string | Uint8Array) =>
-  AppFileSystem.Service.use((fs) => fs.writeWithDirs(file, content))
-const readText = (file: string) => AppFileSystem.Service.use((fs) => fs.readFileString(file))
-const exists = (file: string) => AppFileSystem.Service.use((fs) => fs.existsSafe(file))
-const mkdirp = (dir: string) => AppFileSystem.Service.use((fs) => fs.ensureDir(dir))
+  FSUtil.Service.use((fs) => fs.writeWithDirs(file, content))
+const readText = (file: string) => FSUtil.Service.use((fs) => fs.readFileString(file))
+const exists = (file: string) => FSUtil.Service.use((fs) => fs.existsSafe(file))
+const mkdirp = (dir: string) => FSUtil.Service.use((fs) => fs.ensureDir(dir))
 const rm = (file: string) =>
-  AppFileSystem.Service.use((fs) => fs.remove(file, { recursive: true, force: true }).pipe(Effect.ignore))
+  FSUtil.Service.use((fs) => fs.remove(file, { recursive: true, force: true }).pipe(Effect.ignore))
 
 const initialize = Effect.fn("SnapshotTest.initialize")(function* (dir: string) {
   const unique = Math.random().toString(36).slice(2)
@@ -41,8 +55,6 @@ const initialize = Effect.fn("SnapshotTest.initialize")(function* (dir: string) 
   const bContent = `B${unique}`
   yield* write(`${dir}/a.txt`, aContent)
   yield* write(`${dir}/b.txt`, bContent)
-  yield* exec(dir, ["git", "add", "."])
-  yield* exec(dir, ["git", "commit", "-m", "init"])
   return { aContent, bContent }
 })
 
@@ -65,11 +77,12 @@ const withTrackedSnapshot = <A, E, R>(
   })
 
 const bootstrapScoped = Effect.fn("SnapshotTest.bootstrapScoped")(function* () {
-  const dir = yield* tmpdirScoped({ git: true }).pipe(Effect.provide(CrossSpawnSpawner.defaultLayer))
+  const dir = yield* tmpdirScoped({ git: true }).pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)))
   return { path: dir, extra: yield* initialize(dir) }
 })
 
-const scopedGitTmpdir = () => tmpdirScoped({ git: true }).pipe(Effect.provide(CrossSpawnSpawner.defaultLayer))
+const scopedGitTmpdir = () =>
+  tmpdirScoped({ git: true }).pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)))
 
 const cleanupWorktree = (repo: string, worktree: string, files: string[] = []) =>
   Effect.promise(async () => {
@@ -441,6 +454,97 @@ it.live(
   }),
 )
 
+it.live(
+  "subdirectory snapshots include scoped changes only",
+  Effect.gen(function* () {
+    const dir = yield* scopedGitTmpdir()
+    const frontend = path.join(dir, "frontend")
+    yield* write(`${frontend}/tracked.txt`, "initial")
+    yield* write(`${frontend}/deleted.txt`, "initial")
+    yield* write(`${dir}/backend/tracked.txt`, "initial")
+    yield* write(`${dir}/backend/deleted.txt`, "initial")
+    yield* exec(dir, ["git", "add", "."])
+    yield* exec(dir, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${frontend}/tracked.txt`, "changed")
+      yield* write(`${frontend}/untracked.txt`, "new")
+      yield* rm(`${frontend}/deleted.txt`)
+      yield* write(`${dir}/backend/tracked.txt`, "changed")
+      yield* rm(`${dir}/backend/deleted.txt`)
+      const patch = yield* snapshot.patch(before!)
+      const diff = yield* snapshot.diff(before!)
+      expect(patch.files).toContain(fwd(frontend, "tracked.txt"))
+      expect(patch.files).toContain(fwd(frontend, "untracked.txt"))
+      expect(patch.files).toContain(fwd(frontend, "deleted.txt"))
+      expect(patch.files).not.toContain(fwd(dir, "backend", "tracked.txt"))
+      expect(patch.files).not.toContain(fwd(dir, "backend", "deleted.txt"))
+      expect(diff).not.toContain("backend/tracked.txt")
+      expect(diff).not.toContain("backend/deleted.txt")
+    }).pipe(provideInstance(frontend))
+  }),
+)
+
+nonWindowsIt(
+  "subdirectory snapshots treat wildcard characters literally",
+  Effect.gen(function* () {
+    const dir = yield* scopedGitTmpdir()
+    const subdir = path.join(dir, "src*")
+    yield* write(`${subdir}/file.txt`, "initial")
+    yield* write(`${subdir}/later-ignored.txt`, "initial")
+    yield* write(`${dir}/srca/file.txt`, "initial")
+    yield* exec(dir, ["git", "add", "."])
+    yield* exec(dir, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${subdir}/file.txt`, "changed")
+      yield* write(`${subdir}/later-ignored.txt`, "changed")
+      yield* write(`${subdir}/.gitignore`, "later-ignored.txt\n")
+      yield* write(`${dir}/srca/file.txt`, "changed")
+      const patch = yield* snapshot.patch(before!)
+      const diff = yield* snapshot.diff(before!)
+      expect(patch.files).toContain(fwd(subdir, "file.txt"))
+      expect(patch.files).toContain(fwd(subdir, ".gitignore"))
+      expect(patch.files).not.toContain(fwd(subdir, "later-ignored.txt"))
+      expect(patch.files).not.toContain(fwd(dir, "srca", "file.txt"))
+      expect(diff).toContain("src*/later-ignored.txt")
+      expect(diff).toContain("deleted file mode")
+      expect(diff).not.toContain("srca/file.txt")
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
+nonWindowsIt(
+  "subdirectory snapshots treat leading colons literally",
+  Effect.gen(function* () {
+    const dir = yield* scopedGitTmpdir()
+    const subdir = path.join(dir, ":src")
+    yield* write(`${subdir}/kept.txt`, "initial")
+    yield* write(`${subdir}/later-ignored.txt`, "initial")
+    yield* exec(dir, ["git", "add", "."])
+    yield* exec(dir, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${subdir}/kept.txt`, "changed")
+      yield* write(`${subdir}/later-ignored.txt`, "changed")
+      yield* write(`${subdir}/.gitignore`, "later-ignored.txt\n")
+      const patch = yield* snapshot.patch(before!)
+      const diff = yield* snapshot.diff(before!)
+      expect(patch.files).toContain(fwd(subdir, "kept.txt"))
+      expect(patch.files).toContain(fwd(subdir, ".gitignore"))
+      expect(patch.files).not.toContain(fwd(subdir, "later-ignored.txt"))
+      expect(diff).toContain(":src/later-ignored.txt")
+      expect(diff).toContain("deleted file mode")
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
 it.instance(
   "gitignore changes",
   withTrackedSnapshot(({ tmp, snapshot, before }) =>
@@ -802,7 +906,7 @@ it.instance(
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
     const snapshot = yield* Snapshot.Service
-    const ids = Array.from({ length: 60 }, (_, i) => i.toString().padStart(3, "0"))
+    const ids = Array.from({ length: MIXED_BATCH_GROUP_COUNT }, (_, i) => i.toString().padStart(3, "0"))
     const mod = ids.map((id) => fwd(tmp.path, "mix", `${id}-mod.txt`))
     const del = ids.map((id) => fwd(tmp.path, "mix", `${id}-del.txt`))
     const add = ids.map((id) => fwd(tmp.path, "mix", `${id}-add.txt`))
@@ -862,7 +966,7 @@ it.instance(
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
     const snapshot = yield* Snapshot.Service
-    const ids = Array.from({ length: 140 }, (_, i) => i.toString().padStart(3, "0"))
+    const ids = Array.from({ length: OVER_BATCH_COUNT }, (_, i) => i.toString().padStart(3, "0"))
     yield* mkdirp(`${tmp.path}/order`)
     yield* Effect.all(
       ids.map((id) => write(`${tmp.path}/order/${id}.txt`, `before-${id}`)),
@@ -1090,8 +1194,8 @@ it.instance(
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
     const snapshot = yield* Snapshot.Service
-    const base = Array.from({ length: 140 }, (_, i) => fwd(tmp.path, "batch", `${i}.txt`))
-    const fresh = Array.from({ length: 140 }, (_, i) => fwd(tmp.path, "fresh", `${i}.txt`))
+    const base = Array.from({ length: OVER_BATCH_COUNT }, (_, i) => fwd(tmp.path, "batch", `${i}.txt`))
+    const fresh = [fwd(tmp.path, "fresh", "0.txt")]
     yield* mkdirp(`${tmp.path}/batch`)
     yield* mkdirp(`${tmp.path}/fresh`)
     yield* Effect.all(

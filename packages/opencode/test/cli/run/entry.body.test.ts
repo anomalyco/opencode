@@ -235,11 +235,11 @@ describe("run entry body", () => {
             },
             title: "",
             output: [
-              "task_id: child-1 (for resuming to continue this task if needed)",
-              "",
+              '<task id="child-1" state="completed">',
               "<task_result>",
               "# Findings\n\n- Footer stays live",
               "</task_result>",
+              "</task>",
             ].join("\n"),
             metadata: {
               sessionId: "child-1",
@@ -264,13 +264,9 @@ describe("run entry body", () => {
               subagent_type: "explore",
             },
             title: "",
-            output: [
-              "task_id: child-1 (for resuming to continue this task if needed)",
-              "",
-              "<task_result>",
-              "",
-              "</task_result>",
-            ].join("\n"),
+            output: ['<task id="child-1" state="completed">', "<task_result>", "", "</task_result>", "</task>"].join(
+              "\n",
+            ),
             metadata: {
               sessionId: "child-1",
             },
@@ -356,6 +352,73 @@ describe("run entry body", () => {
     ).toEqual({
       type: "text",
       content: "\nOn branch demo\nnothing to commit, working tree clean",
+    })
+  })
+
+  test("renders command-only bash starts without the shell header", () => {
+    expect(
+      entryBody(
+        toolCommit({
+          tool: "bash",
+          phase: "start",
+          toolState: "running",
+          text: "running shell",
+          state: {
+            status: "running",
+            input: {
+              command: "ls",
+            },
+            time: { start: 1 },
+          },
+        }),
+      ),
+    ).toEqual({
+      type: "text",
+      content: "$ ls",
+    })
+  })
+
+  test("renders direct shell commits without a synthetic shell header", () => {
+    expect(
+      entryBody(
+        commit({
+          kind: "tool",
+          text: "running shell",
+          phase: "start",
+          source: "tool",
+          tool: "bash",
+          partID: "shell:call-1",
+          toolState: "running",
+          shell: {
+            callID: "call-1",
+            command: "pwd",
+          },
+        }),
+      ),
+    ).toEqual({
+      type: "text",
+      content: "$ pwd",
+    })
+
+    expect(
+      entryBody(
+        commit({
+          kind: "tool",
+          text: "/tmp/demo\n",
+          phase: "progress",
+          source: "tool",
+          tool: "bash",
+          partID: "shell:call-1",
+          toolState: "completed",
+          shell: {
+            callID: "call-1",
+            command: "pwd",
+          },
+        }),
+      ),
+    ).toEqual({
+      type: "text",
+      content: "\n/tmp/demo",
     })
   })
 

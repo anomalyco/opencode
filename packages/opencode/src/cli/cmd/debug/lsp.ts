@@ -2,7 +2,6 @@ import { LSP } from "@/lsp/lsp"
 import { Effect } from "effect"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
-import * as Log from "@opencode-ai/core/util/log"
 import { EOL } from "os"
 
 export const LSPCommand = cmd({
@@ -33,7 +32,7 @@ export const SymbolsCommand = effectCmd({
   describe: "search workspace symbols",
   builder: (yargs) => yargs.positional("query", { type: "string", demandOption: true }),
   handler: Effect.fn("Cli.debug.lsp.symbols")(function* (args) {
-    using _ = Log.Default.time("symbols")
+    yield* Effect.logInfo("symbols")
     const results = yield* LSP.Service.use((lsp) => lsp.workspaceSymbol(args.query))
     process.stdout.write(JSON.stringify(results, null, 2) + EOL)
   }),
@@ -44,7 +43,7 @@ export const DocumentSymbolsCommand = effectCmd({
   describe: "get symbols from a document",
   builder: (yargs) => yargs.positional("uri", { type: "string", demandOption: true }),
   handler: Effect.fn("Cli.debug.lsp.documentSymbols")(function* (args) {
-    using _ = Log.Default.time("document-symbols")
+    yield* Effect.logInfo("document-symbols")
     const results = yield* LSP.Service.use((lsp) => lsp.documentSymbol(args.uri))
     process.stdout.write(JSON.stringify(results, null, 2) + EOL)
   }),
