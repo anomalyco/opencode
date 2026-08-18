@@ -331,8 +331,9 @@ For custom inference profiles, use the model and provider name in the key and se
 
 Mantle serves Claude models through the Anthropic Messages API at `/anthropic/v1/messages`; its
 OpenAI-compatible surfaces reject Anthropic model IDs. Set the model's `npm` to
-`@ai-sdk/amazon-bedrock/mantle-anthropic` to route it there. AWS credentials are signed with SigV4,
-so profiles, SSO, and IRSA work as they do elsewhere in Bedrock. A Bedrock API key is also accepted.
+`@ai-sdk/amazon-bedrock/mantle-anthropic` to route it there. The endpoint URL is derived from the
+configured `region`, so no `api` override is needed. AWS credentials are signed with SigV4, so
+profiles, SSO, and IRSA work as they do elsewhere in Bedrock. A Bedrock API key is also accepted.
 
 ```json title="opencode.json"
 {
@@ -346,8 +347,7 @@ so profiles, SSO, and IRSA work as they do elsewhere in Bedrock. A Bedrock API k
       "models": {
         "anthropic.claude-opus-4-8": {
           "provider": {
-            "npm": "@ai-sdk/amazon-bedrock/mantle-anthropic",
-            "api": "https://bedrock-mantle.${AWS_REGION}.api.aws/anthropic/v1"
+            "npm": "@ai-sdk/amazon-bedrock/mantle-anthropic"
           }
         }
       }
