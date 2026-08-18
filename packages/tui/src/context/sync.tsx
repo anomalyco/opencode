@@ -157,10 +157,15 @@ export const {
       hydratingSessions.get(sessionID)?.parts.add(partID)
     }
 
-    function sessionListQuery(): { scope?: "project"; path?: string } {
+    function sessionListQuery(): { scope?: "project"; path?: string; directory?: string } {
       if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
       if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" }
+      // Always pass directory alongside path. Sessions in non-git projects
+      // (worktree "/") have no reliable relative path on Windows — the
+      // worktree-relative computation resolves against the current drive
+      // root — so the server matches them by directory instead.
       return {
+        directory: project.data.instance.path.directory,
         path: path
           .relative(path.resolve(project.data.instance.path.worktree), project.data.instance.path.directory)
           .replaceAll("\\", "/"),

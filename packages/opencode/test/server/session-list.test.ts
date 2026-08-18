@@ -88,6 +88,39 @@ describe("session.list", () => {
     { git: true },
   )
 
+  it.instance(
+    "matches sessions with no path via the directory fallback",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const dir = path.join(test.directory, "packages", "opencode")
+        yield* Effect.promise(() => mkdir(dir, { recursive: true }))
+
+        const created = yield* withSession({ title: "no-path" }).pipe(provideInstance(dir))
+
+        // Simulate a legacy row (or a Windows non-git session) whose path
+        // could not be expressed relative to the worktree and is NULL.
+        yield* Database.Service.use(({ db }) =>
+          db.run(`UPDATE session SET path = NULL WHERE id = '${created.id}'`),
+        )
+
+        // With directory present, the list query falls back to directory
+        // scoping for NULL-path rows.
+        const withDirectory = (yield* SessionNs.Service.use((session) =>
+          session.list({ directory: dir, path: "unrelated/path" }),
+        )).map((session) => session.id)
+        expect(withDirectory).toContain(created.id)
+
+        // Without directory there is no way to scope a NULL-path row inside
+        // the (possibly global) project, so it stays hidden.
+        const pathOnly = (yield* SessionNs.Service.use((session) =>
+          session.list({ path: "unrelated/path" }),
+        )).map((session) => session.id)
+        expect(pathOnly).not.toContain(created.id)
+      }),
+    { git: true },
+  )
+
   itWorkspaces.instance(
     "filters by directory when experimental workspaces are enabled",
     () =>
