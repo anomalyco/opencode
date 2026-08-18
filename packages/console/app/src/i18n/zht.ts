@@ -244,7 +244,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情況",
 
   "go.title": "OpenCode Go | 低成本全民編碼模型",
-  "go.banner.text": "DeepSeek V4 Flash 限時享有 2 倍使用額度",
   "go.meta.description": "Go 首月 $5，之後 $10/月，提供充裕的使用限額，並可穩定存取領先的編碼模型。",
   "go.hero.title": "低成本全民編碼模型",
   "go.hero.body":
