@@ -83,4 +83,10 @@ describe("LLM.Usage", () => {
     expect(new Usage({ outputTokens: 4, reasoningTokens: 10 }).visibleOutputTokens).toBe(0)
     expect(new Usage({}).visibleOutputTokens).toBe(0)
   })
+
+  test("preserves provider-reported billed cost as typed usage", () => {
+    const usage = new Usage({ billedCost: 0.04473525 })
+
+    expect(usage.billedCost).toBe(0.04473525)
+  })
 })
