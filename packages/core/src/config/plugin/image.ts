@@ -11,6 +11,18 @@ export const Plugin = define({
     const config = yield* Config.Service
     const image = yield* Image.Service
     const loaded = { entries: yield* config.entries() }
+    const reload = config.entries().pipe(
+      Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
+      Effect.andThen(image.reload()),
+    )
+    yield* ctx.event.subscribe().pipe(
+      Stream.filter((event) => event.type === "config.updated"),
+      Stream.runForEach(() => reload),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    // Refetch after subscribing so a config update between the first read and
+    // the live subscription cannot leave the transform on a stale snapshot.
+    loaded.entries = yield* config.entries()
     yield* image.transform((draft) => {
       for (const entry of loaded.entries) {
         if (entry.type !== "document") continue
@@ -24,15 +36,5 @@ export const Plugin = define({
         })
       }
     })
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
-      Stream.runForEach(() =>
-        config.entries().pipe(
-          Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
-          Effect.andThen(image.reload()),
-        ),
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
   }),
 })

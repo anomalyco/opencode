@@ -7,7 +7,7 @@ import { Image } from "@opencode-ai/core/image"
 import { Plugin } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { Document, Event, Info, type Entry } from "@opencode-ai/schema/config"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
 
@@ -46,6 +46,24 @@ describe("ConfigImagePlugin.Plugin", () => {
         ]),
       ),
     ),
+  )
+
+  it.live("refetches config after subscribing to updates", () =>
+    Effect.gen(function* () {
+      const image = yield* Image.Service
+      const plugins = yield* Plugin.Service
+      let reads = 0
+      const config = Config.Service.of({
+        entries: () => Effect.sync(() => [document({ max_width: reads++ === 0 ? 1_200 : 700, max_base64_bytes: 1 })]),
+        update: () => Effect.die(new Error("Config update is unavailable")),
+        changes: () => Stream.empty,
+      })
+      yield* ConfigImagePlugin.Plugin.effect(yield* PluginHost.make(plugins)).pipe(
+        Effect.provideService(Config.Service, config),
+      )
+
+      expect(yield* limits(image)).toEqual({ maxWidth: 700, maxHeight: 2_000, maxBytes: 1 })
+    }),
   )
 })
 
