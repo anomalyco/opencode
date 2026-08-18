@@ -163,12 +163,13 @@ export function createPromptInputV2Attachments(
     }
     if (!plainText) return
     const text = plainText.includes("\r") ? plainText.replace(/\r\n?/g, "\n") : plainText
+
     const put = () => {
       if (input.addPart({ type: "text", content: text, start: 0, end: 0 })) return true
       input.focusEditor()
       return input.addPart({ type: "text", content: text, start: 0, end: 0 })
     }
-    if (text.includes("\n") || largePaste(text)) {
+    if (text.includes("\n")) {
       put()
       return
     }
@@ -272,7 +273,3 @@ function cursorPosition(editor: HTMLElement) {
   return before.toString().replace(/\u200B/g, "").length
 }
 
-function largePaste(text: string) {
-  if (text.length >= 8000) return true
-  return text.split("\n").length - 1 >= 120
-}

@@ -9,6 +9,7 @@ import { getCursorPosition } from "./editor-dom"
 import { createBlobReference, type DraftStore } from "@/utils/draft-store"
 import { attachmentMime } from "./files"
 import { normalizePaste, pasteMode } from "./paste"
+import { storePasteTextFile } from "./paste-store"
 
 type PromptTarget = Pick<ReturnType<ReturnType<typeof usePrompt>["capture"]>, "current" | "cursor" | "set">
 type AttachmentTarget = { prompt: PromptTarget; cursor: number | undefined }
@@ -128,7 +129,20 @@ export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
     }
 
     if (pasteMode(text) === "manual") {
-      put()
+      const id = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(16).slice(2)
+      const filePath = await storePasteTextFile(id, text)
+      const filename = "pasted-text.txt"
+      target.prompt.set(
+        [...target.prompt.current(), {
+          type: "image",
+          id,
+          filename,
+          sourcePath: filePath,
+          mime: "text/plain",
+          dataUrl: "",
+        } satisfies ImageAttachmentPart],
+        target.cursor,
+      )
       return
     }
 

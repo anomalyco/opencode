@@ -371,7 +371,7 @@ export function createPromptInputV2Controller(input: {
     resetHistory() {
       setState({ historyIndex: -1, savedHistory: undefined })
     },
-    onPaste(event: ClipboardEvent) {
+    async onPaste(event: ClipboardEvent) {
       const clipboard = event.clipboardData
       if (
         attachments &&
@@ -380,9 +380,29 @@ export function createPromptInputV2Controller(input: {
         void attachments.handlePaste(event)
         return
       }
+      const text = clipboard?.getData("text/plain")
+      if (text && (text.length >= 8000 || text.split("\n").length - 1 >= 120)) {
+        event.preventDefault()
+        const id = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(16).slice(2)
+        const store = ((globalThis as Record<string, unknown>)["__opencode_paste_store"] ??= new Map<string, string>()) as Map<string, string>
+        store.set(id, text)
+        const api = (globalThis as Record<string, unknown>).api as { writePasteFile?: (id: string, text: string) => Promise<string> } | undefined
+        const filePath = api?.writePasteFile
+          ? await api.writePasteFile(id, text).catch(() => `.opencode/pastes/${id}.txt`)
+          : `.opencode/pastes/${id}.txt`
+        const filename = "pasted-text.txt"
+        draft.addAttachment({
+          type: "image",
+          id,
+          filename,
+          sourcePath: filePath,
+          mime: "text/plain",
+          dataUrl: "",
+        })
+        return
+      }
       input.view.onPaste?.(event)
       if (event.defaultPrevented) return
-      const text = clipboard?.getData("text/plain")
       if (!text) return
       event.preventDefault()
       if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return

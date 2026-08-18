@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { stat } from "node:fs/promises"
+import { mkdir, stat, writeFile } from "node:fs/promises"
 import { basename, join } from "node:path"
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
@@ -102,6 +102,15 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
     deps.recordFatalRendererError(error),
   )
+
+  ipcMain.handle("write-paste-file", async (_event: IpcMainInvokeEvent, id: string, text: string) => {
+    const dir = join(app.getPath("userData"), "pastes")
+    await mkdir(dir, { recursive: true })
+    const filePath = join(dir, `${id}.txt`)
+    await writeFile(filePath, text, "utf-8")
+    return filePath
+  })
+
   ipcMain.handle("set-native-translations", (event: IpcMainInvokeEvent, value: unknown) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win || win.isDestroyed() || win.webContents !== event.sender || event.senderFrame !== event.sender.mainFrame) {
@@ -111,6 +120,7 @@ export function registerIpcHandlers(deps: Deps) {
     if (!bundle) throw new Error("Invalid native translation bundle")
     deps.setNativeTranslations(bundle)
   })
+
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     try {
       const store = getStore(name)
@@ -121,29 +131,36 @@ export function registerIpcHandlers(deps: Deps) {
       return null
     }
   })
+
   ipcMain.handle("store-set", (_event: IpcMainInvokeEvent, name: string, key: string, value: string) => {
     getStore(name).set(key, value)
   })
+
   ipcMain.handle("store-delete", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     getStore(name).delete(key)
     void removeStoreFileIfEmpty(name)
   })
+
   ipcMain.handle("store-clear", (_event: IpcMainInvokeEvent, name: string) => {
     getStore(name).clear()
     void removeStoreFileIfEmpty(name)
   })
+
   ipcMain.handle("store-keys", (_event: IpcMainInvokeEvent, name: string) => {
     const store = getStore(name)
     return Object.keys(store.store)
   })
+
   ipcMain.handle("store-length", (_event: IpcMainInvokeEvent, name: string) => {
     const store = getStore(name)
     return Object.keys(store.store).length
   })
+
   ipcMain.handle("draft-get", (_event, key: string) => drafts.get(key))
   ipcMain.handle("draft-set", (_event, key: string, value: string) => drafts.set(key, value))
   ipcMain.handle("draft-delete", (_event, key: string) => drafts.set(key, null))
   ipcMain.handle("draft-blob-put", (_event, data: ArrayBuffer) => drafts.putBlob(new Uint8Array(data)))
+
   ipcMain.handle("draft-blob-get", (_event, id: string) => {
     const data = drafts.getBlob(id)
     return data ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
@@ -157,7 +174,9 @@ export function registerIpcHandlers(deps: Deps) {
         title: opts?.title ?? nativeT("desktop.dialog.chooseFolder"),
         defaultPath: opts?.defaultPath,
       })
+
       if (result.canceled) return null
+
       return opts?.multiple ? result.filePaths : result.filePaths[0]
     },
   )
@@ -174,7 +193,9 @@ export function registerIpcHandlers(deps: Deps) {
         defaultPath: opts?.defaultPath,
         filters: pickerFilters(opts?.extensions),
       })
+
       if (result.canceled) return null
+
       const files = await Promise.all(
         result.filePaths.map(async (filePath) => ({
           path: filePath,
@@ -182,8 +203,11 @@ export function registerIpcHandlers(deps: Deps) {
           size: (await stat(filePath)).size,
         })),
       )
+
       assertAttachmentBudget(files)
+
       const token = pickedFiles.add(event.sender.id, result.filePaths)
+
       return { token, files }
     },
   )
@@ -203,7 +227,9 @@ export function registerIpcHandlers(deps: Deps) {
         title: opts?.title ?? nativeT("desktop.dialog.saveFile"),
         defaultPath: opts?.defaultPath,
       })
+
       if (result.canceled) return null
+
       return result.filePath ?? null
     },
   )
@@ -218,9 +244,13 @@ export function registerIpcHandlers(deps: Deps) {
 
   ipcMain.handle("open-path", async (_event: IpcMainInvokeEvent, path: string, app?: string) => {
     if (!app) return shell.openPath(path)
+
     await new Promise<void>((resolve, reject) => {
       const [cmd, args] =
-        process.platform === "darwin" ? (["open", ["-a", app, path]] as const) : ([app, [path]] as const)
+        process.platform === "darwin"
+          ? (["open", ["-a", app, path]] as const)
+          : ([app, [path]] as const)
+
       execFile(cmd, args, (err) => (err ? reject(err) : resolve()))
     })
   })
@@ -230,24 +260,34 @@ export function registerIpcHandlers(deps: Deps) {
       () => true,
       () => false,
     )
+
     if (!exists) return false
+
     shell.showItemInFolder(path)
+
     return true
   })
 
   ipcMain.handle("read-clipboard-image", () => {
     const image = clipboard.readImage()
+
     if (image.isEmpty()) return null
+
     const buffer = image.toPNG().buffer
     const size = image.getSize()
+
     return { buffer, width: size.width, height: size.height }
   })
 
   ipcMain.handle("get-window-id", (event: IpcMainInvokeEvent) => {
     const win = BrowserWindow.fromWebContents(event.sender)
+
     if (!win) throw new Error("Window not found")
+
     const id = getWindowID(win)
+
     if (!id) throw new Error("Window ID not found")
+
     return id
   })
 
@@ -276,21 +316,31 @@ export function registerIpcHandlers(deps: Deps) {
   })
 
   ipcMain.handle("get-zoom-factor", (event: IpcMainInvokeEvent) => event.sender.getZoomFactor())
+
   ipcMain.handle("set-zoom-factor", (event: IpcMainInvokeEvent, factor: number) => {
     event.sender.setZoomFactor(factor)
+
     const win = BrowserWindow.fromWebContents(event.sender)
+
     if (!win) return
+
     updateTitlebar(win)
   })
+
   ipcMain.handle("get-pinch-zoom-enabled", () => getPinchZoomEnabled())
+
   ipcMain.handle("set-pinch-zoom-enabled", (_event: IpcMainInvokeEvent, enabled: boolean) => {
     setPinchZoomEnabled(enabled)
   })
+
   ipcMain.handle("set-titlebar", (event: IpcMainInvokeEvent, theme: TitlebarTheme) => {
     const win = BrowserWindow.fromWebContents(event.sender)
+
     if (!win) return
+
     setTitlebar(win, theme)
   })
+
   ipcMain.handle("run-desktop-menu-action", (event: IpcMainInvokeEvent, action: DesktopMenuAction) => {
     runDesktopMenuAction(BrowserWindow.fromWebContents(event.sender), action, {
       checkForUpdates: () => void deps.showUpdater(),
@@ -305,4 +355,3 @@ export function sendMenuCommand(win: BrowserWindow, id: string) {
 
 export function sendDeepLinks(win: BrowserWindow, urls: string[]) {
   win.webContents.send("deep-link", urls)
-}
