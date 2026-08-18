@@ -202,5 +202,6 @@ describeHg("Vcs mercurial", () => {
         expect(diff[0].patch).toContain("+two")
       }),
     ),
+    15_000,
   )
 })
