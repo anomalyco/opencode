@@ -113,7 +113,36 @@ test("export requires a session outside an interactive terminal", async () => {
     const [stdout, stderr, exitCode] = await run(["export", "--server", server.url.toString()])
 
     expect(exitCode).toBe(1)
-    expect(stdout + stderr).toContain("Pass a session ID when running without an interactive terminal")
+    expect(stdout).toBe("")
+    expect(stderr).toBe(`Pass a session ID when running without an interactive terminal${os.EOL}`)
+  } finally {
+    await server.stop(true)
+  }
+})
+
+test("export reports a missing session without a stack trace", async () => {
+  const sessionID = "ses_missing"
+  const server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url)
+      if (url.pathname === "/api/health") return health()
+      if (url.pathname === `/api/session/${sessionID}/export`) {
+        return Response.json(
+          { _tag: "SessionNotFoundError", sessionID, message: `Session not found: ${sessionID}` },
+          { status: 404 },
+        )
+      }
+      return new Response("Not found", { status: 404 })
+    },
+  })
+
+  try {
+    const [stdout, stderr, exitCode] = await run(["export", sessionID, "--server", server.url.toString()])
+
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe("")
+    expect(stderr).toBe(`Session not found: ${sessionID}${os.EOL}`)
   } finally {
     await server.stop(true)
   }
